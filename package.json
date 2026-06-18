@@ -1,6 +1,8 @@
 {
-  "name": "next-admin-dashboard",
-  "version": "0.1.0",
+  "name": "madar",
+  "version": "1.0.0",
+  "description": "MADAR - AI Marketing Intelligence Platform",
+  "author": "MADAR Team",
   "private": true,
   "scripts": {
     "dev": "next dev",

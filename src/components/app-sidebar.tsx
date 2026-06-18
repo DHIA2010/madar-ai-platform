@@ -432,8 +432,8 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
                   <PieChart className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Pulse UI</span>
-                  <span className="truncate text-xs">Next.js Admin</span>
+                  <span className="truncate font-medium">MADAR</span>
+                  <span className="truncate text-xs">Marketing Intelligence</span>
                 </div>
               </a>
             </SidebarMenuButton>

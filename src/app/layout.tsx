@@ -11,37 +11,37 @@ const inter = Inter({
 
 /* SEO Metadata */
 export const metadata: Metadata = {
-  metadataBase: new URL("https://yourdomain.com"),
+  metadataBase: new URL("https://madar.ai"),
 
   title: {
-    default: "Pulse UI - Premium Nextjs 16 Admin Dashboard Template",
-    template: "%s | Pulse UI",
+    default: "MADAR | AI Marketing Intelligence Platform",
+    template: "%s | MADAR",
   },
 
   description:
-    "Pulse UI is a premium admin dashboard template built with Next.js 16, React 19, ShadCN UI, Tailwind CSS, and TypeScript.",
+    "MADAR is an AI-powered Marketing Intelligence Platform that unifies marketing, sales, analytics, and customer insights into one intelligent workspace.",
 
   keywords: [
-    "Next.js Admin Template",
-    "React Dashboard",
-    "ShadCN UI Admin",
-    "Tailwind Dashboard",
-    "SaaS Admin Template",
-    "CRM Dashboard",
-    "Analytics Dashboard",
-    "React 19 Template",
-    "Next.js 16 Dashboard",
+    "Marketing Intelligence Platform",
+    "AI Marketing Dashboard",
+    "Marketing Analytics",
+    "Campaign Management",
+    "Marketing Automation",
+    "Business Intelligence",
+    "SaaS Platform",
+    "Marketing Operations",
+    "Customer Analytics",
   ],
 
   authors: [
     {
-      name: "Pulse UI",
-      url: "https://codervent.com/",
+      name: "MADAR Team",
+      url: "https://madar.ai/",
     },
   ],
 
-  creator: "Pulse UI",
-  publisher: "Pulse UI",
+  creator: "MADAR",
+  publisher: "MADAR",
 
   robots: {
     index: true,
@@ -51,28 +51,28 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://codervent.com/",
-    siteName: "Pulse UI",
-    title: "Pulse UI - Premium Nextjs 16 Admin Dashboard Template",
+    url: "https://madar.ai/",
+    siteName: "MADAR",
+    title: "MADAR | AI Marketing Intelligence Platform",
     description:
-      "Modern admin dashboard template built with Next.js 16, React 19, ShadCN UI, and Tailwind CSS.",
+      "AI-powered Marketing Intelligence Platform that unifies marketing, sales, analytics, and customer insights.",
     images: [
       {
         url: "/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: "Pulse UI",
+        alt: "MADAR - AI Marketing Intelligence Platform",
       },
     ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Pulse UI",
+    title: "MADAR | AI Marketing Intelligence Platform",
     description:
-      "Premium React admin dashboard template built with Next.js 16 and ShadCN UI.",
+      "AI-powered Marketing Intelligence Platform that unifies marketing, sales, analytics, and customer insights.",
     images: ["/og-image.jpg"],
-    creator: "@yourtwitter",
+    creator: "@MADAR",
   },
 
   icons: {
