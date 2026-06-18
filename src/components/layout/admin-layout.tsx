@@ -4,8 +4,6 @@ import { useEffect, useState } from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { NotificationDropdown } from "@/components/notification-dropdown"
-import { AppLauncherDropdown } from "@/components/appLauncher-dropdown"
-import { LanguageDropdown } from "@/components/language-dropdown"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { GlobalSearch } from "@/components/global-search"
 import { UserDropdown } from "@/components/UserDropdown"
@@ -19,7 +17,6 @@ import {
 } from "@/components/ui/sidebar"
 
 import { cn } from "@/lib/utils"
-import { Button } from "../ui/button"
 
 export default function AdminLayout({
   children,
@@ -73,33 +70,14 @@ export default function AdminLayout({
                 <SidebarTrigger
                   className="-ml-1 rounded-full h-10 w-10 [&_svg]:!size-5 hover:bg-muted/60 transition-colors"
                 />
-                <div className="header-quick-link hidden md:flex items-center gap-1">
-                   <Button variant="ghost" className="font-medium text-sm">
-                    Pricing
-                  </Button>
-                    <Button variant="ghost" className="font-medium text-sm">
-                      Docs
-                    </Button>
-                    <Button variant="ghost" className="font-medium text-sm">
-                      Reports
-                    </Button>
-                    <Button variant="ghost" className="font-medium text-sm">
-                      Support
-                    </Button>
-                </div>
               </div>
 
                 <div className="ml-auto">
                     <div className="flex items-center gap-1">
                         <GlobalSearch />
                         <ThemeToggle />
-                        <LanguageDropdown />
-                        <AppLauncherDropdown />
                         <div className="relative hidden md:inline-flex">
                             <NotificationDropdown />
-                            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-                                5
-                            </span>
                         </div>
                          <UserDropdown />
                     </div>

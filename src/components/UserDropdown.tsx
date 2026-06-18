@@ -16,8 +16,6 @@ import {
   User,
   Settings,
   LayoutDashboard,
-  Download,
-  DollarSign,
   LogOut,
 } from "lucide-react"
 
@@ -32,7 +30,7 @@ export function UserDropdown() {
         >
           <Avatar className="h-10 w-10 border-border rounded-full">
             <AvatarImage src="https://untitledui.com/images/avatars/madeleine-pitts" />
-            <AvatarFallback>AM</AvatarFallback>
+            <AvatarFallback>م</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
@@ -45,11 +43,11 @@ export function UserDropdown() {
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
               <AvatarImage src="https://untitledui.com/images/avatars/madeleine-pitts" />
-              <AvatarFallback>AM</AvatarFallback>
+              <AvatarFallback>م</AvatarFallback>
             </Avatar>
             <div>
-              <p className="text-sm font-medium">Alex Martin</p>
-              <p className="text-xs text-muted-foreground">Manager</p>
+              <p className="text-sm font-medium">محمد</p>
+              <p className="text-xs text-muted-foreground">admin@madar.ai</p>
             </div>
           </div>
         </DropdownMenuLabel>
@@ -68,18 +66,6 @@ export function UserDropdown() {
         <DropdownMenuItem className="gap-2 h-9">
           <LayoutDashboard className="!size-5" />
           Dashboard
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator className="border-1 my-2"/>
-
-        <DropdownMenuItem className="gap-2 h-9">
-          <Download className="!size-5" />
-          Downloads
-        </DropdownMenuItem>
-
-        <DropdownMenuItem className="gap-2 h-9">
-          <DollarSign className="!size-5" />
-          Earnings
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="border-1 my-2" />
