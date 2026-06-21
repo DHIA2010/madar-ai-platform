@@ -71,6 +71,7 @@ export type {
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
+  RefreshSessionRequestDto,
   ResetPasswordRequestDto,
   SessionStoragePort,
   SessionStorageGateway,

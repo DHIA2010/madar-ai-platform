@@ -40,6 +40,45 @@ export class ConfigurationError extends AppError {
   }
 }
 
+export class AuthenticationError extends AppAuthorizationError {
+  constructor(options: ErrorOptions) {
+    super({
+      code: options.code ?? "auth_error",
+      message: options.message,
+      details: options.details,
+      status: options.status ?? 401,
+      cause: options.cause,
+    })
+    this.name = "AuthenticationError"
+  }
+}
+
+export class InvalidCredentialsError extends AuthenticationError {
+  constructor(options: ErrorOptions) {
+    super({
+      code: options.code ?? "auth_invalid_credentials",
+      message: options.message,
+      details: options.details,
+      status: options.status ?? 401,
+      cause: options.cause,
+    })
+    this.name = "InvalidCredentialsError"
+  }
+}
+
+export class SessionExpiredError extends AuthenticationError {
+  constructor(options: ErrorOptions) {
+    super({
+      code: options.code ?? "auth_session_expired",
+      message: options.message,
+      details: options.details,
+      status: options.status ?? 401,
+      cause: options.cause,
+    })
+    this.name = "SessionExpiredError"
+  }
+}
+
 export class ValidationError extends AppValidationError {
   constructor(options: ErrorOptions) {
     super({
@@ -149,4 +188,52 @@ export function mapRepositoryError(error: unknown): AppError {
   }
 
   return new ApiError({ message: "Unknown repository error.", details: error })
+}
+
+export function mapAuthenticationRepositoryError(error: unknown): AppError {
+  if (error instanceof AppError) {
+    const code = error.code.toLowerCase()
+    const message = error.message || "Authentication request failed."
+
+    const isInvalidCredentialsCode =
+      code.includes("invalid_credentials") || code.includes("invalid_credential")
+
+    const isSessionExpiredCode =
+      code.includes("session_expired") ||
+      code.includes("token_expired") ||
+      code.includes("refresh_expired") ||
+      code.includes("session_missing")
+
+    if (isInvalidCredentialsCode) {
+      return new InvalidCredentialsError({
+        code: error.code,
+        message,
+        details: error.details,
+        status: error.status,
+        cause: error,
+      })
+    }
+
+    if (isSessionExpiredCode) {
+      return new SessionExpiredError({
+        code: error.code,
+        message,
+        details: error.details,
+        status: error.status,
+        cause: error,
+      })
+    }
+
+    if (error.kind === "authorization" || error.status === 401) {
+      return new AuthenticationError({
+        code: error.code,
+        message,
+        details: error.details,
+        status: error.status,
+        cause: error,
+      })
+    }
+  }
+
+  return mapRepositoryError(error)
 }

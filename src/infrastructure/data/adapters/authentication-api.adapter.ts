@@ -4,6 +4,7 @@ import type {
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
+  RefreshSessionRequestDto,
   ResetPasswordRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
@@ -24,6 +25,10 @@ export class AuthenticationApiAdapter {
 
   currentUser(_session: AuthSessionDto | null): Promise<CurrentUserDto> {
     return this.client.get<CurrentUserDto>("/auth/me")
+  }
+
+  refreshSession(payload: RefreshSessionRequestDto): Promise<AuthSessionDto> {
+    return this.client.post<RefreshSessionRequestDto, AuthSessionDto>("/auth/refresh", payload)
   }
 
   forgotPassword(payload: ForgotPasswordRequestDto): Promise<void> {

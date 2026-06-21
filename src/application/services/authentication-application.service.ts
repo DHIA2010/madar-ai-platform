@@ -36,6 +36,10 @@ export class AuthenticationApplicationService {
     return this.loginUseCase.execute(payload)
   }
 
+  refreshSession(refreshToken: string): Promise<AuthSessionDto> {
+    return this.gateway.refreshSession({ refreshToken })
+  }
+
   logout(session: AuthSessionDto | null): Promise<void> {
     return this.logoutUseCase.execute(session)
   }

@@ -7,3 +7,11 @@ export class GetCurrentUserQuery {
     return this.gateway.currentUser(session)
   }
 }
+
+export class RefreshSessionQuery {
+  constructor(private readonly gateway: AuthGateway) {}
+
+  execute(refreshToken: string): Promise<AuthSessionDto> {
+    return this.gateway.refreshSession({ refreshToken })
+  }
+}

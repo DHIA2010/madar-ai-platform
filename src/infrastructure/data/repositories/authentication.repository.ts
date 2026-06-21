@@ -5,6 +5,7 @@ import type {
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
+  RefreshSessionRequestDto,
   ResetPasswordRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
@@ -13,7 +14,7 @@ import { MockAuthenticationGateway } from "@/infrastructure/mock/mock-authentica
 
 import { createHttpDataClient } from "../api/http-data-client"
 import { AuthenticationApiAdapter } from "../adapters/authentication-api.adapter"
-import { mapRepositoryError } from "../errors"
+import { mapAuthenticationRepositoryError } from "../errors"
 import { resolveAuthenticationApiBaseUrl, resolveAuthenticationBackend } from "./repository-runtime"
 
 export class DataAuthenticationRepository implements AuthenticationRepository {
@@ -41,7 +42,7 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
       return await this.adapter.login(payload)
     } catch (error) {
-      throw mapRepositoryError(error)
+      throw mapAuthenticationRepositoryError(error)
     }
   }
 
@@ -55,7 +56,7 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
       await this.adapter.logout(session)
     } catch (error) {
-      throw mapRepositoryError(error)
+      throw mapAuthenticationRepositoryError(error)
     }
   }
 
@@ -68,7 +69,20 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
       return await this.adapter.currentUser(session)
     } catch (error) {
-      throw mapRepositoryError(error)
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async refreshSession(payload: RefreshSessionRequestDto): Promise<AuthSessionDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.refreshSession(payload)
+      }
+
+      return await this.adapter.refreshSession(payload)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
     }
   }
 
@@ -82,7 +96,7 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
       await this.adapter.forgotPassword(payload)
     } catch (error) {
-      throw mapRepositoryError(error)
+      throw mapAuthenticationRepositoryError(error)
     }
   }
 
@@ -96,7 +110,7 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
       await this.adapter.resetPassword(payload)
     } catch (error) {
-      throw mapRepositoryError(error)
+      throw mapAuthenticationRepositoryError(error)
     }
   }
 
@@ -110,7 +124,7 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
       await this.adapter.verifyEmail(payload)
     } catch (error) {
-      throw mapRepositoryError(error)
+      throw mapAuthenticationRepositoryError(error)
     }
   }
 }
