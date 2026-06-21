@@ -1,4 +1,20 @@
 export type {
+  AIAnomalyDto,
+  AICampaignInsightDto,
+  AIChannelPerformanceDto,
+  AICustomerInsightDto,
+  AIInsightItemDto,
+  AIInsightTone,
+  AIIntelligenceDashboardDto,
+  AIIntelligenceGateway,
+  AIIntelligenceQueryDto,
+  AIIntelligenceReadModel,
+  AIIntelligenceRepository,
+  AIIntelligenceViewModel,
+  AIProductInsightDto,
+  AIWeeklySummaryDto,
+} from "./ai-intelligence.contracts"
+export type {
   Ad,
   AttributionComparison,
   AttributionComparisonReadModel,

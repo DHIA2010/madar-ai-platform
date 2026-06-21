@@ -52,15 +52,19 @@ export function AppTableCaption(props: React.ComponentProps<typeof TableCaption>
 export interface AppTableToolbarProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
   title?: React.ReactNode
   description?: React.ReactNode
+  search?: React.ReactNode
   actions?: React.ReactNode
   filters?: React.ReactNode
+  bulkActions?: React.ReactNode
 }
 
 export function AppTableToolbar({
   title,
   description,
+  search,
   actions,
   filters,
+  bulkActions,
   className,
   ...props
 }: AppTableToolbarProps) {
@@ -78,7 +82,9 @@ export function AppTableToolbar({
         {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
       </div>
       <div className="flex flex-wrap items-center gap-3">
+        {search}
         {filters}
+        {bulkActions}
         {actions}
       </div>
     </div>

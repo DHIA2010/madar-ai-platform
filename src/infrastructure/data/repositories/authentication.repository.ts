@@ -10,11 +10,11 @@ import type {
 } from "@/application/contracts/authentication.contracts"
 
 import { MockAuthenticationGateway } from "@/infrastructure/mock/mock-authentication.gateway"
-import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 
 import { createHttpDataClient } from "../api/http-data-client"
 import { AuthenticationApiAdapter } from "../adapters/authentication-api.adapter"
 import { mapRepositoryError } from "../errors"
+import { resolveRepositoryBackend } from "./repository-runtime"
 
 export class DataAuthenticationRepository implements AuthenticationRepository {
   private readonly adapter: AuthenticationApiAdapter
@@ -29,8 +29,8 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
   async login(payload: LoginRequestDto): Promise<LoginResponseDto> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("authentication")
+      if (backend === "mock") {
         return this.fallback.login(payload)
       }
 
@@ -42,8 +42,8 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
   async logout(session: AuthSessionDto | null): Promise<void> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("authentication")
+      if (backend === "mock") {
         await this.fallback.logout(session)
         return
       }
@@ -56,8 +56,8 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
   async currentUser(session: AuthSessionDto | null): Promise<CurrentUserDto> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("authentication")
+      if (backend === "mock") {
         return this.fallback.currentUser(session)
       }
 
@@ -69,8 +69,8 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
   async forgotPassword(payload: ForgotPasswordRequestDto): Promise<void> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("authentication")
+      if (backend === "mock") {
         await this.fallback.forgotPassword(payload)
         return
       }
@@ -83,8 +83,8 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
   async resetPassword(payload: ResetPasswordRequestDto): Promise<void> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("authentication")
+      if (backend === "mock") {
         await this.fallback.resetPassword(payload)
         return
       }
@@ -97,8 +97,8 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
 
   async verifyEmail(payload: VerifyEmailRequestDto): Promise<void> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("authentication")
+      if (backend === "mock") {
         await this.fallback.verifyEmail(payload)
         return
       }

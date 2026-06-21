@@ -1,6 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+
+import { AppError } from "@/lib/app-errors"
 
 import { AppEmpty, AppLoading } from "@/components/app"
 
@@ -15,6 +17,18 @@ import type {
 } from "../types"
 
 import { useApplicationServices } from "@/application"
+
+function getConfigurationErrorMessage(error: unknown): string | null {
+  if (!(error instanceof AppError)) {
+    return null
+  }
+
+  if (error.code !== "configuration_error" && error.code !== "repository_configuration_error") {
+    return null
+  }
+
+  return error.message || "Runtime configuration is invalid."
+}
 
 function toSlug(value: string) {
   return value
@@ -41,6 +55,7 @@ function mergeById<T extends { id: string }>(base: T[], additions: T[]): T[] {
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { workspaceApplicationService } = useApplicationServices()
+  const [configurationError, setConfigurationError] = useState<string | null>(null)
 
   const currentOrganization = useWorkspaceStore((state) => state.currentOrganization)
   const currentWorkspace = useWorkspaceStore((state) => state.currentWorkspace)
@@ -71,7 +86,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) {
           return
         }
-
         const mergedOrganizations = mergeById(context.availableOrganizations, customOrganizations)
         const mergedWorkspaces = mergeById(context.availableWorkspaces, customWorkspaces)
 
@@ -94,8 +108,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCurrentWorkspace(nextWorkspace)
         setWorkspaceStatus("ready")
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          const message = getConfigurationErrorMessage(error)
+          if (message) {
+            setConfigurationError(message)
+          }
           setWorkspaceStatus("error")
         }
       })
@@ -119,6 +137,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const switchWorkspace = useCallback(
     async (payload: WorkspaceSelectionPayload) => {
       setWorkspaceStatus("switching")
+      setConfigurationError(null)
 
       const localWorkspace = customWorkspaces.find(
         (workspace) => workspace.id === payload.workspaceId
@@ -144,6 +163,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCurrentWorkspace(nextWorkspace)
         setWorkspaceStatus("ready")
       } catch (error) {
+        const message = getConfigurationErrorMessage(error)
+        if (message) {
+          setConfigurationError(message)
+        }
         setWorkspaceStatus("error")
         throw error
       }
@@ -272,7 +295,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return (
       <AppEmpty
         title="Workspace context unavailable"
-        description="The tenant context could not be restored from mock services."
+        description={
+          configurationError ?? "The tenant context could not be restored from configured services."
+        }
       />
     )
   }

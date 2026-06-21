@@ -5,6 +5,7 @@ import { createContext, useContext, useMemo } from "react"
 import { InfrastructureProvider, useInfrastructureServices } from "@/infrastructure"
 
 import {
+  AIIntelligenceApplicationService,
   AuthenticationApplicationService,
   AttributionApplicationService,
   CampaignApplicationService,
@@ -18,6 +19,7 @@ import {
 } from "../services"
 
 export interface ApplicationServicesContextValue {
+  aiIntelligenceApplicationService: AIIntelligenceApplicationService
   authenticationApplicationService: AuthenticationApplicationService
   attributionApplicationService: AttributionApplicationService
   integrationApplicationService: IntegrationApplicationService
@@ -34,6 +36,7 @@ const ApplicationServicesContext = createContext<ApplicationServicesContextValue
 
 function ApplicationServicesProvider({ children }: { children: React.ReactNode }) {
   const {
+    aiIntelligenceRepository,
     authenticationRepository,
     attributionRepository,
     integrationRepository,
@@ -48,6 +51,9 @@ function ApplicationServicesProvider({ children }: { children: React.ReactNode }
 
   const value = useMemo<ApplicationServicesContextValue>(
     () => ({
+      aiIntelligenceApplicationService: new AIIntelligenceApplicationService(
+        aiIntelligenceRepository
+      ),
       authenticationApplicationService: new AuthenticationApplicationService(
         authenticationRepository,
         sessionStorageGateway
@@ -65,6 +71,7 @@ function ApplicationServicesProvider({ children }: { children: React.ReactNode }
       permissionApplicationService: new PermissionApplicationService(permissionGateway),
     }),
     [
+      aiIntelligenceRepository,
       authenticationRepository,
       attributionRepository,
       integrationRepository,

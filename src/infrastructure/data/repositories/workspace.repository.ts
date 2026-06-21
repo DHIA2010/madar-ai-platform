@@ -12,12 +12,12 @@ import {
   mockOrganizations,
   mockWorkspaces,
 } from "@/infrastructure/workspace"
-import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 
 import { RepositoryCache, createWorkspaceCacheKey } from "../cache/repository-cache"
 import { mapRepositoryError } from "../errors"
 import { WorkspaceApiAdapter } from "../adapters/workspace-api.adapter"
 import { createHttpDataClient } from "../api/http-data-client"
+import { resolveRepositoryBackend } from "./repository-runtime"
 
 export class DataWorkspaceRepository implements WorkspaceRepository {
   private readonly cache = new RepositoryCache(120_000)
@@ -38,8 +38,8 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("workspace")
+      if (backend === "mock") {
         return this.cache.set(cacheKey, mockOrganizations)
       }
 
@@ -63,8 +63,8 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("workspace")
+      if (backend === "mock") {
         const dto = organizationId
           ? mockWorkspaces.filter((workspace) => workspace.organizationId === organizationId)
           : mockWorkspaces
@@ -86,8 +86,8 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("workspace")
+      if (backend === "mock") {
         if (!selection.workspaceId) {
           return null
         }
@@ -113,8 +113,8 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
 
   async switchWorkspace(payload: WorkspaceSelectionDto): Promise<WorkspaceDto> {
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("workspace")
+      if (backend === "mock") {
         const dto = assertValidWorkspaceSelection(payload)
         this.cache.invalidateWorkspace(payload.workspaceId)
         return dto

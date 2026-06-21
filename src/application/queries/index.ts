@@ -1,4 +1,5 @@
 export { GetCurrentUserQuery } from "./authentication.queries"
+export { GetAIIntelligenceDashboardQuery } from "./ai-intelligence.queries"
 export {
   CalculateAttributionQuery,
   CompareAttributionModelsQuery,

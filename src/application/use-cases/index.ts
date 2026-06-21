@@ -1,4 +1,5 @@
 export { AttachIdentityUseCase } from "./attach-identity.use-case"
+export { GetAIIntelligenceDashboardUseCase } from "./get-ai-intelligence-dashboard.use-case"
 export { AuthorizeConnectorUseCase } from "./authorize-connector.use-case"
 export { CalculateAttributionUseCase } from "./calculate-attribution.use-case"
 export { CompareAttributionModelsUseCase } from "./compare-attribution-models.use-case"

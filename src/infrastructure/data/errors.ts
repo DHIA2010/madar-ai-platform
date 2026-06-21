@@ -27,6 +27,19 @@ export class ApiError extends AppError {
   }
 }
 
+export class ConfigurationError extends AppError {
+  constructor(options: ErrorOptions) {
+    super("unknown", {
+      code: options.code ?? "configuration_error",
+      message: options.message,
+      details: options.details,
+      status: options.status,
+      cause: options.cause,
+    })
+    this.name = "ConfigurationError"
+  }
+}
+
 export class ValidationError extends AppValidationError {
   constructor(options: ErrorOptions) {
     super({

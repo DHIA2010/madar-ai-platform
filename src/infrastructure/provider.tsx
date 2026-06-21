@@ -5,6 +5,7 @@ import { createContext, useContext, useMemo, useState } from "react"
 import { createSessionManager } from "./identity"
 import type { InfrastructureServices } from "./gateways"
 import {
+  createAIIntelligenceRepository,
   createAuthenticationRepository,
   createAttributionRepository,
   createCampaignRepository,
@@ -59,12 +60,14 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
     })
   )
   const [attributionRepository] = useState(() => createAttributionRepository())
+  const [aiIntelligenceRepository] = useState(() => createAIIntelligenceRepository())
   const [integrationRepository] = useState(() => createIntegrationRepository())
   const [campaignRepository] = useState(() => createCampaignRepository())
   const [customerIntelligenceRepository] = useState(() => createCustomerIntelligenceRepository())
   const [segmentationRepository] = useState(() => createSegmentationRepository())
   const [notificationRepository] = useState(() => createNotificationRepository())
 
+  const aiIntelligenceGateway = aiIntelligenceRepository
   const authenticationGateway = authenticationRepository
   const attributionGateway = attributionRepository
   const integrationGateway = integrationRepository
@@ -80,6 +83,7 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
 
   const value = useMemo<InfrastructureServices>(
     () => ({
+      aiIntelligenceRepository,
       authenticationRepository,
       attributionRepository,
       integrationRepository,
@@ -89,6 +93,7 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
       customerIntelligenceRepository,
       segmentationRepository,
       notificationRepository,
+      aiIntelligenceGateway,
       authenticationGateway,
       attributionGateway,
       integrationGateway,
@@ -103,6 +108,8 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
       sessionStorageGateway,
     }),
     [
+      aiIntelligenceGateway,
+      aiIntelligenceRepository,
       authenticationRepository,
       authenticationGateway,
       attributionGateway,
