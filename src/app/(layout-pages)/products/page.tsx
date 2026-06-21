@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import ProductsPage from "./ProductsPage"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="المنتجات" />
+  return <ProductsPage />
 }

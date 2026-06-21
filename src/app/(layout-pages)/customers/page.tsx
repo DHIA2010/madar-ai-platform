@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import { CustomersOverview } from "@/features/customers/components"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="العملاء" />
+  return <CustomersOverview />
 }

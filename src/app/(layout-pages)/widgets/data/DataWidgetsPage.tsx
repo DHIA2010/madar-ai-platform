@@ -18,21 +18,14 @@ const RadialStatCard = lazy(() => import("./RadialStatCard"))
 
 // Skeleton
 function CardSkeleton({ height = 250 }: { height?: number }) {
-  return (
-    <div
-      className="w-full rounded-xl bg-muted animate-pulse"
-      style={{ height }}
-    />
-  )
+  return <div className="w-full rounded-xl bg-muted animate-pulse" style={{ height }} />
 }
 
 export default function DataWidgetsPage() {
   return (
     <div className="data-widgets-page">
-
       {/* Top Grid */}
       <div className="grid grid-cols-12 gap-6">
-
         <div className="col-span-12 xl:col-span-4">
           <Suspense fallback={<CardSkeleton height={260} />}>
             <TopTrafficChannelsCard />
@@ -58,10 +51,10 @@ export default function DataWidgetsPage() {
 
           <Suspense fallback={<CardSkeleton height={140} />}>
             <ProgressStatCard
-              title="Total sessions"
+              title="إجمالي الجلسات"
               value="789"
               progress={68}
-              badgeText="12% remaining"
+              badgeText="متبقي 12%"
               variant="info"
             />
           </Suspense>
@@ -78,12 +71,10 @@ export default function DataWidgetsPage() {
             <VisitorsSalesStackedCard />
           </Suspense>
         </div>
-
       </div>
 
       {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 mt-6">
-
         <Suspense fallback={<CardSkeleton height={180} />}>
           <WebsiteVisitorsCard />
         </Suspense>
@@ -99,50 +90,26 @@ export default function DataWidgetsPage() {
         <Suspense fallback={<CardSkeleton height={180} />}>
           <AreaStatsCard />
         </Suspense>
-
       </div>
 
       {/* Radial Stats */}
       <div className="grid gap-6 md:grid-cols-2 mt-6">
-
         <Suspense fallback={<CardSkeleton height={220} />}>
-          <RadialStatCard
-            title="Revenue Target"
-            value={72}
-            label="Achieved"
-            color="#6366f1"
-          />
+          <RadialStatCard title="هدف الإيرادات" value={72} label="تم تحقيقه" color="#6366f1" />
         </Suspense>
 
         <Suspense fallback={<CardSkeleton height={220} />}>
-          <RadialStatCard
-            title="Goal Completion"
-            value={86}
-            label="Completed"
-            color="#22c55e"
-          />
+          <RadialStatCard title="إكمال الهدف" value={86} label="مكتمل" color="#22c55e" />
         </Suspense>
 
         <Suspense fallback={<CardSkeleton height={220} />}>
-          <RadialStatCard
-            title="Server Usage"
-            value={64}
-            label="Used"
-            color="#f59e0b"
-          />
+          <RadialStatCard title="استخدام الخادم" value={64} label="مستخدم" color="#f59e0b" />
         </Suspense>
 
         <Suspense fallback={<CardSkeleton height={220} />}>
-          <RadialStatCard
-            title="Growth Rate"
-            value={41}
-            label="This Month"
-            color="#0ea5e9"
-          />
+          <RadialStatCard title="معدل النمو" value={41} label="هذا الشهر" color="#0ea5e9" />
         </Suspense>
-
       </div>
-
     </div>
   )
 }

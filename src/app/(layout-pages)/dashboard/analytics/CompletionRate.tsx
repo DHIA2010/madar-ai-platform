@@ -1,8 +1,15 @@
 "use client"
 
 import {
-  ArrowUp, ShieldHalf, Leaf, Lightbulb, EllipsisVertical,
-  LogOutIcon, SettingsIcon, UserIcon, CreditCardIcon
+  ArrowUp,
+  ShieldHalf,
+  Leaf,
+  Lightbulb,
+  EllipsisVertical,
+  LogOutIcon,
+  SettingsIcon,
+  UserIcon,
+  CreditCardIcon,
 } from "lucide-react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
@@ -20,37 +27,70 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { useWidget } from "@/features/dashboard/hooks/use-widget"
 
-export const description = "A bar chart with completion rate"
-
-const chartData = [
-  { month: "Jan", completion: 120 },
-  { month: "Feb", completion: 180 },
-  { month: "Mar", completion: 240 },
-  { month: "Apr", completion: 210 },
-  { month: "May", completion: 275 },
-  { month: "Jun", completion: 190 },
-]
+export const description = "مخطط أعمدة لمعدل الإنجاز"
 
 const chartConfig = {
   completion: {
-    label: "Completion",
+    label: "الإنجاز",
   },
 } satisfies ChartConfig
 
 export default function CompletionRate() {
+  const { readModelViewModel } = useWidget("completion-rate")
+  const payload = readModelViewModel?.payload
+
+  const chartData =
+    payload?.dataPoints?.map((point) => ({
+      month: String(point.month ?? "-"),
+      completion: typeof point.completion === "number" ? point.completion : 0,
+    })) ?? []
+
+  const averageCompletion = chartData.length
+    ? chartData.reduce((total, point) => total + point.completion, 0) / chartData.length
+    : 0
+  const firstValue = chartData[0]?.completion ?? 0
+  const lastValue = chartData[chartData.length - 1]?.completion ?? 0
+  const improvement = firstValue > 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0
+
   return (
     <Card className="h-auto w-full">
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full [&_svg]:size-5">
+              <EllipsisVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="text-right">
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <UserIcon className="h-4 w-4 shrink-0" />
+              عرض التقرير التفصيلي
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <CreditCardIcon className="h-4 w-4 shrink-0" />
+              تنزيل التقرير
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <SettingsIcon className="h-4 w-4 shrink-0" />
+              تصدير بصيغة CSV / PDF
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <LogOutIcon className="h-4 w-4 shrink-0" />
+              تحديث البيانات
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div className="text-right">
           <p className="text-md font-medium text-muted-foreground">
-            Completion Rate
+            {payload?.title ?? "معدل الإنجاز"}
           </p>
 
           <div className="mt-2 flex items-center gap-3">
-            <h2 className="text-4xl font-bold tracking-tight">
-              87%
-            </h2>
+            <h2 className="text-4xl font-bold tracking-tight">{averageCompletion.toFixed(1)}%</h2>
 
             <span
               className="
@@ -60,96 +100,31 @@ export default function CompletionRate() {
       "
             >
               <ArrowUp className="h-4 w-4" />
-              25.8%
+              {improvement.toFixed(1)}%
             </span>
           </div>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full [&_svg]:size-5"
-            >
-              <EllipsisVertical />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem>
-              <UserIcon className="mr-2 h-4 w-4" />
-              View detailed report
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <CreditCardIcon className="mr-2 h-4 w-4" />
-              Download report
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <SettingsIcon className="mr-2 h-4 w-4" />
-              Export as CSV / PDF
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOutIcon className="mr-2 h-4 w-4" />
-              Refresh data
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </CardHeader>
 
       <CardContent>
         {/* Mini bar chart */}
-        <ChartContainer
-          config={chartConfig}
-          className="h-[180px] w-full"
-        >
-          <BarChart
-            accessibilityLayer
-            data={chartData}
-            barSize={26}
-          >
+        <ChartContainer config={chartConfig} className="h-[180px] w-full">
+          <BarChart accessibilityLayer data={chartData} barSize={26}>
             <defs>
+              <linearGradient id="CompletionbarGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#C084FC" />
 
-              <linearGradient
-                id="CompletionbarGradient"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor="#C084FC"
-                />
+                <stop offset="60%" stopColor="#A855F7" />
 
-                <stop
-                  offset="60%"
-                  stopColor="#A855F7"
-                />
-
-                <stop
-                  offset="100%"
-                  stopColor="#7E22CE"
-                />
+                <stop offset="100%" stopColor="#7E22CE" />
               </linearGradient>
-
             </defs>
 
-            <CartesianGrid
-              vertical={false}
-              stroke="rgba(255,255,255,.05)"
-            />
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,.05)" />
 
-            <XAxis
-              dataKey="month"
-              tickLine={false}
-              tickMargin={10}
-              axisLine={false}
-            />
+            <XAxis dataKey="month" tickLine={false} tickMargin={10} axisLine={false} />
 
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent hideLabel />}
-            />
+            <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
 
             <Bar
               dataKey="completion"
@@ -163,9 +138,7 @@ export default function CompletionRate() {
         {/* Stats */}
         <div className="mt-8 space-y-5">
           <div className="flex items-center justify-between">
-
             <div className="flex items-center gap-3">
-
               <div
                 className="
         flex h-10 w-10 items-center justify-center rounded-xl
@@ -179,27 +152,19 @@ export default function CompletionRate() {
               </div>
 
               <div>
-                <p className="text-sm font-medium">
-                  Active Sessions
-                </p>
+                <p className="text-sm font-medium">الجلسات النشطة</p>
 
-                <p className="text-xs text-muted-foreground">
-                  Last 7 days
-                </p>
+                <p className="text-xs text-muted-foreground">آخر 7 أيام</p>
               </div>
-
             </div>
 
             <span className="text-sm font-medium text-emerald-400">
-              +126 this week
+              +{Math.round(lastValue * 24)} هذا الأسبوع
             </span>
-
           </div>
 
           <div className="flex items-center justify-between">
-
             <div className="flex items-center gap-3">
-
               <div
                 className="
                   flex h-10 w-10 items-center justify-center rounded-xl
@@ -213,27 +178,19 @@ export default function CompletionRate() {
               </div>
 
               <div>
-                <p className="text-sm font-medium">
-                  Resolved Items
-                </p>
+                <p className="text-sm font-medium">العناصر المكتملة</p>
 
-                <p className="text-xs text-muted-foreground">
-                  This week
-                </p>
+                <p className="text-xs text-muted-foreground">هذا الأسبوع</p>
               </div>
-
             </div>
 
             <span className="text-sm font-medium text-emerald-400">
-              +98 this week
+              +{Math.round(lastValue * 20)} هذا الأسبوع
             </span>
-
           </div>
 
           <div className="flex items-center justify-between">
-
             <div className="flex items-center gap-3">
-
               <div
                 className="
         flex h-10 w-10 items-center justify-center rounded-xl
@@ -247,21 +204,15 @@ export default function CompletionRate() {
               </div>
 
               <div>
-                <p className="text-sm font-medium">
-                  Follow-ups Created
-                </p>
+                <p className="text-sm font-medium">عمليات المتابعة</p>
 
-                <p className="text-xs text-muted-foreground">
-                  Last 7 days
-                </p>
+                <p className="text-xs text-muted-foreground">آخر 7 أيام</p>
               </div>
-
             </div>
 
             <span className="text-sm font-medium text-emerald-400">
-              +42 this week
+              +{Math.round(lastValue * 9)} هذا الأسبوع
             </span>
-
           </div>
         </div>
       </CardContent>

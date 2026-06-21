@@ -1,29 +1,31 @@
 "use client"
 import { useState } from "react"
-import { Gauge, ShieldHalf, OctagonX } from "lucide-react"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  CreditCardIcon,
+  EllipsisVertical,
+  Gauge,
+  LogOutIcon,
+  SettingsIcon,
+  ShieldHalf,
+  OctagonX,
+  UserIcon,
+} from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs"
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 
 type Range = "weekly" | "monthly" | "yearly"
+type VisitorsSalesPoint = { label: string; visitors: number; sales: number }
 
-const chartData: Record<Range, any[]> = {
+const chartData: Record<Range, VisitorsSalesPoint[]> = {
   weekly: [
     { label: "Mon", visitors: 40, sales: 60 },
     { label: "Tue", visitors: 55, sales: 75 },
@@ -61,110 +63,86 @@ export default function VisitorsSalesCard() {
 
   return (
     <Card className="w-full">
-      <CardHeader className="flex flex-row flex-wrap gap-3 items-center justify-between">
-        <div>
-          <CardTitle className="text-lg font-semibold">
-            Visitors / Sales
-          </CardTitle>
-          <p className="text-sm text-emerald-600">
-            ↑ 2.5% vs last period
-          </p>
-        </div>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full [&_svg]:size-5">
+              <EllipsisVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="text-right">
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <UserIcon className="h-4 w-4 shrink-0" />
+              عرض التقرير التفصيلي
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <CreditCardIcon className="h-4 w-4 shrink-0" />
+              تنزيل التقرير
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <SettingsIcon className="h-4 w-4 shrink-0" />
+              تصدير بصيغة CSV / PDF
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <LogOutIcon className="h-4 w-4 shrink-0" />
+              تحديث البيانات
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        {/* Tabs Filter */}
-        <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="weekly">Weekly</TabsTrigger>
-            <TabsTrigger value="monthly">Monthly</TabsTrigger>
-            <TabsTrigger value="yearly">Yearly</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="text-right">
+          <CardTitle className="text-lg font-semibold">الزوار / المبيعات</CardTitle>
+          <p className="text-sm text-emerald-600">↑ 2.5% مقارنة بالفترة السابقة</p>
+          <div className="mt-2">
+            <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
+              <TabsList className="h-8">
+                <TabsTrigger value="weekly">أسبوعي</TabsTrigger>
+                <TabsTrigger value="monthly">شهري</TabsTrigger>
+                <TabsTrigger value="yearly">سنوي</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
       </CardHeader>
 
       <CardContent className="p-6 pt-0">
         <div className="h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={chartData[range]}
-              margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-            >
+            <AreaChart data={chartData[range]} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
               <defs>
-                <linearGradient
-  id="visitorsGradient"
-  x1="0"
-  y1="0"
-  x2="0"
-  y2="1"
->
-  <stop
-    offset="0%"
-    stopColor="#22D3EE"
-    stopOpacity={0.45}
-  />
+                <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22D3EE" stopOpacity={0.45} />
 
-  <stop
-    offset="50%"
-    stopColor="#3B82F6"
-    stopOpacity={0.18}
-  />
+                  <stop offset="50%" stopColor="#3B82F6" stopOpacity={0.18} />
 
-  <stop
-    offset="100%"
-    stopColor="#3B82F6"
-    stopOpacity={0}
-  />
-</linearGradient>
-                <linearGradient
-  id="salesGradient"
-  x1="0"
-  y1="0"
-  x2="0"
-  y2="1"
->
-  <stop
-    offset="0%"
-    stopColor="#A855F7"
-    stopOpacity={0.45}
-  />
+                  <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#A855F7" stopOpacity={0.45} />
 
-  <stop
-    offset="50%"
-    stopColor="#6366F1"
-    stopOpacity={0.18}
-  />
+                  <stop offset="50%" stopColor="#6366F1" stopOpacity={0.18} />
 
-  <stop
-    offset="100%"
-    stopColor="#6366F1"
-    stopOpacity={0}
-  />
-</linearGradient>
+                  <stop offset="100%" stopColor="#6366F1" stopOpacity={0} />
+                </linearGradient>
 
-<filter id="cyanGlow">
-  <feGaussianBlur
-    stdDeviation="2"
-    result="blur"
-  />
+                <filter id="cyanGlow">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
 
-  <feMerge>
-    <feMergeNode in="blur" />
-    <feMergeNode in="SourceGraphic" />
-  </feMerge>
-</filter>
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
 
-<filter id="purpleGlow">
-  <feGaussianBlur
-    stdDeviation="2"
-    result="blur"
-  />
+                <filter id="purpleGlow">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
 
-  <feMerge>
-    <feMergeNode in="blur" />
-    <feMergeNode in="SourceGraphic" />
-  </feMerge>
-</filter>
-
-
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
 
               <XAxis
@@ -173,22 +151,22 @@ export default function VisitorsSalesCard() {
                 axisLine={false}
                 className="text-xs"
                 tickMargin={10}
-              />  
-              
+              />
+
               <YAxis hide />
 
               <Tooltip
-                  cursor={{
-                    stroke: "rgba(255,255,255,.08)",
-                    strokeWidth: 1,
-                  }}
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    color: "var(--foreground)",
-                  }}
-                />
+                cursor={{
+                  stroke: "rgba(255,255,255,.08)",
+                  strokeWidth: 1,
+                }}
+                contentStyle={{
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  color: "var(--foreground)",
+                }}
+              />
 
               <Area
                 type="natural"
@@ -208,57 +186,58 @@ export default function VisitorsSalesCard() {
               />
             </AreaChart>
           </ResponsiveContainer>
-
         </div>
 
         {/* Legend */}
         <div className="mt-4 flex justify-center gap-6 text-sm">
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-sm" style={{
-  background:
-    "linear-gradient(180deg,#22D3EE,#3B82F6)"
-}} />
-            Visitors
+            <span
+              className="h-3 w-3 rounded-sm"
+              style={{
+                background: "linear-gradient(180deg,#22D3EE,#3B82F6)",
+              }}
+            />
+            الزوار
           </div>
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-sm" style={{
-  background:
-    "linear-gradient(180deg,#A855F7,#6366F1)"
-}} />
-            Sales
+            <span
+              className="h-3 w-3 rounded-sm"
+              style={{
+                background: "linear-gradient(180deg,#A855F7,#6366F1)",
+              }}
+            />
+            المبيعات
           </div>
         </div>
         {/* Stats */}
-          <div className="mt-8 space-y-5">
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3"> 
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-white-600">
-                          <Gauge className="h-5 w-5" />
-                      </div>
-                      <div>
-                          <p className="text-sm font-medium">Completed Orders</p>
-                          <p className="text-xs text-muted-foreground">Last 7 days</p>
-                      </div>
-                  </div>
-                  <span className="text-sm font-medium text-green-600">+128</span>
-              </div>  
-
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-white-600">
-                          <ShieldHalf className="h-5 w-5" /> 
-                      </div>
-                      <div>
-                          <p className="text-sm font-medium">Processing Orders</p>
-                          <p className="text-xs text-muted-foreground">Currently active</p>
-                      </div>
-                  </div>
-                  <span className="text-sm font-medium text-yellow-600">46</span>
+        <div className="mt-8 space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-white-600">
+                <Gauge className="h-5 w-5" />
               </div>
-          </div>    
+              <div>
+                <p className="text-sm font-medium">الطلبات المكتملة</p>
+                <p className="text-xs text-muted-foreground">آخر 7 أيام</p>
+              </div>
+            </div>
+            <span className="text-sm font-medium text-green-600">+128</span>
+          </div>
 
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-white-600">
+                <ShieldHalf className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">الطلبات قيد المعالجة</p>
+                <p className="text-xs text-muted-foreground">نشطة حالياً</p>
+              </div>
+            </div>
+            <span className="text-sm font-medium text-yellow-600">46</span>
+          </div>
+        </div>
       </CardContent>
-        
     </Card>
   )
 }

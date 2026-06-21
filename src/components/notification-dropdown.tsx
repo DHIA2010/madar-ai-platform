@@ -53,69 +53,62 @@ const notifications: Notification[] = [
     color: "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
   },
   {
-  id: 5,
-  title: "Subscription renewed",
-  description: "A user renewed their subscription plan",
-  time: "10m ago",
-  color: "bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400",
-},
-{
-  id: 6,
-  title: "Support ticket opened",
-  description: "A user submitted a new support request",
-  time: "5m ago",
-  color: "bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400",
-},
-{
-  id: 7,
-  title: "New review received",
-  description: "A customer left a 5-star review",
-  time: "20m ago",
-  color: "bg-lime-100 text-lime-600 dark:bg-lime-500/20 dark:text-lime-400",
-},
-{
-  id: 8,
-  title: "Server restarted",
-  description: "Production server was successfully restarted",
-  time: "45m ago",
-  color: "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
-},
+    id: 5,
+    title: "Subscription renewed",
+    description: "A user renewed their subscription plan",
+    time: "10m ago",
+    color: "bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400",
+  },
+  {
+    id: 6,
+    title: "Support ticket opened",
+    description: "A user submitted a new support request",
+    time: "5m ago",
+    color: "bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400",
+  },
+  {
+    id: 7,
+    title: "New review received",
+    description: "A customer left a 5-star review",
+    time: "20m ago",
+    color: "bg-lime-100 text-lime-600 dark:bg-lime-500/20 dark:text-lime-400",
+  },
+  {
+    id: 8,
+    title: "Server restarted",
+    description: "Production server was successfully restarted",
+    time: "45m ago",
+    color: "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
+  },
 ]
 
 export function NotificationDropdown() {
-  const unreadCount = notifications.filter(n => n.unread).length
+  const unreadCount = notifications.filter((n) => n.unread).length
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <div className="relative">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full w-10 h-10"
-          >
-            <Bell className="size-5"/>
+          <Button variant="ghost" size="icon" className="rounded-full w-10 h-10">
+            <Bell className="size-5" />
           </Button>
 
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full
+            <span
+              className="absolute -top-1 -end-1 h-4 min-w-4 rounded-full
               bg-destructive px-1 text-[10px] font-medium
-              text-destructive-foreground flex items-center justify-center">
+              text-destructive-foreground flex items-center justify-center"
+            >
               {unreadCount}
             </span>
           )}
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent
-        align="end"
-        className="w-80 p-0 rounded-xl shadow-xl"
-      >
+      <DropdownMenuContent align="end" className="w-80 p-0 rounded-xl shadow-xl">
         <DropdownMenuLabel className="flex items-center justify-between px-4 py-3">
           <span>Notifications</span>
-          <span className="text-xs text-muted-foreground">
-            {unreadCount} unread
-          </span>
+          <span className="text-xs text-muted-foreground">{unreadCount} unread</span>
         </DropdownMenuLabel>
 
         <DropdownMenuSeparator />
@@ -127,9 +120,7 @@ export function NotificationDropdown() {
                   key={item.id}
                   className={cn(
                     "flex gap-3 px-4 py-3 cursor-pointer transition-colors",
-                    item.unread
-                      ? "bg-muted/50 hover:bg-muted"
-                      : "hover:bg-muted/50"
+                    item.unread ? "bg-muted/50 hover:bg-muted" : "hover:bg-muted/50"
                   )}
                 >
                   <Avatar className="h-10 w-10">
@@ -145,15 +136,9 @@ export function NotificationDropdown() {
                   </Avatar>
 
                   <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium leading-none">
-                      {item.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.description}
-                    </p>
-                    <span className="text-xs text-muted-foreground">
-                      {item.time}
-                    </span>
+                    <p className="text-sm font-medium leading-none">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">{item.description}</p>
+                    <span className="text-xs text-muted-foreground">{item.time}</span>
                   </div>
                 </div>
               ))}

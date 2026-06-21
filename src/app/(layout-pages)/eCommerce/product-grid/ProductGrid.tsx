@@ -1,13 +1,8 @@
 "use client"
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
+import { ROUTES } from "@/constants/routes"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -19,16 +14,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import {
-  MoreVertical,
-  Plus,
-  Search,
-  ShoppingBag,
-  Wallet,
-  Users,
-  Box,
-} from "lucide-react"
-
+import { MoreVertical, Plus, Search, ShoppingBag, Wallet, Users, Box } from "lucide-react"
 
 const products = [
   {
@@ -121,8 +107,7 @@ const products = [
     status: "Archived",
     image: "/pulse-ui-next/products/09.png",
   },
-];
-
+]
 
 const statusVariant = (status: string) => {
   switch (status) {
@@ -137,7 +122,6 @@ const statusVariant = (status: string) => {
   }
 }
 
-
 export default function ProductGrid() {
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -147,184 +131,168 @@ export default function ProductGrid() {
   const PAGE_SIZE = 8
 
   const filtered = useMemo(() => {
-    return data.filter(p =>
-      `${p.name} ${p.category} ${p.status}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
+    return data.filter((p) =>
+      `${p.name} ${p.category} ${p.status}`.toLowerCase().includes(search.toLowerCase())
     )
   }, [search, data])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
 
-  useEffect(() => {
-    setPage(p => Math.min(p, totalPages))
-  }, [totalPages])
-
-  const paginated = filtered.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
-  )
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const toggleOne = (id: number) => {
-    setSelected(prev =>
-      prev.includes(id)
-        ? prev.filter(i => i !== id)
-        : [...prev, id]
-    )
+    setSelected((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-md text-muted-foreground">Total Orders</p>
+                <p className="text-sm text-muted-foreground">All Regions</p>
+              </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            <Card>
-                <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <p className="text-md text-muted-foreground">Total Orders</p>
-                            <p className="text-sm text-muted-foreground">All Regions</p>
-                        </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>View Details</DropdownMenuItem>
+                  <DropdownMenuItem>Export</DropdownMenuItem>
+                  <DropdownMenuItem>Refresh</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem>View Details</DropdownMenuItem>
-                                <DropdownMenuItem>Export</DropdownMenuItem>
-                                <DropdownMenuItem>Refresh</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+            <h2 className="text-2xl font-bold">8,542</h2>
 
-                    <h2 className="text-2xl font-bold">8,542</h2>
+            <div className="mt-3 flex items-center gap-1 text-emerald-600">
+              <ShoppingBag className="h-5 w-5" />
+              <span className="text-sm font-medium">+3.5% since last month</span>
+            </div>
+          </CardContent>
+        </Card>
 
-                    <div className="mt-3 flex items-center gap-1 text-emerald-600">
-                        <ShoppingBag className="h-5 w-5" />
-                        <span className="text-sm font-medium">+3.5% since last month</span>
-                    </div>
-                </CardContent>
-            </Card>
+        <Card className="bg-purple-600 text-white border-purple-500/30">
+          <CardContent className="p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-md">Total Revenue</p>
+                <p className="text-sm opacity-80">This Quarter</p>
+              </div>
 
-            <Card className="bg-purple-600 text-white border-purple-500/30">
-                <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <p className="text-md">Total Revenue</p>
-                            <p className="text-sm opacity-80">This Quarter</p>
-                        </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="text-white">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>View Details</DropdownMenuItem>
+                  <DropdownMenuItem>Export</DropdownMenuItem>
+                  <DropdownMenuItem>Refresh</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost" className="text-white">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem>View Details</DropdownMenuItem>
-                                <DropdownMenuItem>Export</DropdownMenuItem>
-                                <DropdownMenuItem>Refresh</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+            <h2 className="text-2xl font-bold">$23,456</h2>
 
-                    <h2 className="text-2xl font-bold">$23,456</h2>
+            <div className="mt-3 flex items-center gap-1">
+              <Wallet className="h-5 w-5" />
+              <span className="text-sm font-medium">+8.5% since last month</span>
+            </div>
+          </CardContent>
+        </Card>
 
-                    <div className="mt-3 flex items-center gap-1">
-                        <Wallet className="h-5 w-5" />
-                        <span className="text-sm font-medium">+8.5% since last month</span>
-                    </div>
-                </CardContent>
-            </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-md text-muted-foreground">Total Customers</p>
+                <p className="text-sm text-muted-foreground">Worldwide</p>
+              </div>
 
-            <Card>
-                <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <p className="text-md text-muted-foreground">Total Customers</p>
-                            <p className="text-sm text-muted-foreground">Worldwide</p>
-                        </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>View Details</DropdownMenuItem>
+                  <DropdownMenuItem>Export</DropdownMenuItem>
+                  <DropdownMenuItem>Refresh</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem>View Details</DropdownMenuItem>
-                                <DropdownMenuItem>Export</DropdownMenuItem>
-                                <DropdownMenuItem>Refresh</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+            <h2 className="text-2xl font-bold">5,678</h2>
 
-                    <h2 className="text-2xl font-bold">5,678</h2>
+            <div className="mt-3 flex items-center gap-1 text-rose-600">
+              <Users className="h-5 w-5" />
+              <span className="text-sm font-medium">-2.5% since last month</span>
+            </div>
+          </CardContent>
+        </Card>
 
-                    <div className="mt-3 flex items-center gap-1 text-rose-600">
-                        <Users className="h-5 w-5" />
-                        <span className="text-sm font-medium">-2.5% since last month</span>
-                    </div>
-                </CardContent>
-            </Card>
+        <Card className="bg-emerald-600 text-white border-emerald-500/30">
+          <CardContent className="p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-md">Total Products</p>
+                <p className="text-sm opacity-80">Inventory</p>
+              </div>
 
-            <Card className="bg-emerald-600 text-white border-emerald-500/30">
-                <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <p className="text-md">Total Products</p>
-                            <p className="text-sm opacity-80">Inventory</p>
-                        </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="text-white">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>View Details</DropdownMenuItem>
+                  <DropdownMenuItem>Export</DropdownMenuItem>
+                  <DropdownMenuItem>Refresh</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost" className="text-white">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem>View Details</DropdownMenuItem>
-                                <DropdownMenuItem>Export</DropdownMenuItem>
-                                <DropdownMenuItem>Refresh</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+            <h2 className="text-2xl font-bold">1,234</h2>
 
-                    <h2 className="text-2xl font-bold">1,234</h2>
+            <div className="mt-3 flex items-center gap-1">
+              <Box className="h-5 w-5" />
+              <span className="text-sm font-medium">+5.0% since last month</span>
+            </div>
+          </CardContent>
+        </Card>
 
-                    <div className="mt-3 flex items-center gap-1">
-                        <Box className="h-5 w-5" />
-                        <span className="text-sm font-medium">+5.0% since last month</span>
-                    </div>
-                </CardContent>
-            </Card>
+        <Card className="border border-yellow-400 bg-yellow-50 text-yellow-900">
+          <CardContent className="p-6">
+            <p className="text-md text-muted-foreground">Active Shoppers</p>
+            <p className="text-sm text-muted-foreground">Live Now</p>
 
-            <Card className="border border-yellow-400 bg-yellow-50 text-yellow-900">
-                <CardContent className="p-6">
-                    <p className="text-md text-muted-foreground">Active Shoppers</p>
-                    <p className="text-sm text-muted-foreground">Live Now</p>
+            <h2 className="text-2xl font-bold my-3">179</h2>
 
-                    <h2 className="text-2xl font-bold my-3">179</h2>
-
-                    <div className="flex items-center gap-1 text-yellow-600">
-                        <Users className="h-5 w-5" />
-                        <span className="text-sm font-medium">44% today</span>
-                    </div>
-                </CardContent>
-            </Card>
-
-        </div>
+            <div className="flex items-center gap-1 text-yellow-600">
+              <Users className="h-5 w-5" />
+              <span className="text-sm font-medium">44% today</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* HEADER */}
       <Card>
         <CardHeader className="flex flex-row flex-wrap gap-4 items-center justify-between border-b py-4">
           <div>
             <CardTitle className="text-lg">Products Grid</CardTitle>
-            <CardDescription>
-              Visual product management
-            </CardDescription>
+            <CardDescription>Visual product management</CardDescription>
           </div>
 
           <div className="flex gap-3 items-center">
@@ -341,7 +309,7 @@ export default function ProductGrid() {
               />
             </div>
 
-            <Link href="/ecommerce/add-product">
+            <Link href={ROUTES.productsAdd}>
               <Button size="sm">
                 <Plus className="mr-1 h-5 w-5" />
                 Add Product
@@ -353,17 +321,13 @@ export default function ProductGrid() {
         {/* GRID */}
         <CardContent className="p-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {paginated.map(product => (
+            {paginated.map((product) => (
               <ProductGridCard
                 key={product.id}
                 product={product}
                 selected={selected.includes(product.id)}
                 onSelect={() => toggleOne(product.id)}
-                onDelete={() =>
-                  setData(prev =>
-                    prev.filter(p => p.id !== product.id)
-                  )
-                }
+                onDelete={() => setData((prev) => prev.filter((p) => p.id !== product.id))}
               />
             ))}
           </div>
@@ -371,21 +335,21 @@ export default function ProductGrid() {
           {/* PAGINATION */}
           <div className="flex justify-between items-center mt-6">
             <span className="text-sm text-muted-foreground">
-              Page {page} of {totalPages}
+              Page {currentPage} of {totalPages}
             </span>
 
             <div className="flex gap-2">
               <Button
                 size="sm"
-                disabled={page === 1}
-                onClick={() => setPage(p => p - 1)}
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 Prev
               </Button>
               <Button
                 size="sm"
-                disabled={page === totalPages}
-                onClick={() => setPage(p => p + 1)}
+                disabled={currentPage === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
                 Next
               </Button>
@@ -397,18 +361,30 @@ export default function ProductGrid() {
   )
 }
 
-
 /* PRODUCT CARD */
 function ProductGridCard({
   product,
   selected,
   onSelect,
   onDelete,
-}: any) {
+}: {
+  product: {
+    id: number
+    name: string
+    category: string
+    stock: string
+    sku: string
+    price: string
+    status: string
+    image: string
+  }
+  selected: boolean
+  onSelect: () => void
+  onDelete: () => void
+}) {
   return (
     <Card className="group overflow-hidden transition hover:shadow-lg border hover:border-primary cursor-pointer shadow-none hover:shadow-primary/10">
       <CardContent className="p-4 space-y-4">
-
         {/* Top row */}
         <div className="flex items-center justify-between">
           <Checkbox checked={selected} onCheckedChange={onSelect} />
@@ -424,11 +400,8 @@ function ProductGridCard({
               <DropdownMenuItem>View</DropdownMenuItem>
               <DropdownMenuItem>Edit</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-red-600"
-                onClick={onDelete}
-              >
-                Delete 
+              <DropdownMenuItem className="text-red-600" onClick={onDelete}>
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -445,18 +418,14 @@ function ProductGridCard({
 
         {/* Info */}
         <div>
-          <h4 className="font-semibold leading-tight">
-            {product.name}
-          </h4>
-          <p className="text-sm text-muted-foreground">
-            {product.category}
-          </p>
+          <h4 className="font-semibold leading-tight">{product.name}</h4>
+          <p className="text-sm text-muted-foreground">{product.category}</p>
         </div>
 
         {/* Meta */}
         <div className="flex items-center justify-between">
           <span className="font-semibold">{product.price}</span>
-          <Badge className={statusVariant(product.status)} variant= "outline">
+          <Badge className={statusVariant(product.status)} variant="outline">
             {product.status}
           </Badge>
         </div>
@@ -470,5 +439,3 @@ function ProductGridCard({
     </Card>
   )
 }
-
-

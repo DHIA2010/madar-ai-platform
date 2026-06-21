@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { CalendarEvent } from "./types"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 type Props = {
   open: boolean
@@ -22,34 +22,12 @@ type Props = {
   selectedDate?: string | null
 }
 
-export function EventDialog({
-  open,
-  onClose,
-  onSave,
-  event,
-  selectedDate,
-}: Props) {
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
-  const [start, setStart] = useState("")
-  const [end, setEnd] = useState("")
-  const [color, setColor] = useState("#3b82f6")
-
-  useEffect(() => {
-    if (event) {
-      setTitle(event.title)
-      setDescription(event.description ?? "")
-      setStart(event.start)
-      setEnd(event.end ?? "")
-      setColor(event.color ?? "#3b82f6")
-    } else if (selectedDate) {
-      setTitle("")
-      setDescription("")
-      setStart(`${selectedDate}T09:00`)
-      setEnd(`${selectedDate}T09:30`)
-      setColor("#3b82f6")
-    }
-  }, [event, selectedDate])
+export function EventDialog({ open, onClose, onSave, event, selectedDate }: Props) {
+  const [title, setTitle] = useState(event?.title ?? "")
+  const [description, setDescription] = useState(event?.description ?? "")
+  const [start, setStart] = useState(event?.start ?? (selectedDate ? `${selectedDate}T09:00` : ""))
+  const [end, setEnd] = useState(event?.end ?? (selectedDate ? `${selectedDate}T09:30` : ""))
+  const [color, setColor] = useState(event?.color ?? "#3b82f6")
 
   const handleSave = () => {
     onSave({
@@ -67,9 +45,7 @@ export function EventDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {event ? "Edit Event" : "Add Event"}
-          </DialogTitle>
+          <DialogTitle>{event ? "Edit Event" : "Add Event"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -96,21 +72,13 @@ export function EventDialog({
           {/* Start */}
           <div className="space-y-2">
             <Label>Start</Label>
-            <Input
-              type="datetime-local"
-              value={start}
-              onChange={(e) => setStart(e.target.value)}
-            />
+            <Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} />
           </div>
 
           {/* End */}
           <div className="space-y-2">
             <Label>End</Label>
-            <Input
-              type="datetime-local"
-              value={end}
-              onChange={(e) => setEnd(e.target.value)}
-            />
+            <Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />
           </div>
 
           {/* Color */}
@@ -132,10 +100,7 @@ export function EventDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!title || !start}
-          >
+          <Button onClick={handleSave} disabled={!title || !start}>
             {event ? "Update Event" : "Add Event"}
           </Button>
         </DialogFooter>

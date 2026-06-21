@@ -1,7 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Search } from "lucide-react"
+import { useState } from "react"
+import {
+  CreditCardIcon,
+  EllipsisVertical,
+  LogOutIcon,
+  Search,
+  SettingsIcon,
+  UserIcon,
+} from "lucide-react"
 import {
   Table,
   TableBody,
@@ -14,147 +21,88 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-
-export const trafficTableData = [
-  {
-    month: "January",
-    source: "Google",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg",
-    desktop: 186,
-    mobile: 80,
-    sessions: 4200,
-    bounce: "42%",
-    growth: -4.2,
-  },
-  {
-    month: "February",
-    source: "Facebook",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/facebook/facebook-original.svg",
-    desktop: 305,
-    mobile: 200,
-    sessions: 6850,
-    bounce: "38%",
-    growth: 7.1,
-  },
-  {
-    month: "March",
-    source: "Twitter",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/twitter/twitter-original.svg",
-    desktop: 237,
-    mobile: 120,
-    sessions: 5120,
-    bounce: "46%",
-    growth: -2.4,
-  },
-  {
-    month: "April",
-    source: "Direct",
-    icon: "https://img.icons8.com/ios-filled/50/000000/link.png",
-    desktop: 273,
-    mobile: 190,
-    sessions: 5980,
-    bounce: "40%",
-    growth: 3.9,
-  },
-  {
-    month: "May",
-    source: "TikTok",
-    icon: "https://img.icons8.com/ios-filled/50/000000/tiktok.png",
-    desktop: 309,
-    mobile: 230,
-    sessions: 7340,
-    bounce: "35%",
-    growth: 5.6,
-  },
-  {
-    month: "June",
-    source: "LinkedIn",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg",
-    desktop: 334,
-    mobile: 240,
-    sessions: 7680,
-    bounce: "33%",
-    growth: 6.1,
-  },
-  {
-    month: "July",
-    source: "Angular",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/angularjs/angularjs-original.svg",
-    desktop: 368,
-    mobile: 260,
-    sessions: 8240,
-    bounce: "36%",
-    growth: 4.8,
-  },
-  {
-    month: "August",
-    source: "Reddit",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/redhat/redhat-original.svg",
-    desktop: 402,
-    mobile: 295,
-    sessions: 9120,
-    bounce: "38%",
-    growth: 7.4,
-  },
-  {
-    month: "September",
-    source: "Twitter",
-    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/redux/redux-original.svg",
-    desktop: 386,
-    mobile: 310,
-    sessions: 8890,
-    bounce: "41%",
-    growth: -1.9,
-  },
-
-]
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useWidget } from "@/features/dashboard/hooks/use-widget"
 
 export default function TrafficTable() {
+  const { readModelViewModel } = useWidget("traffic-table")
+  const payload = readModelViewModel?.payload
+  const trafficTableData =
+    payload?.dataPoints?.map((point) => ({
+      month: String(point.month ?? "-"),
+      source: String(point.source ?? "-"),
+      icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg",
+      desktop: typeof point.desktop === "number" ? point.desktop : 0,
+      mobile: typeof point.mobile === "number" ? point.mobile : 0,
+      sessions: typeof point.sessions === "number" ? point.sessions : 0,
+      bounce: `${typeof point.bounce === "number" ? point.bounce : 0}%`,
+      growth: typeof point.growth === "number" ? point.growth : 0,
+    })) ?? []
+
   const [search, setSearch] = useState("")
   const [sortKey] = useState<"month" | "desktop" | "mobile">("month")
   const [page, setPage] = useState(1)
 
   const pageSize = 5
 
-  const filteredData = useMemo(() => {
-    return trafficTableData
-      .filter((row) =>
-  [
-    row.month,
-    row.source,
-    row.bounce,
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(search.toLowerCase())
-)
-      .sort((a, b) =>
-        sortKey === "month"
-          ? a.month.localeCompare(b.month)
-          : b[sortKey] - a[sortKey]
-      )
-  }, [search, sortKey])
+  const filteredData = trafficTableData
+    .filter((row) =>
+      [row.month, row.source, row.bounce].join(" ").toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) =>
+      sortKey === "month" ? a.month.localeCompare(b.month) : b[sortKey] - a[sortKey]
+    )
 
-  const paginatedData = filteredData.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  )
+  const paginatedData = filteredData.slice((page - 1) * pageSize, page * pageSize)
 
   const totalPages = Math.ceil(filteredData.length / pageSize)
 
   return (
     <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b">
-        <div>
-          <CardTitle className="text-lg">Traffic Details</CardTitle>
-          <CardDescription>January - June 2025</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 border-b">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full [&_svg]:size-5">
+              <EllipsisVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="text-right">
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <UserIcon className="h-4 w-4 shrink-0" />
+              عرض التقرير التفصيلي
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <CreditCardIcon className="h-4 w-4 shrink-0" />
+              تنزيل التقرير
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <SettingsIcon className="h-4 w-4 shrink-0" />
+              تصدير بصيغة CSV / PDF
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <LogOutIcon className="h-4 w-4 shrink-0" />
+              تحديث البيانات
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div className="text-right">
+          <CardTitle className="text-lg text-right">{payload?.title ?? "مصادر الزيارات"}</CardTitle>
+          <CardDescription className="num-ltr text-right">يناير - يونيو 2025</CardDescription>
         </div>
 
         <div className="relative w-full max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
           <Input
-            placeholder="Search month..."
+            placeholder="ابحث عن الشهر..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
@@ -165,17 +113,17 @@ export default function TrafficTable() {
         </div>
       </CardHeader>
       <CardContent className="overflow-auto">
-        <Table>
+        <Table dir="rtl">
           <TableHeader className="sticky top-0 bg-background z-10">
             <TableRow>
-              <TableHead>Month</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead className="text-right">Desktop</TableHead>
-              <TableHead className="text-right">Mobile</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Sessions</TableHead>
-              <TableHead className="text-right">Bounce</TableHead>
-              <TableHead className="text-right">Growth</TableHead>
+              <TableHead className="text-right">الشهر</TableHead>
+              <TableHead className="text-right">المصدر</TableHead>
+              <TableHead className="text-left num-ltr">Desktop</TableHead>
+              <TableHead className="text-left num-ltr">Mobile</TableHead>
+              <TableHead className="text-left num-ltr">Total</TableHead>
+              <TableHead className="text-left num-ltr">Sessions</TableHead>
+              <TableHead className="text-left num-ltr">Bounce</TableHead>
+              <TableHead className="text-left num-ltr">Growth</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -190,46 +138,34 @@ export default function TrafficTable() {
                   className="hover:bg-muted/50 transition"
                 >
                   {/* Month */}
-                  <TableCell className="font-medium">
-                    {row.month}
+                  <TableCell className="text-right">
+                    <span className="num-ltr">{row.month}</span>
                   </TableCell>
 
                   {/* Source with image */}
-                  <TableCell>
+                  <TableCell className="text-right">
                     <div className="flex items-center gap-3">
                       <img
                         src={row.icon}
                         alt={row.source}
                         className="h-9 w-9 rounded-xl border p-1.5 object-contain"
                       />
-                      <span className="font-medium">
-                        {row.source}
-                      </span>
+                      <span className="font-medium num-ltr">{row.source}</span>
                     </div>
                   </TableCell>
 
-                  <TableCell className="text-right">
-                    {row.desktop}
-                  </TableCell>
+                  <TableCell className="text-left num-ltr">{row.desktop}</TableCell>
 
-                  <TableCell className="text-right">
-                    {row.mobile}
-                  </TableCell>
+                  <TableCell className="text-left num-ltr">{row.mobile}</TableCell>
 
-                  <TableCell className="text-right font-semibold">
-                    {total}
-                  </TableCell>
+                  <TableCell className="text-left font-semibold num-ltr">{total}</TableCell>
 
-                  <TableCell className="text-right">
-                    {row.sessions}
-                  </TableCell>
+                  <TableCell className="text-left num-ltr">{row.sessions}</TableCell>
 
-                  <TableCell className="text-right">
-                    {row.bounce}
-                  </TableCell>
+                  <TableCell className="text-left num-ltr">{row.bounce}</TableCell>
 
                   {/* Growth badge */}
-                  <TableCell className="text-right">
+                  <TableCell className="text-left num-ltr">
                     <Badge
                       className={
                         isPositive
@@ -247,11 +183,11 @@ export default function TrafficTable() {
           </TableBody>
         </Table>
 
-
         {/* Pagination */}
         <div className="flex items-center justify-between mt-4">
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            الصفحة <span className="num-ltr">{page}</span> من{" "}
+            <span className="num-ltr">{totalPages}</span>
           </span>
 
           <div className="flex gap-2">
@@ -261,7 +197,7 @@ export default function TrafficTable() {
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
             >
-              Previous
+              السابق
             </Button>
             <Button
               size="sm"
@@ -269,7 +205,7 @@ export default function TrafficTable() {
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
             >
-              Next
+              التالي
             </Button>
           </div>
         </div>

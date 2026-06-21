@@ -13,13 +13,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 import {
   DropdownMenu,
@@ -30,79 +24,83 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import { Progress } from "@/components/ui/progress"
+import { useWidget } from "@/features/dashboard/hooks/use-widget"
 
 export default function WebsiteAnalytics() {
+  const { readModelViewModel } = useWidget("website-analytics")
+  const payload = readModelViewModel?.payload
+  const metrics = payload?.dataPoints?.[0]
+
+  const totalUsers = typeof metrics?.totalUsers === "number" ? metrics.totalUsers : 0
+  const revenue = typeof metrics?.revenue === "number" ? metrics.revenue : 0
+  const revenueDelta = typeof metrics?.revenueDelta === "number" ? metrics.revenueDelta : 0
+  const activeUsers = typeof metrics?.activeUsers === "number" ? metrics.activeUsers : 0
+  const activeDelta = typeof metrics?.activeDelta === "number" ? metrics.activeDelta : 0
+  const conversionRate = typeof metrics?.conversionRate === "number" ? metrics.conversionRate : 0
+  const conversionDelta = typeof metrics?.conversionDelta === "number" ? metrics.conversionDelta : 0
+
   return (
     <Card className="relative overflow-hidden h-full">
       {/* Gaussian Glow */}
       <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-primary/5 blur-3xl" />
 
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle className="mb-1 text-xl">
-            Website Analytics
-          </CardTitle>
-
-          <CardDescription>
-            Overview of your website analytics data
-          </CardDescription>
-        </div>
-
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full [&_svg]:size-5"
-            >
+            <Button variant="ghost" size="icon" className="rounded-full [&_svg]:size-5">
               <EllipsisVertical />
             </Button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem>
+          <DropdownMenuContent align="end" className="text-right">
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <UserIcon />
-              View detailed report
+              عرض التقرير التفصيلي
             </DropdownMenuItem>
 
-            <DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <CreditCardIcon />
-              Download report
+              تنزيل التقرير
             </DropdownMenuItem>
 
-            <DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <SettingsIcon />
-              Export as CSV / PDF
+              تصدير بصيغة CSV / PDF
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <LogOutIcon />
-              Refresh data
+              تحديث البيانات
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <div className="text-right">
+          <CardTitle className="mb-1 text-xl">{payload?.title ?? "تحليلات الموقع"}</CardTitle>
+
+          <CardDescription>{payload?.summary ?? "نظرة عامة على بيانات الموقع"}</CardDescription>
+        </div>
       </CardHeader>
 
       <CardContent>
         {/* Top Stats */}
         <div>
           <h2 className="text-4xl font-bold tracking-tight">
-            685.7K
+            {new Intl.NumberFormat("en-US", {
+              notation: "compact",
+              maximumFractionDigits: 1,
+            }).format(totalUsers)}
           </h2>
 
-          <p className="mt-1 text-muted-foreground">
-            Total Users
-          </p>
+          <p className="mt-1 text-muted-foreground">إجمالي المستخدمين</p>
         </div>
 
         {/* Metrics */}
         <div className="mt-7 flex flex-col gap-7">
-
           {/* Revenue */}
           <div className="flex items-center gap-5">
-
             <div
               className="
                 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl
@@ -114,17 +112,16 @@ export default function WebsiteAnalytics() {
             </div>
 
             <div className="w-full">
-
               <div className="flex items-center justify-between">
-
-                <span className="text-muted-foreground">
-                  Revenue
-                </span>
+                <span className="text-muted-foreground">الإيرادات</span>
 
                 <div className="flex items-center gap-2">
-
                   <span className="font-medium">
-                    $7,926
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    }).format(revenue)}
                   </span>
 
                   <span
@@ -135,11 +132,9 @@ export default function WebsiteAnalytics() {
                     "
                   >
                     <TrendingUp className="mr-1 h-4 w-4" />
-                    12%
+                    {revenueDelta}%
                   </span>
-
                 </div>
-
               </div>
 
               <Progress
@@ -154,15 +149,11 @@ export default function WebsiteAnalytics() {
                   [&>div]:shadow-[0_0_14px_rgba(23,173,55,.35)]
                 "
               />
-
             </div>
-
           </div>
-
 
           {/* Active Users */}
           <div className="flex items-center gap-5">
-
             <div
               className="
                 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl
@@ -174,17 +165,12 @@ export default function WebsiteAnalytics() {
             </div>
 
             <div className="w-full">
-
               <div className="flex items-center justify-between">
-
-                <span className="text-muted-foreground">
-                  Active Users
-                </span>
+                <span className="text-muted-foreground">المستخدمون النشطون</span>
 
                 <div className="flex items-center gap-2">
-
                   <span className="font-medium">
-                    428
+                    {new Intl.NumberFormat("en-US").format(activeUsers)}
                   </span>
 
                   <span
@@ -195,11 +181,9 @@ export default function WebsiteAnalytics() {
                     "
                   >
                     <TrendingUp className="mr-1 h-4 w-4" />
-                    8%
+                    {activeDelta}%
                   </span>
-
                 </div>
-
               </div>
 
               <Progress
@@ -214,15 +198,11 @@ export default function WebsiteAnalytics() {
                   [&>div]:shadow-[0_0_14px_rgba(255,0,128,.35)]
                 "
               />
-
             </div>
-
           </div>
-
 
           {/* Conversion Rate */}
           <div className="flex items-center gap-5">
-
             <div
               className="
                 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl
@@ -234,18 +214,11 @@ export default function WebsiteAnalytics() {
             </div>
 
             <div className="w-full">
-
               <div className="flex items-center justify-between">
-
-                <span className="text-muted-foreground">
-                  Conversion Rate
-                </span>
+                <span className="text-muted-foreground">معدل التحويل</span>
 
                 <div className="flex items-center gap-2">
-
-                  <span className="font-medium">
-                    3.6%
-                  </span>
+                  <span className="font-medium">{conversionRate.toFixed(1)}%</span>
 
                   <span
                     className="
@@ -255,11 +228,9 @@ export default function WebsiteAnalytics() {
                     "
                   >
                     <TrendingDown className="mr-1 h-4 w-4" />
-                    2%
+                    {Math.abs(conversionDelta)}%
                   </span>
-
                 </div>
-
               </div>
 
               <Progress
@@ -274,11 +245,8 @@ export default function WebsiteAnalytics() {
                   [&>div]:shadow-[0_0_14px_rgba(168,85,247,.35)]
                 "
               />
-
             </div>
-
           </div>
-
         </div>
       </CardContent>
     </Card>

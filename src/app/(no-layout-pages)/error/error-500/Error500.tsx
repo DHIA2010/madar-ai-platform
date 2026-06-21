@@ -1,17 +1,17 @@
 "use client"
 
 import { motion } from "framer-motion"
-import  Link from "next/link"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "next-themes"
 import { Sun, Moon } from "lucide-react"
+import { ROUTES } from "@/constants/routes"
 
 export default function Error500() {
-    const { theme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   return (
     <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-blue-500/20">
-      
-       {/* Theme Toggle */}
+      {/* Theme Toggle */}
       <div className="absolute top-6 right-6">
         <Button
           variant="outline"
@@ -19,14 +19,10 @@ export default function Error500() {
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="bg-background/60 border-border supports-[backdrop-filter]:backdrop-blur-md"
         >
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
       </div>
-      
+
       {/* Background Glow Blobs */}
       <div className="absolute top-0 left-0 w-96 h-96 bg-purple-500/30 blur-3xl rounded-full -z-10"></div>
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-500/30 blur-3xl rounded-full -z-10"></div>
@@ -58,9 +54,7 @@ export default function Error500() {
         </div>
 
         {/* Title */}
-        <h2 className="mt-10 text-2xl font-semibold text-foreground">
-          Internal server error
-        </h2>
+        <h2 className="mt-10 text-2xl font-semibold text-foreground">Internal server error</h2>
 
         {/* Description */}
         <p className="mt-3 text-muted-foreground max-w-sm mx-auto text-sm leading-relaxed">
@@ -86,11 +80,8 @@ export default function Error500() {
             Retry
           </Button>
 
-          <Link href="/">
-            <Button
-              size="lg"
-              className="rounded-xl px-8"
-            >
+          <Link href={ROUTES.home}>
+            <Button size="lg" className="rounded-xl px-8">
               Back to home
             </Button>
           </Link>

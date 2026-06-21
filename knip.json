@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema-json/schema.json",
+  "entry": ["src/app/layout.tsx", "src/app/page.tsx", "next.config.ts"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": [
+    "src/app/(layout-pages)/**",
+    "src/app/(no-layout-pages)/**",
+    "src/components/ui/icons/**"
+  ]
+}

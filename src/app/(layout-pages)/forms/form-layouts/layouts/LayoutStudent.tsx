@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,13 +27,15 @@ const initialState = {
   confirm: false,
 }
 
+type FormState = typeof initialState
+
 export default function LayoutStudent() {
   const [form, setForm] = useState(initialState)
-  const [errors, setErrors] = useState<any>({})
-  const [touched, setTouched] = useState<any>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
 
   const validate = () => {
-    const newErrors: any = {}
+    const newErrors: Record<string, string> = {}
 
     if (!form.firstName) newErrors.firstName = "First name is required"
     if (!form.lastName) newErrors.lastName = "Last name is required"
@@ -54,16 +56,16 @@ export default function LayoutStudent() {
     return newErrors
   }
 
-  const handleChange = (name: string, value: any) => {
+  const handleChange = (name: keyof FormState, value: FormState[keyof FormState]) => {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleBlur = (name: string) => {
-    setTouched((prev: any) => ({ ...prev, [name]: true }))
+  const handleBlur = (name: keyof FormState) => {
+    setTouched((prev) => ({ ...prev, [name]: true }))
     setErrors(validate())
   }
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     const validationErrors = validate()
@@ -89,51 +91,37 @@ export default function LayoutStudent() {
   }
 
   const inputStyle = (name: string) =>
-    touched[name] && errors[name]
-      ? "border-red-500 focus-visible:ring-red-500"
-      : ""
+    touched[name] && errors[name] ? "border-red-500 focus-visible:ring-red-500" : ""
 
   return (
     <div className="flex justify-center py-10 px-4 min-h-screen">
       <Card className="w-full max-w-3xl rounded-2xl shadow-xl">
         <CardHeader className="border-b">
-          <CardTitle className="text-xl font-bold text-center">
-            🎓 Student Registration
-          </CardTitle>
+          <CardTitle className="text-xl font-bold text-center">🎓 Student Registration</CardTitle>
         </CardHeader>
 
         <CardContent className="p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-
             {/* First & Last Name */}
             <div className="grid md:grid-cols-2 gap-6">
-              {["firstName", "lastName"].map((field) => (
-                <div key={field} className="space-y-2">
-                  <Label>
-                    {field === "firstName"
-                      ? "First Name"
-                      : "Last Name"}
-                  </Label>
-                  <Input
-                    placeholder={`Enter ${
-                      field === "firstName"
-                        ? "first"
-                        : "last"
-                    } name`}
-                    value={(form as any)[field]}
-                    onChange={(e) =>
-                      handleChange(field, e.target.value)
-                    }
-                    onBlur={() => handleBlur(field)}
-                    className={inputStyle(field)}
-                  />
-                  {touched[field] && errors[field] && (
-                    <p className="text-sm text-red-500">
-                      {errors[field]}
-                    </p>
-                  )}
-                </div>
-              ))}
+              {["firstName", "lastName"].map((field) => {
+                const key = field as keyof FormState
+                return (
+                  <div key={field} className="space-y-2">
+                    <Label>{field === "firstName" ? "First Name" : "Last Name"}</Label>
+                    <Input
+                      placeholder={`Enter ${field === "firstName" ? "first" : "last"} name`}
+                      value={String(form[key] ?? "")}
+                      onChange={(e) => handleChange(key, e.target.value)}
+                      onBlur={() => handleBlur(key)}
+                      className={inputStyle(field)}
+                    />
+                    {touched[key] && errors[key] && (
+                      <p className="text-sm text-red-500">{errors[key]}</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             {/* Email */}
@@ -143,16 +131,12 @@ export default function LayoutStudent() {
                 type="email"
                 placeholder="Enter email"
                 value={form.email}
-                onChange={(e) =>
-                  handleChange("email", e.target.value)
-                }
+                onChange={(e) => handleChange("email", e.target.value)}
                 onBlur={() => handleBlur("email")}
                 className={inputStyle("email")}
               />
               {touched.email && errors.email && (
-                <p className="text-sm text-red-500">
-                  {errors.email}
-                </p>
+                <p className="text-sm text-red-500">{errors.email}</p>
               )}
             </div>
 
@@ -163,16 +147,12 @@ export default function LayoutStudent() {
                 type="tel"
                 placeholder="Enter phone number"
                 value={form.phone}
-                onChange={(e) =>
-                  handleChange("phone", e.target.value)
-                }
+                onChange={(e) => handleChange("phone", e.target.value)}
                 onBlur={() => handleBlur("phone")}
                 className={inputStyle("phone")}
               />
               {touched.phone && errors.phone && (
-                <p className="text-sm text-red-500">
-                  {errors.phone}
-                </p>
+                <p className="text-sm text-red-500">{errors.phone}</p>
               )}
             </div>
 
@@ -183,26 +163,16 @@ export default function LayoutStudent() {
                 <Input
                   type="date"
                   value={form.dob}
-                  onChange={(e) =>
-                    handleChange("dob", e.target.value)
-                  }
+                  onChange={(e) => handleChange("dob", e.target.value)}
                   onBlur={() => handleBlur("dob")}
                   className={inputStyle("dob")}
                 />
-                {touched.dob && errors.dob && (
-                  <p className="text-sm text-red-500">
-                    {errors.dob}
-                  </p>
-                )}
+                {touched.dob && errors.dob && <p className="text-sm text-red-500">{errors.dob}</p>}
               </div>
 
               <div className="space-y-2">
                 <Label>Gender</Label>
-                <Select
-                  onValueChange={(value) =>
-                    handleChange("gender", value)
-                  }
-                >
+                <Select onValueChange={(value) => handleChange("gender", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
@@ -213,9 +183,7 @@ export default function LayoutStudent() {
                   </SelectContent>
                 </Select>
                 {touched.gender && errors.gender && (
-                  <p className="text-sm text-red-500">
-                    {errors.gender}
-                  </p>
+                  <p className="text-sm text-red-500">{errors.gender}</p>
                 )}
               </div>
             </div>
@@ -223,36 +191,20 @@ export default function LayoutStudent() {
             {/* Course */}
             <div className="space-y-2">
               <Label>Course</Label>
-              <Select
-                onValueChange={(value) =>
-                  handleChange("course", value)
-                }
-              >
+              <Select onValueChange={(value) => handleChange("course", value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select course" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Bachelor of Science">
-                    Bachelor of Science
-                  </SelectItem>
-                  <SelectItem value="Bachelor of Arts">
-                    Bachelor of Arts
-                  </SelectItem>
-                  <SelectItem value="Bachelor of Commerce">
-                    Bachelor of Commerce
-                  </SelectItem>
-                  <SelectItem value="Engineering">
-                    Engineering
-                  </SelectItem>
-                  <SelectItem value="Other">
-                    Other
-                  </SelectItem>
+                  <SelectItem value="Bachelor of Science">Bachelor of Science</SelectItem>
+                  <SelectItem value="Bachelor of Arts">Bachelor of Arts</SelectItem>
+                  <SelectItem value="Bachelor of Commerce">Bachelor of Commerce</SelectItem>
+                  <SelectItem value="Engineering">Engineering</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
               {touched.course && errors.course && (
-                <p className="text-sm text-red-500">
-                  {errors.course}
-                </p>
+                <p className="text-sm text-red-500">{errors.course}</p>
               )}
             </div>
 
@@ -263,16 +215,12 @@ export default function LayoutStudent() {
                 rows={3}
                 placeholder="Enter full address"
                 value={form.address}
-                onChange={(e) =>
-                  handleChange("address", e.target.value)
-                }
+                onChange={(e) => handleChange("address", e.target.value)}
                 onBlur={() => handleBlur("address")}
                 className={inputStyle("address")}
               />
               {touched.address && errors.address && (
-                <p className="text-sm text-red-500">
-                  {errors.address}
-                </p>
+                <p className="text-sm text-red-500">{errors.address}</p>
               )}
             </div>
 
@@ -280,24 +228,19 @@ export default function LayoutStudent() {
             <div className="flex items-start space-x-2">
               <Checkbox
                 checked={form.confirm}
-                onCheckedChange={(value) =>
-                  handleChange("confirm", value)
-                }
+                onCheckedChange={(value) => handleChange("confirm", value)}
               />
               <Label className="text-sm font-normal">
                 I confirm that the above details are correct
               </Label>
             </div>
             {touched.confirm && errors.confirm && (
-              <p className="text-sm text-red-500">
-                {errors.confirm}
-              </p>
+              <p className="text-sm text-red-500">{errors.confirm}</p>
             )}
 
             <Button type="submit" className="w-full font-semibold">
               Register
             </Button>
-
           </form>
         </CardContent>
       </Card>

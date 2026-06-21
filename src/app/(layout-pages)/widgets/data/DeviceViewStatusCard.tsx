@@ -1,27 +1,64 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Smartphone, Tablet, Laptop } from "lucide-react"
+  Smartphone,
+  Tablet,
+  Laptop,
+  CreditCardIcon,
+  EllipsisVertical,
+  LogOutIcon,
+  SettingsIcon,
+  UserIcon,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function DeviceViewStatusCard() {
   return (
     <Card className="w-full">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-md font-semibold">
-          Device View Status
-        </CardTitle>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full [&_svg]:size-5">
+              <EllipsisVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="text-right">
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <UserIcon className="h-4 w-4 shrink-0" />
+              عرض التقرير التفصيلي
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <CreditCardIcon className="h-4 w-4 shrink-0" />
+              تنزيل التقرير
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <SettingsIcon className="h-4 w-4 shrink-0" />
+              تصدير بصيغة CSV / PDF
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
+              <LogOutIcon className="h-4 w-4 shrink-0" />
+              تحديث البيانات
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div className="text-right">
+          <CardTitle className="text-md font-semibold">حالة عرض الأجهزة</CardTitle>
+          <CardDescription>ملخص استخدام الأجهزة</CardDescription>
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-6 p-6">
         {/* Total Traffic */}
         <div className="flex items-end gap-2">
           <h2 className="text-3xl font-bold">72%</h2>
-          <span className="text-sm text-muted-foreground">
-            Total traffic
-          </span>
+          <span className="text-sm text-muted-foreground">إجمالي الزيارات</span>
         </div>
 
         {/* Progress Segments */}
@@ -47,9 +84,7 @@ export default function DeviceViewStatusCard() {
               <Smartphone className="h-5 w-5" />
             </div>
             <h5 className="text-2xl font-semibold">450</h5>
-            <span className="text-md text-muted-foreground">
-              Mobile
-            </span>
+            <span className="text-md text-muted-foreground">الجوال</span>
           </div>
 
           {/* Tablet */}
@@ -58,9 +93,7 @@ export default function DeviceViewStatusCard() {
               <Tablet className="h-5 w-5" />
             </div>
             <h5 className="text-2xl font-semibold">300</h5>
-            <span className="text-md text-muted-foreground">
-              Tablet
-            </span>
+            <span className="text-md text-muted-foreground">الجهاز اللوحي</span>
           </div>
 
           {/* Laptop */}
@@ -69,9 +102,7 @@ export default function DeviceViewStatusCard() {
               <Laptop className="h-5 w-5" />
             </div>
             <h5 className="text-2xl font-semibold">250</h5>
-            <span className="text-md text-muted-foreground">
-              Laptop
-            </span>
+            <span className="text-md text-muted-foreground">الحاسوب</span>
           </div>
         </div>
       </CardContent>

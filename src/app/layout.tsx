@@ -2,7 +2,12 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { Inter } from "next/font/google"
 import { ThemeProvider } from "next-themes"
-import UIThemeProvider from "@/providers/ui-theme-provider"
+import { ApplicationProvider } from "@/application"
+import { AuthProvider, PermissionProvider } from "@/features/authentication/components"
+import { WorkspaceProvider } from "@/features/workspace"
+import { DEFAULT_THEME, THEME_KEYS } from "@/constants/theme"
+import StoreContextProvider from "@/providers/store-context-provider"
+import QueryProvider from "../providers/query-provider"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -94,17 +99,32 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`}>
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body className={`${inter.className} antialiased`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark-blue"
+          defaultTheme={DEFAULT_THEME}
+          themes={[
+            "light",
+            "dark",
+            THEME_KEYS.darkBlue,
+            THEME_KEYS.gaussianBlack,
+            THEME_KEYS.semiDark,
+          ]}
           enableSystem
           disableTransitionOnChange
         >
-          <UIThemeProvider>
-            {children}
-          </UIThemeProvider>
+          <QueryProvider>
+            <ApplicationProvider>
+              <AuthProvider>
+                <WorkspaceProvider>
+                  <PermissionProvider>
+                    <StoreContextProvider>{children}</StoreContextProvider>
+                  </PermissionProvider>
+                </WorkspaceProvider>
+              </AuthProvider>
+            </ApplicationProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

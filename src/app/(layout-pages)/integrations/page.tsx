@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import { ConnectionsOverview } from "@/features/integrations"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="التكاملات" />
+  return <ConnectionsOverview />
 }

@@ -6,11 +6,7 @@ import Link from "next/link"
 
 import { ChevronRight } from "lucide-react"
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 import {
   SidebarMenu,
@@ -20,7 +16,61 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 
-export function NavMain({ items }: { items: any[] }) {
+type NavLeafItem = {
+  title: string
+  url: string
+}
+
+type NavItem = {
+  title: string
+  url: string
+  icon?: React.ReactNode
+  items?: NavLeafItem[]
+}
+
+type NavWithChildren = NavItem & { items: NavLeafItem[] }
+
+function hasChildren(item: NavItem): item is NavWithChildren {
+  return Array.isArray(item.items) && item.items.length > 0
+}
+
+function ParentMenuItem({ item, pathname }: { item: NavWithChildren; pathname: string }) {
+  const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/")
+
+  const parentActive = item.items.some((sub) => pathname.startsWith(sub.url))
+
+  return (
+    <Collapsible key={`${item.title}:${pathname}`} defaultOpen={parentActive} className="group">
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton className="group" isActive={parentActive}>
+            {item.icon}
+            <span>{item.title}</span>
+            <ChevronRight className="ms-auto h-4 w-4 transition-transform duration-200 rtl:rotate-180 group-data-[state=open]:rotate-90" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {item.items.map((subItem) => {
+              const subActive = isActive(subItem.url)
+
+              return (
+                <SidebarMenuSubItem key={subItem.title}>
+                  <SidebarMenuButton asChild isActive={subActive} className="h-8 min-h-8 ps-6">
+                    <Link href={subItem.url}>{subItem.title}</Link>
+                  </SidebarMenuButton>
+                </SidebarMenuSubItem>
+              )
+            })}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  )
+}
+
+export function NavMain({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
 
   // Active Route Check
@@ -28,123 +78,14 @@ export function NavMain({ items }: { items: any[] }) {
     return pathname === url || pathname.startsWith(url + "/")
   }
 
-  // Parent Active Check
-  const isParentActive = (item: any): boolean => {
-    if (!item.items) return false
-
-    return item.items.some((sub: any) => {
-      if (sub.items) {
-        return sub.items.some((child: any) =>
-          pathname.startsWith(child.url)
-        )
-      }
-
-      return pathname.startsWith(sub.url)
-    })
-  }
-
   return (
-    <SidebarMenu className="px-3 py-2">
-      {items.map((item: any) => {
-        const parentActive = isParentActive(item)
-
-        const [open, setOpen] = useState(parentActive)
-
-        useEffect(() => {
-          if (parentActive) {
-            setOpen(true)
-          }
-        }, [pathname])
-
-        return item.items ? (
-          <Collapsible
-            key={item.title}
-            open={open}
-            onOpenChange={setOpen}
-            className="group"
-          >
-            <SidebarMenuItem>
-              {/* Parent Menu */}
-              <CollapsibleTrigger asChild>
-                <SidebarMenuButton
-                  className="group"
-                  isActive={parentActive}
-                  
-                >
-                  {item.icon}
-
-                  <span>{item.title}</span>
-
-                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
-                </SidebarMenuButton>
-              </CollapsibleTrigger>
-
-              <CollapsibleContent>
-                <SidebarMenuSub>
-                  {item.items.map((subItem: any) => {
-                    const subActive = isActive(subItem.url)
-
-                    return (
-                      <SidebarMenuSubItem key={subItem.title}>
-                        {subItem.items ? (
-                          <Collapsible
-                            className="group"
-                            defaultOpen={subItem.items.some(
-                              (child: any) =>
-                                pathname.startsWith(child.url)
-                            )}
-                          >
-                            {/* Nested Trigger */}
-                            <CollapsibleTrigger asChild>
-                              <SidebarMenuButton className="group h-8 min-h-8 pl-6">
-                                <span>{subItem.title}</span>
-
-                                <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
-                              </SidebarMenuButton>
-                            </CollapsibleTrigger>
-
-                            {/* Nested Content */}
-                            <CollapsibleContent>
-                              <SidebarMenuSub>
-                                {subItem.items.map((child: any) => (
-                                  <SidebarMenuButton
-                                    key={child.title}
-                                    asChild
-                                    isActive={isActive(child.url)}
-                                    className="h-8 min-h-8 pl-6"
-                                  >
-                                    <Link href={child.url}>
-                                      {child.title}
-                                    </Link>
-                                  </SidebarMenuButton>
-                                ))}
-                              </SidebarMenuSub>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        ) : (
-                          <SidebarMenuButton
-                            asChild
-                            isActive={subActive}
-                            className="h-8 min-h-8 pl-6"
-                          >
-                            <Link href={subItem.url}>
-                              {subItem.title}
-                            </Link>
-                          </SidebarMenuButton>
-                        )}
-                      </SidebarMenuSubItem>
-                    )
-                  })}
-                </SidebarMenuSub>
-              </CollapsibleContent>
-            </SidebarMenuItem>
-          </Collapsible>
+    <SidebarMenu className="px-3 py-2" dir="rtl">
+      {items.map((item) => {
+        return hasChildren(item) ? (
+          <ParentMenuItem key={item.title} item={item} pathname={pathname} />
         ) : (
           <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive(item.url)}
-            >
+            <SidebarMenuButton asChild isActive={isActive(item.url)}>
               <Link href={item.url}>
                 {item.icon}
 

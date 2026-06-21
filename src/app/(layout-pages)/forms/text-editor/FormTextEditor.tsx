@@ -3,18 +3,12 @@
 import { useState } from "react"
 import Editor from "react-simple-wysiwyg"
 
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 
 export default function FormTextEditor() {
   const [html, setHtml] = useState("my <b>HTML</b>")
 
-  function onChange(e: any) {
+  function onChange(e: { target: { value: string } }) {
     setHtml(e.target.value)
   }
 
@@ -25,16 +19,12 @@ export default function FormTextEditor() {
           <CardTitle>Text Editor</CardTitle>
           <CardDescription>
             This is a simple text editor using{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-sm">
-              react-simple-wysiwyg
-            </code>.
+            <code className="bg-muted px-1 py-0.5 rounded text-sm">react-simple-wysiwyg</code>.
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            You can type your content here:
-          </p>
+          <p className="text-sm text-muted-foreground mb-4">You can type your content here:</p>
 
           <div className="border rounded-lg overflow-hidden bg-background">
             <Editor

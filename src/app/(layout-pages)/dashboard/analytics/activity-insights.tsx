@@ -1,12 +1,6 @@
 "use client"
 
-import {
-  CreditCardIcon,
-  LogOutIcon,
-  SettingsIcon,
-  UserIcon,
-  EllipsisVertical
-} from "lucide-react"
+import { CreditCardIcon, LogOutIcon, SettingsIcon, UserIcon, EllipsisVertical } from "lucide-react"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -18,13 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 import {
   ChartContainer,
@@ -34,63 +22,65 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { useWidget } from "@/features/dashboard/hooks/use-widget"
 
 export const description = "An area chart with gradient fill"
 
-const chartData = [
-  { month: "January", desktop: 186, mobile: 80 },
-  { month: "February", desktop: 305, mobile: 200 },
-  { month: "March", desktop: 237, mobile: 120 },
-  { month: "April", desktop: 73, mobile: 190 },
-  { month: "May", desktop: 209, mobile: 130 },
-  { month: "June", desktop: 214, mobile: 140 },
-]
-
 const chartConfig = {
   desktop: {
-    label: "Views",
+    label: "المشاهدات",
   },
   mobile: {
-    label: "Clicks",
+    label: "النقرات",
   },
 } satisfies ChartConfig
 
 export default function ActivityInsights() {
+  const { readModelViewModel } = useWidget("activity-insights")
+  const payload = readModelViewModel?.payload
+
+  const chartData =
+    payload?.dataPoints?.map((point) => ({
+      month: String(point.month ?? "-"),
+      desktop: typeof point.impressions === "number" ? point.impressions : 0,
+      mobile: typeof point.clicks === "number" ? point.clicks : 0,
+    })) ?? []
+
   return (
     <Card className="h-full">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle className="text-xl mb-1">Activity Insights</CardTitle>
-          <CardDescription>
-            Overview of users and activities
-          </CardDescription>
-        </div>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full [&_svg]:size-5">
               <EllipsisVertical />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem>
+          <DropdownMenuContent className="text-right">
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <UserIcon />
-              View detailed report
+              عرض التقرير التفصيلي
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <CreditCardIcon />
-              Download report
+              تنزيل التقرير
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <SettingsIcon />
-              Export as CSV / PDF
+              تصدير بصيغة CSV / PDF
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem className="flex-row-reverse justify-start gap-2 text-right">
               <LogOutIcon />
-              Refresh data
+              تحديث البيانات
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <div className="text-right">
+          <CardTitle className="text-xl mb-1">{payload?.title ?? "تحليلات النشاط"}</CardTitle>
+          <CardDescription>
+            {payload?.summary ?? "نظرة عامة على المستخدمين والأنشطة"}
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-72 w-full">
@@ -112,86 +102,43 @@ export default function ActivityInsights() {
             />
             <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
             <defs>
+              {/* Views */}
 
-  {/* Views */}
+              <linearGradient id="fillDesktop" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#FDBA74" stopOpacity={0.45} />
 
-  <linearGradient
-    id="fillDesktop"
-    x1="0"
-    y1="0"
-    x2="0"
-    y2="1"
-  >
+                <stop offset="55%" stopColor="#F59E0B" stopOpacity={0.22} />
 
-    <stop
-      offset="0%"
-      stopColor="#FDBA74"
-      stopOpacity={0.45}
-    />
+                <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
+              </linearGradient>
 
-    <stop
-      offset="55%"
-      stopColor="#F59E0B"
-      stopOpacity={0.22}
-    />
+              {/* Clicks */}
 
-    <stop
-      offset="100%"
-      stopColor="#F59E0B"
-      stopOpacity={0}
-    />
+              <linearGradient id="fillMobile" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#67E8F9" stopOpacity={0.45} />
 
-  </linearGradient>
+                <stop offset="55%" stopColor="#0EA5E9" stopOpacity={0.22} />
 
-
-  {/* Clicks */}
-
-  <linearGradient
-    id="fillMobile"
-    x1="0"
-    y1="0"
-    x2="0"
-    y2="1"
-  >
-
-    <stop
-      offset="0%"
-      stopColor="#67E8F9"
-      stopOpacity={0.45}
-    />
-
-    <stop
-      offset="55%"
-      stopColor="#0EA5E9"
-      stopOpacity={0.22}
-    />
-
-    <stop
-      offset="100%"
-      stopColor="#0EA5E9"
-      stopOpacity={0}
-    />
-
-  </linearGradient>
-
-</defs>
+                <stop offset="100%" stopColor="#0EA5E9" stopOpacity={0} />
+              </linearGradient>
+            </defs>
             <Area
-  dataKey="mobile"
-  type="natural"
-  fill="url(#fillMobile)"
-  stroke="#38BDF8"
-  strokeWidth={3}
-  fillOpacity={1}
-/>
+              dataKey="mobile"
+              type="natural"
+              fill="url(#fillMobile)"
+              stroke="#38BDF8"
+              strokeWidth={3}
+              fillOpacity={1}
+            />
 
-<Area
-  dataKey="desktop"
-  type="natural"
-  fill="url(#fillDesktop)"
-  stroke="#F59E0B"
-  strokeWidth={3}
-  fillOpacity={1}
-/>
+            <Area
+              dataKey="desktop"
+              type="natural"
+              fill="url(#fillDesktop)"
+              stroke="#F59E0B"
+              strokeWidth={3}
+              fillOpacity={1}
+            />
             <ChartLegend content={<ChartLegendContent />} />
           </AreaChart>
         </ChartContainer>

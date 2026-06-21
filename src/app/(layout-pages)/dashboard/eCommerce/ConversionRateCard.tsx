@@ -1,9 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Bar, BarChart, XAxis } from "recharts"
-import {
-  ChartContainer,
-  type ChartConfig,
-} from "@/components/ui/chart"
+import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 
 const chartData = [
   { month: "January", conversion: 2.4 },
@@ -26,13 +23,13 @@ export default function ConversionRateCard() {
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-6">
-        <div className="mb-3">
+        <div className="mb-3 text-right">
           <p className="text-md text-muted-foreground">Conversion Rate</p>
-          <h2 className="text-3xl font-semibold">3.6%</h2>
+          <h2 className="text-3xl font-semibold num-ltr">3.6%</h2>
         </div>
 
-        <p className="text-sm flex gap-2 mb-5">
-          <span className="text-green-600 font-semibold">+0.4%</span>
+        <p className="text-sm flex justify-end gap-2 mb-5 num-ltr" dir="ltr">
+          <span className="text-green-600 font-semibold num-ltr">+0.4%</span>
           from last month
         </p>
 
@@ -45,18 +42,13 @@ export default function ConversionRateCard() {
             <XAxis hide dataKey="month" />
 
             <defs>
-                <linearGradient id="conversionGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ee0979" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#ff6a00" stopOpacity={1} />
-                </linearGradient>
+              <linearGradient id="conversionGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#ee0979" stopOpacity={1} />
+                <stop offset="100%" stopColor="#ff6a00" stopOpacity={1} />
+              </linearGradient>
             </defs>
 
-            <Bar
-              dataKey="conversion"
-              fill="url(#conversionGradient)"
-               radius={6}
-              maxBarSize={15}
-            />
+            <Bar dataKey="conversion" fill="url(#conversionGradient)" radius={6} maxBarSize={15} />
           </BarChart>
         </ChartContainer>
       </CardContent>

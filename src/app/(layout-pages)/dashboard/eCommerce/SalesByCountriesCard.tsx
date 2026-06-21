@@ -1,5 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { CreditCardIcon, LogOutIcon, SettingsIcon, UserIcon, EllipsisVertical, MoreVertical, ArrowUpRight, ArrowDownRight  } from "lucide-react"
+import {
+  CreditCardIcon,
+  LogOutIcon,
+  SettingsIcon,
+  UserIcon,
+  EllipsisVertical,
+  ArrowUpRight,
+  ArrowDownRight,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -71,12 +79,10 @@ const salesByCountry = [
 export default function SalesByCountriesCard() {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between border-b py-3">
-        <div>
+      <CardHeader className="flex flex-row items-start justify-between border-b py-3 text-right">
+        <div className="text-right">
           <CardTitle className="text-lg mb-0">Sales by Countries</CardTitle>
-          <CardDescription>
-            Monthly sales overview
-          </CardDescription>
+          <CardDescription>Monthly sales overview</CardDescription>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -84,7 +90,7 @@ export default function SalesByCountriesCard() {
               <EllipsisVertical />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent align="start">
             <DropdownMenuItem>
               <UserIcon />
               View detailed report
@@ -100,17 +106,14 @@ export default function SalesByCountriesCard() {
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <LogOutIcon />
-             Refresh data
+              Refresh data
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>
       <CardContent className="space-y-5 p-6 h-[480px] overflow-y-auto">
         {salesByCountry.map((item, index) => (
-          <div
-            key={index}
-            className="flex items-center justify-between"
-          >
+          <div key={index} className="flex items-center justify-between">
             {/* Flag + Info */}
             <div className="flex items-center gap-3">
               <img
@@ -118,11 +121,9 @@ export default function SalesByCountriesCard() {
                 alt={item.country}
                 className="h-10 w-10 rounded-full object-cover border p-0.5"
               />
-              <div>
-                <p className="font-medium">{item.sales}</p>
-                <p className="text-sm text-muted-foreground">
-                  {item.country}
-                </p>
+              <div className="text-right">
+                <p className="font-medium num-ltr">{item.sales}</p>
+                <p className="text-sm text-muted-foreground">{item.country}</p>
               </div>
             </div>
             {/* Badge */}
@@ -135,7 +136,7 @@ export default function SalesByCountriesCard() {
                 "
               >
                 <ArrowUpRight className="h-3 w-3" />
-                {item.change}
+                <span className="num-ltr">{item.change}</span>
               </span>
             ) : (
               <span
@@ -146,10 +147,9 @@ export default function SalesByCountriesCard() {
                 "
               >
                 <ArrowDownRight className="h-3 w-3" />
-                {item.change}
+                <span className="num-ltr">{item.change}</span>
               </span>
             )}
-
           </div>
         ))}
       </CardContent>

@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import { StoresIntegrationHub } from "@/features/stores"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="المتاجر" />
+  return <StoresIntegrationHub />
 }

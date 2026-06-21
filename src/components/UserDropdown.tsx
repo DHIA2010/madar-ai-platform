@@ -12,22 +12,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 
-import {
-  User,
-  Settings,
-  LayoutDashboard,
-  LogOut,
-} from "lucide-react"
+import { User, Settings, LayoutDashboard, LogOut } from "lucide-react"
 
 export function UserDropdown() {
   return (
     <DropdownMenu>
       {/* Trigger */}
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          className="rounded-full h-10 w-10 p-0 overflow-hidden ml-2"
-        >
+        <Button variant="outline" className="rounded-full h-10 w-10 p-0 overflow-hidden ms-2">
           <Avatar className="h-10 w-10 border-border rounded-full">
             <AvatarImage src="https://untitledui.com/images/avatars/madeleine-pitts" />
             <AvatarFallback>م</AvatarFallback>
@@ -36,8 +28,7 @@ export function UserDropdown() {
       </DropdownMenuTrigger>
 
       {/* Content */}
-      <DropdownMenuContent align="end" className="w-56 p-3 rounded-xl shadow-xl">
-        
+      <DropdownMenuContent side="left" align="end" className="w-56 p-3 rounded-xl shadow-xl">
         {/* Header */}
         <DropdownMenuLabel className="border-border rounded-xl border-1 mb-3 bg-muted/50">
           <div className="flex items-center gap-3">
@@ -72,9 +63,7 @@ export function UserDropdown() {
 
         {/* Logout */}
         <div className="mt-3">
-          <Button 
-           variant={"default"}
-           className="w-full h-8 justify-center gap-2">
+          <Button variant={"default"} className="w-full h-8 justify-center gap-2">
             <LogOut className="size-4" />
             Logout
           </Button>

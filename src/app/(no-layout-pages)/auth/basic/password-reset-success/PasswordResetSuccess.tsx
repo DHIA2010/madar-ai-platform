@@ -1,15 +1,11 @@
 "use client"
 
+import Link from "next/link"
+
+import { AppButton, AppCard } from "@/components/app"
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 import { GalleryVerticalEnd, CheckCircle2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 
 export function PasswordResetSuccess({
   className,
@@ -28,41 +24,23 @@ export function PasswordResetSuccess({
           </div>
 
           {/* Card */}
-          <div
-            className={cn(
-              "mx-auto w-full max-w-sm flex flex-col gap-6",
-              className
-            )}
-            {...props}
-          >
-            <Card>
-              <CardHeader className="text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                  <CheckCircle2 className="h-6 w-6" />
-                </div>
-
-                <CardTitle className="text-xl">
-                  Password reset successful
-                </CardTitle>
-                <CardDescription>
-                  Your password has been updated successfully.  
-                  You can now sign in with your new password.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent>
-                <div className="grid gap-4">
-                  <Button className="w-full" asChild>
-                    <a href="/login">Go to login</a>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          <div className={cn("mx-auto w-full max-w-sm flex flex-col gap-6", className)} {...props}>
+            <AppCard
+              title="Password reset successful"
+              subtitle="Your password has been updated successfully. You can now sign in with your new password."
+              icon={<CheckCircle2 className="h-6 w-6" />}
+            >
+              <div className="grid gap-4">
+                <AppButton fullWidth asChild>
+                  <Link href={ROUTES.login}>Go to login</Link>
+                </AppButton>
+              </div>
+            </AppCard>
 
             {/* Footer text */}
             <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-primary">
-              If you didn’t request a password reset, please{" "}
-              <a href="#">contact support</a> immediately.
+              If you didn’t request a password reset, please <a href="#">contact support</a>{" "}
+              immediately.
             </div>
           </div>
         </div>

@@ -1,9 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Bar, BarChart, XAxis } from "recharts"
-import {
-  ChartContainer,
-  type ChartConfig,
-} from "@/components/ui/chart"
+import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 
 const chartData = [
   { month: "January", revenue: 420 },
@@ -26,13 +23,13 @@ export default function TotalRevenueCard() {
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-6">
-        <div className="mb-3">
+        <div className="mb-3 text-right">
           <p className="text-md text-muted-foreground">Total Revenue</p>
-          <h2 className="text-3xl font-semibold">$92,460</h2>
+          <h2 className="text-3xl font-semibold num-ltr">$92,460</h2>
         </div>
 
-        <p className="text-sm flex gap-2 mb-5">
-          <span className="text-red-600 font-semibold">-18.2%</span>
+        <p className="text-sm flex justify-end gap-2 mb-5 num-ltr" dir="ltr">
+          <span className="text-red-600 font-semibold num-ltr">-18.2%</span>
           from last month
         </p>
 
@@ -47,26 +44,16 @@ export default function TotalRevenueCard() {
               bottom: 0,
             }}
           >
-            <XAxis
-              hide
-              dataKey="month"
-              tickLine={false}
-              axisLine={false}
-            />
+            <XAxis hide dataKey="month" tickLine={false} axisLine={false} />
 
             <defs>
-                <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#98ec2d" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#17ad37" stopOpacity={1} />
-                </linearGradient>
+              <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#98ec2d" stopOpacity={1} />
+                <stop offset="100%" stopColor="#17ad37" stopOpacity={1} />
+              </linearGradient>
             </defs>
 
-            <Bar
-              dataKey="revenue"
-              fill="url(#revenueGradient)"
-              radius={6}
-              maxBarSize={15}
-            />
+            <Bar dataKey="revenue" fill="url(#revenueGradient)" radius={6} maxBarSize={15} />
           </BarChart>
         </ChartContainer>
       </CardContent>

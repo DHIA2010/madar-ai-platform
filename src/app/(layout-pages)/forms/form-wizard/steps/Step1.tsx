@@ -1,6 +1,8 @@
 // app/components/steps/Step1.tsx
 "use client"
 
+import type { Dispatch, SetStateAction } from "react"
+
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -11,32 +13,32 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export default function Step1({ form, setForm }: any) {
+type WizardForm = Record<string, string>
+
+export default function Step1<T extends WizardForm>({
+  form,
+  setForm,
+}: {
+  form: T
+  setForm: Dispatch<SetStateAction<T>>
+}) {
   return (
     <div className="space-y-6 bg-background rounded-2xl shadow border p-8">
-
       {/* Title */}
       <div>
-        <h2 className="text-lg font-semibold">
-          Personal Details
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Please fill in your personal details below.
-        </p>
+        <h2 className="text-lg font-semibold">Personal Details</h2>
+        <p className="text-sm text-muted-foreground">Please fill in your personal details below.</p>
       </div>
 
       {/* Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
         {/* First Name */}
         <div className="space-y-2">
           <Label>First Name</Label>
           <Input
             placeholder="First Name"
             value={form.firstName}
-            onChange={(e) =>
-              setForm({ ...form, firstName: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
           />
         </div>
 
@@ -46,9 +48,7 @@ export default function Step1({ form, setForm }: any) {
           <Input
             placeholder="Last Name"
             value={form.lastName}
-            onChange={(e) =>
-              setForm({ ...form, lastName: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
           />
         </div>
 
@@ -58,9 +58,7 @@ export default function Step1({ form, setForm }: any) {
           <Input
             placeholder="Phone Number"
             value={form.phone}
-            onChange={(e) =>
-              setForm({ ...form, phone: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
           />
         </div>
 
@@ -71,9 +69,7 @@ export default function Step1({ form, setForm }: any) {
             type="email"
             placeholder="Enter Email Address"
             value={form.email}
-            onChange={(e) =>
-              setForm({ ...form, email: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
         </div>
 
@@ -82,9 +78,7 @@ export default function Step1({ form, setForm }: any) {
           <Label>Country</Label>
           <Select
             value={form.country}
-            onValueChange={(value) =>
-              setForm({ ...form, country: value })
-            }
+            onValueChange={(value) => setForm({ ...form, country: value })}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="---" />
@@ -102,9 +96,7 @@ export default function Step1({ form, setForm }: any) {
           <Label>Language</Label>
           <Select
             value={form.language}
-            onValueChange={(value) =>
-              setForm({ ...form, language: value })
-            }
+            onValueChange={(value) => setForm({ ...form, language: value })}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="---" />
@@ -116,7 +108,6 @@ export default function Step1({ form, setForm }: any) {
             </SelectContent>
           </Select>
         </div>
-
       </div>
     </div>
   )

@@ -2,27 +2,35 @@
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { useWidget } from "@/features/dashboard/hooks/use-widget"
 
 export default function WelcomeBannerCard() {
+  const { readModelViewModel } = useWidget("welcome-banner")
+  const payload = readModelViewModel?.payload
+
+  const title = payload?.title ?? "لوحة التسويق"
+  const summary = payload?.summary ?? "لا توجد بيانات حالياً"
+
+  const metric = payload?.dataPoints?.[0]
+  const roas = typeof metric?.roas === "number" ? metric.roas.toFixed(2) : "0.00"
+  const campaigns = typeof metric?.activeCampaigns === "number" ? metric.activeCampaigns : 0
+
   return (
     <Card className="h-full relative overflow-hidden text-dark">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 md:p-8">
-        
         {/* Left Content */}
-        <div className="space-y-4">
-            <h2 className="text-xl md:text-2xl font-semibold">
-                Growth Insights
-            </h2>
-            <p className="text-sm md:text-base text-muted-foreground">
-                Your key metrics show consistent growth across channels.
-                <br />
-                Dive deeper to identify top-performing segments.
-            </p>
+        <div className="space-y-4 text-right">
+          <h2 className="text-xl md:text-2xl font-semibold">{title}</h2>
+          <p className="text-sm md:text-base text-muted-foreground">{summary}</p>
+          <p className="text-sm text-muted-foreground">
+            ROAS: <span className="num-ltr font-semibold">{roas}x</span> | الحملات النشطة:{" "}
+            <span className="num-ltr font-semibold">{campaigns}</span>
+          </p>
           <Button
             size="lg"
             className="bg-gradient-to-r from-pink-500 to-purple-600 text-white border-0 hover:opacity-90"
           >
-            View insights
+            عرض الرؤى
           </Button>
         </div>
         {/* Right Illustration */}

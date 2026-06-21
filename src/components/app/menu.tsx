@@ -1,0 +1,33 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+export {
+  DropdownMenu as AppDropdownMenu,
+  DropdownMenuContent as AppDropdownMenuContent,
+  DropdownMenuGroup as AppDropdownMenuGroup,
+  DropdownMenuItem as AppDropdownMenuItem,
+  DropdownMenuLabel as AppDropdownMenuLabel,
+  DropdownMenuPortal as AppDropdownMenuPortal,
+  DropdownMenuRadioGroup as AppDropdownMenuRadioGroup,
+  DropdownMenuRadioItem as AppDropdownMenuRadioItem,
+  DropdownMenuSeparator as AppDropdownMenuSeparator,
+  DropdownMenuShortcut as AppDropdownMenuShortcut,
+  DropdownMenuSub as AppDropdownMenuSub,
+  DropdownMenuSubContent as AppDropdownMenuSubContent,
+  DropdownMenuSubTrigger as AppDropdownMenuSubTrigger,
+  DropdownMenuTrigger as AppDropdownMenuTrigger,
+}

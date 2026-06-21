@@ -1,0 +1,5 @@
+{
+  "fileExtensions": ["ts", "tsx"],
+  "excludeRegExp": ["node_modules", "\\.next", "out", "build"],
+  "tsConfig": "./tsconfig.json"
+}

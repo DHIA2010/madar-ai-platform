@@ -3,21 +3,15 @@
 import { create } from "zustand"
 
 type UIThemeState = {
-  theme: string
-  setTheme: (theme: string) => void
-  loadTheme: () => void
+  isCustomizerOpen: boolean
+  previewTheme: string | null
+  setCustomizerOpen: (open: boolean) => void
+  setPreviewTheme: (theme: string | null) => void
 }
 
 export const useUIThemeStore = create<UIThemeState>((set) => ({
-  theme: "",
-
-  setTheme: (theme) => {
-    localStorage.setItem("ui-theme", theme)
-    set({ theme })
-  },
-
-  loadTheme: () => {
-    const saved = localStorage.getItem("ui-theme") || ""
-    set({ theme: saved })
-  },
+  isCustomizerOpen: false,
+  previewTheme: null,
+  setCustomizerOpen: (open) => set({ isCustomizerOpen: open }),
+  setPreviewTheme: (theme) => set({ previewTheme: theme }),
 }))

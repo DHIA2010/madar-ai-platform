@@ -1,0 +1,68 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Environment Validation
+        run: npm run check:env
+        env:
+          API_URL: ci-placeholder
+          JWT_SECRET: ci-placeholder
+          ANALYTICS_KEY: ci-placeholder
+          OPENAI_API_KEY: ci-placeholder
+          META_API_KEY: ci-placeholder
+          GOOGLE_ADS_API_KEY: ci-placeholder
+          TIKTOK_API_KEY: ci-placeholder
+          SNAPCHAT_API_KEY: ci-placeholder
+
+      - name: Type Check
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier Check
+        run: npm run format:check
+
+      - name: Architecture Rules
+        run: npm run lint:architecture
+
+      - name: Import Boundaries
+        run: npm run lint:boundaries
+
+      - name: Route Constant Validation
+        run: npm run lint:routes
+
+      - name: Circular Dependencies
+        run: npm run check:circular
+
+      - name: Dead Code Report
+        run: npm run check:deadcode
+
+      - name: Dependency Health Report
+        run: npm run check:deps
+
+      - name: Tests (if present)
+        run: npm run test:ci
+
+      - name: Build
+        run: npm run build:ci

@@ -3,13 +3,7 @@
 import * as React from "react"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
   ChartTooltip,
@@ -121,8 +115,7 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export default function SalesAnalysisCard() {
-  const [activeChart, setActiveChart] =
-    React.useState<keyof typeof chartConfig>("desktop")
+  const [activeChart, setActiveChart] = React.useState<keyof typeof chartConfig>("desktop")
 
   const total = React.useMemo(
     () => ({
@@ -135,7 +128,7 @@ export default function SalesAnalysisCard() {
   return (
     <Card>
       <CardHeader className="flex flex-col items-stretch border-b !p-0 sm:flex-row">
-        <div className="flex flex-1 flex-col justify-center gap-1 px-6 pt-4 pb-3 sm:!py-0">
+        <div className="flex flex-1 flex-col justify-center gap-1 px-6 pt-4 pb-3 text-right sm:!py-0">
           <CardTitle className="text-xl">Sales Analysis</CardTitle>
           <CardDescription className="text-md">
             Showing total Analysis for the last 3 months
@@ -149,14 +142,12 @@ export default function SalesAnalysisCard() {
                 key={chart}
                 data-active={activeChart === chart}
                 className="data-[active=true]:bg-muted/50 relative z-30
-                           flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left
+                           flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-right
                            even:border-l sm:border-t-0 sm:border-l sm:px-8 sm:py-6"
-                    onClick={() => setActiveChart(chart)}
-                  >
-                <span className="text-muted-foreground text-md">
-                  {chartConfig[chart].label}
-                </span>
-                <span className="text-lg leading-none font-semibold sm:text-3xl">
+                onClick={() => setActiveChart(chart)}
+              >
+                <span className="text-muted-foreground text-md">{chartConfig[chart].label}</span>
+                <span className="text-lg leading-none font-semibold sm:text-3xl num-ltr">
                   {total[key as keyof typeof total].toLocaleString()}
                 </span>
               </button>
@@ -165,10 +156,7 @@ export default function SalesAnalysisCard() {
         </div>
       </CardHeader>
       <CardContent className="px-2 sm:p-6">
-        <ChartContainer
-          config={chartConfig}
-          className="aspect-auto h-[330px] w-full"
-        >
+        <ChartContainer config={chartConfig} className="aspect-auto h-[330px] w-full">
           <BarChart
             accessibilityLayer
             data={chartData}

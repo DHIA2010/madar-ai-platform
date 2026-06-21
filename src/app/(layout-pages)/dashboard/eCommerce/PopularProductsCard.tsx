@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CreditCardIcon, LogOutIcon, SettingsIcon, UserIcon, EllipsisVertical} from "lucide-react"
+import { CreditCardIcon, LogOutIcon, SettingsIcon, UserIcon, EllipsisVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,12 +78,10 @@ const products = [
 export default function PopularProductsCard() {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between border-b py-3">
-        <div>
+      <CardHeader className="flex flex-row items-start justify-between border-b py-3 text-right">
+        <div className="text-right">
           <CardTitle className="text-lg mb-0">Popular Products</CardTitle>
-          <CardDescription>
-            Total 10.4k Visitors
-          </CardDescription>
+          <CardDescription>Total 10.4k Visitors</CardDescription>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -91,7 +89,7 @@ export default function PopularProductsCard() {
               <EllipsisVertical />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent align="start">
             <DropdownMenuItem>
               <UserIcon />
               View detailed report
@@ -107,7 +105,7 @@ export default function PopularProductsCard() {
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <LogOutIcon />
-             Refresh data
+              Refresh data
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -115,10 +113,7 @@ export default function PopularProductsCard() {
 
       <CardContent className="space-y-5 p-6 h-[480px] overflow-y-auto">
         {products.map((product, index) => (
-          <div
-            key={index}
-            className="flex items-center justify-between"
-          >
+          <div key={index} className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
                 src={product.image}
@@ -126,19 +121,13 @@ export default function PopularProductsCard() {
                 className="h-12 w-12 rounded-lg object-cover p-1 bg-muted"
               />
 
-              <div>
-                <p className="text-md font-medium leading-none">
-                  {product.name}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Item: {product.sku}
-                </p>
+              <div className="text-right">
+                <p className="text-md font-medium leading-none">{product.name}</p>
+                <p className="text-sm text-muted-foreground num-ltr">Item: {product.sku}</p>
               </div>
             </div>
 
-            <span className="text-md font-medium">
-              {product.price}
-            </span>
+            <span className="text-md font-medium num-ltr">{product.price}</span>
           </div>
         ))}
       </CardContent>

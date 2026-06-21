@@ -2,27 +2,12 @@
 
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { useUIThemeStore } from "@/store/ui-theme.store"   // ✅ ADD THIS
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
-  const { setTheme: setCustomTheme } = useUIThemeStore()   // ✅ ADD THIS
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) return null
 
   const isDark = theme === "dark"
 
@@ -34,10 +19,7 @@ export function ThemeToggle() {
             variant="ghost"
             size="icon"
             className="rounded-full w-10 h-10"
-             onClick={() => {
-              setCustomTheme("")              // ✅ REMOVE custom theme
-              setTheme(isDark ? "light" : "dark") // ✅ APPLY system theme
-            }}
+            onClick={() => setTheme(isDark ? "light" : "dark")}
             aria-label="Toggle theme"
           >
             <Sun

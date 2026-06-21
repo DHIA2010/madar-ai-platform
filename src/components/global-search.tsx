@@ -60,7 +60,7 @@ export function GlobalSearch() {
       >
         <div className="flex items-center gap-2 text-muted-foreground">
           <Search className="size-5" />
-          <span className="text-sm">Type to search...</span>
+          <span className="text-sm">ابحث...</span>
         </div>
 
         {/* Shortcut */}
@@ -77,10 +77,7 @@ export function GlobalSearch() {
 
         {/* Input */}
         <div className="border-b px-3">
-          <CommandInput
-            placeholder="Search pages, actions..."
-            className="h-11 text-sm"
-          />
+          <CommandInput placeholder="Search pages, actions..." className="h-11 text-sm" />
         </div>
 
         <CommandList className="max-h-[400px] overflow-y-auto">
@@ -99,7 +96,7 @@ export function GlobalSearch() {
             >
               <LayoutDashboard className="size-4 text-muted-foreground" />
               <span>Dashboard</span>
-              <ArrowRight className="ml-auto size-3 opacity-40" />
+              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
 
             <CommandItem
@@ -108,7 +105,7 @@ export function GlobalSearch() {
             >
               <BarChart3 className="size-4 text-muted-foreground" />
               <span>Analytics</span>
-              <ArrowRight className="ml-auto size-3 opacity-40" />
+              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
 
             <CommandItem
@@ -117,7 +114,7 @@ export function GlobalSearch() {
             >
               <Users className="size-4 text-muted-foreground" />
               <span>CRM</span>
-              <ArrowRight className="ml-auto size-3 opacity-40" />
+              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
           </CommandGroup>
 
@@ -134,7 +131,7 @@ export function GlobalSearch() {
             >
               <User className="size-4 text-muted-foreground" />
               <span>Profile</span>
-              <ArrowRight className="ml-auto size-3 opacity-40" />
+              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
 
             <CommandItem
@@ -143,7 +140,7 @@ export function GlobalSearch() {
             >
               <CreditCard className="size-4 text-muted-foreground" />
               <span>Billing</span>
-              <ArrowRight className="ml-auto size-3 opacity-40" />
+              <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
           </CommandGroup>
         </CommandList>

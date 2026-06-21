@@ -1,15 +1,11 @@
 "use client"
 
+import Link from "next/link"
+
+import { AppButton, AppCard } from "@/components/app"
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 import { GalleryVerticalEnd, CheckCircle2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 
 export default function CoverPasswordResetSuccessPage({
   className,
@@ -29,38 +25,23 @@ export default function CoverPasswordResetSuccessPage({
           </div>
 
           {/* Card */}
-          <div
-            className={cn("flex flex-col gap-6", className)}
-            {...props}
-          >
-            <Card>
-              <CardHeader className="text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/20">
-                  <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
-                </div>
-
-                <CardTitle className="text-xl">
-                  Password reset successful
-                </CardTitle>
-                <CardDescription>
-                  Your password has been updated successfully.
-                  You can now sign in using your new password.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent>
-                <div className="grid gap-4">
-                  <Button className="w-full" asChild>
-                    <a href="/login">Go to login</a>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          <div className={cn("flex flex-col gap-6", className)} {...props}>
+            <AppCard
+              title="Password reset successful"
+              subtitle="Your password has been updated successfully. You can now sign in using your new password."
+              icon={<CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />}
+            >
+              <div className="grid gap-4">
+                <AppButton fullWidth asChild>
+                  <Link href={ROUTES.login}>Go to login</Link>
+                </AppButton>
+              </div>
+            </AppCard>
 
             {/* Footer text */}
             <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-primary">
-              If you didn’t request a password reset, please{" "}
-              <a href="#">contact support</a> immediately.
+              If you didn’t request a password reset, please <a href="#">contact support</a>{" "}
+              immediately.
             </div>
           </div>
         </div>
@@ -72,12 +53,10 @@ export default function CoverPasswordResetSuccessPage({
         <div className="absolute inset-0 bg-black/10" />
 
         <div className="relative z-10">
-          <h1 className="text-3xl font-semibold leading-tight">
-            You’re all set 🎉
-          </h1>
+          <h1 className="text-3xl font-semibold leading-tight">You’re all set 🎉</h1>
           <p className="mt-3 max-w-md text-primary-foreground/90">
-            Your password has been reset successfully.
-            You can now log in securely and continue using the platform.
+            Your password has been reset successfully. You can now log in securely and continue
+            using the platform.
           </p>
 
           <ul className="mt-6 space-y-2 text-sm">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -11,14 +11,16 @@ const initialState = {
   password: "",
 }
 
+type FormState = typeof initialState
+
 export default function LoginForm() {
   const [form, setForm] = useState(initialState)
-  const [errors, setErrors] = useState<any>({})
-  const [touched, setTouched] = useState<any>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [showPassword, setShowPassword] = useState(false)
 
   const validate = () => {
-    const newErrors: any = {}
+    const newErrors: Record<string, string> = {}
 
     if (!form.email) {
       newErrors.email = "Email is required"
@@ -29,8 +31,7 @@ export default function LoginForm() {
     if (!form.password) {
       newErrors.password = "Password is required"
     } else if (form.password.length < 6) {
-      newErrors.password =
-        "Password must be at least 6 characters"
+      newErrors.password = "Password must be at least 6 characters"
     }
 
     return newErrors
@@ -40,12 +41,12 @@ export default function LoginForm() {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleBlur = (name: string) => {
-    setTouched((prev: any) => ({ ...prev, [name]: true }))
+  const handleBlur = (name: keyof FormState) => {
+    setTouched((prev) => ({ ...prev, [name]: true }))
     setErrors(validate())
   }
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     const validationErrors = validate()
@@ -60,20 +61,18 @@ export default function LoginForm() {
   }
 
   const inputStyle = (name: string) =>
-    touched[name] && errors[name]
-      ? "border-red-500 focus-visible:ring-red-500"
-      : ""
+    touched[name] && errors[name] ? "border-red-500 focus-visible:ring-red-500" : ""
 
   return (
     <div className="flex items-center justify-center min-h-screen px-4">
       <Card className="w-full max-w-md rounded-2xl shadow-xl">
         <CardHeader>
-            {/* Logo */}
-        <div className="flex justify-center mb-4">
+          {/* Logo */}
+          <div className="flex justify-center mb-4">
             <div className="bg-primary/10 p-3 rounded-full">
-                <User className="h-6 w-6 text-primary" />
+              <User className="h-6 w-6 text-primary" />
             </div>
-        </div>
+          </div>
           <CardTitle className="text-xl font-bold text-center flex items-center justify-center gap-2">
             <LogIn className="h-5 w-5 text-primary" />
             Login
@@ -81,9 +80,7 @@ export default function LoginForm() {
         </CardHeader>
 
         <CardContent className="p-8">
-        
           <form onSubmit={handleSubmit} className="space-y-5">
-
             {/* Email */}
             <div className="space-y-2">
               <div className="relative">
@@ -93,16 +90,12 @@ export default function LoginForm() {
                   placeholder="Enter your email"
                   className={`pl-10 ${inputStyle("email")}`}
                   value={form.email}
-                  onChange={(e) =>
-                    handleChange("email", e.target.value)
-                  }
+                  onChange={(e) => handleChange("email", e.target.value)}
                   onBlur={() => handleBlur("email")}
                 />
               </div>
               {touched.email && errors.email && (
-                <p className="text-sm text-red-500">
-                  {errors.email}
-                </p>
+                <p className="text-sm text-red-500">{errors.email}</p>
               )}
             </div>
 
@@ -115,29 +108,19 @@ export default function LoginForm() {
                   placeholder="Enter your password"
                   className={`pl-10 pr-10 ${inputStyle("password")}`}
                   value={form.password}
-                  onChange={(e) =>
-                    handleChange("password", e.target.value)
-                  }
+                  onChange={(e) => handleChange("password", e.target.value)}
                   onBlur={() => handleBlur("password")}
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowPassword(!showPassword)
-                  }
+                  onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 >
-                  {showPassword ? (
-                    <EyeOff size={16} />
-                  ) : (
-                    <Eye size={16} />
-                  )}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
               {touched.password && errors.password && (
-                <p className="text-sm text-red-500">
-                  {errors.password}
-                </p>
+                <p className="text-sm text-red-500">{errors.password}</p>
               )}
             </div>
 
@@ -149,43 +132,28 @@ export default function LoginForm() {
             {/* Divider */}
             <div className="flex items-center gap-3 my-4">
               <div className="flex-1 h-px bg-border" />
-              <span className="text-xs uppercase text-muted-foreground">
-                Or get started with
-              </span>
+              <span className="text-xs uppercase text-muted-foreground">Or get started with</span>
               <div className="flex-1 h-px bg-border" />
             </div>
 
             {/* Social Buttons */}
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full flex items-center gap-2"
-            >
+            <Button type="button" variant="outline" className="w-full flex items-center gap-2">
               <Linkedin size={16} />
               Linkedin
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full flex items-center gap-2"
-            >
+            <Button type="button" variant="outline" className="w-full flex items-center gap-2">
               <Facebook size={16} />
               Facebook
             </Button>
-
           </form>
 
           <p className="text-center text-sm text-muted-foreground mt-6">
             Don’t have an account?{" "}
-            <a
-              href="#"
-              className="text-primary font-medium hover:underline"
-            >
+            <a href="#" className="text-primary font-medium hover:underline">
               Sign up
             </a>
           </p>
-
         </CardContent>
       </Card>
     </div>

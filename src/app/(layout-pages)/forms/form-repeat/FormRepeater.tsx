@@ -14,57 +14,41 @@ interface Item {
   price: number
 }
 
+let nextItemId = 1
+
 export default function FormRepeater() {
   const [items, setItems] = useState<Item[]>([
-    { id: Date.now(), name: "", quantity: 1, price: 0 },
+    { id: nextItemId++, name: "", quantity: 1, price: 0 },
   ])
 
   const addItem = () => {
-    setItems([
-      ...items,
-      { id: Date.now(), name: "", quantity: 1, price: 0 },
-    ])
+    setItems([...items, { id: nextItemId++, name: "", quantity: 1, price: 0 }])
   }
 
   const removeItem = (id: number) => {
     setItems(items.filter((item) => item.id !== id))
   }
 
-  const updateItem = (
-    id: number,
-    field: keyof Item,
-    value: string | number
-  ) => {
-    setItems(
-      items.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
-    )
+  const updateItem = (id: number, field: keyof Item, value: string | number) => {
+    setItems(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)))
   }
 
-  const total = items.reduce(
-    (acc, item) => acc + item.quantity * item.price,
-    0
-  )
+  const total = items.reduce((acc, item) => acc + item.quantity * item.price, 0)
 
   return (
     <div className="space-y-6">
-
       {/* Items */}
       <div className="space-y-4">
         {items.map((item, index) => (
           <Card key={item.id} className="rounded-xl shadow-sm">
             <CardContent className="p-4 grid md:grid-cols-4 gap-4 items-end">
-
               {/* Item Name */}
               <div className="space-y-2">
                 <Label>Item Name</Label>
                 <Input
                   placeholder="Enter item"
                   value={item.name}
-                  onChange={(e) =>
-                    updateItem(item.id, "name", e.target.value)
-                  }
+                  onChange={(e) => updateItem(item.id, "name", e.target.value)}
                 />
               </div>
 
@@ -74,9 +58,7 @@ export default function FormRepeater() {
                 <Input
                   type="number"
                   value={item.quantity}
-                  onChange={(e) =>
-                    updateItem(item.id, "quantity", Number(e.target.value))
-                  }
+                  onChange={(e) => updateItem(item.id, "quantity", Number(e.target.value))}
                 />
               </div>
 
@@ -86,9 +68,7 @@ export default function FormRepeater() {
                 <Input
                   type="number"
                   value={item.price}
-                  onChange={(e) =>
-                    updateItem(item.id, "price", Number(e.target.value))
-                  }
+                  onChange={(e) => updateItem(item.id, "price", Number(e.target.value))}
                 />
               </div>
 
@@ -101,27 +81,19 @@ export default function FormRepeater() {
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
-
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* Add Button */}
-      <Button
-        variant="outline"
-        onClick={addItem}
-        className="gap-2"
-      >
+      <Button variant="outline" onClick={addItem} className="gap-2">
         <Plus className="h-4 w-4" />
         Add Item
       </Button>
 
       {/* Total */}
-      <div className="text-right font-semibold text-lg">
-        Total: ₹ {total.toFixed(2)}
-      </div>
-
+      <div className="text-right font-semibold text-lg">Total: ₹ {total.toFixed(2)}</div>
     </div>
   )
 }

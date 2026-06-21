@@ -24,6 +24,25 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+const SIDEBAR_ITEMS: Array<[string, typeof Folder]> = [
+  ["All Files", Folder],
+  ["My Devices", Folder],
+  ["Recents", Folder],
+  ["Important", Folder],
+  ["Deleted Files", Folder],
+  ["Documents", FileText],
+  ["Images", Image],
+  ["Videos", Video],
+  ["Audio", Music],
+  ["Zip Files", Archive],
+]
+
+const STORAGE_ITEMS: Array<[string, string, string, number]> = [
+  ["Google Drive", "45.5 GB", "50 GB", 90],
+  ["Dropbox", "1.2 GB", "3 GB", 40],
+  ["OneDrive", "2.5 GB", "3 GB", 80],
+]
+
 export default function FileManagerPage() {
   return (
     <div className="flex flex-col xl:flex-row gap-6">
@@ -36,18 +55,7 @@ export default function FileManagerPage() {
         <div className="space-y-1 text-sm">
           <p className="font-semibold">My Drive</p>
 
-          {[
-            ["All Files", Folder],
-            ["My Devices", Folder],
-            ["Recents", Folder],
-            ["Important", Folder],
-            ["Deleted Files", Folder],
-            ["Documents", FileText],
-            ["Images", Image],
-            ["Videos", Video],
-            ["Audio", Music],
-            ["Zip Files", Archive],
-          ].map(([label, Icon]: any) => (
+          {SIDEBAR_ITEMS.map(([label, Icon]) => (
             <div
               key={label}
               className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted cursor-pointer"
@@ -79,15 +87,8 @@ export default function FileManagerPage() {
 
         {/* Cloud Storage */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            ["Google Drive", "45.5 GB", "50 GB", 90],
-            ["Dropbox", "1.2 GB", "3 GB", 40],
-            ["OneDrive", "2.5 GB", "3 GB", 80],
-          ].map(([name, used, total, percent]: any) => (
-            <div
-              key={name}
-              className="rounded-xl border bg-background p-4 space-y-2"
-            >
+          {STORAGE_ITEMS.map(([name, used, total, percent]) => (
+            <div key={name} className="rounded-xl border bg-background p-4 space-y-2">
               <div className="flex justify-between">
                 <p className="font-medium">{name}</p>
                 <MoreHorizontal className="h-4 w-4 text-muted-foreground" />

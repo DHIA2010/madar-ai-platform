@@ -12,6 +12,12 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 import { EventDialog } from "./event-dialog"
 import { CalendarEvent } from "./types"
 
+type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay"
+
+function isCalendarView(value: string): value is CalendarView {
+  return value === "dayGridMonth" || value === "timeGridWeek" || value === "timeGridDay"
+}
+
 export default function ShadcnFullCalendar() {
   const calendarRef = useRef<FullCalendar>(null)
 
@@ -20,17 +26,17 @@ export default function ShadcnFullCalendar() {
     { id: "2", title: "10a Client Meeting", start: "2026-02-18" },
   ])
 
-  const [currentView, setCurrentView] =
-    useState<"dayGridMonth" | "timeGridWeek" | "timeGridDay">("dayGridMonth")
+  const [currentView, setCurrentView] = useState<CalendarView>("dayGridMonth")
+  const [currentTitle, setCurrentTitle] = useState("Month")
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [selectedEvent, setSelectedEvent] =
-    useState<CalendarEvent | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
 
-  const changeView = (view: typeof currentView) => {
+  const changeView = (view: CalendarView) => {
     calendarRef.current?.getApi().changeView(view)
     setCurrentView(view)
+    setCurrentTitle(calendarRef.current?.getApi().view.title ?? "")
   }
 
   return (
@@ -42,7 +48,10 @@ export default function ShadcnFullCalendar() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => calendarRef.current?.getApi().prev()}
+            onClick={() => {
+              calendarRef.current?.getApi().prev()
+              setCurrentTitle(calendarRef.current?.getApi().view.title ?? "")
+            }}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -50,23 +59,27 @@ export default function ShadcnFullCalendar() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => calendarRef.current?.getApi().next()}
+            onClick={() => {
+              calendarRef.current?.getApi().next()
+              setCurrentTitle(calendarRef.current?.getApi().view.title ?? "")
+            }}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
 
           <Button
             variant="secondary"
-            onClick={() => calendarRef.current?.getApi().today()}
+            onClick={() => {
+              calendarRef.current?.getApi().today()
+              setCurrentTitle(calendarRef.current?.getApi().view.title ?? "")
+            }}
           >
             Today
           </Button>
         </div>
 
         {/* Center Title */}
-        <h2 className="text-lg font-semibold">
-          {calendarRef.current?.getApi().view.title}
-        </h2>
+        <h2 className="text-lg font-semibold">{currentTitle}</h2>
 
         {/* Right */}
         <div className="flex items-center gap-2">
@@ -103,49 +116,50 @@ export default function ShadcnFullCalendar() {
 
       {/* 📅 Calendar */}
       <FullCalendar
-  ref={calendarRef}
-  plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-  initialView={currentView}
-  headerToolbar={false}
-  height="auto"
-  events={events}
-  editable
-  selectable
+        ref={calendarRef}
+        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        initialView={currentView}
+        headerToolbar={false}
+        height="auto"
+        events={events}
+        editable
+        selectable
+        datesSet={(arg) => {
+          if (isCalendarView(arg.view.type)) {
+            setCurrentView(arg.view.type)
+          }
+          setCurrentTitle(arg.view.title)
+        }}
+        dateClick={(info) => {
+          setSelectedDate(info.dateStr)
+          setSelectedEvent(null)
+          setDialogOpen(true)
+        }}
+        eventClick={(info) => {
+          const ev = events.find((e) => e.id === info.event.id)
+          if (ev) {
+            setSelectedEvent(ev)
+            setDialogOpen(true)
+          }
+        }}
+        /* 🔹 Apply color + tooltip */
+        eventDidMount={(info) => {
+          const { description, color } = info.event.extendedProps
 
-  datesSet={(arg) => setCurrentView(arg.view.type as any)}
+          if (description) {
+            info.el.title = description
+          }
 
-  dateClick={(info) => {
-    setSelectedDate(info.dateStr)
-    setSelectedEvent(null)
-    setDialogOpen(true)
-  }}
-
-  eventClick={(info) => {
-    const ev = events.find((e) => e.id === info.event.id)
-    if (ev) {
-      setSelectedEvent(ev)
-      setDialogOpen(true)
-    }
-  }}
-
-  /* 🔹 Apply color + tooltip */
-  eventDidMount={(info) => {
-    const { description, color } = info.event.extendedProps
-
-    if (description) {
-      info.el.title = description
-    }
-
-    if (color) {
-      info.el.style.backgroundColor = color
-      info.el.style.borderColor = color
-    }
-  }}
-/>
-
+          if (color) {
+            info.el.style.backgroundColor = color
+            info.el.style.borderColor = color
+          }
+        }}
+      />
 
       {/* 🧩 Dialog */}
       <EventDialog
+        key={selectedEvent?.id ?? selectedDate ?? "new"}
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         selectedDate={selectedDate}
@@ -153,9 +167,7 @@ export default function ShadcnFullCalendar() {
         onSave={(event) => {
           setEvents((prev) => {
             const exists = prev.find((e) => e.id === event.id)
-            return exists
-              ? prev.map((e) => (e.id === event.id ? event : e))
-              : [...prev, event]
+            return exists ? prev.map((e) => (e.id === event.id ? event : e)) : [...prev, event]
           })
         }}
       />

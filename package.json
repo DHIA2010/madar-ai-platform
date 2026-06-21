@@ -5,10 +5,28 @@
   "author": "MADAR Team",
   "private": true,
   "scripts": {
+    "prepare": "husky",
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
+    "build:ci": "TURBOPACK_ROOT=/Users/dheyahagar/Documents/madar-platform/pulse-ui-next next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint --no-error-on-unmatched-pattern \"src/components/app/**/*.{ts,tsx}\" \"src/features/**/*.{ts,tsx}\" \"src/{lib,services,providers,constants,types,hooks,store}/**/*.{ts,tsx}\" \"scripts/**/*.mjs\"",
+    "lint:architecture": "eslint --no-error-on-unmatched-pattern \"src/features/**/*.{ts,tsx}\" \"src/components/app/**/*.{ts,tsx}\"",
+    "lint:boundaries": "dependency-cruiser --config .dependency-cruiser.cjs src",
+    "lint:routes": "node ./scripts/check-routes.mjs",
+    "lint-staged": "lint-staged",
+    "typecheck": "tsc --noEmit",
+    "format": "node ./scripts/run-prettier-governed.mjs --write",
+    "format:check": "node ./scripts/run-prettier-governed.mjs --check",
+    "check:circular": "madge --circular --extensions ts,tsx src",
+    "check:deadcode": "knip --reporter compact || true",
+    "check:deps": "node ./scripts/check-deps.mjs",
+    "check:env": "node ./scripts/validate-env.mjs",
+    "test:ci": "npm run test --if-present",
+    "quality": "npm run check:env && npm run typecheck && npm run lint && npm run format:check && npm run lint:architecture && npm run lint:boundaries && npm run lint:routes && npm run check:circular && npm run check:deadcode && npm run check:deps && npm run test:ci && npm run build:ci",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@boxicons/react": "^1.0.3",
@@ -16,7 +34,9 @@
     "@fullcalendar/interaction": "^6.1.20",
     "@fullcalendar/react": "^6.1.20",
     "@fullcalendar/timegrid": "^6.1.20",
+    "@hookform/resolvers": "^5.2.2",
     "@tailwindcss/postcss": "^4.2.1",
+    "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-table": "^8.21.3",
     "apexcharts": "^5.10.3",
     "bootstrap-icons": "^1.13.1",
@@ -36,6 +56,7 @@
     "react-apexcharts": "^2.1.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
+    "react-hook-form": "^7.66.0",
     "react-simple-wysiwyg": "^3.4.1",
     "recharts": "^2.15.4",
     "shadcn": "^4.0.2",
@@ -45,15 +66,40 @@
     "tailwindcss-animate": "^1.0.7",
     "tw-animate-css": "^1.4.0",
     "xlsx": "^0.18.5",
+    "zod": "^4.1.12",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "@next/bundle-analyzer": "^16.2.9",
+    "@testing-library/react": "^16.3.2",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dependency-cruiser": "^17.4.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "typescript": "^5"
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "husky": "^9.1.7",
+    "jsdom": "^29.1.1",
+    "knip": "^6.17.1",
+    "lint-staged": "^16.4.0",
+    "madge": "^8.0.0",
+    "prettier": "^3.8.4",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,scss,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

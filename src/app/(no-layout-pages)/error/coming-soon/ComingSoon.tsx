@@ -7,15 +7,22 @@ import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
 import { Sun, Moon } from "lucide-react"
 
+const TIME_UNITS = ["days", "hours", "minutes", "seconds"] as const
+
 export default function ComingSoon() {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  const [timeLeft, setTimeLeft] = useState<any>({})
+  const mounted = typeof window !== "undefined"
+  const [timeLeft, setTimeLeft] = useState<
+    Record<"days" | "hours" | "minutes" | "seconds", number>
+  >({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  })
   const [email, setEmail] = useState("")
 
   useEffect(() => {
-    setMounted(true)
-
     const targetDate = new Date()
     targetDate.setDate(targetDate.getDate() + 5)
 
@@ -24,12 +31,8 @@ export default function ComingSoon() {
       const distance = targetDate.getTime() - now
 
       const days = Math.floor(distance / (1000 * 60 * 60 * 24))
-      const hours = Math.floor(
-        (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-      )
-      const minutes = Math.floor(
-        (distance % (1000 * 60 * 60)) / (1000 * 60)
-      )
+      const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))
       const seconds = Math.floor((distance % (1000 * 60)) / 1000)
 
       setTimeLeft({ days, hours, minutes, seconds })
@@ -49,7 +52,6 @@ export default function ComingSoon() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-blue-500/20 transition-colors duration-300">
-
       {/* Theme Toggle */}
       <div className="absolute top-6 right-6">
         <Button
@@ -58,11 +60,7 @@ export default function ComingSoon() {
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="bg-background/60 border-border supports-[backdrop-filter]:backdrop-blur-md"
         >
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
       </div>
 
@@ -104,7 +102,7 @@ export default function ComingSoon() {
 
           {/* Countdown */}
           <div className="mt-10 grid grid-cols-4 gap-6 text-center">
-            {["days", "hours", "minutes", "seconds"].map((unit) => (
+            {TIME_UNITS.map((unit) => (
               <div key={unit}>
                 <div className="text-3xl font-semibold text-foreground">
                   {timeLeft[unit] ?? "00"}

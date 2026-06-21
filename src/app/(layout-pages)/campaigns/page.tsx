@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import { CampaignDashboardScreen } from "@/features/campaigns"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="الحملات" />
+  return <CampaignDashboardScreen />
 }

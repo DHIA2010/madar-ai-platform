@@ -1,10 +1,7 @@
 "use client"
 import { Card, CardContent } from "@/components/ui/card"
 import { Area, AreaChart, XAxis } from "recharts"
-import {
-  ChartContainer,
-  type ChartConfig,
-} from "@/components/ui/chart"
+import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 
 const chartData = [
   { month: "January", visitors: 145 },
@@ -27,13 +24,13 @@ export default function VisitorsCard() {
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-6">
-        <div className="mb-3">
+        <div className="mb-3 text-right">
           <p className="text-md text-muted-foreground">Visitors</p>
-          <h2 className="text-3xl font-semibold">18,432</h2>
+          <h2 className="text-3xl font-semibold num-ltr">18,432</h2>
         </div>
 
-        <p className="text-sm flex gap-2 mb-5">
-          <span className="text-green-600 font-semibold">+9.6%</span>
+        <p className="text-sm flex justify-end gap-2 mb-5 num-ltr" dir="ltr">
+          <span className="text-green-600 font-semibold num-ltr">+9.6%</span>
           from last month
         </p>
 
