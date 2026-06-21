@@ -1,7 +1,9 @@
 import {
+  getResolvedAuthApiBaseUrl,
   getClientEnvironment,
   hasEnvironmentErrors,
   isApiConfigured,
+  isAuthApiConfigured,
   isMockModeEnabled,
   type AppEnvironment,
 } from "@/infrastructure/environment/app-environment"
@@ -27,6 +29,7 @@ function createConfigurationError(repositoryName: string, message: string, env: 
       runtimeMode: env.APP_RUNTIME_MODE,
       nodeEnv: env.NODE_ENV,
       apiBaseUrlConfigured: isApiConfigured(env),
+      authApiBaseUrlConfigured: isAuthApiConfigured(env),
       mockRepositoriesEnabled: isMockModeEnabled(env),
       validationErrors: env.VALIDATION_ERRORS,
     },
@@ -69,4 +72,31 @@ export function assertMockRepositoryEnabled(repositoryName: string) {
       env
     )
   }
+}
+
+export function resolveAuthenticationBackend(): RepositoryRuntimeBackend {
+  const env = getClientEnvironment()
+
+  if (hasEnvironmentErrors(env)) {
+    throw createConfigurationError("authentication", "Runtime configuration is invalid", env)
+  }
+
+  if (isAuthApiConfigured(env)) {
+    return "api"
+  }
+
+  if (env.APP_RUNTIME_MODE === "mock") {
+    return "mock"
+  }
+
+  throw createConfigurationError(
+    "authentication",
+    "AUTH_API_BASE_URL (or API_BASE_URL) is missing and authentication mock mode is disabled",
+    env
+  )
+}
+
+export function resolveAuthenticationApiBaseUrl() {
+  const env = getClientEnvironment()
+  return getResolvedAuthApiBaseUrl(env)
 }

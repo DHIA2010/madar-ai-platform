@@ -7,6 +7,7 @@ export interface AppEnvironment {
   APP_NAME: string
   APP_URL: string
   API_BASE_URL: string
+  AUTH_API_BASE_URL: string
   REQUEST_TIMEOUT_MS: number
   ENABLE_DEBUG_LOGS: boolean
   ENABLE_MOCK_REPOSITORIES: boolean
@@ -19,6 +20,7 @@ const DEVELOPMENT_DEFAULTS: AppEnvironment = {
   APP_NAME: "MADAR",
   APP_URL: "http://localhost:3000/pulse-ui-next",
   API_BASE_URL: "",
+  AUTH_API_BASE_URL: "",
   REQUEST_TIMEOUT_MS: 15_000,
   ENABLE_DEBUG_LOGS: true,
   ENABLE_MOCK_REPOSITORIES: true,
@@ -97,6 +99,10 @@ function parseEnvironment(
     source.NEXT_PUBLIC_API_BASE_URL ?? source.API_BASE_URL,
     defaults.API_BASE_URL
   )
+  const authApiBaseUrl = normalizeUrl(
+    source.NEXT_PUBLIC_AUTH_API_BASE_URL ?? source.AUTH_API_BASE_URL,
+    defaults.AUTH_API_BASE_URL
+  )
 
   const enableMockRepositories = toBoolean(
     source.NEXT_PUBLIC_ENABLE_MOCK_REPOSITORIES ?? source.ENABLE_MOCK_REPOSITORIES,
@@ -109,6 +115,7 @@ function parseEnvironment(
     APP_NAME: source.NEXT_PUBLIC_APP_NAME ?? source.APP_NAME ?? defaults.APP_NAME,
     APP_URL: appUrl,
     API_BASE_URL: apiBaseUrl,
+    AUTH_API_BASE_URL: authApiBaseUrl,
     REQUEST_TIMEOUT_MS: toNumber(
       source.NEXT_PUBLIC_REQUEST_TIMEOUT_MS ?? source.REQUEST_TIMEOUT_MS,
       defaults.REQUEST_TIMEOUT_MS
@@ -170,6 +177,14 @@ export function isMockModeEnabled(env: AppEnvironment) {
 
 export function isApiConfigured(env: AppEnvironment) {
   return Boolean(env.API_BASE_URL)
+}
+
+export function isAuthApiConfigured(env: AppEnvironment) {
+  return Boolean(env.AUTH_API_BASE_URL || env.API_BASE_URL)
+}
+
+export function getResolvedAuthApiBaseUrl(env: AppEnvironment) {
+  return env.AUTH_API_BASE_URL || env.API_BASE_URL
 }
 
 export function hasEnvironmentErrors(env: AppEnvironment) {
