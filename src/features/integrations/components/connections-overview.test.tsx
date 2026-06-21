@@ -56,6 +56,7 @@ describe("ConnectionsOverview", () => {
     mockUseConnectionsCenter.mockReturnValue({
       isLoading: false,
       error: null,
+      records: [mockRecord],
       filteredRecords: [mockRecord],
       filters: {
         search: "",
