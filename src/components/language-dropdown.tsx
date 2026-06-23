@@ -34,40 +34,31 @@ export function LanguageDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full w-10 h-10"
-        >
+        <Button variant="ghost" size="icon" className="rounded-full w-10 h-10">
           <Flag className="size-5" />
         </Button>
       </DropdownMenuTrigger>
 
-    <DropdownMenuContent
-      align="end"
-      className="w-48 rounded-xl p-2 shadow-xl"
-    >
+      <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl">
         {languages.map((lang) => (
-            <DropdownMenuItem
-                key={lang.code}
-                onClick={() => setSelected(lang)}
-                className={cn(
-                    "flex items-center gap-3 cursor-pointer rounded-lg p-1.5",
-                    selected.code === lang.code && "bg-muted/40"
-                )}
-            >
-                <img
-                    src={`/pulse-ui-next/images/countries/${lang.code}.png`}
-                    alt={lang.name}
-                    className="h-5 w-5 rounded-full object-cover"
-                />
+          <DropdownMenuItem
+            key={lang.code}
+            onClick={() => setSelected(lang)}
+            className={cn(
+              "flex items-center gap-3 cursor-pointer rounded-lg p-1.5",
+              selected.code === lang.code && "bg-muted/40"
+            )}
+          >
+            <img
+              src={`/images/countries/${lang.code}.png`}
+              alt={lang.name}
+              className="h-5 w-5 rounded-full object-cover"
+            />
 
-                <span className="text-sm">{lang.name}</span>
+            <span className="text-sm">{lang.name}</span>
 
-                {selected.code === lang.code && (
-                    <Check className="ml-auto h-4 w-4 text-primary" />
-                )}
-            </DropdownMenuItem>
+            {selected.code === lang.code && <Check className="ml-auto h-4 w-4 text-primary" />}
+          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

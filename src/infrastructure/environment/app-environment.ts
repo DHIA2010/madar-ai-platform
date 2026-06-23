@@ -18,7 +18,7 @@ const DEVELOPMENT_DEFAULTS: AppEnvironment = {
   NODE_ENV: "development",
   APP_RUNTIME_MODE: "development",
   APP_NAME: "MADAR",
-  APP_URL: "http://localhost:3000/pulse-ui-next",
+  APP_URL: "http://localhost:3000",
   API_BASE_URL: "",
   AUTH_API_BASE_URL: "",
   REQUEST_TIMEOUT_MS: 15_000,

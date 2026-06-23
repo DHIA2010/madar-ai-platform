@@ -5,34 +5,28 @@ import { ShoppingCart, Heart } from "lucide-react"
 export function FeaturedProducts() {
   return (
     <div className="space-y-6">
-
       <h5 className="text-xl font-bold">Featured Products</h5>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-
         {/* Product 1 */}
         <div className="rounded-3xl overflow-hidden bg-card border shadow hover:shadow-xl hover:-translate-y-2 transition-all duration-500">
           <div className="bg-indigo-100 dark:bg-indigo-500/10 p-8 flex items-center justify-center">
             <img
-              src="/pulse-ui-next/images/cards/eComm/01.png"
+              src="/images/cards/eComm/01.png"
               alt="Wireless Headphones"
               className="h-40 object-contain"
             />
           </div>
 
           <div className="p-6 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Wireless Headphones
-            </h3>
+            <h3 className="text-xl font-semibold">Wireless Headphones</h3>
 
             <p className="text-sm text-muted-foreground">
               Noise-cancelling over-ear headphones with long-lasting battery life.
             </p>
 
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-indigo-600">
-                $129.00
-              </span>
+              <span className="text-2xl font-bold text-indigo-600">$129.00</span>
               <span className="text-xs px-3 py-1 rounded-full bg-green-500 text-white">
                 In Stock
               </span>
@@ -62,25 +56,21 @@ export function FeaturedProducts() {
         <div className="rounded-3xl overflow-hidden bg-card border shadow hover:shadow-xl hover:-translate-y-2 transition-all duration-500">
           <div className="bg-cyan-100 dark:bg-cyan-500/10 p-8 flex items-center justify-center">
             <img
-              src="/pulse-ui-next/images/cards/eComm/02.png"
+              src="/images/cards/eComm/02.png"
               alt="Smartwatch Pro"
               className="h-40 object-contain"
             />
           </div>
 
           <div className="p-6 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Smartwatch Pro
-            </h3>
+            <h3 className="text-xl font-semibold">Smartwatch Pro</h3>
 
             <p className="text-sm text-muted-foreground">
               Fitness tracking, heart rate monitoring, and smart notifications.
             </p>
 
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-indigo-600">
-                $89.00
-              </span>
+              <span className="text-2xl font-bold text-indigo-600">$89.00</span>
               <span className="text-xs px-3 py-1 rounded-full bg-orange-500 text-white">
                 Limited
               </span>
@@ -108,28 +98,22 @@ export function FeaturedProducts() {
         <div className="rounded-3xl overflow-hidden bg-card border shadow hover:shadow-xl hover:-translate-y-2 transition-all duration-500">
           <div className="bg-pink-100 dark:bg-pink-500/10 p-8 flex items-center justify-center">
             <img
-              src="/pulse-ui-next/images/cards/eComm/03.png"
+              src="/images/cards/eComm/03.png"
               alt="Portable Speaker"
               className="h-40 object-contain"
             />
           </div>
 
           <div className="p-6 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Portable Speaker
-            </h3>
+            <h3 className="text-xl font-semibold">Portable Speaker</h3>
 
             <p className="text-sm text-muted-foreground">
               Compact wireless speaker with immersive sound and deep bass.
             </p>
 
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-indigo-600">
-                $59.00
-              </span>
-              <span className="text-xs px-3 py-1 rounded-full bg-blue-500 text-white">
-                New
-              </span>
+              <span className="text-2xl font-bold text-indigo-600">$59.00</span>
+              <span className="text-xs px-3 py-1 rounded-full bg-blue-500 text-white">New</span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -156,28 +140,22 @@ export function FeaturedProducts() {
         <div className="rounded-3xl overflow-hidden bg-card border shadow hover:shadow-xl hover:-translate-y-2 transition-all duration-500">
           <div className="bg-amber-100 dark:bg-amber-500/10 p-8 flex items-center justify-center">
             <img
-              src="/pulse-ui-next/images/cards/eComm/04.png"
+              src="/images/cards/eComm/04.png"
               alt="Noise Cancelling Earbuds"
               className="h-40 object-contain"
             />
           </div>
 
           <div className="p-6 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Noise Cancelling Earbuds
-            </h3>
+            <h3 className="text-xl font-semibold">Noise Cancelling Earbuds</h3>
 
             <p className="text-sm text-muted-foreground">
               Lightweight wireless earbuds with active noise cancellation and crystal clear audio.
             </p>
 
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-indigo-600">
-                $79.00
-              </span>
-              <span className="text-xs px-3 py-1 rounded-full bg-red-500 text-white">
-                Sale
-              </span>
+              <span className="text-2xl font-bold text-indigo-600">$79.00</span>
+              <span className="text-xs px-3 py-1 rounded-full bg-red-500 text-white">Sale</span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -199,7 +177,6 @@ export function FeaturedProducts() {
             </div>
           </div>
         </div>
-
       </div>
     </div>
   )

@@ -1,11 +1,6 @@
 "use client"
 import { useMemo, useState } from "react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -25,12 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   Select,
   SelectContent,
@@ -53,140 +43,140 @@ export default function CategoryList() {
   const [open, setOpen] = useState(false)
   const [categoryList, setCategoryList] = useState([
     {
-    id: 1,
-    name: "Outerwear",
-    description: "Jackets, coats, raincoats and more",
-    products: 12,
-    earnings: "$12,400",
-    status: "Active",
-    image: "/pulse-ui-next/products/01.png",
-  },
-  {
-    id: 2,
-    name: "Accessories",
-    description: "Belts, hats, scarves, wallets",
-    products: 25,
-    earnings: "$8,950",
-    status: "Active",
-    image: "/pulse-ui-next/products/02.png",
-  },
-  {
-    id: 3,
-    name: "Footwear",
-    description: "Shoes, sneakers, boots and sandals",
-    products: 8,
-    earnings: "$5,600",
-    status: "Inactive",
-    image: "/pulse-ui-next/products/03.png",
-  },
-  {
-  id: 4,
-  name: "Outerwear",
-  description: "Jackets, coats, rainwear, and blazers",
-  products: 12,
-  earnings: "$9,200",
-  status: "Published",
-  image: "/pulse-ui-next/products/04.png",
-},
-{
-  id: 5,
-  name: "Accessories",
-  description: "Belts, scarves, hats, and wallets",
-  products: 15,
-  earnings: "$4,350",
-  status: "Active",
-  image: "/pulse-ui-next/products/05.png",
-},
-{
-  id: 6,
-  name: "Tops",
-  description: "Shirts, t-shirts, blouses, and polos",
-  products: 20,
-  earnings: "$11,800",
-  status: "Published",
-  image: "/pulse-ui-next/products/06.png",
-},
-{
-  id: 7,
-  name: "Bottoms",
-  description: "Jeans, trousers, shorts, and skirts",
-  products: 10,
-  earnings: "$7,600",
-  status: "Draft",
-  image: "/pulse-ui-next/products/07.png",
-},
-{
-  id: 8,
-  name: "Sweatshirts",
-  description: "Hoodies, pullovers, and zip-ups",
-  products: 9,
-  earnings: "$6,450",
-  status: "Inactive",
-  image: "/pulse-ui-next/products/08.png",
-},
-{
-  id: 9,
-  name: "Suits & Blazers",
-  description: "Formal suits, tailored blazers, and dress jackets",
-  products: 7,
-  earnings: "$8,900",
-  status: "Published",
-  image: "/pulse-ui-next/products/09.png",
-},
-{
-  id: 10,
-  name: "Activewear",
-  description: "Sportswear, gym outfits, and performance gear",
-  products: 14,
-  earnings: "$10,250",
-  status: "Active",
-  image: "/pulse-ui-next/products/10.png",
-},
-{
-  id: 11,
-  name: "Formal Footwear",
-  description: "Dress shoes, loafers, and office-ready styles",
-  products: 6,
-  earnings: "$6,700",
-  status: "Draft",
-  image: "/pulse-ui-next/products/11.png",
-},
-{
-  id: 12,
-  name: "Casual Wear",
-  description: "Everyday outfits, relaxed fits, and streetwear",
-  products: 18,
-  earnings: "$12,400",
-  status: "Published",
-  image: "/pulse-ui-next/products/12.png",
-},
-{
-  id: 13,
-  name: "Swimwear",
-  description: "Bikinis, trunks, one-piece suits, and cover-ups",
-  products: 8,
-  earnings: "$5,150",
-  status: "Inactive",
-  image: "/pulse-ui-next/products/13.png",
-},
-{
-  id: 14,
-  name: "Formal Dresses",
-  description: "Evening gowns, cocktail dresses, and party wear",
-  products: 11,
-  earnings: "$9,800",
-  status: "Active",
-  image: "/pulse-ui-next/products/14.png",
-},
-{
-  id: 15,
-  name: "Winter Essentials",
-  description: "Coats, thermal wear, gloves, and beanies",
-  products: 13,
-  earnings: "$10,600",
-  status: "Draft",
-  image: "/pulse-ui-next/products/15.png",
-},
+      id: 1,
+      name: "Outerwear",
+      description: "Jackets, coats, raincoats and more",
+      products: 12,
+      earnings: "$12,400",
+      status: "Active",
+      image: "/products/01.png",
+    },
+    {
+      id: 2,
+      name: "Accessories",
+      description: "Belts, hats, scarves, wallets",
+      products: 25,
+      earnings: "$8,950",
+      status: "Active",
+      image: "/products/02.png",
+    },
+    {
+      id: 3,
+      name: "Footwear",
+      description: "Shoes, sneakers, boots and sandals",
+      products: 8,
+      earnings: "$5,600",
+      status: "Inactive",
+      image: "/products/03.png",
+    },
+    {
+      id: 4,
+      name: "Outerwear",
+      description: "Jackets, coats, rainwear, and blazers",
+      products: 12,
+      earnings: "$9,200",
+      status: "Published",
+      image: "/products/04.png",
+    },
+    {
+      id: 5,
+      name: "Accessories",
+      description: "Belts, scarves, hats, and wallets",
+      products: 15,
+      earnings: "$4,350",
+      status: "Active",
+      image: "/products/05.png",
+    },
+    {
+      id: 6,
+      name: "Tops",
+      description: "Shirts, t-shirts, blouses, and polos",
+      products: 20,
+      earnings: "$11,800",
+      status: "Published",
+      image: "/products/06.png",
+    },
+    {
+      id: 7,
+      name: "Bottoms",
+      description: "Jeans, trousers, shorts, and skirts",
+      products: 10,
+      earnings: "$7,600",
+      status: "Draft",
+      image: "/products/07.png",
+    },
+    {
+      id: 8,
+      name: "Sweatshirts",
+      description: "Hoodies, pullovers, and zip-ups",
+      products: 9,
+      earnings: "$6,450",
+      status: "Inactive",
+      image: "/products/08.png",
+    },
+    {
+      id: 9,
+      name: "Suits & Blazers",
+      description: "Formal suits, tailored blazers, and dress jackets",
+      products: 7,
+      earnings: "$8,900",
+      status: "Published",
+      image: "/products/09.png",
+    },
+    {
+      id: 10,
+      name: "Activewear",
+      description: "Sportswear, gym outfits, and performance gear",
+      products: 14,
+      earnings: "$10,250",
+      status: "Active",
+      image: "/products/10.png",
+    },
+    {
+      id: 11,
+      name: "Formal Footwear",
+      description: "Dress shoes, loafers, and office-ready styles",
+      products: 6,
+      earnings: "$6,700",
+      status: "Draft",
+      image: "/products/11.png",
+    },
+    {
+      id: 12,
+      name: "Casual Wear",
+      description: "Everyday outfits, relaxed fits, and streetwear",
+      products: 18,
+      earnings: "$12,400",
+      status: "Published",
+      image: "/products/12.png",
+    },
+    {
+      id: 13,
+      name: "Swimwear",
+      description: "Bikinis, trunks, one-piece suits, and cover-ups",
+      products: 8,
+      earnings: "$5,150",
+      status: "Inactive",
+      image: "/products/13.png",
+    },
+    {
+      id: 14,
+      name: "Formal Dresses",
+      description: "Evening gowns, cocktail dresses, and party wear",
+      products: 11,
+      earnings: "$9,800",
+      status: "Active",
+      image: "/products/14.png",
+    },
+    {
+      id: 15,
+      name: "Winter Essentials",
+      description: "Coats, thermal wear, gloves, and beanies",
+      products: 13,
+      earnings: "$10,600",
+      status: "Draft",
+      image: "/products/15.png",
+    },
   ])
   const [selected, setSelected] = useState<number[]>([])
   const PAGE_SIZE = 5
@@ -212,15 +202,11 @@ export default function CategoryList() {
   }
 
   const handleSelectOne = (id: number) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    )
+    setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
   }
 
   const handleDeleteSelected = () => {
-    setCategoryList((prev) =>
-      prev.filter((cat) => !selected.includes(cat.id))
-    )
+    setCategoryList((prev) => prev.filter((cat) => !selected.includes(cat.id)))
     setSelected([])
   }
 
@@ -233,7 +219,6 @@ export default function CategoryList() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="relative w-[260px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -250,11 +235,7 @@ export default function CategoryList() {
 
           <div className="flex gap-2">
             {selected.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDeleteSelected}
-              >
+              <Button variant="destructive" size="sm" onClick={handleDeleteSelected}>
                 Delete Selected ({selected.length})
               </Button>
             )}
@@ -274,10 +255,7 @@ export default function CategoryList() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
-                  <Checkbox
-                    checked={isAllSelected}
-                    onCheckedChange={handleSelectAll}
-                  />
+                  <Checkbox checked={isAllSelected} onCheckedChange={handleSelectAll} />
                 </TableHead>
                 <TableHead>Image</TableHead>
                 <TableHead>Category</TableHead>
@@ -307,9 +285,7 @@ export default function CategoryList() {
                     />
                   </TableCell>
 
-                  <TableCell className="font-medium">
-                    {cat.name}
-                  </TableCell>
+                  <TableCell className="font-medium">{cat.name}</TableCell>
 
                   <TableCell>{cat.description}</TableCell>
                   <TableCell>{cat.products}</TableCell>
@@ -357,12 +333,8 @@ export default function CategoryList() {
                         <DropdownMenuItem
                           className="text-red-600 focus:text-red-600"
                           onClick={() => {
-                            setCategoryList(prev =>
-                              prev.filter(c => c.id !== cat.id)
-                            )
-                            setSelected(prev =>
-                              prev.filter(id => id !== cat.id)
-                            )
+                            setCategoryList((prev) => prev.filter((c) => c.id !== cat.id))
+                            setSelected((prev) => prev.filter((id) => id !== cat.id))
                           }}
                         >
                           <LogOutIcon className="mr-2 h-4 w-4" />
@@ -379,29 +351,18 @@ export default function CategoryList() {
 
         <div className="flex items-center justify-between pt-2">
           <span className="text-sm text-muted-foreground">
-            Result {start + 1}–
-            {Math.min(start + PAGE_SIZE, filtered.length)} of{" "}
-            {filtered.length}
+            Result {start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} of {filtered.length}
           </span>
 
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
+            <Button size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
               Prev
             </Button>
-            <Button
-              size="sm"
-              disabled={page === totalPages}
-              onClick={() => setPage((p) => p + 1)}
-            >
+            <Button size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
               Next
             </Button>
           </div>
         </div>
-
       </CardContent>
 
       <Sheet open={open} onOpenChange={setOpen}>
