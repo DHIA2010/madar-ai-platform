@@ -38,9 +38,16 @@ function createConfigurationError(repositoryName: string, message: string, env: 
 
 export function resolveRepositoryBackend(repositoryName: string): RepositoryRuntimeBackend {
   const env = getClientEnvironment()
+  const isVitestRuntime = Boolean(
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VITEST
+  )
 
   if (hasEnvironmentErrors(env)) {
     throw createConfigurationError(repositoryName, "Runtime configuration is invalid", env)
+  }
+
+  if (env.NODE_ENV === "test" || isVitestRuntime) {
+    return "mock"
   }
 
   if (isApiConfigured(env)) {
@@ -76,9 +83,16 @@ export function assertMockRepositoryEnabled(repositoryName: string) {
 
 export function resolveAuthenticationBackend(): RepositoryRuntimeBackend {
   const env = getClientEnvironment()
+  const isVitestRuntime = Boolean(
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VITEST
+  )
 
   if (hasEnvironmentErrors(env)) {
     throw createConfigurationError("authentication", "Runtime configuration is invalid", env)
+  }
+
+  if (env.NODE_ENV === "test" || isVitestRuntime) {
+    return "mock"
   }
 
   if (isAuthApiConfigured(env)) {

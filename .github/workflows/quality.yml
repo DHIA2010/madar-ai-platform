@@ -5,9 +5,14 @@ on:
   push:
     branches: [main, develop]
 
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -22,17 +27,16 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Load CI environment defaults
+        run: |
+          while IFS= read -r line; do
+            if [ -n "$line" ] && [ "${line#\#}" = "$line" ]; then
+              echo "$line" >> "$GITHUB_ENV"
+            fi
+          done < .env.example
+
       - name: Environment Validation
         run: npm run check:env
-        env:
-          API_URL: ci-placeholder
-          JWT_SECRET: ci-placeholder
-          ANALYTICS_KEY: ci-placeholder
-          OPENAI_API_KEY: ci-placeholder
-          META_API_KEY: ci-placeholder
-          GOOGLE_ADS_API_KEY: ci-placeholder
-          TIKTOK_API_KEY: ci-placeholder
-          SNAPCHAT_API_KEY: ci-placeholder
 
       - name: Type Check
         run: npm run typecheck

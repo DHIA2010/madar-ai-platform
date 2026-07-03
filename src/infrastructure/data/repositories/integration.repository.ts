@@ -1,610 +1,595 @@
+import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
 import type {
-  AccessToken,
   AuthorizeConnectorRequestDto,
-  CapabilityDiscoveryPort,
   Connection,
-  ConnectorCapability,
-  ConnectorConfigurationPort,
-  ConnectorDefinition,
   ConnectorHealth,
+  ConnectorLifecycleAction,
   CreateConnectionRequestDto,
-  Credential,
-  CredentialStoragePort,
   DisconnectConnectionRequestDto,
-  ErrorMapperPort,
   GetConnectorHealthRequestDto,
   GetIntegrationStatusRequestDto,
   GetSyncHistoryRequestDto,
-  HealthMonitorPort,
   IntegrationEvent,
   IntegrationRepository,
   IntegrationStatusDto,
   PauseSyncRequestDto,
-  RateLimit,
-  RateLimitPort,
   RefreshConnectionRequestDto,
-  RefreshToken,
   ResumeSyncRequestDto,
-  RetryEnginePort,
-  RetryPolicy,
   RetrySyncRequestDto,
   RunSyncRequestDto,
   ScheduleSyncRequestDto,
-  SchedulerPort,
   SyncHistoryDto,
   SyncJob,
-  SyncResult,
+  SyncJobStatus,
   SyncRun,
   SyncSchedule,
-  TokenLifecyclePort,
-  ValidateConnectionRequestDto,
-  Webhook,
-  WebhookPort,
 } from "@/application/contracts/integration.contracts"
-import { NotFoundError, ValidationError, mapRepositoryError } from "@/infrastructure/data/errors"
-import { GA4_CONNECTOR_DEFINITION, GA4Repository } from "@/infrastructure/integration/ga4"
-import {
-  GOOGLE_ADS_CONNECTOR_DEFINITION,
-  GoogleAdsRepository,
-} from "@/infrastructure/integration/google-ads"
-import {
-  META_ADS_CONNECTOR_DEFINITION,
-  MetaAdsRepository,
-} from "@/infrastructure/integration/meta-ads"
-import {
-  TIKTOK_ADS_CONNECTOR_DEFINITION,
-  TikTokAdsRepository,
-} from "@/infrastructure/integration/tiktok-ads"
-import {
-  SNAPCHAT_ADS_CONNECTOR_DEFINITION,
-  SnapchatAdsRepository,
-} from "@/infrastructure/integration/snapchat-ads"
-import { SallaRepository, SALLA_CONNECTOR_DEFINITION } from "@/infrastructure/integration/salla"
-import { ZidRepository, ZID_CONNECTOR_DEFINITION } from "@/infrastructure/integration/zid"
+import { ValidationError, mapRepositoryError, NotFoundError } from "@/infrastructure/data/errors"
+import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
 
-const DEFAULT_POLICY: RetryPolicy = {
-  maxAttempts: 3,
-  baseDelayMs: 250,
-  backoffFactor: 2,
+import { createHttpDataClient } from "../api/http-data-client"
+import { resolveAuthenticationApiBaseUrl, resolveRepositoryBackend } from "./repository-runtime"
+import {
+  InMemoryIntegrationRepository,
+  resetInMemoryIntegrationRepositoryState,
+} from "./integration.repository.in-memory"
+
+interface GoogleOAuthStartResponse {
+  authorizationUrl: string
+  connectionId: string
+  state: string
+  projectId: string
+  workspaceId: string | null
 }
 
-const connectorDefinitions: ConnectorDefinition[] = [
-  SALLA_CONNECTOR_DEFINITION,
-  ZID_CONNECTOR_DEFINITION,
-  GA4_CONNECTOR_DEFINITION,
-  GOOGLE_ADS_CONNECTOR_DEFINITION,
-  META_ADS_CONNECTOR_DEFINITION,
-  TIKTOK_ADS_CONNECTOR_DEFINITION,
-  SNAPCHAT_ADS_CONNECTOR_DEFINITION,
-  {
-    connectorDefinitionId: "connector_def_commerce_generic",
-    key: "commerce.generic",
-    displayName: "Generic Commerce Connector",
-    description: "Reusable commerce connector definition template.",
-    version: "1.0.0",
-    capabilities: ["products", "orders", "customers", "catalog", "media"],
-    supportsWebhook: true,
-    supportsScheduler: true,
-    supportsTokenRefresh: true,
-  },
-  {
-    connectorDefinitionId: "connector_def_ads_generic",
-    key: "ads.generic",
-    displayName: "Generic Ads Connector",
-    description: "Reusable ads connector definition template.",
-    version: "1.0.0",
-    capabilities: ["campaigns", "ads", "traffic", "events", "conversions"],
-    supportsWebhook: false,
-    supportsScheduler: true,
-    supportsTokenRefresh: true,
-  },
-]
+interface GoogleAdsSyncApiResponse {
+  id: string
+  status: "pending" | "running" | "completed" | "failed"
+  startedAt: string | null
+  completedAt: string | null
+  errorCode: string | null
+  errorMessage: string | null
+  metrics?: Record<string, number>
+}
 
-let connectionCounter = 0
-let credentialCounter = 0
-let webhookCounter = 0
-let scheduleCounter = 0
-let syncJobCounter = 0
-let syncRunCounter = 0
-let eventCounter = 0
+interface GoogleAdsRecordItem {
+  id: string
+  updatedAt: string
+}
 
-const connections = new Map<string, Connection>()
-const credentialsByConnection = new Map<string, Credential>()
-const webhooksByConnection = new Map<string, Webhook>()
-const schedulesByConnection = new Map<string, SyncSchedule>()
-const jobs = new Map<string, SyncJob>()
-const jobsByConnection = new Map<string, string[]>()
-const runs = new Map<string, SyncRun>()
-const runsByJob = new Map<string, string[]>()
-const eventsByConnection = new Map<string, IntegrationEvent[]>()
-const rateLimitState = new Map<string, RateLimit>()
+interface GoogleAdsAccessibleAccountApiItem {
+  customerId: string
+  displayName: string | null
+  isSelected: boolean
+}
+
+interface GoogleActiveConnectionResponse {
+  connection: {
+    id: string
+    status: string
+    providerAccountId: string | null
+    providerAccountName: string | null
+    providerAccountEmail: string | null
+    connectedAt: string | null
+    developerTokenConfigured?: boolean
+    customerAccounts: Array<{ customerId: string; displayName: string | null; isSelected: boolean }>
+  } | null
+}
+
+interface StoredState {
+  connections: Record<string, Connection>
+  jobs: Record<string, SyncJob>
+  runs: Record<string, SyncRun[]>
+  events: Record<string, IntegrationEvent[]>
+}
+
+const STORAGE_KEY = "integration-runtime-state:v1"
+const GOOGLE_ADS_CONNECTOR_ID = "google_ads"
+const GOOGLE_ADS_CONNECTOR_DEFINITION_ID = "connector_def_google_ads"
+const DEFAULT_WORKSPACE_ID = "ws_connections_center"
+const DEFAULT_CRON = "*/30 * * * *"
+const DEFAULT_TIMEZONE = "Asia/Riyadh"
 
 function nowIso() {
   return new Date().toISOString()
 }
 
-function nextId(prefix: string, counter: number) {
-  return `${prefix}_${String(counter).padStart(6, "0")}`
-}
-
-function nextConnectionId() {
-  connectionCounter += 1
-  return nextId("conn", connectionCounter)
-}
-
-function nextCredentialId() {
-  credentialCounter += 1
-  return nextId("cred", credentialCounter)
-}
-
-function nextWebhookId() {
-  webhookCounter += 1
-  return nextId("wh", webhookCounter)
-}
-
-function nextScheduleId() {
-  scheduleCounter += 1
-  return nextId("sched", scheduleCounter)
-}
-
-function nextSyncJobId() {
-  syncJobCounter += 1
-  return nextId("sync_job", syncJobCounter)
-}
-
-function nextSyncRunId() {
-  syncRunCounter += 1
-  return nextId("sync_run", syncRunCounter)
-}
-
-function nextEventId() {
-  eventCounter += 1
-  return nextId("int_evt", eventCounter)
-}
-
-function encryptPayload(payload: Record<string, string>) {
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64")
-}
-
-function connectionOrThrow(connectionId: string): Connection {
-  const connection = connections.get(connectionId)
-  if (!connection) {
-    throw new NotFoundError({ message: `Connection ${connectionId} was not found.` })
-  }
-  return connection
-}
-
-function syncJobOrThrow(syncJobId: string): SyncJob {
-  const job = jobs.get(syncJobId)
-  if (!job) {
-    throw new NotFoundError({ message: `Sync job ${syncJobId} was not found.` })
-  }
-  return job
-}
-
-function pushEvent(connectionId: string, action: IntegrationEvent["action"], message: string) {
-  const list = eventsByConnection.get(connectionId) ?? []
-  list.unshift({
-    eventId: nextEventId(),
-    connectionId,
-    action,
-    timestamp: nowIso(),
-    actor: "system",
-    message,
-  })
-  eventsByConnection.set(connectionId, list)
-}
-
-class InMemoryCredentialStore implements CredentialStoragePort {
-  async store(
-    connectionId: string,
-    credential: CreateConnectionRequestDto["credential"]
-  ): Promise<Credential | null> {
-    if (!credential) {
-      return null
-    }
-
-    const record: Credential = {
-      credentialId: nextCredentialId(),
-      connectionId,
-      type: credential.type,
-      encryptedPayload: encryptPayload(credential.payload),
-      createdAt: nowIso(),
-    }
-
-    credentialsByConnection.set(connectionId, record)
-    return record
+function generateUuid() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID()
   }
 
-  async getByConnectionId(connectionId: string): Promise<Credential | null> {
-    return credentialsByConnection.get(connectionId) ?? null
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16)
+    globalThis.crypto.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"))
+    return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`
   }
+
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-${Math.random().toString(16).slice(2, 10)}`
 }
 
-class InMemoryTokenLifecycleService implements TokenLifecyclePort {
-  async issue(
-    connectionId: string
-  ): Promise<{ accessToken: AccessToken; refreshToken: RefreshToken }> {
-    const accessToken: AccessToken = {
-      value: `access_${connectionId}_${Date.now()}`,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    }
-    const refreshToken: RefreshToken = {
-      value: `refresh_${connectionId}_${Date.now()}`,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    }
-    return { accessToken, refreshToken }
+function toLifecycleStatus(status: GoogleAdsSyncApiResponse["status"]): SyncJobStatus {
+  if (status === "failed") {
+    return "failed"
   }
 
-  async refresh(connectionId: string): Promise<AccessToken> {
+  if (status === "running") {
+    return "running"
+  }
+
+  if (status === "pending") {
+    return "queued"
+  }
+
+  return "completed"
+}
+
+function toAction(status: SyncJobStatus): ConnectorLifecycleAction {
+  if (status === "failed") {
+    return "sync"
+  }
+
+  return "sync"
+}
+
+function loadState(): StoredState {
+  if (typeof window === "undefined") {
+    return { connections: {}, jobs: {}, runs: {}, events: {} }
+  }
+
+  const raw = window.localStorage.getItem(STORAGE_KEY)
+  if (!raw) {
+    return { connections: {}, jobs: {}, runs: {}, events: {} }
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredState>
     return {
-      value: `access_${connectionId}_${Date.now()}_refresh`,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      connections: parsed.connections ?? {},
+      jobs: parsed.jobs ?? {},
+      runs: parsed.runs ?? {},
+      events: parsed.events ?? {},
     }
+  } catch {
+    return { connections: {}, jobs: {}, runs: {}, events: {} }
   }
 }
 
-class InMemoryWebhookService implements WebhookPort {
-  async register(connectionId: string, events: string[]): Promise<Webhook> {
-    const existing = webhooksByConnection.get(connectionId)
-    const timestamp = nowIso()
-
-    const webhook: Webhook = {
-      webhookId: existing?.webhookId ?? nextWebhookId(),
-      connectionId,
-      endpoint: `https://mock.integration.local/hooks/${connectionId}`,
-      secret: `whsec_${connectionId}`,
-      events,
-      active: true,
-      createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: timestamp,
-    }
-
-    webhooksByConnection.set(connectionId, webhook)
-    return webhook
+function saveState(state: StoredState) {
+  if (typeof window === "undefined") {
+    return
   }
 
-  async deactivate(connectionId: string): Promise<void> {
-    const existing = webhooksByConnection.get(connectionId)
-    if (!existing) {
-      return
-    }
-
-    webhooksByConnection.set(connectionId, {
-      ...existing,
-      active: false,
-      updatedAt: nowIso(),
-    })
-  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 }
 
-class InMemorySchedulerService implements SchedulerPort {
-  async upsert(input: ScheduleSyncRequestDto): Promise<SyncSchedule> {
-    const existing = schedulesByConnection.get(input.connectionId)
-    const timestamp = nowIso()
-
-    const schedule: SyncSchedule = {
-      scheduleId: existing?.scheduleId ?? nextScheduleId(),
-      connectionId: input.connectionId,
-      cron: input.cron,
-      timezone: input.timezone,
-      enabled: input.enabled ?? true,
-      nextRunAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: timestamp,
-    }
-
-    schedulesByConnection.set(input.connectionId, schedule)
-    return schedule
-  }
-
-  async pause(syncJobId: string): Promise<void> {
-    const job = syncJobOrThrow(syncJobId)
-    jobs.set(syncJobId, {
-      ...job,
-      status: "paused",
-      updatedAt: nowIso(),
-    })
-  }
-
-  async resume(syncJobId: string): Promise<void> {
-    const job = syncJobOrThrow(syncJobId)
-    jobs.set(syncJobId, {
-      ...job,
-      status: "queued",
-      updatedAt: nowIso(),
-    })
-  }
-}
-
-class DefaultRetryEngine implements RetryEnginePort {
-  canRetry(run: SyncRun, policy: RetryPolicy): boolean {
-    return run.status === "failed" && run.attempt < policy.maxAttempts
-  }
-
-  nextAttemptDelayMs(attempt: number, policy: RetryPolicy): number {
-    return Math.floor(policy.baseDelayMs * Math.pow(policy.backoffFactor, Math.max(attempt - 1, 0)))
-  }
-}
-
-class FixedWindowRateLimiter implements RateLimitPort {
-  async consume(key: string): Promise<RateLimit> {
-    const now = Date.now()
-    const existing = rateLimitState.get(key)
-
-    if (!existing || new Date(existing.resetAt).getTime() <= now) {
-      const next: RateLimit = {
-        key,
-        limit: 100,
-        windowMs: 60_000,
-        remaining: 99,
-        resetAt: new Date(now + 60_000).toISOString(),
-      }
-      rateLimitState.set(key, next)
-      return next
-    }
-
-    const remaining = Math.max(existing.remaining - 1, 0)
-    const next = {
-      ...existing,
-      remaining,
-    }
-    rateLimitState.set(key, next)
-    return next
-  }
-}
-
-class DefaultErrorMapper implements ErrorMapperPort {
-  map(error: unknown): { code: string; message: string } {
-    if (error instanceof ValidationError) {
-      return { code: "validation_error", message: error.message }
-    }
-    if (error instanceof NotFoundError) {
-      return { code: "not_found", message: error.message }
-    }
-    if (error instanceof Error) {
-      return { code: "integration_error", message: error.message }
-    }
-    return { code: "integration_error", message: "Unknown integration error" }
-  }
-}
-
-class DefaultHealthMonitor implements HealthMonitorPort {
-  async evaluate(
-    connectorId: string,
-    connectorJobs: SyncJob[],
-    connectorRuns: SyncRun[]
-  ): Promise<ConnectorHealth> {
-    const failed = connectorRuns.filter((run) => run.status === "failed").length
-    const total = connectorRuns.length
-    const failureRatio = total === 0 ? 0 : failed / total
-
-    const throttled = connectorJobs.some((job) => (job.rateLimit?.remaining ?? 1) <= 0)
-
-    const checks: ConnectorHealth["checks"] = [
-      {
-        check: "sync_failure_ratio",
-        status: failureRatio > 0.4 ? "fail" : failureRatio > 0.15 ? "warn" : "pass",
-        message: `Failure ratio ${failureRatio.toFixed(2)}`,
-      },
-      {
-        check: "rate_limit_budget",
-        status: throttled ? "warn" : "pass",
-        message: throttled ? "Rate limit budget exhausted" : "Rate limit budget healthy",
-      },
-    ]
-
-    const hasFail = checks.some((check) => check.status === "fail")
-    const hasWarn = checks.some((check) => check.status === "warn")
-
+function readOAuthCallback(): {
+  status: "connected" | "error" | null
+  connectionId: string | null
+  accountName: string | null
+  accountEmail: string | null
+  reason: string | null
+} {
+  if (typeof window === "undefined") {
     return {
-      connectorId,
-      status: hasFail ? "unhealthy" : hasWarn ? "degraded" : "healthy",
-      score: hasFail ? 45 : hasWarn ? 72 : 96,
-      lastCheckedAt: nowIso(),
-      checks,
+      status: null,
+      connectionId: null,
+      accountName: null,
+      accountEmail: null,
+      reason: null,
     }
   }
-}
 
-class StaticConnectorConfigurationService implements ConnectorConfigurationPort {
-  async getDefinition(connectorDefinitionId: string): Promise<ConnectorDefinition | null> {
-    return (
-      connectorDefinitions.find((item) => item.connectorDefinitionId === connectorDefinitionId) ??
-      null
-    )
-  }
-
-  async listDefinitions(): Promise<ConnectorDefinition[]> {
-    return connectorDefinitions.slice()
-  }
-}
-
-class StaticCapabilityDiscoveryService implements CapabilityDiscoveryPort {
-  async discover(connectorDefinitionId: string): Promise<ConnectorCapability[]> {
-    const definition = connectorDefinitions.find(
-      (item) => item.connectorDefinitionId === connectorDefinitionId
-    )
-    if (!definition) {
-      return []
-    }
-    return definition.capabilities.slice()
-  }
-}
-
-function deriveSyncResult(trigger: SyncJob["trigger"]): SyncResult {
-  const timestamp = nowIso()
-
-  if (trigger === "retry") {
-    return {
-      recordsRead: 80,
-      recordsWritten: 75,
-      recordsFailed: 5,
-      durationMs: 2_100,
-      startedAt: timestamp,
-      finishedAt: timestamp,
-      message: "Retry sync completed with partial recoveries.",
-    }
-  }
+  const params = new URLSearchParams(window.location.search)
+  const oauthStatus = params.get("google_oauth")
 
   return {
-    recordsRead: 120,
-    recordsWritten: 120,
-    recordsFailed: 0,
-    durationMs: 1_800,
-    startedAt: timestamp,
-    finishedAt: timestamp,
-    message: "Sync completed successfully.",
+    status: oauthStatus === "connected" || oauthStatus === "error" ? oauthStatus : null,
+    connectionId: params.get("google_connection_id"),
+    accountName: params.get("google_account_name"),
+    accountEmail: params.get("google_account_email"),
+    reason: params.get("reason"),
   }
 }
 
-function updateConnection(connection: Connection): Connection {
-  connections.set(connection.connectionId, connection)
-  return connection
+function parseStoredGoogleAdsAccounts(raw: string | undefined) {
+  if (!raw) {
+    return [] as GoogleAdsAccessibleAccountApiItem[]
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>
+    if (!Array.isArray(parsed)) {
+      return [] as GoogleAdsAccessibleAccountApiItem[]
+    }
+
+    return parsed
+      .map((item) => ({
+        customerId: typeof item.customerId === "string" ? item.customerId : "",
+        displayName: typeof item.displayName === "string" ? item.displayName : null,
+        isSelected: Boolean(item.isSelected),
+      }))
+      .filter((item) => item.customerId.length > 0)
+  } catch {
+    return [] as GoogleAdsAccessibleAccountApiItem[]
+  }
 }
 
-export class DataIntegrationRepository implements IntegrationRepository {
+function normalizeGoogleAdsAccounts(items: Array<Record<string, unknown>>) {
+  return items
+    .map((item) => ({
+      customerId: typeof item.customerId === "string" ? item.customerId : "",
+      displayName: typeof item.displayName === "string" ? item.displayName : null,
+      isSelected: Boolean(item.isSelected),
+    }))
+    .filter((item) => item.customerId.length > 0)
+}
+
+export class RestIntegrationRepository implements IntegrationRepository {
+  private state = loadState()
+
   constructor(
-    private readonly credentialStorage: CredentialStoragePort = new InMemoryCredentialStore(),
-    private readonly tokenLifecycle: TokenLifecyclePort = new InMemoryTokenLifecycleService(),
-    private readonly webhookPort: WebhookPort = new InMemoryWebhookService(),
-    private readonly schedulerPort: SchedulerPort = new InMemorySchedulerService(),
-    private readonly retryEngine: RetryEnginePort = new DefaultRetryEngine(),
-    private readonly rateLimitPort: RateLimitPort = new FixedWindowRateLimiter(),
-    private readonly errorMapper: ErrorMapperPort = new DefaultErrorMapper(),
-    private readonly healthMonitor: HealthMonitorPort = new DefaultHealthMonitor(),
-    private readonly connectorConfiguration: ConnectorConfigurationPort = new StaticConnectorConfigurationService(),
-    private readonly capabilityDiscovery: CapabilityDiscoveryPort = new StaticCapabilityDiscoveryService(),
-    private readonly sallaRepository: SallaRepository = new SallaRepository(),
-    private readonly zidRepository: ZidRepository = new ZidRepository(),
-    private readonly ga4Repository: GA4Repository = new GA4Repository(),
-    private readonly googleAdsRepository: GoogleAdsRepository = new GoogleAdsRepository(),
-    private readonly metaAdsRepository: MetaAdsRepository = new MetaAdsRepository(),
-    private readonly tikTokAdsRepository: TikTokAdsRepository = new TikTokAdsRepository(),
-    private readonly snapchatAdsRepository: SnapchatAdsRepository = new SnapchatAdsRepository()
+    private readonly options?: {
+      getSession?: () => AuthSessionDto | null
+      getWorkspaceId?: () => string | null
+    }
   ) {}
+
+  private get client() {
+    return createHttpDataClient({
+      ...this.options,
+      baseUrl: resolveAuthenticationApiBaseUrl(),
+    })
+  }
+
+  private persist() {
+    saveState(this.state)
+  }
+
+  private upsertConnection(connection: Connection) {
+    this.state.connections[connection.connectionId] = connection
+    this.persist()
+  }
+
+  private getConnectionOrThrow(connectionId: string) {
+    const connection = this.state.connections[connectionId]
+    if (!connection) {
+      throw new NotFoundError({
+        code: "connection_not_found",
+        message: `Connection ${connectionId} was not found.`,
+      })
+    }
+
+    return connection
+  }
+
+  private appendEvent(connectionId: string, status: SyncJobStatus, message: string) {
+    const event: IntegrationEvent = {
+      eventId: generateUuid(),
+      connectionId,
+      action: toAction(status),
+      timestamp: nowIso(),
+      actor: "system",
+      message,
+    }
+
+    const existing = this.state.events[connectionId] ?? []
+    this.state.events[connectionId] = [event, ...existing].slice(0, 20)
+    this.persist()
+  }
+
+  private mapSyncRun(connectionId: string, response: GoogleAdsSyncApiResponse): SyncRun {
+    const syncJobId = this.state.jobs[connectionId]?.syncJobId ?? `sync_job_${connectionId}`
+    return {
+      syncRunId: response.id,
+      syncJobId,
+      status: toLifecycleStatus(response.status),
+      attempt: 1,
+      result: {
+        recordsRead: response.metrics?.totalRecords ?? 0,
+        recordsWritten: response.metrics?.totalRecords ?? 0,
+        recordsFailed: response.status === "failed" ? 1 : 0,
+        durationMs: 0,
+        startedAt: response.startedAt ?? nowIso(),
+        finishedAt: response.completedAt ?? nowIso(),
+        message:
+          response.errorMessage ??
+          (response.status === "failed" ? "Sync failed." : "Sync completed."),
+      },
+      errorCode: response.errorCode ?? undefined,
+      errorMessage: response.errorMessage ?? undefined,
+      startedAt: response.startedAt ?? nowIso(),
+      finishedAt: response.completedAt ?? undefined,
+    }
+  }
+
+  private async fetchRecordCount(connectionId: string, customerId: string) {
+    traceFrontendExecution({
+      step: "getRecords()",
+      connectionId,
+      customerId,
+      connectionCount: Object.keys(this.state.connections).length,
+    })
+
+    const response = await this.client.get<{ items: GoogleAdsRecordItem[] }>(
+      "/v1/integrations/google-ads/records",
+      {
+        query: {
+          connectionId,
+          customerId,
+          pageSize: 1,
+        },
+      }
+    )
+
+    return response.items.length
+  }
+
+  private async fetchAccessibleAccounts(connectionId: string) {
+    const response = await this.client.get<{ items: Array<Record<string, unknown>> }>(
+      "/v1/integrations/google-ads/accounts",
+      {
+        query: {
+          connectionId,
+        },
+      }
+    )
+
+    return normalizeGoogleAdsAccounts(response.items)
+  }
 
   async createConnection(input: CreateConnectionRequestDto): Promise<Connection> {
     try {
-      const definition = await this.connectorConfiguration.getDefinition(
-        input.connectorDefinitionId
-      )
-      if (!definition) {
-        throw new NotFoundError({
-          message: `Connector definition ${input.connectorDefinitionId} was not found.`,
+      if (input.connectorDefinitionId !== GOOGLE_ADS_CONNECTOR_DEFINITION_ID) {
+        throw new ValidationError({
+          code: "connector_not_supported",
+          message: "Only Google Ads is available in production integration runtime.",
         })
       }
 
-      await this.capabilityDiscovery.discover(input.connectorDefinitionId)
-
-      if (definition.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "Salla connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      if (definition.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "Zid connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      if (definition.connectorDefinitionId === GA4_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "GA4 connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      if (
-        definition.connectorDefinitionId === GOOGLE_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "Google Ads connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      if (
-        definition.connectorDefinitionId === META_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "Meta Ads connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      if (
-        definition.connectorDefinitionId === TIKTOK_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "TikTok Ads connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      if (
-        definition.connectorDefinitionId === SNAPCHAT_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        if (!input.credential || input.credential.type !== "oauth") {
-          throw new ValidationError({
-            message: "Snapchat Ads connector requires OAuth credential payload.",
-          })
-        }
-      }
-
-      const timestamp = nowIso()
-      const connectionId = nextConnectionId()
+      const start = await this.client.post<
+        { workspaceId?: string | null; projectId?: string | null; connectionName?: string | null },
+        GoogleOAuthStartResponse
+      >("/v1/integrations/google/oauth/start", {
+        workspaceId: input.workspaceId,
+        projectId: null,
+        connectionName: input.metadata?.connectionName ?? input.metadata?.accountName ?? null,
+      })
 
       const connection: Connection = {
-        connectionId,
-        workspaceId: input.workspaceId,
-        connectorId: input.connectorId,
-        connectorDefinitionId: input.connectorDefinitionId,
+        connectionId: start.connectionId,
+        workspaceId: input.workspaceId ?? start.workspaceId ?? DEFAULT_WORKSPACE_ID,
+        connectorId: GOOGLE_ADS_CONNECTOR_ID,
+        connectorDefinitionId: GOOGLE_ADS_CONNECTOR_DEFINITION_ID,
         status: "draft",
-        metadata: input.metadata ?? {},
-        createdAt: timestamp,
-        updatedAt: timestamp,
+        metadata: {
+          projectId: start.projectId,
+          oauthState: start.state,
+          oauthAuthorizationUrl: start.authorizationUrl,
+          accountName: input.metadata?.accountName ?? "Google Ads Account",
+          customerId: "",
+        },
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
       }
 
-      const storedCredential = await this.credentialStorage.store(connectionId, input.credential)
-      if (storedCredential) {
-        connection.credentialId = storedCredential.credentialId
+      this.upsertConnection(connection)
+      return connection
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async recoverConnections(): Promise<Connection[]> {
+    try {
+      const backendResponse = await this.client.get<GoogleActiveConnectionResponse>(
+        "/v1/integrations/google/connection"
+      )
+      const backendConn = backendResponse.connection
+
+      if (!backendConn || backendConn.status !== "connected") {
+        return []
       }
 
-      updateConnection(connection)
-      pushEvent(connectionId, "install", "Connection created and installed.")
+      const existing = this.state.connections[backendConn.id]
+      const accounts = backendConn.customerAccounts ?? []
+      const selectedAccount = accounts.find((a) => a.isSelected) ?? accounts[0] ?? null
 
-      if (definition.supportsWebhook) {
-        const webhookEvents =
-          definition.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId
-            ? [
-                "order.created",
-                "order.updated",
-                "customer.created",
-                "product.updated",
-                "inventory.updated",
-              ]
-            : definition.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId
-              ? [
-                  "order.created",
-                  "order.updated",
-                  "product.created",
-                  "product.updated",
-                  "inventory.updated",
-                  "customer.created",
-                ]
-              : ["sync.completed", "sync.failed"]
+      const recovered: Connection = {
+        connectionId: backendConn.id,
+        workspaceId:
+          existing?.workspaceId ?? this.options?.getWorkspaceId?.() ?? DEFAULT_WORKSPACE_ID,
+        connectorId: GOOGLE_ADS_CONNECTOR_ID,
+        connectorDefinitionId: GOOGLE_ADS_CONNECTOR_DEFINITION_ID,
+        status: "connected",
+        metadata: {
+          ...(existing?.metadata ?? {}),
+          accountName:
+            selectedAccount?.displayName ??
+            backendConn.providerAccountName ??
+            existing?.metadata.accountName ??
+            "Google Ads Account",
+          accountEmail: backendConn.providerAccountEmail ?? existing?.metadata.accountEmail ?? "",
+          customerId: selectedAccount?.customerId ?? existing?.metadata.customerId ?? "",
+          availableGoogleAdsCustomerAccounts: JSON.stringify(accounts),
+        },
+        createdAt: existing?.createdAt ?? nowIso(),
+        updatedAt: nowIso(),
+        lastValidatedAt: nowIso(),
+      }
 
-        await this.webhookPort.register(connectionId, webhookEvents)
+      for (const [connectionId, connection] of Object.entries(this.state.connections)) {
+        if (
+          connection.connectorDefinitionId === GOOGLE_ADS_CONNECTOR_DEFINITION_ID &&
+          connectionId !== backendConn.id &&
+          connection.status === "draft"
+        ) {
+          delete this.state.connections[connectionId]
+        }
+      }
+
+      this.upsertConnection(recovered)
+      return [recovered]
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async validateConnection(input: { connectionId: string }): Promise<Connection> {
+    try {
+      const current = this.getConnectionOrThrow(input.connectionId)
+      const callback = readOAuthCallback()
+
+      if (callback.status === "connected" && callback.connectionId === input.connectionId) {
+        let accessibleAccounts: GoogleAdsAccessibleAccountApiItem[] = []
+        try {
+          const response = await this.client.get<{ items: Array<Record<string, unknown>> }>(
+            "/v1/integrations/google-ads/accounts",
+            {
+              query: {
+                connectionId: input.connectionId,
+              },
+            }
+          )
+
+          accessibleAccounts = response.items
+            .map((item) => ({
+              customerId: typeof item.customerId === "string" ? item.customerId : "",
+              displayName: typeof item.displayName === "string" ? item.displayName : null,
+              isSelected: Boolean(item.isSelected),
+            }))
+            .filter((item) => item.customerId.length > 0)
+        } catch {
+          accessibleAccounts = []
+        }
+
+        const selectedAccount =
+          accessibleAccounts.find((account) => account.isSelected) ?? accessibleAccounts[0] ?? null
+
+        const next: Connection = {
+          ...current,
+          status: "connected",
+          metadata: {
+            ...current.metadata,
+            accountName:
+              selectedAccount?.displayName ?? callback.accountName ?? current.metadata.accountName,
+            accountEmail: callback.accountEmail ?? "",
+            customerId: selectedAccount?.customerId ?? "",
+            availableGoogleAdsCustomerAccounts: JSON.stringify(accessibleAccounts),
+          },
+          updatedAt: nowIso(),
+          lastValidatedAt: nowIso(),
+        }
+
+        this.upsertConnection(next)
+        return next
+      }
+
+      if (callback.status === "error" && callback.connectionId === input.connectionId) {
+        const next: Connection = {
+          ...current,
+          status: "error",
+          metadata: {
+            ...current.metadata,
+            oauthError: callback.reason ?? "oauth_failed",
+          },
+          updatedAt: nowIso(),
+          lastValidatedAt: nowIso(),
+        }
+
+        this.upsertConnection(next)
+        return next
+      }
+
+      if (current.status === "connected") {
+        return {
+          ...current,
+          lastValidatedAt: nowIso(),
+        }
+      }
+
+      // Local connection is draft with no matching callback URL — try backend to recover status.
+      try {
+        const backendResponse = await this.client.get<{
+          connection: {
+            id: string
+            status: string
+            providerAccountId: string | null
+            providerAccountName: string | null
+            providerAccountEmail: string | null
+            connectedAt: string | null
+            customerAccounts: Array<{
+              customerId: string
+              displayName: string | null
+              isSelected: boolean
+            }>
+          } | null
+        }>("/v1/integrations/google/connection")
+
+        const backendConn = backendResponse.connection
+        // Trust backend as source of truth for any draft connection — IDs may differ after session resets.
+        if (backendConn && backendConn.status === "connected") {
+          const accounts = backendConn.customerAccounts ?? []
+          const selectedAccount = accounts.find((a) => a.isSelected) ?? accounts[0] ?? null
+
+          const next: Connection = {
+            ...current,
+            // Adopt the canonical backend connection ID so subsequent lookups are consistent.
+            connectionId: backendConn.id,
+            status: "connected",
+            metadata: {
+              ...current.metadata,
+              accountName:
+                selectedAccount?.displayName ??
+                backendConn.providerAccountName ??
+                current.metadata.accountName,
+              accountEmail: backendConn.providerAccountEmail ?? "",
+              customerId: selectedAccount?.customerId ?? "",
+              availableGoogleAdsCustomerAccounts: JSON.stringify(accounts),
+            },
+            updatedAt: nowIso(),
+            lastValidatedAt: nowIso(),
+          }
+
+          // Remove stale draft entry and store under canonical backend ID.
+          if (current.connectionId !== backendConn.id) {
+            delete this.state.connections[current.connectionId]
+          }
+          this.upsertConnection(next)
+          return next
+        }
+      } catch {
+        // Backend sync failed — fall through to pending error.
+      }
+
+      throw new ValidationError({
+        code: "oauth_callback_pending",
+        message: "OAuth callback is pending for this connection.",
+      })
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection> {
+    try {
+      const connection = this.getConnectionOrThrow(input.connectionId)
+      const authorizationUrl = connection.metadata.oauthAuthorizationUrl
+
+      if (!authorizationUrl) {
+        throw new ValidationError({
+          code: "oauth_start_missing",
+          message: "OAuth authorization URL is missing for this connection.",
+        })
+      }
+
+      if (typeof window !== "undefined") {
+        window.location.assign(authorizationUrl)
+        // Keep the promise unresolved because browser navigation takes over.
+        await new Promise<void>(() => undefined)
       }
 
       return connection
@@ -613,169 +598,16 @@ export class DataIntegrationRepository implements IntegrationRepository {
     }
   }
 
-  async validateConnection(input: ValidateConnectionRequestDto): Promise<Connection> {
-    try {
-      const connection = connectionOrThrow(input.connectionId)
-
-      if (connection.status === "deleted") {
-        throw new ValidationError({ message: "Cannot validate a deleted connection." })
-      }
-
-      if (connection.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        const tokenValid = await this.sallaRepository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "Salla access token is invalid or expired." })
-        }
-      }
-
-      if (connection.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        const tokenValid = await this.zidRepository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "Zid access token is invalid or expired." })
-        }
-      }
-
-      if (connection.connectorDefinitionId === GA4_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        const tokenValid = await this.ga4Repository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "GA4 access token is invalid or expired." })
-        }
-      }
-
-      if (
-        connection.connectorDefinitionId === GOOGLE_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        const tokenValid = await this.googleAdsRepository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "Google Ads access token is invalid or expired." })
-        }
-      }
-
-      if (
-        connection.connectorDefinitionId === META_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        const tokenValid = await this.metaAdsRepository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "Meta Ads access token is invalid or expired." })
-        }
-      }
-
-      if (
-        connection.connectorDefinitionId === TIKTOK_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        const tokenValid = await this.tikTokAdsRepository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "TikTok Ads access token is invalid or expired." })
-        }
-      }
-
-      if (
-        connection.connectorDefinitionId === SNAPCHAT_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        const tokenValid = await this.snapchatAdsRepository.validateToken(connection)
-        if (!tokenValid) {
-          throw new ValidationError({ message: "Snapchat Ads access token is invalid or expired." })
-        }
-      }
-
-      const updated = updateConnection({
-        ...connection,
-        status: "valid",
-        lastValidatedAt: nowIso(),
-        updatedAt: nowIso(),
-      })
-
-      pushEvent(connection.connectionId, "validate", "Connection validation completed.")
-      return updated
-    } catch (error) {
-      throw mapRepositoryError(error)
-    }
-  }
-
-  async authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection> {
-    try {
-      const connection = connectionOrThrow(input.connectionId)
-
-      const tokens =
-        connection.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.sallaRepository.authorize(connection, input)
-          : connection.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId
-            ? await this.zidRepository.authorize(connection, input)
-            : connection.connectorDefinitionId === GA4_CONNECTOR_DEFINITION.connectorDefinitionId
-              ? await this.ga4Repository.authorize(connection, input)
-              : connection.connectorDefinitionId ===
-                  GOOGLE_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                ? await this.googleAdsRepository.authorize(connection, input)
-                : connection.connectorDefinitionId ===
-                    META_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                  ? await this.metaAdsRepository.authorize(connection, input)
-                  : connection.connectorDefinitionId ===
-                      TIKTOK_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                    ? await this.tikTokAdsRepository.authorize(connection, input)
-                    : connection.connectorDefinitionId ===
-                        SNAPCHAT_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                      ? await this.snapchatAdsRepository.authorize(connection, input)
-                      : await this.tokenLifecycle.issue(connection.connectionId)
-
-      const updated = updateConnection({
-        ...connection,
-        status: "authorized",
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        updatedAt: nowIso(),
-      })
-
-      pushEvent(connection.connectionId, "authorize", "Connector authorized successfully.")
-      return updated
-    } catch (error) {
-      throw mapRepositoryError(error)
-    }
-  }
-
   async refreshConnection(input: RefreshConnectionRequestDto): Promise<Connection> {
     try {
-      const connection = connectionOrThrow(input.connectionId)
-
-      if (!connection.refreshToken) {
-        throw new ValidationError({ message: "Refresh token is missing for this connection." })
+      const connection = this.getConnectionOrThrow(input.connectionId)
+      const next: Connection = {
+        ...connection,
+        updatedAt: nowIso(),
       }
 
-      const refreshed =
-        connection.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.sallaRepository.refresh(connection)
-          : connection.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId
-            ? await this.zidRepository.refresh(connection)
-            : connection.connectorDefinitionId === GA4_CONNECTOR_DEFINITION.connectorDefinitionId
-              ? await this.ga4Repository.refresh(connection)
-              : connection.connectorDefinitionId ===
-                  GOOGLE_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                ? await this.googleAdsRepository.refresh(connection)
-                : connection.connectorDefinitionId ===
-                    META_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                  ? await this.metaAdsRepository.refresh(connection)
-                  : connection.connectorDefinitionId ===
-                      TIKTOK_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                    ? await this.tikTokAdsRepository.refresh(connection)
-                    : connection.connectorDefinitionId ===
-                        SNAPCHAT_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-                      ? await this.snapchatAdsRepository.refresh(connection)
-                      : {
-                          accessToken: await this.tokenLifecycle.refresh(
-                            connection.connectionId,
-                            connection.refreshToken
-                          ),
-                          refreshToken: connection.refreshToken,
-                        }
-
-      const updated = updateConnection({
-        ...connection,
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-        updatedAt: nowIso(),
-      })
-
-      pushEvent(connection.connectionId, "refresh_token", "Access token refreshed.")
-      return updated
+      this.upsertConnection(next)
+      return next
     } catch (error) {
       throw mapRepositoryError(error)
     }
@@ -783,54 +615,31 @@ export class DataIntegrationRepository implements IntegrationRepository {
 
   async disconnectConnection(input: DisconnectConnectionRequestDto): Promise<Connection> {
     try {
-      const connection = connectionOrThrow(input.connectionId)
-
-      if (connection.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        await this.sallaRepository.disconnect()
-      }
-
-      if (connection.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        await this.zidRepository.disconnect()
-      }
-
-      if (connection.connectorDefinitionId === GA4_CONNECTOR_DEFINITION.connectorDefinitionId) {
-        await this.ga4Repository.disconnect()
-      }
-
-      if (
-        connection.connectorDefinitionId === GOOGLE_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        await this.googleAdsRepository.disconnect()
-      }
-
-      if (
-        connection.connectorDefinitionId === META_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        await this.metaAdsRepository.disconnect()
-      }
-
-      if (
-        connection.connectorDefinitionId === TIKTOK_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        await this.tikTokAdsRepository.disconnect()
-      }
-
-      if (
-        connection.connectorDefinitionId === SNAPCHAT_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        await this.snapchatAdsRepository.disconnect()
-      }
-
-      await this.webhookPort.deactivate(connection.connectionId)
-
-      const updated = updateConnection({
+      const connection = this.getConnectionOrThrow(input.connectionId)
+      const next: Connection = {
         ...connection,
         status: "disconnected",
         updatedAt: nowIso(),
-      })
+      }
 
-      pushEvent(connection.connectionId, "disconnect", input.reason ?? "Connection disconnected.")
-      return updated
+      this.upsertConnection(next)
+      this.appendEvent(connection.connectionId, "completed", input.reason ?? "Disconnected")
+      return next
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async deleteConnection(input: { connectionId: string }): Promise<void> {
+    try {
+      this.getConnectionOrThrow(input.connectionId)
+      await this.client.delete<void>(`/v1/integrations/${input.connectionId}`)
+
+      delete this.state.connections[input.connectionId]
+      delete this.state.jobs[input.connectionId]
+      delete this.state.runs[input.connectionId]
+      delete this.state.events[input.connectionId]
+      this.persist()
     } catch (error) {
       throw mapRepositoryError(error)
     }
@@ -838,285 +647,234 @@ export class DataIntegrationRepository implements IntegrationRepository {
 
   async runSync(input: RunSyncRequestDto): Promise<SyncRun> {
     try {
-      const connection = connectionOrThrow(input.connectionId)
-      if (connection.status === "deleted") {
-        throw new ValidationError({ message: "Cannot run sync for deleted connection." })
+      let connection = this.getConnectionOrThrow(input.connectionId)
+      let customerId = connection.metadata.customerId?.trim() ?? ""
+
+      if (!customerId) {
+        const availableAccounts = parseStoredGoogleAdsAccounts(
+          connection.metadata.availableGoogleAdsCustomerAccounts
+        )
+        const selectedAccount =
+          availableAccounts.find((account) => account.isSelected) ?? availableAccounts[0]
+
+        if (selectedAccount) {
+          customerId = selectedAccount.customerId
+          connection = {
+            ...connection,
+            metadata: {
+              ...connection.metadata,
+              customerId,
+              accountName: selectedAccount.displayName ?? connection.metadata.accountName,
+            },
+            updatedAt: nowIso(),
+          }
+          this.upsertConnection(connection)
+        }
       }
 
-      const trigger = input.trigger ?? "manual"
-      const syncJobId = nextSyncJobId()
-      const rateLimit = await this.rateLimitPort.consume(connection.connectorId)
+      if (!customerId) {
+        try {
+          const accessibleAccounts = await this.fetchAccessibleAccounts(connection.connectionId)
+          const selectedAccount =
+            accessibleAccounts.find((account) => account.isSelected) ?? accessibleAccounts[0]
 
-      const syncJob: SyncJob = {
-        syncJobId,
+          if (selectedAccount) {
+            customerId = selectedAccount.customerId
+            connection = {
+              ...connection,
+              metadata: {
+                ...connection.metadata,
+                customerId,
+                accountName: selectedAccount.displayName ?? connection.metadata.accountName,
+                availableGoogleAdsCustomerAccounts: JSON.stringify(accessibleAccounts),
+              },
+              updatedAt: nowIso(),
+            }
+            this.upsertConnection(connection)
+          }
+        } catch (error) {
+          const mapped = mapRepositoryError(error)
+          if (
+            mapped.status === 401 ||
+            mapped.status === 403 ||
+            mapped.status === 500 ||
+            mapped.status === 502
+          ) {
+            throw mapped
+          }
+        }
+      }
+
+      if (!customerId) {
+        try {
+          const connectionResponse = await this.client.get<GoogleActiveConnectionResponse>(
+            "/v1/integrations/google/connection"
+          )
+
+          if (connectionResponse.connection?.developerTokenConfigured === false) {
+            throw new ValidationError({
+              code: "google_ads_developer_token_missing",
+              message:
+                "Google Ads developer token is missing on backend. Configure IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN and reconnect.",
+            })
+          }
+        } catch (error) {
+          if (error instanceof ValidationError) {
+            throw error
+          }
+
+          const mapped = mapRepositoryError(error)
+          if (
+            mapped.status === 401 ||
+            mapped.status === 403 ||
+            mapped.status === 500 ||
+            mapped.status === 502
+          ) {
+            throw mapped
+          }
+        }
+
+        throw new ValidationError({
+          code: "google_ads_customer_id_missing",
+          message: "No accessible Google Ads account found. Connect or select an account first.",
+        })
+      }
+
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setUTCDate(endDate.getUTCDate() - 7)
+
+      const response = await this.client.post<
+        {
+          connectionId: string
+          customerId: string
+          startDate: string
+          endDate: string
+          idempotencyKey: string
+          mode: "incremental"
+        },
+        GoogleAdsSyncApiResponse
+      >("/v1/integrations/google-ads/sync", {
         connectionId: connection.connectionId,
-        status: "running",
-        trigger,
-        policy: DEFAULT_POLICY,
-        rateLimit,
+        customerId,
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: endDate.toISOString().slice(0, 10),
+        idempotencyKey: generateUuid(),
+        mode: "incremental",
+      })
+
+      const run = this.mapSyncRun(connection.connectionId, response)
+      const syncJob: SyncJob = {
+        syncJobId: `sync_job_${connection.connectionId}`,
+        connectionId: connection.connectionId,
+        status: run.status,
+        trigger: input.trigger ?? "manual",
+        policy: {
+          maxAttempts: 3,
+          baseDelayMs: 250,
+          backoffFactor: 2,
+        },
         createdAt: nowIso(),
         updatedAt: nowIso(),
+        latestRun: run,
       }
 
-      jobs.set(syncJobId, syncJob)
-      jobsByConnection.set(connection.connectionId, [
-        ...(jobsByConnection.get(connection.connectionId) ?? []),
-        syncJobId,
-      ])
+      const existingRuns = this.state.runs[connection.connectionId] ?? []
+      this.state.runs[connection.connectionId] = [run, ...existingRuns].slice(0, 20)
+      this.state.jobs[connection.connectionId] = syncJob
 
-      const sallaSyncOutput =
-        connection.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.sallaRepository.runSync(connection, syncJob)
-          : null
-
-      const zidSyncOutput =
-        connection.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.zidRepository.runSync(connection, syncJob)
-          : null
-      const metaAdsSyncOutput =
-        connection.connectorDefinitionId === META_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.metaAdsRepository.runSync(connection, syncJob)
-          : null
-
-      const tikTokAdsSyncOutput =
-        connection.connectorDefinitionId === TIKTOK_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.tikTokAdsRepository.runSync(connection, syncJob)
-          : null
-
-      const snapchatAdsSyncOutput =
-        connection.connectorDefinitionId === SNAPCHAT_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.snapchatAdsRepository.runSync(connection, syncJob)
-          : null
-
-      const googleAdsSyncOutput =
-        connection.connectorDefinitionId === GOOGLE_ADS_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.googleAdsRepository.runSync(connection, syncJob)
-          : null
-
-      const ga4SyncOutput =
-        connection.connectorDefinitionId === GA4_CONNECTOR_DEFINITION.connectorDefinitionId
-          ? await this.ga4Repository.runSync(connection, syncJob)
-          : null
-
-      if (
-        trigger === "webhook" &&
-        connection.connectorDefinitionId === SALLA_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        const rawWebhookEvent = connection.metadata.sallaWebhookEvent
-        if (rawWebhookEvent) {
-          this.sallaRepository.parseWebhook({
-            event: rawWebhookEvent,
-            data: {
-              id: connection.metadata.sallaWebhookResourceId ?? connection.connectionId,
-            },
-            created_at: nowIso(),
-          })
-        }
-      }
-
-      if (
-        trigger === "webhook" &&
-        connection.connectorDefinitionId === ZID_CONNECTOR_DEFINITION.connectorDefinitionId
-      ) {
-        const rawWebhookEvent = connection.metadata.zidWebhookEvent
-        if (rawWebhookEvent) {
-          this.zidRepository.parseWebhook({
-            event: rawWebhookEvent,
-            data: {
-              id: connection.metadata.zidWebhookResourceId ?? connection.connectionId,
-            },
-            created_at: nowIso(),
-          })
-        }
-      }
-
-      const result =
-        sallaSyncOutput?.result ??
-        googleAdsSyncOutput?.result ??
-        ga4SyncOutput?.result ??
-        metaAdsSyncOutput?.result ??
-        tikTokAdsSyncOutput?.result ??
-        snapchatAdsSyncOutput?.result ??
-        zidSyncOutput?.result ??
-        deriveSyncResult(trigger)
-      const syncRun: SyncRun = {
-        syncRunId: nextSyncRunId(),
-        syncJobId,
-        status: result.recordsFailed > 0 ? "failed" : "completed",
-        attempt: 1,
-        result,
-        startedAt: result.startedAt,
-        finishedAt: result.finishedAt,
-      }
-
-      runs.set(syncRun.syncRunId, syncRun)
-      runsByJob.set(syncJobId, [syncRun.syncRunId])
-
-      jobs.set(syncJobId, {
-        ...syncJob,
-        status: "completed",
-        latestRun: syncRun,
-        updatedAt: nowIso(),
-      })
-
-      updateConnection({
+      const nextConnection: Connection = {
         ...connection,
-        status: "connected",
-        lastSyncedAt: nowIso(),
+        status: run.status === "failed" ? "error" : "connected",
+        lastSyncedAt: run.finishedAt ?? nowIso(),
         updatedAt: nowIso(),
-      })
-
-      if (sallaSyncOutput) {
-        for (const integrationEvent of sallaSyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
       }
+      this.upsertConnection(nextConnection)
 
-      if (zidSyncOutput) {
-        for (const integrationEvent of zidSyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
-      }
+      this.appendEvent(
+        connection.connectionId,
+        run.status,
+        run.errorMessage ?? run.result?.message ?? "Sync completed"
+      )
+      this.persist()
 
-      if (ga4SyncOutput) {
-        for (const integrationEvent of ga4SyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
-      }
-
-      if (googleAdsSyncOutput) {
-        for (const integrationEvent of googleAdsSyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
-      }
-
-      if (metaAdsSyncOutput) {
-        for (const integrationEvent of metaAdsSyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
-      }
-
-      if (tikTokAdsSyncOutput) {
-        for (const integrationEvent of tikTokAdsSyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
-      }
-
-      if (snapchatAdsSyncOutput) {
-        for (const integrationEvent of snapchatAdsSyncOutput.integrationEvents) {
-          pushEvent(connection.connectionId, integrationEvent.action, integrationEvent.message)
-        }
-      }
-
-      pushEvent(connection.connectionId, "sync", `Sync run ${syncRun.syncRunId} completed.`)
-      return syncRun
+      return run
     } catch (error) {
       throw mapRepositoryError(error)
     }
   }
 
   async scheduleSync(input: ScheduleSyncRequestDto): Promise<SyncSchedule> {
-    try {
-      connectionOrThrow(input.connectionId)
-      const schedule = await this.schedulerPort.upsert(input)
-      pushEvent(input.connectionId, "sync", `Sync schedule ${schedule.scheduleId} upserted.`)
-      return schedule
-    } catch (error) {
-      throw mapRepositoryError(error)
+    const schedule: SyncSchedule = {
+      scheduleId: `schedule_${input.connectionId}`,
+      connectionId: input.connectionId,
+      cron: input.cron || DEFAULT_CRON,
+      timezone: input.timezone || DEFAULT_TIMEZONE,
+      enabled: input.enabled ?? true,
+      nextRunAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
     }
+
+    return schedule
   }
 
   async retrySync(input: RetrySyncRequestDto): Promise<SyncRun> {
-    try {
-      const job = syncJobOrThrow(input.syncJobId)
-      const previousRunIds = runsByJob.get(job.syncJobId) ?? []
-      const previousRun =
-        previousRunIds.length > 0 ? runs.get(previousRunIds[previousRunIds.length - 1]) : undefined
-
-      const fallbackFailed: SyncRun = {
-        syncRunId: nextSyncRunId(),
-        syncJobId: job.syncJobId,
-        status: "failed",
-        attempt: 1,
-        startedAt: nowIso(),
-        finishedAt: nowIso(),
-        errorCode: "simulated_failure",
-        errorMessage: "Simulated failed run to allow retry flow.",
-      }
-
-      const baseline = previousRun ?? fallbackFailed
-      const attempt = baseline.attempt + 1
-      if (attempt > job.policy.maxAttempts) {
-        throw new ValidationError({ message: "Retry policy does not allow another attempt." })
-      }
-
-      const canRetryFailedRun = this.retryEngine.canRetry(baseline, job.policy)
-      if (baseline.status === "failed" && !canRetryFailedRun) {
-        throw new ValidationError({ message: "Retry policy does not allow another attempt." })
-      }
-
-      const retryResult = deriveSyncResult("retry")
-      const retryRun: SyncRun = {
-        syncRunId: nextSyncRunId(),
-        syncJobId: job.syncJobId,
-        status: "completed",
-        attempt,
-        result: retryResult,
-        startedAt: retryResult.startedAt,
-        finishedAt: retryResult.finishedAt,
-      }
-
-      runs.set(retryRun.syncRunId, retryRun)
-      runsByJob.set(job.syncJobId, [...previousRunIds, retryRun.syncRunId])
-      jobs.set(job.syncJobId, {
-        ...job,
-        status: "completed",
-        latestRun: retryRun,
-        updatedAt: nowIso(),
-      })
-
-      pushEvent(job.connectionId, "sync", `Sync retry completed for job ${job.syncJobId}.`)
-      return retryRun
-    } catch (error) {
-      const mapped = this.errorMapper.map(error)
-      throw mapRepositoryError(new Error(`${mapped.code}: ${mapped.message}`))
-    }
+    const connectionId = input.syncJobId.replace(/^sync_job_/, "")
+    return this.runSync({ connectionId, trigger: "retry" })
   }
 
   async pauseSync(input: PauseSyncRequestDto): Promise<SyncJob> {
-    try {
-      await this.schedulerPort.pause(input.syncJobId)
-      const updated = syncJobOrThrow(input.syncJobId)
-      pushEvent(updated.connectionId, "pause", `Sync job ${updated.syncJobId} paused.`)
-      return updated
-    } catch (error) {
-      throw mapRepositoryError(error)
+    const connectionId = input.syncJobId.replace(/^sync_job_/, "")
+    const existing = this.state.jobs[connectionId]
+    const job: SyncJob = {
+      ...(existing ?? {
+        syncJobId: input.syncJobId,
+        connectionId,
+        trigger: "manual",
+        policy: { maxAttempts: 3, baseDelayMs: 250, backoffFactor: 2 },
+        createdAt: nowIso(),
+      }),
+      status: "paused",
+      updatedAt: nowIso(),
     }
+
+    this.state.jobs[connectionId] = job
+    this.persist()
+    return job
   }
 
   async resumeSync(input: ResumeSyncRequestDto): Promise<SyncJob> {
-    try {
-      await this.schedulerPort.resume(input.syncJobId)
-      const updated = syncJobOrThrow(input.syncJobId)
-      pushEvent(updated.connectionId, "resume", `Sync job ${updated.syncJobId} resumed.`)
-      return updated
-    } catch (error) {
-      throw mapRepositoryError(error)
+    const connectionId = input.syncJobId.replace(/^sync_job_/, "")
+    const existing = this.state.jobs[connectionId]
+    const job: SyncJob = {
+      ...(existing ?? {
+        syncJobId: input.syncJobId,
+        connectionId,
+        trigger: "manual",
+        policy: { maxAttempts: 3, baseDelayMs: 250, backoffFactor: 2 },
+        createdAt: nowIso(),
+      }),
+      status: "queued",
+      updatedAt: nowIso(),
     }
+
+    this.state.jobs[connectionId] = job
+    this.persist()
+    return job
   }
 
   async getIntegrationStatus(input: GetIntegrationStatusRequestDto): Promise<IntegrationStatusDto> {
     try {
-      const connection = connectionOrThrow(input.connectionId)
-      const jobIds = jobsByConnection.get(connection.connectionId) ?? []
-      const latestJob = jobIds.length > 0 ? jobs.get(jobIds[jobIds.length - 1]) : undefined
-      const latestRun = latestJob?.latestRun
+      const connection = this.getConnectionOrThrow(input.connectionId)
+      const latestJob = this.state.jobs[input.connectionId]
+      const latestRun = (this.state.runs[input.connectionId] ?? [])[0]
 
       return {
         connection,
         latestJob,
         latestRun,
-        recentEvents: (eventsByConnection.get(connection.connectionId) ?? []).slice(0, 10),
+        recentEvents: this.state.events[input.connectionId] ?? [],
       }
     } catch (error) {
       throw mapRepositoryError(error)
@@ -1125,24 +883,13 @@ export class DataIntegrationRepository implements IntegrationRepository {
 
   async getSyncHistory(input: GetSyncHistoryRequestDto): Promise<SyncHistoryDto> {
     try {
-      connectionOrThrow(input.connectionId)
-      const limit = input.limit ?? 50
-
-      const jobIds = jobsByConnection.get(input.connectionId) ?? []
-      const historyJobs = jobIds
-        .map((jobId) => jobs.get(jobId))
-        .filter((job): job is SyncJob => Boolean(job))
-        .slice(-limit)
-
-      const historyRuns = historyJobs
-        .flatMap((job) => (runsByJob.get(job.syncJobId) ?? []).map((runId) => runs.get(runId)))
-        .filter((run): run is SyncRun => Boolean(run))
-        .slice(-limit)
+      const jobs = this.state.jobs[input.connectionId]
+      const runs = this.state.runs[input.connectionId] ?? []
 
       return {
         connectionId: input.connectionId,
-        jobs: historyJobs,
-        runs: historyRuns,
+        jobs: jobs ? [jobs] : [],
+        runs: input.limit ? runs.slice(0, input.limit) : runs,
       }
     } catch (error) {
       throw mapRepositoryError(error)
@@ -1151,45 +898,115 @@ export class DataIntegrationRepository implements IntegrationRepository {
 
   async getConnectorHealth(input: GetConnectorHealthRequestDto): Promise<ConnectorHealth> {
     try {
-      const connectorJobs = [...jobs.values()].filter((job) => {
-        const connection = connections.get(job.connectionId)
-        return connection?.connectorId === input.connectorId
+      traceFrontendExecution({
+        step: "getConnectorHealth()",
+        connectionCount: Object.keys(this.state.connections).length,
+        details: `connectorId=${input.connectorId}`,
       })
 
-      const connectorRuns = connectorJobs.flatMap((job) =>
-        (runsByJob.get(job.syncJobId) ?? [])
-          .map((runId) => runs.get(runId))
-          .filter((run): run is SyncRun => Boolean(run))
+      const connections = Object.values(this.state.connections).filter(
+        (connection) => connection.connectorId === input.connectorId
       )
 
-      return this.healthMonitor.evaluate(input.connectorId, connectorJobs, connectorRuns)
+      const primary = connections[0]
+      if (!primary) {
+        return {
+          connectorId: input.connectorId,
+          status: "degraded",
+          score: 0,
+          lastCheckedAt: nowIso(),
+          checks: [
+            {
+              check: "connection",
+              status: "fail",
+              message: "No backend connection found.",
+            },
+          ],
+        }
+      }
+
+      const customerId = primary.metadata.customerId
+      let hasData = false
+      if (customerId) {
+        hasData = (await this.fetchRecordCount(primary.connectionId, customerId)) > 0
+      }
+
+      const latestRun = (this.state.runs[primary.connectionId] ?? [])[0]
+      const failed = latestRun?.status === "failed"
+      const hasCustomerSelection = Boolean(primary.metadata.customerId?.trim())
+
+      const checks: ConnectorHealth["checks"] = [
+        {
+          check: "connection",
+          status: primary.status === "connected" ? "pass" : "warn",
+          message: `Connection status: ${primary.status}`,
+        },
+        {
+          check: "records",
+          status: hasData ? "pass" : hasCustomerSelection ? "warn" : "fail",
+          message: hasData
+            ? "Backend records available."
+            : hasCustomerSelection
+              ? "No backend records found yet."
+              : "Select a Google Ads account to start syncing.",
+        },
+        {
+          check: "latest_sync",
+          status: failed ? "fail" : latestRun ? "pass" : "warn",
+          message: failed
+            ? (latestRun?.errorMessage ?? "Latest backend sync failed.")
+            : latestRun
+              ? "Latest backend sync completed."
+              : "No sync run recorded yet.",
+        },
+      ]
+
+      const status: ConnectorHealth["status"] = failed
+        ? "unhealthy"
+        : primary.status === "connected"
+          ? "healthy"
+          : "degraded"
+
+      const score = failed
+        ? 25
+        : primary.status !== "connected"
+          ? 40
+          : hasData
+            ? 100
+            : hasCustomerSelection
+              ? 85
+              : 70
+
+      return {
+        connectorId: input.connectorId,
+        status,
+        score,
+        lastCheckedAt: nowIso(),
+        checks,
+      }
     } catch (error) {
       throw mapRepositoryError(error)
     }
   }
 }
 
-export function createIntegrationRepository(): IntegrationRepository {
-  return new DataIntegrationRepository()
+export const DataIntegrationRepository = RestIntegrationRepository
+
+export function createIntegrationRepository(options?: {
+  getSession?: () => AuthSessionDto | null
+  getWorkspaceId?: () => string | null
+}): IntegrationRepository {
+  if (resolveRepositoryBackend("integration") === "mock") {
+    return new InMemoryIntegrationRepository(options)
+  }
+
+  return new RestIntegrationRepository(options)
 }
 
 export function resetIntegrationRepositoryState() {
-  connectionCounter = 0
-  credentialCounter = 0
-  webhookCounter = 0
-  scheduleCounter = 0
-  syncJobCounter = 0
-  syncRunCounter = 0
-  eventCounter = 0
+  resetInMemoryIntegrationRepositoryState()
 
-  connections.clear()
-  credentialsByConnection.clear()
-  webhooksByConnection.clear()
-  schedulesByConnection.clear()
-  jobs.clear()
-  jobsByConnection.clear()
-  runs.clear()
-  runsByJob.clear()
-  eventsByConnection.clear()
-  rateLimitState.clear()
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(STORAGE_KEY)
+  }
 }

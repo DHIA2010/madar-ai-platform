@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 
 import { ROUTES } from "@/constants/routes"
@@ -44,25 +44,45 @@ export function ProtectedRoute({
     }
   }, [authStatus, currentWorkspace, requireWorkspace, router, workspaceStatus])
 
-  if (authStatus === "idle" || authStatus === "loading") {
-    return <AppLoading variant="page" />
-  }
+  // Pre-compute all conditional states
+  const isLoading = useMemo(() => authStatus === "idle" || authStatus === "loading", [authStatus])
 
-  if (authStatus === "unauthenticated") {
-    return <AppLoading variant="page" />
-  }
+  const isUnauthenticated = useMemo(() => authStatus === "unauthenticated", [authStatus])
 
-  if (requireWorkspace && (workspaceStatus === "idle" || workspaceStatus === "loading")) {
-    return <AppLoading variant="page" />
-  }
+  const isWorkspaceLoading = useMemo(
+    () => requireWorkspace && (workspaceStatus === "idle" || workspaceStatus === "loading"),
+    [requireWorkspace, workspaceStatus]
+  )
 
-  if (requireWorkspace && !currentWorkspace) {
-    return <AppLoading variant="page" />
-  }
+  const isWorkspaceMissing = useMemo(
+    () => requireWorkspace && !currentWorkspace,
+    [requireWorkspace, currentWorkspace]
+  )
 
-  if (!currentUser) {
-    return <AppEmpty title="No active user" description="Sign in again to access this section." />
-  }
+  const hasNoUser = useMemo(() => !currentUser, [currentUser])
 
-  return <>{children}</>
+  // Determine what to show - always evaluate ALL conditions
+  const showLoading = useMemo(
+    () => isLoading || isUnauthenticated || isWorkspaceLoading || isWorkspaceMissing,
+    [isLoading, isUnauthenticated, isWorkspaceLoading, isWorkspaceMissing]
+  )
+
+  const showError = useMemo(
+    () => hasNoUser && !isLoading && !isUnauthenticated && !isWorkspaceLoading,
+    [hasNoUser, isLoading, isUnauthenticated, isWorkspaceLoading]
+  )
+
+  const showContent = useMemo(() => !showLoading && !showError, [showLoading, showError])
+
+  // ALWAYS render the same component tree - only conditionally show content
+  // This ensures React's hook count never changes
+  return (
+    <>
+      {showLoading && <AppLoading variant="page" />}
+      {showError && (
+        <AppEmpty title="No active user" description="Sign in again to access this section." />
+      )}
+      {showContent && <>{children}</>}
+    </>
+  )
 }

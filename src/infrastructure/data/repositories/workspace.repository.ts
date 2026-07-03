@@ -6,12 +6,7 @@ import type {
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
 } from "@/application/contracts/workspace.contracts"
-import {
-  assertValidWorkspaceSelection,
-  findWorkspace,
-  mockOrganizations,
-  mockWorkspaces,
-} from "@/infrastructure/workspace"
+import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 
 import { RepositoryCache, createWorkspaceCacheKey } from "../cache/repository-cache"
 import { mapRepositoryError } from "../errors"
@@ -30,6 +25,20 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     this.adapter = new WorkspaceApiAdapter(createHttpDataClient(options))
   }
 
+  private async getMockGateway() {
+    const { MockWorkspaceGateway } = await import("@/infrastructure/mock/mock-workspace.gateway")
+    return new MockWorkspaceGateway()
+  }
+
+  private resolveBackend() {
+    const env = getClientEnvironment()
+    if (env.APP_RUNTIME_MODE === "mock") {
+      return "mock" as const
+    }
+
+    return resolveRepositoryBackend("workspace")
+  }
+
   async getOrganizations(): Promise<OrganizationDto[]> {
     const cacheKey = createWorkspaceCacheKey("workspace", null, "organizations")
     const cached = this.cache.get<OrganizationDto[]>(cacheKey)
@@ -38,9 +47,10 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const backend = resolveRepositoryBackend("workspace")
-      if (backend === "mock") {
-        return this.cache.set(cacheKey, mockOrganizations)
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.getOrganizations()
+        return this.cache.set(cacheKey, dto)
       }
 
       const dto = await this.adapter.getOrganizations()
@@ -63,11 +73,9 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const backend = resolveRepositoryBackend("workspace")
-      if (backend === "mock") {
-        const dto = organizationId
-          ? mockWorkspaces.filter((workspace) => workspace.organizationId === organizationId)
-          : mockWorkspaces
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.getWorkspaces(organizationId)
         return this.cache.set(cacheKey, dto)
       }
 
@@ -86,21 +94,9 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const backend = resolveRepositoryBackend("workspace")
-      if (backend === "mock") {
-        if (!selection.workspaceId) {
-          return null
-        }
-
-        const dto = findWorkspace(selection.workspaceId)
-        if (!dto) {
-          return null
-        }
-
-        if (selection.organizationId && selection.organizationId !== dto.organizationId) {
-          return null
-        }
-
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.getCurrentWorkspace(selection)
         return this.cache.set(cacheKey, dto)
       }
 
@@ -113,9 +109,9 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
 
   async switchWorkspace(payload: WorkspaceSelectionDto): Promise<WorkspaceDto> {
     try {
-      const backend = resolveRepositoryBackend("workspace")
-      if (backend === "mock") {
-        const dto = assertValidWorkspaceSelection(payload)
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.switchWorkspace(payload)
         this.cache.invalidateWorkspace(payload.workspaceId)
         return dto
       }

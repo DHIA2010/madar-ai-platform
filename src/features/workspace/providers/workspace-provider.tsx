@@ -6,6 +6,8 @@ import { AppError } from "@/lib/app-errors"
 
 import { AppEmpty, AppLoading } from "@/components/app"
 
+import { useAuth } from "@/features/authentication"
+
 import { buildTenantContext } from "../mappers/workspace.mapper"
 import { useWorkspaceStore, WorkspaceContextStore } from "../state"
 import type {
@@ -55,6 +57,7 @@ function mergeById<T extends { id: string }>(base: T[], additions: T[]): T[] {
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { workspaceApplicationService } = useApplicationServices()
+  const { authStatus } = useAuth()
   const [configurationError, setConfigurationError] = useState<string | null>(null)
 
   const currentOrganization = useWorkspaceStore((state) => state.currentOrganization)
@@ -73,6 +76,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const setWorkspaceStatus = useWorkspaceStore((state) => state.setWorkspaceStatus)
 
   useEffect(() => {
+    if (authStatus !== "authenticated") {
+      setWorkspaceStatus("idle")
+      return
+    }
+
     let cancelled = false
 
     setWorkspaceStatus("loading")
@@ -126,6 +134,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     currentWorkspace?.id,
     customOrganizations,
     customWorkspaces,
+    authStatus,
     setAvailableOrganizations,
     setAvailableWorkspaces,
     setCurrentOrganization,
@@ -287,20 +296,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ]
   )
 
-  if (workspaceStatus === "loading") {
-    return <AppLoading variant="page" />
-  }
-
-  if (workspaceStatus === "error") {
-    return (
-      <AppEmpty
-        title="Workspace context unavailable"
-        description={
-          configurationError ?? "The tenant context could not be restored from configured services."
-        }
-      />
-    )
-  }
-
-  return <WorkspaceContextStore.Provider value={value}>{children}</WorkspaceContextStore.Provider>
+  return (
+    <WorkspaceContextStore.Provider value={value}>
+      {authStatus === "authenticated" && workspaceStatus === "loading" && (
+        <AppLoading variant="page" />
+      )}
+      {authStatus === "authenticated" && workspaceStatus === "error" && (
+        <AppEmpty
+          title="Workspace context unavailable"
+          description={
+            configurationError ??
+            "The tenant context could not be restored from configured services."
+          }
+        />
+      )}
+      {(authStatus !== "authenticated" || workspaceStatus !== "loading") &&
+        workspaceStatus !== "error" &&
+        children}
+    </WorkspaceContextStore.Provider>
+  )
 }
