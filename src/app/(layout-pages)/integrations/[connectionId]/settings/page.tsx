@@ -1,5 +1,7 @@
 import { ConnectionSettings } from "@/features/integrations"
 
+export const dynamicParams = false
+
 export async function generateStaticParams() {
   return []
 }
