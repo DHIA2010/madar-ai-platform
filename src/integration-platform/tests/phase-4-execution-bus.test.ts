@@ -69,10 +69,7 @@ describe("phase 4 execution bus", () => {
     const result = await bus.dispatch(buildRequest())
 
     expect(result.status).toBe("completed")
-    expect(envelopes.map((envelope) => envelope.kind)).toEqual([
-      "ExecutionRequest",
-      "ExecutionResult",
-    ])
+    expect(envelopes.map((envelope) => envelope.kind)).toEqual(["ExecutionRequest", "ExecutionResult"])
     expect(envelopes[0]?.metadata).toMatchObject({
       correlationId: "corr-bus",
       traceId: "trace-bus",

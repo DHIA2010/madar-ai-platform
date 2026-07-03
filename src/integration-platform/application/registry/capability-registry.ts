@@ -14,10 +14,7 @@ export class CapabilityRegistry {
   }
 
   findCapability(connectorId: string, capabilityKey: string) {
-    return (
-      this.list(connectorId).find((capability) => capability.capabilityKey === capabilityKey) ??
-      null
-    )
+    return this.list(connectorId).find((capability) => capability.capabilityKey === capabilityKey) ?? null
   }
 
   listConnectorsForCapability(capabilityKey: string) {
@@ -33,8 +30,8 @@ export class CapabilityRegistry {
 
   resolveOperations(connectorId: string, capabilityKey: string): ConnectorOperationMetadata[] {
     const operations = this.metadataRegistry.getOperations(connectorId)
-    return operations.filter(
-      (operation) => operation.supportedCapabilityKeys?.includes(capabilityKey) ?? false
+    return operations.filter((operation) =>
+      operation.supportedCapabilityKeys?.includes(capabilityKey) ?? false
     )
   }
 }

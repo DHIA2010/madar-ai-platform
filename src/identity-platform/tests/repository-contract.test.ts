@@ -74,9 +74,7 @@ async function seedAndAssertContract(repositories: IdentityRepositories) {
     name: organization.name,
     status: organization.status,
   })
-  expect(
-    await repositories.organizations.list({ ownerUserId: organization.ownerUserId })
-  ).toHaveLength(1)
+  expect(await repositories.organizations.list({ ownerUserId: organization.ownerUserId })).toHaveLength(1)
 
   const workspaceId = "00000000-0000-0000-0000-000000000020"
   await repositories.workspaces.save({
@@ -116,14 +114,10 @@ async function seedAndAssertContract(repositories: IdentityRepositories) {
     organizationId: organization.id,
     role: "owner",
   })
-  expect(
-    await repositories.memberships.findByUserAndOrganization(membership.userId, organization.id)
-  ).toMatchObject({
+  expect(await repositories.memberships.findByUserAndOrganization(membership.userId, organization.id)).toMatchObject({
     id: membership.id,
   })
-  expect(
-    await repositories.memberships.listRolesByUserInOrganization(membership.userId, organization.id)
-  ).toEqual(["owner"])
+  expect(await repositories.memberships.listRolesByUserInOrganization(membership.userId, organization.id)).toEqual(["owner"])
 
   const invitation: InvitationState = {
     id: "00000000-0000-0000-0000-000000000012",
@@ -152,12 +146,7 @@ async function seedAndAssertContract(repositories: IdentityRepositories) {
     id: invitation.id,
     email: invitation.email,
   })
-  expect(
-    await repositories.invitations.findPendingByIdempotencyKey(
-      organization.id,
-      invitation.idempotencyKey
-    )
-  ).toMatchObject({
+  expect(await repositories.invitations.findPendingByIdempotencyKey(organization.id, invitation.idempotencyKey)).toMatchObject({
     id: invitation.id,
   })
   expect(await repositories.invitations.listByOrganizationId(organization.id)).toHaveLength(1)

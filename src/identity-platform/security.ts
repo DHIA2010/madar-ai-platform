@@ -3,9 +3,7 @@ import { InMemoryRateLimiter } from "./infrastructure/redis/in-memory-rate-limit
 
 export type JwtPayload = import("./application/ports").AccessTokenPayload
 
-const defaultTokenService = new HmacTokenService(
-  process.env.IDENTITY_PLATFORM_JWT_SECRET ?? "dev_identity_secret_change_me"
-)
+const defaultTokenService = new HmacTokenService(process.env.IDENTITY_PLATFORM_JWT_SECRET ?? "dev_identity_secret_change_me")
 const defaultPasswordHasher = new ScryptPasswordHasher()
 
 export function hashPassword(plainText: string): string {

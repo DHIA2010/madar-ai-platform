@@ -1,0 +1,262 @@
+name: madar-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: madar-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-madar}
+      POSTGRES_USER: ${POSTGRES_USER:-madar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-madar_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-madar} -d ${POSTGRES_DB:-madar}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - madar-local
+
+  redis:
+    image: redis:7-alpine
+    container_name: madar-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - madar-local
+
+  minio:
+    image: minio/minio:latest
+    container_name: madar-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks:
+      - madar-local
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: madar-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin123} &&
+      mc mb --ignore-existing local/${MINIO_BUCKET:-madar-local} &&
+      mc anonymous set private local/${MINIO_BUCKET:-madar-local}
+      "
+    restart: "no"
+    networks:
+      - madar-local
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: madar-mailpit
+    environment:
+      MP_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MP_UI_BIND_ADDR: 0.0.0.0:8025
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - madar-local
+
+  backend:
+    image: node:22-alpine
+    container_name: madar-backend
+    working_dir: /workspace
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: development
+      IDENTITY_PLATFORM_PORT: ${BACKEND_PORT:-4000}
+      IDENTITY_PLATFORM_N8N_BASE_URL: ${IDENTITY_PLATFORM_N8N_BASE_URL:-http://n8n:5678}
+      IDENTITY_PLATFORM_N8N_API_BASE_URL: ${IDENTITY_PLATFORM_N8N_API_BASE_URL:-http://n8n:5678/api/v1}
+      IDENTITY_PLATFORM_N8N_API_KEY: ${IDENTITY_PLATFORM_N8N_API_KEY:-madar-local-n8n-api-key}
+      IDENTITY_PLATFORM_POSTGRES_URL: postgresql://${POSTGRES_USER:-madar}:${POSTGRES_PASSWORD:-madar_password}@postgres:5432/${POSTGRES_DB:-madar}
+      IDENTITY_PLATFORM_REDIS_URL: redis://redis:6379
+      IDENTITY_PLATFORM_SMTP_HOST: mailpit
+      IDENTITY_PLATFORM_SMTP_PORT: 1025
+      IDENTITY_PLATFORM_EMAIL_FROM: ${IDENTITY_PLATFORM_EMAIL_FROM:-identity@madar.local}
+      IDENTITY_PLATFORM_JWT_SECRET: ${IDENTITY_PLATFORM_JWT_SECRET:-dev_identity_secret_change_me_32_chars}
+      IDENTITY_PLATFORM_TOKEN_HASH_SECRET: ${IDENTITY_PLATFORM_TOKEN_HASH_SECRET:-dev_identity_token_hash_change_me_32_chars}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-madar-local}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_REGION: us-east-1
+      ROOT_PATH: /workspace
+    command: >
+      sh -c "npm ci --ignore-scripts &&
+      node --import tsx scripts/local-backend-bootstrap.ts &&
+      node --import tsx src/identity-platform/server.ts"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      n8n:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - ./:/workspace
+      - backend_node_modules:/workspace/node_modules
+      - backend_storage:/workspace/.madar-identity-storage
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - madar-local
+
+  frontend:
+    image: node:22-alpine
+    container_name: madar-frontend
+    working_dir: /workspace
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: ${FRONTEND_PORT:-3000}
+      NEXT_PUBLIC_N8N_BASE_URL: ${NEXT_PUBLIC_N8N_BASE_URL:-http://localhost:5678}
+    command: >
+      sh -c "npm ci --ignore-scripts &&
+      npm run dev -- --hostname 0.0.0.0 --port ${FRONTEND_PORT:-3000}"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./:/workspace
+      - frontend_node_modules:/workspace/node_modules
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - madar-local
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: madar-pgadmin
+    env_file:
+      - .env.local
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@madar.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/misc/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks:
+      - madar-local
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: madar-redisinsight
+    profiles: ["optional"]
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - madar-local
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: madar-n8n
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: ${N8N_PORT:-5678}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-madar_n8n_encryption_key_32_chars_minimum}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      N8N_PUBLIC_API_DISABLED: ${N8N_PUBLIC_API_DISABLED:-false}
+      N8N_API_KEY: ${IDENTITY_PLATFORM_N8N_API_KEY:-madar-local-n8n-api-key}
+      DB_TYPE: ${N8N_DB_TYPE:-sqlite}
+      DB_SQLITE_VACUUM_ON_STARTUP: ${N8N_DB_SQLITE_VACUUM_ON_STARTUP:-true}
+      GENERIC_TIMEZONE: ${N8N_TIMEZONE:-UTC}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 25s
+    networks:
+      - madar-local
+
+networks:
+  madar-local:
+    name: madar-local
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  pgadmin_data:
+  backend_node_modules:
+  frontend_node_modules:
+  backend_storage:
+  n8n_data:

@@ -58,22 +58,22 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
     clientId: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_ID ?? "",
     clientSecret: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_SECRET ?? "",
     redirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_REDIRECT_URI ??
-      "http://localhost:4000/v1/integrations/google/oauth/callback",
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_REDIRECT_URI
+      ?? "http://localhost:4000/v1/integrations/google/oauth/callback",
     successRedirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI ??
-      `${appUrl.replace(/\/$/, "")}/integrations/new`,
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI
+      ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
     tokenEncryptionKey:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
-      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
-      "",
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
+      ?? process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
+      ?? "",
     googleAdsApiBaseUrl:
-      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
-      "https://googleads.googleapis.com/v22",
+      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL
+      ?? "https://googleads.googleapis.com/v22",
     googleAdsDeveloperToken:
-      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
-      process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
-      "",
+      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN
+      ?? process.env.GOOGLE_ADS_DEVELOPER_TOKEN
+      ?? "",
     scopes: configuredScopes.length > 0 ? configuredScopes : defaultScopes,
   }
 }
@@ -124,11 +124,7 @@ function validateConfiguredUrl(raw: string, opts: { allowHttpLocalhostOnly: bool
     return parsed
   }
 
-  if (
-    parsed.protocol === "http:" &&
-    opts.allowHttpLocalhostOnly &&
-    isLocalhostHost(parsed.hostname)
-  ) {
+  if (parsed.protocol === "http:" && opts.allowHttpLocalhostOnly && isLocalhostHost(parsed.hostname)) {
     return parsed
   }
 
@@ -194,12 +190,7 @@ function createStateToken() {
 }
 
 function ensureConfigured(config: GoogleOAuthServiceConfig) {
-  if (
-    !config.clientId ||
-    !config.clientSecret ||
-    !config.redirectUri ||
-    !config.successRedirectUri
-  ) {
+  if (!config.clientId || !config.clientSecret || !config.redirectUri || !config.successRedirectUri) {
     throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
   }
 
@@ -299,17 +290,11 @@ async function fetchAccessibleGoogleAdsCustomerIds(input: {
 export class GoogleOAuthService {
   private readonly config: GoogleOAuthServiceConfig
 
-  constructor(
-    private readonly repository: GoogleOAuthRepository,
-    config?: Partial<GoogleOAuthServiceConfig>
-  ) {
+  constructor(private readonly repository: GoogleOAuthRepository, config?: Partial<GoogleOAuthServiceConfig>) {
     this.config = { ...buildDefaultConfig(), ...(config ?? {}) }
   }
 
-  async startAuthorization(
-    actor: AuthenticatedActor,
-    input: GoogleOAuthStartInput = {}
-  ): Promise<GoogleOAuthStartResult> {
+  async startAuthorization(actor: AuthenticatedActor, input: GoogleOAuthStartInput = {}): Promise<GoogleOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
     ensureConfigured(this.config)
 
@@ -397,10 +382,7 @@ export class GoogleOAuthService {
     }
   }
 
-  async completeAuthorization(input: {
-    state: string
-    code: string
-  }): Promise<GoogleOAuthCallbackResult> {
+  async completeAuthorization(input: { state: string; code: string }): Promise<GoogleOAuthCallbackResult> {
     ensureConfigured(this.config)
 
     const state = await this.repository.findPendingStateByValue(input.state)
@@ -433,8 +415,7 @@ export class GoogleOAuthService {
         developerToken: this.config.googleAdsDeveloperToken,
       })
     } catch (error) {
-      customerDiscoveryError =
-        error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
+      customerDiscoveryError = error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
     }
 
     const connectionId = String(state.connection_id)
@@ -471,9 +452,7 @@ export class GoogleOAuthService {
         encryptedRefreshToken: encryptSecret(refreshToken, this.config.tokenEncryptionKey),
         encryptedAccessToken: encryptSecret(token.access_token, this.config.tokenEncryptionKey),
         scopes,
-        tokenExpiresAt: token.expires_in
-          ? new Date(Date.now() + token.expires_in * 1000).toISOString()
-          : null,
+        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
         status: "connected",
         connectionReference: profile.email ?? null,
         lastConnectedAt: now,

@@ -26,9 +26,7 @@ describe("outbox foundation", () => {
       },
     ])
 
-    const result = await database.query<{ count: string }>(
-      "SELECT COUNT(*)::text AS count FROM outbox_events"
-    )
+    const result = await database.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM outbox_events")
     expect(Number(result.rows[0]?.count ?? 0)).toBe(1)
   })
 })

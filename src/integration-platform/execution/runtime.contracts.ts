@@ -1,10 +1,4 @@
-export type ExecutionLifecycleState =
-  | "queued"
-  | "dispatched"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled"
+export type ExecutionLifecycleState = "queued" | "dispatched" | "running" | "completed" | "failed" | "cancelled"
 
 export interface ExecutionOrganizationContext {
   organizationId: string
@@ -128,9 +122,6 @@ export interface ExecutionHooks {
   onEvent?(event: ExecutionEvent, state: ExecutionState): void | Promise<void>
   onStateChange?(state: ExecutionState): void | Promise<void>
   onBeforeExecute?(context: ExecutionMiddlewareContext): void | Promise<void>
-  onAfterExecute?(
-    context: ExecutionMiddlewareContext,
-    result: ExecutionRuntimeResult
-  ): void | Promise<void>
+  onAfterExecute?(context: ExecutionMiddlewareContext, result: ExecutionRuntimeResult): void | Promise<void>
   onError?(context: ExecutionMiddlewareContext, error: ExecutionError): void | Promise<void>
 }

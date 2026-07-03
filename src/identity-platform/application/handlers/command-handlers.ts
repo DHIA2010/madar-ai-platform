@@ -167,9 +167,7 @@ export class IdentityCommandHandlers {
     const refreshDays = input.rememberMe
       ? this.deps.config.rememberMeRefreshTokenTtlDays
       : this.deps.config.refreshTokenTtlDays
-    const refreshTokenExpiresAt = new Date(
-      Date.now() + refreshDays * 24 * 60 * 60 * 1000
-    ).toISOString()
+    const refreshTokenExpiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000).toISOString()
 
     return {
       accessToken: this.deps.tokenService.signAccessToken({
@@ -245,23 +243,11 @@ export class IdentityCommandHandlers {
       createdAt: timestamp,
     })
     await this.deps.repositories.emailVerifications.save(verification.toState())
-    await this.deps.emailGateway.sendVerificationEmail({
-      email: user.email,
-      token: verificationToken,
-    })
+    await this.deps.emailGateway.sendVerificationEmail({ email: user.email, token: verificationToken })
 
-    await this.audit(
-      "auth.register",
-      context,
-      userId,
-      organizationId,
-      workspaceId,
-      "user",
-      userId,
-      {
-        email: user.email,
-      }
-    )
+    await this.audit("auth.register", context, userId, organizationId, workspaceId, "user", userId, {
+      email: user.email,
+    })
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "UserRegistered",
@@ -303,8 +289,7 @@ export class IdentityCommandHandlers {
 
   async verifyEmail(command: VerifyEmailCommand, context: RequestContext) {
     const tokenHash = this.deps.tokenService.hashOpaqueToken(command.token)
-    const verificationState =
-      await this.deps.repositories.emailVerifications.findByTokenHash(tokenHash)
+    const verificationState = await this.deps.repositories.emailVerifications.findByTokenHash(tokenHash)
     if (!verificationState) {
       throw ERRORS.tokenInvalid()
     }
@@ -321,15 +306,7 @@ export class IdentityCommandHandlers {
     verification.consume(this.now)
     await this.deps.repositories.users.save(user.toState())
     await this.deps.repositories.emailVerifications.save(verification.toState())
-    await this.audit(
-      "auth.verify_email",
-      context,
-      user.id,
-      user.toState().primaryOrganizationId,
-      user.activeWorkspaceId,
-      "user",
-      user.id
-    )
+    await this.audit("auth.verify_email", context, user.id, user.toState().primaryOrganizationId, user.activeWorkspaceId, "user", user.id)
   }
 
   async login(command: LoginUserCommand, context: RequestContext) {
@@ -350,22 +327,9 @@ export class IdentityCommandHandlers {
       throw ERRORS.forbidden()
     }
     if (!this.deps.hasher.verify(command.password, user.toState().passwordHash)) {
-      user.recordFailedLogin(
-        this.now,
-        Date.now(),
-        this.deps.config.lockoutAttempts,
-        this.deps.config.lockoutMinutes
-      )
+      user.recordFailedLogin(this.now, Date.now(), this.deps.config.lockoutAttempts, this.deps.config.lockoutMinutes)
       await this.deps.repositories.users.save(user.toState())
-      await this.audit(
-        "auth.login_failed",
-        context,
-        user.id,
-        user.toState().primaryOrganizationId,
-        user.activeWorkspaceId,
-        "user",
-        user.id
-      )
+      await this.audit("auth.login_failed", context, user.id, user.toState().primaryOrganizationId, user.activeWorkspaceId, "user", user.id)
       throw ERRORS.invalidCredentials()
     }
 
@@ -400,15 +364,7 @@ export class IdentityCommandHandlers {
       updatedAt: this.now,
     })
     await this.deps.repositories.sessions.save(session.toState())
-    await this.audit(
-      "auth.login",
-      context,
-      user.id,
-      membership.organizationId,
-      membership.workspaceId,
-      "session",
-      sessionId
-    )
+    await this.audit("auth.login", context, user.id, membership.organizationId, membership.workspaceId, "session", sessionId)
 
     return {
       user: {
@@ -451,21 +407,9 @@ export class IdentityCommandHandlers {
       sessionId: session.id,
       rememberMe: session.rememberMe,
     })
-    session.rotateRefreshToken(
-      this.deps.tokenService.hashOpaqueToken(tokens.refreshToken),
-      tokens.refreshTokenExpiresAt,
-      this.now
-    )
+    session.rotateRefreshToken(this.deps.tokenService.hashOpaqueToken(tokens.refreshToken), tokens.refreshTokenExpiresAt, this.now)
     await this.deps.repositories.sessions.save(session.toState())
-    await this.audit(
-      "auth.refresh",
-      context,
-      session.userId,
-      session.organizationId,
-      session.workspaceId,
-      "session",
-      session.id
-    )
+    await this.audit("auth.refresh", context, session.userId, session.organizationId, session.workspaceId, "session", session.id)
     return {
       sessionId: session.id,
       organizationId: session.organizationId,
@@ -486,15 +430,7 @@ export class IdentityCommandHandlers {
     const session = SessionEntity.rehydrate(sessionState)
     session.revoke(this.now)
     await this.deps.repositories.sessions.save(session.toState())
-    await this.audit(
-      "auth.logout",
-      context,
-      actor.userId,
-      actor.organizationId,
-      actor.workspaceId,
-      "session",
-      session.id
-    )
+    await this.audit("auth.logout", context, actor.userId, actor.organizationId, actor.workspaceId, "session", session.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "SessionRevoked",
@@ -506,11 +442,7 @@ export class IdentityCommandHandlers {
     ])
   }
 
-  async revokeSession(
-    command: RevokeSessionCommand,
-    context: RequestContext,
-    actor: AuthenticatedActor
-  ) {
+  async revokeSession(command: RevokeSessionCommand, context: RequestContext, actor: AuthenticatedActor) {
     if (!hasPermission(actor.roles, "session:revoke")) {
       throw ERRORS.forbidden()
     }
@@ -521,15 +453,7 @@ export class IdentityCommandHandlers {
     const session = SessionEntity.rehydrate(sessionState)
     session.revoke(this.now)
     await this.deps.repositories.sessions.save(session.toState())
-    await this.audit(
-      "auth.session_revoke",
-      context,
-      actor.userId,
-      session.organizationId,
-      session.workspaceId,
-      "session",
-      session.id
-    )
+    await this.audit("auth.session_revoke", context, actor.userId, session.organizationId, session.workspaceId, "session", session.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "SessionRevoked",
@@ -558,15 +482,7 @@ export class IdentityCommandHandlers {
     })
     await this.deps.repositories.passwordResets.save(entry.toState())
     await this.deps.emailGateway.sendPasswordResetEmail({ email: userState.email, token })
-    await this.audit(
-      "auth.password_reset_requested",
-      context,
-      userState.id,
-      userState.primaryOrganizationId,
-      userState.activeWorkspaceId,
-      "user",
-      userState.id
-    )
+    await this.audit("auth.password_reset_requested", context, userState.id, userState.primaryOrganizationId, userState.activeWorkspaceId, "user", userState.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "PasswordResetRequested",
@@ -605,15 +521,7 @@ export class IdentityCommandHandlers {
         await this.deps.repositories.sessions.save(session.toState())
       }
     }
-    await this.audit(
-      "auth.password_reset_completed",
-      context,
-      user.id,
-      user.toState().primaryOrganizationId,
-      user.activeWorkspaceId,
-      "user",
-      user.id
-    )
+    await this.audit("auth.password_reset_completed", context, user.id, user.toState().primaryOrganizationId, user.activeWorkspaceId, "user", user.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "PasswordChanged",
@@ -625,11 +533,7 @@ export class IdentityCommandHandlers {
     ])
   }
 
-  async updateProfile(
-    actor: AuthenticatedActor,
-    command: UpdateProfileCommand,
-    context: RequestContext
-  ) {
+  async updateProfile(actor: AuthenticatedActor, command: UpdateProfileCommand, context: RequestContext) {
     const userState = await this.deps.repositories.users.findById(actor.userId)
     if (!userState) {
       throw ERRORS.notFound("User")
@@ -637,23 +541,11 @@ export class IdentityCommandHandlers {
     const user = UserEntity.rehydrate(userState)
     user.updateProfile(command, this.now)
     await this.deps.repositories.users.save(user.toState())
-    await this.audit(
-      "identity.profile_updated",
-      context,
-      actor.userId,
-      actor.organizationId,
-      actor.workspaceId,
-      "user",
-      actor.userId
-    )
+    await this.audit("identity.profile_updated", context, actor.userId, actor.organizationId, actor.workspaceId, "user", actor.userId)
     return user.toState()
   }
 
-  async changeEmail(
-    actor: AuthenticatedActor,
-    command: ChangeEmailCommand,
-    context: RequestContext
-  ) {
+  async changeEmail(actor: AuthenticatedActor, command: ChangeEmailCommand, context: RequestContext) {
     const userState = await this.deps.repositories.users.findById(actor.userId)
     if (!userState) {
       throw ERRORS.notFound("User")
@@ -677,27 +569,12 @@ export class IdentityCommandHandlers {
       createdAt: this.now,
     })
     await this.deps.repositories.emailVerifications.save(verification.toState())
-    await this.deps.emailGateway.sendVerificationEmail({
-      email: user.toState().email,
-      token: verificationToken,
-    })
-    await this.audit(
-      "identity.email_change_requested",
-      context,
-      actor.userId,
-      actor.organizationId,
-      actor.workspaceId,
-      "user",
-      actor.userId
-    )
+    await this.deps.emailGateway.sendVerificationEmail({ email: user.toState().email, token: verificationToken })
+    await this.audit("identity.email_change_requested", context, actor.userId, actor.organizationId, actor.workspaceId, "user", actor.userId)
     return { success: true, verificationToken }
   }
 
-  async changePassword(
-    actor: AuthenticatedActor,
-    command: ChangePasswordCommand,
-    context: RequestContext
-  ) {
+  async changePassword(actor: AuthenticatedActor, command: ChangePasswordCommand, context: RequestContext) {
     const userState = await this.deps.repositories.users.findById(actor.userId)
     if (!userState) {
       throw ERRORS.notFound("User")
@@ -715,15 +592,7 @@ export class IdentityCommandHandlers {
         await this.deps.repositories.sessions.save(session.toState())
       }
     }
-    await this.audit(
-      "identity.password_changed",
-      context,
-      actor.userId,
-      actor.organizationId,
-      actor.workspaceId,
-      "user",
-      actor.userId
-    )
+    await this.audit("identity.password_changed", context, actor.userId, actor.organizationId, actor.workspaceId, "user", actor.userId)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "PasswordChanged",
@@ -737,10 +606,7 @@ export class IdentityCommandHandlers {
   }
 
   private async requireOrganizationMembership(userId: string, organizationId: string) {
-    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
-      userId,
-      organizationId
-    )
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(userId, organizationId)
     if (!membership || membership.deletedAt || membership.status !== "active") {
       throw ERRORS.forbidden()
     }
@@ -766,20 +632,11 @@ export class IdentityCommandHandlers {
       (membership) => membership.role === "owner"
     )
     if (owners.length === 0) {
-      throw new IdentityError(
-        "ORG_OWNER_REQUIRED",
-        409,
-        "business",
-        "Organization must have at least one active owner."
-      )
+      throw new IdentityError("ORG_OWNER_REQUIRED", 409, "business", "Organization must have at least one active owner.")
     }
   }
 
-  async createOrganization(
-    actor: AuthenticatedActor,
-    command: CreateOrganizationCommand,
-    context: RequestContext
-  ) {
+  async createOrganization(actor: AuthenticatedActor, command: CreateOrganizationCommand, context: RequestContext) {
     const startedAt = Date.now()
     const organization = OrganizationEntity.create({
       id: this.deps.uuid.generate(),
@@ -808,15 +665,7 @@ export class IdentityCommandHandlers {
 
     await this.deps.repositories.organizations.save(organization.toState())
     await this.deps.repositories.memberships.save(ownerMembership.toState())
-    await this.audit(
-      "organization.created",
-      context,
-      actor.userId,
-      organization.id,
-      null,
-      "organization",
-      organization.id
-    )
+    await this.audit("organization.created", context, actor.userId, organization.id, null, "organization", organization.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "OrganizationCreated",
@@ -832,12 +681,7 @@ export class IdentityCommandHandlers {
     return organization.toState()
   }
 
-  async updateOrganization(
-    actor: AuthenticatedActor,
-    organizationId: string,
-    command: UpdateOrganizationCommand,
-    context: RequestContext
-  ) {
+  async updateOrganization(actor: AuthenticatedActor, organizationId: string, command: UpdateOrganizationCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, organizationId)
     const organizationState = await this.deps.repositories.organizations.findById(organizationId)
     if (!organizationState) {
@@ -846,15 +690,7 @@ export class IdentityCommandHandlers {
     const organization = OrganizationEntity.rehydrate(organizationState)
     organization.update(command, this.now)
     await this.deps.repositories.organizations.save(organization.toState())
-    await this.audit(
-      "organization.updated",
-      context,
-      actor.userId,
-      organization.id,
-      null,
-      "organization",
-      organization.id
-    )
+    await this.audit("organization.updated", context, actor.userId, organization.id, null, "organization", organization.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "OrganizationUpdated",
@@ -867,30 +703,16 @@ export class IdentityCommandHandlers {
     return organization.toState()
   }
 
-  async archiveOrganization(
-    actor: AuthenticatedActor,
-    command: ArchiveOrganizationCommand,
-    context: RequestContext
-  ) {
+  async archiveOrganization(actor: AuthenticatedActor, command: ArchiveOrganizationCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const organizationState = await this.deps.repositories.organizations.findById(
-      command.organizationId
-    )
+    const organizationState = await this.deps.repositories.organizations.findById(command.organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
     }
     const organization = OrganizationEntity.rehydrate(organizationState)
     organization.archive(this.now)
     await this.deps.repositories.organizations.save(organization.toState())
-    await this.audit(
-      "organization.archived",
-      context,
-      actor.userId,
-      organization.id,
-      null,
-      "organization",
-      organization.id
-    )
+    await this.audit("organization.archived", context, actor.userId, organization.id, null, "organization", organization.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "OrganizationArchived",
@@ -903,30 +725,16 @@ export class IdentityCommandHandlers {
     return organization.toState()
   }
 
-  async restoreOrganization(
-    actor: AuthenticatedActor,
-    command: RestoreOrganizationCommand,
-    context: RequestContext
-  ) {
+  async restoreOrganization(actor: AuthenticatedActor, command: RestoreOrganizationCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const organizationState = await this.deps.repositories.organizations.findById(
-      command.organizationId
-    )
+    const organizationState = await this.deps.repositories.organizations.findById(command.organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
     }
     const organization = OrganizationEntity.rehydrate(organizationState)
     organization.restore(this.now)
     await this.deps.repositories.organizations.save(organization.toState())
-    await this.audit(
-      "organization.restored",
-      context,
-      actor.userId,
-      organization.id,
-      null,
-      "organization",
-      organization.id
-    )
+    await this.audit("organization.restored", context, actor.userId, organization.id, null, "organization", organization.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "OrganizationUpdated",
@@ -939,30 +747,16 @@ export class IdentityCommandHandlers {
     return organization.toState()
   }
 
-  async deleteOrganization(
-    actor: AuthenticatedActor,
-    command: DeleteOrganizationCommand,
-    context: RequestContext
-  ) {
+  async deleteOrganization(actor: AuthenticatedActor, command: DeleteOrganizationCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const organizationState = await this.deps.repositories.organizations.findById(
-      command.organizationId
-    )
+    const organizationState = await this.deps.repositories.organizations.findById(command.organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
     }
     const organization = OrganizationEntity.rehydrate(organizationState)
     organization.softDelete(this.now)
     await this.deps.repositories.organizations.save(organization.toState())
-    await this.audit(
-      "organization.deleted",
-      context,
-      actor.userId,
-      organization.id,
-      null,
-      "organization",
-      organization.id
-    )
+    await this.audit("organization.deleted", context, actor.userId, organization.id, null, "organization", organization.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "OrganizationDeleted",
@@ -975,21 +769,12 @@ export class IdentityCommandHandlers {
     return organization.toState()
   }
 
-  async createWorkspace(
-    actor: AuthenticatedActor,
-    command: CreateWorkspaceCommand,
-    context: RequestContext
-  ) {
-    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
-      actor.userId,
-      command.organizationId
-    )
+  async createWorkspace(actor: AuthenticatedActor, command: CreateWorkspaceCommand, context: RequestContext) {
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(actor.userId, command.organizationId)
     if (!membership || !["owner", "admin"].includes(membership.role)) {
       throw ERRORS.forbidden()
     }
-    const organizationState = await this.deps.repositories.organizations.findById(
-      command.organizationId
-    )
+    const organizationState = await this.deps.repositories.organizations.findById(command.organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
     }
@@ -1011,15 +796,7 @@ export class IdentityCommandHandlers {
     })
     await this.deps.repositories.workspaces.save(workspace.toState())
     await this.deps.repositories.memberships.save(ownerMembership.toState())
-    await this.audit(
-      "workspace.created",
-      context,
-      actor.userId,
-      command.organizationId,
-      workspace.id,
-      "workspace",
-      workspace.id
-    )
+    await this.audit("workspace.created", context, actor.userId, command.organizationId, workspace.id, "workspace", workspace.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "WorkspaceCreated",
@@ -1032,16 +809,8 @@ export class IdentityCommandHandlers {
     return workspace.toState()
   }
 
-  async updateWorkspace(
-    actor: AuthenticatedActor,
-    workspaceId: string,
-    command: UpdateWorkspaceCommand,
-    context: RequestContext
-  ) {
-    const membership = await this.deps.repositories.memberships.findByUserAndWorkspace(
-      actor.userId,
-      workspaceId
-    )
+  async updateWorkspace(actor: AuthenticatedActor, workspaceId: string, command: UpdateWorkspaceCommand, context: RequestContext) {
+    const membership = await this.deps.repositories.memberships.findByUserAndWorkspace(actor.userId, workspaceId)
     if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
       throw ERRORS.forbidden()
     }
@@ -1052,38 +821,16 @@ export class IdentityCommandHandlers {
     const workspace = WorkspaceEntity.rehydrate(workspaceState)
     workspace.update(command, this.now)
     await this.deps.repositories.workspaces.save(workspace.toState())
-    await this.audit(
-      "workspace.updated",
-      context,
-      actor.userId,
-      workspace.organizationId,
-      workspace.id,
-      "workspace",
-      workspace.id
-    )
+    await this.audit("workspace.updated", context, actor.userId, workspace.organizationId, workspace.id, "workspace", workspace.id)
     return workspace.toState()
   }
 
-  async inviteMember(
-    actor: AuthenticatedActor,
-    command: InviteMemberCommand,
-    context: RequestContext
-  ) {
-    const membership = await this.requireOrganizationMembership(
-      actor.userId,
-      command.organizationId
-    )
-    if (
-      !(
-        hasPermission([membership.role], "membership:write") ||
-        ["owner", "admin"].includes(membership.role)
-      )
-    ) {
+  async inviteMember(actor: AuthenticatedActor, command: InviteMemberCommand, context: RequestContext) {
+    const membership = await this.requireOrganizationMembership(actor.userId, command.organizationId)
+    if (!(hasPermission([membership.role], "membership:write") || ["owner", "admin"].includes(membership.role))) {
       throw ERRORS.forbidden()
     }
-    const idempotencyKey =
-      command.idempotencyKey ??
-      `${command.organizationId}:${command.email.toLowerCase()}:${command.role}`
+    const idempotencyKey = command.idempotencyKey ?? `${command.organizationId}:${command.email.toLowerCase()}:${command.role}`
     const existingInvitation = await this.deps.repositories.invitations.findPendingByIdempotencyKey(
       command.organizationId,
       idempotencyKey
@@ -1092,15 +839,9 @@ export class IdentityCommandHandlers {
       return existingInvitation
     }
 
-    await this.enforceRateLimit(
-      `organization_invite:${command.organizationId}:${context.ipAddress}`,
-      30,
-      60_000
-    )
+    await this.enforceRateLimit(`organization_invite:${command.organizationId}:${context.ipAddress}`, 30, 60_000)
 
-    const organizationState = await this.deps.repositories.organizations.findById(
-      command.organizationId
-    )
+    const organizationState = await this.deps.repositories.organizations.findById(command.organizationId)
     if (!organizationState || organizationState.status !== "active") {
       throw ERRORS.notFound("Organization")
     }
@@ -1163,11 +904,7 @@ export class IdentityCommandHandlers {
     return invitation.toState()
   }
 
-  async acceptInvitation(
-    actor: AuthenticatedActor,
-    command: AcceptInvitationCommand,
-    context: RequestContext
-  ) {
+  async acceptInvitation(actor: AuthenticatedActor, command: AcceptInvitationCommand, context: RequestContext) {
     const invitationState = await this.deps.repositories.invitations.findByToken(command.token)
     if (!invitationState) {
       throw ERRORS.tokenInvalid()
@@ -1192,10 +929,7 @@ export class IdentityCommandHandlers {
       throw ERRORS.forbidden()
     }
 
-    const existing = await this.deps.repositories.memberships.findByUserAndOrganization(
-      actor.userId,
-      invitation.organizationId
-    )
+    const existing = await this.deps.repositories.memberships.findByUserAndOrganization(actor.userId, invitation.organizationId)
     if (existing && existing.status === "active" && !existing.deletedAt) {
       invitation.accept(this.now)
       await this.deps.repositories.invitations.save(invitation.toState())
@@ -1216,53 +950,29 @@ export class IdentityCommandHandlers {
       now: this.now,
     })
     await this.deps.repositories.memberships.save(membership.toState())
-    await this.audit(
-      "organization.invitation_accepted",
-      context,
-      actor.userId,
-      invitation.organizationId,
-      invitation.workspaceId,
-      "invitation",
-      invitation.toState().id
-    )
+    await this.audit("organization.invitation_accepted", context, actor.userId, invitation.organizationId, invitation.workspaceId, "invitation", invitation.toState().id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "InvitationAccepted",
         aggregateType: "invitation",
         aggregateId: invitation.toState().id,
         context,
-        payload: {
-          invitationId: invitation.toState().id,
-          userId: actor.userId,
-          workspaceId: invitation.workspaceId,
-        },
+        payload: { invitationId: invitation.toState().id, userId: actor.userId, workspaceId: invitation.workspaceId },
       }),
       this.createEvent({
         eventType: "MemberJoined",
         aggregateType: "organization",
         aggregateId: invitation.organizationId,
         context,
-        payload: {
-          organizationId: invitation.organizationId,
-          userId: actor.userId,
-          role: invitation.role,
-        },
+        payload: { organizationId: invitation.organizationId, userId: actor.userId, role: invitation.role },
       }),
     ])
-    this.deps.metrics?.incrementCounter("membership_count", 1, {
-      organizationId: invitation.organizationId,
-    })
-    this.deps.metrics?.incrementCounter("invitation_accept_rate", 1, {
-      organizationId: invitation.organizationId,
-    })
+    this.deps.metrics?.incrementCounter("membership_count", 1, { organizationId: invitation.organizationId })
+    this.deps.metrics?.incrementCounter("invitation_accept_rate", 1, { organizationId: invitation.organizationId })
     return { success: true, membershipId: membership.toState().id }
   }
 
-  async declineInvitation(
-    actor: AuthenticatedActor,
-    command: DeclineInvitationCommand,
-    context: RequestContext
-  ) {
+  async declineInvitation(actor: AuthenticatedActor, command: DeclineInvitationCommand, context: RequestContext) {
     const invitationState = await this.deps.repositories.invitations.findByToken(command.token)
     if (!invitationState) {
       throw ERRORS.tokenInvalid()
@@ -1270,23 +980,11 @@ export class IdentityCommandHandlers {
     const invitation = InvitationEntity.rehydrate(invitationState)
     invitation.decline(this.now)
     await this.deps.repositories.invitations.save(invitation.toState())
-    await this.audit(
-      "organization.invitation_declined",
-      context,
-      actor.userId,
-      invitation.organizationId,
-      invitation.workspaceId,
-      "invitation",
-      invitation.id
-    )
+    await this.audit("organization.invitation_declined", context, actor.userId, invitation.organizationId, invitation.workspaceId, "invitation", invitation.id)
     return { success: true }
   }
 
-  async cancelInvitation(
-    actor: AuthenticatedActor,
-    command: CancelInvitationCommand,
-    context: RequestContext
-  ) {
+  async cancelInvitation(actor: AuthenticatedActor, command: CancelInvitationCommand, context: RequestContext) {
     const invitationState = await this.deps.repositories.invitations.findById(command.invitationId)
     if (!invitationState) {
       throw ERRORS.notFound("Invitation")
@@ -1295,34 +993,18 @@ export class IdentityCommandHandlers {
     await this.requireOrganizationWriteAccess(actor, invitation.organizationId)
     invitation.cancel(this.now)
     await this.deps.repositories.invitations.save(invitation.toState())
-    await this.audit(
-      "organization.invitation_canceled",
-      context,
-      actor.userId,
-      invitation.organizationId,
-      invitation.workspaceId,
-      "invitation",
-      invitation.id
-    )
+    await this.audit("organization.invitation_canceled", context, actor.userId, invitation.organizationId, invitation.workspaceId, "invitation", invitation.id)
     return { success: true }
   }
 
-  async resendInvitation(
-    actor: AuthenticatedActor,
-    command: ResendInvitationCommand,
-    context: RequestContext
-  ) {
+  async resendInvitation(actor: AuthenticatedActor, command: ResendInvitationCommand, context: RequestContext) {
     const invitationState = await this.deps.repositories.invitations.findById(command.invitationId)
     if (!invitationState) {
       throw ERRORS.notFound("Invitation")
     }
     const invitation = InvitationEntity.rehydrate(invitationState)
     await this.requireOrganizationWriteAccess(actor, invitation.organizationId)
-    await this.enforceRateLimit(
-      `organization_invite_resend:${invitation.organizationId}:${context.ipAddress}`,
-      20,
-      60_000
-    )
+    await this.enforceRateLimit(`organization_invite_resend:${invitation.organizationId}:${context.ipAddress}`, 20, 60_000)
     invitation.resend(this.now)
     await this.deps.repositories.invitations.save(invitation.toState())
     await this.deps.emailGateway.sendInvitationEmail({
@@ -1331,28 +1013,13 @@ export class IdentityCommandHandlers {
       organizationId: invitation.organizationId,
       workspaceId: invitation.workspaceId ?? undefined,
     })
-    await this.audit(
-      "organization.invitation_resent",
-      context,
-      actor.userId,
-      invitation.organizationId,
-      invitation.workspaceId,
-      "invitation",
-      invitation.id
-    )
+    await this.audit("organization.invitation_resent", context, actor.userId, invitation.organizationId, invitation.workspaceId, "invitation", invitation.id)
     return invitation.toState()
   }
 
-  async removeMember(
-    actor: AuthenticatedActor,
-    command: RemoveMemberCommand,
-    context: RequestContext
-  ) {
+  async removeMember(actor: AuthenticatedActor, command: RemoveMemberCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.memberUserId,
-      command.organizationId
-    )
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(command.memberUserId, command.organizationId)
     if (!memberState) {
       throw ERRORS.notFound("Membership")
     }
@@ -1361,52 +1028,29 @@ export class IdentityCommandHandlers {
     member.remove(command.reason, this.now, actor.userId)
     await this.deps.repositories.memberships.save(member.toState())
     await this.enforceAtLeastOneOwner(command.organizationId)
-    await this.audit(
-      "membership.removed",
-      context,
-      actor.userId,
-      command.organizationId,
-      memberState.workspaceId,
-      "membership",
-      memberState.id
-    )
+    await this.audit("membership.removed", context, actor.userId, command.organizationId, memberState.workspaceId, "membership", memberState.id)
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "RoleRevoked",
         aggregateType: "membership",
         aggregateId: memberState.id,
         context,
-        payload: {
-          organizationId: command.organizationId,
-          userId: command.memberUserId,
-          role: previousRole,
-        },
+        payload: { organizationId: command.organizationId, userId: command.memberUserId, role: previousRole },
       }),
       this.createEvent({
         eventType: "MemberRemoved",
         aggregateType: "organization",
         aggregateId: command.organizationId,
         context,
-        payload: {
-          organizationId: command.organizationId,
-          userId: command.memberUserId,
-          reason: command.reason,
-        },
+        payload: { organizationId: command.organizationId, userId: command.memberUserId, reason: command.reason },
       }),
     ])
     return member.toState()
   }
 
-  async suspendMember(
-    actor: AuthenticatedActor,
-    command: SuspendMemberCommand,
-    context: RequestContext
-  ) {
+  async suspendMember(actor: AuthenticatedActor, command: SuspendMemberCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.memberUserId,
-      command.organizationId
-    )
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(command.memberUserId, command.organizationId)
     if (!memberState) {
       throw ERRORS.notFound("Membership")
     }
@@ -1414,68 +1058,33 @@ export class IdentityCommandHandlers {
     member.suspend(command.reason, this.now, actor.userId)
     await this.deps.repositories.memberships.save(member.toState())
     await this.enforceAtLeastOneOwner(command.organizationId)
-    await this.audit(
-      "membership.suspended",
-      context,
-      actor.userId,
-      command.organizationId,
-      memberState.workspaceId,
-      "membership",
-      memberState.id
-    )
+    await this.audit("membership.suspended", context, actor.userId, command.organizationId, memberState.workspaceId, "membership", memberState.id)
     return member.toState()
   }
 
-  async reactivateMember(
-    actor: AuthenticatedActor,
-    command: ReactivateMemberCommand,
-    context: RequestContext
-  ) {
+  async reactivateMember(actor: AuthenticatedActor, command: ReactivateMemberCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.memberUserId,
-      command.organizationId
-    )
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(command.memberUserId, command.organizationId)
     if (!memberState) {
       throw ERRORS.notFound("Membership")
     }
     const member = MembershipEntity.rehydrate(memberState)
     member.reactivate(this.now, actor.userId)
     await this.deps.repositories.memberships.save(member.toState())
-    await this.audit(
-      "membership.reactivated",
-      context,
-      actor.userId,
-      command.organizationId,
-      memberState.workspaceId,
-      "membership",
-      memberState.id
-    )
+    await this.audit("membership.reactivated", context, actor.userId, command.organizationId, memberState.workspaceId, "membership", memberState.id)
     return member.toState()
   }
 
-  async transferOwnership(
-    actor: AuthenticatedActor,
-    command: TransferOwnershipCommand,
-    context: RequestContext
-  ) {
-    const actorMembership = await this.requireOrganizationMembership(
-      actor.userId,
-      command.organizationId
-    )
+  async transferOwnership(actor: AuthenticatedActor, command: TransferOwnershipCommand, context: RequestContext) {
+    const actorMembership = await this.requireOrganizationMembership(actor.userId, command.organizationId)
     if (actorMembership.role !== "owner") {
       throw ERRORS.forbidden()
     }
-    const newOwnerState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.newOwnerUserId,
-      command.organizationId
-    )
+    const newOwnerState = await this.deps.repositories.memberships.findByUserAndOrganization(command.newOwnerUserId, command.organizationId)
     if (!newOwnerState || newOwnerState.status !== "active" || newOwnerState.deletedAt) {
       throw ERRORS.notFound("Membership")
     }
-    const organizationState = await this.deps.repositories.organizations.findById(
-      command.organizationId
-    )
+    const organizationState = await this.deps.repositories.organizations.findById(command.organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
     }
@@ -1492,45 +1101,25 @@ export class IdentityCommandHandlers {
     await this.deps.repositories.memberships.save(newOwner.toState())
     await this.deps.repositories.memberships.save(currentOwner.toState())
     await this.enforceAtLeastOneOwner(command.organizationId)
-    await this.audit(
-      "organization.ownership_transferred",
-      context,
-      actor.userId,
-      command.organizationId,
-      null,
-      "organization",
-      command.organizationId,
-      {
-        previousOwnerUserId: actor.userId,
-        newOwnerUserId: command.newOwnerUserId,
-      }
-    )
+    await this.audit("organization.ownership_transferred", context, actor.userId, command.organizationId, null, "organization", command.organizationId, {
+      previousOwnerUserId: actor.userId,
+      newOwnerUserId: command.newOwnerUserId,
+    })
     await this.publishEvents(context, [
       this.createEvent({
         eventType: "OwnershipTransferred",
         aggregateType: "organization",
         aggregateId: command.organizationId,
         context,
-        payload: {
-          organizationId: command.organizationId,
-          previousOwnerUserId: actor.userId,
-          newOwnerUserId: command.newOwnerUserId,
-        },
+        payload: { organizationId: command.organizationId, previousOwnerUserId: actor.userId, newOwnerUserId: command.newOwnerUserId },
       }),
     ])
     return organization.toState()
   }
 
-  async assignMemberRole(
-    actor: AuthenticatedActor,
-    command: AssignMemberRoleCommand,
-    context: RequestContext
-  ) {
+  async assignMemberRole(actor: AuthenticatedActor, command: AssignMemberRoleCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.memberUserId,
-      command.organizationId
-    )
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(command.memberUserId, command.organizationId)
     if (!memberState) {
       throw ERRORS.notFound("Membership")
     }
@@ -1539,18 +1128,9 @@ export class IdentityCommandHandlers {
     member.assignRole(command.role, this.now, actor.userId)
     await this.deps.repositories.memberships.save(member.toState())
     await this.enforceAtLeastOneOwner(command.organizationId)
-    await this.audit(
-      "membership.role_assigned",
-      context,
-      actor.userId,
-      command.organizationId,
-      memberState.workspaceId,
-      "membership",
-      memberState.id,
-      {
-        role: command.role,
-      }
-    )
+    await this.audit("membership.role_assigned", context, actor.userId, command.organizationId, memberState.workspaceId, "membership", memberState.id, {
+      role: command.role,
+    })
     await this.publishEvents(context, [
       ...(previousRole === command.role
         ? []
@@ -1560,11 +1140,7 @@ export class IdentityCommandHandlers {
               aggregateType: "membership",
               aggregateId: memberState.id,
               context,
-              payload: {
-                organizationId: command.organizationId,
-                userId: command.memberUserId,
-                role: previousRole,
-              },
+              payload: { organizationId: command.organizationId, userId: command.memberUserId, role: previousRole },
             }),
           ]),
       this.createEvent({
@@ -1572,57 +1148,28 @@ export class IdentityCommandHandlers {
         aggregateType: "membership",
         aggregateId: memberState.id,
         context,
-        payload: {
-          organizationId: command.organizationId,
-          userId: command.memberUserId,
-          role: command.role,
-        },
+        payload: { organizationId: command.organizationId, userId: command.memberUserId, role: command.role },
       }),
     ])
-    this.deps.metrics?.incrementCounter("role_assignment_count", 1, {
-      organizationId: command.organizationId,
-      role: command.role,
-    })
+    this.deps.metrics?.incrementCounter("role_assignment_count", 1, { organizationId: command.organizationId, role: command.role })
     return member.toState()
   }
 
-  async updateMemberProfile(
-    actor: AuthenticatedActor,
-    command: UpdateMemberProfileCommand,
-    context: RequestContext
-  ) {
+  async updateMemberProfile(actor: AuthenticatedActor, command: UpdateMemberProfileCommand, context: RequestContext) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.memberUserId,
-      command.organizationId
-    )
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(command.memberUserId, command.organizationId)
     if (!memberState) {
       throw ERRORS.notFound("Membership")
     }
     const member = MembershipEntity.rehydrate(memberState)
     member.updateProfile(command.profile, this.now, actor.userId)
     await this.deps.repositories.memberships.save(member.toState())
-    await this.audit(
-      "membership.profile_updated",
-      context,
-      actor.userId,
-      command.organizationId,
-      memberState.workspaceId,
-      "membership",
-      memberState.id
-    )
+    await this.audit("membership.profile_updated", context, actor.userId, command.organizationId, memberState.workspaceId, "membership", memberState.id)
     return member.toState()
   }
 
-  async switchWorkspace(
-    actor: AuthenticatedActor,
-    command: SwitchWorkspaceCommand,
-    context: RequestContext
-  ) {
-    const membership = await this.deps.repositories.memberships.findByUserAndWorkspace(
-      actor.userId,
-      command.workspaceId
-    )
+  async switchWorkspace(actor: AuthenticatedActor, command: SwitchWorkspaceCommand, context: RequestContext) {
+    const membership = await this.deps.repositories.memberships.findByUserAndWorkspace(actor.userId, command.workspaceId)
     if (!membership) {
       throw ERRORS.forbidden()
     }
@@ -1633,15 +1180,7 @@ export class IdentityCommandHandlers {
     const user = UserEntity.rehydrate(userState)
     user.switchWorkspace(command.workspaceId, this.now)
     await this.deps.repositories.users.save(user.toState())
-    await this.audit(
-      "workspace.switched",
-      context,
-      actor.userId,
-      membership.organizationId,
-      command.workspaceId,
-      "workspace",
-      command.workspaceId
-    )
+    await this.audit("workspace.switched", context, actor.userId, membership.organizationId, command.workspaceId, "workspace", command.workspaceId)
     return { success: true, activeWorkspaceId: command.workspaceId }
   }
 
@@ -1662,10 +1201,7 @@ export class IdentityCommandHandlers {
     if (!userState || userState.deletedAt) {
       throw ERRORS.tokenInvalid()
     }
-    const roles = (await this.deps.repositories.memberships.listRolesByUserInOrganization(
-      payload.sub,
-      session.organizationId
-    )) as Role[]
+    const roles = (await this.deps.repositories.memberships.listRolesByUserInOrganization(payload.sub, session.organizationId)) as Role[]
     return {
       userId: payload.sub,
       sessionId: payload.sid,

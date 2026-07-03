@@ -134,14 +134,8 @@ export const googleAdsRecordsQuerySchema = z.object({
       "conversion_action",
     ])
     .optional(),
-  startDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  endDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   pageSize: z.coerce.number().int().min(1).max(1000).optional(),
 })
 

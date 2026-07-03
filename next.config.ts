@@ -15,7 +15,6 @@ const normalizedBasePath =
       : ""
 
 const nextConfig: NextConfig = {
-  output: "export",
   ...(normalizedBasePath
     ? {
         basePath: normalizedBasePath,

@@ -7,16 +7,7 @@ export const registerConnectorSchema = z.object({
   displayName: z.string().min(2),
   description: z.string().optional(),
   version: z.string().optional(),
-  capabilities: z
-    .array(
-      z.object({
-        key: z.string(),
-        name: z.string(),
-        enabled: z.boolean(),
-        description: z.string().optional(),
-      })
-    )
-    .default([]),
+  capabilities: z.array(z.object({ key: z.string(), name: z.string(), enabled: z.boolean(), description: z.string().optional() })).default([]),
 })
 
 export const createConnectionSchema = z.object({

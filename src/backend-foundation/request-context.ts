@@ -12,7 +12,7 @@ class NoopLogger implements FoundationLogger {
 
 function asSingleHeader(value: string | string[] | undefined) {
   if (!value) return null
-  return Array.isArray(value) ? (value[0] ?? null) : value
+  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 function parsePermissions(headerValue: string | null) {
@@ -23,10 +23,7 @@ function parsePermissions(headerValue: string | null) {
     .filter(Boolean)
 }
 
-export function createRequestContextFromHttp(
-  request: IncomingMessage,
-  logger: FoundationLogger = new NoopLogger()
-): RequestContext {
+export function createRequestContextFromHttp(request: IncomingMessage, logger: FoundationLogger = new NoopLogger()): RequestContext {
   const requestId = asSingleHeader(request.headers["x-request-id"]) ?? randomUUID()
   const correlationId = asSingleHeader(request.headers["x-correlation-id"]) ?? requestId
 

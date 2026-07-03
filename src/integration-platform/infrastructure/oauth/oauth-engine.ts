@@ -2,20 +2,9 @@ import { randomBytes } from "node:crypto"
 import { randomUUID } from "node:crypto"
 
 import { INTEGRATION_ERRORS } from "../../application/errors/IntegrationPlatformError"
-import type {
-  CredentialRepository,
-  OAuthSessionRepository,
-  OAuthTokenRepository,
-} from "../../domain/repositories"
+import type { CredentialRepository, OAuthSessionRepository, OAuthTokenRepository } from "../../domain/repositories"
 import type { OAuthAdapter, SecretCipher } from "../../application/ports"
-import {
-  createCredential,
-  createOAuthSession,
-  createOAuthToken,
-  completeOAuthSession,
-  failOAuthSession,
-  revokeOAuthToken,
-} from "../../domain/entities"
+import { createCredential, createOAuthSession, createOAuthToken, completeOAuthSession, failOAuthSession, revokeOAuthToken } from "../../domain/entities"
 
 export interface OAuthEngineDependencies {
   sessions: OAuthSessionRepository
@@ -33,14 +22,7 @@ export class OAuthEngine {
     return this.deps.now?.() ?? new Date().toISOString()
   }
 
-  async start(input: {
-    connectionId: string
-    connectorId: string
-    redirectUri: string
-    scopes: string[]
-    offlineAccess?: boolean
-    codeChallenge?: string | null
-  }) {
+  async start(input: { connectionId: string; connectorId: string; redirectUri: string; scopes: string[]; offlineAccess?: boolean; codeChallenge?: string | null }) {
     const state = randomBytes(16).toString("hex")
     const codeVerifier = randomBytes(32).toString("hex")
     const session = createOAuthSession({
@@ -84,12 +66,10 @@ export class OAuthEngine {
       codeVerifier: session.codeVerifier ?? undefined,
     })
 
-    const encryptedSecret = this.deps.cipher.encrypt(
-      JSON.stringify({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken ?? null,
-      })
-    )
+    const encryptedSecret = this.deps.cipher.encrypt(JSON.stringify({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken ?? null,
+    }))
 
     const credential = createCredential({
       id: randomUUID(),
@@ -108,9 +88,7 @@ export class OAuthEngine {
       providerAccountId: result.providerAccountId ?? null,
       providerEmail: result.providerAccountEmail ?? null,
       accessTokenCiphertext: this.deps.cipher.encrypt(result.accessToken),
-      refreshTokenCiphertext: result.refreshToken
-        ? this.deps.cipher.encrypt(result.refreshToken)
-        : null,
+      refreshTokenCiphertext: result.refreshToken ? this.deps.cipher.encrypt(result.refreshToken) : null,
       tokenType: "Bearer",
       scopes: result.scopes,
       expiresAt: new Date(Date.now() + result.expiresInSeconds * 1000).toISOString(),
@@ -133,24 +111,13 @@ export class OAuthEngine {
     if (!credential) throw INTEGRATION_ERRORS.notFound("Credential")
     const latestToken = await this.deps.tokens.findLatestByCredentialId(credentialId)
     if (!latestToken) throw INTEGRATION_ERRORS.notFound("OAuth token")
-    const payload = JSON.parse(this.deps.cipher.decrypt(credential.secretCiphertext)) as {
-      accessToken: string
-      refreshToken: string | null
-    }
-    if (!payload.refreshToken)
-      throw INTEGRATION_ERRORS.invalidState("Refresh token is not available.")
+    const payload = JSON.parse(this.deps.cipher.decrypt(credential.secretCiphertext)) as { accessToken: string; refreshToken: string | null }
+    if (!payload.refreshToken) throw INTEGRATION_ERRORS.invalidState("Refresh token is not available.")
 
-    const refreshed = await this.deps.adapter.refreshAccessToken({
-      refreshToken: payload.refreshToken,
-    })
+    const refreshed = await this.deps.adapter.refreshAccessToken({ refreshToken: payload.refreshToken })
     const nextCredential = {
       ...credential,
-      secretCiphertext: this.deps.cipher.encrypt(
-        JSON.stringify({
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken ?? payload.refreshToken,
-        })
-      ),
+      secretCiphertext: this.deps.cipher.encrypt(JSON.stringify({ accessToken: refreshed.accessToken, refreshToken: refreshed.refreshToken ?? payload.refreshToken })),
       version: credential.version + 1,
       updatedAt: this.now(),
     }
@@ -160,9 +127,7 @@ export class OAuthEngine {
       providerAccountId: latestToken.providerAccountId,
       providerEmail: latestToken.providerEmail,
       accessTokenCiphertext: this.deps.cipher.encrypt(refreshed.accessToken),
-      refreshTokenCiphertext: this.deps.cipher.encrypt(
-        refreshed.refreshToken ?? payload.refreshToken
-      ),
+      refreshTokenCiphertext: this.deps.cipher.encrypt(refreshed.refreshToken ?? payload.refreshToken),
       tokenType: latestToken.tokenType,
       scopes: refreshed.scopes,
       expiresAt: new Date(Date.now() + refreshed.expiresInSeconds * 1000).toISOString(),
@@ -177,22 +142,11 @@ export class OAuthEngine {
     const credential = await this.deps.credentials.findById(credentialId)
     if (!credential) throw INTEGRATION_ERRORS.notFound("Credential")
     const latestToken = await this.deps.tokens.findLatestByCredentialId(credentialId)
-    const payload = JSON.parse(this.deps.cipher.decrypt(credential.secretCiphertext)) as {
-      accessToken: string
-      refreshToken: string | null
-    }
+    const payload = JSON.parse(this.deps.cipher.decrypt(credential.secretCiphertext)) as { accessToken: string; refreshToken: string | null }
     if (this.deps.adapter.revokeToken && latestToken) {
-      await this.deps.adapter.revokeToken({
-        refreshToken: payload.refreshToken ?? undefined,
-        accessToken: this.deps.cipher.decrypt(latestToken.accessTokenCiphertext),
-      })
+      await this.deps.adapter.revokeToken({ refreshToken: payload.refreshToken ?? undefined, accessToken: this.deps.cipher.decrypt(latestToken.accessTokenCiphertext) })
     }
-    const revokedCredential = {
-      ...credential,
-      status: "revoked" as const,
-      revokedAt: this.now(),
-      updatedAt: this.now(),
-    }
+    const revokedCredential = { ...credential, status: "revoked" as const, revokedAt: this.now(), updatedAt: this.now() }
     const revokedToken = latestToken ? revokeOAuthToken(latestToken, this.now()) : null
     await this.deps.credentials.save(revokedCredential)
     if (revokedToken) await this.deps.tokens.save(revokedToken)

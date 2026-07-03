@@ -7,72 +7,38 @@ export class IdentityPlatformService {
   readonly container
 
   constructor(config: Partial<IdentityPlatformConfig>) {
-    this.container = createIdentityPlatform({
-      config: loadIdentityPlatformConfig(config),
-      mode: "memory",
-    })
+    this.container = createIdentityPlatform({ config: loadIdentityPlatformConfig(config), mode: "memory" })
   }
 
-  register(
-    payload: Parameters<(typeof this.container.commands)["register"]>[0],
-    context: RequestContext
-  ) {
+  register(payload: Parameters<(typeof this.container.commands)["register"]>[0], context: RequestContext) {
     return this.container.commands.register(payload, context)
   }
 
-  verifyEmail(
-    payload: Parameters<(typeof this.container.commands)["verifyEmail"]>[0],
-    context: RequestContext
-  ) {
+  verifyEmail(payload: Parameters<(typeof this.container.commands)["verifyEmail"]>[0], context: RequestContext) {
     return this.container.commands.verifyEmail(payload, context)
   }
 
-  login(
-    payload: Parameters<(typeof this.container.commands)["login"]>[0],
-    context: RequestContext
-  ) {
+  login(payload: Parameters<(typeof this.container.commands)["login"]>[0], context: RequestContext) {
     return this.container.commands.login(payload, context)
   }
 
-  refresh(
-    payload: Parameters<(typeof this.container.commands)["refresh"]>[0],
-    context: RequestContext
-  ) {
+  refresh(payload: Parameters<(typeof this.container.commands)["refresh"]>[0], context: RequestContext) {
     return this.container.commands.refresh(payload, context)
   }
 
   logout(payload: { sessionId: string }, context: RequestContext, actorUserId: string) {
-    return this.container.commands.logout(
-      payload,
-      context,
-      this.resolveActorFromUserId(actorUserId, ["owner"])
-    )
+    return this.container.commands.logout(payload, context, this.resolveActorFromUserId(actorUserId, ["owner"]))
   }
 
-  revokeSession(
-    payload: { sessionId: string },
-    context: RequestContext,
-    actorUserId: string,
-    actorRoles: Role[]
-  ) {
-    return this.container.commands.revokeSession(
-      payload,
-      context,
-      this.resolveActorFromUserId(actorUserId, actorRoles)
-    )
+  revokeSession(payload: { sessionId: string }, context: RequestContext, actorUserId: string, actorRoles: Role[]) {
+    return this.container.commands.revokeSession(payload, context, this.resolveActorFromUserId(actorUserId, actorRoles))
   }
 
-  createPasswordReset(
-    payload: Parameters<(typeof this.container.commands)["createPasswordReset"]>[0],
-    context: RequestContext
-  ) {
+  createPasswordReset(payload: Parameters<(typeof this.container.commands)["createPasswordReset"]>[0], context: RequestContext) {
     return this.container.commands.createPasswordReset(payload, context)
   }
 
-  resetPassword(
-    payload: Parameters<(typeof this.container.commands)["resetPassword"]>[0],
-    context: RequestContext
-  ) {
+  resetPassword(payload: Parameters<(typeof this.container.commands)["resetPassword"]>[0], context: RequestContext) {
     return this.container.commands.resetPassword(payload, context)
   }
 
@@ -104,11 +70,7 @@ export class IdentityPlatformService {
     },
     context: RequestContext
   ) {
-    return this.container.commands.updateProfile(
-      this.resolveActorFromUserId(actorUserId, ["owner"]),
-      payload,
-      context
-    )
+    return this.container.commands.updateProfile(this.resolveActorFromUserId(actorUserId, ["owner"]), payload, context)
   }
 
   createWorkspace(
@@ -117,17 +79,11 @@ export class IdentityPlatformService {
     payload: { organizationId: string; name: string; metadata?: Record<string, string> },
     context: RequestContext
   ) {
-    return this.container.commands.createWorkspace(
-      this.resolveActorFromUserId(actorUserId, actorRoles),
-      payload,
-      context
-    )
+    return this.container.commands.createWorkspace(this.resolveActorFromUserId(actorUserId, actorRoles), payload, context)
   }
 
   listWorkspaces(actorUserId: string, actorRoles: Role[]) {
-    return this.container.queries.listWorkspaces(
-      this.resolveActorFromUserId(actorUserId, actorRoles)
-    )
+    return this.container.queries.listWorkspaces(this.resolveActorFromUserId(actorUserId, actorRoles))
   }
 
   createOrganizationInvite(

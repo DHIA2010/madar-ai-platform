@@ -112,10 +112,7 @@ export class AuthenticationApiAdapter {
   constructor(private readonly client: ApiClient) {}
 
   async login(payload: LoginRequestDto): Promise<LoginResponseDto> {
-    const response = await this.client.post<LoginRequestDto, IdentityLoginResponse>(
-      "/v1/auth/login",
-      payload
-    )
+    const response = await this.client.post<LoginRequestDto, IdentityLoginResponse>("/v1/auth/login", payload)
     return {
       user: {
         id: response.user.id,
@@ -150,10 +147,7 @@ export class AuthenticationApiAdapter {
   }
 
   async refreshSession(payload: RefreshSessionRequestDto): Promise<AuthSessionDto> {
-    const response = await this.client.post<
-      RefreshSessionRequestDto,
-      IdentityLoginResponse["session"]
-    >("/v1/auth/refresh", payload)
+    const response = await this.client.post<RefreshSessionRequestDto, IdentityLoginResponse["session"]>("/v1/auth/refresh", payload)
     return mapSession(response)
   }
 

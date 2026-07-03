@@ -102,8 +102,6 @@ describe("IdentityPlatformService", () => {
       }
     }
 
-    await expect(
-      service.login({ email: "locked@madar.test", password: "VeryStrongPassword123!" }, context)
-    ).rejects.toThrowError()
+    await expect(service.login({ email: "locked@madar.test", password: "VeryStrongPassword123!" }, context)).rejects.toThrowError()
   })
 })

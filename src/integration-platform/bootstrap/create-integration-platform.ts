@@ -12,13 +12,7 @@ import { IntegrationPlatformService } from "../service"
 
 class NullOAuthAdapter {
   connectorId = "integration-platform"
-  buildAuthorizationUrl(input: {
-    state: string
-    codeChallenge?: string
-    redirectUri: string
-    scopes: string[]
-    offlineAccess: boolean
-  }) {
+  buildAuthorizationUrl(input: { state: string; codeChallenge?: string; redirectUri: string; scopes: string[]; offlineAccess: boolean }) {
     const url = new URL(input.redirectUri)
     url.searchParams.set("state", input.state)
     url.searchParams.set("scope", input.scopes.join(" "))
@@ -27,22 +21,10 @@ class NullOAuthAdapter {
     return url.toString()
   }
   async exchangeCode(input: { code: string; redirectUri: string; codeVerifier?: string }) {
-    return {
-      accessToken: `access_${input.code}`,
-      refreshToken: `refresh_${input.code}`,
-      expiresInSeconds: 3600,
-      scopes: ["offline_access"],
-      providerAccountId: "provider-account",
-      providerAccountEmail: "provider@example.com",
-    }
+    return { accessToken: `access_${input.code}`, refreshToken: `refresh_${input.code}`, expiresInSeconds: 3600, scopes: ["offline_access"], providerAccountId: "provider-account", providerAccountEmail: "provider@example.com" }
   }
   async refreshAccessToken(input: { refreshToken: string }) {
-    return {
-      accessToken: `refreshed_${input.refreshToken}`,
-      refreshToken: input.refreshToken,
-      expiresInSeconds: 3600,
-      scopes: ["offline_access"],
-    }
+    return { accessToken: `refreshed_${input.refreshToken}`, refreshToken: input.refreshToken, expiresInSeconds: 3600, scopes: ["offline_access"] }
   }
 }
 
@@ -54,11 +36,7 @@ export function createIntegrationPlatform() {
   executionEngines.register(new LocalExecutionEngine(), createLocalExecutionManifest())
   const executionDispatcher = new ExecutionDispatcher(executionEngines)
   const executionBus = new ExecutionBus({ dispatcher: executionDispatcher })
-  const executionRuntime = new ExecutionRuntime({
-    registry: executionEngines,
-    dispatcher: executionDispatcher,
-    bus: executionBus,
-  })
+  const executionRuntime = new ExecutionRuntime({ registry: executionEngines, dispatcher: executionDispatcher, bus: executionBus })
   return {
     id: randomUUID(),
     registry,

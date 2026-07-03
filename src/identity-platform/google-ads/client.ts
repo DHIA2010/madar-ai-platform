@@ -93,24 +93,21 @@ export class GoogleAdsClient {
           )
         )
       } catch (error) {
-        const mapped =
-          error instanceof GoogleAdsIntegrationError
-            ? error
-            : new GoogleAdsIntegrationError(
-                "Google Ads provider failure.",
-                "GOOGLE_ADS_PROVIDER_FAILURE",
-                true,
-                502
-              )
+        const mapped = error instanceof GoogleAdsIntegrationError
+          ? error
+          : new GoogleAdsIntegrationError(
+            "Google Ads provider failure.",
+            "GOOGLE_ADS_PROVIDER_FAILURE",
+            true,
+            502
+          )
 
         if (!mapped.retryable || attempt >= this.config.maxRetries) {
           throw mapped
         }
 
         attempt += 1
-        await new Promise<void>((resolve) =>
-          setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000))
-        )
+        await new Promise<void>((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000)))
       }
     }
 
@@ -143,20 +140,21 @@ export class GoogleAdsClient {
           authorization: `Bearer ${accessToken}`,
           "developer-token": developerToken,
           "content-type": "application/json",
-          ...(this.config.loginCustomerId
-            ? { "login-customer-id": this.config.loginCustomerId }
-            : {}),
+          ...(this.config.loginCustomerId ? { "login-customer-id": this.config.loginCustomerId } : {}),
         }
 
-        const response = await this.fetchFn(requestUrl, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            query: input.query,
-            pageSize: input.pageSize ?? 1000,
-            pageToken: input.nextPageToken,
-          }),
-        })
+        const response = await this.fetchFn(
+          requestUrl,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              query: input.query,
+              pageSize: input.pageSize ?? 1000,
+              pageToken: input.nextPageToken,
+            }),
+          }
+        )
 
         if (!response.ok) {
           const body = await response.text()
@@ -165,24 +163,21 @@ export class GoogleAdsClient {
 
         return (await response.json()) as GoogleAdsApiPage
       } catch (error) {
-        const mapped =
-          error instanceof GoogleAdsIntegrationError
-            ? error
-            : new GoogleAdsIntegrationError(
-                "Google Ads provider failure.",
-                "GOOGLE_ADS_PROVIDER_FAILURE",
-                true,
-                502
-              )
+        const mapped = error instanceof GoogleAdsIntegrationError
+          ? error
+          : new GoogleAdsIntegrationError(
+            "Google Ads provider failure.",
+            "GOOGLE_ADS_PROVIDER_FAILURE",
+            true,
+            502
+          )
 
         if (!mapped.retryable || attempt >= this.config.maxRetries) {
           throw mapped
         }
 
         attempt += 1
-        await new Promise<void>((resolve) =>
-          setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000))
-        )
+        await new Promise<void>((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000)))
       }
     }
 
@@ -199,7 +194,7 @@ export class GoogleAdsClient {
     if (developerToken.length === 0) {
       throw new GoogleAdsIntegrationError(
         "Google Ads developer token is missing.",
-        "GOOGLE_ADS_PROVIDER_FAILURE",
+            "GOOGLE_ADS_PROVIDER_FAILURE",
         false,
         500
       )

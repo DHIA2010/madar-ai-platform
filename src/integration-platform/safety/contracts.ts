@@ -59,27 +59,18 @@ export interface ExecutionEngineContract {
 }
 
 export interface ConnectorContractTarget {
-  createConnection(input: {
-    connectorId: string
-    workspaceId: string
-    connectorDefinitionId: string
-    credential: { type: "oauth"; payload: Record<string, string> }
-  }): Promise<
-    { payload: { connectionId: string; status: string } } | { connectionId: string; status: string }
-  >
+  createConnection(
+    input: {
+      connectorId: string
+      workspaceId: string
+      connectorDefinitionId: string
+      credential: { type: "oauth"; payload: Record<string, string> }
+    }
+  ): Promise<{ payload: { connectionId: string; status: string } } | { connectionId: string; status: string }>
   authorizeConnector(input: {
     connectionId: string
     authorizationCode: string
-  }): Promise<
-    | {
-        payload: {
-          status: string
-          accessToken?: { value: string }
-          refreshToken?: { value: string }
-        }
-      }
-    | { status: string }
-  >
+  }): Promise<{ payload: { status: string; accessToken?: { value: string }; refreshToken?: { value: string } } } | { status: string }>
   validateConnection(input: {
     connectionId: string
   }): Promise<{ payload: { status: string } } | { status: string }>
@@ -144,8 +135,7 @@ export async function assertConnectorContract(
     },
   })
 
-  const connectionId =
-    "payload" in connection ? connection.payload.connectionId : connection.connectionId
+  const connectionId = "payload" in connection ? connection.payload.connectionId : connection.connectionId
   assert.equal(connectionId.length > 0, true)
 
   const authorized = await connectorService.authorizeConnector({
@@ -165,6 +155,6 @@ export async function assertConnectorContract(
   })
 
   const syncMessage =
-    "payload" in synced ? (synced.payload.result?.message ?? "") : (synced.result?.message ?? "")
+    "payload" in synced ? synced.payload.result?.message ?? "" : synced.result?.message ?? ""
   assert.equal(syncMessage.length > 0, true)
 }

@@ -38,9 +38,7 @@ function buildCheck(name: string, status: PlatformDiagnosticCheck["status"], mes
   return { name, status, message }
 }
 
-export function collectPlatformDiagnostics(
-  snapshot: PlatformRegistrySnapshot
-): PlatformDiagnosticReport {
+export function collectPlatformDiagnostics(snapshot: PlatformRegistrySnapshot): PlatformDiagnosticReport {
   const connectorIds = snapshot.connectors.map((connector) => connector.connectorId)
   const engineIds = snapshot.executionEngines.map((engine) => engine.engineId)
   const pluginIds = snapshot.plugins.map((plugin) => plugin.pluginId)
@@ -57,8 +55,7 @@ export function collectPlatformDiagnostics(
   )
 
   checks.push(
-    snapshot.executionEngines.length > 0 &&
-      snapshot.executionEngines.every((engine) => engine.registered)
+    snapshot.executionEngines.length > 0 && snapshot.executionEngines.every((engine) => engine.registered)
       ? buildCheck(
           "execution engine registration",
           "pass",
@@ -74,34 +71,20 @@ export function collectPlatformDiagnostics(
   checks.push(
     snapshot.plugins.length > 0 && uniqueCount(pluginIds) === pluginIds.length
       ? buildCheck("plugin registration", "pass", "Plugins are registered with unique identifiers.")
-      : buildCheck(
-          "plugin registration",
-          "fail",
-          "Plugin registration is incomplete or duplicated."
-        )
+      : buildCheck("plugin registration", "fail", "Plugin registration is incomplete or duplicated.")
   )
 
   checks.push(
     snapshot.capabilities.length > 0 && uniqueCount(capabilityKeys) === capabilityKeys.length
       ? buildCheck("capability registration", "pass", "Capabilities are registered per connector.")
-      : buildCheck(
-          "capability registration",
-          "fail",
-          "Capability registration is incomplete or duplicated."
-        )
+      : buildCheck("capability registration", "fail", "Capability registration is incomplete or duplicated.")
   )
 
-  const manifestValidity = snapshot.plugins.every(
-    (plugin) => validateConnectorManifest(plugin.manifest).success
-  )
+  const manifestValidity = snapshot.plugins.every((plugin) => validateConnectorManifest(plugin.manifest).success)
   checks.push(
     manifestValidity
       ? buildCheck("manifest validity", "pass", "All connector manifests are structurally valid.")
-      : buildCheck(
-          "manifest validity",
-          "fail",
-          "One or more connector manifests failed validation."
-        )
+      : buildCheck("manifest validity", "fail", "One or more connector manifests failed validation.")
   )
 
   return {

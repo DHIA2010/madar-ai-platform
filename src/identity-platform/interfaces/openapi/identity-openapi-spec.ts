@@ -25,10 +25,7 @@ export const identityOpenApiSpec = {
     },
     "/v1/identity/email/change": { post: { summary: "Change email" } },
     "/v1/identity/password/change": { post: { summary: "Change password" } },
-    "/v1/organizations": {
-      get: { summary: "List organizations" },
-      post: { summary: "Create organization" },
-    },
+    "/v1/organizations": { get: { summary: "List organizations" }, post: { summary: "Create organization" } },
     "/v1/organizations/{id}": {
       get: { summary: "Get organization" },
       patch: { summary: "Update organization" },
@@ -41,30 +38,16 @@ export const identityOpenApiSpec = {
       get: { summary: "List invitations" },
       post: { summary: "Invite member" },
     },
-    "/v1/organizations/{id}/members/{memberUserId}/suspend": {
-      post: { summary: "Suspend member" },
-    },
-    "/v1/organizations/{id}/members/{memberUserId}/reactivate": {
-      post: { summary: "Reactivate member" },
-    },
+    "/v1/organizations/{id}/members/{memberUserId}/suspend": { post: { summary: "Suspend member" } },
+    "/v1/organizations/{id}/members/{memberUserId}/reactivate": { post: { summary: "Reactivate member" } },
     "/v1/organizations/{id}/members/{memberUserId}/remove": { post: { summary: "Remove member" } },
-    "/v1/organizations/{id}/members/{memberUserId}/transfer-ownership": {
-      post: { summary: "Transfer ownership" },
-    },
-    "/v1/organizations/{id}/members/{memberUserId}/roles": {
-      post: { summary: "Assign member role" },
-    },
-    "/v1/organizations/{id}/members/{memberUserId}/profile": {
-      post: { summary: "Update member profile" },
-    },
+    "/v1/organizations/{id}/members/{memberUserId}/transfer-ownership": { post: { summary: "Transfer ownership" } },
+    "/v1/organizations/{id}/members/{memberUserId}/roles": { post: { summary: "Assign member role" } },
+    "/v1/organizations/{id}/members/{memberUserId}/profile": { post: { summary: "Update member profile" } },
     "/v1/organizations/invitations/{token}/accept": { post: { summary: "Accept invitation" } },
     "/v1/organizations/invitations/{token}/decline": { post: { summary: "Decline invitation" } },
-    "/v1/organizations/invitations/{invitationId}/cancel": {
-      post: { summary: "Cancel invitation" },
-    },
-    "/v1/organizations/invitations/{invitationId}/resend": {
-      post: { summary: "Resend invitation" },
-    },
+    "/v1/organizations/invitations/{invitationId}/cancel": { post: { summary: "Cancel invitation" } },
+    "/v1/organizations/invitations/{invitationId}/resend": { post: { summary: "Resend invitation" } },
     "/v1/workspaces": {
       get: { summary: "List workspaces" },
       post: { summary: "Create workspace" },
@@ -78,8 +61,7 @@ export const identityOpenApiSpec = {
     "/v1/integrations/{provider}/sync": {
       post: {
         summary: "Run provider sync",
-        description:
-          "Runs a registered integration provider sync for a connection, customer, and date range.",
+        description: "Runs a registered integration provider sync for a connection, customer, and date range.",
         responses: {
           "200": { description: "Sync run completed or reused idempotent run." },
           "400": { description: "Validation error." },
@@ -109,8 +91,7 @@ export const identityOpenApiSpec = {
     "/v1/integrations/{connectionId}": {
       delete: {
         summary: "Delete integration connection",
-        description:
-          "Permanently deletes connection credentials, OAuth metadata, and related sync history for the active workspace.",
+        description: "Permanently deletes connection credentials, OAuth metadata, and related sync history for the active workspace.",
         responses: {
           "204": { description: "Connection deleted." },
           "401": { description: "Authentication required." },

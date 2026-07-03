@@ -1,0 +1,300 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MADAR Identity Platform API",
+    "version": "1.0.0",
+    "description": "Authentication, identity, organization, workspace, and RBAC foundation"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "summary": "Register user and bootstrap default org/workspace",
+        "responses": {
+          "201": {
+            "description": "Registered"
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "summary": "Login",
+        "responses": {
+          "200": {
+            "description": "Authenticated"
+          }
+        }
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "summary": "Rotate refresh token and issue new access token",
+        "responses": {
+          "200": {
+            "description": "Refreshed"
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "summary": "Logout and revoke current session",
+        "responses": {
+          "200": {
+            "description": "Logged out"
+          }
+        }
+      }
+    },
+    "/v1/auth/password/forgot": {
+      "post": {
+        "summary": "Create password reset token",
+        "responses": {
+          "200": {
+            "description": "Accepted"
+          }
+        }
+      }
+    },
+    "/v1/auth/password/reset": {
+      "post": {
+        "summary": "Reset password",
+        "responses": {
+          "200": {
+            "description": "Reset complete"
+          }
+        }
+      }
+    },
+    "/v1/auth/email/verify": {
+      "post": {
+        "summary": "Verify email",
+        "responses": {
+          "200": {
+            "description": "Verified"
+          }
+        }
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "summary": "Restore active session",
+        "responses": {
+          "200": {
+            "description": "Session"
+          }
+        }
+      }
+    },
+    "/v1/auth/sessions/{id}/revoke": {
+      "post": {
+        "summary": "Revoke session by id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked"
+          }
+        }
+      }
+    },
+    "/v1/identity/profile": {
+      "get": {
+        "summary": "Get profile",
+        "responses": {
+          "200": {
+            "description": "Profile"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update profile",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      }
+    },
+    "/v1/identity/email/change": {
+      "post": {
+        "summary": "Request email change",
+        "responses": {
+          "200": {
+            "description": "Requested"
+          }
+        }
+      }
+    },
+    "/v1/identity/password/change": {
+      "post": {
+        "summary": "Change password",
+        "responses": {
+          "200": {
+            "description": "Changed"
+          }
+        }
+      }
+    },
+    "/v1/organizations": {
+      "post": {
+        "summary": "Create organization",
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{id}": {
+      "get": {
+        "summary": "Get organization",
+        "responses": {
+          "200": {
+            "description": "Organization"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update organization",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{id}/members": {
+      "get": {
+        "summary": "List organization members",
+        "responses": {
+          "200": {
+            "description": "Members"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{id}/invitations": {
+      "post": {
+        "summary": "Create organization invitation",
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/v1/organizations/invitations/{token}/accept": {
+      "post": {
+        "summary": "Accept invitation",
+        "responses": {
+          "200": {
+            "description": "Accepted"
+          }
+        }
+      }
+    },
+    "/v1/workspaces": {
+      "post": {
+        "summary": "Create workspace",
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      },
+      "get": {
+        "summary": "List my workspaces",
+        "responses": {
+          "200": {
+            "description": "List"
+          }
+        }
+      }
+    },
+    "/v1/workspaces/{id}": {
+      "patch": {
+        "summary": "Update workspace",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      }
+    },
+    "/v1/workspaces/{id}/members": {
+      "get": {
+        "summary": "List workspace members",
+        "responses": {
+          "200": {
+            "description": "Members"
+          }
+        }
+      }
+    },
+    "/v1/workspaces/switch": {
+      "post": {
+        "summary": "Switch active workspace",
+        "responses": {
+          "200": {
+            "description": "Switched"
+          }
+        }
+      }
+    },
+    "/v1/rbac/permissions": {
+      "get": {
+        "summary": "Get role-permission matrix",
+        "responses": {
+          "200": {
+            "description": "Matrix"
+          }
+        }
+      }
+    },
+    "/v1/rbac/me": {
+      "get": {
+        "summary": "Get resolved role and permissions",
+        "responses": {
+          "200": {
+            "description": "Resolved permissions"
+          }
+        }
+      }
+    },
+    "/v1/audit/logs": {
+      "get": {
+        "summary": "Paginated audit logs",
+        "responses": {
+          "200": {
+            "description": "Logs"
+          }
+        }
+      }
+    }
+  }
+}

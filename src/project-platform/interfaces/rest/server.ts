@@ -1,13 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { z } from "zod"
 
-import {
-  createNotFoundProblem,
-  parsePagination,
-  readJsonBody,
-  sendJson,
-  sendProblem,
-} from "../../../backend-foundation"
+import { createNotFoundProblem, parsePagination, readJsonBody, sendJson, sendProblem } from "../../../backend-foundation"
 import { createProjectPlatform } from "../../bootstrap/create-project-platform"
 import { mapProjectError } from "../../errors"
 import {
@@ -69,223 +63,87 @@ export function createProjectApiServer(platform = createProjectPlatform()) {
 
       if (method === "POST" && url.pathname === "/v1/projects") {
         const body = createProjectSchema.parse(await readJsonBody(request))
-        return send(
-          201,
-          await projects.createProject(
-            {
-              userId: "system",
-              organizationId: body.organizationId,
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            body
-          )
-        )
+        return send(201, await projects.createProject({ userId: "system", organizationId: body.organizationId, workspaceId: null, roles: ["owner"] } as never, body))
       }
 
       const projectList = method === "GET" && url.pathname === "/v1/projects"
       if (projectList) {
         const pagination = parsePagination(url.searchParams)
-        return send(
-          200,
-          await projects.listProjects(
-            {
-              userId: "system",
-              organizationId: url.searchParams.get("organizationId") ?? "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            {
-              organizationId: url.searchParams.get("organizationId") ?? undefined,
-              workspaceId: url.searchParams.get("workspaceId") ?? undefined,
-              status: (url.searchParams.get("status") as ProjectStatus | null) ?? undefined,
-              page: pagination.page,
-              pageSize: pagination.pageSize,
-              sort: (url.searchParams.get("sort") as ProjectSort | null) ?? undefined,
-            }
-          )
-        )
+        return send(200, await projects.listProjects({ userId: "system", organizationId: url.searchParams.get("organizationId") ?? "system", workspaceId: null, roles: ["owner"] } as never, {
+          organizationId: url.searchParams.get("organizationId") ?? undefined,
+          workspaceId: url.searchParams.get("workspaceId") ?? undefined,
+          status: (url.searchParams.get("status") as ProjectStatus | null) ?? undefined,
+          page: pagination.page,
+          pageSize: pagination.pageSize,
+          sort: (url.searchParams.get("sort") as ProjectSort | null) ?? undefined,
+        }))
       }
 
       const projectMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)$/)
       if (projectMatch && method === "GET") {
-        return send(
-          200,
-          await projects.getProject(
-            {
-              userId: "system",
-              organizationId: "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            projectMatch[1]
-          )
-        )
+        return send(200, await projects.getProject({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, projectMatch[1]))
       }
       if (projectMatch && method === "PATCH") {
-        return send(
-          200,
-          await projects.updateProject(
-            {
-              userId: "system",
-              organizationId: "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            projectMatch[1],
-            updateProjectSchema.parse(await readJsonBody(request))
-          )
-        )
+        return send(200, await projects.updateProject({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, projectMatch[1], updateProjectSchema.parse(await readJsonBody(request))))
       }
 
       const archiveMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/(archive|restore|delete)$/)
       if (archiveMatch && method === "POST") {
-        const actor = {
-          userId: "system",
-          organizationId: "system",
-          workspaceId: null,
-          roles: ["owner"],
-        }
-        if (archiveMatch[2] === "archive")
-          return send(200, await projects.archiveProject(actor as never, archiveMatch[1]))
-        if (archiveMatch[2] === "restore")
-          return send(200, await projects.restoreProject(actor as never, archiveMatch[1]))
+        const actor = { userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] }
+        if (archiveMatch[2] === "archive") return send(200, await projects.archiveProject(actor as never, archiveMatch[1]))
+        if (archiveMatch[2] === "restore") return send(200, await projects.restoreProject(actor as never, archiveMatch[1]))
         return send(200, await projects.deleteProject(actor as never, archiveMatch[1]))
       }
 
       const dataSourceList = url.pathname.match(/^\/v1\/projects\/([^/]+)\/data-sources$/)
       if (dataSourceList && method === "POST") {
-        return send(
-          201,
-          await projects.createDataSource(
-            {
-              userId: "system",
-              organizationId: "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            {
-              projectId: dataSourceList[1],
-              ...createDataSourceSchema.parse(await readJsonBody(request)),
-            }
-          )
-        )
+        return send(201, await projects.createDataSource({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, {
+          projectId: dataSourceList[1],
+          ...createDataSourceSchema.parse(await readJsonBody(request)),
+        }))
       }
       if (dataSourceList && method === "GET") {
         const pagination = parsePagination(url.searchParams)
-        return send(
-          200,
-          await projects.listDataSources(
-            {
-              userId: "system",
-              organizationId: "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            {
-              projectId: dataSourceList[1],
-              status: (url.searchParams.get("status") as DataSourceStatus | null) ?? undefined,
-              type: (url.searchParams.get("type") as DataSourceType | null) ?? undefined,
-              page: pagination.page,
-              pageSize: pagination.pageSize,
-            }
-          )
-        )
+        return send(200, await projects.listDataSources({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, {
+          projectId: dataSourceList[1],
+          status: (url.searchParams.get("status") as DataSourceStatus | null) ?? undefined,
+          type: (url.searchParams.get("type") as DataSourceType | null) ?? undefined,
+          page: pagination.page,
+          pageSize: pagination.pageSize,
+        }))
       }
 
       const dataSourceMatch = url.pathname.match(/^\/v1\/data-sources\/([^/]+)$/)
       if (dataSourceMatch && method === "PATCH") {
-        return send(
-          200,
-          await projects.updateDataSource(
-            {
-              userId: "system",
-              organizationId: "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            dataSourceMatch[1],
-            updateDataSourceSchema.parse(await readJsonBody(request))
-          )
-        )
+        return send(200, await projects.updateDataSource({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, dataSourceMatch[1], updateDataSourceSchema.parse(await readJsonBody(request))))
       }
       if (dataSourceMatch && method === "POST") {
         const action = url.searchParams.get("action")
-        const actor = {
-          userId: "system",
-          organizationId: "system",
-          workspaceId: null,
-          roles: ["owner"],
-        }
-        if (action === "enable")
-          return send(200, await projects.enableDataSource(actor as never, dataSourceMatch[1]))
-        if (action === "disable")
-          return send(200, await projects.disableDataSource(actor as never, dataSourceMatch[1]))
-        if (action === "archive")
-          return send(200, await projects.archiveDataSource(actor as never, dataSourceMatch[1]))
-        if (action === "delete")
-          return send(200, await projects.deleteDataSource(actor as never, dataSourceMatch[1]))
+        const actor = { userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] }
+        if (action === "enable") return send(200, await projects.enableDataSource(actor as never, dataSourceMatch[1]))
+        if (action === "disable") return send(200, await projects.disableDataSource(actor as never, dataSourceMatch[1]))
+        if (action === "archive") return send(200, await projects.archiveDataSource(actor as never, dataSourceMatch[1]))
+        if (action === "delete") return send(200, await projects.deleteDataSource(actor as never, dataSourceMatch[1]))
       }
 
       const inviteMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/invitations$/)
       if (inviteMatch && method === "POST") {
-        return send(
-          201,
-          await projects.inviteProjectMember(
-            {
-              userId: "system",
-              organizationId: "system",
-              workspaceId: null,
-              roles: ["owner"],
-            } as never,
-            {
-              projectId: inviteMatch[1],
-              ...projectInvitationSchema.parse(await readJsonBody(request)),
-            }
-          )
-        )
+        return send(201, await projects.inviteProjectMember({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, {
+          projectId: inviteMatch[1],
+          ...projectInvitationSchema.parse(await readJsonBody(request)),
+        }))
       }
       if (inviteMatch && method === "GET") {
         return send(200, { items: [] })
       }
 
-      const memberMatch = url.pathname.match(
-        /^\/v1\/projects\/([^/]+)\/members\/([^/]+)\/(roles|suspend|remove)$/
-      )
+      const memberMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/members\/([^/]+)\/(roles|suspend|remove)$/)
       if (memberMatch && method === "POST") {
         const body = projectMemberActionSchema.parse(await readJsonBody(request))
-        const actor = {
-          userId: "system",
-          organizationId: "system",
-          workspaceId: null,
-          roles: ["owner"],
-        }
-        if (memberMatch[3] === "roles")
-          return send(
-            200,
-            await projects.updateProjectMemberRole(actor as never, {
-              projectId: memberMatch[1],
-              userId: memberMatch[2],
-              role: body.role ?? "viewer",
-            })
-          )
-        if (memberMatch[3] === "suspend")
-          return send(
-            200,
-            await projects.suspendProjectMember(actor as never, {
-              projectId: memberMatch[1],
-              userId: memberMatch[2],
-              reason: body.reason ?? "suspended",
-            })
-          )
-        return send(
-          200,
-          await projects.removeProjectMember(actor as never, {
-            projectId: memberMatch[1],
-            userId: memberMatch[2],
-            reason: body.reason ?? "removed",
-          })
-        )
+        const actor = { userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] }
+        if (memberMatch[3] === "roles") return send(200, await projects.updateProjectMemberRole(actor as never, { projectId: memberMatch[1], userId: memberMatch[2], role: body.role ?? "viewer" }))
+        if (memberMatch[3] === "suspend") return send(200, await projects.suspendProjectMember(actor as never, { projectId: memberMatch[1], userId: memberMatch[2], reason: body.reason ?? "suspended" }))
+        return send(200, await projects.removeProjectMember(actor as never, { projectId: memberMatch[1], userId: memberMatch[2], reason: body.reason ?? "removed" }))
       }
 
       return sendProblem(response, createNotFoundProblem(url.pathname))

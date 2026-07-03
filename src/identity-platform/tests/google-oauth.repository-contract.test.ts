@@ -23,10 +23,7 @@ beforeEach(async () => {
   repository = new GoogleOAuthRepository(database)
 
   await runIdentityMigrations(database, process.cwd())
-  await runSqlFile(
-    database,
-    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
-  )
+  await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
 
   await database.query(
     `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -179,7 +176,13 @@ describe("google oauth repository contract", () => {
         id, provider_key, connection_id, project_id, organization_id, lock_token, locked_until,
         created_by_user_id, updated_by_user_id, created_at, updated_at
       ) values ($1,'google-ads',$2,$3,$4,'lock-token',now() + interval '10 minutes',$5,$5,now(),now())`,
-      ["f1f57ce5-47e1-49f2-b9a5-04bd4a874b45", CONNECTION_ID, PROJECT_ID, ORG_ID, OWNER_ID]
+      [
+        "f1f57ce5-47e1-49f2-b9a5-04bd4a874b45",
+        CONNECTION_ID,
+        PROJECT_ID,
+        ORG_ID,
+        OWNER_ID,
+      ]
     )
 
     await database.query(
@@ -205,42 +208,15 @@ describe("google oauth repository contract", () => {
     })
 
     const counts = await Promise.all([
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_oauth_connections where id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_oauth_states where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_oauth_events where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_ads_customer_accounts where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_ads_sync_runs where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_ads_sync_checkpoints where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_ads_sync_locks where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_ads_sync_cursors where connection_id = $1",
-        [CONNECTION_ID]
-      ),
-      database.query<{ count: string }>(
-        "select count(*)::text as count from google_ads_domain_records where connection_id = $1",
-        [CONNECTION_ID]
-      ),
+      database.query<{ count: string }>("select count(*)::text as count from google_oauth_connections where id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_oauth_states where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_oauth_events where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_ads_customer_accounts where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_ads_sync_runs where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_ads_sync_checkpoints where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_ads_sync_locks where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_ads_sync_cursors where connection_id = $1", [CONNECTION_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_ads_domain_records where connection_id = $1", [CONNECTION_ID]),
     ])
 
     counts.forEach((result) => {

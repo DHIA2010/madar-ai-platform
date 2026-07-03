@@ -118,9 +118,10 @@ export class GoogleOAuthRepository {
   }
 
   async resolveProject(input: ResolveProjectInput): Promise<ResolveProjectResult> {
-    const result = await this.db.query<{ id: string; workspace_id: string | null }>({
-      name: "google-oauth-resolve-project",
-      text: `
+    const result = await this.db.query<{ id: string; workspace_id: string | null }>(
+      {
+        name: "google-oauth-resolve-project",
+        text: `
           SELECT p.id, p.workspace_id
           FROM projects p
           WHERE p.organization_id = $1
@@ -131,8 +132,9 @@ export class GoogleOAuthRepository {
           ORDER BY p.created_at DESC
           LIMIT 1
         `,
-      values: [input.organizationId, input.workspaceId, input.projectId],
-    })
+        values: [input.organizationId, input.workspaceId, input.projectId],
+      }
+    )
 
     const row = result.rows[0]
     if (!row) {
@@ -263,9 +265,7 @@ export class GoogleOAuthRepository {
     return result.rows[0] ? mapConnection(result.rows[0]) : null
   }
 
-  async findConnectionOwnershipById(
-    connectionId: string
-  ): Promise<ConnectionOwnershipRecord | null> {
+  async findConnectionOwnershipById(connectionId: string): Promise<ConnectionOwnershipRecord | null> {
     const result = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-connection-find-ownership",
       text: `
@@ -315,13 +315,7 @@ export class GoogleOAuthRepository {
         INSERT INTO google_oauth_events (id, connection_id, event_type, metadata, created_at)
         VALUES ($1, $2, $3, $4, $5)
       `,
-      values: [
-        randomUUID(),
-        connectionId,
-        eventType,
-        JSON.stringify(metadata),
-        new Date().toISOString(),
-      ],
+      values: [randomUUID(), connectionId, eventType, JSON.stringify(metadata), new Date().toISOString()],
     })
   }
 
@@ -399,23 +393,23 @@ export class GoogleOAuthRepository {
       throw new Error("GOOGLE_ADS_CUSTOMER_DISCOVERY_EMPTY")
     }
 
-    const existingSelected = await this.db.query<{ customer_id: string }>({
-      name: "google-ads-customer-account-selected",
-      text: `
+    const existingSelected = await this.db.query<{ customer_id: string }>(
+      {
+        name: "google-ads-customer-account-selected",
+        text: `
           SELECT customer_id
           FROM google_ads_customer_accounts
           WHERE connection_id = $1
             AND is_selected = true
           LIMIT 1
         `,
-      values: [input.connectionId],
-    })
+        values: [input.connectionId],
+      }
+    )
 
-    const candidateSelected =
-      input.selectedCustomerId &&
-      normalizedAccounts.some((account) => account.customerId === input.selectedCustomerId)
-        ? input.selectedCustomerId
-        : (existingSelected.rows[0]?.customer_id ?? normalizedAccounts[0].customerId)
+    const candidateSelected = input.selectedCustomerId && normalizedAccounts.some((account) => account.customerId === input.selectedCustomerId)
+      ? input.selectedCustomerId
+      : existingSelected.rows[0]?.customer_id ?? normalizedAccounts[0].customerId
 
     await this.db.query({
       name: "google-ads-customer-account-deactivate-missing",
@@ -592,4 +586,5 @@ export class GoogleOAuthRepository {
       values: [connectionId],
     })
   }
+
 }

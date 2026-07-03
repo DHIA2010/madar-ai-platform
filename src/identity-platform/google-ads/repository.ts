@@ -126,11 +126,7 @@ export class GoogleAdsRepository {
     )
   }
 
-  async markSyncRunCompleted(
-    syncRunId: string,
-    actorUserId: string,
-    metrics: Record<string, number>
-  ) {
+  async markSyncRunCompleted(syncRunId: string, actorUserId: string, metrics: Record<string, number>) {
     await this.db.query(
       `
       update google_ads_sync_runs
@@ -142,12 +138,7 @@ export class GoogleAdsRepository {
     )
   }
 
-  async markSyncRunFailed(
-    syncRunId: string,
-    actorUserId: string,
-    errorCode: string,
-    errorMessage: string
-  ) {
+  async markSyncRunFailed(syncRunId: string, actorUserId: string, errorCode: string, errorMessage: string) {
     await this.db.query(
       `
       update google_ads_sync_runs
@@ -223,18 +214,11 @@ export class GoogleAdsRepository {
       projectId: String(row.project_id),
       organizationId: String(row.organization_id),
       lockToken: String(row.lock_token),
-      lockedUntil:
-        toJsonDate((row.locked_until as string | null) ?? null) ?? new Date().toISOString(),
+      lockedUntil: toJsonDate((row.locked_until as string | null) ?? null) ?? new Date().toISOString(),
     }
   }
 
-  async extendSyncLock(input: {
-    providerKey: string
-    connectionId: string
-    projectId: string
-    lockToken: string
-    leaseSeconds?: number
-  }) {
+  async extendSyncLock(input: { providerKey: string; connectionId: string; projectId: string; lockToken: string; leaseSeconds?: number }) {
     const leaseSeconds = input.leaseSeconds ?? 3600
     const lockedUntil = new Date(Date.now() + leaseSeconds * 1000).toISOString()
     const result = await this.db.query<Record<string, unknown>>(
@@ -254,19 +238,12 @@ export class GoogleAdsRepository {
     return result.rows[0]
       ? {
           id: String(result.rows[0].id),
-          lockedUntil:
-            toJsonDate((result.rows[0].locked_until as string | null) ?? null) ??
-            new Date().toISOString(),
+          lockedUntil: toJsonDate((result.rows[0].locked_until as string | null) ?? null) ?? new Date().toISOString(),
         }
       : null
   }
 
-  async releaseSyncLock(input: {
-    providerKey: string
-    connectionId: string
-    projectId: string
-    lockToken: string
-  }) {
+  async releaseSyncLock(input: { providerKey: string; connectionId: string; projectId: string; lockToken: string }) {
     await this.db.query(
       `
       delete from google_ads_sync_locks
@@ -276,11 +253,7 @@ export class GoogleAdsRepository {
     )
   }
 
-  async loadSyncCheckpoint(input: {
-    providerKey: string
-    connectionId: string
-    customerId: string
-  }) {
+  async loadSyncCheckpoint(input: { providerKey: string; connectionId: string; customerId: string }) {
     const result = await this.db.query<Record<string, unknown>>(
       `
       select *
@@ -308,7 +281,7 @@ export class GoogleAdsRepository {
       lastRecordDate:
         row.last_record_date instanceof Date
           ? row.last_record_date.toISOString().slice(0, 10)
-          : ((row.last_record_date as string | null) ?? null),
+          : (row.last_record_date as string | null) ?? null,
       syncRunId: (row.sync_run_id as string | null) ?? null,
       status: String(row.status) as "in_progress" | "completed",
       updatedAt: toJsonDate((row.updated_at as string | null) ?? null) ?? new Date().toISOString(),
@@ -362,103 +335,43 @@ export class GoogleAdsRepository {
     }> = []
 
     for (const item of input.bundle.customers) {
-      entries.push({
-        entityType: "customer_account",
-        entityId: item.id,
-        recordDate: "1970-01-01",
-        payload: item,
-      })
+      entries.push({ entityType: "customer_account", entityId: item.id, recordDate: "1970-01-01", payload: item })
     }
     for (const item of input.bundle.campaigns) {
-      entries.push({
-        entityType: "campaign",
-        entityId: item.id,
-        recordDate: "1970-01-01",
-        payload: item,
-      })
+      entries.push({ entityType: "campaign", entityId: item.id, recordDate: "1970-01-01", payload: item })
     }
     for (const item of input.bundle.campaignMetrics) {
-      entries.push({
-        entityType: "campaign_metric",
-        entityId: item.campaignId,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "campaign_metric", entityId: item.campaignId, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.adGroups) {
-      entries.push({
-        entityType: "ad_group",
-        entityId: item.id,
-        recordDate: "1970-01-01",
-        payload: item,
-      })
+      entries.push({ entityType: "ad_group", entityId: item.id, recordDate: "1970-01-01", payload: item })
     }
     for (const item of input.bundle.adGroupMetrics) {
-      entries.push({
-        entityType: "ad_group_metric",
-        entityId: item.adGroupId,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "ad_group_metric", entityId: item.adGroupId, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.ads) {
       entries.push({ entityType: "ad", entityId: item.id, recordDate: "1970-01-01", payload: item })
     }
     for (const item of input.bundle.adMetrics) {
-      entries.push({
-        entityType: "ad_metric",
-        entityId: item.adId,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "ad_metric", entityId: item.adId, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.keywords) {
-      entries.push({
-        entityType: "keyword",
-        entityId: item.id,
-        recordDate: "1970-01-01",
-        payload: item,
-      })
+      entries.push({ entityType: "keyword", entityId: item.id, recordDate: "1970-01-01", payload: item })
     }
     for (const item of input.bundle.keywordMetrics) {
-      entries.push({
-        entityType: "keyword_metric",
-        entityId: item.keywordId,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "keyword_metric", entityId: item.keywordId, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.searchTerms) {
-      entries.push({
-        entityType: "search_term",
-        entityId: item.id,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "search_term", entityId: item.id, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.geoMetrics) {
-      entries.push({
-        entityType: "geo_metric",
-        entityId: item.id,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "geo_metric", entityId: item.id, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.deviceMetrics) {
-      entries.push({
-        entityType: "device_metric",
-        entityId: item.id,
-        recordDate: item.date,
-        payload: item,
-      })
+      entries.push({ entityType: "device_metric", entityId: item.id, recordDate: item.date, payload: item })
     }
     for (const item of input.bundle.conversionActions) {
-      entries.push({
-        entityType: "conversion_action",
-        entityId: item.id,
-        recordDate: "1970-01-01",
-        payload: item,
-      })
+      entries.push({ entityType: "conversion_action", entityId: item.id, recordDate: "1970-01-01", payload: item })
     }
 
     for (const entry of entries) {
@@ -487,12 +400,11 @@ export class GoogleAdsRepository {
 
     const lastSyncedAt = new Date().toISOString()
     for (const entityType of new Set(entries.map((entry) => entry.entityType))) {
-      const maxRecordDate =
-        entries
-          .filter((entry) => entry.entityType === entityType)
-          .map((entry) => entry.recordDate)
-          .sort()
-          .at(-1) ?? null
+      const maxRecordDate = entries
+        .filter((entry) => entry.entityType === entityType)
+        .map((entry) => entry.recordDate)
+        .sort()
+        .at(-1) ?? null
 
       await this.db.query(
         `
@@ -502,14 +414,7 @@ export class GoogleAdsRepository {
         on conflict (connection_id, customer_id, entity_type)
         do update set last_record_date = excluded.last_record_date, last_synced_at = excluded.last_synced_at, updated_at = now()
         `,
-        [
-          randomUUID(),
-          input.connectionId,
-          input.customerId,
-          entityType,
-          maxRecordDate,
-          lastSyncedAt,
-        ]
+        [randomUUID(), input.connectionId, input.customerId, entityType, maxRecordDate, lastSyncedAt]
       )
     }
 

@@ -20,12 +20,7 @@ export type DataSourceType =
 export type DataSourceStatus = "draft" | "enabled" | "disabled" | "archived" | "deleted"
 export type DataSourceHealth = "healthy" | "degraded" | "unhealthy" | "unknown"
 export type DataSourceSyncStatus = "idle" | "syncing" | "failed" | "disabled" | "pending"
-export type DataSourceConnectionStatus =
-  | "connected"
-  | "disconnected"
-  | "pending"
-  | "error"
-  | "not_applicable"
+export type DataSourceConnectionStatus = "connected" | "disconnected" | "pending" | "error" | "not_applicable"
 
 export type ProjectMemberStatus = "invited" | "active" | "suspended" | "removed"
 export type ProjectInvitationStatus = "pending" | "accepted" | "declined" | "canceled" | "expired"

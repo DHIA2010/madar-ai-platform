@@ -25,10 +25,7 @@ function createContainer() {
   })
 }
 
-async function registerAndLogin(
-  container: ReturnType<typeof createIdentityPlatform>,
-  email: string
-) {
+async function registerAndLogin(container: ReturnType<typeof createIdentityPlatform>, email: string) {
   const registration = await container.commands.register(
     {
       email,
@@ -202,10 +199,6 @@ describe("organization platform", () => {
     expect(removed.status).toBe("removed")
 
     const members = await container.queries.listOrganizationMembers(member.actor, organization.id)
-    expect(
-      members.members.some(
-        (entry) => entry.userId === owner.actor.userId && entry.status === "removed"
-      )
-    ).toBe(true)
+    expect(members.members.some((entry) => entry.userId === owner.actor.userId && entry.status === "removed")).toBe(true)
   })
 })

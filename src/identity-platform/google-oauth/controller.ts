@@ -31,8 +31,7 @@ function toSafeCallbackReason(error: unknown) {
       return mappedReason
     }
 
-    const message =
-      error.message && error.message.trim().length > 0 ? error.message : "error_without_message"
+    const message = error.message && error.message.trim().length > 0 ? error.message : "error_without_message"
     return `oauth_callback_failed_${toReasonSlug(message)}`
   }
 
@@ -41,8 +40,7 @@ function toSafeCallbackReason(error: unknown) {
   }
 
   if (error && typeof error === "object") {
-    const constructorName =
-      (error as { constructor?: { name?: string } }).constructor?.name ?? "object"
+    const constructorName = (error as { constructor?: { name?: string } }).constructor?.name ?? "object"
     return `oauth_callback_failed_non_error_${toReasonSlug(constructorName)}`
   }
 

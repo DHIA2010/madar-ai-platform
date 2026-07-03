@@ -41,9 +41,7 @@ function buildManifest(connectorId: string): ConnectorManifest {
     ],
     supportedEvents: ["entity.synced"],
     supportedCommands: ["entity.fetch"],
-    healthChecks: [
-      { checkId: "health", displayName: "Health", intervalSeconds: 30, timeoutMs: 500 },
-    ],
+    healthChecks: [{ checkId: "health", displayName: "Health", intervalSeconds: 30, timeoutMs: 500 }],
     rateLimits: [{ limitId: "default", scope: "connection", maxRequests: 10, intervalSeconds: 1 }],
     dependencies: [],
     minimumPlatformVersion: "1.0.0",

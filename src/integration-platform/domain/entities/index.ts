@@ -141,31 +141,11 @@ export interface ConnectorConfigurationState extends TimestampedState {
   status: "draft" | "validated" | "active" | "archived"
 }
 
-export function createConnector(
-  input: Omit<ConnectorState, "createdAt" | "updatedAt" | "deletedAt">
-): ConnectorState {
-  return {
-    ...input,
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createConnector(input: Omit<ConnectorState, "createdAt" | "updatedAt" | "deletedAt">): ConnectorState {
+  return { ...input, deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
-export function createConnection(
-  input: Omit<
-    ConnectionState,
-    | "status"
-    | "credentialId"
-    | "oauthSessionId"
-    | "providerAccountId"
-    | "providerEmail"
-    | "lastSyncedAt"
-    | "createdAt"
-    | "updatedAt"
-    | "deletedAt"
-  >
-): ConnectionState {
+export function createConnection(input: Omit<ConnectionState, "status" | "credentialId" | "oauthSessionId" | "providerAccountId" | "providerEmail" | "lastSyncedAt" | "createdAt" | "updatedAt" | "deletedAt">): ConnectionState {
   return {
     ...input,
     status: "draft",
@@ -180,113 +160,36 @@ export function createConnection(
   }
 }
 
-export function createCredential(
-  input: Omit<
-    CredentialState,
-    "status" | "revokedAt" | "rotatedAt" | "createdAt" | "updatedAt" | "deletedAt"
-  >
-): CredentialState {
-  return {
-    ...input,
-    status: "active",
-    revokedAt: null,
-    rotatedAt: null,
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createCredential(input: Omit<CredentialState, "status" | "revokedAt" | "rotatedAt" | "createdAt" | "updatedAt" | "deletedAt">): CredentialState {
+  return { ...input, status: "active", revokedAt: null, rotatedAt: null, deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
-export function createOAuthSession(
-  input: Omit<OAuthSessionState, "status" | "createdAt" | "updatedAt" | "deletedAt">
-): OAuthSessionState {
+export function createOAuthSession(input: Omit<OAuthSessionState, "status" | "createdAt" | "updatedAt" | "deletedAt">): OAuthSessionState {
   if (!input.state.trim()) throw INTEGRATION_ERRORS.invalidState("OAuth state is required.")
-  return {
-    ...input,
-    status: "pending",
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+  return { ...input, status: "pending", deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
-export function completeOAuthSession(
-  session: OAuthSessionState,
-  input: { providerAccountId?: string | null; providerAccountEmail?: string | null; now?: string }
-) {
-  return {
-    ...session,
-    status: "completed" as const,
-    providerAccountId: input.providerAccountId ?? null,
-    providerAccountEmail: input.providerAccountEmail ?? null,
-    updatedAt: input.now ?? new Date().toISOString(),
-  }
+export function completeOAuthSession(session: OAuthSessionState, input: { providerAccountId?: string | null; providerAccountEmail?: string | null; now?: string }) {
+  return { ...session, status: "completed" as const, providerAccountId: input.providerAccountId ?? null, providerAccountEmail: input.providerAccountEmail ?? null, updatedAt: input.now ?? new Date().toISOString() }
 }
 
-export function failOAuthSession(
-  session: OAuthSessionState,
-  message: string,
-  now = new Date().toISOString()
-) {
-  return {
-    ...session,
-    status: "failed" as const,
-    updatedAt: now,
-    deletedAt: session.deletedAt,
-    expiresAt: session.expiresAt,
-    state: session.state,
-  }
+export function failOAuthSession(session: OAuthSessionState, message: string, now = new Date().toISOString()) {
+  return { ...session, status: "failed" as const, updatedAt: now, deletedAt: session.deletedAt, expiresAt: session.expiresAt, state: session.state }
 }
 
-export function createOAuthToken(
-  input: Omit<OAuthTokenState, "status" | "createdAt" | "updatedAt" | "deletedAt">
-): OAuthTokenState {
-  return {
-    ...input,
-    status: "active",
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createOAuthToken(input: Omit<OAuthTokenState, "status" | "createdAt" | "updatedAt" | "deletedAt">): OAuthTokenState {
+  return { ...input, status: "active", deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
 export function revokeOAuthToken(token: OAuthTokenState, now = new Date().toISOString()) {
   return { ...token, status: "revoked" as const, updatedAt: now }
 }
 
-export function createSyncJob(
-  input: Omit<
-    SyncJobState,
-    | "progress"
-    | "retryCount"
-    | "status"
-    | "createdAt"
-    | "updatedAt"
-    | "deletedAt"
-    | "lastError"
-    | "startedAt"
-    | "completedAt"
-  >
-): SyncJobState {
-  return {
-    ...input,
-    progress: 0,
-    retryCount: 0,
-    status: "queued",
-    lastError: null,
-    startedAt: null,
-    completedAt: null,
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createSyncJob(input: Omit<SyncJobState, "progress" | "retryCount" | "status" | "createdAt" | "updatedAt" | "deletedAt" | "lastError" | "startedAt" | "completedAt">): SyncJobState {
+  return { ...input, progress: 0, retryCount: 0, status: "queued", lastError: null, startedAt: null, completedAt: null, deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
-export function updateSyncJobProgress(
-  job: SyncJobState,
-  progress: number,
-  now = new Date().toISOString()
-) {
+export function updateSyncJobProgress(job: SyncJobState, progress: number, now = new Date().toISOString()) {
   return { ...job, progress: Math.max(0, Math.min(100, progress)), updatedAt: now }
 }
 
@@ -295,71 +198,25 @@ export function completeSyncJob(job: SyncJobState, now = new Date().toISOString(
 }
 
 export function failSyncJob(job: SyncJobState, error: string, now = new Date().toISOString()) {
-  return {
-    ...job,
-    status: "failed" as const,
-    lastError: error,
-    retryCount: job.retryCount + 1,
-    updatedAt: now,
-  }
+  return { ...job, status: "failed" as const, lastError: error, retryCount: job.retryCount + 1, updatedAt: now }
 }
 
 export function cancelSyncJob(job: SyncJobState, reason: string, now = new Date().toISOString()) {
-  return {
-    ...job,
-    status: "canceled" as const,
-    lastError: reason,
-    completedAt: now,
-    updatedAt: now,
-  }
+  return { ...job, status: "canceled" as const, lastError: reason, completedAt: now, updatedAt: now }
 }
 
-export function createWebhookRegistration(
-  input: Omit<
-    WebhookRegistrationState,
-    "status" | "lastVerifiedAt" | "createdAt" | "updatedAt" | "deletedAt"
-  >
-): WebhookRegistrationState {
-  return {
-    ...input,
-    status: "active",
-    lastVerifiedAt: null,
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createWebhookRegistration(input: Omit<WebhookRegistrationState, "status" | "lastVerifiedAt" | "createdAt" | "updatedAt" | "deletedAt">): WebhookRegistrationState {
+  return { ...input, status: "active", lastVerifiedAt: null, deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
-export function revokeWebhookRegistration(
-  registration: WebhookRegistrationState,
-  now = new Date().toISOString()
-) {
+export function revokeWebhookRegistration(registration: WebhookRegistrationState, now = new Date().toISOString()) {
   return { ...registration, status: "revoked" as const, deletedAt: now, updatedAt: now }
 }
 
-export function createConnectorHealth(
-  input: Omit<ConnectorHealthState, "createdAt" | "updatedAt" | "deletedAt">
-): ConnectorHealthState {
-  return {
-    ...input,
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createConnectorHealth(input: Omit<ConnectorHealthState, "createdAt" | "updatedAt" | "deletedAt">): ConnectorHealthState {
+  return { ...input, deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }
 
-export function createConnectorConfiguration(
-  input: Omit<
-    ConnectorConfigurationState,
-    "createdAt" | "updatedAt" | "deletedAt" | "version" | "status"
-  >
-): ConnectorConfigurationState {
-  return {
-    ...input,
-    version: 1,
-    status: "draft",
-    deletedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+export function createConnectorConfiguration(input: Omit<ConnectorConfigurationState, "createdAt" | "updatedAt" | "deletedAt" | "version" | "status">): ConnectorConfigurationState {
+  return { ...input, version: 1, status: "draft", deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 }

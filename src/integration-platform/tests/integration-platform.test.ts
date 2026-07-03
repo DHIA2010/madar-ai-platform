@@ -28,16 +28,9 @@ describe("integration platform", () => {
       capabilities: [{ key: "oauth.start", name: "OAuth Start", enabled: true }],
     })
 
-    const connection = await service.createConnection(actor() as never, {
-      connectorId: connector.connectorId,
-      workspaceId: actor().workspaceId,
-    })
+    const connection = await service.createConnection(actor() as never, { connectorId: connector.connectorId, workspaceId: actor().workspaceId })
     const oauth = await service.startOAuth(actor() as never, connection.id)
-    const completed = await service.completeOAuth(actor() as never, {
-      state: oauth.session.state,
-      code: "code-123",
-      redirectUri: "https://madar.local/oauth/callback",
-    })
+    const completed = await service.completeOAuth(actor() as never, { state: oauth.session.state, code: "code-123", redirectUri: "https://madar.local/oauth/callback" })
 
     expect(completed.connection.status).toBe("connected")
   })
@@ -54,33 +47,17 @@ describe("integration platform", () => {
           connectorId: "test",
           buildAuthorizationUrl: ({ state, redirectUri }) => `${redirectUri}?state=${state}`,
           async exchangeCode() {
-            return {
-              accessToken: "access",
-              refreshToken: "refresh",
-              expiresInSeconds: 3600,
-              scopes: ["offline_access"],
-            }
+            return { accessToken: "access", refreshToken: "refresh", expiresInSeconds: 3600, scopes: ["offline_access"] }
           },
           async refreshAccessToken() {
-            return {
-              accessToken: "access-2",
-              refreshToken: "refresh",
-              expiresInSeconds: 3600,
-              scopes: ["offline_access"],
-            }
+            return { accessToken: "access-2", refreshToken: "refresh", expiresInSeconds: 3600, scopes: ["offline_access"] }
           },
         },
       },
     })
 
-    const connector = await service.registerConnector(actor() as never, {
-      connectorId: "test",
-      displayName: "Test Connector",
-    })
-    const capabilities = await service.getConnectorCapabilities(
-      actor() as never,
-      connector.connectorId
-    )
+    const connector = await service.registerConnector(actor() as never, { connectorId: "test", displayName: "Test Connector" })
+    const capabilities = await service.getConnectorCapabilities(actor() as never, connector.connectorId)
     expect(capabilities).toHaveLength(0)
   })
 })

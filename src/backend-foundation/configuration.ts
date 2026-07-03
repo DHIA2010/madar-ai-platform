@@ -15,17 +15,13 @@ function parseFeatureFlags(raw: string | undefined) {
 
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(parsed).filter(([, value]) => typeof value === "boolean")
-    ) as Record<string, boolean>
+    return Object.fromEntries(Object.entries(parsed).filter(([, value]) => typeof value === "boolean")) as Record<string, boolean>
   } catch {
     return {}
   }
 }
 
-export function loadBackendFoundationConfig(
-  source: Record<string, string | undefined> = process.env
-): BackendFoundationConfig {
+export function loadBackendFoundationConfig(source: Record<string, string | undefined> = process.env): BackendFoundationConfig {
   const parsed = schema.parse(source)
   return {
     environment: parsed.BACKEND_ENVIRONMENT as DeploymentEnvironment,

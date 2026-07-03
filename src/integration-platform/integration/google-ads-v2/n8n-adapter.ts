@@ -38,9 +38,7 @@ export class InMemoryN8nWorkflowAdapter implements N8nWorkflowAdapter {
         connectorId: input.connectorId,
         workflowType: input.workflowType,
         accountIds: input.payload.accountIds ?? [],
-        importedCount: Array.isArray(input.payload.accountIds)
-          ? input.payload.accountIds.length
-          : 0,
+        importedCount: Array.isArray(input.payload.accountIds) ? input.payload.accountIds.length : 0,
       },
       startedAt,
       finishedAt,

@@ -15,10 +15,7 @@ export interface FoundationMetrics {
 }
 
 export interface FoundationTracer {
-  startSpan(
-    name: string,
-    attributes?: Record<string, string | number | boolean>
-  ): {
+  startSpan(name: string, attributes?: Record<string, string | number | boolean>): {
     end(status?: "ok" | "error"): void
   }
 }

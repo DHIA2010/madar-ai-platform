@@ -32,16 +32,7 @@ class InMemoryProjectRepository implements ProjectRepository {
   async findById(id: string) {
     return clone(this.store.projects.find((project) => project.id === id) ?? null)
   }
-  async list(
-    input: {
-      organizationId?: string
-      workspaceId?: string | null
-      status?: ProjectState["status"]
-      page?: number
-      pageSize?: number
-      sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc"
-    } = {}
-  ) {
+  async list(input: { organizationId?: string; workspaceId?: string | null; status?: ProjectState["status"]; page?: number; pageSize?: number; sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc" } = {}) {
     const items = this.store.projects.filter((project) => {
       if (input.organizationId && project.organizationId !== input.organizationId) return false
       if (input.workspaceId !== undefined && project.workspaceId !== input.workspaceId) return false
@@ -50,14 +41,10 @@ class InMemoryProjectRepository implements ProjectRepository {
     })
     items.sort((a, b) => {
       switch (input.sort) {
-        case "name:asc":
-          return a.name.localeCompare(b.name)
-        case "name:desc":
-          return b.name.localeCompare(a.name)
-        case "createdAt:asc":
-          return a.createdAt.localeCompare(b.createdAt)
-        default:
-          return b.createdAt.localeCompare(a.createdAt)
+        case "name:asc": return a.name.localeCompare(b.name)
+        case "name:desc": return b.name.localeCompare(a.name)
+        case "createdAt:asc": return a.createdAt.localeCompare(b.createdAt)
+        default: return b.createdAt.localeCompare(a.createdAt)
       }
     })
     return paginate(items, input.page, input.pageSize).map(clone)
@@ -72,24 +59,10 @@ class InMemoryProjectRepository implements ProjectRepository {
 
 class InMemoryProjectMemberRepository implements ProjectMemberRepository {
   constructor(private readonly store: InMemoryProjectDataStore) {}
-  async findById(id: string) {
-    return clone(this.store.projectMembers.find((member) => member.id === id) ?? null)
-  }
-  async findByProjectAndUser(projectId: string, userId: string) {
-    return clone(
-      this.store.projectMembers.find(
-        (member) => member.projectId === projectId && member.userId === userId
-      ) ?? null
-    )
-  }
-  async listByProjectId(projectId: string) {
-    return this.store.projectMembers.filter((member) => member.projectId === projectId).map(clone)
-  }
-  async listByOrganizationId(organizationId: string) {
-    return this.store.projectMembers
-      .filter((member) => member.organizationId === organizationId)
-      .map(clone)
-  }
+  async findById(id: string) { return clone(this.store.projectMembers.find((member) => member.id === id) ?? null) }
+  async findByProjectAndUser(projectId: string, userId: string) { return clone(this.store.projectMembers.find((member) => member.projectId === projectId && member.userId === userId) ?? null) }
+  async listByProjectId(projectId: string) { return this.store.projectMembers.filter((member) => member.projectId === projectId).map(clone) }
+  async listByOrganizationId(organizationId: string) { return this.store.projectMembers.filter((member) => member.organizationId === organizationId).map(clone) }
   async save(member: ProjectMemberState) {
     const index = this.store.projectMembers.findIndex((item) => item.id === member.id)
     const value = clone(member)
@@ -100,31 +73,13 @@ class InMemoryProjectMemberRepository implements ProjectMemberRepository {
 
 class InMemoryProjectInvitationRepository implements ProjectInvitationRepository {
   constructor(private readonly store: InMemoryProjectDataStore) {}
-  async findById(id: string) {
-    return clone(this.store.projectInvitations.find((item) => item.id === id) ?? null)
-  }
-  async findByToken(token: string) {
-    return clone(this.store.projectInvitations.find((item) => item.token === token) ?? null)
-  }
-  async listByProjectId(
-    projectId: string,
-    input: { page?: number; pageSize?: number; status?: ProjectInvitationState["status"] } = {}
-  ) {
-    const items = this.store.projectInvitations.filter(
-      (item) => item.projectId === projectId && (!input.status || item.status === input.status)
-    )
+  async findById(id: string) { return clone(this.store.projectInvitations.find((item) => item.id === id) ?? null) }
+  async findByToken(token: string) { return clone(this.store.projectInvitations.find((item) => item.token === token) ?? null) }
+  async listByProjectId(projectId: string, input: { page?: number; pageSize?: number; status?: ProjectInvitationState["status"] } = {}) {
+    const items = this.store.projectInvitations.filter((item) => item.projectId === projectId && (!input.status || item.status === input.status))
     return paginate(items, input.page, input.pageSize).map(clone)
   }
-  async findPendingByIdempotencyKey(projectId: string, idempotencyKey: string) {
-    return clone(
-      this.store.projectInvitations.find(
-        (item) =>
-          item.projectId === projectId &&
-          item.idempotencyKey === idempotencyKey &&
-          item.status === "pending"
-      ) ?? null
-    )
-  }
+  async findPendingByIdempotencyKey(projectId: string, idempotencyKey: string) { return clone(this.store.projectInvitations.find((item) => item.projectId === projectId && item.idempotencyKey === idempotencyKey && item.status === "pending") ?? null) }
   async save(invitation: ProjectInvitationState) {
     const index = this.store.projectInvitations.findIndex((item) => item.id === invitation.id)
     const value = clone(invitation)
@@ -135,18 +90,8 @@ class InMemoryProjectInvitationRepository implements ProjectInvitationRepository
 
 class InMemoryDataSourceRepository implements DataSourceRepository {
   constructor(private readonly store: InMemoryProjectDataStore) {}
-  async findById(id: string) {
-    return clone(this.store.dataSources.find((item) => item.id === id) ?? null)
-  }
-  async listByProjectId(
-    projectId: string,
-    input: {
-      page?: number
-      pageSize?: number
-      status?: DataSourceState["status"]
-      type?: DataSourceState["type"]
-    } = {}
-  ) {
+  async findById(id: string) { return clone(this.store.dataSources.find((item) => item.id === id) ?? null) }
+  async listByProjectId(projectId: string, input: { page?: number; pageSize?: number; status?: DataSourceState["status"]; type?: DataSourceState["type"] } = {}) {
     const items = this.store.dataSources.filter((item) => {
       if (item.projectId !== projectId) return false
       if (input.status && item.status !== input.status) return false
@@ -163,14 +108,12 @@ class InMemoryDataSourceRepository implements DataSourceRepository {
   }
 }
 
-export function createInMemoryProjectRepositories(
-  store: InMemoryProjectDataStore = {
-    projects: [],
-    projectMembers: [],
-    projectInvitations: [],
-    dataSources: [],
-  }
-): ProjectRepositories {
+export function createInMemoryProjectRepositories(store: InMemoryProjectDataStore = {
+  projects: [],
+  projectMembers: [],
+  projectInvitations: [],
+  dataSources: [],
+}): ProjectRepositories {
   return {
     projects: new InMemoryProjectRepository(store),
     projectMembers: new InMemoryProjectMemberRepository(store),

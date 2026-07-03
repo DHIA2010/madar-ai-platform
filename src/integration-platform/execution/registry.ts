@@ -1,8 +1,4 @@
-import type {
-  ExecutionEngine,
-  ExecutionEngineManifest,
-  ExecutionEngineHealthSnapshot,
-} from "./contracts"
+import type { ExecutionEngine, ExecutionEngineManifest, ExecutionEngineHealthSnapshot } from "./contracts"
 
 export interface ExecutionEngineRegistryEntry {
   engineId: string

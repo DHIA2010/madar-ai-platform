@@ -1,25 +1,6 @@
 import type { TokenService } from "../../application/ports"
-import type {
-  IdentityRepositories,
-  AuditLogRepository,
-  EmailVerificationRepository,
-  InvitationRepository,
-  MembershipRepository,
-  OrganizationRepository,
-  PasswordResetRepository,
-  UserRepository,
-  WorkspaceRepository,
-} from "../../domain/repositories"
-import type {
-  AuditLogState,
-  EmailVerificationState,
-  InvitationState,
-  MembershipState,
-  OrganizationState,
-  PasswordResetState,
-  UserState,
-  WorkspaceState,
-} from "../../domain/entities"
+import type { IdentityRepositories, AuditLogRepository, EmailVerificationRepository, InvitationRepository, MembershipRepository, OrganizationRepository, PasswordResetRepository, UserRepository, WorkspaceRepository } from "../../domain/repositories"
+import type { AuditLogState, EmailVerificationState, InvitationState, MembershipState, OrganizationState, PasswordResetState, UserState, WorkspaceState } from "../../domain/entities"
 import { PostgresDatabase } from "./database"
 
 function mapUser(row: Record<string, unknown>): UserState {
@@ -189,20 +170,12 @@ class PostgresUserRepository implements UserRepository {
   constructor(private readonly db: PostgresDatabase) {}
 
   async findById(id: string) {
-    const result = await this.db.query({
-      name: "identity-users-find-by-id",
-      text: "SELECT * FROM users WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
+    const result = await this.db.query({ name: "identity-users-find-by-id", text: "SELECT * FROM users WHERE id = $1 LIMIT 1", values: [id] })
     return result.rows[0] ? mapUser(result.rows[0]) : null
   }
 
   async findByEmail(email: string) {
-    const result = await this.db.query({
-      name: "identity-users-find-by-email",
-      text: "SELECT * FROM users WHERE email = $1 LIMIT 1",
-      values: [email],
-    })
+    const result = await this.db.query({ name: "identity-users-find-by-email", text: "SELECT * FROM users WHERE email = $1 LIMIT 1", values: [email] })
     return result.rows[0] ? mapUser(result.rows[0]) : null
   }
 
@@ -260,22 +233,16 @@ class PostgresUserRepository implements UserRepository {
 class PostgresOrganizationRepository implements OrganizationRepository {
   constructor(private readonly db: PostgresDatabase) {}
   async findById(id: string) {
-    const result = await this.db.query({
-      name: "identity-orgs-find-by-id",
-      text: "SELECT * FROM organizations WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
+    const result = await this.db.query({ name: "identity-orgs-find-by-id", text: "SELECT * FROM organizations WHERE id = $1 LIMIT 1", values: [id] })
     return result.rows[0] ? mapOrganization(result.rows[0]) : null
   }
-  async list(
-    input: {
-      ownerUserId?: string
-      status?: OrganizationState["status"]
-      page?: number
-      pageSize?: number
-      sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc"
-    } = {}
-  ) {
+  async list(input: {
+    ownerUserId?: string
+    status?: OrganizationState["status"]
+    page?: number
+    pageSize?: number
+    sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc"
+  } = {}) {
     const page = input.page ?? 1
     const pageSize = input.pageSize ?? 20
     const where: string[] = []
@@ -292,14 +259,10 @@ class PostgresOrganizationRepository implements OrganizationRepository {
 
     const orderBy = (() => {
       switch (input.sort) {
-        case "name:asc":
-          return "name ASC"
-        case "name:desc":
-          return "name DESC"
-        case "createdAt:asc":
-          return "created_at ASC"
-        default:
-          return "created_at DESC"
+        case "name:asc": return "name ASC"
+        case "name:desc": return "name DESC"
+        case "createdAt:asc": return "created_at ASC"
+        default: return "created_at DESC"
       }
     })()
 
@@ -364,11 +327,7 @@ class PostgresOrganizationRepository implements OrganizationRepository {
 class PostgresWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly db: PostgresDatabase) {}
   async findById(id: string) {
-    const result = await this.db.query({
-      name: "identity-workspaces-find-by-id",
-      text: "SELECT * FROM workspaces WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
+    const result = await this.db.query({ name: "identity-workspaces-find-by-id", text: "SELECT * FROM workspaces WHERE id = $1 LIMIT 1", values: [id] })
     return result.rows[0] ? mapWorkspace(result.rows[0]) : null
   }
   async save(workspace: WorkspaceState) {
@@ -386,17 +345,7 @@ class PostgresWorkspaceRepository implements WorkspaceRepository {
           updated_at = EXCLUDED.updated_at,
           deleted_at = EXCLUDED.deleted_at
       `,
-      values: [
-        workspace.id,
-        workspace.organizationId,
-        workspace.name,
-        workspace.status,
-        JSON.stringify(workspace.metadata),
-        JSON.stringify(workspace.settings),
-        workspace.createdAt,
-        workspace.updatedAt,
-        workspace.deletedAt,
-      ],
+      values: [workspace.id, workspace.organizationId, workspace.name, workspace.status, JSON.stringify(workspace.metadata), JSON.stringify(workspace.settings), workspace.createdAt, workspace.updatedAt, workspace.deletedAt],
     })
   }
 }
@@ -404,11 +353,7 @@ class PostgresWorkspaceRepository implements WorkspaceRepository {
 class PostgresMembershipRepository implements MembershipRepository {
   constructor(private readonly db: PostgresDatabase) {}
   async findById(id: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-find-by-id",
-      text: "SELECT * FROM memberships WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
+    const result = await this.db.query({ name: "identity-memberships-find-by-id", text: "SELECT * FROM memberships WHERE id = $1 LIMIT 1", values: [id] })
     return result.rows[0] ? mapMembership(result.rows[0]) : null
   }
   async save(membership: MembershipState) {
@@ -461,59 +406,31 @@ class PostgresMembershipRepository implements MembershipRepository {
     })
   }
   async findByUserAndWorkspace(userId: string, workspaceId: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-find-user-workspace",
-      text: "SELECT * FROM memberships WHERE user_id = $1 AND workspace_id = $2 AND deleted_at IS NULL LIMIT 1",
-      values: [userId, workspaceId],
-    })
+    const result = await this.db.query({ name: "identity-memberships-find-user-workspace", text: "SELECT * FROM memberships WHERE user_id = $1 AND workspace_id = $2 AND deleted_at IS NULL LIMIT 1", values: [userId, workspaceId] })
     return result.rows[0] ? mapMembership(result.rows[0]) : null
   }
   async findByUserAndOrganization(userId: string, organizationId: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-find-user-org",
-      text: "SELECT * FROM memberships WHERE user_id = $1 AND organization_id = $2 AND deleted_at IS NULL LIMIT 1",
-      values: [userId, organizationId],
-    })
+    const result = await this.db.query({ name: "identity-memberships-find-user-org", text: "SELECT * FROM memberships WHERE user_id = $1 AND organization_id = $2 AND deleted_at IS NULL LIMIT 1", values: [userId, organizationId] })
     return result.rows[0] ? mapMembership(result.rows[0]) : null
   }
   async findFirstByUserId(userId: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-find-first-user",
-      text: "SELECT * FROM memberships WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1",
-      values: [userId],
-    })
+    const result = await this.db.query({ name: "identity-memberships-find-first-user", text: "SELECT * FROM memberships WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1", values: [userId] })
     return result.rows[0] ? mapMembership(result.rows[0]) : null
   }
   async listByUserId(userId: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-list-user",
-      text: "SELECT * FROM memberships WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC",
-      values: [userId],
-    })
+    const result = await this.db.query({ name: "identity-memberships-list-user", text: "SELECT * FROM memberships WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC", values: [userId] })
     return result.rows.map(mapMembership)
   }
   async listByWorkspaceId(workspaceId: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-list-workspace",
-      text: "SELECT * FROM memberships WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC",
-      values: [workspaceId],
-    })
+    const result = await this.db.query({ name: "identity-memberships-list-workspace", text: "SELECT * FROM memberships WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC", values: [workspaceId] })
     return result.rows.map(mapMembership)
   }
   async listByOrganizationId(organizationId: string) {
-    const result = await this.db.query({
-      name: "identity-memberships-list-org",
-      text: "SELECT * FROM memberships WHERE organization_id = $1 ORDER BY created_at ASC",
-      values: [organizationId],
-    })
+    const result = await this.db.query({ name: "identity-memberships-list-org", text: "SELECT * FROM memberships WHERE organization_id = $1 ORDER BY created_at ASC", values: [organizationId] })
     return result.rows.map(mapMembership)
   }
   async listRolesByUserInOrganization(userId: string, organizationId: string) {
-    const result = await this.db.query<{ role_code: string }>({
-      name: "identity-memberships-list-roles-user-org",
-      text: "SELECT role_code FROM memberships WHERE user_id = $1 AND organization_id = $2 AND deleted_at IS NULL",
-      values: [userId, organizationId],
-    })
+    const result = await this.db.query<{ role_code: string }>({ name: "identity-memberships-list-roles-user-org", text: "SELECT role_code FROM memberships WHERE user_id = $1 AND organization_id = $2 AND deleted_at IS NULL", values: [userId, organizationId] })
     return result.rows.map((row) => row.role_code)
   }
 }
@@ -521,11 +438,7 @@ class PostgresMembershipRepository implements MembershipRepository {
 class PostgresEmailVerificationRepository implements EmailVerificationRepository {
   constructor(private readonly db: PostgresDatabase) {}
   async findByTokenHash(tokenHash: string) {
-    const result = await this.db.query({
-      name: "identity-email-verifications-find",
-      text: "SELECT * FROM email_verifications WHERE token_hash = $1 AND deleted_at IS NULL LIMIT 1",
-      values: [tokenHash],
-    })
+    const result = await this.db.query({ name: "identity-email-verifications-find", text: "SELECT * FROM email_verifications WHERE token_hash = $1 AND deleted_at IS NULL LIMIT 1", values: [tokenHash] })
     return result.rows[0] ? mapEmailVerification(result.rows[0]) : null
   }
   async save(entry: EmailVerificationState) {
@@ -540,15 +453,7 @@ class PostgresEmailVerificationRepository implements EmailVerificationRepository
           used_at = EXCLUDED.used_at,
           deleted_at = EXCLUDED.deleted_at
       `,
-      values: [
-        entry.id,
-        entry.userId,
-        entry.tokenHash,
-        entry.expiresAt,
-        entry.createdAt,
-        entry.consumedAt,
-        null,
-      ],
+      values: [entry.id, entry.userId, entry.tokenHash, entry.expiresAt, entry.createdAt, entry.consumedAt, null],
     })
   }
 }
@@ -556,11 +461,7 @@ class PostgresEmailVerificationRepository implements EmailVerificationRepository
 class PostgresPasswordResetRepository implements PasswordResetRepository {
   constructor(private readonly db: PostgresDatabase) {}
   async findByTokenHash(tokenHash: string) {
-    const result = await this.db.query({
-      name: "identity-password-resets-find",
-      text: "SELECT * FROM password_reset_tokens WHERE token_hash = $1 AND deleted_at IS NULL LIMIT 1",
-      values: [tokenHash],
-    })
+    const result = await this.db.query({ name: "identity-password-resets-find", text: "SELECT * FROM password_reset_tokens WHERE token_hash = $1 AND deleted_at IS NULL LIMIT 1", values: [tokenHash] })
     return result.rows[0] ? mapPasswordReset(result.rows[0]) : null
   }
   async save(entry: PasswordResetState) {
@@ -575,38 +476,19 @@ class PostgresPasswordResetRepository implements PasswordResetRepository {
           used_at = EXCLUDED.used_at,
           deleted_at = EXCLUDED.deleted_at
       `,
-      values: [
-        entry.id,
-        entry.userId,
-        entry.tokenHash,
-        entry.expiresAt,
-        entry.createdAt,
-        entry.consumedAt,
-        null,
-      ],
+      values: [entry.id, entry.userId, entry.tokenHash, entry.expiresAt, entry.createdAt, entry.consumedAt, null],
     })
   }
 }
 
 class PostgresInvitationRepository implements InvitationRepository {
-  constructor(
-    private readonly db: PostgresDatabase,
-    private readonly tokenService: TokenService
-  ) {}
+  constructor(private readonly db: PostgresDatabase, private readonly tokenService: TokenService) {}
   async findById(id: string) {
-    const result = await this.db.query({
-      name: "identity-invitations-find-by-id",
-      text: "SELECT * FROM organization_invitations WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
-      values: [id],
-    })
+    const result = await this.db.query({ name: "identity-invitations-find-by-id", text: "SELECT * FROM organization_invitations WHERE id = $1 AND deleted_at IS NULL LIMIT 1", values: [id] })
     return result.rows[0] ? mapInvitation(result.rows[0], "") : null
   }
   async findByToken(token: string) {
-    const result = await this.db.query({
-      name: "identity-invitations-find",
-      text: "SELECT * FROM organization_invitations WHERE token_hash = $1 AND deleted_at IS NULL LIMIT 1",
-      values: [this.tokenService.hashOpaqueToken(token)],
-    })
+    const result = await this.db.query({ name: "identity-invitations-find", text: "SELECT * FROM organization_invitations WHERE token_hash = $1 AND deleted_at IS NULL LIMIT 1", values: [this.tokenService.hashOpaqueToken(token)] })
     return result.rows[0] ? mapInvitation(result.rows[0], token) : null
   }
   async listByOrganizationId(
@@ -710,21 +592,7 @@ class PostgresAuditLogRepository implements AuditLogRepository {
         INSERT INTO audit_logs (id, actor_user_id, organization_id, workspace_id, action, entity_type, entity_id, metadata, created_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       `,
-      values: [
-        entry.id,
-        entry.actorUserId,
-        entry.organizationId,
-        entry.workspaceId,
-        entry.action,
-        entry.targetType,
-        entry.targetId,
-        JSON.stringify({
-          ...entry.details,
-          ipAddress: entry.ipAddress,
-          userAgent: entry.userAgent,
-        }),
-        entry.createdAt,
-      ],
+      values: [entry.id, entry.actorUserId, entry.organizationId, entry.workspaceId, entry.action, entry.targetType, entry.targetId, JSON.stringify({ ...entry.details, ipAddress: entry.ipAddress, userAgent: entry.userAgent }), entry.createdAt],
     })
   }
   async listRecent(page: number, pageSize: number) {
@@ -734,11 +602,7 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       if (value instanceof Date) return value.toISOString()
       return String(value)
     }
-    const result = await this.db.query({
-      name: "identity-audit-list-recent",
-      text: "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-      values: [pageSize, offset],
-    })
+    const result = await this.db.query({ name: "identity-audit-list-recent", text: "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2", values: [pageSize, offset] })
     return result.rows.map((row) => ({
       id: String(row.id),
       actorUserId: (row.actor_user_id as string | null) ?? null,
@@ -748,29 +612,18 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       targetType: String(row.entity_type),
       targetId: (row.entity_id as string | null) ?? null,
       details: (row.metadata as Record<string, unknown>) ?? {},
-      ipAddress: String(
-        ((row.metadata as Record<string, unknown>)?.ipAddress as string | undefined) ?? "unknown"
-      ),
-      userAgent: String(
-        ((row.metadata as Record<string, unknown>)?.userAgent as string | undefined) ?? "unknown"
-      ),
+      ipAddress: String(((row.metadata as Record<string, unknown>)?.ipAddress as string | undefined) ?? "unknown"),
+      userAgent: String(((row.metadata as Record<string, unknown>)?.userAgent as string | undefined) ?? "unknown"),
       createdAt: toIsoString(row.created_at) ?? "",
     }))
   }
   async count() {
-    const result = await this.db.query<{ count: string }>({
-      name: "identity-audit-count",
-      text: "SELECT COUNT(*)::text AS count FROM audit_logs",
-    })
+    const result = await this.db.query<{ count: string }>({ name: "identity-audit-count", text: "SELECT COUNT(*)::text AS count FROM audit_logs" })
     return Number(result.rows[0]?.count ?? 0)
   }
 }
 
-export function createPostgresRepositories(input: {
-  db: PostgresDatabase
-  tokenService: TokenService
-  sessions: IdentityRepositories["sessions"]
-}): IdentityRepositories {
+export function createPostgresRepositories(input: { db: PostgresDatabase; tokenService: TokenService; sessions: IdentityRepositories["sessions"] }): IdentityRepositories {
   return {
     users: new PostgresUserRepository(input.db),
     organizations: new PostgresOrganizationRepository(input.db),

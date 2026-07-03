@@ -1,11 +1,5 @@
 export type ConnectorStatus = "active" | "disabled" | "archived" | "deleted"
-export type ConnectionStatus =
-  | "draft"
-  | "oauth_pending"
-  | "connected"
-  | "disconnected"
-  | "error"
-  | "deleted"
+export type ConnectionStatus = "draft" | "oauth_pending" | "connected" | "disconnected" | "error" | "deleted"
 export type CredentialStatus = "active" | "rotating" | "revoked" | "deleted"
 export type OAuthSessionStatus = "pending" | "completed" | "failed" | "expired"
 export type OAuthTokenStatus = "active" | "expired" | "revoked"

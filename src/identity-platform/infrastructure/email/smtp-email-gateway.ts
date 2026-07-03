@@ -34,12 +34,7 @@ export class SmtpEmailGateway implements EmailGateway {
     })
   }
 
-  async sendInvitationEmail(input: {
-    email: string
-    token: string
-    organizationId: string
-    workspaceId?: string
-  }) {
+  async sendInvitationEmail(input: { email: string; token: string; organizationId: string; workspaceId?: string }) {
     const workspaceInfo = input.workspaceId ? `\nWorkspace: ${input.workspaceId}` : ""
     await this.transport.sendMail({
       from: this.config.emailFrom,

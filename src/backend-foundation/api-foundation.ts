@@ -2,12 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { ProblemDetails } from "./types"
 
-export function sendJson(
-  response: ServerResponse,
-  status: number,
-  body: unknown,
-  headers: Record<string, string> = {}
-) {
+export function sendJson(response: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
   response.writeHead(status, {
     "content-type": "application/json",
     ...headers,
@@ -15,11 +10,7 @@ export function sendJson(
   response.end(JSON.stringify(body))
 }
 
-export function sendProblem(
-  response: ServerResponse,
-  problem: ProblemDetails,
-  headers: Record<string, string> = {}
-) {
+export function sendProblem(response: ServerResponse, problem: ProblemDetails, headers: Record<string, string> = {}) {
   return sendJson(response, problem.status, problem, {
     "content-type": "application/problem+json",
     ...headers,
@@ -44,15 +35,9 @@ export function parsePositiveInt(value: string | null, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-export function parsePagination(
-  query: URLSearchParams,
-  defaults = { page: 1, pageSize: 20, maxPageSize: 100 }
-) {
+export function parsePagination(query: URLSearchParams, defaults = { page: 1, pageSize: 20, maxPageSize: 100 }) {
   const page = parsePositiveInt(query.get("page"), defaults.page)
-  const pageSize = Math.min(
-    parsePositiveInt(query.get("pageSize"), defaults.pageSize),
-    defaults.maxPageSize
-  )
+  const pageSize = Math.min(parsePositiveInt(query.get("pageSize"), defaults.pageSize), defaults.maxPageSize)
   return { page, pageSize }
 }
 

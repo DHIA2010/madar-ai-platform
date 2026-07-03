@@ -6,21 +6,9 @@ import type { SecretCipher } from "../../application/ports"
 import { INTEGRATION_ERRORS } from "../../application/errors/IntegrationPlatformError"
 
 export class WebhookEngine {
-  constructor(
-    private readonly registrations: WebhookRegistrationRepository,
-    private readonly cipher: SecretCipher,
-    private readonly now: () => string = () => new Date().toISOString()
-  ) {}
+  constructor(private readonly registrations: WebhookRegistrationRepository, private readonly cipher: SecretCipher, private readonly now: () => string = () => new Date().toISOString()) {}
 
-  async register(input: {
-    connectorId: string
-    connectionId: string
-    endpointUrl: string
-    secret: string
-    signatureHeader: string
-    replayWindowSeconds?: number
-    metadata?: Record<string, unknown>
-  }) {
+  async register(input: { connectorId: string; connectionId: string; endpointUrl: string; secret: string; signatureHeader: string; replayWindowSeconds?: number; metadata?: Record<string, unknown> }) {
     const registration = createWebhookRegistration({
       id: randomUUID(),
       connectorId: input.connectorId,

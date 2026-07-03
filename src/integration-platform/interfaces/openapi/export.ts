@@ -6,9 +6,7 @@ const outputPath = new URL("../../openapi/openapi.json", import.meta.url)
 
 async function main() {
   await writeFile(outputPath, JSON.stringify(integrationOpenApiSpec, null, 2))
-  process.stdout.write(
-    "Integration OpenAPI written to src/integration-platform/openapi/openapi.json\n"
-  )
+  process.stdout.write("Integration OpenAPI written to src/integration-platform/openapi/openapi.json\n")
 }
 
 main().catch((error) => {

@@ -57,9 +57,7 @@ export class HmacTokenService implements TokenService {
     const encodedHeader = base64UrlEncode(JSON.stringify(header))
     const encodedPayload = base64UrlEncode(JSON.stringify(payload))
     const signingInput = `${encodedHeader}.${encodedPayload}`
-    const signature = base64UrlEncode(
-      createHmac("sha256", this.secret).update(signingInput).digest()
-    )
+    const signature = base64UrlEncode(createHmac("sha256", this.secret).update(signingInput).digest())
     return `${signingInput}.${signature}`
   }
 
@@ -78,9 +76,7 @@ export class HmacTokenService implements TokenService {
     if (!timingSafeEqual(expectedSignature, actualSignature)) {
       return null
     }
-    const payload = JSON.parse(
-      base64UrlDecode(encodedPayload).toString("utf8")
-    ) as AccessTokenPayload
+    const payload = JSON.parse(base64UrlDecode(encodedPayload).toString("utf8")) as AccessTokenPayload
     if (payload.exp <= Math.floor(Date.now() / 1000)) {
       return null
     }

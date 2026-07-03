@@ -17,32 +17,8 @@ export interface SecretCipher {
 
 export interface OAuthAdapter {
   connectorId: string
-  buildAuthorizationUrl(input: {
-    state: string
-    codeChallenge?: string
-    redirectUri: string
-    scopes: string[]
-    offlineAccess: boolean
-  }): string
-  exchangeCode(input: {
-    code: string
-    redirectUri: string
-    codeVerifier?: string
-  }): Promise<{
-    accessToken: string
-    refreshToken?: string
-    expiresInSeconds: number
-    scopes: string[]
-    providerAccountId?: string
-    providerAccountEmail?: string
-  }>
-  refreshAccessToken(input: {
-    refreshToken: string
-  }): Promise<{
-    accessToken: string
-    refreshToken?: string
-    expiresInSeconds: number
-    scopes: string[]
-  }>
+  buildAuthorizationUrl(input: { state: string; codeChallenge?: string; redirectUri: string; scopes: string[]; offlineAccess: boolean }): string
+  exchangeCode(input: { code: string; redirectUri: string; codeVerifier?: string }): Promise<{ accessToken: string; refreshToken?: string; expiresInSeconds: number; scopes: string[]; providerAccountId?: string; providerAccountEmail?: string }>
+  refreshAccessToken(input: { refreshToken: string }): Promise<{ accessToken: string; refreshToken?: string; expiresInSeconds: number; scopes: string[] }>
   revokeToken?(input: { refreshToken?: string; accessToken?: string }): Promise<void>
 }

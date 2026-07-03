@@ -132,10 +132,7 @@ export class GoogleAdsAuthProvider {
       )
     }
 
-    const refreshToken = decryptSecret(
-      connection.encrypted_refresh_token,
-      this.config.encryptionKey
-    )
+    const refreshToken = decryptSecret(connection.encrypted_refresh_token, this.config.encryptionKey)
     const refreshed = await this.refreshAccessToken(refreshToken)
 
     const encryptedAccessToken = encryptSecret(refreshed.accessToken, this.config.encryptionKey)

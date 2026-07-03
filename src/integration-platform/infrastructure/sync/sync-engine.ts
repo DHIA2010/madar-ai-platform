@@ -1,34 +1,20 @@
 import { randomUUID } from "node:crypto"
 
-import {
-  cancelSyncJob,
-  completeSyncJob,
-  createSyncJob,
-  failSyncJob,
-  updateSyncJobProgress,
-} from "../../domain/entities"
+import { cancelSyncJob, completeSyncJob, createSyncJob, failSyncJob, updateSyncJobProgress } from "../../domain/entities"
 import type { SyncJobRepository } from "../../domain/repositories"
 import { INTEGRATION_ERRORS } from "../../application/errors/IntegrationPlatformError"
 
 export class SyncEngine {
-  constructor(
-    private readonly jobs: SyncJobRepository,
-    private readonly now: () => string = () => new Date().toISOString()
-  ) {}
+  constructor(private readonly jobs: SyncJobRepository, private readonly now: () => string = () => new Date().toISOString()) {}
 
-  async start(input: {
-    connectionId: string
-    connectorId: string
-    mode: "full" | "incremental"
-    metadata?: Record<string, unknown>
-  }) {
-    const job = createSyncJob({
+  async start(input: { connectionId: string; connectorId: string; mode: "full" | "incremental"; metadata?: Record<string, unknown> }) {
+    const job = createSyncJob({ 
       id: randomUUID(),
-      connectionId: input.connectionId,
-      connectorId: input.connectorId,
-      mode: input.mode,
-      metadata: input.metadata ?? {},
-      maxRetries: 3,
+      connectionId: input.connectionId, 
+      connectorId: input.connectorId, 
+      mode: input.mode, 
+      metadata: input.metadata ?? {}, 
+      maxRetries: 3, 
       scheduledAt: this.now(),
       nextAttemptAt: null,
     })

@@ -1,16 +1,6 @@
-import type {
-  ExecutionEvent,
-  ExecutionLifecycleState,
-  ExecutionRuntimeRequest,
-  ExecutionRuntimeResult,
-  ExecutionState,
-} from "./runtime.contracts"
+import type { ExecutionEvent, ExecutionLifecycleState, ExecutionRuntimeRequest, ExecutionRuntimeResult, ExecutionState } from "./runtime.contracts"
 
-export type ExecutionEnvelopeKind =
-  | "ExecutionRequest"
-  | "ExecutionResult"
-  | "ExecutionEvent"
-  | "ExecutionState"
+export type ExecutionEnvelopeKind = "ExecutionRequest" | "ExecutionResult" | "ExecutionEvent" | "ExecutionState"
 
 export interface ExecutionEnvelopeMetadata {
   correlationId: string

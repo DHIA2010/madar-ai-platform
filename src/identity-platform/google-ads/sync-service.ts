@@ -88,22 +88,30 @@ function addDays(isoDate: string, days: number) {
 function mergeCounts(previous: Record<string, number>, next: Partial<Record<string, number>>) {
   return {
     ...previous,
-    ...Object.fromEntries(
-      Object.entries(next).map(([key, value]) => [key, value ?? previous[key] ?? 0])
-    ),
+    ...Object.fromEntries(Object.entries(next).map(([key, value]) => [key, value ?? previous[key] ?? 0])),
   }
 }
 
 function assertAuthorized(actor: AuthenticatedActor) {
   if (!actor.roles.includes("owner") && !actor.roles.includes("admin")) {
-    throw new GoogleAdsIntegrationError("Forbidden", "GOOGLE_ADS_FORBIDDEN", false, 403)
+    throw new GoogleAdsIntegrationError(
+      "Forbidden",
+      "GOOGLE_ADS_FORBIDDEN",
+      false,
+      403
+    )
   }
 }
 
 function safeDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
-    throw new GoogleAdsIntegrationError("Invalid date range.", "GOOGLE_ADS_SYNC_FAILED", false, 400)
+    throw new GoogleAdsIntegrationError(
+      "Invalid date range.",
+      "GOOGLE_ADS_SYNC_FAILED",
+      false,
+      400
+    )
   }
 
   return date.toISOString().slice(0, 10)
@@ -142,17 +150,13 @@ export class GoogleAdsSyncService {
       encryptionKey: config.encryptionKey,
     })
 
-    const client = new GoogleAdsClient(
-      authProvider,
-      {
-        apiBaseUrl: config.apiBaseUrl,
-        developerToken: config.developerToken,
-        loginCustomerId: config.loginCustomerId,
-        maxRetries: config.maxRetries ?? 2,
-        minRequestIntervalMs: config.minRequestIntervalMs ?? 75,
-      },
-      fetchFn
-    )
+    const client = new GoogleAdsClient(authProvider, {
+      apiBaseUrl: config.apiBaseUrl,
+      developerToken: config.developerToken,
+      loginCustomerId: config.loginCustomerId,
+      maxRetries: config.maxRetries ?? 2,
+      minRequestIntervalMs: config.minRequestIntervalMs ?? 75,
+    }, fetchFn)
 
     this.oauthRepository = new GoogleOAuthRepository(db)
     this.repository = new GoogleAdsRepository(db)
@@ -188,11 +192,7 @@ export class GoogleAdsSyncService {
     }
 
     const customerId = input.customerId
-    const selectedCustomer = await this.resolveAccessibleCustomerAccount(
-      connection.id,
-      customerId,
-      actor.userId
-    )
+    const selectedCustomer = await this.resolveAccessibleCustomerAccount(connection.id, customerId, actor.userId)
     if (!selectedCustomer) {
       throw new GoogleAdsIntegrationError(
         "Google Ads customer is not accessible for this connection.",
@@ -250,20 +250,13 @@ export class GoogleAdsSyncService {
       connectionId: connection.id,
       customerId,
     })
-    const checkpointState = this.normalizeCheckpoint(
-      checkpoint?.checkpointState,
-      input.mode ?? "incremental",
-      startDate,
-      endDate
-    )
-    const resumeFromStageIndex =
-      checkpoint?.status === "in_progress"
-        ? Math.max(STAGE_ORDER.indexOf(checkpointState.stage) + 1, 0)
-        : 0
-    const effectiveStartDate =
-      checkpoint?.status === "completed" && checkpoint.lastRecordDate
-        ? addDays(checkpoint.lastRecordDate, 1)
-        : startDate
+    const checkpointState = this.normalizeCheckpoint(checkpoint?.checkpointState, input.mode ?? "incremental", startDate, endDate)
+    const resumeFromStageIndex = checkpoint?.status === "in_progress"
+      ? Math.max(STAGE_ORDER.indexOf(checkpointState.stage) + 1, 0)
+      : 0
+    const effectiveStartDate = checkpoint?.status === "completed" && checkpoint.lastRecordDate
+      ? addDays(checkpoint.lastRecordDate, 1)
+      : startDate
 
     await this.repository.markSyncRunRunning(syncRun.id, actor.userId)
 
@@ -271,11 +264,7 @@ export class GoogleAdsSyncService {
       let persistedCount = 0
       let counts = checkpointState.counts
 
-      const persistStage = async (
-        stage: Exclude<SyncStage, "completed">,
-        stageBundle: GoogleAdsNormalizedBundle,
-        nextCounts: Partial<Record<string, number>>
-      ) => {
+      const persistStage = async (stage: Exclude<SyncStage, "completed">, stageBundle: GoogleAdsNormalizedBundle, nextCounts: Partial<Record<string, number>>) => {
         await this.repository.withTransaction(async () => {
           persistedCount += await this.repository.upsertBundle({
             syncRunId: syncRun.id,
@@ -314,135 +303,20 @@ export class GoogleAdsSyncService {
         })
       }
 
-      const stages: Array<{
-        key: Exclude<SyncStage, "completed">
-        run: () => Promise<unknown[]>
-        bundleKey: keyof GoogleAdsNormalizedBundle
-        countKey: string
-      }> = [
-        {
-          key: "customers",
-          run: () =>
-            this.customerService.listCustomerAccounts({ connectionId: connection.id, customerId }),
-          bundleKey: "customers",
-          countKey: "customers",
-        },
-        {
-          key: "campaigns",
-          run: () =>
-            this.campaignService.listCampaigns({ connectionId: connection.id, customerId }),
-          bundleKey: "campaigns",
-          countKey: "campaigns",
-        },
-        {
-          key: "campaignMetrics",
-          run: () =>
-            this.campaignService.listCampaignMetrics({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "campaignMetrics",
-          countKey: "campaignMetrics",
-        },
-        {
-          key: "adGroups",
-          run: () => this.adGroupService.listAdGroups({ connectionId: connection.id, customerId }),
-          bundleKey: "adGroups",
-          countKey: "adGroups",
-        },
-        {
-          key: "adGroupMetrics",
-          run: () =>
-            this.adGroupService.listAdGroupMetrics({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "adGroupMetrics",
-          countKey: "adGroupMetrics",
-        },
-        {
-          key: "ads",
-          run: () => this.adService.listAds({ connectionId: connection.id, customerId }),
-          bundleKey: "ads",
-          countKey: "ads",
-        },
-        {
-          key: "adMetrics",
-          run: () =>
-            this.adService.listAdMetrics({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "adMetrics",
-          countKey: "adMetrics",
-        },
-        {
-          key: "keywords",
-          run: () => this.keywordService.listKeywords({ connectionId: connection.id, customerId }),
-          bundleKey: "keywords",
-          countKey: "keywords",
-        },
-        {
-          key: "keywordMetrics",
-          run: () =>
-            this.keywordService.listKeywordMetrics({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "keywordMetrics",
-          countKey: "keywordMetrics",
-        },
-        {
-          key: "searchTerms",
-          run: () =>
-            this.insightsService.listSearchTerms({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "searchTerms",
-          countKey: "searchTerms",
-        },
-        {
-          key: "geoMetrics",
-          run: () =>
-            this.insightsService.listGeoMetrics({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "geoMetrics",
-          countKey: "geoMetrics",
-        },
-        {
-          key: "deviceMetrics",
-          run: () =>
-            this.insightsService.listDeviceMetrics({
-              connectionId: connection.id,
-              customerId,
-              startDate: effectiveStartDate,
-              endDate,
-            }),
-          bundleKey: "deviceMetrics",
-          countKey: "deviceMetrics",
-        },
-        {
-          key: "conversionActions",
-          run: () =>
-            this.insightsService.listConversionActions({ connectionId: connection.id, customerId }),
-          bundleKey: "conversionActions",
-          countKey: "conversionActions",
-        },
+      const stages: Array<{ key: Exclude<SyncStage, "completed">; run: () => Promise<unknown[]>; bundleKey: keyof GoogleAdsNormalizedBundle; countKey: string }> = [
+        { key: "customers", run: () => this.customerService.listCustomerAccounts({ connectionId: connection.id, customerId }), bundleKey: "customers", countKey: "customers" },
+        { key: "campaigns", run: () => this.campaignService.listCampaigns({ connectionId: connection.id, customerId }), bundleKey: "campaigns", countKey: "campaigns" },
+        { key: "campaignMetrics", run: () => this.campaignService.listCampaignMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "campaignMetrics", countKey: "campaignMetrics" },
+        { key: "adGroups", run: () => this.adGroupService.listAdGroups({ connectionId: connection.id, customerId }), bundleKey: "adGroups", countKey: "adGroups" },
+        { key: "adGroupMetrics", run: () => this.adGroupService.listAdGroupMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "adGroupMetrics", countKey: "adGroupMetrics" },
+        { key: "ads", run: () => this.adService.listAds({ connectionId: connection.id, customerId }), bundleKey: "ads", countKey: "ads" },
+        { key: "adMetrics", run: () => this.adService.listAdMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "adMetrics", countKey: "adMetrics" },
+        { key: "keywords", run: () => this.keywordService.listKeywords({ connectionId: connection.id, customerId }), bundleKey: "keywords", countKey: "keywords" },
+        { key: "keywordMetrics", run: () => this.keywordService.listKeywordMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "keywordMetrics", countKey: "keywordMetrics" },
+        { key: "searchTerms", run: () => this.insightsService.listSearchTerms({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "searchTerms", countKey: "searchTerms" },
+        { key: "geoMetrics", run: () => this.insightsService.listGeoMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "geoMetrics", countKey: "geoMetrics" },
+        { key: "deviceMetrics", run: () => this.insightsService.listDeviceMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "deviceMetrics", countKey: "deviceMetrics" },
+        { key: "conversionActions", run: () => this.insightsService.listConversionActions({ connectionId: connection.id, customerId }), bundleKey: "conversionActions", countKey: "conversionActions" },
       ]
 
       for (let index = 0; index < stages.length; index += 1) {
@@ -507,15 +381,14 @@ export class GoogleAdsSyncService {
 
       return completed
     } catch (error) {
-      const mapped =
-        error instanceof GoogleAdsIntegrationError
-          ? error
-          : new GoogleAdsIntegrationError(
-              "Google Ads sync failed.",
-              "GOOGLE_ADS_SYNC_FAILED",
-              false,
-              500
-            )
+      const mapped = error instanceof GoogleAdsIntegrationError
+        ? error
+        : new GoogleAdsIntegrationError(
+          "Google Ads sync failed.",
+          "GOOGLE_ADS_SYNC_FAILED",
+          false,
+          500
+        )
 
       await this.repository.markSyncRunFailed(syncRun.id, actor.userId, mapped.code, mapped.message)
       throw mapped
@@ -551,10 +424,7 @@ export class GoogleAdsSyncService {
       )
     }
 
-    const selectedCustomer = await this.oauthRepository.findAccessibleCustomerAccount(
-      connection.id,
-      query.customerId
-    )
+    const selectedCustomer = await this.oauthRepository.findAccessibleCustomerAccount(connection.id, query.customerId)
     if (!selectedCustomer) {
       throw new GoogleAdsIntegrationError(
         "Google Ads customer is not accessible for this connection.",
@@ -606,15 +476,8 @@ export class GoogleAdsSyncService {
     return accounts
   }
 
-  private async resolveAccessibleCustomerAccount(
-    connectionId: string,
-    customerId: string,
-    actorUserId: string
-  ) {
-    const existing = await this.oauthRepository.findAccessibleCustomerAccount(
-      connectionId,
-      customerId
-    )
+  private async resolveAccessibleCustomerAccount(connectionId: string, customerId: string, actorUserId: string) {
+    const existing = await this.oauthRepository.findAccessibleCustomerAccount(connectionId, customerId)
     if (existing) {
       return existing
     }
@@ -627,9 +490,7 @@ export class GoogleAdsSyncService {
     await this.oauthRepository.replaceAccessibleCustomerAccounts({
       connectionId,
       actorUserId,
-      selectedCustomerId: discoveredCustomerIds.includes(customerId)
-        ? customerId
-        : discoveredCustomerIds[0],
+      selectedCustomerId: discoveredCustomerIds.includes(customerId) ? customerId : discoveredCustomerIds[0],
       accounts: discoveredCustomerIds.map((id) => ({
         customerId: id,
         displayName: `Google Ads ${id}`,
@@ -641,12 +502,7 @@ export class GoogleAdsSyncService {
     return this.oauthRepository.findAccessibleCustomerAccount(connectionId, customerId)
   }
 
-  private normalizeCheckpoint(
-    raw: Record<string, unknown> | undefined,
-    mode: "full" | "incremental",
-    startDate: string,
-    endDate: string
-  ): SyncCheckpointState {
+  private normalizeCheckpoint(raw: Record<string, unknown> | undefined, mode: "full" | "incremental", startDate: string, endDate: string): SyncCheckpointState {
     if (!raw) {
       return {
         version: 1,
@@ -658,14 +514,13 @@ export class GoogleAdsSyncService {
       }
     }
 
-    const stage =
-      typeof raw.stage === "string" && STAGE_ORDER.includes(raw.stage as SyncStage)
-        ? (raw.stage as SyncStage)
-        : "customers"
+    const stage = typeof raw.stage === "string" && STAGE_ORDER.includes(raw.stage as SyncStage)
+      ? (raw.stage as SyncStage)
+      : "customers"
 
     return {
       version: Number(raw.version) === 1 ? 1 : 1,
-      mode: raw.mode === "full" || raw.mode === "incremental" ? raw.mode : mode,
+      mode: (raw.mode === "full" || raw.mode === "incremental") ? raw.mode : mode,
       stage,
       startDate: typeof raw.startDate === "string" ? raw.startDate : startDate,
       endDate: typeof raw.endDate === "string" ? raw.endDate : endDate,

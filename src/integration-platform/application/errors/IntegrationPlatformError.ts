@@ -8,7 +8,7 @@ export class IntegrationPlatformError extends Error {
       | "CONFLICT"
       | "UNAUTHORIZED",
     message: string,
-    public readonly status = 400
+    public readonly status = 400,
   ) {
     super(message)
     this.name = "IntegrationPlatformError"
@@ -17,8 +17,7 @@ export class IntegrationPlatformError extends Error {
 
 export const INTEGRATION_ERRORS = {
   forbidden: () => new IntegrationPlatformError("FORBIDDEN", "Access denied.", 403),
-  notFound: (entity: string) =>
-    new IntegrationPlatformError("NOT_FOUND", `${entity} was not found.`, 404),
+  notFound: (entity: string) => new IntegrationPlatformError("NOT_FOUND", `${entity} was not found.`, 404),
   invalidState: (message: string) => new IntegrationPlatformError("INVALID_STATE", message, 409),
   validation: (message: string) => new IntegrationPlatformError("VALIDATION_ERROR", message, 400),
   conflict: (message: string) => new IntegrationPlatformError("CONFLICT", message, 409),

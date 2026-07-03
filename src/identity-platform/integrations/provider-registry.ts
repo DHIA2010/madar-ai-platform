@@ -27,10 +27,7 @@ export interface IntegrationProvider {
   displayName: string
   sync?(actor: AuthenticatedActor, input: IntegrationProviderSyncInput): Promise<unknown>
   listRecords?(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery): Promise<unknown>
-  listAccounts?(
-    actor: AuthenticatedActor,
-    query: IntegrationProviderAccountsQuery
-  ): Promise<unknown>
+  listAccounts?(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery): Promise<unknown>
 }
 
 export class IntegrationProviderRegistry {

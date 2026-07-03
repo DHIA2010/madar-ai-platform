@@ -24,10 +24,7 @@ export class AesSecretCipher implements SecretCipher {
     }
     const decipher = createDecipheriv("aes-256-gcm", this.key, Buffer.from(ivHex, "hex"))
     decipher.setAuthTag(Buffer.from(authTagHex, "hex"))
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(payloadHex, "hex")),
-      decipher.final(),
-    ])
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(payloadHex, "hex")), decipher.final()])
     return decrypted.toString("utf8")
   }
 }

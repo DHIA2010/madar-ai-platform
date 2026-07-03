@@ -29,28 +29,19 @@ export interface ProjectMemberRepository {
 export interface ProjectInvitationRepository {
   findById(id: string): Promise<ProjectInvitationState | null>
   findByToken(token: string): Promise<ProjectInvitationState | null>
-  listByProjectId(
-    projectId: string,
-    input?: { page?: number; pageSize?: number; status?: ProjectInvitationState["status"] }
-  ): Promise<ProjectInvitationState[]>
-  findPendingByIdempotencyKey(
-    projectId: string,
-    idempotencyKey: string
-  ): Promise<ProjectInvitationState | null>
+  listByProjectId(projectId: string, input?: { page?: number; pageSize?: number; status?: ProjectInvitationState["status"] }): Promise<ProjectInvitationState[]>
+  findPendingByIdempotencyKey(projectId: string, idempotencyKey: string): Promise<ProjectInvitationState | null>
   save(invitation: ProjectInvitationState): Promise<void>
 }
 
 export interface DataSourceRepository {
   findById(id: string): Promise<DataSourceState | null>
-  listByProjectId(
-    projectId: string,
-    input?: {
-      page?: number
-      pageSize?: number
-      status?: DataSourceState["status"]
-      type?: DataSourceState["type"]
-    }
-  ): Promise<DataSourceState[]>
+  listByProjectId(projectId: string, input?: {
+    page?: number
+    pageSize?: number
+    status?: DataSourceState["status"]
+    type?: DataSourceState["type"]
+  }): Promise<DataSourceState[]>
   save(dataSource: DataSourceState): Promise<void>
 }
 

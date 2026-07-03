@@ -13,12 +13,7 @@ import { ExecutionPipeline } from "./pipeline"
 import { defaultExecutionPolicy, mergeExecutionPolicy } from "./policies"
 import { ExecutionPublisher } from "./publisher"
 import { ExecutionSubscriberRegistry } from "./subscribers"
-import type {
-  ExecutionEvent,
-  ExecutionRuntimeRequest,
-  ExecutionRuntimeResult,
-  ExecutionState,
-} from "./runtime.contracts"
+import type { ExecutionEvent, ExecutionRuntimeRequest, ExecutionRuntimeResult, ExecutionState } from "./runtime.contracts"
 import type { ExecutionDispatcher } from "./dispatcher"
 
 export interface ExecutionBusDependencies {
@@ -40,12 +35,7 @@ export class ExecutionBus implements RuntimeEventPublisher {
     return this.deps.now?.() ?? new Date().toISOString()
   }
 
-  private envelopeMetadata(
-    request: ExecutionRuntimeRequest,
-    state: ExecutionState["status"],
-    durationMs?: number,
-    retryCount = 0
-  ): ExecutionEnvelopeMetadata {
+  private envelopeMetadata(request: ExecutionRuntimeRequest, state: ExecutionState["status"], durationMs?: number, retryCount = 0): ExecutionEnvelopeMetadata {
     return {
       correlationId: request.context.correlationId,
       traceId: request.context.traceId,
@@ -98,12 +88,7 @@ export class ExecutionBus implements RuntimeEventPublisher {
       "ExecutionEvent",
       event.executionId,
       event,
-      this.envelopeMetadata(
-        state.request,
-        state.status,
-        undefined,
-        state.request.context.metadata.retryCount ?? 0
-      )
+      this.envelopeMetadata(state.request, state.status, undefined, state.request.context.metadata.retryCount ?? 0)
     )
     await this.publisher.publish("ExecutionEvent", envelope)
   }
@@ -117,12 +102,7 @@ export class ExecutionBus implements RuntimeEventPublisher {
     try {
       const timeoutPromise = new Promise<T>((_, reject) => {
         timer = setTimeout(() => {
-          reject(
-            new ExecutionRuntimeError(
-              "execution_timed_out",
-              `Execution exceeded timeout ${timeoutMs}ms.`
-            )
-          )
+          reject(new ExecutionRuntimeError("execution_timed_out", `Execution exceeded timeout ${timeoutMs}ms.`))
         }, timeoutMs)
       })
       return await Promise.race([promise, timeoutPromise])
@@ -133,10 +113,7 @@ export class ExecutionBus implements RuntimeEventPublisher {
     }
   }
 
-  async dispatch(
-    request: ExecutionRuntimeRequest,
-    options?: ExecutionDispatchOptions
-  ): Promise<ExecutionRuntimeResult> {
+  async dispatch(request: ExecutionRuntimeRequest, options?: ExecutionDispatchOptions): Promise<ExecutionRuntimeResult> {
     const policy = mergeExecutionPolicy(options?.policy ?? defaultExecutionPolicy)
     let lastError: unknown = null
 
@@ -171,8 +148,7 @@ export class ExecutionBus implements RuntimeEventPublisher {
             policy,
             attempt,
           },
-          () =>
-            this.runWithTimeout(this.deps.dispatcher.dispatch(request), policy.timeout.timeoutMs)
+          () => this.runWithTimeout(this.deps.dispatcher.dispatch(request), policy.timeout.timeoutMs)
         )
 
         const finishedAt = this.now()
@@ -207,8 +183,8 @@ export class ExecutionBus implements RuntimeEventPublisher {
     }
 
     throw (
-      lastError ??
-      new ExecutionRuntimeError("execution_error", "Execution failed without an explicit error.")
+      lastError
+      ?? new ExecutionRuntimeError("execution_error", "Execution failed without an explicit error.")
     )
   }
 }

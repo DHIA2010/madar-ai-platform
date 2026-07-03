@@ -32,10 +32,7 @@ function detectDuplicates(values: string[]) {
   return [...duplicates.values()]
 }
 
-function validateCapabilityConsistency(
-  manifest: ConnectorManifest,
-  issues: ManifestValidationIssue[]
-) {
+function validateCapabilityConsistency(manifest: ConnectorManifest, issues: ManifestValidationIssue[]) {
   const declaredCapabilities = new Set(
     manifest.capabilities.filter((entry) => entry.enabled).map((entry) => entry.capabilityKey)
   )
@@ -54,10 +51,7 @@ function validateCapabilityConsistency(
   }
 }
 
-function validateMetadataConsistency(
-  manifest: ConnectorManifest,
-  issues: ManifestValidationIssue[]
-) {
+function validateMetadataConsistency(manifest: ConnectorManifest, issues: ManifestValidationIssue[]) {
   const objectIds = new Set(manifest.supportedObjects.map((entry) => entry.objectId))
   const operationIds = new Set(manifest.supportedOperations.map((entry) => entry.operationId))
   const eventIds = new Set(manifest.supportedEvents)
@@ -166,13 +160,7 @@ function validateVersionCompatibility(
     }
   }
 
-  if (
-    !isWithinVersionRange(
-      currentPlatformVersion,
-      manifest.minimumPlatformVersion,
-      manifest.maximumPlatformVersion
-    )
-  ) {
+  if (!isWithinVersionRange(currentPlatformVersion, manifest.minimumPlatformVersion, manifest.maximumPlatformVersion)) {
     pushIssue(
       issues,
       "version_incompatibility",
@@ -201,9 +189,7 @@ export function validateConnectorManifest(
   }
 
   const manifest = parsed.data
-  const duplicateObjectIds = detectDuplicates(
-    manifest.supportedObjects.map((entry) => entry.objectId)
-  )
+  const duplicateObjectIds = detectDuplicates(manifest.supportedObjects.map((entry) => entry.objectId))
   for (const duplicateObjectId of duplicateObjectIds) {
     pushIssue(
       issues,
@@ -213,9 +199,7 @@ export function validateConnectorManifest(
     )
   }
 
-  const duplicateOperationIds = detectDuplicates(
-    manifest.supportedOperations.map((entry) => entry.operationId)
-  )
+  const duplicateOperationIds = detectDuplicates(manifest.supportedOperations.map((entry) => entry.operationId))
   for (const duplicateOperationId of duplicateOperationIds) {
     pushIssue(
       issues,

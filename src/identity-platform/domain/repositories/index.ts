@@ -65,14 +65,8 @@ export interface PasswordResetRepository {
 export interface InvitationRepository {
   findById(id: string): Promise<InvitationState | null>
   findByToken(token: string): Promise<InvitationState | null>
-  listByOrganizationId(
-    organizationId: string,
-    input?: { page?: number; pageSize?: number; status?: InvitationState["status"] }
-  ): Promise<InvitationState[]>
-  findPendingByIdempotencyKey(
-    organizationId: string,
-    idempotencyKey: string
-  ): Promise<InvitationState | null>
+  listByOrganizationId(organizationId: string, input?: { page?: number; pageSize?: number; status?: InvitationState["status"] }): Promise<InvitationState[]>
+  findPendingByIdempotencyKey(organizationId: string, idempotencyKey: string): Promise<InvitationState | null>
   save(entry: InvitationState): Promise<void>
 }
 

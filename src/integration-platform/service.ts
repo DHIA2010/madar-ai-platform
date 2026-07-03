@@ -5,18 +5,7 @@ import type { AuthenticatedActor } from "../identity-platform/application/dto/id
 import { INTEGRATION_ERRORS } from "./application/errors/IntegrationPlatformError"
 import type { EventPublisher, Logger, OAuthAdapter, SecretCipher } from "./application/ports"
 import { ConnectorRegistry } from "./application/registry/connector-registry"
-import {
-  createConnection,
-  createConnector,
-  createCredential,
-  createOAuthSession,
-  createOAuthToken,
-  createSyncJob,
-  createWebhookRegistration,
-  completeOAuthSession,
-  revokeOAuthToken,
-  revokeWebhookRegistration,
-} from "./domain/entities"
+import { createConnection, createConnector, createCredential, createOAuthSession, createOAuthToken, createSyncJob, createWebhookRegistration, completeOAuthSession, revokeOAuthToken, revokeWebhookRegistration } from "./domain/entities"
 import type { IntegrationRepositories } from "./domain/repositories"
 import { OAuthEngine } from "./infrastructure/oauth/oauth-engine"
 import { SyncEngine } from "./infrastructure/sync/sync-engine"
@@ -47,25 +36,10 @@ export class IntegrationPlatformService {
       now,
     })
     this.syncEngine = new SyncEngine(deps.repositories.syncJobs, now)
-    this.webhookEngine = new WebhookEngine(
-      deps.repositories.webhookRegistrations,
-      deps.oauth.cipher,
-      now
-    )
+    this.webhookEngine = new WebhookEngine(deps.repositories.webhookRegistrations, deps.oauth.cipher, now)
   }
 
-  private async publish(
-    events: Array<{
-      eventId: string
-      eventType: string
-      eventVersion: number
-      aggregateType: string
-      aggregateId: string
-      occurredAt: string
-      metadata: Record<string, string>
-      payload: Record<string, unknown>
-    }>
-  ) {
+  private async publish(events: Array<{ eventId: string; eventType: string; eventVersion: number; aggregateType: string; aggregateId: string; occurredAt: string; metadata: Record<string, string>; payload: Record<string, unknown> }>) {
     if (events.length > 0) {
       await (this.deps.eventPublisher ?? { publish: async () => undefined }).publish(events)
     }
@@ -77,16 +51,7 @@ export class IntegrationPlatformService {
     }
   }
 
-  async registerConnector(
-    actor: AuthenticatedActor,
-    input: {
-      connectorId: string
-      displayName: string
-      description?: string
-      version?: string
-      capabilities?: Array<{ key: string; name: string; enabled: boolean; description?: string }>
-    }
-  ) {
+  async registerConnector(actor: AuthenticatedActor, input: { connectorId: string; displayName: string; description?: string; version?: string; capabilities?: Array<{ key: string; name: string; enabled: boolean; description?: string }> }) {
     this.requireAccess(actor)
     const connector = createConnector({
       id: randomUUID(),
@@ -106,18 +71,16 @@ export class IntegrationPlatformService {
       version: connector.version,
       capabilities: connector.capabilities,
     })
-    await this.publish([
-      {
-        eventId: randomUUID(),
-        eventType: "ConnectorRegistered",
-        eventVersion: 1,
-        aggregateType: "connector",
-        aggregateId: connector.id,
-        occurredAt: new Date().toISOString(),
-        metadata: { actorUserId: actor.userId },
-        payload: { connectorId: connector.connectorId },
-      },
-    ])
+    await this.publish([{
+      eventId: randomUUID(),
+      eventType: "ConnectorRegistered",
+      eventVersion: 1,
+      aggregateType: "connector",
+      aggregateId: connector.id,
+      occurredAt: new Date().toISOString(),
+      metadata: { actorUserId: actor.userId },
+      payload: { connectorId: connector.connectorId },
+    }])
     return connector
   }
 
@@ -151,15 +114,7 @@ export class IntegrationPlatformService {
     }
   }
 
-  async createConnection(
-    actor: AuthenticatedActor,
-    input: {
-      connectorId: string
-      workspaceId: string | null
-      projectId?: string | null
-      metadata?: Record<string, unknown>
-    }
-  ) {
+  async createConnection(actor: AuthenticatedActor, input: { connectorId: string; workspaceId: string | null; projectId?: string | null; metadata?: Record<string, unknown> }) {
     this.requireAccess(actor)
     const connector = await this.deps.repositories.connectors.findByConnectorId(input.connectorId)
     if (!connector) throw INTEGRATION_ERRORS.notFound("Connector")
@@ -180,9 +135,7 @@ export class IntegrationPlatformService {
     this.requireAccess(actor)
     const connection = await this.deps.repositories.connections.findById(connectionId)
     if (!connection) throw INTEGRATION_ERRORS.notFound("Connection")
-    const connector = await this.deps.repositories.connectors.findByConnectorId(
-      connection.connectorId
-    )
+    const connector = await this.deps.repositories.connectors.findByConnectorId(connection.connectorId)
     if (!connector) throw INTEGRATION_ERRORS.notFound("Connector")
     const sessionResult = await this.oauthEngine.start({
       connectionId: connection.id,
@@ -194,25 +147,12 @@ export class IntegrationPlatformService {
     return sessionResult
   }
 
-  async completeOAuth(
-    actor: AuthenticatedActor,
-    input: { state: string; code: string; redirectUri: string }
-  ) {
+  async completeOAuth(actor: AuthenticatedActor, input: { state: string; code: string; redirectUri: string }) {
     this.requireAccess(actor)
     const result = await this.oauthEngine.complete(input)
-    const connection = await this.deps.repositories.connections.findById(
-      result.session.connectionId
-    )
+    const connection = await this.deps.repositories.connections.findById(result.session.connectionId)
     if (!connection) throw INTEGRATION_ERRORS.notFound("Connection")
-    const nextConnection = {
-      ...connection,
-      status: "connected" as const,
-      credentialId: result.credential.id,
-      oauthSessionId: result.session.id,
-      providerAccountId: result.session.state,
-      providerEmail: result.session.state,
-      updatedAt: new Date().toISOString(),
-    }
+    const nextConnection = { ...connection, status: "connected" as const, credentialId: result.credential.id, oauthSessionId: result.session.id, providerAccountId: result.session.state, providerEmail: result.session.state, updatedAt: new Date().toISOString() }
     await this.deps.repositories.connections.save(nextConnection)
     return { connection: nextConnection, credential: result.credential, session: result.session }
   }
@@ -221,27 +161,16 @@ export class IntegrationPlatformService {
     this.requireAccess(actor)
     const connection = await this.deps.repositories.connections.findById(connectionId)
     if (!connection) throw INTEGRATION_ERRORS.notFound("Connection")
-    const next = {
-      ...connection,
-      status: "disconnected" as const,
-      updatedAt: new Date().toISOString(),
-    }
+    const next = { ...connection, status: "disconnected" as const, updatedAt: new Date().toISOString() }
     await this.deps.repositories.connections.save(next)
     return next
   }
 
-  async requestSync(
-    actor: AuthenticatedActor,
-    input: { connectionId: string; mode: "full" | "incremental" }
-  ) {
+  async requestSync(actor: AuthenticatedActor, input: { connectionId: string; mode: "full" | "incremental" }) {
     this.requireAccess(actor)
     const connection = await this.deps.repositories.connections.findById(input.connectionId)
     if (!connection) throw INTEGRATION_ERRORS.notFound("Connection")
-    const job = await this.syncEngine.start({
-      connectionId: connection.id,
-      connectorId: connection.connectorId,
-      mode: input.mode,
-    })
+    const job = await this.syncEngine.start({ connectionId: connection.id, connectorId: connection.connectorId, mode: input.mode })
     return await this.syncEngine.complete(job.id)
   }
 
@@ -250,10 +179,7 @@ export class IntegrationPlatformService {
     return this.syncEngine.cancel(syncJobId, "Canceled by API")
   }
 
-  async registerWebhook(
-    actor: AuthenticatedActor,
-    input: { connectionId: string; endpointUrl: string; secret: string; signatureHeader: string }
-  ) {
+  async registerWebhook(actor: AuthenticatedActor, input: { connectionId: string; endpointUrl: string; secret: string; signatureHeader: string }) {
     this.requireAccess(actor)
     const connection = await this.deps.repositories.connections.findById(input.connectionId)
     if (!connection) throw INTEGRATION_ERRORS.notFound("Connection")

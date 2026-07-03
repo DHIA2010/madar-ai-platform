@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+.git
+.github
+.vscode
+coverage
+.turbo
+.cache
+terraform
+docs
+**/*.log
+Dockerfile.backend

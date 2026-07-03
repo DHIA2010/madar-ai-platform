@@ -2,7 +2,11 @@
 
 import { describe, expect, it } from "vitest"
 
-import { CapabilityRegistry, ConnectorRegistry, MetadataRegistry } from "../application"
+import {
+  CapabilityRegistry,
+  ConnectorRegistry,
+  MetadataRegistry,
+} from "../application"
 import {
   ExecutionBus,
   ExecutionDispatcher,
@@ -11,7 +15,10 @@ import {
   LocalExecutionEngine,
   createLocalExecutionManifest,
 } from "../execution"
-import { GoogleAdsConnectorV2, InMemoryN8nWorkflowAdapter } from "../integration"
+import {
+  GoogleAdsConnectorV2,
+  InMemoryN8nWorkflowAdapter,
+} from "../integration"
 import { ConnectorManifestRegistry } from "../manifest"
 import { PluginRegistry } from "../plugins"
 import { AesSecretCipher } from "../infrastructure/crypto/aes-secret-cipher"
@@ -45,7 +52,8 @@ function createHarness(input?: {
   const manifestRegistry =
     input?.manifestRegistry ?? new ConnectorManifestRegistry({ platformVersion: "1.5.0" })
   const pluginRegistry =
-    input?.pluginRegistry ?? new PluginRegistry({ platformVersion: "1.5.0", manifestRegistry })
+    input?.pluginRegistry ??
+    new PluginRegistry({ platformVersion: "1.5.0", manifestRegistry })
   const n8nAdapter = input?.n8nAdapter ?? new InMemoryN8nWorkflowAdapter()
 
   const executionEngines = new ExecutionEngineRegistry()
@@ -129,9 +137,7 @@ describe("phase 9 google ads v2 connector", () => {
     expect(health.status).toBe("healthy")
 
     const observability = await harness.connector.observability(connection.id)
-    expect(observability.executionEvents.some((event) => event.type === "ExecutionCompleted")).toBe(
-      true
-    )
+    expect(observability.executionEvents.some((event) => event.type === "ExecutionCompleted")).toBe(true)
     expect(observability.busEnvelopes.length > 0).toBe(true)
 
     const disconnected = await harness.connector.disconnect(connection.id)
@@ -188,9 +194,7 @@ describe("phase 9 google ads v2 connector", () => {
     const n8nRestartSync = await afterBackendRestart.connector.sync(connection.id)
     expect(n8nRestartSync.status).toBe("completed")
 
-    const storedConnection = await afterBackendRestart.repositories.connections.findById(
-      connection.id
-    )
+    const storedConnection = await afterBackendRestart.repositories.connections.findById(connection.id)
     expect(Array.isArray(storedConnection?.metadata.selectedAccountIds)).toBe(true)
     expect((storedConnection?.metadata.selectedAccountIds as string[]).length).toBe(2)
     expect(storedConnection?.lastSyncedAt).toBeTruthy()

@@ -1,16 +1,5 @@
-import type {
-  DataSourceRepository,
-  ProjectInvitationRepository,
-  ProjectMemberRepository,
-  ProjectRepositories,
-  ProjectRepository,
-} from "../../domain/repositories"
-import type {
-  DataSourceState,
-  ProjectInvitationState,
-  ProjectMemberState,
-  ProjectState,
-} from "../../domain/entities"
+import type { DataSourceRepository, ProjectInvitationRepository, ProjectMemberRepository, ProjectRepositories, ProjectRepository } from "../../domain/repositories"
+import type { DataSourceState, ProjectInvitationState, ProjectMemberState, ProjectState } from "../../domain/entities"
 import { PostgresDatabase } from "../../../backend-foundation/postgres/database"
 
 function mapPrimitiveRecord(value: unknown): Record<string, string | number | boolean> {
@@ -114,47 +103,18 @@ function mapDataSource(row: Record<string, unknown>): DataSourceState {
 class PostgresProjectRepository implements ProjectRepository {
   constructor(private readonly db: PostgresDatabase) {}
   async findById(id: string) {
-    const result = await this.db.query({
-      name: "project-find-by-id",
-      text: "SELECT * FROM projects WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
+    const result = await this.db.query({ name: "project-find-by-id", text: "SELECT * FROM projects WHERE id = $1 LIMIT 1", values: [id] })
     return result.rows[0] ? mapProject(result.rows[0]) : null
   }
-  async list(
-    input: {
-      organizationId?: string
-      workspaceId?: string | null
-      status?: ProjectState["status"]
-      page?: number
-      pageSize?: number
-      sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc"
-    } = {}
-  ) {
+  async list(input: { organizationId?: string; workspaceId?: string | null; status?: ProjectState["status"]; page?: number; pageSize?: number; sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc" } = {}) {
     const page = input.page ?? 1
     const pageSize = input.pageSize ?? 20
     const where: string[] = []
     const values: unknown[] = []
-    if (input.organizationId) {
-      values.push(input.organizationId)
-      where.push(`organization_id = $${values.length}`)
-    }
-    if (input.workspaceId !== undefined) {
-      values.push(input.workspaceId)
-      where.push(`workspace_id IS NOT DISTINCT FROM $${values.length}`)
-    }
-    if (input.status) {
-      values.push(input.status)
-      where.push(`status = $${values.length}`)
-    }
-    const orderBy =
-      input.sort === "name:asc"
-        ? "name ASC"
-        : input.sort === "name:desc"
-          ? "name DESC"
-          : input.sort === "createdAt:asc"
-            ? "created_at ASC"
-            : "created_at DESC"
+    if (input.organizationId) { values.push(input.organizationId); where.push(`organization_id = $${values.length}`) }
+    if (input.workspaceId !== undefined) { values.push(input.workspaceId); where.push(`workspace_id IS NOT DISTINCT FROM $${values.length}`) }
+    if (input.status) { values.push(input.status); where.push(`status = $${values.length}`) }
+    const orderBy = input.sort === "name:asc" ? "name ASC" : input.sort === "name:desc" ? "name DESC" : input.sort === "createdAt:asc" ? "created_at ASC" : "created_at DESC"
     values.push(pageSize)
     values.push((page - 1) * pageSize)
     const query = `SELECT * FROM projects ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${orderBy} LIMIT $${values.length - 1} OFFSET $${values.length}`
@@ -224,38 +184,10 @@ class PostgresProjectRepository implements ProjectRepository {
 
 class PostgresProjectMemberRepository implements ProjectMemberRepository {
   constructor(private readonly db: PostgresDatabase) {}
-  async findById(id: string) {
-    const result = await this.db.query({
-      name: "project-member-find-by-id",
-      text: "SELECT * FROM project_members WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
-    return result.rows[0] ? mapProjectMember(result.rows[0]) : null
-  }
-  async findByProjectAndUser(projectId: string, userId: string) {
-    const result = await this.db.query({
-      name: "project-member-find-by-project-user",
-      text: "SELECT * FROM project_members WHERE project_id = $1 AND user_id = $2 LIMIT 1",
-      values: [projectId, userId],
-    })
-    return result.rows[0] ? mapProjectMember(result.rows[0]) : null
-  }
-  async listByProjectId(projectId: string) {
-    const result = await this.db.query({
-      name: "project-member-list-by-project",
-      text: "SELECT * FROM project_members WHERE project_id = $1 ORDER BY created_at ASC",
-      values: [projectId],
-    })
-    return result.rows.map(mapProjectMember)
-  }
-  async listByOrganizationId(organizationId: string) {
-    const result = await this.db.query({
-      name: "project-member-list-by-org",
-      text: "SELECT * FROM project_members WHERE organization_id = $1 ORDER BY created_at ASC",
-      values: [organizationId],
-    })
-    return result.rows.map(mapProjectMember)
-  }
+  async findById(id: string) { const result = await this.db.query({ name: "project-member-find-by-id", text: "SELECT * FROM project_members WHERE id = $1 LIMIT 1", values: [id] }); return result.rows[0] ? mapProjectMember(result.rows[0]) : null }
+  async findByProjectAndUser(projectId: string, userId: string) { const result = await this.db.query({ name: "project-member-find-by-project-user", text: "SELECT * FROM project_members WHERE project_id = $1 AND user_id = $2 LIMIT 1", values: [projectId, userId] }); return result.rows[0] ? mapProjectMember(result.rows[0]) : null }
+  async listByProjectId(projectId: string) { const result = await this.db.query({ name: "project-member-list-by-project", text: "SELECT * FROM project_members WHERE project_id = $1 ORDER BY created_at ASC", values: [projectId] }); return result.rows.map(mapProjectMember) }
+  async listByOrganizationId(organizationId: string) { const result = await this.db.query({ name: "project-member-list-by-org", text: "SELECT * FROM project_members WHERE organization_id = $1 ORDER BY created_at ASC", values: [organizationId] }); return result.rows.map(mapProjectMember) }
   async save(member: ProjectMemberState) {
     await this.db.query({
       name: "project-member-upsert",
@@ -310,51 +242,10 @@ class PostgresProjectMemberRepository implements ProjectMemberRepository {
 
 class PostgresProjectInvitationRepository implements ProjectInvitationRepository {
   constructor(private readonly db: PostgresDatabase) {}
-  async findById(id: string) {
-    const result = await this.db.query({
-      name: "project-invite-find-by-id",
-      text: "SELECT * FROM project_invitations WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
-    return result.rows[0] ? mapProjectInvitation(result.rows[0]) : null
-  }
-  async findByToken(token: string) {
-    const result = await this.db.query({
-      name: "project-invite-find-by-token",
-      text: "SELECT * FROM project_invitations WHERE token = $1 LIMIT 1",
-      values: [token],
-    })
-    return result.rows[0] ? mapProjectInvitation(result.rows[0]) : null
-  }
-  async listByProjectId(
-    projectId: string,
-    input: { page?: number; pageSize?: number; status?: ProjectInvitationState["status"] } = {}
-  ) {
-    const values: unknown[] = [projectId]
-    let where = "project_id = $1"
-    if (input.status) {
-      values.push(input.status)
-      where += ` AND status = $${values.length}`
-    }
-    const page = input.page ?? 1
-    const pageSize = input.pageSize ?? 20
-    values.push(pageSize)
-    values.push((page - 1) * pageSize)
-    const result = await this.db.query({
-      name: "project-invite-list",
-      text: `SELECT * FROM project_invitations WHERE ${where} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
-      values,
-    })
-    return result.rows.map(mapProjectInvitation)
-  }
-  async findPendingByIdempotencyKey(projectId: string, idempotencyKey: string) {
-    const result = await this.db.query({
-      name: "project-invite-find-pending-idempotency",
-      text: "SELECT * FROM project_invitations WHERE project_id = $1 AND idempotency_key = $2 AND status = 'pending' AND deleted_at IS NULL LIMIT 1",
-      values: [projectId, idempotencyKey],
-    })
-    return result.rows[0] ? mapProjectInvitation(result.rows[0]) : null
-  }
+  async findById(id: string) { const result = await this.db.query({ name: "project-invite-find-by-id", text: "SELECT * FROM project_invitations WHERE id = $1 LIMIT 1", values: [id] }); return result.rows[0] ? mapProjectInvitation(result.rows[0]) : null }
+  async findByToken(token: string) { const result = await this.db.query({ name: "project-invite-find-by-token", text: "SELECT * FROM project_invitations WHERE token = $1 LIMIT 1", values: [token] }); return result.rows[0] ? mapProjectInvitation(result.rows[0]) : null }
+  async listByProjectId(projectId: string, input: { page?: number; pageSize?: number; status?: ProjectInvitationState["status"] } = {}) { const values: unknown[] = [projectId]; let where = "project_id = $1"; if (input.status) { values.push(input.status); where += ` AND status = $${values.length}` } const page = input.page ?? 1; const pageSize = input.pageSize ?? 20; values.push(pageSize); values.push((page - 1) * pageSize); const result = await this.db.query({ name: "project-invite-list", text: `SELECT * FROM project_invitations WHERE ${where} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`, values }); return result.rows.map(mapProjectInvitation) }
+  async findPendingByIdempotencyKey(projectId: string, idempotencyKey: string) { const result = await this.db.query({ name: "project-invite-find-pending-idempotency", text: "SELECT * FROM project_invitations WHERE project_id = $1 AND idempotency_key = $2 AND status = 'pending' AND deleted_at IS NULL LIMIT 1", values: [projectId, idempotencyKey] }); return result.rows[0] ? mapProjectInvitation(result.rows[0]) : null }
   async save(invitation: ProjectInvitationState) {
     await this.db.query({
       name: "project-invite-upsert",
@@ -407,44 +298,8 @@ class PostgresProjectInvitationRepository implements ProjectInvitationRepository
 
 class PostgresDataSourceRepository implements DataSourceRepository {
   constructor(private readonly db: PostgresDatabase) {}
-  async findById(id: string) {
-    const result = await this.db.query({
-      name: "project-datasource-find-by-id",
-      text: "SELECT * FROM data_sources WHERE id = $1 LIMIT 1",
-      values: [id],
-    })
-    return result.rows[0] ? mapDataSource(result.rows[0]) : null
-  }
-  async listByProjectId(
-    projectId: string,
-    input: {
-      page?: number
-      pageSize?: number
-      status?: DataSourceState["status"]
-      type?: DataSourceState["type"]
-    } = {}
-  ) {
-    const where: string[] = ["project_id = $1"]
-    const values: unknown[] = [projectId]
-    if (input.status) {
-      values.push(input.status)
-      where.push(`status = $${values.length}`)
-    }
-    if (input.type) {
-      values.push(input.type)
-      where.push(`type = $${values.length}`)
-    }
-    const page = input.page ?? 1
-    const pageSize = input.pageSize ?? 20
-    values.push(pageSize)
-    values.push((page - 1) * pageSize)
-    const result = await this.db.query({
-      name: "project-datasource-list",
-      text: `SELECT * FROM data_sources WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
-      values,
-    })
-    return result.rows.map(mapDataSource)
-  }
+  async findById(id: string) { const result = await this.db.query({ name: "project-datasource-find-by-id", text: "SELECT * FROM data_sources WHERE id = $1 LIMIT 1", values: [id] }); return result.rows[0] ? mapDataSource(result.rows[0]) : null }
+  async listByProjectId(projectId: string, input: { page?: number; pageSize?: number; status?: DataSourceState["status"]; type?: DataSourceState["type"] } = {}) { const where: string[] = ["project_id = $1"]; const values: unknown[] = [projectId]; if (input.status) { values.push(input.status); where.push(`status = $${values.length}`) } if (input.type) { values.push(input.type); where.push(`type = $${values.length}`) } const page = input.page ?? 1; const pageSize = input.pageSize ?? 20; values.push(pageSize); values.push((page - 1) * pageSize); const result = await this.db.query({ name: "project-datasource-list", text: `SELECT * FROM data_sources WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`, values }); return result.rows.map(mapDataSource) }
   async save(dataSource: DataSourceState) {
     await this.db.query({
       name: "project-datasource-upsert",

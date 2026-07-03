@@ -35,8 +35,7 @@ export function mapIdentityError(error: unknown) {
       status: error.status,
       body: {
         code: error.code,
-        category:
-          error.status >= 500 ? "infrastructure" : error.status === 400 ? "validation" : "business",
+        category: error.status >= 500 ? "infrastructure" : error.status === 400 ? "validation" : "business",
         message: error.message,
       },
     }

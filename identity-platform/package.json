@@ -1,0 +1,21 @@
+{
+  "name": "madar-identity-platform",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx ../src/identity-platform/server.ts",
+    "start": "node --import tsx ../src/identity-platform/server.ts",
+    "test": "npm --prefix .. run test:identity",
+    "openapi": "node --import tsx ../src/identity-platform/interfaces/openapi/export.ts",
+    "build": "node --import tsx -e \"import('../src/identity-platform/index.ts').then(() => console.log('identity-platform module ready'))\""
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "nodemailer": "^7.0.5",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2",
+    "tsx": "^4.20.6",
+    "zod": "^4.4.3"
+  }
+}

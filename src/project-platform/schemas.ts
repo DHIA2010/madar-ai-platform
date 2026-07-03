@@ -51,9 +51,7 @@ export const updateDataSourceSchema = createDataSourceSchema.partial().extend({
   validationStatus: z.enum(["pending", "valid", "invalid"]).optional(),
   healthStatus: z.enum(["healthy", "degraded", "unhealthy", "unknown"]).optional(),
   syncStatus: z.enum(["idle", "syncing", "failed", "disabled", "pending"]).optional(),
-  connectionStatus: z
-    .enum(["connected", "disconnected", "pending", "error", "not_applicable"])
-    .optional(),
+  connectionStatus: z.enum(["connected", "disconnected", "pending", "error", "not_applicable"]).optional(),
   status: z.enum(["draft", "enabled", "disabled", "archived", "deleted"]).optional(),
 })
 

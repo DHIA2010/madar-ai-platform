@@ -27,11 +27,7 @@ export interface FeatureFlagProvider {
 }
 
 export interface RateLimiter {
-  check(
-    key: string,
-    limit: number,
-    windowMs: number
-  ): Promise<{
+  check(key: string, limit: number, windowMs: number): Promise<{
     allowed: boolean
     retryAfterSeconds: number
   }>
