@@ -2,15 +2,15 @@ import { ConnectionSyncHistory } from "@/features/integrations"
 
 export const dynamicParams = false
 
-export async function generateStaticParams() {
+export function generateStaticParams() {
   return []
 }
 
-export default async function IntegrationHistoryPage({
+export default function IntegrationHistoryPage({
   params,
 }: {
-  params: Promise<{ connectionId: string }>
+  params: { connectionId: string }
 }) {
-  const { connectionId } = await params
+  const { connectionId } = params
   return <ConnectionSyncHistory connectionId={connectionId} />
 }
