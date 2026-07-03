@@ -1,5 +1,9 @@
 import { ConnectionSettings } from "@/features/integrations"
 
+export async function generateStaticParams() {
+  return []
+}
+
 export default async function IntegrationSettingsPage({
   params,
 }: {
