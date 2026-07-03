@@ -5,8 +5,47 @@ import {
   CONNECTOR_CATALOG,
   filterConnectionRecords,
   inferHealthState,
+  loadStoredConnectionReferences,
+  loadStoredConnectorAccounts,
   mergeCatalogWithRegistry,
+  removeStoredConnectionReference,
+  removeStoredConnectorAccounts,
+  storeConnectionReferences,
+  storeConnectorAccounts,
 } from "./connections-center.service"
+
+describe("connections center service storage", () => {
+  it("removes deleted connection references and connector account registries", () => {
+    localStorage.clear()
+
+    storeConnectionReferences([
+      {
+        connectorDefinitionId: "connector_def_google_ads",
+        connectionId: "conn_keep",
+      },
+      {
+        connectorDefinitionId: "connector_def_google_ads",
+        connectionId: "conn_delete",
+      },
+    ])
+    storeConnectorAccounts({
+      connector_def_google_ads: ["Google Ads Account", "Backup Account"],
+    })
+
+    const remainingReferences = removeStoredConnectionReference("conn_delete")
+    expect(remainingReferences).toHaveLength(1)
+    expect(loadStoredConnectionReferences()).toEqual([
+      {
+        connectorDefinitionId: "connector_def_google_ads",
+        connectionId: "conn_keep",
+      },
+    ])
+
+    const remainingAccounts = removeStoredConnectorAccounts("connector_def_google_ads")
+    expect(remainingAccounts).toEqual({})
+    expect(loadStoredConnectorAccounts()).toEqual({})
+  })
+})
 
 function createRecord(overrides: Partial<ConnectionCenterRecord> = {}): ConnectionCenterRecord {
   return {

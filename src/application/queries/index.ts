@@ -1,4 +1,5 @@
-export { GetCurrentUserQuery } from "./authentication.queries"
+export { GetCurrentUserQuery, RefreshSessionQuery } from "./authentication.queries"
+export { GetAIIntelligenceDashboardQuery } from "./ai-intelligence.queries"
 export {
   CalculateAttributionQuery,
   CompareAttributionModelsQuery,
@@ -13,6 +14,7 @@ export {
 export {
   AuthorizeConnectorQuery,
   CreateConnectionQuery,
+  DeleteConnectionQuery,
   DisconnectConnectionQuery,
   GetConnectorHealthQuery,
   GetIntegrationStatusQuery,

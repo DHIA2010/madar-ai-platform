@@ -1,47 +1,114 @@
 # MADAR
 
-**AI-Powered Marketing Intelligence Platform**
+MADAR is a Next.js 16 application for AI-assisted marketing intelligence workflows.
 
----
+This repository is deployment-ready from an engineering perspective and includes:
+- Frontend application (App Router, TypeScript, Tailwind)
+- Terraform infrastructure definitions
+- Container build artifacts
+- GitHub Actions CI/CD workflows
+- Operational and architecture documentation
 
-## 📋 Project Overview
+## Quick Start
 
-MADAR is an intelligent marketing operations platform that unifies marketing, sales, analytics, and customer insights into a single, cohesive workspace. Built with modern web technologies and AI-driven intelligence, MADAR empowers teams to make data-informed decisions, optimize campaigns, and accelerate business growth.
+Prerequisites:
+- Node.js 20+
+- npm 10+
+- Terraform 1.8+
 
----
+Commands:
 
-## 🎯 Vision
+```bash
+npm install
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-To become the operating system for modern marketing teams—where every decision is informed by actionable intelligence, every campaign is optimized by AI, and every insight drives measurable business impact.
+Terraform validation only (no apply):
 
----
+```bash
+terraform fmt -recursive
+terraform -chdir=terraform/bootstrap validate
+terraform -chdir=terraform/environments/local validate
+terraform -chdir=terraform/environments/stage-networking validate
+terraform -chdir=terraform/environments/stage validate
+terraform -chdir=terraform/environments/stage-platform validate
+terraform -chdir=terraform/environments/production validate
+```
 
-## ✨ Key Features
+## Engineering Quality Gates
 
-- **Unified Dashboard**: Centralized view of all marketing metrics, campaigns, and performance indicators
-- **AI-Powered Analytics**: Intelligent insights and recommendations powered by advanced analytics
-- **Campaign Management**: Create, manage, and optimize marketing campaigns across multiple channels
-- **Channel Performance**: Real-time tracking of performance across advertising channels (Meta, Google, TikTok, Snapchat)
-- **Customer Intelligence**: Deep insights into customer behavior, segmentation, and lifetime value
-- **Premium UI/UX**: Modern, elegant interface built for productivity and clarity
-- **Real-time Reporting**: Live dashboards with instant data updates
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- `npm run lint:boundaries`
+- `npm run check:circular`
+- `npm run identity:openapi`
+- `npm run project:openapi`
+- `npm run identity:migrations:validate`
+- `npm run project:migrations:validate`
+- `docker compose config -q`
+- `terraform fmt -recursive`
+- `terraform validate` for each root environment
 
----
+Security gate:
 
-## 🛠 Tech Stack
+- `npm audit --audit-level=low`
 
-- **Frontend Framework**: Next.js 16 with TypeScript
-- **Styling**: Tailwind CSS 4.2
-- **UI Components**: ShadCN UI, Radix UI
-- **Charts & Visualization**: Recharts, ApexCharts
-- **Icons**: Lucide React, Bootstrap Icons
-- **State Management**: Zustand
-- **Authentication**: Next.js Auth (planned)
-- **Database**: PostgreSQL (planned)
-- **API**: RESTful with TypeScript
-- **Theme Management**: next-themes
-- **Runtime**: React 19
+## Repository Structure
 
----
+```text
+src/
+	app/                 # Next.js App Router pages and layouts
+	application/         # Use-cases, validators, DTOs, commands/queries
+	components/          # App-level and reusable UI compositions
+	constants/           # Shared constants and route contracts
+	features/            # Feature slices (campaigns, integrations, etc.)
+	hooks/               # Shared hooks
+	infrastructure/      # Adapters, repositories, external integrations
+	lib/                 # Utilities and cross-cutting helpers
+	providers/           # React providers
+	services/            # Service clients and orchestration helpers
+	store/               # Client state stores
+	types/               # Shared TypeScript types
 
-## 📁 Project Structure
+terraform/
+	modules/             # Reusable infrastructure modules
+	environments/        # Root compositions per environment
+	bootstrap/           # Backend/bootstrap setup definitions
+
+.github/workflows/     # CI/CD workflows
+docs/                  # Engineering and platform documentation
+```
+
+## Documentation Map
+
+- `docs/ARCHITECTURE.md`
+- `docs/DEVELOPMENT_GUIDE.md`
+- `docs/DEPLOYMENT_GUIDE.md`
+- `docs/ENVIRONMENT_GUIDE.md`
+- `docs/CONTRIBUTING.md`
+- `BACKEND_FOUNDATION.md`
+- `REPOSITORY_BASELINE_AUDIT.md`
+- `RELEASE_BASELINE.md`
+- `docs/archive/sprint/` (historical sprint documents)
+
+## Sprint 5.6 Baseline Status
+
+- Backend foundation consolidation completed without adding new integration/OAuth feature behavior.
+- Quality, architecture, OpenAPI, migration, and Docker health gates are green.
+- Release baseline remains blocked by unresolved `npm audit` vulnerabilities pending controlled dependency remediation.
+
+## Deployment Safety
+
+- Do not run `terraform apply` without explicit change approval.
+- Do not deploy ECS services manually outside CI/CD controls.
+- Use immutable image tags for all releases.
+
+## Notes
+
+- Static export build is enabled (`next build` generates static routes).
+- Some infrastructure workflows are manual (`workflow_dispatch`) by design.

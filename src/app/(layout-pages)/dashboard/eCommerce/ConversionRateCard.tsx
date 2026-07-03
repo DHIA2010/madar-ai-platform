@@ -15,7 +15,7 @@ const chartData = [
 const chartConfig = {
   conversion: {
     label: "Conversion Rate",
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
   },
 } satisfies ChartConfig
 

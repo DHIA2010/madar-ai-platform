@@ -1,65 +1,50 @@
 "use client"
 
+import { useState } from "react"
 import {
-  ColumnDef,
+  type ColumnDef,
+  type ColumnFiltersState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  SortingState,
+  type SortingState,
   useReactTable,
 } from "@tanstack/react-table"
-
-import { useState } from "react"
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
-
-import { ArrowUpDown } from "lucide-react"
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-
-import { SlidersHorizontal } from "lucide-react"
-
-import { FileDown, Printer } from "lucide-react"
+import { ArrowUpDown, Printer, SlidersHorizontal } from "lucide-react"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { saveAs } from "file-saver"
+
+import {
+  AppButton,
+  AppSearchInput,
+  AppTable,
+  AppTableBody,
+  AppTableCell,
+  AppTableEmpty,
+  AppTableHead,
+  AppTableHeader,
+  AppTablePagination,
+  AppTableRow,
+  AppTableToolbar,
+} from "@/components/app"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
 }
 
-export function DataTable<TData, TValue>({
-  columns,
-  data,
-}: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
   const [rowSelection, setRowSelection] = useState({})
@@ -67,8 +52,7 @@ export function DataTable<TData, TValue>({
     pageIndex: 0,
     pageSize: 10,
   })
-
-  const [columnFilters, setColumnFilters] = useState([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   const table = useReactTable({
     data,
@@ -78,20 +62,19 @@ export function DataTable<TData, TValue>({
       globalFilter,
       rowSelection,
       pagination,
-      columnFilters,   // 👈 add this
+      columnFilters,
     },
-    // onColumnFiltersChange: setColumnFilters, // 👈 add this
-    enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
-    onPaginationChange: setPagination,
-    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
+    onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
+    enableRowSelection: true,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   })
-
 
   const exportToCSV = () => {
     const rows = table.getFilteredRowModel().rows
@@ -100,7 +83,10 @@ export function DataTable<TData, TValue>({
       "data:text/csv;charset=utf-8," +
       rows
         .map((row) =>
-          row.getVisibleCells().map((cell) => cell.getValue()).join(",")
+          row
+            .getVisibleCells()
+            .map((cell) => cell.getValue())
+            .join(",")
         )
         .join("\n")
 
@@ -113,9 +99,7 @@ export function DataTable<TData, TValue>({
   }
 
   const exportToExcel = () => {
-    const rows = table.getFilteredRowModel().rows.map((row) =>
-      row.original
-    )
+    const rows = table.getFilteredRowModel().rows.map((row) => row.original)
 
     const worksheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
@@ -136,18 +120,15 @@ export function DataTable<TData, TValue>({
   const exportToPDF = () => {
     const doc = new jsPDF()
 
-    const rows = table.getFilteredRowModel().rows.map((row) =>
-      Object.values(
-        row.original as Record<string, unknown>
-      ).map((val) => String(val ?? ""))
-    )
+    const rows = table
+      .getFilteredRowModel()
+      .rows.map((row) =>
+        Object.values(row.original as Record<string, unknown>).map((value) => String(value ?? ""))
+      )
 
     const headers =
       table.getFilteredRowModel().rows.length > 0
-        ? Object.keys(
-          table.getFilteredRowModel().rows[0]
-            .original as Record<string, unknown>
-        )
+        ? Object.keys(table.getFilteredRowModel().rows[0].original as Record<string, unknown>)
         : []
 
     autoTable(doc, {
@@ -171,202 +152,144 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
+      <AppTableToolbar
+        search={
+          <AppSearchInput
+            aria-label="Search table"
+            className="max-w-xs"
+            onChange={(event) => setGlobalFilter(event.target.value)}
+            placeholder="Search..."
+            value={globalFilter}
+            wrapperClassName="space-y-0"
+          />
+        }
+        filters={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <AppButton size="sm" variant="outline">
+                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                Filter Status
+              </AppButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {["Active", "Inactive"].map((status) => (
+                <DropdownMenuCheckboxItem
+                  key={status}
+                  checked={table.getColumn("status")?.getFilterValue() === status}
+                  onCheckedChange={(checked) =>
+                    table.getColumn("status")?.setFilterValue(checked ? status : undefined)
+                  }
+                >
+                  {status}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+        bulkActions={
+          table.getFilteredSelectedRowModel().rows.length > 0 ? (
+            <span className="text-sm text-muted-foreground">
+              {table.getFilteredSelectedRowModel().rows.length} selected
+            </span>
+          ) : null
+        }
+        actions={
+          <div className="ml-auto flex flex-wrap gap-2">
+            <AppButton onClick={exportToCSV} size="sm" variant="outline">
+              CSV
+            </AppButton>
+            <AppButton onClick={exportToExcel} size="sm" variant="outline">
+              Excel
+            </AppButton>
+            <AppButton onClick={exportToPDF} size="sm" variant="outline">
+              PDF
+            </AppButton>
+            <AppButton onClick={handlePrint} size="sm" variant="outline">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </AppButton>
+          </div>
+        }
+      />
 
-      {/* Search + Selected Count */}
-      <div className="flex items-center flex-wrap gap-3">
-        <Input
-          placeholder="Search..."
-          value={globalFilter ?? ""}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="max-w-xs"
-        />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <SlidersHorizontal className="h-4 w-4 mr-2" />
-              Filter Status
-            </Button>
-          </DropdownMenuTrigger>
-
-          <DropdownMenuContent align="end">
-            {["Active", "Inactive"].map((status) => (
-              <DropdownMenuCheckboxItem
-                key={status}
-                checked={
-                  table
-                    .getColumn("status")
-                    ?.getFilterValue() === status
-                }
-                onCheckedChange={(checked) =>
-                  table
-                    .getColumn("status")
-                    ?.setFilterValue(checked ? status : undefined)
-                }
-              >
-                {status}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="flex flex-wrap gap-2 ml-auto">
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportToCSV()}
-          >
-            CSV
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportToExcel()}
-          >
-            Excel
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportToPDF()}
-          >
-            PDF
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePrint()}
-          >
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-
-        </div>
-
-      </div>
-
-      {/* Table */}
-      <div className="rounded-xl border overflow-hidden">
-        <Table>
-          <TableHeader className="bg-muted/50">
+      <div className="overflow-hidden rounded-xl border">
+        <AppTable>
+          <AppTableHeader className="bg-muted/50">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-
-                {/* Select All Checkbox */}
-                <TableHead className="w-[40px]">
+              <AppTableRow key={headerGroup.id}>
+                <AppTableHead className="w-[40px]">
                   <Checkbox
                     checked={table.getIsAllPageRowsSelected()}
-                    onCheckedChange={(value) =>
-                      table.toggleAllPageRowsSelected(!!value)
-                    }
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
                   />
-                </TableHead>
+                </AppTableHead>
 
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <AppTableHead key={header.id}>
                     {header.isPlaceholder ? null : (
                       <div
-                        className={`flex items-center gap-2 ${header.column.getCanSort()
-                            ? "cursor-pointer select-none"
-                            : ""
-                          }`}
+                        className={
+                          header.column.getCanSort()
+                            ? "flex cursor-pointer select-none items-center gap-2"
+                            : "flex items-center gap-2"
+                        }
                         onClick={header.column.getToggleSortingHandler()}
                       >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-
-                        {header.column.getCanSort() && (
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() ? (
                           <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                        )}
+                        ) : null}
                       </div>
                     )}
-                  </TableHead>
+                  </AppTableHead>
                 ))}
-              </TableRow>
+              </AppTableRow>
             ))}
-          </TableHeader>
+          </AppTableHeader>
 
-          <TableBody>
+          <AppTableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {/* Row Checkbox */}
-                  <TableCell>
+                <AppTableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                  <AppTableCell>
                     <Checkbox
                       checked={row.getIsSelected()}
-                      onCheckedChange={(value) =>
-                        row.toggleSelected(!!value)
-                      }
+                      onCheckedChange={(value) => row.toggleSelected(!!value)}
                     />
-                  </TableCell>
+                  </AppTableCell>
 
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+                    <AppTableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </AppTableCell>
                   ))}
-                </TableRow>
+                </AppTableRow>
               ))
             ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length + 1}
-                  className="text-center py-8 text-muted-foreground"
-                >
-                  No results found.
-                </TableCell>
-              </TableRow>
+              <AppTableRow>
+                <AppTableCell className="py-8" colSpan={columns.length + 1}>
+                  <AppTableEmpty
+                    description="Try changing the search query or filters."
+                    title="No results found"
+                    variant="no-search-results"
+                  />
+                </AppTableCell>
+              </AppTableRow>
             )}
-          </TableBody>
-        </Table>
+          </AppTableBody>
+        </AppTable>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-muted-foreground">
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
-          {table.getPageCount()}
+          Page {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
         </span>
-
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                onClick={() => table.previousPage()}
-                className={
-                  !table.getCanPreviousPage()
-                    ? "pointer-events-none opacity-50"
-                    : ""
-                }
-              />
-            </PaginationItem>
-
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => table.nextPage()}
-                className={
-                  !table.getCanNextPage()
-                    ? "pointer-events-none opacity-50"
-                    : ""
-                }
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
+        <AppTablePagination
+          onPageChange={(nextPage) => table.setPageIndex(nextPage - 1)}
+          page={table.getState().pagination.pageIndex + 1}
+          totalPages={Math.max(table.getPageCount(), 1)}
+        />
       </div>
-
     </div>
   )
 }

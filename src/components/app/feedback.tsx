@@ -1,4 +1,6 @@
+import type { EmptyStateVariant } from "@/components/ui/empty-state"
 import { EmptyState } from "@/components/ui/empty-state"
+import type { ErrorStateVariant } from "@/components/ui/error-state"
 import { ErrorState } from "@/components/ui/error-state"
 import { LoadingCard } from "@/components/ui/loading-card"
 import { LoadingChart } from "@/components/ui/loading-chart"
@@ -33,12 +35,14 @@ export function AppLoading({
 }
 
 export function AppError({
+  variant,
   title = "Something went wrong",
   description = "The request could not be completed.",
   retryLabel = "Retry",
   onRetry,
   className,
 }: {
+  variant?: ErrorStateVariant
   title?: string
   description?: string
   retryLabel?: string
@@ -47,6 +51,7 @@ export function AppError({
 }) {
   return (
     <ErrorState
+      variant={variant}
       title={title}
       description={description}
       retryLabel={retryLabel}
@@ -57,12 +62,14 @@ export function AppError({
 }
 
 export function AppEmpty({
+  variant,
   title = "No data available",
   description,
   actionLabel,
   onAction,
   className,
 }: {
+  variant?: EmptyStateVariant
   title?: string
   description?: string
   actionLabel?: string
@@ -71,6 +78,7 @@ export function AppEmpty({
 }) {
   return (
     <EmptyState
+      variant={variant}
       title={title}
       description={description}
       actionLabel={actionLabel}

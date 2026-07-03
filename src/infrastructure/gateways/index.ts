@@ -1,4 +1,6 @@
 import type {
+  AIIntelligenceGateway,
+  AIIntelligenceRepository,
   AttributionGateway,
   AttributionRepository,
   IntegrationGateway,
@@ -23,6 +25,7 @@ import type { DashboardGateway } from "@/application/contracts/dashboard.contrac
 import type { WorkspaceGateway } from "@/application/contracts/workspace.contracts"
 
 export interface InfrastructureServices {
+  aiIntelligenceRepository: AIIntelligenceRepository
   authenticationRepository: AuthenticationRepository
   attributionRepository: AttributionRepository
   integrationRepository: IntegrationRepository
@@ -33,6 +36,7 @@ export interface InfrastructureServices {
   segmentationRepository: SegmentationRepository
   notificationRepository: NotificationRepository
 
+  aiIntelligenceGateway: AIIntelligenceGateway
   authenticationGateway: AuthenticationGateway
   attributionGateway: AttributionGateway
   integrationGateway: IntegrationGateway
@@ -48,6 +52,8 @@ export interface InfrastructureServices {
 }
 
 export type {
+  AIIntelligenceGateway,
+  AIIntelligenceRepository,
   AttributionGateway,
   AttributionRepository,
   IntegrationGateway,

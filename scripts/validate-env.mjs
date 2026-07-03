@@ -15,13 +15,29 @@ const lines = fs
   .map((line) => line.trim())
   .filter((line) => line && !line.startsWith("#"))
 
-const requiredKeys = lines.map((line) => line.split("=")[0]?.trim()).filter(Boolean)
+const requiredEntries = lines
+  .map((line) => {
+    const separatorIndex = line.indexOf("=")
+    const key = (separatorIndex === -1 ? line : line.slice(0, separatorIndex)).trim()
+    const exampleValue = separatorIndex === -1 ? "" : line.slice(separatorIndex + 1)
 
-const missing = requiredKeys.filter((key) => !process.env[key])
+    return key ? { key, exampleValue } : null
+  })
+  .filter(Boolean)
+
+const missing = requiredEntries
+  .filter(({ key, exampleValue }) => {
+    if (!Object.prototype.hasOwnProperty.call(process.env, key)) {
+      return true
+    }
+
+    return exampleValue !== "" && process.env[key] === ""
+  })
+  .map(({ key }) => key)
 
 if (missing.length > 0) {
   console.error(`[env] Missing required environment variables: ${missing.join(", ")}`)
   process.exit(1)
 }
 
-console.log(`[env] Validation passed for ${requiredKeys.length} variables.`)
+console.log(`[env] Validation passed for ${requiredEntries.length} variables.`)

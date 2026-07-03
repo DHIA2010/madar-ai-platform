@@ -1,0 +1,283 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MADAR Identity Platform API",
+    "version": "1.2.0",
+    "description": "Identity platform REST surface over clean application and domain layers."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000"
+    }
+  ],
+  "paths": {
+    "/live": {
+      "get": {
+        "summary": "Liveness"
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Liveness"
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Readiness"
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "summary": "Register user"
+      }
+    },
+    "/v1/auth/verify-email": {
+      "post": {
+        "summary": "Verify email"
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "summary": "Login"
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "summary": "Refresh session"
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "summary": "Logout"
+      }
+    },
+    "/v1/auth/sessions/revoke": {
+      "post": {
+        "summary": "Revoke session"
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "summary": "Get active session"
+      }
+    },
+    "/v1/auth/password/forgot": {
+      "post": {
+        "summary": "Request password reset"
+      }
+    },
+    "/v1/auth/password/reset": {
+      "post": {
+        "summary": "Reset password"
+      }
+    },
+    "/v1/identity/profile": {
+      "get": {
+        "summary": "Get profile"
+      },
+      "patch": {
+        "summary": "Update profile"
+      }
+    },
+    "/v1/identity/email/change": {
+      "post": {
+        "summary": "Change email"
+      }
+    },
+    "/v1/identity/password/change": {
+      "post": {
+        "summary": "Change password"
+      }
+    },
+    "/v1/organizations": {
+      "get": {
+        "summary": "List organizations"
+      },
+      "post": {
+        "summary": "Create organization"
+      }
+    },
+    "/v1/organizations/{id}": {
+      "get": {
+        "summary": "Get organization"
+      },
+      "patch": {
+        "summary": "Update organization"
+      }
+    },
+    "/v1/organizations/{id}/archive": {
+      "post": {
+        "summary": "Archive organization"
+      }
+    },
+    "/v1/organizations/{id}/restore": {
+      "post": {
+        "summary": "Restore organization"
+      }
+    },
+    "/v1/organizations/{id}/delete": {
+      "post": {
+        "summary": "Soft delete organization"
+      }
+    },
+    "/v1/organizations/{id}/members": {
+      "get": {
+        "summary": "List organization members"
+      }
+    },
+    "/v1/organizations/{id}/invitations": {
+      "get": {
+        "summary": "List invitations"
+      },
+      "post": {
+        "summary": "Invite member"
+      }
+    },
+    "/v1/organizations/{id}/members/{memberUserId}/suspend": {
+      "post": {
+        "summary": "Suspend member"
+      }
+    },
+    "/v1/organizations/{id}/members/{memberUserId}/reactivate": {
+      "post": {
+        "summary": "Reactivate member"
+      }
+    },
+    "/v1/organizations/{id}/members/{memberUserId}/remove": {
+      "post": {
+        "summary": "Remove member"
+      }
+    },
+    "/v1/organizations/{id}/members/{memberUserId}/transfer-ownership": {
+      "post": {
+        "summary": "Transfer ownership"
+      }
+    },
+    "/v1/organizations/{id}/members/{memberUserId}/roles": {
+      "post": {
+        "summary": "Assign member role"
+      }
+    },
+    "/v1/organizations/{id}/members/{memberUserId}/profile": {
+      "post": {
+        "summary": "Update member profile"
+      }
+    },
+    "/v1/organizations/invitations/{token}/accept": {
+      "post": {
+        "summary": "Accept invitation"
+      }
+    },
+    "/v1/organizations/invitations/{token}/decline": {
+      "post": {
+        "summary": "Decline invitation"
+      }
+    },
+    "/v1/organizations/invitations/{invitationId}/cancel": {
+      "post": {
+        "summary": "Cancel invitation"
+      }
+    },
+    "/v1/organizations/invitations/{invitationId}/resend": {
+      "post": {
+        "summary": "Resend invitation"
+      }
+    },
+    "/v1/workspaces": {
+      "get": {
+        "summary": "List workspaces"
+      },
+      "post": {
+        "summary": "Create workspace"
+      }
+    },
+    "/v1/workspaces/{id}": {
+      "patch": {
+        "summary": "Update workspace"
+      }
+    },
+    "/v1/workspaces/{id}/members": {
+      "get": {
+        "summary": "List workspace members"
+      }
+    },
+    "/v1/workspaces/switch": {
+      "post": {
+        "summary": "Switch workspace"
+      }
+    },
+    "/v1/rbac/permissions": {
+      "get": {
+        "summary": "Get permission matrix"
+      }
+    },
+    "/v1/rbac/me": {
+      "get": {
+        "summary": "Get resolved permissions"
+      }
+    },
+    "/v1/audit/logs": {
+      "get": {
+        "summary": "List audit logs"
+      }
+    },
+    "/v1/integrations/{provider}/sync": {
+      "post": {
+        "summary": "Run provider sync",
+        "description": "Runs a registered integration provider sync for a connection, customer, and date range.",
+        "responses": {
+          "200": {
+            "description": "Sync run completed or reused idempotent run."
+          },
+          "400": {
+            "description": "Validation error."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Forbidden."
+          },
+          "404": {
+            "description": "Provider not found."
+          },
+          "409": {
+            "description": "Sync already in progress."
+          },
+          "429": {
+            "description": "Provider quota exceeded."
+          },
+          "502": {
+            "description": "Provider request failed."
+          },
+          "503": {
+            "description": "Transient provider failure."
+          }
+        }
+      }
+    },
+    "/v1/integrations/{provider}/records": {
+      "get": {
+        "summary": "List normalized provider records",
+        "description": "Returns provider-independent normalized records persisted by sync runs.",
+        "responses": {
+          "200": {
+            "description": "Records listed."
+          },
+          "400": {
+            "description": "Validation error."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Forbidden."
+          },
+          "404": {
+            "description": "Provider or connection not found."
+          }
+        }
+      }
+    }
+  }
+}

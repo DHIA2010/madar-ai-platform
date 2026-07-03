@@ -47,7 +47,7 @@ const products = [
     stock: "In Stock",
     price: "$120",
     status: "Published",
-    image: "/pulse-ui-next/products/01.png",
+    image: "/products/01.png",
   },
   {
     id: 2,
@@ -56,7 +56,7 @@ const products = [
     stock: "In Stock",
     price: "$45",
     status: "Published",
-    image: "/pulse-ui-next/products/02.png",
+    image: "/products/02.png",
   },
   {
     id: 3,
@@ -65,7 +65,7 @@ const products = [
     stock: "Low Stock",
     price: "$899",
     status: "Draft",
-    image: "/pulse-ui-next/products/03.png",
+    image: "/products/03.png",
   },
   {
     id: 4,
@@ -74,7 +74,7 @@ const products = [
     stock: "In Stock",
     price: "$199",
     status: "Published",
-    image: "/pulse-ui-next/products/04.png",
+    image: "/products/04.png",
   },
   {
     id: 5,
@@ -83,7 +83,7 @@ const products = [
     stock: "Out of Stock",
     price: "$75",
     status: "Published",
-    image: "/pulse-ui-next/products/05.png",
+    image: "/products/05.png",
   },
   {
     id: 6,
@@ -92,7 +92,7 @@ const products = [
     stock: "In Stock",
     price: "$149",
     status: "Draft",
-    image: "/pulse-ui-next/products/06.png",
+    image: "/products/06.png",
   },
 ]
 
@@ -115,10 +115,8 @@ export default function ProductTable() {
       </CardHeader>
 
       <CardContent className="space-y-6">
-
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-          
           <div className="flex flex-wrap gap-3">
             <Input type="date" className="w-[180px]" />
 
@@ -171,23 +169,18 @@ export default function ProductTable() {
               {products.map((prod) => (
                 <TableRow key={prod.id} className="hover:bg-muted/40 transition">
                   <TableCell>
-                        <img
-                            src={prod.image}
-                            alt={prod.name}
-                            className="w-12 h-12 object-cover rounded-lg border p-1"
-                        />
+                    <img
+                      src={prod.image}
+                      alt={prod.name}
+                      className="w-12 h-12 object-cover rounded-lg border p-1"
+                    />
                   </TableCell>
-                  <TableCell className="font-medium">
-                    {prod.name}
-                  </TableCell>
+                  <TableCell className="font-medium">{prod.name}</TableCell>
                   <TableCell>{prod.category}</TableCell>
                   <TableCell>{prod.stock}</TableCell>
                   <TableCell>{prod.price}</TableCell>
                   <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={getStatusStyle(prod.status)}
-                    >
+                    <Badge variant="outline" className={getStatusStyle(prod.status)}>
                       {prod.status}
                     </Badge>
                   </TableCell>
@@ -202,9 +195,7 @@ export default function ProductTable() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem>View</DropdownMenuItem>
                         <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          Delete
-                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-600">Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -216,9 +207,7 @@ export default function ProductTable() {
 
         {/* Pagination */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Result 1–10 of 45
-          </span>
+          <span className="text-sm text-muted-foreground">Result 1–10 of 45</span>
 
           <Pagination>
             <PaginationContent>
@@ -242,7 +231,6 @@ export default function ProductTable() {
             </PaginationContent>
           </Pagination>
         </div>
-
       </CardContent>
     </Card>
   )

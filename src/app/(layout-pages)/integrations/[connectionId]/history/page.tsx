@@ -1,19 +1,16 @@
 import { ConnectionSyncHistory } from "@/features/integrations"
 
-const STATIC_CONNECTION_ID_PARAMS = Array.from({ length: 200 }, (_, index) => {
-  const serial = String(index + 1)
-  return [{ connectionId: `conn_${serial.padStart(6, "0")}` }, { connectionId: `conn_${serial}` }]
-}).flat()
+export const dynamicParams = false
 
 export function generateStaticParams() {
-  return STATIC_CONNECTION_ID_PARAMS
+  return []
 }
 
-export default async function IntegrationHistoryPage({
+export default function IntegrationHistoryPage({
   params,
 }: {
-  params: Promise<{ connectionId: string }>
+  params: { connectionId: string }
 }) {
-  const { connectionId } = await params
+  const { connectionId } = params
   return <ConnectionSyncHistory connectionId={connectionId} />
 }

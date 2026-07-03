@@ -218,6 +218,10 @@ export interface DisconnectConnectionRequestDto {
   reason?: string
 }
 
+export interface DeleteConnectionRequestDto {
+  connectionId: string
+}
+
 export interface RunSyncRequestDto {
   connectionId: string
   trigger?: SyncJob["trigger"]
@@ -337,10 +341,12 @@ export interface ConnectorContract {
 
 export interface IntegrationRepository {
   createConnection(input: CreateConnectionRequestDto): Promise<Connection>
+  recoverConnections?(): Promise<Connection[]>
   validateConnection(input: ValidateConnectionRequestDto): Promise<Connection>
   authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection>
   refreshConnection(input: RefreshConnectionRequestDto): Promise<Connection>
   disconnectConnection(input: DisconnectConnectionRequestDto): Promise<Connection>
+  deleteConnection(input: DeleteConnectionRequestDto): Promise<void>
   runSync(input: RunSyncRequestDto): Promise<SyncRun>
   scheduleSync(input: ScheduleSyncRequestDto): Promise<SyncSchedule>
   retrySync(input: RetrySyncRequestDto): Promise<SyncRun>

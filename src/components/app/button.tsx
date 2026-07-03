@@ -48,11 +48,6 @@ export const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
     )
 
     if (props.asChild) {
-      const child = React.Children.only(children) as React.ReactElement<{
-        children?: React.ReactNode
-        className?: string
-      }>
-
       return (
         <Button
           ref={ref}
@@ -60,9 +55,7 @@ export const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
           className={cn(fullWidth && "w-full", className)}
           {...props}
         >
-          {React.cloneElement(child, {
-            children: buttonContent,
-          })}
+          {children}
         </Button>
       )
     }

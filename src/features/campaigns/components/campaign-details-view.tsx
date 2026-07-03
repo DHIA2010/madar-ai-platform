@@ -585,6 +585,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
 
                           <div className="mt-3 rounded-lg border border-border/70 bg-muted/20 p-2">
                             {creative.previewUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={creative.previewUrl}
                                 alt={creative.name}
@@ -692,6 +693,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                       </div>
 
                       {previewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={previewUrl}
                           alt="Creative preview"

@@ -25,7 +25,7 @@ const products = [
     sku: "DJ-659",
     price: "$120",
     status: "Published",
-    image: "/pulse-ui-next/products/01.png",
+    image: "/products/01.png",
   },
   {
     id: 2,
@@ -35,7 +35,7 @@ const products = [
     sku: "LB-500",
     price: "$45",
     status: "Published",
-    image: "/pulse-ui-next/products/02.png",
+    image: "/products/02.png",
   },
   {
     id: 3,
@@ -45,7 +45,7 @@ const products = [
     sku: "SFJ-2021",
     price: "$89",
     status: "Draft",
-    image: "/pulse-ui-next/products/03.png",
+    image: "/products/03.png",
   },
   {
     id: 4,
@@ -55,7 +55,7 @@ const products = [
     sku: "FB-300",
     price: "$199",
     status: "Published",
-    image: "/pulse-ui-next/products/04.png",
+    image: "/products/04.png",
   },
   {
     id: 5,
@@ -65,7 +65,7 @@ const products = [
     sku: "RS-150",
     price: "$75",
     status: "Inactive",
-    image: "/pulse-ui-next/products/05.png",
+    image: "/products/05.png",
   },
   {
     id: 6,
@@ -75,7 +75,7 @@ const products = [
     sku: "CH-100",
     price: "$149",
     status: "Draft",
-    image: "/pulse-ui-next/products/06.png",
+    image: "/products/06.png",
   },
   {
     id: 7,
@@ -85,7 +85,7 @@ const products = [
     sku: "WS-220",
     price: "$39",
     status: "Published",
-    image: "/pulse-ui-next/products/07.png",
+    image: "/products/07.png",
   },
   {
     id: 8,
@@ -95,7 +95,7 @@ const products = [
     sku: "GT-310",
     price: "$29",
     status: "Published",
-    image: "/pulse-ui-next/products/08.png",
+    image: "/products/08.png",
   },
   {
     id: 9,
@@ -105,7 +105,7 @@ const products = [
     sku: "RC-450",
     price: "$89",
     status: "Archived",
-    image: "/pulse-ui-next/products/09.png",
+    image: "/products/09.png",
   },
 ]
 

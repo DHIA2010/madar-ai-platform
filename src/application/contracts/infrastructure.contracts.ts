@@ -1,5 +1,6 @@
 import type { PermissionContext } from "@/lib/permissions"
 
+import type { AIIntelligenceGateway as AIIntelligenceGatewayContract } from "./ai-intelligence.contracts"
 import type { AttributionGateway as AttributionGatewayContract } from "./attribution.contracts"
 import type { AuthGateway, SessionStoragePort } from "./authentication.contracts"
 import type { CampaignGateway as CampaignGatewayContract } from "./campaign.contracts"
@@ -18,6 +19,7 @@ export type CampaignGateway = CampaignGatewayContract
 export type CustomerIntelligenceGateway = CustomerIntelligenceGatewayContract
 export type SegmentationGateway = SegmentationGatewayContract
 export type IntegrationGateway = IntegrationGatewayContract
+export type AIIntelligenceGateway = AIIntelligenceGatewayContract
 export type AuthenticationRepository = AuthGateway
 export type AttributionRepository = AttributionGatewayContract
 export type DashboardRepository = DashboardGatewayContract
@@ -26,6 +28,7 @@ export type CampaignRepository = CampaignGatewayContract
 export type CustomerIntelligenceRepository = CustomerIntelligenceGatewayContract
 export type SegmentationRepository = SegmentationGatewayContract
 export type IntegrationRepository = IntegrationGatewayContract
+export type AIIntelligenceRepository = AIIntelligenceGatewayContract
 
 export interface PermissionGateway {
   can(permission: string, availablePermissions: string[], context?: PermissionContext): boolean

@@ -1,4 +1,5 @@
 export { AuthenticationApplicationService } from "./authentication-application.service"
+export { AIIntelligenceApplicationService } from "./ai-intelligence-application.service"
 export { AttributionApplicationService } from "./attribution-application.service"
 export { CampaignApplicationService } from "./campaign-application.service"
 export { ConnectionManager } from "./connection-management.service"

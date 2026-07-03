@@ -88,6 +88,12 @@ interface PlatformDetails {
   accounts: Array<{ id: string; label: string; description: string }>
 }
 
+interface AccountOption {
+  id: string
+  label: string
+  description: string
+}
+
 interface WizardErrorState {
   kind: ErrorKind
   title: string
@@ -278,6 +284,37 @@ function StepDot({ state }: { state: "done" | "active" | "todo" }) {
   return <Circle className="size-3.5" />
 }
 
+function parseAccessibleGoogleAdsAccounts(rawValue: string | undefined): AccountOption[] {
+  if (!rawValue) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Array<Record<string, unknown>>
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed
+      .map((item) => {
+        const id = typeof item.customerId === "string" ? item.customerId : ""
+        const displayName = typeof item.displayName === "string" ? item.displayName : null
+        if (!id) {
+          return null
+        }
+
+        return {
+          id,
+          label: displayName ?? `Google Ads ${id}`,
+          description: `Customer ID: ${id}`,
+        } satisfies AccountOption
+      })
+      .filter((item): item is AccountOption => item !== null)
+  } catch {
+    return []
+  }
+}
+
 function SyncChip({
   active,
   children,
@@ -403,7 +440,7 @@ function useDocumentDirection() {
 export function NewConnectionWizard() {
   const router = useRouter()
   const { refetch } = useConnectionsCenter()
-  const { connectionManager } = useApplicationServices()
+  const { connectionManager, integrationApplicationService } = useApplicationServices()
   const { currentWorkspace } = useWorkspace()
   const documentDirection = useDocumentDirection()
 
@@ -428,6 +465,7 @@ export function NewConnectionWizard() {
   const [isRunningFirstSync, setIsRunningFirstSync] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [googleAdsAccounts, setGoogleAdsAccounts] = useState<AccountOption[]>([])
 
   const workspaceId = currentWorkspace?.id ?? null
   const workspaceLabel = currentWorkspace?.name ?? "Madar Workspace"
@@ -454,10 +492,17 @@ export function NewConnectionWizard() {
     )
   }, [selectedCategory])
 
-  const availableAccounts = useMemo(
-    () => (selectedConnector ? (selectedConnectorDetails?.accounts ?? [ACCOUNT_FALLBACK]) : []),
-    [selectedConnector, selectedConnectorDetails]
-  )
+  const availableAccounts = useMemo(() => {
+    if (!selectedConnector) {
+      return []
+    }
+
+    if (selectedConnector.connectorId === "google_ads") {
+      return googleAdsAccounts.length > 0 ? googleAdsAccounts : [ACCOUNT_FALLBACK]
+    }
+
+    return selectedConnectorDetails?.accounts ?? [ACCOUNT_FALLBACK]
+  }, [googleAdsAccounts, selectedConnector, selectedConnectorDetails])
   const selectedAccount =
     availableAccounts.find((account) => account.id === selectedAccountId) ??
     availableAccounts[0] ??
@@ -481,6 +526,10 @@ export function NewConnectionWizard() {
       return
     }
 
+    if (selectedConnector.connectorId !== "google_ads") {
+      setGoogleAdsAccounts([])
+    }
+
     setSelectedObjects((current) => {
       if (current.length > 0) {
         return current.filter((item) => allObjects.includes(item))
@@ -490,6 +539,81 @@ export function NewConnectionWizard() {
     setSelectedAccountId((current) => current ?? availableAccounts[0]?.id ?? ACCOUNT_FALLBACK.id)
     setConnectionName((current) => current || `${selectedConnector.displayName} Connection`)
   }, [availableAccounts, allObjects, recommendedObjects, selectedConnector])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const callbackParams = new URLSearchParams(window.location.search)
+    if (callbackParams.get("google_oauth") !== "connected") {
+      return
+    }
+
+    const callbackConnectionId = callbackParams.get("google_connection_id")
+    if (!callbackConnectionId) {
+      return
+    }
+
+    let cancelled = false
+    const loadAccessibleAccounts = async () => {
+      setDraftConnectionId(callbackConnectionId)
+      setFlowStatus("fetching_accounts")
+
+      try {
+        const validateConnectionInput = {
+          connectionId: callbackConnectionId,
+        }
+
+        const validated =
+          await integrationApplicationService.validateConnection(validateConnectionInput)
+
+        if (cancelled) {
+          return
+        }
+
+        if (validated.payload.connectorId !== "google_ads") {
+          return
+        }
+
+        setSelectedConnectorDefinitionId(validated.payload.connectorDefinitionId)
+
+        const accounts = parseAccessibleGoogleAdsAccounts(
+          validated.payload.metadata.availableGoogleAdsCustomerAccounts
+        )
+        if (accounts.length > 0) {
+          setGoogleAdsAccounts(accounts)
+          const selectedCustomerId =
+            validated.payload.metadata.customerId &&
+            accounts.some((account) => account.id === validated.payload.metadata.customerId)
+              ? validated.payload.metadata.customerId
+              : accounts[0].id
+          setSelectedAccountId(selectedCustomerId)
+        }
+
+        setStepIndex(2)
+        setErrorState(null)
+        setRetryTarget(null)
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+        const message = error instanceof Error ? error.message : String(error)
+        const kind = inferErrorKind(message)
+        setErrorState(errorMeta(kind))
+      } finally {
+        if (!cancelled) {
+          setFlowStatus("idle")
+        }
+      }
+    }
+
+    void loadAccessibleAccounts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [integrationApplicationService, selectedConnector?.connectorId])
 
   useEffect(() => {
     if (!selectedConnectorDetails) {
@@ -546,45 +670,39 @@ export function NewConnectionWizard() {
 
     try {
       const references = loadStoredConnectionReferences()
-      const existingReference = references.find(
-        (entry) => entry.connectorDefinitionId === selectedConnector.connectorDefinitionId
-      )
-
-      let connectionId = existingReference?.connectionId
-
-      if (!connectionId) {
-        const created = await connectionManager.createConnection({
-          workspaceId,
-          connectorDefinitionId: selectedConnector.connectorDefinitionId,
-          connectorId: selectedConnector.connectorId,
-          metadata: {
-            accountName: selectedAccount.label,
-            workspaceName: workspaceLabel,
-            connectionName,
-          },
-          ...(setupMode === "manual"
-            ? {
-                credential: {
-                  type: "api_key" as const,
-                  payload: {
-                    apiKey,
-                    clientSecret,
-                    manualCredentials,
-                  },
+      const created = await connectionManager.createConnection({
+        workspaceId,
+        connectorDefinitionId: selectedConnector.connectorDefinitionId,
+        connectorId: selectedConnector.connectorId,
+        metadata: {
+          accountName: selectedAccount.label,
+          workspaceName: workspaceLabel,
+          connectionName,
+        },
+        ...(setupMode === "manual"
+          ? {
+              credential: {
+                type: "api_key" as const,
+                payload: {
+                  apiKey,
+                  clientSecret,
+                  manualCredentials,
                 },
-              }
-            : {}),
-        })
+              },
+            }
+          : {}),
+      })
 
-        connectionId = created.connectionId
-        storeConnectionReferences([
-          ...references,
-          {
-            connectorDefinitionId: selectedConnector.connectorDefinitionId,
-            connectionId: created.connectionId,
-          },
-        ])
-      }
+      const connectionId = created.connectionId
+      storeConnectionReferences([
+        ...references.filter(
+          (entry) => entry.connectorDefinitionId !== selectedConnector.connectorDefinitionId
+        ),
+        {
+          connectorDefinitionId: selectedConnector.connectorDefinitionId,
+          connectionId: created.connectionId,
+        },
+      ])
 
       if (!connectionId) {
         throw new Error("Connection id missing after OAuth initialization")
@@ -592,28 +710,19 @@ export function NewConnectionWizard() {
 
       setDraftConnectionId(connectionId)
       setFlowStatus("authorizing")
-      await new Promise((resolve) => window.setTimeout(resolve, 260))
-
-      const connected = await connectionManager.connect({
-        connectionId,
-        authorizationCode: `${selectedConnector.connectorId}_oauth_code`,
-      })
-
       appendConnectorAccount(selectedConnector.connectorDefinitionId, selectedAccount.label)
 
-      setDraftConnectionId(connected.connectionId)
-      setFlowStatus("fetching_accounts")
-      await new Promise((resolve) => window.setTimeout(resolve, 260))
-      setFlowStatus("almost_done")
-      await new Promise((resolve) => window.setTimeout(resolve, 220))
+      await connectionManager.connect({
+        connectionId,
+      })
 
-      setStepIndex(2)
-      setSyncPreset("recommended")
-      setIsSuccess(false)
-      initializeImportSelection("recommended")
-      setErrorState(null)
-      setRetryTarget(null)
-      setFlowStatus("idle")
+      const requiresProviderCallback =
+        selectedConnector.connectorId === "google_ads" && setupMode === "oauth"
+
+      if (!requiresProviderCallback) {
+        setStepIndex(2)
+        setFlowStatus("idle")
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const kind = inferErrorKind(message)
@@ -626,7 +735,6 @@ export function NewConnectionWizard() {
     clientSecret,
     connectionManager,
     connectionName,
-    initializeImportSelection,
     manualCredentials,
     resetError,
     selectedAccount.label,
