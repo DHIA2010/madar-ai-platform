@@ -65,6 +65,10 @@ export const disconnectConnectionSchema = z.object({
   reason: z.string().min(1).optional(),
 })
 
+export const deleteConnectionSchema = z.object({
+  connectionId: z.string().min(1),
+})
+
 export const runSyncSchema = z.object({
   connectionId: z.string().min(1),
   trigger: z.enum(["manual", "scheduled", "webhook", "retry"]).optional(),

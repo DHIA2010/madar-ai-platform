@@ -6,6 +6,7 @@ export { CompareAttributionModelsUseCase } from "./compare-attribution-models.us
 export { CreateConnectionUseCase } from "./create-connection.use-case"
 export { CreateCampaignUseCase } from "./create-campaign.use-case"
 export { DisconnectConnectionUseCase } from "./disconnect-connection.use-case"
+export { DeleteConnectionUseCase } from "./delete-connection.use-case"
 export { EndSessionUseCase } from "./end-session.use-case"
 export { GetCampaignROIUseCase } from "./get-campaign-roi.use-case"
 export { GetCampaignROASUseCase } from "./get-campaign-roas.use-case"

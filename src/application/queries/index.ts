@@ -14,6 +14,7 @@ export {
 export {
   AuthorizeConnectorQuery,
   CreateConnectionQuery,
+  DeleteConnectionQuery,
   DisconnectConnectionQuery,
   GetConnectorHealthQuery,
   GetIntegrationStatusQuery,

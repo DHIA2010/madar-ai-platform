@@ -141,7 +141,7 @@ function formatCurrency(value: number) {
 export function useCampaignDashboardData() {
   const campaignListQuery = useCampaignList({
     page: 1,
-    pageSize: 120,
+    pageSize: 100,
     sortBy: "startDate",
     sortDirection: "desc",
   })

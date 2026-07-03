@@ -33,7 +33,14 @@ vi.mock("@/components/ui/select", async () => {
 
   function SelectTrigger({ children, ...props }: React.ComponentProps<"button">) {
     return (
-      <button type="button" role="combobox" data-slot="select-trigger" {...props}>
+      <button
+        type="button"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="select-options"
+        data-slot="select-trigger"
+        {...props}
+      >
         {children}
       </button>
     )

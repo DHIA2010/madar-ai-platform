@@ -167,6 +167,7 @@ export type {
   Credential,
   CredentialStoragePort,
   DisconnectConnectionRequestDto,
+  DeleteConnectionRequestDto,
   ErrorMapperPort,
   GetConnectorHealthRequestDto,
   GetIntegrationStatusRequestDto,

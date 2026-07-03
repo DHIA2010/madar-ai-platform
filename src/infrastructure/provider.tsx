@@ -20,6 +20,8 @@ import { createMockFeatureFlagGateway, createMockPermissionGateway } from "./moc
 
 const InfrastructureContext = createContext<InfrastructureServices | null>(null)
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 function getWorkspaceIdFromStorage() {
   if (typeof window === "undefined") {
     return null
@@ -32,7 +34,12 @@ function getWorkspaceIdFromStorage() {
 
   try {
     const parsed = JSON.parse(raw) as { state?: { currentWorkspace?: { id?: string } } }
-    return parsed.state?.currentWorkspace?.id ?? null
+    const workspaceId = parsed.state?.currentWorkspace?.id ?? null
+    if (!workspaceId) {
+      return null
+    }
+
+    return UUID_PATTERN.test(workspaceId) ? workspaceId : null
   } catch {
     return null
   }
@@ -61,7 +68,12 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
   )
   const [attributionRepository] = useState(() => createAttributionRepository())
   const [aiIntelligenceRepository] = useState(() => createAIIntelligenceRepository())
-  const [integrationRepository] = useState(() => createIntegrationRepository())
+  const [integrationRepository] = useState(() =>
+    createIntegrationRepository({
+      getSession: () => sessionStorageGateway.restore(),
+      getWorkspaceId: getWorkspaceIdFromStorage,
+    })
+  )
   const [campaignRepository] = useState(() => createCampaignRepository())
   const [customerIntelligenceRepository] = useState(() => createCustomerIntelligenceRepository())
   const [segmentationRepository] = useState(() => createSegmentationRepository())

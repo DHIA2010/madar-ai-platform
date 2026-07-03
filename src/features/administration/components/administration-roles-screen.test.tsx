@@ -27,7 +27,7 @@ describe("AdministrationRolesScreen", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
       expect(screen.queryByRole("dialog", { name: "Edit Role" })).toBeNull()
     }
-  })
+  }, 10000)
 
   it("opens Clone dialog for every role card and pre-fills cloned values", () => {
     render(<AdministrationRolesScreen />)

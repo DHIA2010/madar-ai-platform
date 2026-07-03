@@ -19,6 +19,7 @@ import type {
   ValidateConnectionRequestDto,
   CreateConnectionRequestDto,
   DisconnectConnectionRequestDto,
+  DeleteConnectionRequestDto,
   SyncSchedule,
 } from "../contracts"
 
@@ -59,6 +60,14 @@ export class DisconnectConnectionQuery {
 
   execute(input: DisconnectConnectionRequestDto): Promise<Connection> {
     return this.gateway.disconnectConnection(input)
+  }
+}
+
+export class DeleteConnectionQuery {
+  constructor(private readonly gateway: IntegrationGateway) {}
+
+  execute(input: DeleteConnectionRequestDto): Promise<void> {
+    return this.gateway.deleteConnection(input)
   }
 }
 

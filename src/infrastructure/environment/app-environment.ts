@@ -166,7 +166,28 @@ export function getServerEnvironment(): AppEnvironment {
 }
 
 export function getClientEnvironment(): AppEnvironment {
-  return parseEnvironment(process.env as Record<string, string | undefined>, false)
+  return parseEnvironment(
+    {
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_APP_RUNTIME_MODE: process.env.NEXT_PUBLIC_APP_RUNTIME_MODE,
+      NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+      NEXT_PUBLIC_AUTH_API_BASE_URL: process.env.NEXT_PUBLIC_AUTH_API_BASE_URL,
+      NEXT_PUBLIC_REQUEST_TIMEOUT_MS: process.env.NEXT_PUBLIC_REQUEST_TIMEOUT_MS,
+      NEXT_PUBLIC_ENABLE_DEBUG_LOGS: process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS,
+      NEXT_PUBLIC_ENABLE_MOCK_REPOSITORIES: process.env.NEXT_PUBLIC_ENABLE_MOCK_REPOSITORIES,
+      APP_RUNTIME_MODE: process.env.APP_RUNTIME_MODE,
+      APP_NAME: process.env.APP_NAME,
+      APP_URL: process.env.APP_URL,
+      API_BASE_URL: process.env.API_BASE_URL,
+      AUTH_API_BASE_URL: process.env.AUTH_API_BASE_URL,
+      REQUEST_TIMEOUT_MS: process.env.REQUEST_TIMEOUT_MS,
+      ENABLE_DEBUG_LOGS: process.env.ENABLE_DEBUG_LOGS,
+      ENABLE_MOCK_REPOSITORIES: process.env.ENABLE_MOCK_REPOSITORIES,
+    },
+    false
+  )
 }
 
 export const environment = getServerEnvironment()
