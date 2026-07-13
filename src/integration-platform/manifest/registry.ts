@@ -27,7 +27,10 @@ export class ConnectorManifestRegistry {
     })
 
     if (!result.ok || !result.manifest) {
-      throw new ConnectorManifestRegistryError("Connector manifest validation failed.", result.issues)
+      throw new ConnectorManifestRegistryError(
+        "Connector manifest validation failed.",
+        result.issues
+      )
     }
 
     this.manifests.set(result.manifest.connectorId, result.manifest)

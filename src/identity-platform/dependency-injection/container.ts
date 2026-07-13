@@ -24,6 +24,7 @@ import { EnvironmentConfigurationProvider } from "../infrastructure/configuratio
 import { InMemoryMetricsProvider } from "../infrastructure/observability/in-memory-metrics-provider"
 import { GoogleAdsSyncService } from "../google-ads/sync-service"
 import { GoogleAdsIntegrationProvider } from "../integrations/google-ads/provider"
+import { SnapchatAdsIntegrationProvider } from "../integrations/snapchat-ads/provider"
 import { IntegrationProviderRegistry } from "../integrations/provider-registry"
 
 class SystemClock implements Clock {
@@ -72,6 +73,7 @@ export function createIdentityPlatformContainer(options: {
     const metrics = new InMemoryMetricsProvider()
     const featureFlags = new EnvironmentFeatureFlagProvider(config)
     const integrations = new IntegrationProviderRegistry()
+    integrations.register(new SnapchatAdsIntegrationProvider())
     const repositories = createInMemoryRepositories(options.store)
     const commands = new IdentityCommandHandlers({
       config,
@@ -115,6 +117,7 @@ export function createIdentityPlatformContainer(options: {
   const configuration = new EnvironmentConfigurationProvider()
   const metrics = new InMemoryMetricsProvider()
   const integrations = new IntegrationProviderRegistry()
+  integrations.register(new SnapchatAdsIntegrationProvider(database))
   integrations.register(
     new GoogleAdsIntegrationProvider(
       new GoogleAdsSyncService(database, {

@@ -2,10 +2,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import {
-  MetadataRegistry,
-  type ConnectorMetadataDefinition,
-} from "../application"
+import { MetadataRegistry, type ConnectorMetadataDefinition } from "../application"
 
 function googleAdsMetadata(): ConnectorMetadataDefinition {
   return {
@@ -278,8 +275,8 @@ describe("phase 5 metadata registry", () => {
       "order_id",
       "total",
     ])
-    expect(registry.getOperations("google_ads", "campaign").map((entry) => entry.operationKey)).toEqual([
-      "campaign.list",
-    ])
+    expect(
+      registry.getOperations("google_ads", "campaign").map((entry) => entry.operationKey)
+    ).toEqual(["campaign.list"])
   })
 })

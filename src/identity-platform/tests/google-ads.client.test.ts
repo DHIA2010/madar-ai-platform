@@ -68,11 +68,15 @@ describe("google ads client", () => {
       (async () => new Response("quota", { status: 429 })) as unknown as typeof fetch
     )
 
-    await expect(client.queryAllRows({
-      connectionId: "conn",
-      customerId: "123",
-      query: "SELECT campaign.id FROM campaign",
-    })).rejects.toMatchObject({ code: "GOOGLE_ADS_QUOTA_EXCEEDED" } satisfies Partial<GoogleAdsIntegrationError>)
+    await expect(
+      client.queryAllRows({
+        connectionId: "conn",
+        customerId: "123",
+        query: "SELECT campaign.id FROM campaign",
+      })
+    ).rejects.toMatchObject({
+      code: "GOOGLE_ADS_QUOTA_EXCEEDED",
+    } satisfies Partial<GoogleAdsIntegrationError>)
 
     const notFoundClient = new GoogleAdsClient(
       {
@@ -89,10 +93,14 @@ describe("google ads client", () => {
       (async () => new Response("not-found", { status: 404 })) as unknown as typeof fetch
     )
 
-    await expect(notFoundClient.queryAllRows({
-      connectionId: "conn",
-      customerId: "missing",
-      query: "SELECT campaign.id FROM campaign",
-    })).rejects.toMatchObject({ code: "GOOGLE_ADS_INVALID_CUSTOMER" } satisfies Partial<GoogleAdsIntegrationError>)
+    await expect(
+      notFoundClient.queryAllRows({
+        connectionId: "conn",
+        customerId: "missing",
+        query: "SELECT campaign.id FROM campaign",
+      })
+    ).rejects.toMatchObject({
+      code: "GOOGLE_ADS_INVALID_CUSTOMER",
+    } satisfies Partial<GoogleAdsIntegrationError>)
   })
 })

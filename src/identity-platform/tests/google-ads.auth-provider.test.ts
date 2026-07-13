@@ -26,7 +26,10 @@ describe("google ads auth provider", () => {
     database = new PostgresDatabase(new adapter.Pool())
 
     await runIdentityMigrations(database, process.cwd())
-    await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
+    await runSqlFile(
+      database,
+      `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+    )
 
     await database.query(
       `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -110,7 +113,8 @@ describe("google ads auth provider", () => {
       encryptionKey: key,
     })
 
-    await expect(provider.getAccessToken("00000000-0000-4000-8000-000000000206"))
-      .rejects.toMatchObject({ code: "GOOGLE_ADS_TOKEN_UNAVAILABLE" })
+    await expect(
+      provider.getAccessToken("00000000-0000-4000-8000-000000000206")
+    ).rejects.toMatchObject({ code: "GOOGLE_ADS_TOKEN_UNAVAILABLE" })
   })
 })

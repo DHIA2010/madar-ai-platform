@@ -45,6 +45,8 @@ describe("provider foundation", () => {
     expect((await storage.getObject("events/outbox.json"))?.toString("utf8")).toBe("hello")
 
     const email = new SmtpEmailGateway(config)
-    await expect(email.sendVerificationEmail({ email: "owner@test.local", token: "token-1" })).resolves.toBeUndefined()
+    await expect(
+      email.sendVerificationEmail({ email: "owner@test.local", token: "token-1" })
+    ).resolves.toBeUndefined()
   })
 })

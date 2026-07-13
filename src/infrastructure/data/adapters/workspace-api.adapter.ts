@@ -10,13 +10,15 @@ export class WorkspaceApiAdapter {
   constructor(private readonly client: ApiClient) {}
 
   getOrganizations(): Promise<OrganizationDto[]> {
-    return this.client.get<{ items: OrganizationDto[] }>("/v1/organizations").then((response) => response.items)
+    return this.client
+      .get<{ items: OrganizationDto[] }>("/v1/organizations")
+      .then((response) => response.items)
   }
 
   getWorkspaces(organizationId?: string): Promise<WorkspaceDto[]> {
-    return this.client.get<{ items: Array<{ workspace: WorkspaceDto }> }>("/v1/workspaces").then(
-      (response) => response.items.map((item) => item.workspace)
-    )
+    return this.client
+      .get<{ items: Array<{ workspace: WorkspaceDto }> }>("/v1/workspaces")
+      .then((response) => response.items.map((item) => item.workspace))
   }
 
   getCurrentWorkspace(selection: WorkspaceServiceSelectionDto): Promise<WorkspaceDto | null> {
@@ -41,8 +43,9 @@ export class WorkspaceApiAdapter {
   }
 
   switchWorkspace(payload: WorkspaceSelectionDto): Promise<WorkspaceDto> {
-    return this.client.get<{ items: Array<{ workspace: WorkspaceDto }> }>("/v1/workspaces").then(
-      (response) => {
+    return this.client
+      .get<{ items: Array<{ workspace: WorkspaceDto }> }>("/v1/workspaces")
+      .then((response) => {
         const workspaces = response.items.map((item) => item.workspace)
         const selectedWorkspace =
           workspaces.find((workspace) => workspace.id === payload.workspaceId) ??
@@ -53,7 +56,6 @@ export class WorkspaceApiAdapter {
         }
 
         return selectedWorkspace
-      }
-    )
+      })
   }
 }

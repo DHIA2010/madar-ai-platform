@@ -11,7 +11,12 @@ export class InMemoryEmailGateway implements EmailGateway {
     this.sent.push({ kind: "password_reset", ...input })
   }
 
-  async sendInvitationEmail(input: { email: string; token: string; organizationId: string; workspaceId?: string }) {
+  async sendInvitationEmail(input: {
+    email: string
+    token: string
+    organizationId: string
+    workspaceId?: string
+  }) {
     this.sent.push({ kind: "invitation", ...input })
   }
 }

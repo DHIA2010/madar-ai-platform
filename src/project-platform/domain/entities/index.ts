@@ -28,7 +28,9 @@ function assertPrimitiveRecord(record: Record<string, unknown>, label: string) {
     }
     const valueType = typeof value
     if (valueType !== "string" && valueType !== "number" && valueType !== "boolean") {
-      throw new Error(`${label} must contain only JSON-compatible primitive values. Invalid key: ${key}`)
+      throw new Error(
+        `${label} must contain only JSON-compatible primitive values. Invalid key: ${key}`
+      )
     }
   }
 }
@@ -162,24 +164,27 @@ export class ProjectEntity {
     this.state.updatedAt = now
   }
 
-  update(payload: {
-    name?: string
-    status?: ProjectStatus
-    workspaceId?: string | null
-    metadata?: Record<string, string>
-    branding?: Record<string, string>
-    logoUrl?: string | null
-    timezone?: string
-    currency?: string
-    locale?: string
-    environment?: ProjectEnvironment
-    settings?: Record<string, PrimitiveValue>
-    retentionPolicy?: string | null
-    defaultDashboard?: string | null
-    notificationPreferences?: Record<string, PrimitiveValue>
-    featureFlags?: Record<string, boolean>
-    connectorPreferences?: Record<string, PrimitiveValue>
-  }, now: string) {
+  update(
+    payload: {
+      name?: string
+      status?: ProjectStatus
+      workspaceId?: string | null
+      metadata?: Record<string, string>
+      branding?: Record<string, string>
+      logoUrl?: string | null
+      timezone?: string
+      currency?: string
+      locale?: string
+      environment?: ProjectEnvironment
+      settings?: Record<string, PrimitiveValue>
+      retentionPolicy?: string | null
+      defaultDashboard?: string | null
+      notificationPreferences?: Record<string, PrimitiveValue>
+      featureFlags?: Record<string, boolean>
+      connectorPreferences?: Record<string, PrimitiveValue>
+    },
+    now: string
+  ) {
     this.ensureWritable()
     if (payload.name !== undefined) this.rename(payload.name, now)
     if (payload.status === "archived") this.archive(now)
@@ -204,14 +209,21 @@ export class ProjectEntity {
       this.state.settings = payload.settings
     }
     if (payload.retentionPolicy !== undefined) this.state.retentionPolicy = payload.retentionPolicy
-    if (payload.defaultDashboard !== undefined) this.state.defaultDashboard = payload.defaultDashboard
+    if (payload.defaultDashboard !== undefined)
+      this.state.defaultDashboard = payload.defaultDashboard
     if (payload.notificationPreferences !== undefined) {
-      assertPrimitiveRecord(payload.notificationPreferences as Record<string, unknown>, "Notification preferences")
+      assertPrimitiveRecord(
+        payload.notificationPreferences as Record<string, unknown>,
+        "Notification preferences"
+      )
       this.state.notificationPreferences = payload.notificationPreferences
     }
     if (payload.featureFlags !== undefined) this.state.featureFlags = payload.featureFlags
     if (payload.connectorPreferences !== undefined) {
-      assertPrimitiveRecord(payload.connectorPreferences as Record<string, unknown>, "Connector preferences")
+      assertPrimitiveRecord(
+        payload.connectorPreferences as Record<string, unknown>,
+        "Connector preferences"
+      )
       this.state.connectorPreferences = payload.connectorPreferences
     }
     this.state.updatedAt = now
@@ -304,7 +316,11 @@ export class ProjectMemberEntity {
       removedAt: null,
       history: input.history ?? [],
       roleHistory: input.roleHistory ?? [
-        { role: input.projectRole, actorUserId: input.invitedByUserId ?? null, occurredAt: input.now },
+        {
+          role: input.projectRole,
+          actorUserId: input.invitedByUserId ?? null,
+          occurredAt: input.now,
+        },
       ],
       createdAt: input.now,
       updatedAt: input.now,
@@ -336,7 +352,12 @@ export class ProjectMemberEntity {
     this.state.status = "suspended"
     this.state.statusReason = reason
     this.state.suspendedAt = now
-    this.state.history.push({ action: "suspended", actorUserId, occurredAt: now, details: { reason } })
+    this.state.history.push({
+      action: "suspended",
+      actorUserId,
+      occurredAt: now,
+      details: { reason },
+    })
     this.state.updatedAt = now
   }
 
@@ -356,7 +377,12 @@ export class ProjectMemberEntity {
     this.state.status = "removed"
     this.state.statusReason = reason
     this.state.removedAt = now
-    this.state.history.push({ action: "removed", actorUserId, occurredAt: now, details: { reason } })
+    this.state.history.push({
+      action: "removed",
+      actorUserId,
+      occurredAt: now,
+      details: { reason },
+    })
     this.state.updatedAt = now
   }
 
@@ -582,28 +608,35 @@ export class DataSourceEntity {
     this.state.updatedAt = now
   }
 
-  update(payload: {
-    name?: string
-    type?: DataSourceType
-    metadata?: Record<string, string | number | boolean>
-    validationStatus?: "pending" | "valid" | "invalid"
-    healthStatus?: DataSourceHealth
-    syncStatus?: DataSourceSyncStatus
-    connectionStatus?: DataSourceConnectionStatus
-    futureOauthReady?: boolean
-    connectionReference?: string | null
-    status?: DataSourceStatus
-  }, now: string) {
+  update(
+    payload: {
+      name?: string
+      type?: DataSourceType
+      metadata?: Record<string, string | number | boolean>
+      validationStatus?: "pending" | "valid" | "invalid"
+      healthStatus?: DataSourceHealth
+      syncStatus?: DataSourceSyncStatus
+      connectionStatus?: DataSourceConnectionStatus
+      futureOauthReady?: boolean
+      connectionReference?: string | null
+      status?: DataSourceStatus
+    },
+    now: string
+  ) {
     this.ensureWritable()
     if (payload.name !== undefined) this.state.name = assertName(payload.name, "Data source name")
     if (payload.type !== undefined) this.state.type = payload.type
     if (payload.metadata !== undefined) this.state.metadata = payload.metadata
-    if (payload.validationStatus !== undefined) this.state.validationStatus = payload.validationStatus
+    if (payload.validationStatus !== undefined)
+      this.state.validationStatus = payload.validationStatus
     if (payload.healthStatus !== undefined) this.state.healthStatus = payload.healthStatus
     if (payload.syncStatus !== undefined) this.state.syncStatus = payload.syncStatus
-    if (payload.connectionStatus !== undefined) this.state.connectionStatus = payload.connectionStatus
-    if (payload.futureOauthReady !== undefined) this.state.futureOauthReady = payload.futureOauthReady
-    if (payload.connectionReference !== undefined) this.state.connectionReference = payload.connectionReference
+    if (payload.connectionStatus !== undefined)
+      this.state.connectionStatus = payload.connectionStatus
+    if (payload.futureOauthReady !== undefined)
+      this.state.futureOauthReady = payload.futureOauthReady
+    if (payload.connectionReference !== undefined)
+      this.state.connectionReference = payload.connectionReference
     if (payload.status === "enabled") this.enable(now)
     if (payload.status === "disabled") this.disable(now)
     if (payload.status === "archived") this.archive(now)

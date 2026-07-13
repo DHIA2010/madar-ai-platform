@@ -21,4 +21,5 @@ export async function runIdentityMigrations(database: PostgresDatabase, rootPath
   await runSqlFile(database, join(rootPath, "identity-platform/migrations/003_google_oauth_connections.sql"))
   await runSqlFile(database, join(rootPath, "identity-platform/migrations/004_google_ads_integration_layer.sql"))
   await runSqlFile(database, join(rootPath, "identity-platform/migrations/005_google_ads_account_onboarding.sql"))
+  await runSqlFile(database, join(rootPath, "identity-platform/migrations/006_snapchat_oauth_connections.sql"))
 }

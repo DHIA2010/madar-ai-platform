@@ -5,12 +5,7 @@ import { GoogleOAuthRepository } from "./repository"
 
 function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
   if (!actor.roles.includes("owner") && !actor.roles.includes("admin")) {
-    throw new IdentityError(
-      "GOOGLE_OAUTH_FORBIDDEN",
-      403,
-      "security",
-      "Permission denied."
-    )
+    throw new IdentityError("GOOGLE_OAUTH_FORBIDDEN", 403, "security", "Permission denied.")
   }
 }
 

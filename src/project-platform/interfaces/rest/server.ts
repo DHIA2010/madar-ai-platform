@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { z } from "zod"
 
-import { createNotFoundProblem, parsePagination, readJsonBody, sendJson, sendProblem } from "../../../backend-foundation"
 import { createProjectPlatform } from "../../bootstrap/create-project-platform"
 import { mapProjectError } from "../../errors"
 import {
@@ -31,34 +30,36 @@ type DataSourceType =
   | "webhook"
   | "manual_upload"
 
+function json(response: ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, { "content-type": "application/json" })
+  response.end(JSON.stringify(body))
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  if (chunks.length === 0) return {}
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"))
+}
+
+function parseListParam(value: string | null, fallback: number) {
+  const parsed = Number(value ?? fallback)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 export function createProjectApiServer(platform = createProjectPlatform()) {
   return createServer(async (request, response) => {
     const method = request.method ?? "GET"
     const url = new URL(request.url ?? "/", "http://localhost")
     const projects = platform.services.projects
 
-    const send = (status: number, body: unknown) => sendJson(response, status, body)
+    const send = (status: number, body: unknown) => json(response, status, body)
 
     try {
-      if (method === "GET" && url.pathname === "/live") {
-        return send(200, { status: "live", service: "project-platform" })
-      }
-
       if (method === "GET" && url.pathname === "/health") {
         return send(200, { status: "ok", service: "project-platform" })
-      }
-
-      if (method === "GET" && url.pathname === "/ready") {
-        return send(200, { status: "ready", service: "project-platform" })
-      }
-
-      if (method === "GET" && url.pathname === "/version") {
-        return send(200, {
-          service: "project-platform",
-          version: "0.1.0",
-          buildSha: process.env.BACKEND_BUILD_SHA ?? "local",
-          environment: process.env.BACKEND_ENVIRONMENT ?? process.env.NODE_ENV ?? "local",
-        })
       }
 
       if (method === "POST" && url.pathname === "/v1/projects") {
@@ -68,13 +69,12 @@ export function createProjectApiServer(platform = createProjectPlatform()) {
 
       const projectList = method === "GET" && url.pathname === "/v1/projects"
       if (projectList) {
-        const pagination = parsePagination(url.searchParams)
         return send(200, await projects.listProjects({ userId: "system", organizationId: url.searchParams.get("organizationId") ?? "system", workspaceId: null, roles: ["owner"] } as never, {
           organizationId: url.searchParams.get("organizationId") ?? undefined,
           workspaceId: url.searchParams.get("workspaceId") ?? undefined,
           status: (url.searchParams.get("status") as ProjectStatus | null) ?? undefined,
-          page: pagination.page,
-          pageSize: pagination.pageSize,
+          page: parseListParam(url.searchParams.get("page"), 1),
+          pageSize: Math.min(parseListParam(url.searchParams.get("pageSize"), 20), 100),
           sort: (url.searchParams.get("sort") as ProjectSort | null) ?? undefined,
         }))
       }
@@ -103,13 +103,12 @@ export function createProjectApiServer(platform = createProjectPlatform()) {
         }))
       }
       if (dataSourceList && method === "GET") {
-        const pagination = parsePagination(url.searchParams)
         return send(200, await projects.listDataSources({ userId: "system", organizationId: "system", workspaceId: null, roles: ["owner"] } as never, {
           projectId: dataSourceList[1],
           status: (url.searchParams.get("status") as DataSourceStatus | null) ?? undefined,
           type: (url.searchParams.get("type") as DataSourceType | null) ?? undefined,
-          page: pagination.page,
-          pageSize: pagination.pageSize,
+          page: parseListParam(url.searchParams.get("page"), 1),
+          pageSize: Math.min(parseListParam(url.searchParams.get("pageSize"), 20), 100),
         }))
       }
 
@@ -146,28 +145,13 @@ export function createProjectApiServer(platform = createProjectPlatform()) {
         return send(200, await projects.removeProjectMember(actor as never, { projectId: memberMatch[1], userId: memberMatch[2], reason: body.reason ?? "removed" }))
       }
 
-      return sendProblem(response, createNotFoundProblem(url.pathname))
+      return send(404, { code: "NOT_FOUND", message: "Endpoint not found." })
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return sendProblem(response, {
-          type: "https://madar.dev/problems/validation-error",
-          title: "Request Validation Failed",
-          status: 400,
-          detail: "Request validation failed.",
-          extensions: { issues: error.issues },
-        })
+        return send(400, { code: "VALIDATION_ERROR", category: "validation", message: "Request validation failed.", details: error.issues })
       }
       const mapped = mapProjectError(error)
-      return sendProblem(response, {
-        type: `https://madar.dev/problems/${String(mapped.body.code).toLowerCase()}`,
-        title: String(mapped.body.code),
-        status: mapped.status,
-        detail: String(mapped.body.message),
-        extensions: {
-          category: mapped.body.category,
-          details: mapped.body.details,
-        },
-      })
+      return send(mapped.status, mapped.body)
     }
   })
 }

@@ -1,6 +1,8 @@
+import type { Role } from "../identity-platform/types"
+
 export type ProjectStatus = "active" | "archived" | "deleted"
 export type ProjectEnvironment = "development" | "staging" | "production" | "sandbox"
-export type ProjectRole = "owner" | "admin" | "manager" | "analyst" | "viewer"
+export type ProjectRole = Role
 
 export type DataSourceType =
   | "google_ads"

@@ -6,7 +6,9 @@ import { createIntegrationPlatform } from "../bootstrap/create-integration-platf
 import type { ExecutionRuntimeRequest } from "../execution/runtime.contracts"
 import { ExecutionRuntime, ExecutionRuntimeError } from "../execution"
 
-function buildRequest(overrides?: Partial<ExecutionRuntimeRequest> & { engineId?: string }): ExecutionRuntimeRequest {
+function buildRequest(
+  overrides?: Partial<ExecutionRuntimeRequest> & { engineId?: string }
+): ExecutionRuntimeRequest {
   return {
     executionId: overrides?.executionId ?? "execution-1",
     engineId: overrides?.engineId ?? "local-executor",
@@ -101,7 +103,9 @@ describe("phase 3 execution runtime", () => {
     const platform = createIntegrationPlatform()
     const runtime = platform.executionRuntime as ExecutionRuntime
 
-    const result = await runtime.execute(buildRequest({ executionId: "execution-missing-engine", engineId: "unknown-engine" }))
+    const result = await runtime.execute(
+      buildRequest({ executionId: "execution-missing-engine", engineId: "unknown-engine" })
+    )
 
     expect(result.status).toBe("failed")
     expect(result.output).toEqual({ error: "Execution engine unknown-engine is not registered." })

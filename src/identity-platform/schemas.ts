@@ -105,6 +105,8 @@ export const googleOAuthStartSchema = z.object({
   connectionName: z.string().min(1).max(200).nullable().optional(),
 })
 
+export const integrationOAuthStartSchema = googleOAuthStartSchema
+
 export const googleAdsSyncSchema = z.object({
   connectionId: z.string().uuid(),
   customerId: z.string().min(1).max(64),
@@ -113,6 +115,8 @@ export const googleAdsSyncSchema = z.object({
   idempotencyKey: z.string().min(8).max(200),
   mode: z.enum(["full", "incremental"]).default("incremental"),
 })
+
+export const integrationSyncSchema = googleAdsSyncSchema
 
 export const googleAdsRecordsQuerySchema = z.object({
   connectionId: z.string().uuid(),
@@ -139,6 +143,10 @@ export const googleAdsRecordsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(1000).optional(),
 })
 
+export const integrationRecordsQuerySchema = googleAdsRecordsQuerySchema
+
 export const googleAdsAccountsQuerySchema = z.object({
   connectionId: z.string().uuid(),
 })
+
+export const integrationAccountsQuerySchema = googleAdsAccountsQuerySchema

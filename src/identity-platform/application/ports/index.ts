@@ -33,7 +33,11 @@ export interface AccessTokenPayload {
 }
 
 export interface RateLimiter {
-  check(key: string, limit: number, windowMs: number): Promise<{
+  check(
+    key: string,
+    limit: number,
+    windowMs: number
+  ): Promise<{
     allowed: boolean
     retryAfterSeconds: number
   }>
@@ -42,7 +46,12 @@ export interface RateLimiter {
 export interface EmailGateway {
   sendVerificationEmail(input: { email: string; token: string }): Promise<void>
   sendPasswordResetEmail(input: { email: string; token: string }): Promise<void>
-  sendInvitationEmail(input: { email: string; token: string; organizationId: string; workspaceId?: string }): Promise<void>
+  sendInvitationEmail(input: {
+    email: string
+    token: string
+    organizationId: string
+    workspaceId?: string
+  }): Promise<void>
 }
 
 export interface Logger {

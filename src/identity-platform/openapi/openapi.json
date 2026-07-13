@@ -220,64 +220,6 @@
       "get": {
         "summary": "List audit logs"
       }
-    },
-    "/v1/integrations/{provider}/sync": {
-      "post": {
-        "summary": "Run provider sync",
-        "description": "Runs a registered integration provider sync for a connection, customer, and date range.",
-        "responses": {
-          "200": {
-            "description": "Sync run completed or reused idempotent run."
-          },
-          "400": {
-            "description": "Validation error."
-          },
-          "401": {
-            "description": "Authentication required."
-          },
-          "403": {
-            "description": "Forbidden."
-          },
-          "404": {
-            "description": "Provider not found."
-          },
-          "409": {
-            "description": "Sync already in progress."
-          },
-          "429": {
-            "description": "Provider quota exceeded."
-          },
-          "502": {
-            "description": "Provider request failed."
-          },
-          "503": {
-            "description": "Transient provider failure."
-          }
-        }
-      }
-    },
-    "/v1/integrations/{provider}/records": {
-      "get": {
-        "summary": "List normalized provider records",
-        "description": "Returns provider-independent normalized records persisted by sync runs.",
-        "responses": {
-          "200": {
-            "description": "Records listed."
-          },
-          "400": {
-            "description": "Validation error."
-          },
-          "401": {
-            "description": "Authentication required."
-          },
-          "403": {
-            "description": "Forbidden."
-          },
-          "404": {
-            "description": "Provider or connection not found."
-          }
-        }
-      }
     }
   }
 }

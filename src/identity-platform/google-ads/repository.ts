@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import type { ProviderSyncRepository } from "../integrations/provider-repositories"
 
 import type { GoogleAdsEntityType, GoogleAdsNormalizedBundle } from "./models"
 import type { GoogleAdsRecordQuery, GoogleAdsRecordView, GoogleAdsSyncRunView } from "./types"
@@ -68,7 +69,8 @@ function mapRun(row: Record<string, unknown>): GoogleAdsSyncRunView {
   }
 }
 
-export class GoogleAdsRepository {
+export class GoogleAdsRepository
+implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuery, GoogleAdsRecordView> {
   constructor(private readonly db: PostgresDatabase) {}
 
   async withTransaction<T>(work: () => Promise<T>) {

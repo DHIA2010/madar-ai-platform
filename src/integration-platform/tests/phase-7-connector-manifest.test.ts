@@ -27,8 +27,18 @@ function googleAdsManifest(): ConnectorManifest {
         objectId: "campaign",
         displayName: "Campaign",
         fields: [
-          { fieldId: "campaign_id", displayName: "Campaign ID", dataType: "string", required: true },
-          { fieldId: "campaign_name", displayName: "Campaign Name", dataType: "string", required: true },
+          {
+            fieldId: "campaign_id",
+            displayName: "Campaign ID",
+            dataType: "string",
+            required: true,
+          },
+          {
+            fieldId: "campaign_name",
+            displayName: "Campaign Name",
+            dataType: "string",
+            required: true,
+          },
         ],
       },
     ],
@@ -57,7 +67,12 @@ function googleAdsManifest(): ConnectorManifest {
     supportedEvents: ["campaign.synced"],
     supportedCommands: ["campaign.fetch"],
     healthChecks: [
-      { checkId: "oauth-health", displayName: "OAuth Health", intervalSeconds: 300, timeoutMs: 3000 },
+      {
+        checkId: "oauth-health",
+        displayName: "OAuth Health",
+        intervalSeconds: 300,
+        timeoutMs: 3000,
+      },
     ],
     rateLimits: [
       { limitId: "google-api", scope: "connection", maxRequests: 1000, intervalSeconds: 60 },
@@ -66,7 +81,11 @@ function googleAdsManifest(): ConnectorManifest {
     minimumPlatformVersion: "1.0.0",
     maximumPlatformVersion: "2.0.0",
     compatibilityRules: [
-      { ruleId: "oauth-required", description: "OAuth token required for all operations", required: true },
+      {
+        ruleId: "oauth-required",
+        description: "OAuth token required for all operations",
+        required: true,
+      },
     ],
   }
 }
@@ -129,7 +148,12 @@ function fakeCommerceManifest(): ConnectorManifest {
     supportedEvents: ["orders.synced", "payment.received"],
     supportedCommands: ["orders.pull", "payments.subscribe"],
     healthChecks: [
-      { checkId: "api-key-health", displayName: "API Key Health", intervalSeconds: 120, timeoutMs: 2000 },
+      {
+        checkId: "api-key-health",
+        displayName: "API Key Health",
+        intervalSeconds: 120,
+        timeoutMs: 2000,
+      },
     ],
     rateLimits: [
       { limitId: "tenant-limit", scope: "workspace", maxRequests: 120, intervalSeconds: 60 },
@@ -138,7 +162,11 @@ function fakeCommerceManifest(): ConnectorManifest {
     minimumPlatformVersion: "1.0.0",
     maximumPlatformVersion: "2.0.0",
     compatibilityRules: [
-      { ruleId: "event-ingestion-required", description: "Event ingestion must be enabled", required: true },
+      {
+        ruleId: "event-ingestion-required",
+        description: "Event ingestion must be enabled",
+        required: true,
+      },
     ],
   }
 }
@@ -158,9 +186,9 @@ describe("phase 7 connector manifest", () => {
 
   it("rejects invalid manifests with missing required fields", () => {
     const registry = new ConnectorManifestRegistry({ platformVersion: "1.5.0" })
-    expect(() => registry.register({ manifestType: "connector-manifest", connectorId: "invalid" })).toThrow(
-      ConnectorManifestRegistryError
-    )
+    expect(() =>
+      registry.register({ manifestType: "connector-manifest", connectorId: "invalid" })
+    ).toThrow(ConnectorManifestRegistryError)
   })
 
   it("rejects duplicate connector registrations", () => {

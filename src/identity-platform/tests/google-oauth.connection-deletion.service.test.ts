@@ -27,7 +27,10 @@ beforeEach(async () => {
   service = new GoogleOAuthConnectionDeletionService(repository)
 
   await runIdentityMigrations(database, process.cwd())
-  await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
+  await runSqlFile(
+    database,
+    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+  )
 
   await database.query(
     `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -92,7 +95,7 @@ describe("google oauth connection deletion service", () => {
           sessionId: "session-member",
           organizationId: ORG_ID,
           workspaceId: WS_ID,
-            roles: ["viewer"],
+          roles: ["viewer"],
         },
         CONNECTION_ID
       )

@@ -8,7 +8,10 @@ export class InMemoryMetricsProvider implements MetricsProvider {
     if (!tags || Object.keys(tags).length === 0) {
       return name
     }
-    return `${name}:${Object.entries(tags).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}=${value}`).join(",")}`
+    return `${name}:${Object.entries(tags)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join(",")}`
   }
 
   incrementCounter(name: string, value = 1, tags?: Record<string, string>) {

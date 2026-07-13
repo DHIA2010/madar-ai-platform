@@ -1,4 +1,6 @@
-export class GoogleAdsIntegrationError extends Error {
+import { IntegrationProviderError } from "../integrations/provider-error"
+
+export class GoogleAdsIntegrationError extends IntegrationProviderError {
   constructor(
     message: string,
     public readonly code:
@@ -14,9 +16,10 @@ export class GoogleAdsIntegrationError extends Error {
       | "GOOGLE_ADS_SYNC_IN_PROGRESS"
       | "GOOGLE_ADS_SYNC_FAILED",
     public readonly retryable: boolean = false,
-    public readonly status: number = 400
+    public readonly status: number = 400,
+    public readonly details?: unknown
   ) {
-    super(message)
+    super(message, code, retryable, status, details)
   }
 }
 

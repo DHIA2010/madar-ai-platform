@@ -1,4 +1,8 @@
-import type { ExecutionInterceptor, ExecutionInterceptorContext, ExecutionInterceptorNext } from "./bus.contracts"
+import type {
+  ExecutionInterceptor,
+  ExecutionInterceptorContext,
+  ExecutionInterceptorNext,
+} from "./bus.contracts"
 import type { ExecutionRuntimeResult } from "./runtime.contracts"
 
 export class ExecutionPipeline {
@@ -8,7 +12,10 @@ export class ExecutionPipeline {
     this.interceptors.push(interceptor)
   }
 
-  async run(context: ExecutionInterceptorContext, dispatch: ExecutionInterceptorNext): Promise<ExecutionRuntimeResult> {
+  async run(
+    context: ExecutionInterceptorContext,
+    dispatch: ExecutionInterceptorNext
+  ): Promise<ExecutionRuntimeResult> {
     const chain = [...this.interceptors]
     let index = -1
 

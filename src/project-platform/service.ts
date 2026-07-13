@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto"
 
+import type { AuthenticatedActor } from "../identity-platform/application/dto/identity-dtos"
+import type { EventPublisher, Logger, MetricsProvider } from "../identity-platform/application/ports"
+import { InMemoryEventPublisher } from "../identity-platform/infrastructure/queue/in-memory-event-publisher"
+
 import { ProjectEntity, DataSourceEntity, ProjectInvitationEntity, ProjectMemberEntity } from "./domain/entities"
 import type { ProjectRepositories } from "./domain/repositories"
 import type { ProjectDomainEvent } from "./domain/events"
@@ -21,38 +25,11 @@ import type {
 } from "./application/commands"
 import type { ListProjectsQuery, ListDataSourcesQuery } from "./application/queries"
 
-interface ProjectAuthenticatedActor {
-  userId: string
-  sessionId: string
-  organizationId: string
-  workspaceId: string | null
-  roles: Array<"owner" | "admin" | "manager" | "analyst" | "viewer">
-}
-
-interface ProjectEventPublisher {
-  publish(events: ProjectDomainEvent[]): Promise<void>
-}
-
-interface ProjectLogger {
-  info(message: string, details?: Record<string, unknown>): void
-}
-
-interface ProjectMetricsProvider {
-  incrementCounter(name: string, value?: number, tags?: Record<string, string>): void
-}
-
-class InMemoryProjectEventPublisher implements ProjectEventPublisher {
-  readonly published: ProjectDomainEvent[] = []
-  async publish(events: ProjectDomainEvent[]) {
-    this.published.push(...events)
-  }
-}
-
 interface ProjectPlatformDependencies {
   repositories: ProjectRepositories
-  eventPublisher?: ProjectEventPublisher
-  logger?: ProjectLogger
-  metrics?: ProjectMetricsProvider
+  eventPublisher?: EventPublisher
+  logger?: Logger
+  metrics?: MetricsProvider
 }
 
 function defaultNow() {
@@ -77,16 +54,16 @@ export class ProjectPlatformService {
 
   private async publish(events: ProjectDomainEvent[]) {
     if (events.length === 0) return
-    await (this.deps.eventPublisher ?? new InMemoryProjectEventPublisher()).publish(events)
+    await (this.deps.eventPublisher ?? new InMemoryEventPublisher()).publish(events)
   }
 
-  private requireOwner(actor: ProjectAuthenticatedActor) {
+  private requireOwner(actor: AuthenticatedActor) {
     if (!actor.roles.includes("owner") && !actor.roles.includes("admin")) {
       throw PROJECT_ERRORS.forbidden()
     }
   }
 
-  private async assertProjectBelongsToActor(projectId: string, actor: ProjectAuthenticatedActor) {
+  private async assertProjectBelongsToActor(projectId: string, actor: AuthenticatedActor) {
     const project = await this.deps.repositories.projects.findById(projectId)
     if (!project || project.organizationId !== actor.organizationId) {
       throw PROJECT_ERRORS.notFound("Project")
@@ -94,7 +71,7 @@ export class ProjectPlatformService {
     return project
   }
 
-  async createProject(actor: ProjectAuthenticatedActor, command: CreateProjectCommand) {
+  async createProject(actor: AuthenticatedActor, command: CreateProjectCommand) {
     this.requireOwner(actor)
     const now = defaultNow()
     const project = ProjectEntity.create({
@@ -125,7 +102,7 @@ export class ProjectPlatformService {
     return project.toState()
   }
 
-  async listProjects(actor: ProjectAuthenticatedActor, query: ListProjectsQuery = {}) {
+  async listProjects(actor: AuthenticatedActor, query: ListProjectsQuery = {}) {
     return this.deps.repositories.projects.list({
       organizationId: query.organizationId ?? actor.organizationId,
       workspaceId: query.workspaceId ?? undefined,
@@ -136,12 +113,12 @@ export class ProjectPlatformService {
     })
   }
 
-  async getProject(actor: ProjectAuthenticatedActor, projectId: string) {
+  async getProject(actor: AuthenticatedActor, projectId: string) {
     const project = await this.assertProjectBelongsToActor(projectId, actor)
     return project
   }
 
-  async updateProject(actor: ProjectAuthenticatedActor, projectId: string, command: UpdateProjectCommand) {
+  async updateProject(actor: AuthenticatedActor, projectId: string, command: UpdateProjectCommand) {
     this.requireOwner(actor)
     const projectState = await this.assertProjectBelongsToActor(projectId, actor)
     const project = ProjectEntity.rehydrate(projectState)
@@ -151,7 +128,7 @@ export class ProjectPlatformService {
     return project.toState()
   }
 
-  async archiveProject(actor: ProjectAuthenticatedActor, projectId: string) {
+  async archiveProject(actor: AuthenticatedActor, projectId: string) {
     this.requireOwner(actor)
     const project = ProjectEntity.rehydrate(await this.assertProjectBelongsToActor(projectId, actor))
     project.archive(defaultNow())
@@ -160,7 +137,7 @@ export class ProjectPlatformService {
     return project.toState()
   }
 
-  async restoreProject(actor: ProjectAuthenticatedActor, projectId: string) {
+  async restoreProject(actor: AuthenticatedActor, projectId: string) {
     this.requireOwner(actor)
     const project = ProjectEntity.rehydrate(await this.assertProjectBelongsToActor(projectId, actor))
     project.restore(defaultNow())
@@ -169,7 +146,7 @@ export class ProjectPlatformService {
     return project.toState()
   }
 
-  async deleteProject(actor: ProjectAuthenticatedActor, projectId: string) {
+  async deleteProject(actor: AuthenticatedActor, projectId: string) {
     this.requireOwner(actor)
     const project = ProjectEntity.rehydrate(await this.assertProjectBelongsToActor(projectId, actor))
     project.softDelete(defaultNow())
@@ -178,7 +155,7 @@ export class ProjectPlatformService {
     return project.toState()
   }
 
-  async createDataSource(actor: ProjectAuthenticatedActor, command: CreateProjectDataSourceCommand) {
+  async createDataSource(actor: AuthenticatedActor, command: CreateProjectDataSourceCommand) {
     this.requireOwner(actor)
     const project = await this.assertProjectBelongsToActor(command.projectId, actor)
     if (project.status !== "active") {
@@ -200,7 +177,7 @@ export class ProjectPlatformService {
     return dataSource.toState()
   }
 
-  async updateDataSource(actor: ProjectAuthenticatedActor, dataSourceId: string, command: UpdateProjectDataSourceCommand) {
+  async updateDataSource(actor: AuthenticatedActor, dataSourceId: string, command: UpdateProjectDataSourceCommand) {
     this.requireOwner(actor)
     const current = await this.deps.repositories.dataSources.findById(dataSourceId)
     if (!current || current.organizationId !== actor.organizationId) {
@@ -213,7 +190,7 @@ export class ProjectPlatformService {
     return dataSource.toState()
   }
 
-  async enableDataSource(actor: ProjectAuthenticatedActor, dataSourceId: string) {
+  async enableDataSource(actor: AuthenticatedActor, dataSourceId: string) {
     this.requireOwner(actor)
     const dataSource = DataSourceEntity.rehydrate(await this.requireDataSource(actor, dataSourceId))
     dataSource.enable(defaultNow())
@@ -222,7 +199,7 @@ export class ProjectPlatformService {
     return dataSource.toState()
   }
 
-  async disableDataSource(actor: ProjectAuthenticatedActor, dataSourceId: string) {
+  async disableDataSource(actor: AuthenticatedActor, dataSourceId: string) {
     this.requireOwner(actor)
     const dataSource = DataSourceEntity.rehydrate(await this.requireDataSource(actor, dataSourceId))
     dataSource.disable(defaultNow())
@@ -231,7 +208,7 @@ export class ProjectPlatformService {
     return dataSource.toState()
   }
 
-  async archiveDataSource(actor: ProjectAuthenticatedActor, dataSourceId: string) {
+  async archiveDataSource(actor: AuthenticatedActor, dataSourceId: string) {
     this.requireOwner(actor)
     const dataSource = DataSourceEntity.rehydrate(await this.requireDataSource(actor, dataSourceId))
     dataSource.archive(defaultNow())
@@ -240,7 +217,7 @@ export class ProjectPlatformService {
     return dataSource.toState()
   }
 
-  async deleteDataSource(actor: ProjectAuthenticatedActor, dataSourceId: string) {
+  async deleteDataSource(actor: AuthenticatedActor, dataSourceId: string) {
     this.requireOwner(actor)
     const dataSource = DataSourceEntity.rehydrate(await this.requireDataSource(actor, dataSourceId))
     dataSource.softDelete(defaultNow())
@@ -249,7 +226,7 @@ export class ProjectPlatformService {
     return dataSource.toState()
   }
 
-  async listDataSources(actor: ProjectAuthenticatedActor, query: ListDataSourcesQuery) {
+  async listDataSources(actor: AuthenticatedActor, query: ListDataSourcesQuery) {
     await this.assertProjectBelongsToActor(query.projectId, actor)
     return this.deps.repositories.dataSources.listByProjectId(query.projectId, {
       page: query.page,
@@ -259,7 +236,7 @@ export class ProjectPlatformService {
     })
   }
 
-  async inviteProjectMember(actor: ProjectAuthenticatedActor, command: InviteProjectMemberCommand) {
+  async inviteProjectMember(actor: AuthenticatedActor, command: InviteProjectMemberCommand) {
     this.requireOwner(actor)
     const project = await this.assertProjectBelongsToActor(command.projectId, actor)
     const invitation = ProjectInvitationEntity.create({
@@ -279,7 +256,7 @@ export class ProjectPlatformService {
     return invitation.toState()
   }
 
-  async addProjectMember(actor: ProjectAuthenticatedActor, command: AddProjectMemberCommand) {
+  async addProjectMember(actor: AuthenticatedActor, command: AddProjectMemberCommand) {
     this.requireOwner(actor)
     const project = await this.assertProjectBelongsToActor(command.projectId, actor)
     const member = ProjectMemberEntity.create({
@@ -296,7 +273,7 @@ export class ProjectPlatformService {
     return member.toState()
   }
 
-  async updateProjectMemberRole(actor: ProjectAuthenticatedActor, command: UpdateProjectMemberRoleCommand) {
+  async updateProjectMemberRole(actor: AuthenticatedActor, command: UpdateProjectMemberRoleCommand) {
     this.requireOwner(actor)
     const memberState = await this.deps.repositories.projectMembers.findByProjectAndUser(command.projectId, command.userId)
     if (!memberState) {
@@ -308,7 +285,7 @@ export class ProjectPlatformService {
     return member.toState()
   }
 
-  async suspendProjectMember(actor: ProjectAuthenticatedActor, command: SuspendProjectMemberCommand) {
+  async suspendProjectMember(actor: AuthenticatedActor, command: SuspendProjectMemberCommand) {
     this.requireOwner(actor)
     const memberState = await this.deps.repositories.projectMembers.findByProjectAndUser(command.projectId, command.userId)
     if (!memberState) throw PROJECT_ERRORS.notFound("Project member")
@@ -318,7 +295,7 @@ export class ProjectPlatformService {
     return member.toState()
   }
 
-  async removeProjectMember(actor: ProjectAuthenticatedActor, command: RemoveProjectMemberCommand) {
+  async removeProjectMember(actor: AuthenticatedActor, command: RemoveProjectMemberCommand) {
     this.requireOwner(actor)
     const memberState = await this.deps.repositories.projectMembers.findByProjectAndUser(command.projectId, command.userId)
     if (!memberState) throw PROJECT_ERRORS.notFound("Project member")
@@ -328,7 +305,7 @@ export class ProjectPlatformService {
     return member.toState()
   }
 
-  async acceptProjectInvitation(actor: ProjectAuthenticatedActor, command: AcceptProjectInvitationCommand) {
+  async acceptProjectInvitation(actor: AuthenticatedActor, command: AcceptProjectInvitationCommand) {
     const invitationState = await this.deps.repositories.projectInvitations.findByToken(command.token)
     if (!invitationState) throw PROJECT_ERRORS.notFound("Project invitation")
     const invitation = ProjectInvitationEntity.rehydrate(invitationState)
@@ -337,7 +314,7 @@ export class ProjectPlatformService {
     return invitation.toState()
   }
 
-  async declineProjectInvitation(actor: ProjectAuthenticatedActor, command: DeclineProjectInvitationCommand) {
+  async declineProjectInvitation(actor: AuthenticatedActor, command: DeclineProjectInvitationCommand) {
     const invitationState = await this.deps.repositories.projectInvitations.findByToken(command.token)
     if (!invitationState) throw PROJECT_ERRORS.notFound("Project invitation")
     const invitation = ProjectInvitationEntity.rehydrate(invitationState)
@@ -346,7 +323,7 @@ export class ProjectPlatformService {
     return invitation.toState()
   }
 
-  async cancelProjectInvitation(actor: ProjectAuthenticatedActor, command: CancelProjectInvitationCommand) {
+  async cancelProjectInvitation(actor: AuthenticatedActor, command: CancelProjectInvitationCommand) {
     this.requireOwner(actor)
     const invitationState = await this.deps.repositories.projectInvitations.findById(command.invitationId)
     if (!invitationState) throw PROJECT_ERRORS.notFound("Project invitation")
@@ -356,7 +333,7 @@ export class ProjectPlatformService {
     return invitation.toState()
   }
 
-  async resendProjectInvitation(actor: ProjectAuthenticatedActor, command: ResendProjectInvitationCommand) {
+  async resendProjectInvitation(actor: AuthenticatedActor, command: ResendProjectInvitationCommand) {
     this.requireOwner(actor)
     const invitationState = await this.deps.repositories.projectInvitations.findById(command.invitationId)
     if (!invitationState) throw PROJECT_ERRORS.notFound("Project invitation")
@@ -366,7 +343,7 @@ export class ProjectPlatformService {
     return invitation.toState()
   }
 
-  private async requireDataSource(actor: ProjectAuthenticatedActor, dataSourceId: string) {
+  private async requireDataSource(actor: AuthenticatedActor, dataSourceId: string) {
     const dataSource = await this.deps.repositories.dataSources.findById(dataSourceId)
     if (!dataSource || dataSource.organizationId !== actor.organizationId) {
       throw PROJECT_ERRORS.notFound("Data source")

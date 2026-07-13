@@ -114,13 +114,16 @@ export class UserEntity {
     this.state.updatedAt = now
   }
 
-  updateProfile(payload: {
-    fullName?: string
-    avatarUrl?: string | null
-    timezone?: string
-    language?: string
-    preferences?: Record<string, string | number | boolean>
-  }, now: string) {
+  updateProfile(
+    payload: {
+      fullName?: string
+      avatarUrl?: string | null
+      timezone?: string
+      language?: string
+      preferences?: Record<string, string | number | boolean>
+    },
+    now: string
+  ) {
     if (payload.fullName !== undefined) this.state.fullName = payload.fullName
     if (payload.avatarUrl !== undefined) this.state.avatarUrl = payload.avatarUrl
     if (payload.timezone !== undefined) this.state.timezone = payload.timezone
@@ -261,18 +264,21 @@ export class OrganizationEntity {
     this.state.updatedAt = now
   }
 
-  update(payload: {
-    name?: string
-    status?: "active" | "archived" | "deleted"
-    metadata?: Record<string, string>
-    branding?: Record<string, string>
-    logoUrl?: string | null
-    timezone?: string
-    locale?: string
-    currency?: string
-    subscriptionReference?: string | null
-    settings?: Record<string, string | boolean | number>
-  }, now: string) {
+  update(
+    payload: {
+      name?: string
+      status?: "active" | "archived" | "deleted"
+      metadata?: Record<string, string>
+      branding?: Record<string, string>
+      logoUrl?: string | null
+      timezone?: string
+      locale?: string
+      currency?: string
+      subscriptionReference?: string | null
+      settings?: Record<string, string | boolean | number>
+    },
+    now: string
+  ) {
     this.ensureWritable()
     if (payload.name !== undefined) this.rename(payload.name, now)
     if (payload.status === "archived") this.archive(now)
@@ -284,7 +290,8 @@ export class OrganizationEntity {
     if (payload.timezone !== undefined) this.state.timezone = payload.timezone
     if (payload.locale !== undefined) this.state.locale = payload.locale
     if (payload.currency !== undefined) this.state.currency = payload.currency
-    if (payload.subscriptionReference !== undefined) this.state.subscriptionReference = payload.subscriptionReference
+    if (payload.subscriptionReference !== undefined)
+      this.state.subscriptionReference = payload.subscriptionReference
     if (payload.settings !== undefined) this.state.settings = payload.settings
     this.state.updatedAt = now
   }
@@ -348,12 +355,15 @@ export class WorkspaceEntity {
     return this.state.organizationId
   }
 
-  update(payload: {
-    name?: string
-    status?: "active" | "archived"
-    metadata?: Record<string, string>
-    settings?: Record<string, string | boolean | number>
-  }, now: string) {
+  update(
+    payload: {
+      name?: string
+      status?: "active" | "archived"
+      metadata?: Record<string, string>
+      settings?: Record<string, string | boolean | number>
+    },
+    now: string
+  ) {
     if (payload.name !== undefined) this.state.name = payload.name
     if (payload.status !== undefined) this.state.status = payload.status
     if (payload.metadata !== undefined) this.state.metadata = payload.metadata
@@ -427,9 +437,9 @@ export class MembershipEntity {
       suspendedAt: null,
       removedAt: null,
       history: input.history ?? [],
-      roleHistory:
-        input.roleHistory
-        ?? [{ role: input.role, actorUserId: input.invitedByUserId ?? null, occurredAt: input.now }],
+      roleHistory: input.roleHistory ?? [
+        { role: input.role, actorUserId: input.invitedByUserId ?? null, occurredAt: input.now },
+      ],
       createdAt: input.now,
       updatedAt: input.now,
       deletedAt: null,

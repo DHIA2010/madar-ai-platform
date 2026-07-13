@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import type {
+  ProviderAccountDiscoveryRepository,
+  ProviderConnectionLifecycleRepository,
+} from "../integrations/provider-repositories"
 
 import type { GoogleAdsCustomerAccountView, GoogleOAuthConnectionView } from "./types"
 
@@ -110,7 +114,8 @@ function mapAdsCustomerAccount(row: Record<string, unknown>): GoogleAdsCustomerA
   }
 }
 
-export class GoogleOAuthRepository {
+export class GoogleOAuthRepository
+implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryRepository {
   constructor(private readonly db: PostgresDatabase) {}
 
   async withTransaction<T>(work: () => Promise<T>) {

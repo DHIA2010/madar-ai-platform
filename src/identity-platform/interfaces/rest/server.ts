@@ -13,10 +13,10 @@ import {
   createOrganizationSchema,
   createWorkspaceSchema,
   forgotPasswordSchema,
-  googleAdsRecordsQuerySchema,
-  googleAdsAccountsQuerySchema,
-  googleAdsSyncSchema,
-  googleOAuthStartSchema,
+  integrationAccountsQuerySchema,
+  integrationOAuthStartSchema,
+  integrationRecordsQuerySchema,
+  integrationSyncSchema,
   inviteOrganizationMemberSchema,
   loginSchema,
   removeMemberSchema,
@@ -218,6 +218,19 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         return
       }
 
+      const providerOauthCallbackMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/oauth\/callback$/)
+      if (method === "GET" && providerOauthCallbackMatch) {
+        const provider = container.infrastructure.integrations?.find(providerOauthCallbackMatch[1])
+        if (!provider || !provider.oauthCallback) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        const callbackResult = await provider.oauthCallback(request, url.searchParams)
+        response.writeHead(callbackResult.status, callbackResult.headers)
+        response.end()
+        return
+      }
+
       const token = getBearerToken(request)
       if (!token) {
         return send(401, { code: "AUTH_TOKEN_MISSING", message: "Authentication required." })
@@ -252,7 +265,27 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
           return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
         }
 
-        const payload = googleOAuthStartSchema.parse(await readJsonBody(request))
+        const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
+        return send(200, await googleOAuthController.start(actor, payload))
+      }
+
+      const providerOauthStartMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/oauth\/start$/)
+      if (method === "POST" && providerOauthStartMatch) {
+        const provider = container.infrastructure.integrations?.find(providerOauthStartMatch[1])
+        if (!provider || !provider.oauthStart) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
+        return send(200, await provider.oauthStart(actor, payload))
+      }
+
+      if (method === "POST" && url.pathname === "/v1/integrations/google-ads/oauth/start") {
+        if (!googleOAuthController) {
+          return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
+        }
+
+        const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
         return send(200, await googleOAuthController.start(actor, payload))
       }
 
@@ -261,6 +294,16 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
           return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
         }
         return send(200, await googleOAuthController.getActiveConnection(actor))
+      }
+
+      const providerConnectionMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/connection$/)
+      if (method === "GET" && providerConnectionMatch) {
+        const provider = container.infrastructure.integrations?.find(providerConnectionMatch[1])
+        if (!provider || !provider.getActiveConnection) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        return send(200, await provider.getActiveConnection(actor))
       }
 
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)
@@ -286,17 +329,17 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         }
 
         if (action === "sync" && method === "POST" && provider.sync) {
-          const payload = googleAdsSyncSchema.parse(await readJsonBody(request))
+          const payload = integrationSyncSchema.parse(await readJsonBody(request))
           return send(200, await provider.sync(actor, payload))
         }
 
         if (action === "records" && method === "GET" && provider.listRecords) {
-          const query = googleAdsRecordsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
+          const query = integrationRecordsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
           return send(200, { items: await provider.listRecords(actor, query) })
         }
 
         if (action === "accounts" && method === "GET" && provider.listAccounts) {
-          const query = googleAdsAccountsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
+          const query = integrationAccountsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
           return send(200, { items: await provider.listAccounts(actor, query) })
         }
       }

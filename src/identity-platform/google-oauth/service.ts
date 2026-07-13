@@ -148,7 +148,13 @@ function toOnboardingRedirectUrl(rawUrl: string) {
 
 function ensureRequiredScopesGranted(grantedScopes: string[], requiredScopes: string[]) {
   const granted = new Set(grantedScopes)
+  const required = new Set(requiredScopes)
   const missing = requiredScopes.filter((scope) => !granted.has(scope))
+  console.info("[TEMP_DIAGNOSTIC][google-oauth] scope validation", {
+    grantedScopes: Array.from(granted),
+    requiredScopes: Array.from(required),
+    missingScopes: missing,
+  })
   if (missing.length > 0) {
     throw new Error("GOOGLE_OAUTH_SCOPE_VALIDATION_FAILED")
   }
@@ -224,7 +230,25 @@ async function exchangeAuthorizationCode(input: {
     throw new Error("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
   }
 
-  const body = (await response.json()) as GoogleTokenResponse
+  const rawBody = await response.text()
+  console.info("[TEMP_DIAGNOSTIC][google-oauth] token endpoint raw response", rawBody)
+
+  let body: GoogleTokenResponse
+  try {
+    body = JSON.parse(rawBody) as GoogleTokenResponse
+  } catch {
+    throw new Error("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
+  }
+
+  console.info("[TEMP_DIAGNOSTIC][google-oauth] token response fields", {
+    access_token_exists: Boolean(body.access_token),
+    refresh_token_exists: Boolean(body.refresh_token),
+    expires_in: body.expires_in ?? null,
+    token_type: body.token_type ?? null,
+    scope: typeof body.scope === "string" ? body.scope : "<missing>",
+    id_token_exists: Boolean((body as { id_token?: string }).id_token),
+  })
+
   if (!body.access_token || typeof body.access_token !== "string") {
     throw new Error("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
   }
@@ -426,6 +450,10 @@ export class GoogleOAuthService {
     const now = new Date().toISOString()
 
     const scopedValues = parseScopes(token.scope)
+    console.info("[TEMP_DIAGNOSTIC][google-oauth] parsed granted scopes", {
+      rawScope: typeof token.scope === "string" ? token.scope : "<missing>",
+      grantedScopes: scopedValues,
+    })
     const scopes = scopedValues && scopedValues.length > 0 ? scopedValues : this.config.scopes
     ensureRequiredScopesGranted(scopes, REQUIRED_GOOGLE_SCOPES)
 

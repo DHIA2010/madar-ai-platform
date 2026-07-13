@@ -83,12 +83,71 @@ interface StoredState {
   events: Record<string, IntegrationEvent[]>
 }
 
+interface RuntimeProviderProfile {
+  providerId: string
+  connectorId: string
+  connectorDefinitionId: string
+  displayName: string
+  oauth: {
+    startPath: string
+    activeConnectionPath: string
+    callbackStatusParam: string
+    callbackConnectionIdParam: string
+    callbackAccountNameParam: string
+    callbackAccountEmailParam: string
+    callbackReasonParam: string
+  }
+  endpoints: {
+    sync: string
+    records: string
+    accounts: string
+  }
+  metadata: {
+    availableAccountsKey: string
+  }
+}
+
 const STORAGE_KEY = "integration-runtime-state:v1"
-const GOOGLE_ADS_CONNECTOR_ID = "google_ads"
-const GOOGLE_ADS_CONNECTOR_DEFINITION_ID = "connector_def_google_ads"
+
+const GOOGLE_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "google-ads",
+  connectorId: "google_ads",
+  connectorDefinitionId: "connector_def_google_ads",
+  displayName: "Google Ads",
+  oauth: {
+    startPath: "/v1/integrations/google/oauth/start",
+    activeConnectionPath: "/v1/integrations/google/connection",
+    callbackStatusParam: "google_oauth",
+    callbackConnectionIdParam: "google_connection_id",
+    callbackAccountNameParam: "google_account_name",
+    callbackAccountEmailParam: "google_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/google-ads/sync",
+    records: "/v1/integrations/google-ads/records",
+    accounts: "/v1/integrations/google-ads/accounts",
+  },
+  metadata: {
+    availableAccountsKey: "availableGoogleAdsCustomerAccounts",
+  },
+}
+
+const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = {
+  [GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ADS_PROVIDER_PROFILE,
+}
+
 const DEFAULT_WORKSPACE_ID = "ws_connections_center"
 const DEFAULT_CRON = "*/30 * * * *"
 const DEFAULT_TIMEZONE = "Asia/Riyadh"
+
+function resolveProviderProfileByDefinition(connectorDefinitionId: string) {
+  return PROVIDER_PROFILES_BY_DEFINITION[connectorDefinitionId] ?? null
+}
+
+function resolveProviderProfileByConnection(connection: Connection) {
+  return resolveProviderProfileByDefinition(connection.connectorDefinitionId)
+}
 
 function nowIso() {
   return new Date().toISOString()
@@ -166,7 +225,7 @@ function saveState(state: StoredState) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 }
 
-function readOAuthCallback(): {
+function readOAuthCallback(profile: RuntimeProviderProfile): {
   status: "connected" | "error" | null
   connectionId: string | null
   accountName: string | null
@@ -184,18 +243,18 @@ function readOAuthCallback(): {
   }
 
   const params = new URLSearchParams(window.location.search)
-  const oauthStatus = params.get("google_oauth")
+  const oauthStatus = params.get(profile.oauth.callbackStatusParam)
 
   return {
     status: oauthStatus === "connected" || oauthStatus === "error" ? oauthStatus : null,
-    connectionId: params.get("google_connection_id"),
-    accountName: params.get("google_account_name"),
-    accountEmail: params.get("google_account_email"),
-    reason: params.get("reason"),
+    connectionId: params.get(profile.oauth.callbackConnectionIdParam),
+    accountName: params.get(profile.oauth.callbackAccountNameParam),
+    accountEmail: params.get(profile.oauth.callbackAccountEmailParam),
+    reason: params.get(profile.oauth.callbackReasonParam),
   }
 }
 
-function parseStoredGoogleAdsAccounts(raw: string | undefined) {
+function parseStoredProviderAccounts(raw: string | undefined) {
   if (!raw) {
     return [] as GoogleAdsAccessibleAccountApiItem[]
   }
@@ -218,7 +277,7 @@ function parseStoredGoogleAdsAccounts(raw: string | undefined) {
   }
 }
 
-function normalizeGoogleAdsAccounts(items: Array<Record<string, unknown>>) {
+function normalizeProviderAccounts(items: Array<Record<string, unknown>>) {
   return items
     .map((item) => ({
       customerId: typeof item.customerId === "string" ? item.customerId : "",
@@ -315,7 +374,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
     })
 
     const response = await this.client.get<{ items: GoogleAdsRecordItem[] }>(
-      "/v1/integrations/google-ads/records",
+      GOOGLE_ADS_PROVIDER_PROFILE.endpoints.records,
       {
         query: {
           connectionId,
@@ -330,7 +389,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
   private async fetchAccessibleAccounts(connectionId: string) {
     const response = await this.client.get<{ items: Array<Record<string, unknown>> }>(
-      "/v1/integrations/google-ads/accounts",
+      GOOGLE_ADS_PROVIDER_PROFILE.endpoints.accounts,
       {
         query: {
           connectionId,
@@ -338,12 +397,13 @@ export class RestIntegrationRepository implements IntegrationRepository {
       }
     )
 
-    return normalizeGoogleAdsAccounts(response.items)
+    return normalizeProviderAccounts(response.items)
   }
 
   async createConnection(input: CreateConnectionRequestDto): Promise<Connection> {
     try {
-      if (input.connectorDefinitionId !== GOOGLE_ADS_CONNECTOR_DEFINITION_ID) {
+      const providerProfile = resolveProviderProfileByDefinition(input.connectorDefinitionId)
+      if (!providerProfile) {
         throw new ValidationError({
           code: "connector_not_supported",
           message: "Only Google Ads is available in production integration runtime.",
@@ -353,7 +413,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
       const start = await this.client.post<
         { workspaceId?: string | null; projectId?: string | null; connectionName?: string | null },
         GoogleOAuthStartResponse
-      >("/v1/integrations/google/oauth/start", {
+      >(providerProfile.oauth.startPath, {
         workspaceId: input.workspaceId,
         projectId: null,
         connectionName: input.metadata?.connectionName ?? input.metadata?.accountName ?? null,
@@ -362,8 +422,8 @@ export class RestIntegrationRepository implements IntegrationRepository {
       const connection: Connection = {
         connectionId: start.connectionId,
         workspaceId: input.workspaceId ?? start.workspaceId ?? DEFAULT_WORKSPACE_ID,
-        connectorId: GOOGLE_ADS_CONNECTOR_ID,
-        connectorDefinitionId: GOOGLE_ADS_CONNECTOR_DEFINITION_ID,
+        connectorId: providerProfile.connectorId,
+        connectorDefinitionId: providerProfile.connectorDefinitionId,
         status: "draft",
         metadata: {
           projectId: start.projectId,
@@ -386,7 +446,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
   async recoverConnections(): Promise<Connection[]> {
     try {
       const backendResponse = await this.client.get<GoogleActiveConnectionResponse>(
-        "/v1/integrations/google/connection"
+        GOOGLE_ADS_PROVIDER_PROFILE.oauth.activeConnectionPath
       )
       const backendConn = backendResponse.connection
 
@@ -402,8 +462,8 @@ export class RestIntegrationRepository implements IntegrationRepository {
         connectionId: backendConn.id,
         workspaceId:
           existing?.workspaceId ?? this.options?.getWorkspaceId?.() ?? DEFAULT_WORKSPACE_ID,
-        connectorId: GOOGLE_ADS_CONNECTOR_ID,
-        connectorDefinitionId: GOOGLE_ADS_CONNECTOR_DEFINITION_ID,
+        connectorId: GOOGLE_ADS_PROVIDER_PROFILE.connectorId,
+        connectorDefinitionId: GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId,
         status: "connected",
         metadata: {
           ...(existing?.metadata ?? {}),
@@ -414,7 +474,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
             "Google Ads Account",
           accountEmail: backendConn.providerAccountEmail ?? existing?.metadata.accountEmail ?? "",
           customerId: selectedAccount?.customerId ?? existing?.metadata.customerId ?? "",
-          availableGoogleAdsCustomerAccounts: JSON.stringify(accounts),
+          [GOOGLE_ADS_PROVIDER_PROFILE.metadata.availableAccountsKey]: JSON.stringify(accounts),
         },
         createdAt: existing?.createdAt ?? nowIso(),
         updatedAt: nowIso(),
@@ -423,7 +483,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
       for (const [connectionId, connection] of Object.entries(this.state.connections)) {
         if (
-          connection.connectorDefinitionId === GOOGLE_ADS_CONNECTOR_DEFINITION_ID &&
+          connection.connectorDefinitionId === GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId &&
           connectionId !== backendConn.id &&
           connection.status === "draft"
         ) {
@@ -441,13 +501,20 @@ export class RestIntegrationRepository implements IntegrationRepository {
   async validateConnection(input: { connectionId: string }): Promise<Connection> {
     try {
       const current = this.getConnectionOrThrow(input.connectionId)
-      const callback = readOAuthCallback()
+      const providerProfile = resolveProviderProfileByConnection(current)
+      if (!providerProfile) {
+        throw new ValidationError({
+          code: "connector_not_supported",
+          message: "Only Google Ads is available in production integration runtime.",
+        })
+      }
+      const callback = readOAuthCallback(providerProfile)
 
       if (callback.status === "connected" && callback.connectionId === input.connectionId) {
         let accessibleAccounts: GoogleAdsAccessibleAccountApiItem[] = []
         try {
           const response = await this.client.get<{ items: Array<Record<string, unknown>> }>(
-            "/v1/integrations/google-ads/accounts",
+            providerProfile.endpoints.accounts,
             {
               query: {
                 connectionId: input.connectionId,
@@ -478,7 +545,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
               selectedAccount?.displayName ?? callback.accountName ?? current.metadata.accountName,
             accountEmail: callback.accountEmail ?? "",
             customerId: selectedAccount?.customerId ?? "",
-            availableGoogleAdsCustomerAccounts: JSON.stringify(accessibleAccounts),
+            [providerProfile.metadata.availableAccountsKey]: JSON.stringify(accessibleAccounts),
           },
           updatedAt: nowIso(),
           lastValidatedAt: nowIso(),
@@ -527,7 +594,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
               isSelected: boolean
             }>
           } | null
-        }>("/v1/integrations/google/connection")
+        }>(providerProfile.oauth.activeConnectionPath)
 
         const backendConn = backendResponse.connection
         // Trust backend as source of truth for any draft connection — IDs may differ after session resets.
@@ -548,7 +615,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
                 current.metadata.accountName,
               accountEmail: backendConn.providerAccountEmail ?? "",
               customerId: selectedAccount?.customerId ?? "",
-              availableGoogleAdsCustomerAccounts: JSON.stringify(accounts),
+              [providerProfile.metadata.availableAccountsKey]: JSON.stringify(accounts),
             },
             updatedAt: nowIso(),
             lastValidatedAt: nowIso(),
@@ -649,10 +716,14 @@ export class RestIntegrationRepository implements IntegrationRepository {
     try {
       let connection = this.getConnectionOrThrow(input.connectionId)
       let customerId = connection.metadata.customerId?.trim() ?? ""
+      const providerProfile = resolveProviderProfileByConnection(connection)
 
       if (!customerId) {
-        const availableAccounts = parseStoredGoogleAdsAccounts(
-          connection.metadata.availableGoogleAdsCustomerAccounts
+        const availableAccounts = parseStoredProviderAccounts(
+          connection.metadata[
+            providerProfile?.metadata.availableAccountsKey
+            ?? GOOGLE_ADS_PROVIDER_PROFILE.metadata.availableAccountsKey
+          ]
         )
         const selectedAccount =
           availableAccounts.find((account) => account.isSelected) ?? availableAccounts[0]
@@ -686,7 +757,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
                 ...connection.metadata,
                 customerId,
                 accountName: selectedAccount.displayName ?? connection.metadata.accountName,
-                availableGoogleAdsCustomerAccounts: JSON.stringify(accessibleAccounts),
+                [GOOGLE_ADS_PROVIDER_PROFILE.metadata.availableAccountsKey]: JSON.stringify(accessibleAccounts),
               },
               updatedAt: nowIso(),
             }
@@ -708,7 +779,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
       if (!customerId) {
         try {
           const connectionResponse = await this.client.get<GoogleActiveConnectionResponse>(
-            "/v1/integrations/google/connection"
+            GOOGLE_ADS_PROVIDER_PROFILE.oauth.activeConnectionPath
           )
 
           if (connectionResponse.connection?.developerTokenConfigured === false) {
@@ -754,7 +825,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
           mode: "incremental"
         },
         GoogleAdsSyncApiResponse
-      >("/v1/integrations/google-ads/sync", {
+      >(GOOGLE_ADS_PROVIDER_PROFILE.endpoints.sync, {
         connectionId: connection.connectionId,
         customerId,
         startDate: startDate.toISOString().slice(0, 10),

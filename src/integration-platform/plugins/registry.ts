@@ -29,7 +29,8 @@ export class PluginRegistry {
 
   constructor(deps: PluginRegistryDependencies) {
     this.manifestRegistry =
-      deps.manifestRegistry ?? new ConnectorManifestRegistry({ platformVersion: deps.platformVersion })
+      deps.manifestRegistry ??
+      new ConnectorManifestRegistry({ platformVersion: deps.platformVersion })
   }
 
   register(plugin: ConnectorPluginRegistration) {
@@ -37,7 +38,9 @@ export class PluginRegistry {
       throw new PluginRegistryError(`Plugin id '${plugin.pluginId}' is already registered.`)
     }
 
-    const manifest = this.manifestRegistry.find(plugin.manifest.connectorId) ?? this.manifestRegistry.register(plugin.manifest)
+    const manifest =
+      this.manifestRegistry.find(plugin.manifest.connectorId) ??
+      this.manifestRegistry.register(plugin.manifest)
     const registration = {
       ...plugin,
       manifest,

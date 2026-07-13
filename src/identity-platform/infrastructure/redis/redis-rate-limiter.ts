@@ -5,7 +5,10 @@ import type { RedisLikeClient } from "./redis-like-client"
 export class RedisRateLimiter implements RateLimiter {
   private readonly prefix: string
 
-  constructor(private readonly client: RedisLikeClient, config: IdentityPlatformConfig) {
+  constructor(
+    private readonly client: RedisLikeClient,
+    config: IdentityPlatformConfig
+  ) {
     this.prefix = config.redisKeyPrefix
   }
 

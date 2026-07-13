@@ -19,7 +19,9 @@ export interface CreateProjectCommand {
   connectorPreferences?: Record<string, string | number | boolean>
 }
 
-export interface UpdateProjectCommand extends Partial<Omit<CreateProjectCommand, "organizationId">> {
+export interface UpdateProjectCommand extends Partial<
+  Omit<CreateProjectCommand, "organizationId">
+> {
   status?: "active" | "archived" | "deleted"
 }
 

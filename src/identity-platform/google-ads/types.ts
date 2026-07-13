@@ -1,49 +1,21 @@
+import type {
+  ProviderRecordsQueryDto,
+  ProviderSyncRequestDto,
+} from "../integrations/provider-dtos"
+import type {
+  IntegrationRecordView,
+  IntegrationSyncRunView,
+} from "../integrations/provider-models"
 import type { GoogleAdsEntityType } from "./models"
 
-export interface GoogleAdsSyncRequest {
-  connectionId: string
-  customerId: string
-  startDate: string
-  endDate: string
-  idempotencyKey: string
-  mode?: "full" | "incremental"
-}
+export interface GoogleAdsSyncRequest extends ProviderSyncRequestDto {}
 
-export interface GoogleAdsSyncRunView {
-  id: string
-  connectionId: string
-  organizationId: string
-  workspaceId: string | null
-  projectId: string
-  customerId: string
-  dateStart: string
-  dateEnd: string
-  idempotencyKey: string
-  status: "pending" | "running" | "completed" | "failed"
-  metrics: Record<string, number>
-  errorCode: string | null
-  errorMessage: string | null
-  startedAt: string | null
-  completedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
+export interface GoogleAdsSyncRunView extends IntegrationSyncRunView {}
 
-export interface GoogleAdsRecordView {
-  id: string
+export interface GoogleAdsRecordView extends IntegrationRecordView {
   entityType: GoogleAdsEntityType
-  customerId: string
-  entityId: string
-  recordDate: string
-  payload: Record<string, unknown>
-  updatedAt: string
 }
 
-export interface GoogleAdsRecordQuery {
-  connectionId: string
-  customerId: string
+export interface GoogleAdsRecordQuery extends ProviderRecordsQueryDto {
   entityType?: GoogleAdsEntityType
-  startDate?: string
-  endDate?: string
-  pageSize?: number
 }

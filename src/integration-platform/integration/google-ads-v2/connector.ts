@@ -22,7 +22,11 @@ import type { ConnectorManifest } from "../../manifest"
 import type { ConnectorManifestRegistry } from "../../manifest"
 import type { PluginRegistry } from "../../plugins"
 import { GoogleAdsV2ExecutionEngine, createGoogleAdsV2ExecutionManifest } from "./execution-engine"
-import { GoogleAdsV2Api, GoogleAdsV2OAuthAdapter, type GoogleAdsAccountProfile } from "./oauth-adapter"
+import {
+  GoogleAdsV2Api,
+  GoogleAdsV2OAuthAdapter,
+  type GoogleAdsAccountProfile,
+} from "./oauth-adapter"
 import { InMemoryN8nWorkflowAdapter, type N8nWorkflowAdapter } from "./n8n-adapter"
 
 export interface GoogleAdsV2ConnectorDependencies {
@@ -55,7 +59,12 @@ export class GoogleAdsConnectorV2 {
   private readonly oauthEngine: OAuthEngine
   private readonly googleAdsApi: GoogleAdsV2Api
   private readonly n8nAdapter: N8nWorkflowAdapter
-  private readonly busEnvelopes: Array<{ kind: string; executionId: string; correlationId: string; traceId: string }> = []
+  private readonly busEnvelopes: Array<{
+    kind: string
+    executionId: string
+    correlationId: string
+    traceId: string
+  }> = []
 
   constructor(private readonly deps: GoogleAdsV2ConnectorDependencies) {
     this.oauthAdapter = deps.oauthAdapter ?? new GoogleAdsV2OAuthAdapter()
@@ -102,7 +111,11 @@ export class GoogleAdsConnectorV2 {
       ],
       capabilities: [
         { capabilityKey: "account.discovery", displayName: "Account Discovery", enabled: true },
-        { capabilityKey: "capability.discovery", displayName: "Capability Discovery", enabled: true },
+        {
+          capabilityKey: "capability.discovery",
+          displayName: "Capability Discovery",
+          enabled: true,
+        },
         { capabilityKey: "data.import", displayName: "Import", enabled: true },
         { capabilityKey: "sync", displayName: "Sync", enabled: true },
         { capabilityKey: "resync", displayName: "Re-sync", enabled: true },
@@ -112,8 +125,18 @@ export class GoogleAdsConnectorV2 {
           objectId: "account",
           displayName: "Google Ads Account",
           fields: [
-            { fieldId: "account_id", displayName: "Account ID", dataType: "string", required: true },
-            { fieldId: "customer_id", displayName: "Customer ID", dataType: "string", required: true },
+            {
+              fieldId: "account_id",
+              displayName: "Account ID",
+              dataType: "string",
+              required: true,
+            },
+            {
+              fieldId: "customer_id",
+              displayName: "Customer ID",
+              dataType: "string",
+              required: true,
+            },
             { fieldId: "name", displayName: "Name", dataType: "string", required: true },
           ],
         },
@@ -168,14 +191,28 @@ export class GoogleAdsConnectorV2 {
         "accounts.resync",
       ],
       healthChecks: [
-        { checkId: "oauth-token-health", displayName: "OAuth Token Health", intervalSeconds: 300, timeoutMs: 3000 },
-        { checkId: "sync-runtime-health", displayName: "Sync Runtime Health", intervalSeconds: 120, timeoutMs: 2000 },
+        {
+          checkId: "oauth-token-health",
+          displayName: "OAuth Token Health",
+          intervalSeconds: 300,
+          timeoutMs: 3000,
+        },
+        {
+          checkId: "sync-runtime-health",
+          displayName: "Sync Runtime Health",
+          intervalSeconds: 120,
+          timeoutMs: 2000,
+        },
       ],
-      rateLimits: [{ limitId: "google-ads-api", scope: "connection", maxRequests: 1000, intervalSeconds: 60 }],
+      rateLimits: [
+        { limitId: "google-ads-api", scope: "connection", maxRequests: 1000, intervalSeconds: 60 },
+      ],
       dependencies: [{ dependencyId: "n8n", type: "service", minVersion: "1.0.0" }],
       minimumPlatformVersion: "1.0.0",
       maximumPlatformVersion: "2.0.0",
-      compatibilityRules: [{ ruleId: "oauth2-required", description: "OAuth2 is mandatory.", required: true }],
+      compatibilityRules: [
+        { ruleId: "oauth2-required", description: "OAuth2 is mandatory.", required: true },
+      ],
     }
   }
 
@@ -268,10 +305,13 @@ export class GoogleAdsConnectorV2 {
           description: "Google Ads connector running on the new integration platform.",
           version: "2.0.0",
           status: "active",
-          capabilities: this.deps
-            .capabilityRegistry
+          capabilities: this.deps.capabilityRegistry
             .list(CONNECTOR_ID)
-            .map((capability) => ({ key: capability.capabilityKey, name: capability.displayName, enabled: capability.enabled })),
+            .map((capability) => ({
+              key: capability.capabilityKey,
+              name: capability.displayName,
+              enabled: capability.enabled,
+            })),
           configuration: {},
         })
       )
@@ -401,7 +441,11 @@ export class GoogleAdsConnectorV2 {
       selectedAccountIds: accountIds,
       executionIds: [...this.executionIds(connection), result.executionId],
     }
-    await this.deps.repositories.connections.save({ ...connection, metadata, updatedAt: this.now() })
+    await this.deps.repositories.connections.save({
+      ...connection,
+      metadata,
+      updatedAt: this.now(),
+    })
     return result
   }
 
@@ -425,7 +469,11 @@ export class GoogleAdsConnectorV2 {
     return result
   }
 
-  async reconnect(connectionId: string, authorizationCode: string, redirectUri = "https://madar.local/oauth/callback") {
+  async reconnect(
+    connectionId: string,
+    authorizationCode: string,
+    redirectUri = "https://madar.local/oauth/callback"
+  ) {
     const oauth = await this.startOAuth(connectionId, redirectUri)
     return this.completeOAuth({
       state: oauth.session.state,
@@ -463,7 +511,9 @@ export class GoogleAdsConnectorV2 {
 
   async health(connectionId: string) {
     const connection = await this.requireConnection(connectionId)
-    const latest = await this.deps.repositories.connectorHealth.findLatestByConnectorId(connection.connectorId)
+    const latest = await this.deps.repositories.connectorHealth.findLatestByConnectorId(
+      connection.connectorId
+    )
     if (latest) {
       return latest
     }
@@ -472,7 +522,10 @@ export class GoogleAdsConnectorV2 {
       connectorId: connection.connectorId,
       connectionId: connection.id,
       status: connection.status === "connected" ? "healthy" : "unknown",
-      message: connection.status === "connected" ? "Connection is healthy." : "Connection is not connected.",
+      message:
+        connection.status === "connected"
+          ? "Connection is healthy."
+          : "Connection is not connected.",
       retryCount: 0,
       lastSyncedAt: connection.lastSyncedAt,
       nextSyncAt: null,
@@ -493,12 +546,16 @@ export class GoogleAdsConnectorV2 {
 
   private executionIds(connection: ConnectionState) {
     const values = connection.metadata.executionIds
-    return Array.isArray(values) ? values.filter((value): value is string => typeof value === "string") : []
+    return Array.isArray(values)
+      ? values.filter((value): value is string => typeof value === "string")
+      : []
   }
 
   private selectedAccountIds(connection: ConnectionState) {
     const values = connection.metadata.selectedAccountIds
-    return Array.isArray(values) ? values.filter((value): value is string => typeof value === "string") : []
+    return Array.isArray(values)
+      ? values.filter((value): value is string => typeof value === "string")
+      : []
   }
 
   private async afterSync(connection: ConnectionState, executionId: string) {
@@ -530,7 +587,11 @@ export class GoogleAdsConnectorV2 {
     )
   }
 
-  private async executeAction(connection: ConnectionState, action: "import" | "sync" | "resync", input: Record<string, unknown>) {
+  private async executeAction(
+    connection: ConnectionState,
+    action: "import" | "sync" | "resync",
+    input: Record<string, unknown>
+  ) {
     const executionId = randomUUID()
     const request: ExecutionRuntimeRequest = {
       executionId,

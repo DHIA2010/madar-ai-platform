@@ -61,7 +61,7 @@ class InMemoryUserRepository implements UserRepository {
 
   async findByEmail(email: string) {
     const userId = this.store.usersByEmail.get(email.toLowerCase())
-    return userId ? this.store.users.get(userId) ?? null : null
+    return userId ? (this.store.users.get(userId) ?? null) : null
   }
 
   async save(user: UserState) {
@@ -79,17 +79,21 @@ class InMemoryOrganizationRepository implements OrganizationRepository {
   async findById(id: string) {
     return this.store.organizations.get(id) ?? null
   }
-  async list(input: {
-    ownerUserId?: string
-    status?: OrganizationState["status"]
-    page?: number
-    pageSize?: number
-    sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc"
-  } = {}) {
+  async list(
+    input: {
+      ownerUserId?: string
+      status?: OrganizationState["status"]
+      page?: number
+      pageSize?: number
+      sort?: "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc"
+    } = {}
+  ) {
     const page = input.page ?? 1
     const pageSize = input.pageSize ?? 20
     const rows = [...this.store.organizations.values()]
-      .filter((organization) => (input.ownerUserId ? organization.ownerUserId === input.ownerUserId : true))
+      .filter((organization) =>
+        input.ownerUserId ? organization.ownerUserId === input.ownerUserId : true
+      )
       .filter((organization) => (input.status ? organization.status === input.status : true))
 
     const sorted = rows.sort((left, right) => {
@@ -128,7 +132,11 @@ class InMemoryMembershipRepository implements MembershipRepository {
   }
   async findByUserAndWorkspace(userId: string, workspaceId: string) {
     for (const membership of this.store.memberships.values()) {
-      if (membership.userId === userId && membership.workspaceId === workspaceId && !membership.deletedAt) {
+      if (
+        membership.userId === userId &&
+        membership.workspaceId === workspaceId &&
+        !membership.deletedAt
+      ) {
         return membership
       }
     }
@@ -136,7 +144,11 @@ class InMemoryMembershipRepository implements MembershipRepository {
   }
   async findByUserAndOrganization(userId: string, organizationId: string) {
     for (const membership of this.store.memberships.values()) {
-      if (membership.userId === userId && membership.organizationId === organizationId && !membership.deletedAt) {
+      if (
+        membership.userId === userId &&
+        membership.organizationId === organizationId &&
+        !membership.deletedAt
+      ) {
         return membership
       }
     }
@@ -151,13 +163,19 @@ class InMemoryMembershipRepository implements MembershipRepository {
     return null
   }
   async listByUserId(userId: string) {
-    return [...this.store.memberships.values()].filter((membership) => membership.userId === userId && !membership.deletedAt)
+    return [...this.store.memberships.values()].filter(
+      (membership) => membership.userId === userId && !membership.deletedAt
+    )
   }
   async listByWorkspaceId(workspaceId: string) {
-    return [...this.store.memberships.values()].filter((membership) => membership.workspaceId === workspaceId && !membership.deletedAt)
+    return [...this.store.memberships.values()].filter(
+      (membership) => membership.workspaceId === workspaceId && !membership.deletedAt
+    )
   }
   async listByOrganizationId(organizationId: string) {
-    return [...this.store.memberships.values()].filter((membership) => membership.organizationId === organizationId)
+    return [...this.store.memberships.values()].filter(
+      (membership) => membership.organizationId === organizationId
+    )
   }
   async listRolesByUserInOrganization(userId: string, organizationId: string) {
     const memberships = await this.listByOrganizationId(organizationId)
@@ -237,9 +255,9 @@ class InMemoryInvitationRepository implements InvitationRepository {
   async findPendingByIdempotencyKey(organizationId: string, idempotencyKey: string) {
     for (const invitation of this.store.invitations.values()) {
       if (
-        invitation.organizationId === organizationId
-        && invitation.idempotencyKey === idempotencyKey
-        && invitation.status === "pending"
+        invitation.organizationId === organizationId &&
+        invitation.idempotencyKey === idempotencyKey &&
+        invitation.status === "pending"
       ) {
         return invitation
       }
@@ -258,14 +276,19 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
   }
   async listRecent(page: number, pageSize: number) {
     const start = (page - 1) * pageSize
-    return this.store.auditLogs.slice().reverse().slice(start, start + pageSize)
+    return this.store.auditLogs
+      .slice()
+      .reverse()
+      .slice(start, start + pageSize)
   }
   async count() {
     return this.store.auditLogs.length
   }
 }
 
-export function createInMemoryRepositories(store = createInMemoryIdentityDataStore()): IdentityRepositories {
+export function createInMemoryRepositories(
+  store = createInMemoryIdentityDataStore()
+): IdentityRepositories {
   return {
     users: new InMemoryUserRepository(store),
     organizations: new InMemoryOrganizationRepository(store),

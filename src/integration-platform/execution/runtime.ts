@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto"
 
-import type { ExecutionEvent, ExecutionHooks, ExecutionMiddleware, ExecutionRuntimeRequest, ExecutionRuntimeResult, ExecutionState } from "./runtime.contracts"
+import type {
+  ExecutionEvent,
+  ExecutionHooks,
+  ExecutionMiddleware,
+  ExecutionRuntimeRequest,
+  ExecutionRuntimeResult,
+  ExecutionState,
+} from "./runtime.contracts"
 import { ExecutionCancelledError, ExecutionNotFoundError, ExecutionRuntimeError } from "./errors"
 import { ExecutionDispatcher } from "./dispatcher"
 import type { ExecutionEngineRegistry } from "./registry"
@@ -72,7 +79,10 @@ export class ExecutionRuntime {
     }
   }
 
-  private async runMiddleware(context: { state: ExecutionState; request: ExecutionRuntimeRequest }, dispatch: () => Promise<ExecutionRuntimeResult>) {
+  private async runMiddleware(
+    context: { state: ExecutionState; request: ExecutionRuntimeRequest },
+    dispatch: () => Promise<ExecutionRuntimeResult>
+  ) {
     const chain = [...this.middlewares]
     let index = -1
 
@@ -139,7 +149,11 @@ export class ExecutionRuntime {
     )
 
     const runningAt = this.now()
-    const runningState: ExecutionState = { ...dispatchedState, status: "running", startedAt: runningAt }
+    const runningState: ExecutionState = {
+      ...dispatchedState,
+      status: "running",
+      startedAt: runningAt,
+    }
     await this.updateState(runningState)
     await this.emit(
       {
@@ -169,23 +183,25 @@ export class ExecutionRuntime {
     }
 
     try {
-      const result = await this.runMiddleware(
-        { state: runningState, request: state.request },
-        () =>
-          this.bus.dispatch(state.request, {
-            policy: {
-              retry: {
-                maxAttempts: Math.max(1, state.request.context.metadata.retryCount ?? 1),
-                retryableErrorCodes: ["execution_timed_out", "engine_not_registered"],
-              },
-              timeout: {
-                timeoutMs: state.request.context.metadata.timeoutMs ?? 30000,
-              },
+      const result = await this.runMiddleware({ state: runningState, request: state.request }, () =>
+        this.bus.dispatch(state.request, {
+          policy: {
+            retry: {
+              maxAttempts: Math.max(1, state.request.context.metadata.retryCount ?? 1),
+              retryableErrorCodes: ["execution_timed_out", "engine_not_registered"],
             },
-          })
+            timeout: {
+              timeoutMs: state.request.context.metadata.timeoutMs ?? 30000,
+            },
+          },
+        })
       )
       const completedAt = this.now()
-      const terminalResult: ExecutionRuntimeResult = { ...result, startedAt: runningAt, finishedAt: completedAt }
+      const terminalResult: ExecutionRuntimeResult = {
+        ...result,
+        startedAt: runningAt,
+        finishedAt: completedAt,
+      }
       this.metrics.recordResult(terminalResult)
 
       if (terminalResult.status === "failed") {
@@ -194,11 +210,18 @@ export class ExecutionRuntime {
           status: "failed",
           finishedAt: completedAt,
           result: terminalResult,
-          error: { code: "execution_failed", message: "Execution completed with failed status.", retryable: false },
+          error: {
+            code: "execution_failed",
+            message: "Execution completed with failed status.",
+            retryable: false,
+          },
         }
         await this.updateState(failedState)
         for (const hook of this.hooks) {
-          await hook.onAfterExecute?.({ state: failedState, request: state.request }, terminalResult)
+          await hook.onAfterExecute?.(
+            { state: failedState, request: state.request },
+            terminalResult
+          )
         }
         await this.emit(
           {
@@ -221,11 +244,18 @@ export class ExecutionRuntime {
           finishedAt: completedAt,
           cancelledAt: completedAt,
           result: terminalResult,
-          error: { code: "execution_cancelled", message: "Execution completed with cancelled status.", retryable: false },
+          error: {
+            code: "execution_cancelled",
+            message: "Execution completed with cancelled status.",
+            retryable: false,
+          },
         }
         await this.updateState(cancelledState)
         for (const hook of this.hooks) {
-          await hook.onAfterExecute?.({ state: cancelledState, request: state.request }, terminalResult)
+          await hook.onAfterExecute?.(
+            { state: cancelledState, request: state.request },
+            terminalResult
+          )
         }
         await this.emit(
           {
@@ -242,10 +272,18 @@ export class ExecutionRuntime {
       }
 
       const completedResult: ExecutionRuntimeResult = { ...terminalResult, status: "completed" }
-      const completedState: ExecutionState = { ...runningState, status: "completed", finishedAt: completedAt, result: completedResult }
+      const completedState: ExecutionState = {
+        ...runningState,
+        status: "completed",
+        finishedAt: completedAt,
+        result: completedResult,
+      }
       await this.updateState(completedState)
       for (const hook of this.hooks) {
-        await hook.onAfterExecute?.({ state: completedState, request: state.request }, completedResult)
+        await hook.onAfterExecute?.(
+          { state: completedState, request: state.request },
+          completedResult
+        )
       }
       await this.emit(
         {
@@ -262,11 +300,21 @@ export class ExecutionRuntime {
     } catch (error) {
       const failedAt = this.now()
       const executionError = {
-        code: error instanceof ExecutionRuntimeError ? error.code : error instanceof Error ? error.name : "execution_error",
+        code:
+          error instanceof ExecutionRuntimeError
+            ? error.code
+            : error instanceof Error
+              ? error.name
+              : "execution_error",
         message: error instanceof Error ? error.message : String(error),
         retryable: false,
       }
-      const failedState: ExecutionState = { ...runningState, status: "failed", finishedAt: failedAt, error: executionError }
+      const failedState: ExecutionState = {
+        ...runningState,
+        status: "failed",
+        finishedAt: failedAt,
+        error: executionError,
+      }
       await this.updateState(failedState)
       for (const hook of this.hooks) {
         await hook.onError?.({ state: failedState, request: state.request }, executionError)

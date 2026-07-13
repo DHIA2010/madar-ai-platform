@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto"
 
 import type { RequestContext } from "../../application/dto/identity-dtos"
 import { IdentityError } from "../../application/errors/IdentityError"
-import { GoogleAdsIntegrationError } from "../../google-ads/errors"
+import { mapProviderStatusToErrorCategory } from "../../integrations/provider-mappers"
+import { IntegrationProviderError } from "../../integrations/provider-error"
 
 export function createRequestContext(request: IncomingMessage): RequestContext {
   const requestId = request.headers["x-request-id"]?.toString() || randomUUID()
@@ -30,12 +31,12 @@ export function mapIdentityError(error: unknown) {
     }
   }
 
-  if (error instanceof GoogleAdsIntegrationError) {
+  if (error instanceof IntegrationProviderError) {
     return {
       status: error.status,
       body: {
         code: error.code,
-        category: error.status >= 500 ? "infrastructure" : error.status === 400 ? "validation" : "business",
+        category: mapProviderStatusToErrorCategory(error.status),
         message: error.message,
       },
     }

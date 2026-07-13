@@ -1,6 +1,6 @@
 import type { DataSourceRepository, ProjectInvitationRepository, ProjectMemberRepository, ProjectRepositories, ProjectRepository } from "../../domain/repositories"
 import type { DataSourceState, ProjectInvitationState, ProjectMemberState, ProjectState } from "../../domain/entities"
-import { PostgresDatabase } from "../../../backend-foundation/postgres/database"
+import { PostgresDatabase } from "../../../identity-platform/infrastructure/postgres/database"
 
 function mapPrimitiveRecord(value: unknown): Record<string, string | number | boolean> {
   return (value as Record<string, string | number | boolean>) ?? {}

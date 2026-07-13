@@ -60,6 +60,10 @@ const STAGE_ORDER: SyncStage[] = [
   "completed",
 ]
 
+// TEMPORARY DIAGNOSTIC: Remove after experiment.
+// Used only when automatic accessible-customer discovery returns no IDs.
+const TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID = "2233503900"
+
 function createEmptyBundle(): GoogleAdsNormalizedBundle {
   return {
     customers: [],
@@ -456,15 +460,22 @@ export class GoogleAdsSyncService {
     }
 
     const discoveredCustomerIds = await this.client.listAccessibleCustomerIds(connection.id)
+    const effectiveCustomerIds = discoveredCustomerIds.length > 0
+      ? discoveredCustomerIds
+      : [TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID]
+
     if (discoveredCustomerIds.length === 0) {
-      return []
+      console.warn("[TEMP_DIAGNOSTIC] Using fallback customerId because discovery returned no IDs", {
+        connectionId: connection.id,
+        fallbackCustomerId: TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID,
+      })
     }
 
     await this.oauthRepository.replaceAccessibleCustomerAccounts({
       connectionId: connection.id,
       actorUserId: actor.userId,
-      selectedCustomerId: discoveredCustomerIds[0],
-      accounts: discoveredCustomerIds.map((customerId) => ({
+      selectedCustomerId: effectiveCustomerIds[0],
+      accounts: effectiveCustomerIds.map((customerId) => ({
         customerId,
         displayName: `Google Ads ${customerId}`,
         currencyCode: null,
@@ -483,15 +494,23 @@ export class GoogleAdsSyncService {
     }
 
     const discoveredCustomerIds = await this.client.listAccessibleCustomerIds(connectionId)
+    const effectiveCustomerIds = discoveredCustomerIds.length > 0
+      ? discoveredCustomerIds
+      : [TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID]
+
     if (discoveredCustomerIds.length === 0) {
-      return null
+      console.warn("[TEMP_DIAGNOSTIC] Using fallback customerId during accessible-customer resolution", {
+        connectionId,
+        requestedCustomerId: customerId,
+        fallbackCustomerId: TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID,
+      })
     }
 
     await this.oauthRepository.replaceAccessibleCustomerAccounts({
       connectionId,
       actorUserId,
-      selectedCustomerId: discoveredCustomerIds.includes(customerId) ? customerId : discoveredCustomerIds[0],
-      accounts: discoveredCustomerIds.map((id) => ({
+      selectedCustomerId: effectiveCustomerIds.includes(customerId) ? customerId : effectiveCustomerIds[0],
+      accounts: effectiveCustomerIds.map((id) => ({
         customerId: id,
         displayName: `Google Ads ${id}`,
         currencyCode: null,

@@ -33,7 +33,10 @@ beforeEach(async () => {
   database = new PostgresDatabase(new adapter.Pool())
 
   await runIdentityMigrations(database, process.cwd())
-  await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
+  await runSqlFile(
+    database,
+    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+  )
 
   container = createIdentityPlatform({ mode: "memory" })
   ;(container.infrastructure as { database?: PostgresDatabase }).database = database
@@ -45,18 +48,21 @@ beforeEach(async () => {
           apiBaseUrl: "https://googleads.googleapis.com/v17",
           tokenEndpoint: "https://oauth2.googleapis.com/token",
           clientId: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_ID ?? "google-client-id",
-          clientSecret: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_SECRET ?? "google-client-secret",
+          clientSecret:
+            process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_SECRET ?? "google-client-secret",
           encryptionKey:
-            process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
-            ?? "12345678901234567890123456789012",
-          developerToken: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ?? "developer-token-test",
+            process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+            "12345678901234567890123456789012",
+          developerToken:
+            process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ?? "developer-token-test",
           maxRetries: 0,
           minRequestIntervalMs: 0,
         },
-        (async () => new Response(JSON.stringify({ results: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })) as unknown as typeof fetch
+        (async () =>
+          new Response(JSON.stringify({ results: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })) as unknown as typeof fetch
       )
     )
   )
@@ -158,7 +164,11 @@ describe("google oauth http flow", () => {
     })
 
     expect(startResponse.status).toBe(200)
-    const started = (await startResponse.json()) as { authorizationUrl: string; state: string; connectionId: string }
+    const started = (await startResponse.json()) as {
+      authorizationUrl: string
+      state: string
+      connectionId: string
+    }
     expect(started.authorizationUrl).toContain("accounts.google.com")
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -188,10 +198,10 @@ describe("google oauth http flow", () => {
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
@@ -208,10 +218,9 @@ describe("google oauth http flow", () => {
     const persisted = await database.query<{
       status: string
       encrypted_refresh_token: string | null
-    }>(
-      "select status, encrypted_refresh_token from google_oauth_connections where id = $1",
-      [started.connectionId]
-    )
+    }>("select status, encrypted_refresh_token from google_oauth_connections where id = $1", [
+      started.connectionId,
+    ])
     expect(persisted.rows[0]?.status).toBe("connected")
     expect(persisted.rows[0]?.encrypted_refresh_token).toBeTruthy()
 
@@ -255,7 +264,10 @@ describe("google oauth http flow", () => {
     const loginResponse = await fetch(`${baseUrl}/v1/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "oauth-http-safe-error@madar.test", password: "VeryStrongPassword123!" }),
+      body: JSON.stringify({
+        email: "oauth-http-safe-error@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
     })
     const login = (await loginResponse.json()) as { session: { accessToken: string } }
     const actor = await container.commands.resolveActorFromAccessToken(login.session.accessToken)
@@ -343,7 +355,10 @@ describe("google oauth http flow", () => {
     const loginResponse = await fetch(`${baseUrl}/v1/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "oauth-http-dup@madar.test", password: "VeryStrongPassword123!" }),
+      body: JSON.stringify({
+        email: "oauth-http-dup@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
     })
     const login = (await loginResponse.json()) as { session: { accessToken: string } }
     const actor = await container.commands.resolveActorFromAccessToken(login.session.accessToken)
@@ -397,7 +412,8 @@ describe("google oauth http flow", () => {
             access_token: "token-access-dup-http",
             refresh_token: "token-refresh-dup-http",
             expires_in: 3600,
-            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -405,16 +421,20 @@ describe("google oauth http flow", () => {
 
       if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
         return new Response(
-          JSON.stringify({ id: "acct-http-dup", email: "acct-http-dup@example.com", name: "Acct Dup" }),
+          JSON.stringify({
+            id: "acct-http-dup",
+            email: "acct-http-dup@example.com",
+            name: "Acct Dup",
+          }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
@@ -458,7 +478,10 @@ describe("google oauth http flow", () => {
     const loginResponse = await fetch(`${baseUrl}/v1/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "oauth-http-delete@madar.test", password: "VeryStrongPassword123!" }),
+      body: JSON.stringify({
+        email: "oauth-http-delete@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
     })
     const login = (await loginResponse.json()) as { session: { accessToken: string } }
     const actor = await container.commands.resolveActorFromAccessToken(login.session.accessToken)
@@ -547,7 +570,10 @@ describe("google oauth http flow", () => {
     const loginResponse = await fetch(`${baseUrl}/v1/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "oauth-http-records-delete@madar.test", password: "VeryStrongPassword123!" }),
+      body: JSON.stringify({
+        email: "oauth-http-records-delete@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
     })
     const login = (await loginResponse.json()) as { session: { accessToken: string } }
     const actor = await container.commands.resolveActorFromAccessToken(login.session.accessToken)

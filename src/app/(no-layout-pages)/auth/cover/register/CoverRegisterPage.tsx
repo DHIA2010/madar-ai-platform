@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { GalleryVerticalEnd } from "lucide-react"
 import { SignupForm } from "@/components/signup-form"
 
@@ -22,8 +23,8 @@ export default function CoverRegisterPage() {
           {/* Footer text */}
           <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-primary">
             By creating an account, you agree to our{" "}
-            <a href="#">Terms of Service</a> and{" "}
-            <a href="#">Privacy Policy</a>.
+            <Link href="/privacy">Terms of Service</Link> and{" "}
+            <Link href="/privacy">Privacy Policy</Link>.
           </div>
         </div>
       </div>

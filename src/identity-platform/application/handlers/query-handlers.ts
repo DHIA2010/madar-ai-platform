@@ -2,7 +2,11 @@ import type { AuthenticatedActor } from "../dto/identity-dtos"
 import type { ListAuditLogsQuery, ListInvitationsQuery, ListOrganizationsQuery } from "../queries"
 import type { IdentityRepositories } from "../../domain/repositories"
 import { ERRORS } from "../errors/IdentityError"
-import { hasPermission, ROLE_PERMISSIONS, resolvePermissions } from "../../domain/domain-services/permission-service"
+import {
+  hasPermission,
+  ROLE_PERMISSIONS,
+  resolvePermissions,
+} from "../../domain/domain-services/permission-service"
 
 export class IdentityQueryHandlers {
   constructor(private readonly repositories: IdentityRepositories) {}
@@ -53,14 +57,19 @@ export class IdentityQueryHandlers {
     const items = await Promise.all(
       memberships.map(async (membership) => ({
         role: membership.role,
-        workspace: membership.workspaceId ? await this.repositories.workspaces.findById(membership.workspaceId) : null,
+        workspace: membership.workspaceId
+          ? await this.repositories.workspaces.findById(membership.workspaceId)
+          : null,
       }))
     )
     return items.filter((entry) => Boolean(entry.workspace))
   }
 
   async getOrganization(actor: AuthenticatedActor, organizationId: string) {
-    const membership = await this.repositories.memberships.findByUserAndOrganization(actor.userId, organizationId)
+    const membership = await this.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      organizationId
+    )
     if (!membership) {
       throw ERRORS.forbidden()
     }
@@ -92,7 +101,10 @@ export class IdentityQueryHandlers {
   }
 
   async listOrganizationMembers(actor: AuthenticatedActor, organizationId: string) {
-    const membership = await this.repositories.memberships.findByUserAndOrganization(actor.userId, organizationId)
+    const membership = await this.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      organizationId
+    )
     if (!membership) {
       throw ERRORS.forbidden()
     }
@@ -100,7 +112,9 @@ export class IdentityQueryHandlers {
     const members = await Promise.all(
       rows.map(async (row) => {
         const user = await this.repositories.users.findById(row.userId)
-        const workspace = row.workspaceId ? await this.repositories.workspaces.findById(row.workspaceId) : null
+        const workspace = row.workspaceId
+          ? await this.repositories.workspaces.findById(row.workspaceId)
+          : null
         return {
           membershipId: row.id,
           userId: row.userId,
@@ -119,8 +133,15 @@ export class IdentityQueryHandlers {
     return { organizationId, members }
   }
 
-  async listOrganizationInvitations(actor: AuthenticatedActor, organizationId: string, query: ListInvitationsQuery) {
-    const membership = await this.repositories.memberships.findByUserAndOrganization(actor.userId, organizationId)
+  async listOrganizationInvitations(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    query: ListInvitationsQuery
+  ) {
+    const membership = await this.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      organizationId
+    )
     if (!membership) {
       throw ERRORS.forbidden()
     }
@@ -138,7 +159,10 @@ export class IdentityQueryHandlers {
   }
 
   async listWorkspaceMembers(actor: AuthenticatedActor, workspaceId: string) {
-    const membership = await this.repositories.memberships.findByUserAndWorkspace(actor.userId, workspaceId)
+    const membership = await this.repositories.memberships.findByUserAndWorkspace(
+      actor.userId,
+      workspaceId
+    )
     if (!membership) {
       throw ERRORS.forbidden()
     }

@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest"
 import { loadIdentityPlatformConfig } from "../../identity-platform/configuration"
 import { HmacTokenService } from "../../identity-platform/infrastructure/jwt/token-service"
 import { PostgresDatabase } from "../../identity-platform/infrastructure/postgres/database"
-import { runIdentityMigrations, runSqlFile } from "../../identity-platform/infrastructure/postgres/migration-runner"
+import {
+  runIdentityMigrations,
+  runSqlFile,
+} from "../../identity-platform/infrastructure/postgres/migration-runner"
 import { createPostgresRepositories } from "../../identity-platform/infrastructure/postgres/repositories"
 import { RedisSessionRepository } from "../../identity-platform/infrastructure/redis/redis-session-repository"
 import { FakeRedisClient } from "../../identity-platform/tests/helpers/fake-redis-client"
@@ -44,7 +47,10 @@ function createPostgresDatabase() {
 
 async function seedIdentityFoundation(database: PostgresDatabase) {
   await runIdentityMigrations(database, process.cwd())
-  await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
+  await runSqlFile(
+    database,
+    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+  )
 
   const config = createIdentityConfig()
   const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
@@ -125,7 +131,9 @@ async function seedIdentityFoundation(database: PostgresDatabase) {
 
 describe("Project platform", () => {
   it("supports the project lifecycle in memory", async () => {
-    const service = new ProjectPlatformService({ repositories: createInMemoryProjectRepositories() })
+    const service = new ProjectPlatformService({
+      repositories: createInMemoryProjectRepositories(),
+    })
     const actor = createActor()
 
     const created = await service.createProject(actor as never, {
@@ -153,7 +161,9 @@ describe("Project platform", () => {
     const restored = await service.restoreProject(actor as never, created.id)
     expect(restored.status).toBe("active")
 
-    const projects = await service.listProjects(actor as never, { organizationId: actor.organizationId })
+    const projects = await service.listProjects(actor as never, {
+      organizationId: actor.organizationId,
+    })
     expect(projects).toHaveLength(1)
   })
 
@@ -189,7 +199,9 @@ describe("Project platform", () => {
       deletedAt: null,
     })
 
-    expect(await repositories.projects.findById("00000000-0000-0000-0000-000000000101")).toMatchObject({
+    expect(
+      await repositories.projects.findById("00000000-0000-0000-0000-000000000101")
+    ).toMatchObject({
       name: "Postgres Project",
       organizationId: createActor().organizationId,
     })
@@ -213,6 +225,8 @@ describe("Project platform", () => {
       deletedAt: null,
     })
 
-    expect(await repositories.dataSources.listByProjectId("00000000-0000-0000-0000-000000000101")).toHaveLength(1)
+    expect(
+      await repositories.dataSources.listByProjectId("00000000-0000-0000-0000-000000000101")
+    ).toHaveLength(1)
   })
 })

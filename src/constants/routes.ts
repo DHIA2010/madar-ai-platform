@@ -50,6 +50,7 @@ export const ROUTES = {
   },
   login: "/auth/basic/login",
   register: "/auth/basic/register",
+  privacy: "/privacy",
   forgotPassword: "/auth/basic/forgot-password",
   resetPassword: "/auth/basic/reset-password",
   verifyEmail: "/auth/basic/verify-email",
