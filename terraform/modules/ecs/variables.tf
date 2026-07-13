@@ -72,6 +72,16 @@ variable "backend_memory" {
   default = 1024
 }
 
+variable "operating_system_family" {
+  type    = string
+  default = "LINUX"
+}
+
+variable "cpu_architecture" {
+  type    = string
+  default = "X86_64"
+}
+
 variable "frontend_desired_count" {
   type    = number
   default = 2
