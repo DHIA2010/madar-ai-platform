@@ -96,9 +96,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   const logout = useCallback(async () => {
-    await authenticationApplicationService.logout(session)
-    clear()
-  }, [authenticationApplicationService, clear, session])
+    try {
+      await authenticationApplicationService.logout(session)
+    } finally {
+      clear()
+      setStatus("unauthenticated")
+    }
+  }, [authenticationApplicationService, clear, session, setStatus])
 
   const value = useMemo(
     () => ({
