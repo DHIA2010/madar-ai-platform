@@ -38,6 +38,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate frontend build-time environment URLs
+        run: |
+          set -euo pipefail
+
+          required_keys=(
+            NEXT_PUBLIC_APP_URL
+            NEXT_PUBLIC_API_BASE_URL
+            NEXT_PUBLIC_AUTH_API_BASE_URL
+          )
+
+          for key in "${required_keys[@]}"; do
+            value=$(grep -E "^${key}=" .env.production | head -n 1 | cut -d '=' -f2- || true)
+
+            if [ -z "${value}" ]; then
+              echo "::error::Missing ${key} in .env.production"
+              exit 1
+            fi
+
+            if ! printf '%s' "${value}" | grep -Eq '^https?://'; then
+              echo "::error::${key} must be an absolute URL in .env.production"
+              exit 1
+            fi
+
+            if printf '%s' "${value}" | grep -Eq '\.example($|/)'; then
+              echo "::error::${key} uses a placeholder domain (${value}). Update .env.production before deploy."
+              exit 1
+            fi
+          done
+
+          echo "Frontend build-time URL validation passed."
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
