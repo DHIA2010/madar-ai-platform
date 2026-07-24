@@ -1,5 +1,8 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -14,7 +17,28 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 
 import { User, Settings, LayoutDashboard, LogOut } from "lucide-react"
 
+import { useAuth } from "@/features/authentication/hooks/use-auth"
+
 export function UserDropdown() {
+  const { logout } = useAuth()
+  const router = useRouter()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return
+    }
+
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      router.replace("/auth/basic/login")
+      router.refresh()
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
     <DropdownMenu>
       {/* Trigger */}
@@ -63,9 +87,14 @@ export function UserDropdown() {
 
         {/* Logout */}
         <div className="mt-3">
-          <Button variant={"default"} className="w-full h-8 justify-center gap-2">
+          <Button
+            variant={"default"}
+            className="w-full h-8 justify-center gap-2"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+          >
             <LogOut className="size-4" />
-            Logout
+            {isLoggingOut ? "Logging out..." : "Logout"}
           </Button>
         </div>
       </DropdownMenuContent>
