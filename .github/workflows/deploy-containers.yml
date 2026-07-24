@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools inspect "${{ steps.images.outputs.frontend_image }}" --raw \
-            | jq -r '.manifests[]?.platform | "os=\(.os) arch=\(.architecture) variant=\(.variant // \"\")"'
+            | jq -r '.manifests[]?.platform | "os=\(.os) arch=\(.architecture) variant=\(.variant // "")"'
 
       - name: Build and push backend image
         run: |
@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools inspect "${{ steps.images.outputs.backend_image }}" --raw \
-            | jq -r '.manifests[]?.platform | "os=\(.os) arch=\(.architecture) variant=\(.variant // \"\")"'
+            | jq -r '.manifests[]?.platform | "os=\(.os) arch=\(.architecture) variant=\(.variant // "")"'
 
   deploy-ecs:
     runs-on: ubuntu-latest
