@@ -45,10 +45,7 @@ describe("google ads sync service", () => {
     database = new PostgresDatabase(new adapter.Pool())
 
     await runIdentityMigrations(database, process.cwd())
-    await runSqlFile(
-      database,
-      `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
-    )
+    await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
 
     await database.query(
       `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -124,44 +121,15 @@ describe("google ads sync service", () => {
         JSON.stringify({
           results: [
             {
-              campaign: {
-                id: "cmp-1",
-                name: "Campaign 1",
-                status: "ENABLED",
-                biddingStrategyType: "MANUAL_CPC",
-              },
+              campaign: { id: "cmp-1", name: "Campaign 1", status: "ENABLED", biddingStrategyType: "MANUAL_CPC" },
               campaignBudget: { amountMicros: 1000 },
-              customerClient: {
-                id: "123",
-                descriptiveName: "Account",
-                currencyCode: "USD",
-                timeZone: "UTC",
-                manager: false,
-                level: 0,
-              },
+              customerClient: { id: "123", descriptiveName: "Account", currencyCode: "USD", timeZone: "UTC", manager: false, level: 0 },
               adGroup: { id: "ag-1", name: "Ad Group", status: "ENABLED" },
-              adGroupAd: {
-                ad: {
-                  id: "ad-1",
-                  type: "RESPONSIVE_SEARCH_AD",
-                  responsiveSearchAd: { headlines: ["Headline"] },
-                },
-                status: "ENABLED",
-              },
-              adGroupCriterion: {
-                criterionId: "kw-1",
-                keyword: { text: "keyword", matchType: "EXACT" },
-                status: "ENABLED",
-              },
+              adGroupAd: { ad: { id: "ad-1", type: "RESPONSIVE_SEARCH_AD", responsiveSearchAd: { headlines: ["Headline"] } }, status: "ENABLED" },
+              adGroupCriterion: { criterionId: "kw-1", keyword: { text: "keyword", matchType: "EXACT" }, status: "ENABLED" },
               searchTermView: { searchTerm: "keyword" },
               geographicView: { locationType: "LOCATION_OF_PRESENCE", countryCriterionId: "682" },
-              conversionAction: {
-                id: "conv-1",
-                name: "Purchase",
-                category: "PURCHASE",
-                status: "ENABLED",
-                type: "WEBPAGE",
-              },
+              conversionAction: { id: "conv-1", name: "Purchase", category: "PURCHASE", status: "ENABLED", type: "WEBPAGE" },
               segments: { date: "2026-06-01", device: "MOBILE" },
               metrics: {
                 costMicros: 100,
@@ -185,8 +153,6 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 1,
@@ -230,8 +196,6 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
@@ -240,23 +204,19 @@ describe("google ads sync service", () => {
       (async () => new Response("forbidden", { status: 403 })) as unknown as typeof fetch
     )
 
-    await expect(
-      permissionService.sync(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "123",
-        startDate: "2026-06-01",
-        endDate: "2026-06-02",
-        idempotencyKey: "sync-idem-2",
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_PERMISSION_DENIED" })
+    await expect(permissionService.sync(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-idem-2",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_PERMISSION_DENIED" })
 
     const quotaService = new GoogleAdsSyncService(
       database,
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
@@ -265,15 +225,13 @@ describe("google ads sync service", () => {
       (async () => new Response("quota", { status: 429 })) as unknown as typeof fetch
     )
 
-    await expect(
-      quotaService.sync(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "123",
-        startDate: "2026-06-01",
-        endDate: "2026-06-02",
-        idempotencyKey: "sync-idem-3",
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_QUOTA_EXCEEDED" })
+    await expect(quotaService.sync(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-idem-3",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_QUOTA_EXCEEDED" })
   })
 
   it("handles empty responses and invalid connection", async () => {
@@ -282,18 +240,12 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
         minRequestIntervalMs: 0,
       },
-      (async () =>
-        new Response(JSON.stringify({ results: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })) as unknown as typeof fetch
+      (async () => new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch
     )
 
     const run = await service.sync(ACTOR, {
@@ -306,15 +258,13 @@ describe("google ads sync service", () => {
 
     expect(run.status).toBe("completed")
 
-    await expect(
-      service.sync(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000999",
-        customerId: "123",
-        startDate: "2026-06-01",
-        endDate: "2026-06-02",
-        idempotencyKey: "sync-idem-5",
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_FOUND" })
+    await expect(service.sync(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000999",
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-idem-5",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_FOUND" })
   })
 
   it("returns typed errors when listing records for deleted or invalid customers", async () => {
@@ -339,47 +289,36 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
         minRequestIntervalMs: 0,
       },
-      (async () =>
-        new Response(JSON.stringify({ results: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })) as unknown as typeof fetch
+      (async () => new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch
     )
 
-    await expect(
-      service.listRecords(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "google-ads-1",
-        pageSize: 20,
-      })
-    ).resolves.toEqual([])
+    await expect(service.listRecords(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "google-ads-1",
+      pageSize: 20,
+    })).resolves.toEqual([])
 
-    await expect(
-      service.listRecords(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "missing-customer",
-        pageSize: 20,
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_INVALID_CUSTOMER", status: 400 })
+    await expect(service.listRecords(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "missing-customer",
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_INVALID_CUSTOMER", status: 400 })
 
-    await database.query(`delete from google_oauth_connections where id = $1`, [
-      "00000000-0000-4000-8000-000000000105",
-    ])
+    await database.query(
+      `delete from google_oauth_connections where id = $1`,
+      ["00000000-0000-4000-8000-000000000105"]
+    )
 
-    await expect(
-      service.listRecords(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "google-ads-1",
-        pageSize: 20,
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_FOUND", status: 404 })
+    await expect(service.listRecords(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "google-ads-1",
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_FOUND", status: 404 })
   })
 
   it("blocks duplicate concurrent syncs with a database lease", async () => {
@@ -416,8 +355,6 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
@@ -431,8 +368,6 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
@@ -451,22 +386,15 @@ describe("google ads sync service", () => {
 
     await googleQueryStarted
 
-    await expect(
-      secondService.sync(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "123",
-        startDate: "2026-06-01",
-        endDate: "2026-06-02",
-        idempotencyKey: "sync-lock-2",
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_SYNC_IN_PROGRESS" })
+    await expect(secondService.sync(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-lock-2",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_SYNC_IN_PROGRESS" })
 
-    blocked.resolve(
-      new Response(JSON.stringify({ results: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
-    )
+    blocked.resolve(new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "content-type": "application/json" } }))
     await expect(first).resolves.toMatchObject({ status: "completed" })
   })
 
@@ -487,7 +415,7 @@ describe("google ads sync service", () => {
         queryBodies.push(init.body)
       }
 
-      const query = typeof init?.body === "string" ? (JSON.parse(init.body).query as string) : ""
+      const query = typeof init?.body === "string" ? JSON.parse(init.body).query as string : ""
       if (failOnce && query.includes("FROM ad_group")) {
         failOnce = false
         return new Response("temporary", { status: 500 })
@@ -504,8 +432,6 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,
@@ -514,15 +440,13 @@ describe("google ads sync service", () => {
       fetchMock as unknown as typeof fetch
     )
 
-    await expect(
-      service.sync(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "123",
-        startDate: "2026-06-01",
-        endDate: "2026-06-02",
-        idempotencyKey: "sync-crash-1",
-      })
-    ).rejects.toMatchObject({ code: "GOOGLE_ADS_TRANSIENT_FAILURE" })
+    await expect(service.sync(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-crash-1",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_TRANSIENT_FAILURE" })
 
     const checkpoint = await database.query<{ checkpoint_state: Record<string, unknown> }>(
       `select checkpoint_state from google_ads_sync_checkpoints where provider_key = $1 and connection_id = $2 and customer_id = $3 limit 1`,
@@ -531,15 +455,13 @@ describe("google ads sync service", () => {
 
     expect(checkpoint.rows[0]?.checkpoint_state).toMatchObject({ stage: "campaignMetrics" })
 
-    await expect(
-      service.sync(ACTOR, {
-        connectionId: "00000000-0000-4000-8000-000000000105",
-        customerId: "123",
-        startDate: "2026-06-01",
-        endDate: "2026-06-02",
-        idempotencyKey: "sync-crash-1",
-      })
-    ).resolves.toMatchObject({ status: "completed" })
+    await expect(service.sync(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-crash-1",
+    })).resolves.toMatchObject({ status: "completed" })
   })
 
   it("respects incremental resume from the stored checkpoint date", async () => {
@@ -572,8 +494,6 @@ describe("google ads sync service", () => {
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
-        clientId: "client-id",
-        clientSecret: "client-secret",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token",
         maxRetries: 0,

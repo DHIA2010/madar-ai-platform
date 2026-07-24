@@ -16,6 +16,7 @@ interface GoogleOAuthStateRecord {
   projectId: string
   userId: string
   connectionId: string
+  oauthAccountId: string
   requestedScopes: string[]
   redirectUri: string
   expiresAt: string
@@ -34,6 +35,7 @@ interface ResolveProjectResult {
 
 interface UpsertConnectionInput {
   id: string
+  oauthAccountId: string
   organizationId: string
   workspaceId: string | null
   projectId: string
@@ -67,6 +69,7 @@ interface ReplaceAccessibleCustomerAccountsInput {
 
 interface ConnectionOwnershipRecord {
   id: string
+  oauthAccountId: string | null
   organizationId: string
   workspaceId: string | null
 }
@@ -98,6 +101,25 @@ function mapConnection(row: Record<string, unknown>): GoogleOAuthConnectionView 
   }
 }
 
+function parseJsonArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry))
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      if (Array.isArray(parsed)) {
+        return parsed.map((entry) => String(entry))
+      }
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
 function mapAdsCustomerAccount(row: Record<string, unknown>): GoogleAdsCustomerAccountView {
   return {
     id: String(row.id),
@@ -112,6 +134,10 @@ function mapAdsCustomerAccount(row: Record<string, unknown>): GoogleAdsCustomerA
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
   }
+}
+
+function mapLegacyScopes(value: unknown): string[] {
+  return parseJsonArray(value)
 }
 
 export class GoogleOAuthRepository
@@ -156,11 +182,12 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     await this.db.query({
       name: "google-oauth-state-insert",
       text: `
-        INSERT INTO google_oauth_states (
-          id, state, organization_id, workspace_id, project_id, user_id, connection_id,
+        INSERT INTO oauth_states (
+          id, state, provider_family, provider_product,
+          organization_id, workspace_id, project_id, user_id, oauth_account_id,
           requested_scopes, redirect_uri, status, expires_at, created_at, updated_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10,$11,$11
+          $1,$2,'google','ads',$3,$4,$5,$6,$7,$8,$9,'pending',$10,$11,$11
         )
       `,
       values: [
@@ -170,7 +197,7 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
         input.workspaceId,
         input.projectId,
         input.userId,
-        input.connectionId,
+        input.oauthAccountId,
         JSON.stringify(input.requestedScopes),
         input.redirectUri,
         input.expiresAt,
@@ -182,7 +209,7 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
   async findPendingStateByValue(state: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-state-find",
-      text: "SELECT * FROM google_oauth_states WHERE state = $1 LIMIT 1",
+      text: "SELECT * FROM oauth_states WHERE state = $1 AND provider_family = 'google' LIMIT 1",
       values: [state],
     })
     return result.rows[0] ?? null
@@ -192,9 +219,10 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     const result = await this.db.query({
       name: "google-oauth-state-consume",
       text: `
-        UPDATE google_oauth_states
+        UPDATE oauth_states
         SET status = 'consumed', consumed_at = $2, updated_at = $2
         WHERE id = $1
+          AND provider_family = 'google'
           AND status = 'pending'
           AND consumed_at IS NULL
           AND expires_at > $2::timestamptz
@@ -206,6 +234,131 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
   }
 
   async upsertConnection(input: UpsertConnectionInput) {
+    await this.db.query({
+      name: "google-oauth-account-upsert",
+      text: `
+        INSERT INTO oauth_accounts (
+          id, provider_family, organization_id, workspace_id,
+          provider_subject_id, provider_email, provider_display_name,
+          granted_scopes, status, last_authenticated_at,
+          created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at
+        ) VALUES (
+          $1, 'google', $2, $3,
+          $4, $5, $6,
+          $7, $8, $9,
+          $10, $10, $11, $11, null
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          organization_id = EXCLUDED.organization_id,
+          workspace_id = EXCLUDED.workspace_id,
+          provider_subject_id = EXCLUDED.provider_subject_id,
+          provider_email = EXCLUDED.provider_email,
+          provider_display_name = EXCLUDED.provider_display_name,
+          granted_scopes = EXCLUDED.granted_scopes,
+          status = EXCLUDED.status,
+          last_authenticated_at = EXCLUDED.last_authenticated_at,
+          updated_by_user_id = EXCLUDED.updated_by_user_id,
+          updated_at = EXCLUDED.updated_at,
+          deleted_at = null
+      `,
+      values: [
+        input.oauthAccountId,
+        input.organizationId,
+        input.workspaceId,
+        input.providerAccountId,
+        input.providerAccountEmail,
+        input.providerAccountName,
+        JSON.stringify(input.scopes),
+        input.status,
+        input.lastConnectedAt,
+        input.actorUserId,
+        input.nowIso,
+      ],
+    })
+
+    if (input.encryptedAccessToken || input.encryptedRefreshToken || input.tokenExpiresAt) {
+      await this.db.query({
+        name: "google-oauth-tokens-revoke-active",
+        text: `
+          UPDATE oauth_tokens
+          SET status = 'revoked', revoked_at = $2, updated_at = $2
+          WHERE oauth_account_id = $1
+            AND status = 'active'
+        `,
+        values: [input.oauthAccountId, input.nowIso],
+      })
+
+      await this.db.query({
+        name: "google-oauth-token-insert",
+        text: `
+          INSERT INTO oauth_tokens (
+            id, oauth_account_id, encrypted_refresh_token, encrypted_access_token,
+            token_type, token_expires_at, refresh_token_issued_at,
+            status, created_at, updated_at, revoked_at
+          ) VALUES (
+            $1, $2, $3, $4,
+            'Bearer', $5, $6,
+            'active', $6, $6, null
+          )
+        `,
+        values: [
+          randomUUID(),
+          input.oauthAccountId,
+          input.encryptedRefreshToken,
+          input.encryptedAccessToken,
+          input.tokenExpiresAt,
+          input.nowIso,
+        ],
+      })
+    }
+
+    await this.db.query({
+      name: "google-oauth-integration-connection-upsert",
+      text: `
+        INSERT INTO integration_connections (
+          id, provider_id, provider_family, platform,
+          organization_id, workspace_id, project_id, oauth_account_id, data_source_id,
+          connection_reference, configuration, status,
+          last_connected_at, last_disconnected_at, last_synced_at,
+          created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at
+        ) VALUES (
+          $1, 'google-ads', 'google', 'marketing',
+          $2, $3, $4, $5, $6,
+          $7, '{}'::jsonb, $8,
+          $9, $10, null,
+          $11, $11, $12, $12, null
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          organization_id = EXCLUDED.organization_id,
+          workspace_id = EXCLUDED.workspace_id,
+          project_id = EXCLUDED.project_id,
+          oauth_account_id = EXCLUDED.oauth_account_id,
+          data_source_id = EXCLUDED.data_source_id,
+          connection_reference = EXCLUDED.connection_reference,
+          status = EXCLUDED.status,
+          last_connected_at = EXCLUDED.last_connected_at,
+          last_disconnected_at = EXCLUDED.last_disconnected_at,
+          updated_by_user_id = EXCLUDED.updated_by_user_id,
+          updated_at = EXCLUDED.updated_at,
+          deleted_at = null
+      `,
+      values: [
+        input.id,
+        input.organizationId,
+        input.workspaceId,
+        input.projectId,
+        input.oauthAccountId,
+        input.dataSourceId,
+        input.connectionReference,
+        input.status,
+        input.lastConnectedAt,
+        input.lastDisconnectedAt,
+        input.actorUserId,
+        input.nowIso,
+      ],
+    })
+
+    // Keep legacy table in sync for backward compatibility with existing Google Ads tables.
     await this.db.query({
       name: "google-oauth-connection-upsert",
       text: `
@@ -263,20 +416,72 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
   async findConnectionById(connectionId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-connection-find",
-      text: "SELECT * FROM google_oauth_connections WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
+      text: `
+        SELECT
+          c.id,
+          c.oauth_account_id,
+          c.organization_id,
+          c.workspace_id,
+          c.project_id,
+          c.data_source_id,
+          a.provider_subject_id AS provider_account_id,
+          a.provider_display_name AS provider_account_name,
+          a.provider_email AS provider_account_email,
+          a.granted_scopes AS scopes,
+          c.status,
+          c.connection_reference,
+          c.last_connected_at,
+          c.last_disconnected_at,
+          c.created_at,
+          c.updated_at
+        FROM integration_connections c
+        LEFT JOIN oauth_accounts a ON a.id = c.oauth_account_id
+        WHERE c.id = $1
+          AND c.provider_id = 'google-ads'
+          AND c.deleted_at IS NULL
+        LIMIT 1
+      `,
       values: [connectionId],
     })
 
-    return result.rows[0] ? mapConnection(result.rows[0]) : null
+    if (!result.rows[0]) {
+      const legacyResult = await this.db.query<Record<string, unknown>>({
+        name: "google-oauth-connection-find-legacy",
+        text: "SELECT * FROM google_oauth_connections WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
+        values: [connectionId],
+      })
+
+      const legacyRow = legacyResult.rows[0]
+      if (!legacyRow) {
+        return null
+      }
+
+      return mapConnection({
+        ...legacyRow,
+        scopes: mapLegacyScopes(legacyRow.scopes),
+      })
+    }
+
+    const row = result.rows[0]
+    const tokenExpiresAt = row.oauth_account_id
+      ? await this.findActiveTokenExpiresAt(String(row.oauth_account_id))
+      : null
+
+    return mapConnection({
+      ...row,
+      token_expires_at: tokenExpiresAt,
+      scopes: parseJsonArray(row.scopes),
+    })
   }
 
   async findConnectionOwnershipById(connectionId: string): Promise<ConnectionOwnershipRecord | null> {
     const result = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-connection-find-ownership",
       text: `
-        SELECT id, organization_id, workspace_id
-        FROM google_oauth_connections
+        SELECT id, oauth_account_id, organization_id, workspace_id
+        FROM integration_connections
         WHERE id = $1
+          AND provider_id = 'google-ads'
           AND deleted_at IS NULL
         LIMIT 1
       `,
@@ -285,11 +490,34 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
 
     const row = result.rows[0]
     if (!row) {
-      return null
+      const legacyResult = await this.db.query<Record<string, unknown>>({
+        name: "google-oauth-connection-find-ownership-legacy",
+        text: `
+          SELECT id, organization_id, workspace_id
+          FROM google_oauth_connections
+          WHERE id = $1
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        values: [connectionId],
+      })
+
+      const legacyRow = legacyResult.rows[0]
+      if (!legacyRow) {
+        return null
+      }
+
+      return {
+        id: String(legacyRow.id),
+        oauthAccountId: null,
+        organizationId: String(legacyRow.organization_id),
+        workspaceId: (legacyRow.workspace_id as string | null) ?? null,
+      }
     }
 
     return {
       id: String(row.id),
+      oauthAccountId: (row.oauth_account_id as string | null) ?? null,
       organizationId: String(row.organization_id),
       workspaceId: (row.workspace_id as string | null) ?? null,
     }
@@ -299,18 +527,136 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     const result = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-connection-find-project",
       text: `
-        SELECT *
-        FROM google_oauth_connections
-        WHERE organization_id = $1
-          AND project_id = $2
-          AND provider = 'google_ads'
-          AND deleted_at IS NULL
+        SELECT
+          c.id,
+          c.oauth_account_id,
+          c.organization_id,
+          c.workspace_id,
+          c.project_id,
+          c.data_source_id,
+          a.provider_subject_id AS provider_account_id,
+          a.provider_display_name AS provider_account_name,
+          a.provider_email AS provider_account_email,
+          a.granted_scopes AS scopes,
+          c.status,
+          c.connection_reference,
+          c.last_connected_at,
+          c.last_disconnected_at,
+          c.created_at,
+          c.updated_at
+        FROM integration_connections c
+        LEFT JOIN oauth_accounts a ON a.id = c.oauth_account_id
+        WHERE c.organization_id = $1
+          AND c.project_id = $2
+          AND c.provider_id = 'google-ads'
+          AND c.deleted_at IS NULL
         LIMIT 1
       `,
       values: [organizationId, projectId],
     })
 
-    return result.rows[0] ? mapConnection(result.rows[0]) : null
+    if (!result.rows[0]) {
+      const legacyResult = await this.db.query<Record<string, unknown>>({
+        name: "google-oauth-connection-find-project-legacy",
+        text: `
+          SELECT *
+          FROM google_oauth_connections
+          WHERE organization_id = $1
+            AND project_id = $2
+            AND provider = 'google_ads'
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        values: [organizationId, projectId],
+      })
+
+      const legacyRow = legacyResult.rows[0]
+      if (!legacyRow) {
+        return null
+      }
+
+      return mapConnection({
+        ...legacyRow,
+        scopes: mapLegacyScopes(legacyRow.scopes),
+      })
+    }
+
+    const row = result.rows[0]
+    const tokenExpiresAt = row.oauth_account_id
+      ? await this.findActiveTokenExpiresAt(String(row.oauth_account_id))
+      : null
+
+    return mapConnection({
+      ...row,
+      token_expires_at: tokenExpiresAt,
+      scopes: parseJsonArray(row.scopes),
+    })
+  }
+
+  async findConnectionByOAuthAccountId(oauthAccountId: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "google-oauth-connection-find-oauth-account",
+      text: `
+        SELECT
+          c.id,
+          c.oauth_account_id,
+          c.organization_id,
+          c.workspace_id,
+          c.project_id,
+          c.data_source_id,
+          a.provider_subject_id AS provider_account_id,
+          a.provider_display_name AS provider_account_name,
+          a.provider_email AS provider_account_email,
+          a.granted_scopes AS scopes,
+          c.status,
+          c.connection_reference,
+          c.last_connected_at,
+          c.last_disconnected_at,
+          c.created_at,
+          c.updated_at
+        FROM integration_connections c
+        LEFT JOIN oauth_accounts a ON a.id = c.oauth_account_id
+        WHERE c.oauth_account_id = $1
+          AND c.provider_id = 'google-ads'
+          AND c.deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [oauthAccountId],
+    })
+
+    if (!result.rows[0]) {
+      return null
+    }
+
+    const row = result.rows[0]
+    const tokenExpiresAt = row.oauth_account_id
+      ? await this.findActiveTokenExpiresAt(String(row.oauth_account_id))
+      : null
+
+    return mapConnection({
+      ...row,
+      token_expires_at: tokenExpiresAt,
+      scopes: parseJsonArray(row.scopes),
+    })
+  }
+
+  private async findActiveTokenExpiresAt(oauthAccountId: string) {
+    const tokenResult = await this.db.query<{ token_expires_at: string | null }>(
+      {
+        name: "google-oauth-token-expires-active",
+        text: `
+          SELECT token_expires_at
+          FROM oauth_tokens
+          WHERE oauth_account_id = $1
+            AND status = 'active'
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `,
+        values: [oauthAccountId],
+      }
+    )
+
+    return tokenResult.rows[0]?.token_expires_at ?? null
   }
 
   async saveEvent(connectionId: string, eventType: string, metadata: Record<string, unknown>) {
@@ -517,6 +863,8 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
   }
 
   async deleteConnectionCascade(connectionId: string) {
+    const ownership = await this.findConnectionOwnershipById(connectionId)
+
     await this.db.query({
       name: "google-oauth-delete-outbox-events",
       text: `
@@ -526,6 +874,50 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
       `,
       values: [connectionId],
     })
+
+    await this.db.query({
+      name: "google-oauth-delete-token-refresh-history",
+      text: `
+        DELETE FROM token_refresh_history
+        WHERE integration_connection_id = $1
+      `,
+      values: [connectionId],
+    })
+
+    await this.db.query({
+      name: "google-oauth-delete-integration-connection",
+      text: "DELETE FROM integration_connections WHERE id = $1 AND provider_id = 'google-ads'",
+      values: [connectionId],
+    })
+
+    if (ownership?.oauthAccountId) {
+      await this.db.query({
+        name: "google-oauth-delete-oauth-states",
+        text: "DELETE FROM oauth_states WHERE oauth_account_id = $1 AND provider_family = 'google'",
+        values: [ownership.oauthAccountId],
+      })
+
+      await this.db.query({
+        name: "google-oauth-delete-oauth-tokens",
+        text: "DELETE FROM oauth_tokens WHERE oauth_account_id = $1",
+        values: [ownership.oauthAccountId],
+      })
+
+      await this.db.query({
+        name: "google-oauth-delete-oauth-account-if-unused",
+        text: `
+          DELETE FROM oauth_accounts
+          WHERE id = $1
+            AND NOT EXISTS (
+              SELECT 1
+              FROM integration_connections c
+              WHERE c.oauth_account_id = $1
+                AND c.deleted_at IS NULL
+            )
+        `,
+        values: [ownership.oauthAccountId],
+      })
+    }
 
     await this.db.query({
       name: "google-oauth-delete-audit-logs",

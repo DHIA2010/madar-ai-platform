@@ -3,6 +3,11 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 
 import type { GoogleOAuthDomainEvent } from "./events"
+import {
+  AwsSecretsGoogleIdentityCredentialsProvider,
+  type GoogleIdentityCredentials,
+  type GoogleIdentityCredentialsProvider,
+} from "./google-identity-credentials"
 import { GoogleOAuthRepository } from "./repository"
 import type {
   GoogleOAuthCallbackResult,
@@ -11,13 +16,9 @@ import type {
 } from "./types"
 
 interface GoogleOAuthServiceConfig {
-  clientId: string
-  clientSecret: string
-  redirectUri: string
   successRedirectUri: string
   tokenEncryptionKey: string
   googleAdsApiBaseUrl: string
-  googleAdsDeveloperToken: string
   scopes: string[]
 }
 
@@ -39,9 +40,10 @@ const GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 const REQUIRED_GOOGLE_SCOPES = ["https://www.googleapis.com/auth/adwords"]
+const PRODUCTION_APP_URL = "https://www.madar.my"
 
 function buildDefaultConfig(): GoogleOAuthServiceConfig {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? PRODUCTION_APP_URL
   const defaultScopes = [
     "https://www.googleapis.com/auth/adwords",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -55,11 +57,6 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
     .filter(Boolean)
 
   return {
-    clientId: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_ID ?? "",
-    clientSecret: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_SECRET ?? "",
-    redirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_REDIRECT_URI
-      ?? "http://localhost:4000/v1/integrations/google/oauth/callback",
     successRedirectUri:
       process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI
       ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
@@ -70,10 +67,6 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
     googleAdsApiBaseUrl:
       process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL
       ?? "https://googleads.googleapis.com/v22",
-    googleAdsDeveloperToken:
-      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN
-      ?? process.env.GOOGLE_ADS_DEVELOPER_TOKEN
-      ?? "",
     scopes: configuredScopes.length > 0 ? configuredScopes : defaultScopes,
   }
 }
@@ -195,13 +188,17 @@ function createStateToken() {
   return `go_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
 }
 
-function ensureConfigured(config: GoogleOAuthServiceConfig) {
-  if (!config.clientId || !config.clientSecret || !config.redirectUri || !config.successRedirectUri) {
+function ensureConfigured(config: GoogleOAuthServiceConfig, credentials: GoogleIdentityCredentials) {
+  if (!credentials.clientId || !credentials.clientSecret || !credentials.redirectUri || !config.successRedirectUri) {
     throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
   }
 
-  validateConfiguredUrl(config.redirectUri, { allowHttpLocalhostOnly: true })
+  validateConfiguredUrl(credentials.redirectUri, { allowHttpLocalhostOnly: true })
   validateConfiguredUrl(config.successRedirectUri, { allowHttpLocalhostOnly: true })
+
+  if (!credentials.developerToken) {
+    throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
+  }
 
   if (config.scopes.length === 0) {
     throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
@@ -212,16 +209,16 @@ function ensureConfigured(config: GoogleOAuthServiceConfig) {
 
 async function exchangeAuthorizationCode(input: {
   code: string
-  config: GoogleOAuthServiceConfig
+  credentials: GoogleIdentityCredentials
 }): Promise<GoogleTokenResponse> {
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code: input.code,
-      client_id: input.config.clientId,
-      client_secret: input.config.clientSecret,
-      redirect_uri: input.config.redirectUri,
+      client_id: input.credentials.clientId,
+      client_secret: input.credentials.clientSecret,
+      redirect_uri: input.credentials.redirectUri,
       grant_type: "authorization_code",
     }).toString(),
   })
@@ -231,7 +228,6 @@ async function exchangeAuthorizationCode(input: {
   }
 
   const rawBody = await response.text()
-  console.info("[TEMP_DIAGNOSTIC][google-oauth] token endpoint raw response", rawBody)
 
   let body: GoogleTokenResponse
   try {
@@ -313,14 +309,26 @@ async function fetchAccessibleGoogleAdsCustomerIds(input: {
 
 export class GoogleOAuthService {
   private readonly config: GoogleOAuthServiceConfig
+  private readonly credentialsProvider: GoogleIdentityCredentialsProvider
 
-  constructor(private readonly repository: GoogleOAuthRepository, config?: Partial<GoogleOAuthServiceConfig>) {
+  constructor(
+    private readonly repository: GoogleOAuthRepository,
+    config?: Partial<GoogleOAuthServiceConfig>,
+    credentialsProvider: GoogleIdentityCredentialsProvider = new AwsSecretsGoogleIdentityCredentialsProvider()
+  ) {
     this.config = { ...buildDefaultConfig(), ...(config ?? {}) }
+    this.credentialsProvider = credentialsProvider
+  }
+
+  private async loadResolvedConfig() {
+    const credentials = await this.credentialsProvider.load()
+    ensureConfigured(this.config, credentials)
+    return { config: this.config, credentials }
   }
 
   async startAuthorization(actor: AuthenticatedActor, input: GoogleOAuthStartInput = {}): Promise<GoogleOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
-    ensureConfigured(this.config)
+    const { config, credentials } = await this.loadResolvedConfig()
 
     const resolvedProject = await this.repository.resolveProject({
       organizationId: actor.organizationId,
@@ -333,12 +341,17 @@ export class GoogleOAuthService {
       resolvedProject.projectId
     )
     const connectionId = existingConnection?.id ?? randomUUID()
+    const existingOwnership = existingConnection
+      ? await this.repository.findConnectionOwnershipById(existingConnection.id)
+      : null
+    const oauthAccountId = existingOwnership?.oauthAccountId ?? randomUUID()
     const state = createStateToken()
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
 
     await this.repository.upsertConnection({
       id: connectionId,
+      oauthAccountId,
       organizationId: actor.organizationId,
       workspaceId: resolvedProject.workspaceId,
       projectId: resolvedProject.projectId,
@@ -366,16 +379,17 @@ export class GoogleOAuthService {
       projectId: resolvedProject.projectId,
       userId: actor.userId,
       connectionId,
-      requestedScopes: this.config.scopes,
-      redirectUri: this.config.redirectUri,
+      oauthAccountId,
+      requestedScopes: config.scopes,
+      redirectUri: credentials.redirectUri,
       expiresAt,
     })
 
     const authorizationUrl = new URL(GOOGLE_AUTHORIZATION_URL)
-    authorizationUrl.searchParams.set("client_id", this.config.clientId)
-    authorizationUrl.searchParams.set("redirect_uri", this.config.redirectUri)
+    authorizationUrl.searchParams.set("client_id", credentials.clientId)
+    authorizationUrl.searchParams.set("redirect_uri", credentials.redirectUri)
     authorizationUrl.searchParams.set("response_type", "code")
-    authorizationUrl.searchParams.set("scope", this.config.scopes.join(" "))
+    authorizationUrl.searchParams.set("scope", config.scopes.join(" "))
     authorizationUrl.searchParams.set("access_type", "offline")
     authorizationUrl.searchParams.set("prompt", "consent")
     authorizationUrl.searchParams.set("state", state)
@@ -391,7 +405,7 @@ export class GoogleOAuthService {
         projectId: resolvedProject.projectId,
         occurredAt: startedAt,
         payload: {
-          scopes: this.config.scopes,
+          scopes: config.scopes,
         },
       },
       "integration.google_oauth.started"
@@ -407,7 +421,7 @@ export class GoogleOAuthService {
   }
 
   async completeAuthorization(input: { state: string; code: string }): Promise<GoogleOAuthCallbackResult> {
-    ensureConfigured(this.config)
+    const { config, credentials } = await this.loadResolvedConfig()
 
     const state = await this.repository.findPendingStateByValue(input.state)
     if (!state) {
@@ -425,7 +439,7 @@ export class GoogleOAuthService {
 
     const token = await exchangeAuthorizationCode({
       code: input.code,
-      config: this.config,
+      credentials,
     })
 
     const profile = await fetchGoogleUserInfo(token.access_token)
@@ -435,14 +449,24 @@ export class GoogleOAuthService {
     try {
       accessibleCustomerIds = await fetchAccessibleGoogleAdsCustomerIds({
         accessToken: token.access_token,
-        apiBaseUrl: this.config.googleAdsApiBaseUrl,
-        developerToken: this.config.googleAdsDeveloperToken,
+        apiBaseUrl: config.googleAdsApiBaseUrl,
+        developerToken: credentials.developerToken,
       })
     } catch (error) {
       customerDiscoveryError = error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
     }
 
-    const connectionId = String(state.connection_id)
+    const oauthAccountId = String(state.oauth_account_id ?? "")
+    if (!oauthAccountId) {
+      throw new Error("GOOGLE_OAUTH_STATE_INVALID")
+    }
+
+    const existingConnection = await this.repository.findConnectionByOAuthAccountId(oauthAccountId)
+    if (!existingConnection) {
+      throw new Error("GOOGLE_OAUTH_STATE_INVALID")
+    }
+
+    const connectionId = existingConnection.id
     const actorUserId = String(state.user_id)
     const organizationId = String(state.organization_id)
     const workspaceId = (state.workspace_id as string | null) ?? null
@@ -470,6 +494,7 @@ export class GoogleOAuthService {
 
       await this.repository.upsertConnection({
         id: connectionId,
+        oauthAccountId,
         organizationId,
         workspaceId,
         projectId,
@@ -477,8 +502,8 @@ export class GoogleOAuthService {
         providerAccountId: profile.id ?? null,
         providerAccountName: profile.name ?? profile.email ?? "Google Ads Account",
         providerAccountEmail: profile.email ?? null,
-        encryptedRefreshToken: encryptSecret(refreshToken, this.config.tokenEncryptionKey),
-        encryptedAccessToken: encryptSecret(token.access_token, this.config.tokenEncryptionKey),
+        encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
+        encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
         scopes,
         tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
         status: "connected",
@@ -538,7 +563,7 @@ export class GoogleOAuthService {
   }
 
   async getActiveConnection(actor: AuthenticatedActor) {
-    ensureConfigured(this.config)
+    const { credentials } = await this.loadResolvedConfig()
 
     const resolvedProject = await this.repository.resolveProject({
       organizationId: actor.organizationId,
@@ -568,7 +593,7 @@ export class GoogleOAuthService {
         providerAccountName: connection.providerAccountName,
         providerAccountEmail: connection.providerAccountEmail,
         connectedAt: connection.lastConnectedAt,
-        developerTokenConfigured: this.config.googleAdsDeveloperToken.trim().length > 0,
+        developerTokenConfigured: credentials.developerToken.trim().length > 0,
         customerAccounts: customerAccounts.map((acc) => ({
           customerId: acc.customerId,
           displayName: acc.displayName,

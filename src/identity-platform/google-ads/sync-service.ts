@@ -137,8 +137,6 @@ export class GoogleAdsSyncService {
     private readonly config: {
       apiBaseUrl: string
       tokenEndpoint: string
-      clientId: string
-      clientSecret: string
       encryptionKey: string
       developerToken: string
       loginCustomerId?: string
@@ -148,8 +146,6 @@ export class GoogleAdsSyncService {
     fetchFn: typeof fetch = fetch
   ) {
     const authProvider = new GoogleAdsAuthProvider(db, {
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
       tokenEndpoint: config.tokenEndpoint,
       encryptionKey: config.encryptionKey,
     })

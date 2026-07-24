@@ -123,7 +123,13 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
 
 export function createIdentityApiServer(container: IdentityPlatformContainer = createIdentityPlatform()) {
   const googleOAuthController = container.infrastructure.database
-    ? new GoogleOAuthController(new GoogleOAuthService(new GoogleOAuthRepository(container.infrastructure.database)))
+    ? new GoogleOAuthController(
+      new GoogleOAuthService(
+        new GoogleOAuthRepository(container.infrastructure.database),
+        undefined,
+        container.infrastructure.googleIdentityCredentialsProvider
+      )
+    )
     : null
   const googleOAuthDeletionService = container.infrastructure.database
     ? new GoogleOAuthConnectionDeletionService(new GoogleOAuthRepository(container.infrastructure.database))

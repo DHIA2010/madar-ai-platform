@@ -23,7 +23,15 @@ import { EnvironmentFeatureFlagProvider } from "../infrastructure/feature-flags/
 import { EnvironmentConfigurationProvider } from "../infrastructure/configuration/environment-configuration-provider"
 import { InMemoryMetricsProvider } from "../infrastructure/observability/in-memory-metrics-provider"
 import { GoogleAdsSyncService } from "../google-ads/sync-service"
+import {
+  AwsSecretsGoogleIdentityCredentialsProvider,
+  type GoogleIdentityCredentialsProvider,
+} from "../google-oauth/google-identity-credentials"
+import { GoogleOAuthController } from "../google-oauth/controller"
+import { GoogleOAuthRepository } from "../google-oauth/repository"
+import { GoogleOAuthService } from "../google-oauth/service"
 import { GoogleAdsIntegrationProvider } from "../integrations/google-ads/provider"
+import { GoogleIdentityIntegrationProvider } from "../integrations/google/provider"
 import { SnapchatAdsIntegrationProvider } from "../integrations/snapchat-ads/provider"
 import { IntegrationProviderRegistry } from "../integrations/provider-registry"
 
@@ -54,6 +62,7 @@ export interface IdentityPlatformContainer {
     configuration?: EnvironmentConfigurationProvider
     metrics?: InMemoryMetricsProvider
     integrations?: IntegrationProviderRegistry
+    googleIdentityCredentialsProvider?: GoogleIdentityCredentialsProvider
   }
 }
 
@@ -99,6 +108,7 @@ export function createIdentityPlatformContainer(options: {
         metrics,
         featureFlags,
         integrations,
+        googleIdentityCredentialsProvider: undefined,
       },
     }
   }
@@ -116,15 +126,22 @@ export function createIdentityPlatformContainer(options: {
   const featureFlags = new EnvironmentFeatureFlagProvider(config)
   const configuration = new EnvironmentConfigurationProvider()
   const metrics = new InMemoryMetricsProvider()
+  const googleIdentityCredentialsProvider = new AwsSecretsGoogleIdentityCredentialsProvider()
   const integrations = new IntegrationProviderRegistry()
   integrations.register(new SnapchatAdsIntegrationProvider(database))
+  const googleOAuthController = new GoogleOAuthController(
+    new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleIdentityCredentialsProvider
+    )
+  )
+  integrations.register(new GoogleIdentityIntegrationProvider(googleOAuthController))
   integrations.register(
     new GoogleAdsIntegrationProvider(
       new GoogleAdsSyncService(database, {
         apiBaseUrl: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ?? "https://googleads.googleapis.com/v22",
         tokenEndpoint: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ?? "https://oauth2.googleapis.com/token",
-        clientId: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_ID ?? "",
-        clientSecret: process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_SECRET ?? "",
         encryptionKey:
           process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
           ?? process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
@@ -166,6 +183,7 @@ export function createIdentityPlatformContainer(options: {
       configuration,
       metrics,
       integrations,
+      googleIdentityCredentialsProvider,
     },
   }
 }
