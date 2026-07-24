@@ -150,3 +150,10 @@ export const googleAdsAccountsQuerySchema = z.object({
 })
 
 export const integrationAccountsQuerySchema = googleAdsAccountsQuerySchema
+
+export const googleAdsAccountSelectionSchema = z.object({
+  connectionId: z.string().uuid(),
+  customerId: z.string().min(1).max(64),
+})
+
+export const integrationAccountSelectionSchema = googleAdsAccountSelectionSchema

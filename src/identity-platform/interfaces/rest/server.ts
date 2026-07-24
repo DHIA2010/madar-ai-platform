@@ -13,6 +13,7 @@ import {
   createOrganizationSchema,
   createWorkspaceSchema,
   forgotPasswordSchema,
+  integrationAccountSelectionSchema,
   integrationAccountsQuerySchema,
   integrationOAuthStartSchema,
   integrationRecordsQuerySchema,
@@ -31,12 +32,20 @@ import {
   verifyEmailSchema,
 } from "../../schemas"
 
-function json(response: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
+function json(response: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
   response.writeHead(status, {
     "content-type": "application/json",
     ...headers,
   })
   response.end(JSON.stringify(body))
+}
+
+function getLogoutCookieHeaders(): Record<string, string[]> {
+  const expiredAttributes = "Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax"
+  const names = ["madar_access_token", "madar_refresh_token", "madar_session", "accessToken", "refreshToken", "session"]
+  return {
+    "set-cookie": names.map((name) => `${name}=; ${expiredAttributes}`),
+  }
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -56,6 +65,67 @@ function mapZodError(error: z.ZodError) {
     code: issue.code,
     message: issue.message,
   }))
+}
+
+function isPostgresLikeError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof (error as { code?: unknown }).code === "string"
+  )
+}
+
+function classifyAuthFailure(error: unknown) {
+  if (isPostgresLikeError(error)) {
+    const code = (error as { code: string }).code
+    if (code === "42P01") return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "42703") return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "23505") return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "08001" || code === "08006" || code.startsWith("08")) {
+      return { category: "infrastructure", code, exceptionType: "PostgresError", shouldLogStack: true }
+    }
+    if (code === "42501") return { category: "security", code, exceptionType: "PostgresError", shouldLogStack: true }
+  }
+
+  if (error instanceof z.ZodError) {
+    return { category: "validation", code: "VALIDATION_ERROR", exceptionType: error.name, shouldLogStack: false }
+  }
+
+  if (error instanceof Error) {
+    return { category: "bug", code: "INTERNAL_ERROR", exceptionType: error.name, shouldLogStack: true }
+  }
+
+  return { category: "bug", code: "INTERNAL_ERROR", exceptionType: typeof error, shouldLogStack: true }
+}
+
+function logAuthFailure(input: {
+  error: unknown
+  requestId: string
+  correlationId: string
+  endpoint: string
+  method: string
+}) {
+  const classification = classifyAuthFailure(input.error)
+  const stackTrace = classification.shouldLogStack && input.error instanceof Error ? input.error.stack : undefined
+
+  console.error(
+    JSON.stringify({
+      level: "error",
+      service: "identity-platform",
+      timestamp: new Date().toISOString(),
+      event: "auth.error",
+      requestId: input.requestId,
+      correlationId: input.correlationId,
+      endpoint: input.endpoint,
+      method: input.method,
+      category: classification.category,
+      code: classification.code,
+      exceptionType: classification.exceptionType,
+      stackTrace,
+      message: input.error instanceof Error ? input.error.message : "Unexpected error.",
+    })
+  )
 }
 
 function getBearerToken(request: IncomingMessage): string | null {
@@ -141,7 +211,7 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
     const context = createRequestContext(request)
     const requestStartedAt = Date.now()
     const corsHeaders = getCorsHeaders(request)
-    const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
+    const send = (status: number, body: unknown, headers: Record<string, string | string[]> = {}) => {
       container.infrastructure.metrics?.recordHistogram("organization_api_latency", Date.now() - requestStartedAt, {
         path: url.pathname,
         method,
@@ -250,7 +320,7 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
 
       if (method === "POST" && url.pathname === "/v1/auth/logout") {
         await container.commands.logout({ sessionId: actor.sessionId }, context, actor)
-        return send(200, { loggedOut: true })
+        return send(200, { loggedOut: true }, getLogoutCookieHeaders())
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/sessions/revoke") {
@@ -322,6 +392,28 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         response.writeHead(204, corsHeaders)
         response.end()
         return
+      }
+
+      const integrationSelectedAccountMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/accounts\/selected$/)
+      if (method === "GET" && integrationSelectedAccountMatch) {
+        const provider = container.infrastructure.integrations?.find(integrationSelectedAccountMatch[1])
+        if (!provider || !provider.getSelectedAccount) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        const query = integrationAccountsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
+        return send(200, { item: await provider.getSelectedAccount(actor, query) })
+      }
+
+      const integrationSelectAccountMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/accounts\/select$/)
+      if (method === "POST" && integrationSelectAccountMatch) {
+        const provider = container.infrastructure.integrations?.find(integrationSelectAccountMatch[1])
+        if (!provider || !provider.selectAccount) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        const payload = integrationAccountSelectionSchema.parse(await readJsonBody(request))
+        return send(200, await provider.selectAccount(actor, payload))
       }
 
       const integrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/(sync|records|accounts)$/)
@@ -503,6 +595,15 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
       }
 
       const mapped = mapIdentityError(error)
+      if (mapped.status >= 500) {
+        logAuthFailure({
+          error,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          endpoint: url.pathname,
+          method,
+        })
+      }
       return send(mapped.status, mapped.body)
     }
   })

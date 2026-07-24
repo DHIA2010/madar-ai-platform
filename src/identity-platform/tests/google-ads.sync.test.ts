@@ -523,4 +523,69 @@ describe("google ads sync service", () => {
 
     expect(queries.some((query) => query.includes("2026-06-03"))).toBe(true)
   })
+
+  it("discovers, persists, and selects an active Google Ads customer", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString()
+
+      if (url.includes("customers:listAccessibleCustomers")) {
+        return new Response(
+          JSON.stringify({
+            resourceNames: ["customers/123", "customers/456-789-0000"],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    })
+
+    const service = new GoogleAdsSyncService(
+      database,
+      {
+        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        tokenEndpoint: "https://oauth2.googleapis.com/token",
+        encryptionKey: "12345678901234567890123456789012",
+        developerToken: "developer-token",
+        maxRetries: 0,
+        minRequestIntervalMs: 0,
+      },
+      fetchMock as unknown as typeof fetch
+    )
+
+    const discovered = await service.listAccessibleAccounts(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+    })
+
+    expect(discovered.map((account) => account.customerId)).toEqual(["123", "4567890000"])
+    expect(discovered[0]?.isSelected).toBe(true)
+
+    const selected = await service.selectAccessibleAccount(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+      customerId: "4567890000",
+    })
+
+    expect(selected.status).toBe("connected")
+    expect(selected.selectedCustomer.customerId).toBe("4567890000")
+    expect(selected.selectedCustomer.isSelected).toBe(true)
+
+    const active = await service.getSelectedAccessibleAccount(ACTOR, {
+      connectionId: "00000000-0000-4000-8000-000000000105",
+    })
+
+    expect(active?.customerId).toBe("4567890000")
+
+    const selectionRows = await database.query<{ customer_id: string; is_selected: boolean }>(
+      `select customer_id, is_selected from google_ads_customer_accounts where connection_id = $1 order by customer_id`,
+      ["00000000-0000-4000-8000-000000000105"]
+    )
+
+    expect(selectionRows.rows).toEqual([
+      { customer_id: "123", is_selected: false },
+      { customer_id: "4567890000", is_selected: true },
+    ])
+  })
 })

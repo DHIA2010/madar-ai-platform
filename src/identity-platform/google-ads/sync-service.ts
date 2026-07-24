@@ -5,6 +5,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import { GoogleAdsAuthProvider } from "./auth-provider"
 import { GoogleAdsClient } from "./client"
+import { GoogleAdsCustomerManagementService } from "./customer-management-service"
 import { GoogleAdsIntegrationError } from "./errors"
 import type { GoogleAdsNormalizedBundle } from "./models"
 import { GoogleAdsRepository } from "./repository"
@@ -59,10 +60,6 @@ const STAGE_ORDER: SyncStage[] = [
   "conversionActions",
   "completed",
 ]
-
-// TEMPORARY DIAGNOSTIC: Remove after experiment.
-// Used only when automatic accessible-customer discovery returns no IDs.
-const TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID = "2233503900"
 
 function createEmptyBundle(): GoogleAdsNormalizedBundle {
   return {
@@ -125,6 +122,7 @@ export class GoogleAdsSyncService {
   private readonly oauthRepository: GoogleOAuthRepository
   private readonly repository: GoogleAdsRepository
   private readonly client: GoogleAdsClient
+  private readonly customerManagementService: GoogleAdsCustomerManagementService
   private readonly customerService: GoogleAdsCustomerService
   private readonly campaignService: GoogleAdsCampaignService
   private readonly adGroupService: GoogleAdsAdGroupService
@@ -161,6 +159,7 @@ export class GoogleAdsSyncService {
     this.oauthRepository = new GoogleOAuthRepository(db)
     this.repository = new GoogleAdsRepository(db)
     this.client = client
+    this.customerManagementService = new GoogleAdsCustomerManagementService(this.oauthRepository, client)
     this.customerService = new GoogleAdsCustomerService(client)
     this.campaignService = new GoogleAdsCampaignService(client)
     this.adGroupService = new GoogleAdsAdGroupService(client)
@@ -192,7 +191,7 @@ export class GoogleAdsSyncService {
     }
 
     const customerId = input.customerId
-    const selectedCustomer = await this.resolveAccessibleCustomerAccount(connection.id, customerId, actor.userId)
+    const selectedCustomer = await this.customerManagementService.resolveAccessibleCustomerAccount(connection.id, customerId, actor.userId)
     if (!selectedCustomer) {
       throw new GoogleAdsIntegrationError(
         "Google Ads customer is not accessible for this connection.",
@@ -450,71 +449,58 @@ export class GoogleAdsSyncService {
       )
     }
 
-    let accounts = await this.oauthRepository.listAccessibleCustomerAccounts(connection.id)
-    if (accounts.length > 0) {
-      return accounts
-    }
-
-    const discoveredCustomerIds = await this.client.listAccessibleCustomerIds(connection.id)
-    const effectiveCustomerIds = discoveredCustomerIds.length > 0
-      ? discoveredCustomerIds
-      : [TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID]
-
-    if (discoveredCustomerIds.length === 0) {
-      console.warn("[TEMP_DIAGNOSTIC] Using fallback customerId because discovery returned no IDs", {
-        connectionId: connection.id,
-        fallbackCustomerId: TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID,
-      })
-    }
-
-    await this.oauthRepository.replaceAccessibleCustomerAccounts({
-      connectionId: connection.id,
-      actorUserId: actor.userId,
-      selectedCustomerId: effectiveCustomerIds[0],
-      accounts: effectiveCustomerIds.map((customerId) => ({
-        customerId,
-        displayName: `Google Ads ${customerId}`,
-        currencyCode: null,
-        timeZone: null,
-      })),
-    })
-
-    accounts = await this.oauthRepository.listAccessibleCustomerAccounts(connection.id)
-    return accounts
+    return this.customerManagementService.listAccessibleAccounts(connection.id, actor.userId)
   }
 
-  private async resolveAccessibleCustomerAccount(connectionId: string, customerId: string, actorUserId: string) {
-    const existing = await this.oauthRepository.findAccessibleCustomerAccount(connectionId, customerId)
-    if (existing) {
-      return existing
+  async getSelectedAccessibleAccount(actor: AuthenticatedActor, input: { connectionId: string }) {
+    assertAuthorized(actor)
+
+    const connection = await this.oauthRepository.findConnectionById(input.connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new GoogleAdsIntegrationError(
+        "Google Ads connection not found.",
+        "GOOGLE_ADS_CONNECTION_NOT_FOUND",
+        false,
+        404
+      )
     }
 
-    const discoveredCustomerIds = await this.client.listAccessibleCustomerIds(connectionId)
-    const effectiveCustomerIds = discoveredCustomerIds.length > 0
-      ? discoveredCustomerIds
-      : [TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID]
+    return this.customerManagementService.getSelectedAccessibleAccount(connection.id)
+  }
 
-    if (discoveredCustomerIds.length === 0) {
-      console.warn("[TEMP_DIAGNOSTIC] Using fallback customerId during accessible-customer resolution", {
-        connectionId,
-        requestedCustomerId: customerId,
-        fallbackCustomerId: TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID,
-      })
+  async selectAccessibleAccount(actor: AuthenticatedActor, input: { connectionId: string; customerId: string }) {
+    assertAuthorized(actor)
+
+    const connection = await this.oauthRepository.findConnectionById(input.connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new GoogleAdsIntegrationError(
+        "Google Ads connection not found.",
+        "GOOGLE_ADS_CONNECTION_NOT_FOUND",
+        false,
+        404
+      )
     }
 
-    await this.oauthRepository.replaceAccessibleCustomerAccounts({
-      connectionId,
-      actorUserId,
-      selectedCustomerId: effectiveCustomerIds.includes(customerId) ? customerId : effectiveCustomerIds[0],
-      accounts: effectiveCustomerIds.map((id) => ({
-        customerId: id,
-        displayName: `Google Ads ${id}`,
-        currencyCode: null,
-        timeZone: null,
-      })),
-    })
+    const selected = await this.customerManagementService.selectAccessibleAccount(
+      connection.id,
+      input.customerId,
+      actor.userId
+    )
 
-    return this.oauthRepository.findAccessibleCustomerAccount(connectionId, customerId)
+    if (!selected) {
+      throw new GoogleAdsIntegrationError(
+        "Google Ads customer is not accessible for this connection.",
+        "GOOGLE_ADS_INVALID_CUSTOMER",
+        false,
+        400
+      )
+    }
+
+    return {
+      connectionId: connection.id,
+      status: "connected" as const,
+      selectedCustomer: selected,
+    }
   }
 
   private normalizeCheckpoint(raw: Record<string, unknown> | undefined, mode: "full" | "incremental", startDate: string, endDate: string): SyncCheckpointState {

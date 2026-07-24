@@ -862,6 +862,71 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     return result.rows[0] ? mapAdsCustomerAccount(result.rows[0]) : null
   }
 
+  async findSelectedAccessibleCustomerAccount(connectionId: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "google-ads-customer-account-find-selected",
+      text: `
+        SELECT *
+        FROM google_ads_customer_accounts
+        WHERE connection_id = $1
+          AND is_selected = true
+          AND status = 'active'
+        LIMIT 1
+      `,
+      values: [connectionId],
+    })
+
+    return result.rows[0] ? mapAdsCustomerAccount(result.rows[0]) : null
+  }
+
+  async selectAccessibleCustomerAccount(input: {
+    connectionId: string
+    customerId: string
+  }) {
+    const target = await this.findAccessibleCustomerAccount(input.connectionId, input.customerId)
+    if (!target) {
+      return null
+    }
+
+    await this.db.query({
+      name: "google-ads-customer-account-select-clear",
+      text: `
+        UPDATE google_ads_customer_accounts
+        SET is_selected = false,
+            updated_at = now()
+        WHERE connection_id = $1
+      `,
+      values: [input.connectionId],
+    })
+
+    await this.db.query({
+      name: "google-ads-customer-account-select-set",
+      text: `
+        UPDATE google_ads_customer_accounts
+        SET is_selected = true,
+            updated_at = now()
+        WHERE connection_id = $1
+          AND customer_id = $2
+          AND status = 'active'
+      `,
+      values: [input.connectionId, input.customerId],
+    })
+
+    await this.db.query({
+      name: "google-ads-connection-touch-selected",
+      text: `
+        UPDATE integration_connections
+        SET status = 'connected',
+            updated_at = now()
+        WHERE id = $1
+          AND provider_id = 'google-ads'
+      `,
+      values: [input.connectionId],
+    })
+
+    return this.findSelectedAccessibleCustomerAccount(input.connectionId)
+  }
+
   async deleteConnectionCascade(connectionId: string) {
     const ownership = await this.findConnectionOwnershipById(connectionId)
 

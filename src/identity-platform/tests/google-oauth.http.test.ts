@@ -332,6 +332,169 @@ describe("google oauth http flow", () => {
     expect(invalidGrantResponse.headers.get("location")).toContain("reason=token_exchange_failed")
   })
 
+  it("lists customers, selects one active customer, and returns the selected customer", async () => {
+    const nativeFetch = globalThis.fetch
+
+    const registerResponse = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "oauth-http-customers@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "OAuth HTTP Customers",
+        organizationName: "OAuth Org",
+      }),
+    })
+    const registration = (await registerResponse.json()) as { verificationToken: string }
+
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: registration.verificationToken }),
+    })
+
+    const loginResponse = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "oauth-http-customers@madar.test", password: "VeryStrongPassword123!" }),
+    })
+    const login = (await loginResponse.json()) as { session: { accessToken: string } }
+    const actor = await container.commands.resolveActorFromAccessToken(login.session.accessToken)
+
+    await database.query(
+      `insert into users (id, email, password_hash, full_name, email_verified_at)
+       values ($1, 'oauth-http-customers@madar.test', 'hash', 'OAuth HTTP Customers', now())`,
+      [actor.userId]
+    )
+    await database.query(
+      `insert into organizations (id, name, owner_user_id, status)
+       values ($1, 'OAuth Org', $2, 'active')`,
+      [actor.organizationId, actor.userId]
+    )
+
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000000218"
+    await database.query(
+      `insert into workspaces (id, organization_id, name, status)
+       values ($1, $2, 'OAuth Workspace', 'active')`,
+      [workspaceId, actor.organizationId]
+    )
+
+    await database.query(
+      `insert into projects (id, organization_id, workspace_id, owner_user_id, name, status)
+       values ('00000000-0000-4000-8000-000000000219', $1, $2, $3, 'OAuth HTTP Customer Project', 'active')`,
+      [actor.organizationId, workspaceId, actor.userId]
+    )
+
+    const startResponse = await fetch(`${baseUrl}/v1/integrations/google/oauth/start`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${login.session.accessToken}`,
+        "x-workspace-id": workspaceId,
+      },
+      body: JSON.stringify({ workspaceId, projectId: "00000000-0000-4000-8000-000000000219" }),
+    })
+    const started = (await startResponse.json()) as { state: string; connectionId: string }
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString()
+
+      if (url.startsWith(baseUrl)) {
+        return nativeFetch(input, init)
+      }
+
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "token-access-http-customers",
+            refresh_token: "token-refresh-http-customers",
+            expires_in: 3600,
+            scope: "https://www.googleapis.com/auth/adwords",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(
+          JSON.stringify({ id: "acct-http-customers", email: "acct-http-customers@example.com", name: "Acct Customers" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("customers:listAccessibleCustomers")) {
+        return new Response(
+          JSON.stringify({ resourceNames: ["customers/123", "customers/456-789-0000"] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      return new Response("{}", { status: 404 })
+    })
+
+    const callbackResponse = await fetch(
+      `${baseUrl}/v1/integrations/google/oauth/callback?state=${encodeURIComponent(started.state)}&code=oauth-http-customer-code`,
+      { redirect: "manual" }
+    )
+
+    expect(callbackResponse.status).toBe(302)
+
+    const listResponse = await fetch(
+      `${baseUrl}/v1/integrations/google-ads/accounts?connectionId=${started.connectionId}`,
+      {
+        headers: {
+          authorization: `Bearer ${login.session.accessToken}`,
+          "x-workspace-id": workspaceId,
+        },
+      }
+    )
+
+    expect(listResponse.status).toBe(200)
+    await expect(listResponse.json()).resolves.toMatchObject({
+      items: [
+        { customerId: "123" },
+        { customerId: "4567890000" },
+      ],
+    })
+
+    const selectResponse = await fetch(`${baseUrl}/v1/integrations/google-ads/accounts/select`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${login.session.accessToken}`,
+        "x-workspace-id": workspaceId,
+      },
+      body: JSON.stringify({ connectionId: started.connectionId, customerId: "4567890000" }),
+    })
+
+    expect(selectResponse.status).toBe(200)
+    await expect(selectResponse.json()).resolves.toMatchObject({
+      status: "connected",
+      selectedCustomer: {
+        customerId: "4567890000",
+        isSelected: true,
+      },
+    })
+
+    const selectedResponse = await fetch(
+      `${baseUrl}/v1/integrations/google-ads/accounts/selected?connectionId=${started.connectionId}`,
+      {
+        headers: {
+          authorization: `Bearer ${login.session.accessToken}`,
+          "x-workspace-id": workspaceId,
+        },
+      }
+    )
+
+    expect(selectedResponse.status).toBe(200)
+    await expect(selectedResponse.json()).resolves.toMatchObject({
+      item: {
+        customerId: "4567890000",
+        isSelected: true,
+      },
+    })
+  })
+
   it("handles duplicate callbacks safely", async () => {
     const nativeFetch = globalThis.fetch
 
