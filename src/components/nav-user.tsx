@@ -56,7 +56,6 @@ export function NavUser({
       await logout()
     } finally {
       router.replace("/auth/basic/login")
-      router.refresh()
       setIsLoggingOut(false)
     }
   }

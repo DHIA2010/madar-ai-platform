@@ -63,8 +63,8 @@ export function ProtectedRoute({
 
   // Determine what to show - always evaluate ALL conditions
   const showLoading = useMemo(
-    () => isLoading || isUnauthenticated || isWorkspaceLoading || isWorkspaceMissing,
-    [isLoading, isUnauthenticated, isWorkspaceLoading, isWorkspaceMissing]
+    () => isLoading || isWorkspaceLoading || isWorkspaceMissing,
+    [isLoading, isWorkspaceLoading, isWorkspaceMissing]
   )
 
   const showError = useMemo(
@@ -72,7 +72,10 @@ export function ProtectedRoute({
     [hasNoUser, isLoading, isUnauthenticated, isWorkspaceLoading]
   )
 
-  const showContent = useMemo(() => !showLoading && !showError, [showLoading, showError])
+  const showContent = useMemo(
+    () => !showLoading && !showError && !isUnauthenticated,
+    [showLoading, showError, isUnauthenticated]
+  )
 
   // ALWAYS render the same component tree - only conditionally show content
   // This ensures React's hook count never changes
