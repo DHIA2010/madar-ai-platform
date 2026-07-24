@@ -2,7 +2,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { URL } from "node:url"
 import { z } from "zod"
 
-import { createIdentityPlatform, type IdentityPlatformContainer } from "../../bootstrap/create-identity-platform"
+import {
+  createIdentityPlatform,
+  type IdentityPlatformContainer,
+} from "../../bootstrap/create-identity-platform"
 import { GoogleOAuthController } from "../../google-oauth/controller"
 import { GoogleOAuthConnectionDeletionService } from "../../google-oauth/connection-deletion-service"
 import { GoogleOAuthRepository } from "../../google-oauth/repository"
@@ -32,7 +35,12 @@ import {
   verifyEmailSchema,
 } from "../../schemas"
 
-function json(response: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
+function json(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string | string[]> = {}
+) {
   response.writeHead(status, {
     "content-type": "application/json",
     ...headers,
@@ -41,8 +49,16 @@ function json(response: ServerResponse, status: number, body: unknown, headers: 
 }
 
 function getLogoutCookieHeaders(): Record<string, string[]> {
-  const expiredAttributes = "Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax"
-  const names = ["madar_access_token", "madar_refresh_token", "madar_session", "accessToken", "refreshToken", "session"]
+  const expiredAttributes =
+    "Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax"
+  const names = [
+    "madar_access_token",
+    "madar_refresh_token",
+    "madar_session",
+    "accessToken",
+    "refreshToken",
+    "session",
+  ]
   return {
     "set-cookie": names.map((name) => `${name}=; ${expiredAttributes}`),
   }
@@ -70,33 +86,57 @@ function mapZodError(error: z.ZodError) {
 function isPostgresLikeError(error: unknown) {
   return Boolean(
     error &&
-      typeof error === "object" &&
-      "code" in error &&
-      typeof (error as { code?: unknown }).code === "string"
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
   )
 }
 
 function classifyAuthFailure(error: unknown) {
   if (isPostgresLikeError(error)) {
     const code = (error as { code: string }).code
-    if (code === "42P01") return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
-    if (code === "42703") return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
-    if (code === "23505") return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "42P01")
+      return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "42703")
+      return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "23505")
+      return { category: "database", code, exceptionType: "PostgresError", shouldLogStack: true }
     if (code === "08001" || code === "08006" || code.startsWith("08")) {
-      return { category: "infrastructure", code, exceptionType: "PostgresError", shouldLogStack: true }
+      return {
+        category: "infrastructure",
+        code,
+        exceptionType: "PostgresError",
+        shouldLogStack: true,
+      }
     }
-    if (code === "42501") return { category: "security", code, exceptionType: "PostgresError", shouldLogStack: true }
+    if (code === "42501")
+      return { category: "security", code, exceptionType: "PostgresError", shouldLogStack: true }
   }
 
   if (error instanceof z.ZodError) {
-    return { category: "validation", code: "VALIDATION_ERROR", exceptionType: error.name, shouldLogStack: false }
+    return {
+      category: "validation",
+      code: "VALIDATION_ERROR",
+      exceptionType: error.name,
+      shouldLogStack: false,
+    }
   }
 
   if (error instanceof Error) {
-    return { category: "bug", code: "INTERNAL_ERROR", exceptionType: error.name, shouldLogStack: true }
+    return {
+      category: "bug",
+      code: "INTERNAL_ERROR",
+      exceptionType: error.name,
+      shouldLogStack: true,
+    }
   }
 
-  return { category: "bug", code: "INTERNAL_ERROR", exceptionType: typeof error, shouldLogStack: true }
+  return {
+    category: "bug",
+    code: "INTERNAL_ERROR",
+    exceptionType: typeof error,
+    shouldLogStack: true,
+  }
 }
 
 function logAuthFailure(input: {
@@ -107,7 +147,8 @@ function logAuthFailure(input: {
   method: string
 }) {
   const classification = classifyAuthFailure(input.error)
-  const stackTrace = classification.shouldLogStack && input.error instanceof Error ? input.error.stack : undefined
+  const stackTrace =
+    classification.shouldLogStack && input.error instanceof Error ? input.error.stack : undefined
 
   console.error(
     JSON.stringify({
@@ -182,7 +223,8 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
     return {
       "access-control-allow-origin": origin,
       "access-control-allow-credentials": "true",
-      "access-control-allow-headers": "content-type, authorization, x-correlation-id, x-request-id, x-workspace-id, x-request-timeout-ms",
+      "access-control-allow-headers":
+        "content-type, authorization, x-correlation-id, x-request-id, x-workspace-id, x-request-timeout-ms",
       "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
       vary: "Origin",
     }
@@ -191,18 +233,22 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
   return {}
 }
 
-export function createIdentityApiServer(container: IdentityPlatformContainer = createIdentityPlatform()) {
+export function createIdentityApiServer(
+  container: IdentityPlatformContainer = createIdentityPlatform()
+) {
   const googleOAuthController = container.infrastructure.database
     ? new GoogleOAuthController(
-      new GoogleOAuthService(
-        new GoogleOAuthRepository(container.infrastructure.database),
-        undefined,
-        container.infrastructure.googleIdentityCredentialsProvider
+        new GoogleOAuthService(
+          new GoogleOAuthRepository(container.infrastructure.database),
+          undefined,
+          container.infrastructure.googleIdentityCredentialsProvider
+        )
       )
-    )
     : null
   const googleOAuthDeletionService = container.infrastructure.database
-    ? new GoogleOAuthConnectionDeletionService(new GoogleOAuthRepository(container.infrastructure.database))
+    ? new GoogleOAuthConnectionDeletionService(
+        new GoogleOAuthRepository(container.infrastructure.database)
+      )
     : null
 
   return createServer(async (request, response) => {
@@ -211,11 +257,19 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
     const context = createRequestContext(request)
     const requestStartedAt = Date.now()
     const corsHeaders = getCorsHeaders(request)
-    const send = (status: number, body: unknown, headers: Record<string, string | string[]> = {}) => {
-      container.infrastructure.metrics?.recordHistogram("organization_api_latency", Date.now() - requestStartedAt, {
-        path: url.pathname,
-        method,
-      })
+    const send = (
+      status: number,
+      body: unknown,
+      headers: Record<string, string | string[]> = {}
+    ) => {
+      container.infrastructure.metrics?.recordHistogram(
+        "organization_api_latency",
+        Date.now() - requestStartedAt,
+        {
+          path: url.pathname,
+          method,
+        }
+      )
       return json(response, status, body, { ...corsHeaders, ...headers })
     }
 
@@ -258,34 +312,64 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/register") {
-        return send(201, await container.commands.register(registerSchema.parse(await readJsonBody(request)), context))
+        return send(
+          201,
+          await container.commands.register(
+            registerSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/verify-email") {
-        await container.commands.verifyEmail(verifyEmailSchema.parse(await readJsonBody(request)), context)
+        await container.commands.verifyEmail(
+          verifyEmailSchema.parse(await readJsonBody(request)),
+          context
+        )
         return send(200, { verified: true })
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/login") {
-        return send(200, await container.commands.login(loginSchema.parse(await readJsonBody(request)), context))
+        return send(
+          200,
+          await container.commands.login(loginSchema.parse(await readJsonBody(request)), context)
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/refresh") {
-        return send(200, await container.commands.refresh(refreshSchema.parse(await readJsonBody(request)), context))
+        return send(
+          200,
+          await container.commands.refresh(
+            refreshSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/password/forgot") {
-        return send(202, await container.commands.createPasswordReset(forgotPasswordSchema.parse(await readJsonBody(request)), context))
+        return send(
+          202,
+          await container.commands.createPasswordReset(
+            forgotPasswordSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/password/reset") {
-        await container.commands.resetPassword(resetPasswordSchema.parse(await readJsonBody(request)), context)
+        await container.commands.resetPassword(
+          resetPasswordSchema.parse(await readJsonBody(request)),
+          context
+        )
         return send(200, { reset: true })
       }
 
       if (method === "GET" && url.pathname === "/v1/integrations/google/oauth/callback") {
         if (!googleOAuthController) {
-          return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
         }
 
         const callbackResult = await googleOAuthController.callback(request, url.searchParams)
@@ -294,7 +378,9 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         return
       }
 
-      const providerOauthCallbackMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/oauth\/callback$/)
+      const providerOauthCallbackMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/oauth\/callback$/
+      )
       if (method === "GET" && providerOauthCallbackMatch) {
         const provider = container.infrastructure.integrations?.find(providerOauthCallbackMatch[1])
         if (!provider || !provider.oauthCallback) {
@@ -324,7 +410,11 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
       }
 
       if (method === "POST" && url.pathname === "/v1/auth/sessions/revoke") {
-        await container.commands.revokeSession(revokeSessionSchema.parse(await readJsonBody(request)), context, actor)
+        await container.commands.revokeSession(
+          revokeSessionSchema.parse(await readJsonBody(request)),
+          context,
+          actor
+        )
         return send(200, { revoked: true })
       }
 
@@ -333,19 +423,43 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
       }
 
       if (method === "PATCH" && url.pathname === "/v1/identity/profile") {
-        return send(200, await container.commands.updateProfile(actor, updateProfileSchema.parse(await readJsonBody(request)), context))
+        return send(
+          200,
+          await container.commands.updateProfile(
+            actor,
+            updateProfileSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/integrations/google/oauth/start") {
         if (!googleOAuthController) {
-          return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
         }
 
         const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
         return send(200, await googleOAuthController.start(actor, payload))
       }
 
-      const providerOauthStartMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/oauth\/start$/)
+      if (method === "POST" && url.pathname === "/v1/integrations/google-ads/oauth/start") {
+        if (!googleOAuthController) {
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
+        }
+
+        const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
+        return send(200, await googleOAuthController.start(actor, payload))
+      }
+
+      const providerOauthStartMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/oauth\/start$/
+      )
       if (method === "POST" && providerOauthStartMatch) {
         const provider = container.infrastructure.integrations?.find(providerOauthStartMatch[1])
         if (!provider || !provider.oauthStart) {
@@ -356,23 +470,19 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         return send(200, await provider.oauthStart(actor, payload))
       }
 
-      if (method === "POST" && url.pathname === "/v1/integrations/google-ads/oauth/start") {
-        if (!googleOAuthController) {
-          return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
-        }
-
-        const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
-        return send(200, await googleOAuthController.start(actor, payload))
-      }
-
       if (method === "GET" && url.pathname === "/v1/integrations/google/connection") {
         if (!googleOAuthController) {
-          return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
         }
         return send(200, await googleOAuthController.getActiveConnection(actor))
       }
 
-      const providerConnectionMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/connection$/)
+      const providerConnectionMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/connection$/
+      )
       if (method === "GET" && providerConnectionMatch) {
         const provider = container.infrastructure.integrations?.find(providerConnectionMatch[1])
         if (!provider || !provider.getActiveConnection) {
@@ -385,7 +495,10 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)
       if (method === "DELETE" && deleteIntegrationMatch) {
         if (!googleOAuthDeletionService) {
-          return send(503, { code: "GOOGLE_OAUTH_UNAVAILABLE", message: "Google OAuth is unavailable in memory mode." })
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
         }
 
         await googleOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
@@ -394,20 +507,30 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         return
       }
 
-      const integrationSelectedAccountMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/accounts\/selected$/)
+      const integrationSelectedAccountMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/accounts\/selected$/
+      )
       if (method === "GET" && integrationSelectedAccountMatch) {
-        const provider = container.infrastructure.integrations?.find(integrationSelectedAccountMatch[1])
+        const provider = container.infrastructure.integrations?.find(
+          integrationSelectedAccountMatch[1]
+        )
         if (!provider || !provider.getSelectedAccount) {
           return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
         }
 
-        const query = integrationAccountsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
+        const query = integrationAccountsQuerySchema.parse(
+          Object.fromEntries(url.searchParams.entries())
+        )
         return send(200, { item: await provider.getSelectedAccount(actor, query) })
       }
 
-      const integrationSelectAccountMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/accounts\/select$/)
+      const integrationSelectAccountMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/accounts\/select$/
+      )
       if (method === "POST" && integrationSelectAccountMatch) {
-        const provider = container.infrastructure.integrations?.find(integrationSelectAccountMatch[1])
+        const provider = container.infrastructure.integrations?.find(
+          integrationSelectAccountMatch[1]
+        )
         if (!provider || !provider.selectAccount) {
           return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
         }
@@ -416,7 +539,9 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         return send(200, await provider.selectAccount(actor, payload))
       }
 
-      const integrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/(sync|records|accounts)$/)
+      const integrationMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/(sync|records|accounts)$/
+      )
       if (integrationMatch) {
         const providerId = integrationMatch[1]
         const action = integrationMatch[2]
@@ -432,86 +557,191 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         }
 
         if (action === "records" && method === "GET" && provider.listRecords) {
-          const query = integrationRecordsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
+          const query = integrationRecordsQuerySchema.parse(
+            Object.fromEntries(url.searchParams.entries())
+          )
           return send(200, { items: await provider.listRecords(actor, query) })
         }
 
         if (action === "accounts" && method === "GET" && provider.listAccounts) {
-          const query = integrationAccountsQuerySchema.parse(Object.fromEntries(url.searchParams.entries()))
+          const query = integrationAccountsQuerySchema.parse(
+            Object.fromEntries(url.searchParams.entries())
+          )
           return send(200, { items: await provider.listAccounts(actor, query) })
         }
       }
 
-      const invitationAcceptMatch = url.pathname.match(/^\/v1\/organizations\/invitations\/([^/]+)\/accept$/)
+      const invitationAcceptMatch = url.pathname.match(
+        /^\/v1\/organizations\/invitations\/([^/]+)\/accept$/
+      )
       if (method === "POST" && invitationAcceptMatch) {
-        return send(200, await container.commands.acceptInvitation(actor, { token: invitationAcceptMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.acceptInvitation(
+            actor,
+            { token: invitationAcceptMatch[1] },
+            context
+          )
+        )
       }
 
-      const invitationDeclineMatch = url.pathname.match(/^\/v1\/organizations\/invitations\/([^/]+)\/decline$/)
+      const invitationDeclineMatch = url.pathname.match(
+        /^\/v1\/organizations\/invitations\/([^/]+)\/decline$/
+      )
       if (method === "POST" && invitationDeclineMatch) {
-        return send(200, await container.commands.declineInvitation(actor, { token: invitationDeclineMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.declineInvitation(
+            actor,
+            { token: invitationDeclineMatch[1] },
+            context
+          )
+        )
       }
 
-      const invitationCancelMatch = url.pathname.match(/^\/v1\/organizations\/invitations\/([^/]+)\/cancel$/)
+      const invitationCancelMatch = url.pathname.match(
+        /^\/v1\/organizations\/invitations\/([^/]+)\/cancel$/
+      )
       if (method === "POST" && invitationCancelMatch) {
-        return send(200, await container.commands.cancelInvitation(actor, { invitationId: invitationCancelMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.cancelInvitation(
+            actor,
+            { invitationId: invitationCancelMatch[1] },
+            context
+          )
+        )
       }
 
-      const invitationResendMatch = url.pathname.match(/^\/v1\/organizations\/invitations\/([^/]+)\/resend$/)
+      const invitationResendMatch = url.pathname.match(
+        /^\/v1\/organizations\/invitations\/([^/]+)\/resend$/
+      )
       if (method === "POST" && invitationResendMatch) {
-        return send(200, await container.commands.resendInvitation(actor, { invitationId: invitationResendMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.resendInvitation(
+            actor,
+            { invitationId: invitationResendMatch[1] },
+            context
+          )
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/organizations") {
-        return send(201, await container.commands.createOrganization(actor, createOrganizationSchema.parse(await readJsonBody(request)), context))
+        return send(
+          201,
+          await container.commands.createOrganization(
+            actor,
+            createOrganizationSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "GET" && url.pathname === "/v1/organizations") {
-        return send(200, await container.queries.listOrganizations(actor, {
-          page: parsePage(url.searchParams.get("page"), 1),
-          pageSize: Math.min(parsePage(url.searchParams.get("pageSize"), 20), 100),
-          status: (url.searchParams.get("status") as "active" | "archived" | "deleted" | null) ?? undefined,
-          sort: (url.searchParams.get("sort") as "createdAt:asc" | "createdAt:desc" | "name:asc" | "name:desc" | null) ?? undefined,
-        }))
+        return send(
+          200,
+          await container.queries.listOrganizations(actor, {
+            page: parsePage(url.searchParams.get("page"), 1),
+            pageSize: Math.min(parsePage(url.searchParams.get("pageSize"), 20), 100),
+            status:
+              (url.searchParams.get("status") as "active" | "archived" | "deleted" | null) ??
+              undefined,
+            sort:
+              (url.searchParams.get("sort") as
+                | "createdAt:asc"
+                | "createdAt:desc"
+                | "name:asc"
+                | "name:desc"
+                | null) ?? undefined,
+          })
+        )
       }
 
       const organizationMembersMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/members$/)
       if (method === "GET" && organizationMembersMatch) {
-        return send(200, await container.queries.listOrganizationMembers(actor, organizationMembersMatch[1]))
+        return send(
+          200,
+          await container.queries.listOrganizationMembers(actor, organizationMembersMatch[1])
+        )
       }
 
-      const organizationInvitationsMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/invitations$/)
+      const organizationInvitationsMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/invitations$/
+      )
       if (organizationInvitationsMatch && method === "POST") {
         const payload = inviteOrganizationMemberSchema.parse(await readJsonBody(request))
-        return send(201, await container.commands.inviteMember(actor, {
-          organizationId: organizationInvitationsMatch[1],
-          workspaceId: payload.workspaceId,
-          email: payload.email,
-          role: payload.role,
-          idempotencyKey: payload.idempotencyKey,
-        }, context))
+        return send(
+          201,
+          await container.commands.inviteMember(
+            actor,
+            {
+              organizationId: organizationInvitationsMatch[1],
+              workspaceId: payload.workspaceId,
+              email: payload.email,
+              role: payload.role,
+              idempotencyKey: payload.idempotencyKey,
+            },
+            context
+          )
+        )
       }
       if (organizationInvitationsMatch && method === "GET") {
-        return send(200, await container.queries.listOrganizationInvitations(actor, organizationInvitationsMatch[1], {
-          page: parsePage(url.searchParams.get("page"), 1),
-          pageSize: Math.min(parsePage(url.searchParams.get("pageSize"), 20), 100),
-          status: (url.searchParams.get("status") as "pending" | "accepted" | "declined" | "canceled" | "expired" | null) ?? undefined,
-        }))
+        return send(
+          200,
+          await container.queries.listOrganizationInvitations(
+            actor,
+            organizationInvitationsMatch[1],
+            {
+              page: parsePage(url.searchParams.get("page"), 1),
+              pageSize: Math.min(parsePage(url.searchParams.get("pageSize"), 20), 100),
+              status:
+                (url.searchParams.get("status") as
+                  | "pending"
+                  | "accepted"
+                  | "declined"
+                  | "canceled"
+                  | "expired"
+                  | null) ?? undefined,
+            }
+          )
+        )
       }
 
       const organizationArchiveMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/archive$/)
       if (method === "POST" && organizationArchiveMatch) {
-        return send(200, await container.commands.archiveOrganization(actor, { organizationId: organizationArchiveMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.archiveOrganization(
+            actor,
+            { organizationId: organizationArchiveMatch[1] },
+            context
+          )
+        )
       }
 
       const organizationRestoreMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/restore$/)
       if (method === "POST" && organizationRestoreMatch) {
-        return send(200, await container.commands.restoreOrganization(actor, { organizationId: organizationRestoreMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.restoreOrganization(
+            actor,
+            { organizationId: organizationRestoreMatch[1] },
+            context
+          )
+        )
       }
 
       const organizationDeleteMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/delete$/)
       if (method === "POST" && organizationDeleteMatch) {
-        return send(200, await container.commands.deleteOrganization(actor, { organizationId: organizationDeleteMatch[1] }, context))
+        return send(
+          200,
+          await container.commands.deleteOrganization(
+            actor,
+            { organizationId: organizationDeleteMatch[1] },
+            context
+          )
+        )
       }
 
       const organizationItemMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)$/)
@@ -519,55 +749,114 @@ export function createIdentityApiServer(container: IdentityPlatformContainer = c
         return send(200, await container.queries.getOrganization(actor, organizationItemMatch[1]))
       }
       if (organizationItemMatch && method === "PATCH") {
-        return send(200, await container.commands.updateOrganization(actor, organizationItemMatch[1], updateOrganizationSchema.parse(await readJsonBody(request)), context))
+        return send(
+          200,
+          await container.commands.updateOrganization(
+            actor,
+            organizationItemMatch[1],
+            updateOrganizationSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
-      const memberActionMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/(suspend|reactivate|remove|transfer-ownership|roles|profile)$/)
+      const memberActionMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/(suspend|reactivate|remove|transfer-ownership|roles|profile)$/
+      )
       if (memberActionMatch && method === "POST") {
         const organizationId = memberActionMatch[1]
         const memberUserId = memberActionMatch[2]
         const action = memberActionMatch[3]
         if (action === "suspend") {
-          return send(200, await container.commands.suspendMember(actor, {
-            organizationId,
-            memberUserId,
-            reason: suspendMemberSchema.parse(await readJsonBody(request)).reason,
-          }, context))
+          return send(
+            200,
+            await container.commands.suspendMember(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                reason: suspendMemberSchema.parse(await readJsonBody(request)).reason,
+              },
+              context
+            )
+          )
         }
         if (action === "reactivate") {
-          return send(200, await container.commands.reactivateMember(actor, { organizationId, memberUserId }, context))
+          return send(
+            200,
+            await container.commands.reactivateMember(
+              actor,
+              { organizationId, memberUserId },
+              context
+            )
+          )
         }
         if (action === "remove") {
-          return send(200, await container.commands.removeMember(actor, {
-            organizationId,
-            memberUserId,
-            reason: removeMemberSchema.parse(await readJsonBody(request)).reason,
-          }, context))
+          return send(
+            200,
+            await container.commands.removeMember(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                reason: removeMemberSchema.parse(await readJsonBody(request)).reason,
+              },
+              context
+            )
+          )
         }
         if (action === "transfer-ownership") {
-          return send(200, await container.commands.transferOwnership(actor, {
-            organizationId,
-            newOwnerUserId: memberUserId,
-          }, context))
+          return send(
+            200,
+            await container.commands.transferOwnership(
+              actor,
+              {
+                organizationId,
+                newOwnerUserId: memberUserId,
+              },
+              context
+            )
+          )
         }
         if (action === "roles") {
-          return send(200, await container.commands.assignMemberRole(actor, {
-            organizationId,
-            memberUserId,
-            role: assignRoleSchema.parse(await readJsonBody(request)).role,
-          }, context))
+          return send(
+            200,
+            await container.commands.assignMemberRole(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                role: assignRoleSchema.parse(await readJsonBody(request)).role,
+              },
+              context
+            )
+          )
         }
         if (action === "profile") {
-          return send(200, await container.commands.updateMemberProfile(actor, {
-            organizationId,
-            memberUserId,
-            profile: updateMemberProfileSchema.parse(await readJsonBody(request)).profile,
-          }, context))
+          return send(
+            200,
+            await container.commands.updateMemberProfile(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                profile: updateMemberProfileSchema.parse(await readJsonBody(request)).profile,
+              },
+              context
+            )
+          )
         }
       }
 
       if (method === "POST" && url.pathname === "/v1/workspaces") {
-        return send(201, await container.commands.createWorkspace(actor, createWorkspaceSchema.parse(await readJsonBody(request)), context))
+        return send(
+          201,
+          await container.commands.createWorkspace(
+            actor,
+            createWorkspaceSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "GET" && url.pathname === "/v1/workspaces") {
