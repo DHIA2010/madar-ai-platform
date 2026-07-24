@@ -18,6 +18,31 @@ interface CreateSyncRunInput {
   actorUserId: string
 }
 
+export interface MarketingCampaignRecord {
+  id: string
+  integrationConnectionId: string
+  organizationId: string
+  workspaceId: string | null
+  projectId: string
+  providerId: string
+  providerFamily: string
+  providerAccountId: string
+  externalCustomerId: string
+  providerEntityId: string
+  name: string
+  status: string
+  channel: string | null
+  objective: string | null
+  budgetMicros: number | null
+  currencyCode: string | null
+  startDate: string | null
+  endDate: string | null
+  sourceUpdatedAt: string | null
+  syncedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
 interface SyncLockInput {
   providerKey: string
   connectionId: string
@@ -252,6 +277,171 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       where provider_key = $1 and connection_id = $2 and project_id = $3 and lock_token = $4
       `,
       [input.providerKey, input.connectionId, input.projectId, input.lockToken]
+    )
+  }
+
+  async listMarketingCampaigns(input: { connectionId: string; externalCustomerId: string }) {
+    const result = await this.db.query<Record<string, unknown>>(
+      `
+      select *
+      from marketing_campaigns
+      where integration_connection_id = $1
+        and external_customer_id = $2
+      order by provider_entity_id asc
+      `,
+      [input.connectionId, input.externalCustomerId]
+    )
+
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      integrationConnectionId: String(row.integration_connection_id),
+      organizationId: String(row.organization_id),
+      workspaceId: (row.workspace_id as string | null) ?? null,
+      projectId: String(row.project_id),
+      providerId: String(row.provider_id),
+      providerFamily: String(row.provider_family),
+      providerAccountId: String(row.provider_account_id),
+      externalCustomerId: String(row.external_customer_id),
+      providerEntityId: String(row.provider_entity_id),
+      name: String(row.name),
+      status: String(row.status),
+      channel: (row.channel as string | null) ?? null,
+      objective: (row.objective as string | null) ?? null,
+      budgetMicros: row.budget_micros === null || row.budget_micros === undefined ? null : Number(row.budget_micros),
+      currencyCode: (row.currency_code as string | null) ?? null,
+      startDate: row.start_date instanceof Date ? row.start_date.toISOString().slice(0, 10) : (row.start_date as string | null) ?? null,
+      endDate: row.end_date instanceof Date ? row.end_date.toISOString().slice(0, 10) : (row.end_date as string | null) ?? null,
+      sourceUpdatedAt: toJsonDate((row.source_updated_at as string | null) ?? null),
+      syncedAt: toJsonDate((row.synced_at as string | null) ?? null) ?? new Date().toISOString(),
+      createdAt: toJsonDate((row.created_at as string | null) ?? null) ?? new Date().toISOString(),
+      updatedAt: toJsonDate((row.updated_at as string | null) ?? null) ?? new Date().toISOString(),
+    } satisfies MarketingCampaignRecord))
+  }
+
+  async upsertMarketingCampaign(input: MarketingCampaignRecord) {
+    await this.db.query(
+      `
+      insert into marketing_campaigns (
+        id, integration_connection_id, organization_id, workspace_id, project_id,
+        provider_id, provider_family, provider_account_id, external_customer_id,
+        provider_entity_id, name, status, channel, objective, budget_micros,
+        currency_code, start_date, end_date, source_updated_at, synced_at, created_at, updated_at
+      ) values (
+        $1,$2,$3,$4,$5,
+        $6,$7,$8,$9,
+        $10,$11,$12,$13,$14,$15,
+        $16,$17::date,$18::date,$19,$20,$21,$22
+      )
+      on conflict (integration_connection_id, provider_entity_id)
+      do update set
+        provider_account_id = excluded.provider_account_id,
+        external_customer_id = excluded.external_customer_id,
+        name = excluded.name,
+        status = excluded.status,
+        channel = excluded.channel,
+        objective = excluded.objective,
+        budget_micros = excluded.budget_micros,
+        currency_code = excluded.currency_code,
+        start_date = excluded.start_date,
+        end_date = excluded.end_date,
+        source_updated_at = excluded.source_updated_at,
+        synced_at = excluded.synced_at,
+        updated_at = excluded.updated_at
+      `,
+      [
+        input.id,
+        input.integrationConnectionId,
+        input.organizationId,
+        input.workspaceId,
+        input.projectId,
+        input.providerId,
+        input.providerFamily,
+        input.providerAccountId,
+        input.externalCustomerId,
+        input.providerEntityId,
+        input.name,
+        input.status,
+        input.channel,
+        input.objective,
+        input.budgetMicros,
+        input.currencyCode,
+        input.startDate,
+        input.endDate,
+        input.sourceUpdatedAt,
+        input.syncedAt,
+        input.createdAt,
+        input.updatedAt,
+      ]
+    )
+  }
+
+  async markMarketingCampaignInactive(input: { campaignId: string; syncedAt: string }) {
+    await this.db.query(
+      `
+      update marketing_campaigns
+      set status = 'INACTIVE',
+          synced_at = $2,
+          updated_at = $2
+      where id = $1
+      `,
+      [input.campaignId, input.syncedAt]
+    )
+  }
+
+  async touchIntegrationConnectionSynced(input: { connectionId: string; syncedAt: string }) {
+    await this.db.query(
+      `
+      update integration_connections
+      set status = 'connected',
+          last_synced_at = $2,
+          updated_at = $2
+      where id = $1
+        and provider_id = 'google-ads'
+      `,
+      [input.connectionId, input.syncedAt]
+    )
+  }
+
+  async ensureIntegrationConnectionExists(input: {
+    connectionId: string
+    organizationId: string
+    workspaceId: string | null
+    projectId: string
+    dataSourceId: string | null
+    status: string
+    connectionReference: string | null
+    actorUserId: string
+    nowIso: string
+  }) {
+    await this.db.query(
+      `
+      insert into integration_connections (
+        id, provider_id, provider_family, platform,
+        organization_id, workspace_id, project_id, oauth_account_id, data_source_id,
+        connection_reference, configuration, status,
+        last_connected_at, last_disconnected_at, last_synced_at,
+        created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at
+      ) values (
+        $1, 'google-ads', 'google', 'marketing',
+        $2, $3, $4, null, $5,
+        $6, '{}'::jsonb, $7,
+        null, null, null,
+        $8, $8, $9, $9, null
+      )
+      on conflict (id)
+      do nothing
+      `,
+      [
+        input.connectionId,
+        input.organizationId,
+        input.workspaceId,
+        input.projectId,
+        input.dataSourceId,
+        input.connectionReference,
+        input.status,
+        input.actorUserId,
+        input.nowIso,
+      ]
     )
   }
 

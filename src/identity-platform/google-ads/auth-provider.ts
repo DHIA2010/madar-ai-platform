@@ -174,12 +174,38 @@ export class GoogleAdsAuthProvider {
     }
 
     if (!isLegacyConnection && !connection.oauth_account_id) {
-      throw new GoogleAdsIntegrationError(
-        "Google Ads OAuth account is unavailable.",
-        "GOOGLE_ADS_TOKEN_UNAVAILABLE",
-        false,
-        409
-      )
+      const legacy = await this.db.query<LegacyTokenRow>({
+        name: "google-ads-auth-legacy-token-bridge",
+        text: `
+          SELECT status, encrypted_access_token, encrypted_refresh_token, token_expires_at
+          FROM google_oauth_connections
+          WHERE id = $1
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        values: [connectionId],
+      })
+
+      const legacyRow = legacy.rows[0]
+      if (!legacyRow) {
+        throw new GoogleAdsIntegrationError(
+          "Google Ads OAuth account is unavailable.",
+          "GOOGLE_ADS_TOKEN_UNAVAILABLE",
+          false,
+          409
+        )
+      }
+
+      connection = {
+        ...connection,
+        connection_status: String(legacyRow.status),
+      }
+      activeToken = {
+        encrypted_access_token: legacyRow.encrypted_access_token,
+        encrypted_refresh_token: legacyRow.encrypted_refresh_token,
+        token_expires_at: legacyRow.token_expires_at,
+      }
+      isLegacyConnection = true
     }
 
     if (!isLegacyConnection) {

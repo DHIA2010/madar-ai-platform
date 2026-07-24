@@ -30,6 +30,9 @@ export interface Campaign {
   status: string
   budgetMicros: number | null
   biddingStrategyType: string | null
+  channelType?: string | null
+  startDate?: string | null
+  endDate?: string | null
 }
 
 export interface CampaignMetric {

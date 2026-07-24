@@ -188,6 +188,13 @@ describe("google ads sync service", () => {
     })
 
     expect(rows.length).toBeGreaterThan(0)
+
+    const canonicalCampaigns = await database.query<{ count: string }>(
+      `select count(*)::text as count from marketing_campaigns where integration_connection_id = $1 and external_customer_id = $2`,
+      ["00000000-0000-4000-8000-000000000105", "123"]
+    )
+
+    expect(Number(canonicalCampaigns.rows[0]?.count ?? "0")).toBeGreaterThanOrEqual(1)
   })
 
   it("maps permission and quota failures", async () => {

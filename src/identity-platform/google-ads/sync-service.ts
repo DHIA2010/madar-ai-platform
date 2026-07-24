@@ -4,6 +4,7 @@ import { GoogleOAuthRepository } from "../google-oauth/repository"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import { GoogleAdsAuthProvider } from "./auth-provider"
+import { GoogleAdsCampaignManagementService } from "./campaign-management-service"
 import { GoogleAdsClient } from "./client"
 import { GoogleAdsCustomerManagementService } from "./customer-management-service"
 import { GoogleAdsIntegrationError } from "./errors"
@@ -123,6 +124,7 @@ export class GoogleAdsSyncService {
   private readonly repository: GoogleAdsRepository
   private readonly client: GoogleAdsClient
   private readonly customerManagementService: GoogleAdsCustomerManagementService
+  private readonly campaignManagementService: GoogleAdsCampaignManagementService
   private readonly customerService: GoogleAdsCustomerService
   private readonly campaignService: GoogleAdsCampaignService
   private readonly adGroupService: GoogleAdsAdGroupService
@@ -162,6 +164,7 @@ export class GoogleAdsSyncService {
     this.customerManagementService = new GoogleAdsCustomerManagementService(this.oauthRepository, client)
     this.customerService = new GoogleAdsCustomerService(client)
     this.campaignService = new GoogleAdsCampaignService(client)
+    this.campaignManagementService = new GoogleAdsCampaignManagementService(this.repository, this.campaignService)
     this.adGroupService = new GoogleAdsAdGroupService(client)
     this.adService = new GoogleAdsAdService(client)
     this.keywordService = new GoogleAdsKeywordService(client)
@@ -260,6 +263,13 @@ export class GoogleAdsSyncService {
     await this.repository.markSyncRunRunning(syncRun.id, actor.userId)
 
     try {
+      const campaignSync = await this.campaignManagementService.synchronizeCampaigns({
+        connection,
+        customerId,
+        currencyCode: selectedCustomer.currencyCode,
+        actorUserId: actor.userId,
+      })
+
       let persistedCount = 0
       let counts = checkpointState.counts
 
@@ -304,7 +314,7 @@ export class GoogleAdsSyncService {
 
       const stages: Array<{ key: Exclude<SyncStage, "completed">; run: () => Promise<unknown[]>; bundleKey: keyof GoogleAdsNormalizedBundle; countKey: string }> = [
         { key: "customers", run: () => this.customerService.listCustomerAccounts({ connectionId: connection.id, customerId }), bundleKey: "customers", countKey: "customers" },
-        { key: "campaigns", run: () => this.campaignService.listCampaigns({ connectionId: connection.id, customerId }), bundleKey: "campaigns", countKey: "campaigns" },
+        { key: "campaigns", run: async () => campaignSync.campaigns, bundleKey: "campaigns", countKey: "campaigns" },
         { key: "campaignMetrics", run: () => this.campaignService.listCampaignMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "campaignMetrics", countKey: "campaignMetrics" },
         { key: "adGroups", run: () => this.adGroupService.listAdGroups({ connectionId: connection.id, customerId }), bundleKey: "adGroups", countKey: "adGroups" },
         { key: "adGroupMetrics", run: () => this.adGroupService.listAdGroupMetrics({ connectionId: connection.id, customerId, startDate: effectiveStartDate, endDate }), bundleKey: "adGroupMetrics", countKey: "adGroupMetrics" },
