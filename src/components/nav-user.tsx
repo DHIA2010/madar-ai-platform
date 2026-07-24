@@ -1,5 +1,8 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -25,6 +28,8 @@ import {
   LogOutIcon,
 } from "lucide-react"
 
+import { useAuth } from "@/features/authentication/hooks/use-auth"
+
 export function NavUser({
   user,
 }: {
@@ -34,9 +39,27 @@ export function NavUser({
     avatar: string
   }
 }) {
+  const { logout } = useAuth()
+  const router = useRouter()
   const { isMobile, state } = useSidebar()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const collapsed = state === "collapsed"
+
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return
+    }
+
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      router.replace("/auth/basic/login")
+      router.refresh()
+      setIsLoggingOut(false)
+    }
+  }
 
   return (
     <SidebarMenu>
@@ -120,9 +143,9 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator className="my-2" />
-            <DropdownMenuItem className="gap-2 h-9">
+            <DropdownMenuItem className="gap-2 h-9" onSelect={() => void handleLogout()}>
               <LogOutIcon className="!size-5" />
-              Log out
+              {isLoggingOut ? "Logging out..." : "Log out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
