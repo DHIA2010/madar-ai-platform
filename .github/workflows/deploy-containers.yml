@@ -114,7 +114,7 @@ jobs:
 
           jq --arg IMAGE "${{ needs.build-and-push.outputs.frontend_image }}" '
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-            | .containerDefinitions = (.containerDefinitions | map(if .name == "frontend" then .image = $IMAGE else . end))
+            | .containerDefinitions = (.containerDefinitions | map(if .name == "madar-stage-app" then .image = $IMAGE else . end))
           ' frontend-taskdef.json > frontend-taskdef-updated.json
 
           NEW_TD_ARN=$(aws ecs register-task-definition --cli-input-json file://frontend-taskdef-updated.json --query 'taskDefinition.taskDefinitionArn' --output text)
@@ -138,7 +138,7 @@ jobs:
 
           jq --arg IMAGE "${{ needs.build-and-push.outputs.backend_image }}" '
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-            | .containerDefinitions = (.containerDefinitions | map(if .name == "backend" then .image = $IMAGE else . end))
+            | .containerDefinitions = (.containerDefinitions | map(if .name == "madar-stage-auth-backend" then .image = $IMAGE else . end))
           ' backend-taskdef.json > backend-taskdef-updated.json
 
           NEW_TD_ARN=$(aws ecs register-task-definition --cli-input-json file://backend-taskdef-updated.json --query 'taskDefinition.taskDefinitionArn' --output text)
