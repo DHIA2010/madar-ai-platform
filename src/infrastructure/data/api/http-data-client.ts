@@ -6,10 +6,12 @@ import type { AuthSessionDto } from "@/application/contracts/authentication.cont
 interface HttpDataClientOptions {
   getSession?: () => AuthSessionDto | null
   getWorkspaceId?: () => string | null
+  baseUrl?: string
 }
 
 export function createHttpDataClient(options: HttpDataClientOptions = {}): ApiClient {
   return createApiClient({
+    baseUrl: options.baseUrl,
     getAuthHeaders: (): HeadersInit => {
       const session = options.getSession?.()
       if (!session?.accessToken?.token) {

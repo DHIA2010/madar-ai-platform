@@ -5,6 +5,24 @@ import { describe, expect, it, vi } from "vitest"
 import { ConnectionsOverview } from "./connections-overview"
 
 const mockUseConnectionsCenter = vi.fn()
+const mockRouterReplace = vi.fn()
+const { toastSuccess, toastError } = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}))
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: mockRouterReplace,
+  }),
+}))
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: toastSuccess,
+    error: toastError,
+  },
+}))
 
 vi.mock("../hooks", () => ({
   useConnectionsCenter: () => mockUseConnectionsCenter(),
@@ -79,6 +97,7 @@ describe("ConnectionsOverview", () => {
       refreshToken: vi.fn(),
       retrySync: vi.fn(),
       runSync: vi.fn(),
+      deleteConnection: vi.fn(),
     })
 
     const queryClient = new QueryClient()

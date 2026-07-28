@@ -6,46 +6,97 @@ import type {
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
+  RefreshSessionRequestDto,
   ResetPasswordRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
 import type { AuthenticationGateway } from "@/application/contracts/infrastructure.contracts"
 
-const MOCK_USER: AuthUserDto = {
-  id: "user_001",
-  email: "demo@madar.ai",
-  fullName: "MADAR Demo User",
-  emailVerified: true,
-  roles: [
-    {
-      id: "role_admin",
-      name: "Admin",
-      permissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
-    },
-  ],
-  permissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
+function createMockUser(email: string): AuthUserDto {
+  const normalizedEmail = email.trim().toLowerCase()
+  const inferredName = normalizedEmail
+    .split("@")[0]
+    ?.replace(/[._-]+/g, " ")
+    .trim()
+
+  return {
+    id: `mock_user_${normalizedEmail || "anonymous"}`,
+    email: normalizedEmail,
+    fullName: inferredName
+      ? inferredName.replace(/\b\w/g, (char) => char.toUpperCase())
+      : "MADAR User",
+    emailVerified: true,
+    roles: [
+      {
+        id: "role_admin",
+        name: "Admin",
+        permissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
+      },
+    ],
+    permissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
+  }
 }
 
-function createSession(rememberMe?: boolean): AuthSessionDto {
+function encodeTokenValue(value: string) {
+  if (typeof btoa !== "function") {
+    return ""
+  }
+
+  return btoa(value)
+}
+
+function decodeTokenValue(value: string) {
+  try {
+    if (typeof atob !== "function") {
+      return ""
+    }
+
+    return atob(value)
+  } catch {
+    return ""
+  }
+}
+
+function createSession(user: AuthUserDto, rememberMe?: boolean): AuthSessionDto {
   const now = Date.now()
+  const encodedEmail = encodeTokenValue(user.email)
 
   return {
     issuedAt: new Date(now).toISOString(),
     rememberMe,
     strategy: "storage",
     accessToken: {
-      token: `mock-access-${now}`,
+      token: `mock-access-${user.id}-${encodedEmail}-${now}`,
       tokenType: "Bearer",
       expiresAt: new Date(now + 1000 * 60 * 15).toISOString(),
     },
     refreshToken: {
-      token: `mock-refresh-${now}`,
+      token: `mock-refresh-${user.id}-${encodedEmail}-${now}`,
       expiresAt: new Date(now + 1000 * 60 * 60 * 24 * 30).toISOString(),
     },
   }
 }
 
+function createUserFromToken(token: string): AuthUserDto | null {
+  const [, , userId, encodedEmail] = token.split("-")
+  if (!userId || !encodedEmail) {
+    return null
+  }
+
+  const email = decodeTokenValue(encodedEmail)
+  if (!email) {
+    return null
+  }
+
+  return createMockUser(email)
+}
+
 export class MockAuthenticationGateway implements AuthenticationGateway {
+  private readonly sessionsByRefreshToken = new Map<
+    string,
+    { session: AuthSessionDto; user: AuthUserDto }
+  >()
+
   async login(payload: LoginRequestDto): Promise<LoginResponseDto> {
     if (!payload.email || !payload.password) {
       throw new ValidationError({
@@ -61,13 +112,21 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
       })
     }
 
+    const user = createMockUser(payload.email)
+    const session = createSession(user, payload.rememberMe)
+    this.sessionsByRefreshToken.set(session.refreshToken.token, { session, user })
+
     return {
-      user: MOCK_USER,
-      session: createSession(payload.rememberMe),
+      user,
+      session,
     }
   }
 
-  async logout(_session: AuthSessionDto | null): Promise<void> {
+  async logout(session: AuthSessionDto | null): Promise<void> {
+    if (session?.refreshToken?.token) {
+      this.sessionsByRefreshToken.delete(session.refreshToken.token)
+    }
+
     return
   }
 
@@ -79,7 +138,44 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
       })
     }
 
-    return { user: MOCK_USER }
+    const active = this.sessionsByRefreshToken.get(session.refreshToken.token)
+    if (active) {
+      return { user: active.user }
+    }
+
+    const userFromToken = createUserFromToken(session.refreshToken.token)
+    if (!userFromToken) {
+      throw new AuthorizationError({
+        code: "auth_session_expired",
+        message: "Session is no longer active.",
+      })
+    }
+
+    this.sessionsByRefreshToken.set(session.refreshToken.token, {
+      session,
+      user: userFromToken,
+    })
+
+    return { user: userFromToken }
+  }
+
+  async refreshSession(payload: RefreshSessionRequestDto): Promise<AuthSessionDto> {
+    const active = this.sessionsByRefreshToken.get(payload.refreshToken)
+    if (!active) {
+      throw new AuthorizationError({
+        code: "auth_refresh_invalid",
+        message: "Refresh token is invalid or expired.",
+      })
+    }
+
+    this.sessionsByRefreshToken.delete(payload.refreshToken)
+    const refreshed = createSession(active.user, active.session.rememberMe)
+    this.sessionsByRefreshToken.set(refreshed.refreshToken.token, {
+      session: refreshed,
+      user: active.user,
+    })
+
+    return refreshed
   }
 
   async forgotPassword(payload: ForgotPasswordRequestDto): Promise<void> {

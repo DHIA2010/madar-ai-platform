@@ -1,10 +1,5 @@
 "use client"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -53,25 +48,25 @@ const order = {
       name: "Denim Jacket",
       price: "$120.00",
       qty: 1,
-      image: "/pulse-ui-next/products/01.png",
+      image: "/products/01.png",
     },
     {
       name: "Leather Belt",
       price: "$45.00",
       qty: 1,
-      image: "/pulse-ui-next/products/02.png",
+      image: "/products/02.png",
     },
     {
       name: "Cotton T-Shirt",
       price: "$25.00",
       qty: 2,
-      image: "/pulse-ui-next/products/03.png",
+      image: "/products/03.png",
     },
     {
       name: "Running Shoes",
       price: "$85.75",
       qty: 1,
-      image: "/pulse-ui-next/products/04.png",
+      image: "/products/04.png",
     },
   ],
 }
@@ -90,7 +85,6 @@ const statusClass = (status: string) => {
 }
 
 export default function OrderDetails() {
-
   // Handle print invoice action
   const handlePrintInvoice = () => {
     window.print()
@@ -98,10 +92,8 @@ export default function OrderDetails() {
 
   return (
     <div className="order-detail-page">
-
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-7 xl:col-span-8 space-y-6">
-
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Button variant="outline" size="icon">
@@ -109,12 +101,8 @@ export default function OrderDetails() {
               </Button>
 
               <div>
-                <h2 className="text-2xl font-semibold">
-                  Order ORD-003
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Placed on 2024-02-03
-                </p>
+                <h2 className="text-2xl font-semibold">Order ORD-003</h2>
+                <p className="text-sm text-muted-foreground">Placed on 2024-02-03</p>
               </div>
             </div>
 
@@ -138,171 +126,162 @@ export default function OrderDetails() {
               </div>
 
               {/* Status */}
-              <Badge className="bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400" variant="outline">
+              <Badge
+                className="bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400"
+                variant="outline"
+              >
                 Completed
               </Badge>
             </div>
           </div>
-          
-              {/* ORDER ITEMS */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Order Items</CardTitle>
-                </CardHeader>
 
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead className="text-right">
-                          Total
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
+          {/* ORDER ITEMS */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Items</CardTitle>
+            </CardHeader>
 
-                    <TableBody>
-                      {order.items.map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="h-11 w-11 rounded-full border object-cover p-1 bg-muted/50"
-                              />
-                              <span className="font-medium">
-                                {item.name}
-                              </span>
-                            </div>
-                          </TableCell>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
 
-                          <TableCell>{item.price}</TableCell>
-                          <TableCell>{item.qty}</TableCell>
-                          <TableCell className="text-right">
-                            {item.price}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-              {/* ORDER ACTIVITY */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Order Activity</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <p>✔ Order placed</p>
-                  <p>✔ Payment confirmed</p>
-                  <p>✔ Order completed</p>
-                </CardContent>
-              </Card>
+                <TableBody>
+                  {order.items.map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="h-11 w-11 rounded-full border object-cover p-1 bg-muted/50"
+                          />
+                          <span className="font-medium">{item.name}</span>
+                        </div>
+                      </TableCell>
+
+                      <TableCell>{item.price}</TableCell>
+                      <TableCell>{item.qty}</TableCell>
+                      <TableCell className="text-right">{item.price}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          {/* ORDER ACTIVITY */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Activity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <p>✔ Order placed</p>
+              <p>✔ Payment confirmed</p>
+              <p>✔ Order completed</p>
+            </CardContent>
+          </Card>
         </div>
         <div className="col-span-12 lg:col-span-5 xl:col-span-4">
-            <div className="space-y-6">
-              {/* CUSTOMER */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Customer</CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center gap-3">
-                  <img
-                    src={order.customer.avatar}
-                    alt={order.customer.name}
-                    className="h-14 w-14 rounded-full border object-cover"
-                  />
-                  <div>
-                    <p className="font-medium">{order.customer.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {order.customer.email}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="space-y-6">
+            {/* CUSTOMER */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer</CardTitle>
+              </CardHeader>
+              <CardContent className="flex items-center gap-3">
+                <img
+                  src={order.customer.avatar}
+                  alt={order.customer.name}
+                  className="h-14 w-14 rounded-full border object-cover"
+                />
+                <div>
+                  <p className="font-medium">{order.customer.name}</p>
+                  <p className="text-sm text-muted-foreground">{order.customer.email}</p>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* PAYMENT */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Method</span>
-                    <span>Credit Card</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Status</span>
-                    <Badge>{order.paymentStatus}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* PAYMENT */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Method</span>
+                  <span>Credit Card</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Status</span>
+                  <Badge>{order.paymentStatus}</Badge>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* ORDER SUMMARY */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Order Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>{order.subtotal}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Tax</span>
-                    <span>{order.tax}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Shipping</span>
-                    <span>{order.shipping}</span>
-                  </div>
+            {/* ORDER SUMMARY */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Order Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>{order.subtotal}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax</span>
+                  <span>{order.tax}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Shipping</span>
+                  <span>{order.shipping}</span>
+                </div>
 
-                  <Separator />
+                <Separator />
 
-                  <div className="flex justify-between font-medium">
-                    <span>Total</span>
-                    <span>{order.total}</span>
-                  </div>
-                </CardContent>
-              </Card>
+                <div className="flex justify-between font-medium">
+                  <span>Total</span>
+                  <span>{order.total}</span>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* ACTIONS */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Update status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                      <SelectItem value="Processing">Processing</SelectItem>
-                      <SelectItem value="Completed">Completed</SelectItem>
-                      <SelectItem value="Cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
+            {/* ACTIONS */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Update status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Processing">Processing</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                  <Button variant="outline" className="w-full">
-                    Refund Order
-                  </Button>
+                <Button variant="outline" className="w-full">
+                  Refund Order
+                </Button>
 
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                  >
-                    Cancel Order
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+                <Button variant="destructive" className="w-full">
+                  Cancel Order
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-
     </div>
   )
 }

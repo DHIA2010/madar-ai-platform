@@ -1,12 +1,16 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
   AppCard,
+  AppConfirmDialog,
   AppContainer,
   AppPage,
   AppSection,
@@ -17,7 +21,10 @@ import { useConnectionsCenter } from "../hooks"
 import { getHealthTone, getStatusTone } from "../services"
 
 export function ConnectionDetails({ connectionId }: { connectionId: string }) {
-  const { getConnectionById } = useConnectionsCenter()
+  const router = useRouter()
+  const { getConnectionById, deleteConnection } = useConnectionsCenter()
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const record = getConnectionById(connectionId)
 
   if (!record) {
@@ -32,6 +39,25 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
 
   const latestJob = record.integrationStatus.latestJob
   const latestRun = record.integrationStatus.latestRun
+
+  const onDeleteConnection = async () => {
+    if (isDeleting) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      await deleteConnection(connectionId)
+      toast.success("Connection deleted successfully.")
+      setIsDeleteDialogOpen(false)
+      router.push(ROUTES.integrations)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete connection."
+      toast.error(message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <AppPage>
@@ -170,8 +196,40 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
             <Link href={ROUTES.integrations}>
               <AppButton variant="outline">Back to Overview</AppButton>
             </Link>
+            <AppButton
+              variant="destructive"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isDeleting}
+            >
+              Delete Connection
+            </AppButton>
           </div>
         </AppSection>
+
+        <AppConfirmDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            if (!isDeleting) {
+              setIsDeleteDialogOpen(open)
+            }
+          }}
+          title="Delete Connection"
+          description={
+            "This will permanently remove the connection, OAuth tokens, synced metadata, and history.\nThis action cannot be undone."
+          }
+          cancelLabel="Cancel"
+          confirmLabel="Delete"
+          confirmTone="destructive"
+          loading={isDeleting}
+          onCancel={() => {
+            if (!isDeleting) {
+              setIsDeleteDialogOpen(false)
+            }
+          }}
+          onConfirm={() => {
+            void onDeleteConnection()
+          }}
+        />
       </AppContainer>
     </AppPage>
   )

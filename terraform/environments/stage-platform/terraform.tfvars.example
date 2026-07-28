@@ -1,0 +1,11 @@
+aws_region = "us-east-1"
+
+environment = "stage"
+name_prefix = "madar-stage"
+
+app_desired_count = 1
+app_image_tag     = "latest"
+
+tags = {
+  CostCenter = "platform"
+}

@@ -12,7 +12,10 @@ export class LogoutUseCase {
   }
 
   async execute(session: AuthSessionDto | null): Promise<void> {
-    await this.gateway.logout(session)
-    this.clearSessionCommand.execute()
+    try {
+      await this.gateway.logout(session)
+    } finally {
+      this.clearSessionCommand.execute()
+    }
   }
 }

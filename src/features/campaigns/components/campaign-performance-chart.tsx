@@ -5,11 +5,11 @@ import { useMemo } from "react"
 import { cn } from "@/lib/utils"
 
 const METRIC_COLORS = {
-  spend: "hsl(var(--chart-1))",
-  revenue: "hsl(var(--chart-2))",
-  roas: "hsl(var(--chart-3))",
-  ctr: "hsl(var(--chart-4))",
-  cpc: "hsl(var(--chart-5))",
+  spend: "var(--chart-1)",
+  revenue: "var(--chart-2)",
+  roas: "var(--chart-3)",
+  ctr: "var(--chart-4)",
+  cpc: "var(--chart-5)",
   conversions: "hsl(var(--primary))",
 } as const
 

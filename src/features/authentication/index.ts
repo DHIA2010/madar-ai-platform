@@ -1,5 +1,4 @@
 export * from "./commands"
-export * from "./components"
 export * from "./hooks"
 export * from "./queries"
 export * from "./services"

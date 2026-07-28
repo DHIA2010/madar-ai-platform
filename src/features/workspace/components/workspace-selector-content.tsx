@@ -14,6 +14,10 @@ interface WorkspaceSelectorContentProps {
   onComplete?: () => void
 }
 
+function getOrganizationPlanName(organization: Organization) {
+  return organization.subscription?.plan?.name ?? "No Plan"
+}
+
 function matchesSearch(organization: Organization, workspace: Workspace, searchTerm: string) {
   const normalizedTerm = searchTerm.trim().toLowerCase()
 
@@ -38,8 +42,8 @@ function matchesOrganization(organization: Organization, searchTerm: string) {
     return true
   }
 
-  return [organization.name, organization.slug, organization.subscription.plan.name].some((value) =>
-    value.toLowerCase().includes(normalizedTerm)
+  return [organization.name, organization.slug, getOrganizationPlanName(organization)].some(
+    (value) => value.toLowerCase().includes(normalizedTerm)
   )
 }
 
@@ -271,6 +275,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
           <div role="list" aria-label="Organizations" className="space-y-3">
             {filteredOrganizations.map((organization) => {
               const isActive = organization.id === effectiveSelectedOrganizationId
+              const planName = getOrganizationPlanName(organization)
 
               return (
                 <AppButton
@@ -320,9 +325,9 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                         isActive &&
                           "border-primary-foreground/20 bg-primary-foreground/15 text-primary-foreground"
                       )}
-                      title={organization.subscription.plan.name}
+                      title={planName}
                     >
-                      {organization.subscription.plan.name}
+                      {planName}
                     </AppBadge>
                   </span>
                 </AppButton>

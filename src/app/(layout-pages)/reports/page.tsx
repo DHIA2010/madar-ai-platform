@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import { ReportsOverviewPage } from "@/features/reports"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="التقارير" />
+  return <ReportsOverviewPage />
 }

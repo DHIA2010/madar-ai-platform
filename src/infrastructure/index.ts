@@ -1,4 +1,5 @@
 export * from "./adapters"
+export * from "./ai"
 export * from "./attribution"
 export * from "./customer-intelligence"
 export * from "./data/repositories"

@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import { AIIntelligencePage } from "@/features/ai"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="الذكاء الاصطناعي" />
+  return <AIIntelligencePage />
 }

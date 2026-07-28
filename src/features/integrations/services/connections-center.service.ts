@@ -245,6 +245,14 @@ export function storeConnectionReferences(references: StoredConnectionReference[
   window.localStorage.setItem(CONNECTION_CENTER_STORAGE_KEY, JSON.stringify(references))
 }
 
+export function removeStoredConnectionReference(connectionId: string) {
+  const references = loadStoredConnectionReferences().filter(
+    (entry) => entry.connectionId !== connectionId
+  )
+  storeConnectionReferences(references)
+  return references
+}
+
 export function loadStoredConnectorAccounts(): StoredConnectorAccountRegistry {
   if (typeof window === "undefined") {
     return {}
@@ -285,6 +293,17 @@ export function storeConnectorAccounts(registry: StoredConnectorAccountRegistry)
   }
 
   window.localStorage.setItem(CONNECTOR_ACCOUNTS_STORAGE_KEY, JSON.stringify(registry))
+}
+
+export function removeStoredConnectorAccounts(connectorDefinitionId: string) {
+  const registry = loadStoredConnectorAccounts()
+  if (!(connectorDefinitionId in registry)) {
+    return registry
+  }
+
+  delete registry[connectorDefinitionId]
+  storeConnectorAccounts(registry)
+  return registry
 }
 
 export function appendConnectorAccount(

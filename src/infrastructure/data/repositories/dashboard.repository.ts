@@ -9,16 +9,25 @@ import {
   dashboardWidgetPayloadDtos,
   marketingDashboardPackageDto,
 } from "@/infrastructure/dashboard"
-import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
+import { AppError } from "@/lib/app-errors"
 
 import { createWorkspaceCacheKey, RepositoryCache } from "../cache/repository-cache"
 import { mapRepositoryError } from "../errors"
 import { serializeFilters } from "../serializers/query-serializer"
 import { DashboardApiAdapter } from "../adapters/dashboard-api.adapter"
 import { createHttpDataClient } from "../api/http-data-client"
+import { resolveRepositoryBackend } from "./repository-runtime"
 
 const DASHBOARD_NAMESPACE = "dashboard"
+
+function shouldFallbackToMock(error: unknown) {
+  if (!(error instanceof AppError)) {
+    return false
+  }
+
+  return error.status === 404 || error.code.toLowerCase() === "not_found"
+}
 
 export class DataDashboardRepository implements DashboardRepository {
   private readonly cache = new RepositoryCache(60_000)
@@ -39,8 +48,8 @@ export class DataDashboardRepository implements DashboardRepository {
     }
 
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("dashboard")
+      if (backend === "mock") {
         return this.cache.set(cacheKey, marketingDashboardPackageDto, {
           tags: [`workspace:${input.workspaceId ?? "global"}`],
         })
@@ -63,6 +72,12 @@ export class DataDashboardRepository implements DashboardRepository {
         tags: [`workspace:${input.workspaceId ?? "global"}`],
       })
     } catch (error) {
+      if (shouldFallbackToMock(error)) {
+        return this.cache.set(cacheKey, marketingDashboardPackageDto, {
+          tags: [`workspace:${input.workspaceId ?? "global"}`],
+        })
+      }
+
       throw mapRepositoryError(error)
     }
   }
@@ -75,8 +90,8 @@ export class DataDashboardRepository implements DashboardRepository {
     }
 
     try {
-      const env = getClientEnvironment()
-      if (!env.API_BASE_URL) {
+      const backend = resolveRepositoryBackend("dashboard")
+      if (backend === "mock") {
         const dto = dashboardWidgetPayloadDtos[widgetId] ?? null
         return this.cache.set(cacheKey, dto)
       }
@@ -84,6 +99,11 @@ export class DataDashboardRepository implements DashboardRepository {
       const dto = await this.adapter.getWidgetReadModel(widgetId)
       return this.cache.set(cacheKey, dto)
     } catch (error) {
+      if (shouldFallbackToMock(error)) {
+        const dto = dashboardWidgetPayloadDtos[widgetId] ?? null
+        return this.cache.set(cacheKey, dto)
+      }
+
       throw mapRepositoryError(error)
     }
   }

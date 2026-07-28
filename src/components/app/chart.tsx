@@ -4,6 +4,23 @@ import { cn } from "@/lib/utils"
 
 import { AppCard } from "@/components/app/card"
 
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart"
+
+export {
+  ChartContainer as AppChartPrimitiveContainer,
+  ChartLegend as AppChartPrimitiveLegend,
+  ChartLegendContent as AppChartPrimitiveLegendContent,
+  ChartTooltip as AppChartPrimitiveTooltip,
+  ChartTooltipContent as AppChartPrimitiveTooltipContent,
+}
+export type { ChartConfig as AppChartPrimitiveConfig } from "@/components/ui/chart"
+
 export interface AppChartHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
   title?: React.ReactNode
   subtitle?: React.ReactNode
@@ -47,11 +64,17 @@ export function AppChartLegend({ items, className, ...props }: AppChartLegendPro
   return (
     <div
       data-slot="app-chart-legend"
-      className={cn("flex flex-wrap items-center gap-3 text-sm", className)}
+      className={cn(
+        "flex flex-wrap items-center gap-3 text-[11px] font-medium text-muted-foreground",
+        className
+      )}
       {...props}
     >
       {items.map((item, index) => (
-        <div key={index} className="flex items-center gap-2 rounded-full border px-3 py-1.5">
+        <div
+          key={index}
+          className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/40 px-2.5 py-1.5 shadow-sm"
+        >
           {item.icon ? (
             <span aria-hidden="true" className="shrink-0">
               {item.icon}
@@ -63,8 +86,8 @@ export function AppChartLegend({ items, className, ...props }: AppChartLegendPro
               style={item.color ? { backgroundColor: item.color } : undefined}
             />
           )}
-          <span className="text-muted-foreground">{item.label}</span>
-          {item.value ? <span className="font-medium text-foreground">{item.value}</span> : null}
+          <span className="text-foreground/85">{item.label}</span>
+          {item.value ? <span className="font-semibold text-foreground">{item.value}</span> : null}
         </div>
       ))}
     </div>

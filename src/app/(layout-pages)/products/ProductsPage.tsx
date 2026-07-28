@@ -64,7 +64,7 @@ const products: ProductRow[] = [
     costPrice: 168,
     sellingPrice: 249,
     platform: "Shopify",
-    image: "/pulse-ui-next/products/01.png",
+    image: "/products/01.png",
     activityDate: "2026-06-04",
   },
   {
@@ -77,7 +77,7 @@ const products: ProductRow[] = [
     costPrice: 72,
     sellingPrice: 119,
     platform: "Salla",
-    image: "/pulse-ui-next/products/02.png",
+    image: "/products/02.png",
     activityDate: "2026-06-07",
   },
   {
@@ -90,7 +90,7 @@ const products: ProductRow[] = [
     costPrice: 24,
     sellingPrice: 49,
     platform: "Zid",
-    image: "/pulse-ui-next/products/03.png",
+    image: "/products/03.png",
     activityDate: "2026-06-11",
   },
   {
@@ -103,7 +103,7 @@ const products: ProductRow[] = [
     costPrice: 31,
     sellingPrice: 59,
     platform: "Shopify",
-    image: "/pulse-ui-next/products/04.png",
+    image: "/products/04.png",
     activityDate: "2026-06-13",
   },
   {
@@ -116,7 +116,7 @@ const products: ProductRow[] = [
     costPrice: 58,
     sellingPrice: 110,
     platform: "WooCommerce",
-    image: "/pulse-ui-next/products/05.png",
+    image: "/products/05.png",
     activityDate: "2026-06-16",
   },
   {
@@ -129,7 +129,7 @@ const products: ProductRow[] = [
     costPrice: 129,
     sellingPrice: 199,
     platform: "Salla",
-    image: "/pulse-ui-next/products/06.png",
+    image: "/products/06.png",
     activityDate: "2026-06-18",
   },
   {
@@ -142,7 +142,7 @@ const products: ProductRow[] = [
     costPrice: 19,
     sellingPrice: 34,
     platform: "Zid",
-    image: "/pulse-ui-next/products/07.png",
+    image: "/products/07.png",
     activityDate: "2026-06-19",
   },
   {
@@ -155,7 +155,7 @@ const products: ProductRow[] = [
     costPrice: 94,
     sellingPrice: 179,
     platform: "WooCommerce",
-    image: "/pulse-ui-next/products/08.png",
+    image: "/products/08.png",
     activityDate: "2026-06-20",
   },
 ]

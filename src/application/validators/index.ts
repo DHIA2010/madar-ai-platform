@@ -11,6 +11,7 @@ export {
   connectionStatusSchema,
   connectorCapabilitySchema,
   createConnectionSchema,
+  deleteConnectionSchema,
   disconnectConnectionSchema,
   getConnectorHealthSchema,
   getIntegrationStatusSchema,

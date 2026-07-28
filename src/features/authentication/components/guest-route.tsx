@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 
 import { ROUTES } from "@/constants/routes"
@@ -24,13 +24,22 @@ export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRou
     }
   }, [authStatus, redirectTo, router])
 
-  if (authStatus === "idle" || authStatus === "loading") {
-    return <AppLoading variant="page" />
-  }
+  // Pre-compute conditional states
+  const isLoading = useMemo(() => authStatus === "idle" || authStatus === "loading", [authStatus])
 
-  if (authStatus === "authenticated") {
-    return <AppLoading variant="page" />
-  }
+  const isAuthenticated = useMemo(() => authStatus === "authenticated", [authStatus])
 
-  return <>{children}</>
+  // Determine what to show - always evaluate ALL conditions
+  const showLoading = useMemo(() => isLoading || isAuthenticated, [isLoading, isAuthenticated])
+
+  const showContent = useMemo(() => !showLoading, [showLoading])
+
+  // ALWAYS render the same component tree - only conditionally show content
+  // This ensures React's hook count never changes
+  return (
+    <>
+      {showLoading && <AppLoading variant="page" />}
+      {showContent && <>{children}</>}
+    </>
+  )
 }

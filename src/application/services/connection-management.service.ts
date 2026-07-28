@@ -1,6 +1,7 @@
 import type {
   AuthorizeConnectorRequestDto,
   Connection,
+  DeleteConnectionRequestDto,
   CreateConnectionRequestDto,
   DisconnectConnectionRequestDto,
   GetIntegrationStatusRequestDto,
@@ -369,6 +370,14 @@ export class ConnectionManager {
       input.reason ?? "Connection disconnected"
     )
     return disconnected
+  }
+
+  async deleteConnection(input: DeleteConnectionRequestDto): Promise<void> {
+    await this.integrationGateway.deleteConnection(input)
+    this.states.delete(input.connectionId)
+    this.health.delete(input.connectionId)
+    this.schedulers.delete(input.connectionId)
+    this.history.delete(input.connectionId)
   }
 
   async runSync(input: RunSyncRequestDto): Promise<SyncRun> {

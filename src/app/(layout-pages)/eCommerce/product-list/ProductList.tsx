@@ -49,7 +49,7 @@ const products = [
     averageSellingPrice: 120,
     orders: 932,
     conversionRate: 3.8,
-    image: "/pulse-ui-next/products/01.png",
+    image: "/products/01.png",
     activityDate: "2026-06-04",
   },
   {
@@ -63,7 +63,7 @@ const products = [
     averageSellingPrice: 45,
     orders: 714,
     conversionRate: 4.2,
-    image: "/pulse-ui-next/products/02.png",
+    image: "/products/02.png",
     activityDate: "2026-06-07",
   },
   {
@@ -77,7 +77,7 @@ const products = [
     averageSellingPrice: 89,
     orders: 608,
     conversionRate: 2.9,
-    image: "/pulse-ui-next/products/03.png",
+    image: "/products/03.png",
     activityDate: "2026-06-11",
   },
   {
@@ -91,7 +91,7 @@ const products = [
     averageSellingPrice: 199,
     orders: 394,
     conversionRate: 2.5,
-    image: "/pulse-ui-next/products/04.png",
+    image: "/products/04.png",
     activityDate: "2026-06-13",
   },
   {
@@ -105,7 +105,7 @@ const products = [
     averageSellingPrice: 75,
     orders: 818,
     conversionRate: 3.4,
-    image: "/pulse-ui-next/products/05.png",
+    image: "/products/05.png",
     activityDate: "2026-06-16",
   },
   {
@@ -119,7 +119,7 @@ const products = [
     averageSellingPrice: 149,
     orders: 521,
     conversionRate: 3.1,
-    image: "/pulse-ui-next/products/06.png",
+    image: "/products/06.png",
     activityDate: "2026-06-18",
   },
   {
@@ -133,7 +133,7 @@ const products = [
     averageSellingPrice: 39,
     orders: 487,
     conversionRate: 4.6,
-    image: "/pulse-ui-next/products/07.png",
+    image: "/products/07.png",
     activityDate: "2026-06-19",
   },
   {
@@ -147,7 +147,7 @@ const products = [
     averageSellingPrice: 29,
     orders: 1032,
     conversionRate: 5.1,
-    image: "/pulse-ui-next/products/08.png",
+    image: "/products/08.png",
     activityDate: "2026-06-20",
   },
   {
@@ -161,7 +161,7 @@ const products = [
     averageSellingPrice: 89,
     orders: 321,
     conversionRate: 2.2,
-    image: "/pulse-ui-next/products/09.png",
+    image: "/products/09.png",
     activityDate: "2026-06-14",
   },
 ]

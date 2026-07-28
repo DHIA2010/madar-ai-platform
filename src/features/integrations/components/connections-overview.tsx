@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Activity,
   AlertTriangle,
@@ -12,6 +13,7 @@ import {
   PlugZap,
   RefreshCcw,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -19,6 +21,7 @@ import { ROUTES } from "@/constants/routes"
 import {
   AppButton,
   AppCard,
+  AppConfirmDialog,
   AppContainer,
   AppDropdownMenu,
   AppDropdownMenuContent,
@@ -98,6 +101,7 @@ const UI_TEXT = {
     history: "History",
     logs: "Logs",
     disconnect: "Disconnect",
+    delete: "Delete Connection",
     moreActions: "More actions",
   },
 } as const
@@ -130,84 +134,6 @@ const CATEGORY_PLATFORM_MAP: Record<string, string[]> = {
   Ecommerce: ["Salla", "Zid", "Shopify", "WooCommerce"],
   CRM: ["HubSpot", "Salesforce", "Pipedrive"],
   Analytics: ["Google Analytics 4", "PostHog", "Mixpanel"],
-}
-
-const SYNC_ACTIVITY: Record<
-  string,
-  Array<{
-    name: string
-    state: "completed" | "running" | "queued"
-    records: string
-    time: string
-    progress?: number
-  }>
-> = {
-  "Google Analytics 4": [
-    { name: "Traffic Imported", state: "completed", records: "1.2M records", time: "2 min ago" },
-    {
-      name: "Events Processed",
-      state: "running",
-      records: "Syncing...",
-      time: "Now",
-      progress: 62,
-    },
-    { name: "Conversions Imported", state: "queued", records: "Queued", time: "Now" },
-  ],
-  "Google Ads": [
-    { name: "Campaigns Imported", state: "completed", records: "428 records", time: "1 min ago" },
-    {
-      name: "Audience Updated",
-      state: "running",
-      records: "Syncing...",
-      time: "Now",
-      progress: 48,
-    },
-    { name: "Conversions Imported", state: "completed", records: "312 records", time: "3 min ago" },
-  ],
-  "Meta Ads": [
-    { name: "Campaigns Imported", state: "completed", records: "284 records", time: "2 min ago" },
-    { name: "Audience Updated", state: "completed", records: "312 records", time: "4 min ago" },
-    { name: "Catalog Updated", state: "queued", records: "Queued", time: "Now" },
-  ],
-  "TikTok Ads": [
-    { name: "Audience Updated", state: "completed", records: "120 records", time: "1 min ago" },
-    {
-      name: "Campaigns Imported",
-      state: "running",
-      records: "Syncing...",
-      time: "Now",
-      progress: 37,
-    },
-    { name: "Conversions Imported", state: "queued", records: "Queued", time: "Now" },
-  ],
-  "Snapchat Ads": [
-    { name: "Conversions Imported", state: "completed", records: "52K records", time: "2 min ago" },
-    {
-      name: "Audience Updated",
-      state: "running",
-      records: "Syncing...",
-      time: "Now",
-      progress: 55,
-    },
-    { name: "Campaigns Imported", state: "queued", records: "Queued", time: "Now" },
-  ],
-  Salla: [
-    { name: "Orders Imported", state: "completed", records: "845 records", time: "1 min ago" },
-    { name: "Customers Synced", state: "completed", records: "312 records", time: "4 min ago" },
-    {
-      name: "Products Updated",
-      state: "running",
-      records: "Syncing...",
-      time: "Now",
-      progress: 69,
-    },
-    { name: "Inventory Updated", state: "completed", records: "1,240 records", time: "8 min ago" },
-  ],
-  Zid: [
-    { name: "Products Updated", state: "completed", records: "18 records", time: "2 min ago" },
-    { name: "Catalog Updated", state: "running", records: "Syncing...", time: "Now", progress: 31 },
-    { name: "Customers Synced", state: "queued", records: "Queued", time: "Now" },
-  ],
 }
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
@@ -306,7 +232,24 @@ function formatRelativeDate(timestamp?: string): string {
   })
 }
 
-function getHealthVisuals(healthState: ConnectionsHealthState) {
+function getHealthVisuals(
+  healthState: ConnectionsHealthState,
+  backendScore?: number,
+  backendLabel?: string
+) {
+  if (typeof backendScore === "number") {
+    const bounded = Math.max(0, Math.min(100, Math.round(backendScore)))
+    const textClass =
+      bounded >= 80 ? "text-emerald-700" : bounded >= 50 ? "text-amber-700" : "text-red-700"
+    const barColor = bounded >= 80 ? "#10B981" : bounded >= 50 ? "#F59E0B" : "#EF4444"
+    return {
+      score: bounded,
+      label: backendLabel ?? (bounded >= 80 ? "Healthy" : bounded >= 50 ? "Degraded" : "Unhealthy"),
+      barColor,
+      textClass,
+    }
+  }
+
   switch (healthState) {
     case "Healthy":
       return { score: 98, label: "Excellent", barColor: "#10B981", textClass: "text-emerald-700" }
@@ -644,6 +587,7 @@ function FilterSelect({
 }
 
 export function ConnectionsOverview() {
+  const router = useRouter()
   const {
     isLoading,
     error,
@@ -653,6 +597,7 @@ export function ConnectionsOverview() {
     updateFilters,
     connect,
     disconnect,
+    deleteConnection,
     pauseSync,
     resumeSync,
     refreshToken,
@@ -663,9 +608,30 @@ export function ConnectionsOverview() {
   const [activeCategory, setActiveCategory] = useState("All")
   const [syncAllDialogOpen, setSyncAllDialogOpen] = useState(false)
   const [isSyncingAll, setIsSyncingAll] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [pendingDeleteConnectionId, setPendingDeleteConnectionId] = useState<string | null>(null)
+  const [isDeletingConnection, setIsDeletingConnection] = useState(false)
   const [syncProgress, setSyncProgress] = useState<
     Record<string, "queued" | "running" | "completed" | "failed">
   >({})
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("google_oauth") !== "connected") {
+      return
+    }
+
+    if (!params.get("google_connection_id")) {
+      return
+    }
+
+    const query = params.toString()
+    router.replace(query.length > 0 ? `${ROUTES.integrationsNew}?${query}` : ROUTES.integrationsNew)
+  }, [router])
 
   const statuses = [
     "all",
@@ -756,6 +722,30 @@ export function ConnectionsOverview() {
       },
     ]
   }, [categoryFilteredRecords])
+
+  const requestDeleteConnection = (connectionId: string) => {
+    setPendingDeleteConnectionId(connectionId)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteConnection = async () => {
+    if (!pendingDeleteConnectionId || isDeletingConnection) {
+      return
+    }
+
+    setIsDeletingConnection(true)
+    try {
+      await deleteConnection(pendingDeleteConnectionId)
+      setDeleteDialogOpen(false)
+      setPendingDeleteConnectionId(null)
+      toast.success("Connection deleted successfully.")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete connection."
+      toast.error(message)
+    } finally {
+      setIsDeletingConnection(false)
+    }
+  }
 
   return (
     <AppPage>
@@ -928,34 +918,56 @@ export function ConnectionsOverview() {
                   <ConnectionCardSkeleton key={`skeleton-${index}`} />
                 ))
               : categoryFilteredRecords.map((record) => {
-                  const healthVisuals = getHealthVisuals(record.healthState)
+                  const healthVisuals = getHealthVisuals(
+                    record.healthState,
+                    record.healthScore,
+                    record.healthLabel
+                  )
                   const accentClass =
                     CONNECTOR_ACCENT_CLASS[record.platformName] ??
                     "from-slate-400/30 to-transparent"
                   const statusItems = getStatusItems(record.connection.status, record.healthState)
-                  const syncActivity = SYNC_ACTIVITY[record.platformName] ?? [
-                    {
-                      name: "Records Imported",
-                      state: "completed" as const,
-                      records: "120 records",
-                      time: "2 min ago",
-                    },
-                    {
-                      name: "Retry Queue",
-                      state: "running" as const,
-                      records: "Syncing...",
-                      time: "Now",
-                      progress: 45,
-                    },
-                    {
-                      name: "Customers Synced",
-                      state: "queued" as const,
-                      records: "Queued",
-                      time: "Now",
-                    },
-                  ]
+                  const syncActivityFromRuns = (record.syncHistory?.runs ?? [])
+                    .slice(0, 3)
+                    .map((run) => ({
+                      name: `Run ${run.syncRunId.slice(0, 8)}`,
+                      state:
+                        run.status === "failed"
+                          ? ("queued" as const)
+                          : run.status === "running"
+                            ? ("running" as const)
+                            : ("completed" as const),
+                      records:
+                        run.status === "failed"
+                          ? (run.errorMessage ?? "Failed")
+                          : `${run.result?.recordsWritten ?? 0} records`,
+                      time: formatRelativeDate(run.finishedAt ?? run.startedAt),
+                    }))
+
+                  const syncActivityFromEvents = record.integrationStatus.recentEvents
+                    .slice(0, 3)
+                    .map((event) => ({
+                      name: event.action,
+                      state: event.action === "sync" ? ("completed" as const) : ("queued" as const),
+                      records: event.message,
+                      time: formatRelativeDate(event.timestamp),
+                    }))
+
+                  const syncActivity =
+                    syncActivityFromRuns.length > 0 ? syncActivityFromRuns : syncActivityFromEvents
                   const syncState = syncProgress[record.connection.connectionId]
                   const isSyncing = syncState && syncState !== "completed" && syncState !== "failed"
+                  const canRunSync = record.connection.status === "connected"
+
+                  const handleRunSync = async () => {
+                    try {
+                      await runSync(record.connection.connectionId)
+                      toast.success("Sync started successfully.")
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : "Failed to run sync."
+                      toast.error(message)
+                    }
+                  }
 
                   return (
                     <AppCard
@@ -1084,7 +1096,13 @@ export function ConnectionsOverview() {
                           <AppButton
                             size="sm"
                             className="h-8 rounded-md px-3 shadow-sm transition-all hover:shadow"
-                            onClick={() => void runSync(record.connection.connectionId)}
+                            onClick={() => void handleRunSync()}
+                            disabled={!canRunSync}
+                            title={
+                              !canRunSync
+                                ? "Connection must be connected before syncing"
+                                : undefined
+                            }
                           >
                             {UI_TEXT.buttons.runSync}
                           </AppButton>
@@ -1186,6 +1204,15 @@ export function ConnectionsOverview() {
                               >
                                 {UI_TEXT.overflow.disconnect}
                               </AppDropdownMenuItem>
+                              <AppDropdownMenuItem
+                                className="text-red-600 focus:text-red-700"
+                                onSelect={(event) => {
+                                  event.preventDefault()
+                                  requestDeleteConnection(record.connection.connectionId)
+                                }}
+                              >
+                                {UI_TEXT.overflow.delete}
+                              </AppDropdownMenuItem>
                             </AppDropdownMenuContent>
                           </AppDropdownMenu>
                         </div>
@@ -1281,6 +1308,34 @@ export function ConnectionsOverview() {
             </AppTable>
           </AppCard>
         </AppSection>
+
+        <AppConfirmDialog
+          open={deleteDialogOpen}
+          onOpenChange={(open) => {
+            setDeleteDialogOpen(open)
+            if (!open && !isDeletingConnection) {
+              setPendingDeleteConnectionId(null)
+            }
+          }}
+          title="Delete Connection"
+          description={
+            "This will permanently remove the connection, OAuth tokens, synced metadata, and history.\nThis action cannot be undone."
+          }
+          cancelLabel="Cancel"
+          confirmLabel="Delete"
+          confirmTone="destructive"
+          loading={isDeletingConnection}
+          onCancel={() => {
+            if (isDeletingConnection) {
+              return
+            }
+            setDeleteDialogOpen(false)
+            setPendingDeleteConnectionId(null)
+          }}
+          onConfirm={() => {
+            void confirmDeleteConnection()
+          }}
+        />
       </AppContainer>
     </AppPage>
   )

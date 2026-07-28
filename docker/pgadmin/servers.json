@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "MADAR Local Postgres",
+      "Group": "MADAR",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "madar",
+      "Username": "madar",
+      "SSLMode": "prefer"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+aws_region = "us-east-1"
+
+project_name      = "madar"
+environment       = "bootstrap"
+state_bucket_name = "madar-terraform-state-160450753643"
+state_key_prefix  = "madar"
+
+# Leave empty to auto-detect from git remote origin metadata.
+github_repository_override = ""
+
+github_allowed_branches = [
+  "main"
+]
+
+github_allowed_environments = [
+  "stage",
+  "production"
+]
+
+tags = {
+  CostCenter = "platform"
+}

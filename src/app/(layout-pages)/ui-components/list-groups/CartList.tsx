@@ -1,11 +1,6 @@
 "use client"
 import { useState } from "react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -20,7 +15,7 @@ export function CartList() {
   const [items, setItems] = useState([
     {
       title: "Project Manager Tee",
-      img: "/pulse-ui-next/products/01.png",
+      img: "/products/01.png",
       color: "Silver",
       size: "Large",
       pricePerItem: 23,
@@ -28,7 +23,7 @@ export function CartList() {
     },
     {
       title: "Cozy Pink Zip-Up Hoodie",
-      img: "/pulse-ui-next/products/02.png",
+      img: "/products/02.png",
       color: "Silver",
       size: "Large",
       pricePerItem: 23,
@@ -36,7 +31,7 @@ export function CartList() {
     },
     {
       title: "Adidas Running Shoes",
-      img: "/pulse-ui-next/products/03.png",
+      img: "/products/03.png",
       color: "Black",
       size: "Medium",
       pricePerItem: 35,
@@ -44,7 +39,7 @@ export function CartList() {
     },
     {
       title: "Elegant White Leather Handbag",
-      img: "/pulse-ui-next/products/04.png",
+      img: "/products/04.png",
       color: "Gold",
       size: "Small",
       pricePerItem: 15,
@@ -52,7 +47,7 @@ export function CartList() {
     },
     {
       title: "Classic Green Formal Shirt",
-      img: "/pulse-ui-next/products/05.png",
+      img: "/products/05.png",
       color: "Blue",
       size: "Extra Large",
       pricePerItem: 14,
@@ -73,12 +68,11 @@ export function CartList() {
 
   return (
     <Card>
-        {/* Header */}
-       <CardHeader className="border-b">
+      {/* Header */}
+      <CardHeader className="border-b">
         <CardTitle className="text-xl font-medium">Cart List</CardTitle>
       </CardHeader>
       <CardContent className="p-6 space-y-4">
-
         {items.map((item, idx) => (
           <div
             key={idx}
@@ -87,23 +81,13 @@ export function CartList() {
             {/* Left Section */}
             <div className="flex items-center gap-4">
               <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-muted p-2">
-                <img
-                  src={item.img}
-                  alt={item.title}
-                  className="max-h-full object-contain"
-                />
+                <img src={item.img} alt={item.title} className="max-h-full object-contain" />
               </div>
 
               <div>
-                <h6 className="text-base font-semibold leading-tight">
-                    {item.title}
-                </h6>
-                <p className="text-sm md:text-base text-muted-foreground">
-                  Color: {item.color}
-                </p>
-                <p className="text-sm md:text-base text-muted-foreground">
-                  Size: {item.size}
-                </p>
+                <h6 className="text-base font-semibold leading-tight">{item.title}</h6>
+                <p className="text-sm md:text-base text-muted-foreground">Color: {item.color}</p>
+                <p className="text-sm md:text-base text-muted-foreground">Size: {item.size}</p>
                 <p className="text-sm md:text-base text-muted-foreground">
                   Price: ${item.pricePerItem} USD / per item
                 </p>
@@ -112,13 +96,10 @@ export function CartList() {
 
             {/* Right Section */}
             <div className="flex flex-wrap items-center gap-4">
-
               {/* Quantity */}
               <Select
                 value={String(item.quantity)}
-                onValueChange={(value) =>
-                  handleQuantityChange(idx, Number(value))
-                }
+                onValueChange={(value) => handleQuantityChange(idx, Number(value))}
               >
                 <SelectTrigger className="w-[100px]">
                   <SelectValue placeholder="Qty" />
@@ -143,14 +124,9 @@ export function CartList() {
               </Button>
 
               {/* Remove */}
-              <Button
-                size="icon"
-                variant="destructive"
-                onClick={() => handleRemove(idx)}
-              >
+              <Button size="icon" variant="destructive" onClick={() => handleRemove(idx)}>
                 <X className="h-4 w-4" />
               </Button>
-
             </div>
           </div>
         ))}
@@ -158,11 +134,7 @@ export function CartList() {
         {/* Remove All */}
         {items.length > 0 && (
           <div className="pt-2">
-            <Button
-              variant="outline"
-              className="text-primary"
-              onClick={() => setItems([])}
-            >
+            <Button variant="outline" className="text-primary" onClick={() => setItems([])}>
               Remove all from cart
             </Button>
           </div>

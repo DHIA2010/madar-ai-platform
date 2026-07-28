@@ -5,17 +5,14 @@ import { Calendar, Clock, ArrowRight } from "lucide-react"
 export function BlogCards() {
   return (
     <div className="space-y-6 blog-cards">
-
       <h5 className="text-xl font-bold">Latest Blog Posts</h5>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-
         {/* Blog Card 1 */}
         <div className="group rounded-2xl overflow-hidden bg-card border shadow flex flex-col">
-
           <div className="relative">
             <img
-              src="/pulse-ui-next/images/cards/blog/01.jpeg"
+              src="/images/cards/blog/01.jpeg"
               alt="AI in SaaS"
               className="w-full h-48 object-cover transition-transform duration-700 group-hover:scale-110"
             />
@@ -27,13 +24,11 @@ export function BlogCards() {
           </div>
 
           <div className="p-6 flex flex-col flex-1 space-y-4">
-            <h3 className="text-xl font-semibold">
-              The Future of AI in SaaS Platforms
-            </h3>
+            <h3 className="text-xl font-semibold">The Future of AI in SaaS Platforms</h3>
 
             <p className="text-md text-muted-foreground flex-1">
-              Discover how artificial intelligence is transforming SaaS products
-              and creating smarter user experiences.
+              Discover how artificial intelligence is transforming SaaS products and creating
+              smarter user experiences.
             </p>
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -42,8 +37,7 @@ export function BlogCards() {
                 Jan 20, 2026
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                5 min read
+                <Clock className="h-4 w-4" />5 min read
               </div>
             </div>
 
@@ -56,10 +50,9 @@ export function BlogCards() {
 
         {/* Blog Card 2 */}
         <div className="group rounded-2xl overflow-hidden bg-card border shadow flex flex-col">
-
           <div className="relative">
             <img
-              src="/pulse-ui-next/images/cards/blog/02.jpeg"
+              src="/images/cards/blog/02.jpeg"
               alt="Web3 Growth"
               className="w-full h-48 object-cover transition-transform duration-700 group-hover:scale-110"
             />
@@ -71,13 +64,11 @@ export function BlogCards() {
           </div>
 
           <div className="p-6 flex flex-col flex-1 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Scaling Web3 Applications Securely
-            </h3>
+            <h3 className="text-xl font-semibold">Scaling Web3 Applications Securely</h3>
 
             <p className="text-md text-muted-foreground flex-1">
-              Learn best practices for building scalable and secure blockchain
-              applications in today’s ecosystem.
+              Learn best practices for building scalable and secure blockchain applications in
+              today’s ecosystem.
             </p>
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -86,8 +77,7 @@ export function BlogCards() {
                 Feb 02, 2026
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                6 min read
+                <Clock className="h-4 w-4" />6 min read
               </div>
             </div>
 
@@ -100,10 +90,9 @@ export function BlogCards() {
 
         {/* Blog Card 3 */}
         <div className="group rounded-2xl overflow-hidden bg-card border shadow flex flex-col">
-
           <div className="relative">
             <img
-              src="/pulse-ui-next/images/cards/blog/03.jpeg"
+              src="/images/cards/blog/03.jpeg"
               alt="UI Trends"
               className="w-full h-48 object-cover transition-transform duration-700 group-hover:scale-110"
             />
@@ -115,13 +104,11 @@ export function BlogCards() {
           </div>
 
           <div className="p-6 flex flex-col flex-1 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Modern UI Trends for 2026
-            </h3>
+            <h3 className="text-xl font-semibold">Modern UI Trends for 2026</h3>
 
             <p className="text-md text-muted-foreground flex-1">
-              Explore the latest interface trends shaping dashboards,
-              applications, and digital products.
+              Explore the latest interface trends shaping dashboards, applications, and digital
+              products.
             </p>
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -130,8 +117,7 @@ export function BlogCards() {
                 Feb 10, 2026
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                4 min read
+                <Clock className="h-4 w-4" />4 min read
               </div>
             </div>
 
@@ -144,10 +130,9 @@ export function BlogCards() {
 
         {/* Blog Card 4 */}
         <div className="group rounded-2xl overflow-hidden bg-card border shadow flex flex-col">
-
           <div className="relative">
             <img
-              src="/pulse-ui-next/images/cards/blog/05.jpeg"
+              src="/images/cards/blog/05.jpeg"
               alt="Startup Growth"
               className="w-full h-48 object-cover transition-transform duration-700 group-hover:scale-110"
             />
@@ -159,13 +144,11 @@ export function BlogCards() {
           </div>
 
           <div className="p-6 flex flex-col flex-1 space-y-4">
-            <h3 className="text-xl font-semibold">
-              Growth Strategies for Startups
-            </h3>
+            <h3 className="text-xl font-semibold">Growth Strategies for Startups</h3>
 
             <p className="text-md text-muted-foreground flex-1">
-              Discover proven marketing and product strategies to accelerate
-              startup growth in competitive markets.
+              Discover proven marketing and product strategies to accelerate startup growth in
+              competitive markets.
             </p>
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -174,8 +157,7 @@ export function BlogCards() {
                 Feb 15, 2026
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                7 min read
+                <Clock className="h-4 w-4" />7 min read
               </div>
             </div>
 
@@ -185,7 +167,6 @@ export function BlogCards() {
             </button>
           </div>
         </div>
-
       </div>
     </div>
   )

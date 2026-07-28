@@ -4,6 +4,7 @@ import type {
   ConnectorHealthViewModel,
   CreateConnectionRequestDto,
   DisconnectConnectionRequestDto,
+  DeleteConnectionRequestDto,
   GetConnectorHealthRequestDto,
   GetIntegrationStatusRequestDto,
   GetSyncHistoryRequestDto,
@@ -23,6 +24,7 @@ import {
   AuthorizeConnectorUseCase,
   CreateConnectionUseCase,
   DisconnectConnectionUseCase,
+  DeleteConnectionUseCase,
   GetConnectorHealthUseCase,
   GetIntegrationStatusUseCase,
   GetSyncHistoryUseCase,
@@ -34,13 +36,16 @@ import {
   ScheduleSyncUseCase,
   ValidateConnectionUseCase,
 } from "../use-cases"
+import { mapConnectionReadModelToViewModel, mapConnectionToReadModel } from "../mappers"
 
 export class IntegrationApplicationService {
+  private readonly gateway: IntegrationGateway
   private readonly createConnectionUseCase: CreateConnectionUseCase
   private readonly validateConnectionUseCase: ValidateConnectionUseCase
   private readonly authorizeConnectorUseCase: AuthorizeConnectorUseCase
   private readonly refreshConnectionUseCase: RefreshConnectionUseCase
   private readonly disconnectConnectionUseCase: DisconnectConnectionUseCase
+  private readonly deleteConnectionUseCase: DeleteConnectionUseCase
   private readonly runSyncUseCase: RunSyncUseCase
   private readonly scheduleSyncUseCase: ScheduleSyncUseCase
   private readonly retrySyncUseCase: RetrySyncUseCase
@@ -51,11 +56,13 @@ export class IntegrationApplicationService {
   private readonly getConnectorHealthUseCase: GetConnectorHealthUseCase
 
   constructor(gateway: IntegrationGateway) {
+    this.gateway = gateway
     this.createConnectionUseCase = new CreateConnectionUseCase(gateway)
     this.validateConnectionUseCase = new ValidateConnectionUseCase(gateway)
     this.authorizeConnectorUseCase = new AuthorizeConnectorUseCase(gateway)
     this.refreshConnectionUseCase = new RefreshConnectionUseCase(gateway)
     this.disconnectConnectionUseCase = new DisconnectConnectionUseCase(gateway)
+    this.deleteConnectionUseCase = new DeleteConnectionUseCase(gateway)
     this.runSyncUseCase = new RunSyncUseCase(gateway)
     this.scheduleSyncUseCase = new ScheduleSyncUseCase(gateway)
     this.retrySyncUseCase = new RetrySyncUseCase(gateway)
@@ -68,6 +75,17 @@ export class IntegrationApplicationService {
 
   createConnection(input: CreateConnectionRequestDto): Promise<ConnectionViewModel> {
     return this.createConnectionUseCase.execute(input)
+  }
+
+  async recoverConnections(): Promise<ConnectionViewModel[]> {
+    const recovered = await this.gateway.recoverConnections?.()
+    if (!recovered || recovered.length === 0) {
+      return []
+    }
+
+    return recovered.map((connection) =>
+      mapConnectionReadModelToViewModel(mapConnectionToReadModel(connection))
+    )
   }
 
   validateConnection(input: ValidateConnectionRequestDto): Promise<ConnectionViewModel> {
@@ -84,6 +102,10 @@ export class IntegrationApplicationService {
 
   disconnectConnection(input: DisconnectConnectionRequestDto): Promise<ConnectionViewModel> {
     return this.disconnectConnectionUseCase.execute(input)
+  }
+
+  deleteConnection(input: DeleteConnectionRequestDto): Promise<void> {
+    return this.deleteConnectionUseCase.execute(input)
   }
 
   runSync(input: RunSyncRequestDto): Promise<SyncStatusViewModel> {

@@ -1,4 +1,8 @@
 export {
+  createAIIntelligenceRepository,
+  DataAIIntelligenceRepository,
+} from "./ai-intelligence.repository"
+export {
   createAuthenticationRepository,
   DataAuthenticationRepository,
 } from "./authentication.repository"

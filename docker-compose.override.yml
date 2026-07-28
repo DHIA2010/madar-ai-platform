@@ -1,0 +1,14 @@
+services:
+  backend:
+    volumes:
+      - ./:/workspace
+      - backend_node_modules:/workspace/node_modules
+
+  frontend:
+    volumes:
+      - ./:/workspace
+      - frontend_node_modules:/workspace/node_modules
+
+volumes:
+  backend_node_modules:
+  frontend_node_modules:

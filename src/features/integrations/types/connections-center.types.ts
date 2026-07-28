@@ -49,6 +49,8 @@ export interface ConnectionCenterRecord {
   nextSyncAt?: string
   lastSyncAt?: string
   latestSyncStatus?: SyncJobStatus
+  healthScore?: number
+  healthLabel?: string
 }
 
 export interface ConnectionsFilterState {

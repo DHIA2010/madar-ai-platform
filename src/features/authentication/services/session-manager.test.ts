@@ -41,7 +41,7 @@ describe("SessionManager", () => {
     expect(manager.restore()).toBeNull()
   })
 
-  it("invalidates expired sessions", () => {
+  it("restores session when access token is expired but refresh token is still valid", () => {
     const manager = new SessionManager("test.session.expired")
     const expiredSession = createSession({
       accessToken: {
@@ -54,6 +54,21 @@ describe("SessionManager", () => {
     manager.persist(expiredSession)
 
     expect(manager.isExpired(expiredSession)).toBe(true)
+    expect(manager.restore()).toEqual(expiredSession)
+  })
+
+  it("invalidates session when refresh token is expired", () => {
+    const manager = new SessionManager("test.session.refresh.expired")
+    const expiredRefreshSession = createSession({
+      refreshToken: {
+        token: "expired-refresh",
+        expiresAt: new Date(Date.now() - 1_000).toISOString(),
+      },
+    })
+
+    manager.persist(expiredRefreshSession)
+
+    expect(manager.isExpired(expiredRefreshSession)).toBe(true)
     expect(manager.restore()).toBeNull()
   })
 })

@@ -36,7 +36,7 @@ export class SessionManager implements SessionStorageGateway {
 
     try {
       const parsed = JSON.parse(raw) as AuthSessionDto
-      if (this.isExpired(parsed)) {
+      if (this.isRefreshTokenExpired(parsed)) {
         this.clear()
         return null
       }
@@ -53,14 +53,23 @@ export class SessionManager implements SessionStorageGateway {
   }
 
   isExpired(session: AuthSessionDto | null): boolean {
+    return this.isAccessTokenExpired(session) || this.isRefreshTokenExpired(session)
+  }
+
+  isAccessTokenExpired(session: AuthSessionDto | null): boolean {
     if (!session) {
       return true
     }
 
-    return (
-      isTimestampExpired(session.accessToken.expiresAt) ||
-      isTimestampExpired(session.refreshToken.expiresAt)
-    )
+    return isTimestampExpired(session.accessToken.expiresAt)
+  }
+
+  isRefreshTokenExpired(session: AuthSessionDto | null): boolean {
+    if (!session) {
+      return true
+    }
+
+    return isTimestampExpired(session.refreshToken.expiresAt)
   }
 }
 

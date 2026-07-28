@@ -55,10 +55,15 @@ export interface CurrentUserDto {
   user: AuthUserDto | null
 }
 
+export interface RefreshSessionRequestDto {
+  refreshToken: string
+}
+
 export interface AuthenticationRepository {
   login(payload: LoginRequestDto): Promise<LoginResponseDto>
   logout(session: AuthSessionDto | null): Promise<void>
   currentUser(session: AuthSessionDto | null): Promise<CurrentUserDto>
+  refreshSession(payload: RefreshSessionRequestDto): Promise<AuthSessionDto>
   forgotPassword(payload: ForgotPasswordRequestDto): Promise<void>
   resetPassword(payload: ResetPasswordRequestDto): Promise<void>
   verifyEmail(payload: VerifyEmailRequestDto): Promise<void>
@@ -72,6 +77,8 @@ export interface SessionStoragePort {
   restore(): AuthSessionDto | null
   clear(): void
   isExpired(session: AuthSessionDto | null): boolean
+  isAccessTokenExpired(session: AuthSessionDto | null): boolean
+  isRefreshTokenExpired(session: AuthSessionDto | null): boolean
 }
 
 export type SessionStorageGateway = SessionStoragePort

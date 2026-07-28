@@ -20,23 +20,36 @@ module.exports = {
       },
     },
     {
-      name: "presentation-no-infra-direct",
+      name: "feature-no-infrastructure-direct",
       severity: "error",
       from: {
         path: "^src/features/",
+        pathNot: "(?:\\.test\\.|\\.spec\\.|/tests?/)",
       },
       to: {
-        path: "^src/(lib/query|lib/errors|lib/logger|services/api-client)/",
+        path: "^src/infrastructure/",
       },
     },
     {
-      name: "presentation-no-services-direct",
+      name: "domain-no-adapters",
       severity: "error",
       from: {
-        path: "^src/app/",
+        path: "^src/.*/domain/",
+        pathNot: "(?:\\.test\\.|\\.spec\\.|/tests?/)",
       },
       to: {
-        path: "^src/services/",
+        path: "^src/(?:infrastructure/.*/adapters/|.*?/adapters/)",
+      },
+    },
+    {
+      name: "integration-platform-domain-is-pure",
+      severity: "error",
+      from: {
+        path: "^src/integration-platform/domain/",
+        pathNot: "(?:\\.test\\.|\\.spec\\.|/tests?/)",
+      },
+      to: {
+        path: "^src/integration-platform/(?:infrastructure|interfaces|bootstrap)/",
       },
     },
     {
@@ -44,6 +57,7 @@ module.exports = {
       severity: "error",
       from: {
         path: "^src/features/[^/]+/domain/",
+        pathNot: "(?:\\.test\\.|\\.spec\\.|/tests?/)",
       },
       to: {
         path: "^src/features/[^/]+/(presentation|ui|components)/",
@@ -54,6 +68,7 @@ module.exports = {
       severity: "error",
       from: {
         path: "^src/features/[^/]+/application/",
+        pathNot: "(?:\\.test\\.|\\.spec\\.|/tests?/)",
       },
       to: {
         path: "^src/features/[^/]+/(presentation|ui|components)/",
@@ -66,6 +81,7 @@ module.exports = {
       path: "node_modules",
     },
     includeOnly: "^src",
+    exclude: "(?:\\.test\\.|\\.spec\\.|/tests?/)",
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default"],

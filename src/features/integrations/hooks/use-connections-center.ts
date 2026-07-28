@@ -1,29 +1,25 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { toAppError } from "@/lib/app-errors"
+import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
 
 import {
+  appendConnectorAccount,
   CONNECTOR_CATALOG,
   filterConnectionRecords,
-  getDefaultTimezone,
-  getDefaultWorkspaceId,
   inferHealthState,
   loadStoredConnectionReferences,
   loadStoredConnectorAccounts,
-  mergeCatalogWithRegistry,
+  removeStoredConnectionReference,
+  removeStoredConnectorAccounts,
   storeConnectionReferences,
 } from "../services"
 import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 
 import { useApplicationServices } from "@/application/context"
-import type {
-  AuthorizeConnectorRequestDto,
-  Connection,
-  SyncHistoryViewModel,
-  SyncJob,
-} from "@/application/contracts"
+import type { Connection, SyncHistoryViewModel, SyncJob } from "@/application/contracts"
 
 const DEFAULT_FILTERS: ConnectionsFilterState = {
   search: "",
@@ -34,29 +30,56 @@ const DEFAULT_FILTERS: ConnectionsFilterState = {
   capability: "all",
 }
 
-function oauthCredentialPayload(connectorId: string) {
-  return {
-    type: "oauth" as const,
-    payload: {
-      clientId: `${connectorId}_client_id`,
-      clientSecret: `${connectorId}_client_secret`,
-      redirectUri: "https://madar.local/callback",
-    },
-  }
-}
-
 export function useConnectionsCenter() {
   const { connectionManager, integrationApplicationService } = useApplicationServices()
   const [records, setRecords] = useState<ConnectionCenterRecord[]>([])
   const [filters, setFilters] = useState<ConnectionsFilterState>(DEFAULT_FILTERS)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const bootstrapRequestIdRef = useRef(0)
+
+  const clearOAuthCallbackParams = useCallback((connectionId: string) => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const params = new URLSearchParams(window.location.search)
+    const callbackConnectionId = params.get("google_connection_id")
+    if (callbackConnectionId !== connectionId && params.get("google_oauth") !== "connected") {
+      return
+    }
+
+    params.delete("google_oauth")
+    params.delete("google_connection_id")
+    params.delete("google_connection_name")
+    params.delete("google_account_name")
+    params.delete("google_account_email")
+    params.delete("reason")
+
+    const nextQuery = params.toString()
+    const nextUrl = `${window.location.pathname}${nextQuery.length > 0 ? `?${nextQuery}` : ""}${window.location.hash}`
+    window.history.replaceState(window.history.state, "", nextUrl)
+  }, [])
 
   const buildRecord = useCallback(
-    async (connection: Connection): Promise<ConnectionCenterRecord> => {
+    async (connection: Connection, requestId?: number): Promise<ConnectionCenterRecord | null> => {
+      traceFrontendExecution({
+        step: "buildConnectionCards()",
+        connectionId: connection.connectionId,
+        customerId:
+          typeof connection.metadata.customerId === "string"
+            ? connection.metadata.customerId
+            : null,
+        connectionCount: records.length,
+      })
+
       const statusViewModel = await integrationApplicationService.getIntegrationStatus({
         connectionId: connection.connectionId,
       })
+
+      if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
+        return null
+      }
 
       let syncHistory: SyncHistoryViewModel | undefined
       try {
@@ -68,14 +91,25 @@ export function useConnectionsCenter() {
         syncHistory = undefined
       }
 
+      if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
+        return null
+      }
+
+      const connectorHealth = await integrationApplicationService.getConnectorHealth({
+        connectorId: connection.connectorId,
+      })
+
+      if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
+        return null
+      }
+
       const health = connectionManager.getHealth(connection.connectionId)
       const scheduler = connectionManager.getScheduler(connection.connectionId)
       const history = connectionManager.getHistory(connection.connectionId)
-      const registry = connectionManager.getRegistry()
-      const catalog = mergeCatalogWithRegistry(registry.connectors)
       const catalogEntry =
-        catalog.find((item) => item.connectorDefinitionId === connection.connectorDefinitionId) ??
-        catalog[0]
+        CONNECTOR_CATALOG.find(
+          (item) => item.connectorDefinitionId === connection.connectorDefinitionId
+        ) ?? CONNECTOR_CATALOG[0]
 
       const latestSyncStatus = statusViewModel.payload.latestJob?.status
       const accountsRegistry = loadStoredConnectorAccounts()
@@ -114,93 +148,149 @@ export function useConnectionsCenter() {
         nextSyncAt: scheduler?.retryQueue[0]?.nextRunAt ?? health?.nextSyncAt,
         lastSyncAt: connection.lastSyncedAt ?? health?.lastSyncAt,
         latestSyncStatus,
+        healthScore: connectorHealth.payload.score,
+        healthLabel: connectorHealth.payload.status,
       }
     },
-    [connectionManager, integrationApplicationService]
+    [connectionManager, integrationApplicationService, records.length]
   )
 
   const bootstrap = useCallback(async () => {
+    const requestId = ++bootstrapRequestIdRef.current
     setIsLoading(true)
     setError(null)
 
+    traceFrontendExecution({
+      step: "bootstrapConnections()",
+      connectionCount: records.length,
+      details: `requestId=${requestId}`,
+    })
+
     try {
-      const registry = connectionManager.getRegistry()
-      const catalog = mergeCatalogWithRegistry(registry.connectors).filter((connector) =>
-        CONNECTOR_CATALOG.some(
-          (catalogEntry) => catalogEntry.connectorDefinitionId === connector.connectorDefinitionId
-        )
-      )
+      const callbackParams =
+        typeof window === "undefined" ? null : new URLSearchParams(window.location.search)
+      const callbackConnected = callbackParams?.get("google_oauth") === "connected"
+      const callbackConnectionId = callbackParams?.get("google_connection_id")
+      const callbackAccountName = callbackParams?.get("google_account_name")
+
       const refs = loadStoredConnectionReferences()
+      traceFrontendExecution({
+        step: "fetchConnections()",
+        connectionId: callbackConnectionId,
+        connectionCount: refs.length,
+        details: "loaded stored connection references",
+      })
+
+      if (callbackConnected && callbackConnectionId) {
+        const googleCatalog = CONNECTOR_CATALOG.find((entry) => entry.connectorId === "google_ads")
+
+        if (googleCatalog) {
+          try {
+            await integrationApplicationService.validateConnection({
+              connectionId: callbackConnectionId,
+            })
+          } catch {
+            // Ignore and continue; bootstrap should remain resilient.
+          }
+
+          if (
+            !refs.some(
+              (entry) =>
+                entry.connectorDefinitionId === googleCatalog.connectorDefinitionId &&
+                entry.connectionId === callbackConnectionId
+            )
+          ) {
+            refs.push({
+              connectorDefinitionId: googleCatalog.connectorDefinitionId,
+              connectionId: callbackConnectionId,
+            })
+          }
+
+          if (callbackAccountName) {
+            appendConnectorAccount(googleCatalog.connectorDefinitionId, callbackAccountName)
+          }
+        }
+      }
+
+      if (refs.length === 0) {
+        const recovered = await integrationApplicationService.recoverConnections()
+        for (const recoveredConnection of recovered) {
+          refs.push({
+            connectorDefinitionId: recoveredConnection.payload.connectorDefinitionId,
+            connectionId: recoveredConnection.payload.connectionId,
+          })
+        }
+      }
 
       const resolvedRefs: Array<{ connectorDefinitionId: string; connectionId: string }> = []
       const nextRecords: ConnectionCenterRecord[] = []
 
-      for (const connector of catalog) {
-        const storedRef = refs.find(
-          (entry) => entry.connectorDefinitionId === connector.connectorDefinitionId
-        )
+      for (const storedRef of refs) {
+        if (requestId !== bootstrapRequestIdRef.current) {
+          return
+        }
+
         let connection: Connection | null = null
 
-        if (storedRef) {
+        try {
+          const status = await integrationApplicationService.getIntegrationStatus({
+            connectionId: storedRef.connectionId,
+          })
+          connection = status.payload.connection
+        } catch {
+          connection = null
+        }
+
+        // If connection is draft (possibly stale after session reset), try backend sync.
+        if (connection && connection.status === "draft") {
           try {
-            const status = await integrationApplicationService.getIntegrationStatus({
-              connectionId: storedRef.connectionId,
+            const validated = await integrationApplicationService.validateConnection({
+              connectionId: connection.connectionId,
             })
-            connection = status.payload.connection
+            connection = validated.payload
           } catch {
-            connection = null
+            // Keep existing draft connection if sync fails.
           }
         }
 
         if (!connection) {
-          const created = await connectionManager.createConnection({
-            workspaceId: getDefaultWorkspaceId(),
-            connectorDefinitionId: connector.connectorDefinitionId,
-            connectorId: connector.connectorId,
-            metadata: {
-              accountName: connector.connectedAccountLabel,
-              workspaceName: connector.workspaceLabel,
-            },
-            credential: oauthCredentialPayload(connector.connectorId),
-          })
+          continue
+        }
 
-          const connectInput: AuthorizeConnectorRequestDto = {
-            connectionId: created.connectionId,
-            authorizationCode: `${connector.connectorId}_auth_code`,
-          }
-          await connectionManager.connect(connectInput)
-
-          await connectionManager.scheduleSync({
-            connectionId: created.connectionId,
-            cron: "*/30 * * * *",
-            timezone: getDefaultTimezone(),
-            enabled: true,
-          })
-
-          await connectionManager.runSync({
-            connectionId: created.connectionId,
-            trigger: "scheduled",
-          })
-
-          connection = created
+        // Skip if this canonical connection ID was already resolved (deduplicates after backend sync).
+        if (resolvedRefs.some((r) => r.connectionId === connection.connectionId)) {
+          continue
         }
 
         resolvedRefs.push({
-          connectorDefinitionId: connector.connectorDefinitionId,
+          connectorDefinitionId: storedRef.connectorDefinitionId,
           connectionId: connection.connectionId,
         })
 
-        nextRecords.push(await buildRecord(connection))
+        const record = await buildRecord(connection, requestId)
+        if (record) {
+          nextRecords.push(record)
+        }
+      }
+
+      if (requestId !== bootstrapRequestIdRef.current) {
+        return
       }
 
       storeConnectionReferences(resolvedRefs)
       setRecords(nextRecords)
     } catch (error) {
+      if (requestId !== bootstrapRequestIdRef.current) {
+        return
+      }
+
       setError(toAppError(error).message)
     } finally {
-      setIsLoading(false)
+      if (requestId === bootstrapRequestIdRef.current) {
+        setIsLoading(false)
+      }
     }
-  }, [buildRecord, connectionManager, integrationApplicationService])
+  }, [buildRecord, integrationApplicationService, records.length])
 
   useEffect(() => {
     void bootstrap()
@@ -210,6 +300,10 @@ export function useConnectionsCenter() {
     async (connectionId: string) => {
       const status = await integrationApplicationService.getIntegrationStatus({ connectionId })
       const next = await buildRecord(status.payload.connection)
+      if (!next) {
+        return null
+      }
+
       setRecords((current) => {
         const exists = current.some((entry) => entry.connection.connectionId === connectionId)
         if (!exists) {
@@ -228,7 +322,12 @@ export function useConnectionsCenter() {
   const runSync = useCallback(
     async (connectionId: string) => {
       await connectionManager.runSync({ connectionId, trigger: "manual" })
-      return refreshConnection(connectionId)
+      const refreshed = await refreshConnection(connectionId)
+      if (!refreshed) {
+        throw new Error("Connection could not be refreshed after sync.")
+      }
+
+      return refreshed
     },
     [connectionManager, refreshConnection]
   )
@@ -256,11 +355,70 @@ export function useConnectionsCenter() {
     async (connectionId: string) => {
       await connectionManager.connect({
         connectionId,
-        authorizationCode: `${connectionId}_reconnect_code`,
       })
       return refreshConnection(connectionId)
     },
     [connectionManager, refreshConnection]
+  )
+
+  const deleteConnection = useCallback(
+    async (connectionId: string) => {
+      bootstrapRequestIdRef.current += 1
+
+      const record = records.find((entry) => entry.connection.connectionId === connectionId)
+      traceFrontendExecution({
+        step: "deleteConnection()",
+        connectionId,
+        customerId:
+          typeof record?.connection.metadata.customerId === "string"
+            ? record.connection.metadata.customerId
+            : null,
+        connectionCount: records.length,
+      })
+
+      await connectionManager.deleteConnection({ connectionId })
+
+      removeStoredConnectionReference(connectionId)
+      if (record) {
+        const remainingReferences = loadStoredConnectionReferences().filter(
+          (entry) => entry.connectorDefinitionId === record.connectorDefinitionId
+        )
+        if (remainingReferences.length === 0) {
+          removeStoredConnectorAccounts(record.connectorDefinitionId)
+        }
+      }
+
+      clearOAuthCallbackParams(connectionId)
+
+      setRecords((current) =>
+        current.filter((entry) => entry.connection.connectionId !== connectionId)
+      )
+
+      traceFrontendExecution({
+        step: "invalidateQueries()",
+        connectionId,
+        customerId:
+          typeof record?.connection.metadata.customerId === "string"
+            ? record.connection.metadata.customerId
+            : null,
+        connectionCount: Math.max(0, records.length - 1),
+        details:
+          "No React Query invalidation in Connections Center; local state/storage invalidation only",
+      })
+
+      traceFrontendExecution({
+        step: "refetchConnections()",
+        connectionId,
+        customerId:
+          typeof record?.connection.metadata.customerId === "string"
+            ? record.connection.metadata.customerId
+            : null,
+        connectionCount: Math.max(0, records.length - 1),
+      })
+
+      await bootstrap()
+    },
+    [bootstrap, clearOAuthCallbackParams, connectionManager, records]
   )
 
   const pauseSync = useCallback(
@@ -357,6 +515,7 @@ export function useConnectionsCenter() {
     retrySync,
     refreshToken,
     disconnect,
+    deleteConnection,
     connect,
     pauseSync,
     resumeSync,
