@@ -11,16 +11,16 @@ The MADAR local development platform is fully operational. All services are heal
 
 ## Service Status
 
-| Service | Status | Port | Health Check |
-|---------|--------|------|--------------|
-| PostgreSQL | ✅ Healthy | 5432 | pg_isready |
-| Redis | ✅ Healthy | 6379 | PONG |
-| MinIO | ✅ Healthy | 9000-9001 | Live check |
-| Mailpit | ✅ Healthy | 1025, 8025 | TCP ready |
-| Backend (Identity API) | ✅ Healthy | 4000 | Health endpoint |
-| Frontend (Next.js) | ✅ Ready | 3000 | HTTP 200 |
-| pgAdmin | ✅ Running | 5050 | TCP ready |
-| minio-init | ✅ Completed | - | Bucket created |
+| Service                | Status       | Port       | Health Check    |
+| ---------------------- | ------------ | ---------- | --------------- |
+| PostgreSQL             | ✅ Healthy   | 5432       | pg_isready      |
+| Redis                  | ✅ Healthy   | 6379       | PONG            |
+| MinIO                  | ✅ Healthy   | 9000-9001  | Live check      |
+| Mailpit                | ✅ Healthy   | 1025, 8025 | TCP ready       |
+| Backend (Identity API) | ✅ Healthy   | 4000       | Health endpoint |
+| Frontend (Next.js)     | ✅ Ready     | 3000       | HTTP 200        |
+| pgAdmin                | ✅ Running   | 5050       | TCP ready       |
+| minio-init             | ✅ Completed | -          | Bucket created  |
 
 ---
 
@@ -31,6 +31,7 @@ The MADAR local development platform is fully operational. All services are heal
 **Root Cause:** PostgreSQL driver returns JavaScript Date objects for timestamp columns. The repository mapping functions were not converting these to ISO strings before passing them back to entity classes and ultimately to the database for updates.
 
 **Fix Applied:** Updated all repository mapping functions to properly convert Date objects to ISO strings:
+
 - `mapUser()`
 - `mapOrganization()`
 - `mapWorkspace()`
@@ -55,20 +56,21 @@ curl -X POST http://localhost:4000/v1/auth/login \
 ```
 
 **Response:** ✅ 200 OK with user profile and JWT tokens
+
 - Access Token: Valid JWT with 15-minute expiry
 - Refresh Token: Valid long-lived token
 - Session: Created and stored in Redis
 
 ### Seeded Data Verification
 
-| Item | Value | Status |
-|------|-------|--------|
-| Admin User Email | admin@madar.local | ✅ Found |
-| Admin User Status | active | ✅ Verified |
-| Demo Organization | Demo Organization | ✅ Created |
-| Demo Workspace | Demo Workspace | ✅ Created |
-| Demo Project | Demo Project | ✅ Created |
-| Demo Datasource | Demo Datasource | ✅ Created |
+| Item              | Value             | Status      |
+| ----------------- | ----------------- | ----------- |
+| Admin User Email  | admin@madar.local | ✅ Found    |
+| Admin User Status | active            | ✅ Verified |
+| Demo Organization | Demo Organization | ✅ Created  |
+| Demo Workspace    | Demo Workspace    | ✅ Created  |
+| Demo Project      | Demo Project      | ✅ Created  |
+| Demo Datasource   | Demo Datasource   | ✅ Created  |
 
 ### Service Endpoints
 
@@ -82,15 +84,15 @@ curl -X POST http://localhost:4000/v1/auth/login \
 
 ## Startup Performance
 
-| Phase | Duration | Notes |
-|-------|----------|-------|
-| Docker image pull | ~30s (first run) | Cached on subsequent runs |
-| Container startup | ~6s | Concurrent health checks |
-| PostgreSQL ready | ~6s | With migrations runner ready |
-| Backend bootstrap | ~30-40s | Migrations + seed data |
-| Frontend ready | ~45-50s | Waits for backend health |
-| **Total cold start** | ~50-60s | From `docker compose up` to all services healthy |
-| **Warm start** | ~30-40s | With cached images |
+| Phase                | Duration         | Notes                                            |
+| -------------------- | ---------------- | ------------------------------------------------ |
+| Docker image pull    | ~30s (first run) | Cached on subsequent runs                        |
+| Container startup    | ~6s              | Concurrent health checks                         |
+| PostgreSQL ready     | ~6s              | With migrations runner ready                     |
+| Backend bootstrap    | ~30-40s          | Migrations + seed data                           |
+| Frontend ready       | ~45-50s          | Waits for backend health                         |
+| **Total cold start** | ~50-60s          | From `docker compose up` to all services healthy |
+| **Warm start**       | ~30-40s          | With cached images                               |
 
 ---
 
@@ -99,6 +101,7 @@ curl -X POST http://localhost:4000/v1/auth/login \
 **File:** `docker-compose.yml` + `docker-compose.override.yml`
 
 **Key Features:**
+
 - ✅ Single network: `madar-local`
 - ✅ Health checks on all services
 - ✅ Dependency ordering via `depends_on`
@@ -112,12 +115,14 @@ curl -X POST http://localhost:4000/v1/auth/login \
 ## What Works End-to-End
 
 1. **Clone Repository** ✅
+
    ```bash
    git clone <repo>
    cd pulse-ui-next
    ```
 
 2. **Start Stack** ✅
+
    ```bash
    docker compose up -d
    ```
@@ -156,9 +161,9 @@ IDENTITY_PLATFORM_REDIS_URL=redis://redis:6379
 # Storage
 MINIO_ENDPOINT=http://minio:9000
 MINIO_CONSOLE_URL=http://minio:9001
-AWS_ACCESS_KEY_ID=minioadmin
-AWS_SECRET_ACCESS_KEY=minioadmin123
-AWS_REGION=us-east-1
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_REGION=us-east-1
 S3_FORCE_PATH_STYLE=true
 
 # Email
@@ -209,14 +214,14 @@ JWT_AUDIENCE=madar-platform
 
 ## Troubleshooting Reference
 
-| Issue | Solution |
-|-------|----------|
-| Backend takes 60+ seconds | Normal on first run; wait for bootstrap complete message |
-| Login returns 401 | Verify email/password match seeded values |
+| Issue                     | Solution                                                   |
+| ------------------------- | ---------------------------------------------------------- |
+| Backend takes 60+ seconds | Normal on first run; wait for bootstrap complete message   |
+| Login returns 401         | Verify email/password match seeded values                  |
 | Database connection error | Check PostgreSQL container healthy via `docker compose ps` |
-| Redis connection error | Check Redis container healthy via `docker compose ps` |
-| MinIO bucket not created | Verify minio-init container completed successfully |
-| Frontend shows loading | Wait for backend to fully start; check backend logs |
+| Redis connection error    | Check Redis container healthy via `docker compose ps`      |
+| MinIO bucket not created  | Verify minio-init container completed successfully         |
+| Frontend shows loading    | Wait for backend to fully start; check backend logs        |
 
 ---
 
@@ -240,6 +245,7 @@ For production, follow [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for AW
 ## Summary
 
 ✅ **All objectives met:**
+
 1. One-command setup: `docker compose up -d`
 2. No manual migrations, seeds, or configuration
 3. Reproduces AWS architecture locally

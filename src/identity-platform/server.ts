@@ -3,6 +3,7 @@ import { resolve } from "node:path"
 
 import { createIdentityApiServer } from "./api"
 import { createIdentityPlatform } from "./bootstrap/create-identity-platform"
+import { validateAwsCredentialIsolationForSecretsManager } from "./configuration/aws-credential-guard"
 
 function loadRuntimeEnvironment() {
   const cwd = process.cwd()
@@ -20,6 +21,7 @@ function loadRuntimeEnvironment() {
 }
 
 loadRuntimeEnvironment()
+validateAwsCredentialIsolationForSecretsManager()
 
 const platform = createIdentityPlatform()
 const server = createIdentityApiServer(platform)

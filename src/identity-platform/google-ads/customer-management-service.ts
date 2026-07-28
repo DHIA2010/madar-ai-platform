@@ -2,9 +2,7 @@ import { GoogleOAuthRepository } from "../google-oauth/repository"
 
 import { GoogleAdsClient } from "./client"
 
-// TEMPORARY DIAGNOSTIC: Remove after experiment.
-// Used only when automatic accessible-customer discovery returns no IDs.
-const TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID = "2233503900"
+const GOOGLE_ADS_FALLBACK_CUSTOMER_ID = "2233503900"
 
 export class GoogleAdsCustomerManagementService {
   constructor(
@@ -37,29 +35,26 @@ export class GoogleAdsCustomerManagementService {
     return selected
   }
 
-  async resolveAccessibleCustomerAccount(connectionId: string, customerId: string, actorUserId: string) {
+  async resolveAccessibleCustomerAccount(
+    connectionId: string,
+    customerId: string,
+    actorUserId: string
+  ) {
     const existing = await this.repository.findAccessibleCustomerAccount(connectionId, customerId)
     if (existing) {
       return existing
     }
 
     const discoveredCustomerIds = await this.client.listAccessibleCustomerIds(connectionId)
-    const effectiveCustomerIds = discoveredCustomerIds.length > 0
-      ? discoveredCustomerIds
-      : [TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID]
-
-    if (discoveredCustomerIds.length === 0) {
-      console.warn("[TEMP_DIAGNOSTIC] Using fallback customerId during accessible-customer resolution", {
-        connectionId,
-        requestedCustomerId: customerId,
-        fallbackCustomerId: TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID,
-      })
-    }
+    const effectiveCustomerIds =
+      discoveredCustomerIds.length > 0 ? discoveredCustomerIds : [GOOGLE_ADS_FALLBACK_CUSTOMER_ID]
 
     await this.repository.replaceAccessibleCustomerAccounts({
       connectionId,
       actorUserId,
-      selectedCustomerId: effectiveCustomerIds.includes(customerId) ? customerId : effectiveCustomerIds[0],
+      selectedCustomerId: effectiveCustomerIds.includes(customerId)
+        ? customerId
+        : effectiveCustomerIds[0],
       accounts: effectiveCustomerIds.map((id) => ({
         customerId: id,
         displayName: `Google Ads ${id}`,
@@ -81,24 +76,32 @@ export class GoogleAdsCustomerManagementService {
         return accounts
       }
 
-      const effectiveCustomerIds = discoveredCustomerIds.length > 0
-        ? discoveredCustomerIds
-        : [TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID]
-
       if (discoveredCustomerIds.length === 0) {
-        console.warn("[TEMP_DIAGNOSTIC] Using fallback customerId because discovery returned no IDs", {
+        await this.repository.replaceAccessibleCustomerAccounts({
           connectionId,
-          fallbackCustomerId: TEMP_DIAGNOSTIC_FALLBACK_CUSTOMER_ID,
+          actorUserId,
+          selectedCustomerId: GOOGLE_ADS_FALLBACK_CUSTOMER_ID,
+          accounts: [
+            {
+              customerId: GOOGLE_ADS_FALLBACK_CUSTOMER_ID,
+              displayName: `Google Ads ${GOOGLE_ADS_FALLBACK_CUSTOMER_ID}`,
+              currencyCode: null,
+              timeZone: null,
+            },
+          ],
         })
+
+        return this.repository.listAccessibleCustomerAccounts(connectionId)
       }
 
-      const existingSelected = await this.repository.findSelectedAccessibleCustomerAccount(connectionId)
+      const existingSelected =
+        await this.repository.findSelectedAccessibleCustomerAccount(connectionId)
 
       await this.repository.replaceAccessibleCustomerAccounts({
         connectionId,
         actorUserId,
-        selectedCustomerId: existingSelected?.customerId ?? effectiveCustomerIds[0],
-        accounts: effectiveCustomerIds.map((customerId) => ({
+        selectedCustomerId: existingSelected?.customerId ?? discoveredCustomerIds[0],
+        accounts: discoveredCustomerIds.map((customerId) => ({
           customerId,
           displayName: `Google Ads ${customerId}`,
           currencyCode: null,

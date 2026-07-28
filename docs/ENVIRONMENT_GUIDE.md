@@ -34,3 +34,5 @@ If validation fails, add missing variables to your active `.env.*` file or expor
 - Do not commit secret values to git.
 - Keep only non-secret defaults in tracked env templates.
 - Use secret managers and CI environment secrets for sensitive values.
+- Keep MinIO credentials in `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_REGION` only.
+- Do not set local MinIO values in `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`; these are reserved for AWS SDK credential resolution.

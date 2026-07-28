@@ -8,6 +8,8 @@
 ## Setup
 
 1. Copy or edit `.env.local` if you need custom ports or credentials.
+   - Use `.env.local.example` as the baseline template.
+   - Keep MinIO credentials in `MINIO_*` variables, not `AWS_*`.
 2. Start the platform:
 
 ```bash
@@ -15,6 +17,7 @@ docker compose up -d
 ```
 
 3. Open the services:
+
 - Frontend: `http://localhost:3000`
 - Backend health: `http://localhost:4000/health`
 - Mailpit: `http://localhost:8025`

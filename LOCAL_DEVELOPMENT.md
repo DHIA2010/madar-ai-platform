@@ -43,7 +43,8 @@ The backend bootstrap waits for PostgreSQL, Redis, and MinIO health checks, appl
 
 ## Notes
 
-- S3-compatible storage is provided by MinIO using the same S3-style environment variables.
+- S3-compatible storage is provided by MinIO through `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_REGION`, and `MINIO_ENDPOINT`.
+- Do not set MinIO credentials in generic `AWS_*` variables. The backend uses `AWS_*` for real AWS credential resolution (for example, Secrets Manager).
 - Email delivery uses Mailpit, so every email is visible in the Mailpit UI.
 - The local stack keeps Terraform and AWS deployment intact.
 - Frontend health checks are expected on `http://127.0.0.1:3000` inside the container network.

@@ -14,24 +14,36 @@ interface GoogleAdsClientConfig {
   minRequestIntervalMs: number
 }
 
-function maskSecret(value: string, keep = 8) {
-  if (!value) {
-    return ""
-  }
-
-  if (value.length <= keep) {
-    return "*".repeat(value.length)
-  }
-
-  return `${value.slice(0, keep)}***`
+function readUpstreamRequestId(response: Response) {
+  return (
+    response.headers.get("request-id") ??
+    response.headers.get("x-request-id") ??
+    response.headers.get("requestid") ??
+    null
+  )
 }
 
-function parseJsonSafe(value: string) {
-  try {
-    return JSON.parse(value) as Record<string, unknown>
-  } catch {
-    return null
-  }
+function logGoogleAdsProviderError(input: {
+  endpoint: string
+  statusCode: number | null
+  errorCode: string
+  correlationId: string
+  requestId: string | null
+}) {
+  console.error(
+    JSON.stringify({
+      level: "error",
+      service: "identity-platform",
+      event: "provider.error",
+      provider: "google-ads",
+      endpoint: input.endpoint,
+      statusCode: input.statusCode,
+      errorCode: input.errorCode,
+      correlationId: input.correlationId,
+      requestId: input.requestId,
+      timestamp: new Date().toISOString(),
+    })
+  )
 }
 
 export class GoogleAdsClient {
@@ -69,6 +81,7 @@ export class GoogleAdsClient {
 
   async listAccessibleCustomerIds(connectionId: string): Promise<string[]> {
     let attempt = 0
+    const requestUrl = `${this.config.apiBaseUrl.replace(/\/$/, "")}/customers:listAccessibleCustomers`
 
     while (attempt <= this.config.maxRetries) {
       await this.rateLimiter.waitTurn()
@@ -76,23 +89,6 @@ export class GoogleAdsClient {
       try {
         const developerToken = this.requireDeveloperToken()
         const accessToken = await this.authProvider.getAccessToken(connectionId)
-        const requestUrl = `${this.config.apiBaseUrl.replace(/\/$/, "")}/customers:listAccessibleCustomers`
-
-        console.info("[TEMP_DIAGNOSTIC][google-ads] request", {
-          operation: "customers:listAccessibleCustomers",
-          method: "GET",
-          connectionId,
-          customerId: null,
-          url: requestUrl,
-          loginCustomerId: this.config.loginCustomerId ?? null,
-          headers: {
-            authorization: `Bearer ${maskSecret(accessToken, 12)}`,
-            "developer-token": maskSecret(developerToken, 4),
-            accept: "application/json",
-          },
-          developerTokenPresent: developerToken.trim().length > 0,
-          oauthTokenPresent: accessToken.trim().length > 0,
-        })
 
         const response = await this.fetchFn(requestUrl, {
           method: "GET",
@@ -104,18 +100,17 @@ export class GoogleAdsClient {
         })
 
         const rawBody = await response.text()
-        console.info("[TEMP_DIAGNOSTIC][google-ads] response", {
-          operation: "customers:listAccessibleCustomers",
-          method: "GET",
-          connectionId,
-          customerId: null,
-          url: requestUrl,
-          status: response.status,
-          rawResponse: rawBody,
-        })
 
         if (!response.ok) {
-          throw toGoogleAdsError({ status: response.status, body: rawBody })
+          const mapped = toGoogleAdsError({ status: response.status, body: rawBody })
+          logGoogleAdsProviderError({
+            endpoint: "customers:listAccessibleCustomers",
+            statusCode: response.status,
+            errorCode: mapped.code,
+            correlationId: connectionId,
+            requestId: readUpstreamRequestId(response),
+          })
+          throw mapped
         }
 
         const payload = JSON.parse(rawBody) as { resourceNames?: unknown }
@@ -140,21 +135,32 @@ export class GoogleAdsClient {
           )
         )
       } catch (error) {
-        const mapped = error instanceof GoogleAdsIntegrationError
-          ? error
-          : new GoogleAdsIntegrationError(
-            "Google Ads provider failure.",
-            "GOOGLE_ADS_PROVIDER_FAILURE",
-            true,
-            502
-          )
+        const mapped =
+          error instanceof GoogleAdsIntegrationError
+            ? error
+            : new GoogleAdsIntegrationError(
+                "Google Ads provider failure.",
+                "GOOGLE_ADS_PROVIDER_FAILURE",
+                true,
+                502
+              )
+
+        logGoogleAdsProviderError({
+          endpoint: "customers:listAccessibleCustomers",
+          statusCode: mapped.status,
+          errorCode: mapped.code,
+          correlationId: connectionId,
+          requestId: null,
+        })
 
         if (!mapped.retryable || attempt >= this.config.maxRetries) {
           throw mapped
         }
 
         attempt += 1
-        await new Promise<void>((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000)))
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000))
+        )
       }
     }
 
@@ -174,6 +180,7 @@ export class GoogleAdsClient {
     nextPageToken?: string
   }): Promise<GoogleAdsApiPage> {
     let attempt = 0
+    const requestUrl = `${this.config.apiBaseUrl.replace(/\/$/, "")}/customers/${encodeURIComponent(input.customerId)}/googleAds:search`
 
     while (attempt <= this.config.maxRetries) {
       await this.rateLimiter.waitTurn()
@@ -182,142 +189,68 @@ export class GoogleAdsClient {
         const developerToken = this.requireDeveloperToken()
 
         const accessToken = await this.authProvider.getAccessToken(input.connectionId)
-        const requestUrl = `${this.config.apiBaseUrl.replace(/\/$/, "")}/customers/${encodeURIComponent(input.customerId)}/googleAds:search`
         const headers: Record<string, string> = {
           authorization: `Bearer ${accessToken}`,
           "developer-token": developerToken,
           "content-type": "application/json",
-          ...(this.config.loginCustomerId ? { "login-customer-id": this.config.loginCustomerId } : {}),
+          ...(this.config.loginCustomerId
+            ? { "login-customer-id": this.config.loginCustomerId }
+            : {}),
         }
 
         const requestBody = JSON.stringify({
           query: input.query,
-          pageSize: input.pageSize ?? 1000,
           pageToken: input.nextPageToken,
         })
 
-        console.info("[TEMP_DIAGNOSTIC][google-ads] request", {
-          operation: "googleAds:search",
+        const response = await this.fetchFn(requestUrl, {
           method: "POST",
-          connectionId: input.connectionId,
-          customerId: input.customerId,
-          url: requestUrl,
-          loginCustomerId: this.config.loginCustomerId ?? null,
-          headers: {
-            authorization: `Bearer ${maskSecret(accessToken, 12)}`,
-            "developer-token": maskSecret(developerToken, 4),
-            "content-type": "application/json",
-            "login-customer-id": this.config.loginCustomerId ?? null,
-          },
-          developerTokenPresent: developerToken.trim().length > 0,
-          oauthTokenPresent: accessToken.trim().length > 0,
-          requestBody,
+          headers,
+          body: requestBody,
         })
-
-        const response = await this.fetchFn(
-          requestUrl,
-          {
-            method: "POST",
-            headers,
-            body: requestBody,
-          }
-        )
 
         const rawBody = await response.text()
-        const responseHeaders = Object.fromEntries(response.headers.entries())
-        console.info("[TEMP_DIAGNOSTIC][google-ads] response", {
-          operation: "googleAds:search",
-          method: "POST",
-          connectionId: input.connectionId,
-          customerId: input.customerId,
-          url: requestUrl,
-          status: response.status,
-          responseHeaders,
-          rawResponse: rawBody,
-        })
 
         if (!response.ok) {
-          const parsed = parseJsonSafe(rawBody)
-          const errorPayload = parsed?.error as Record<string, unknown> | undefined
-          const errorDetails = Array.isArray(errorPayload?.details)
-            ? errorPayload?.details
-            : []
-          const googleAdsFailure = errorDetails.find((detail) => {
-            if (!detail || typeof detail !== "object") {
-              return false
-            }
-
-            const atType = (detail as Record<string, unknown>)["@type"]
-            return typeof atType === "string" && atType.includes("GoogleAdsFailure")
+          const mapped = toGoogleAdsError({ status: response.status, body: rawBody })
+          logGoogleAdsProviderError({
+            endpoint: "googleAds:search",
+            statusCode: response.status,
+            errorCode: mapped.code,
+            correlationId: input.connectionId,
+            requestId: readUpstreamRequestId(response),
           })
-
-          console.error("[TEMP_DIAGNOSTIC][google-ads] upstream error before mapping", {
-            operation: "googleAds:search",
-            method: "POST",
-            url: requestUrl,
-            customerId: input.customerId,
-            loginCustomerId: this.config.loginCustomerId ?? null,
-            developerTokenPresent: developerToken.trim().length > 0,
-            authorizationHeaderPresent: Boolean(headers.authorization),
-            requestId:
-              response.headers.get("request-id")
-              ?? response.headers.get("x-request-id")
-              ?? response.headers.get("requestid")
-              ?? null,
-            status: response.status,
-            errorObject: parsed,
-            errorCode: errorPayload?.code ?? null,
-            errorStatus: errorPayload?.status ?? null,
-            errorDetails,
-            googleAdsFailure,
-            nestedErrors:
-              (googleAdsFailure && typeof googleAdsFailure === "object")
-                ? (googleAdsFailure as Record<string, unknown>).errors ?? null
-                : null,
-            responseHeaders,
-            rawResponse: rawBody,
-          })
-
-          throw toGoogleAdsError({ status: response.status, body: rawBody })
+          throw mapped
         }
 
         return JSON.parse(rawBody) as GoogleAdsApiPage
       } catch (error) {
-        console.error("[TEMP_DIAGNOSTIC][google-ads] client exception", {
-          operation: "googleAds:search",
-          method: "POST",
-          customerId: input.customerId,
-          connectionId: input.connectionId,
-          errorObject: error,
-          errorCode:
-            error instanceof GoogleAdsIntegrationError
-              ? error.code
-              : (error as { code?: unknown })?.code ?? null,
-          errorStatus:
-            error instanceof GoogleAdsIntegrationError
-              ? error.status
-              : (error as { status?: unknown })?.status ?? null,
-          errorDetails:
-            (error as { details?: unknown })?.details
-            ?? (error as { response?: { data?: unknown } })?.response?.data
-            ?? null,
-        })
+        const mapped =
+          error instanceof GoogleAdsIntegrationError
+            ? error
+            : new GoogleAdsIntegrationError(
+                "Google Ads provider failure.",
+                "GOOGLE_ADS_PROVIDER_FAILURE",
+                true,
+                502
+              )
 
-        const mapped = error instanceof GoogleAdsIntegrationError
-          ? error
-          : new GoogleAdsIntegrationError(
-            "Google Ads provider failure.",
-            "GOOGLE_ADS_PROVIDER_FAILURE",
-            true,
-            502
-          )
+        logGoogleAdsProviderError({
+          endpoint: "googleAds:search",
+          statusCode: mapped.status,
+          errorCode: mapped.code,
+          correlationId: input.connectionId,
+          requestId: null,
+        })
 
         if (!mapped.retryable || attempt >= this.config.maxRetries) {
           throw mapped
         }
 
         attempt += 1
-        await new Promise<void>((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000)))
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, Math.min(1000 * 2 ** attempt, 4000))
+        )
       }
     }
 
@@ -334,7 +267,7 @@ export class GoogleAdsClient {
     if (developerToken.length === 0) {
       throw new GoogleAdsIntegrationError(
         "Google Ads developer token is missing.",
-            "GOOGLE_ADS_PROVIDER_FAILURE",
+        "GOOGLE_ADS_PROVIDER_FAILURE",
         false,
         500
       )

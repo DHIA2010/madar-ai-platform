@@ -58,15 +58,15 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
 
   return {
     successRedirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI
-      ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI ??
+      `${appUrl.replace(/\/$/, "")}/integrations/new`,
     tokenEncryptionKey:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
-      ?? process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
-      ?? "",
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+      "",
     googleAdsApiBaseUrl:
-      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL
-      ?? "https://googleads.googleapis.com/v22",
+      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+      "https://googleads.googleapis.com/v22",
     scopes: configuredScopes.length > 0 ? configuredScopes : defaultScopes,
   }
 }
@@ -117,7 +117,11 @@ function validateConfiguredUrl(raw: string, opts: { allowHttpLocalhostOnly: bool
     return parsed
   }
 
-  if (parsed.protocol === "http:" && opts.allowHttpLocalhostOnly && isLocalhostHost(parsed.hostname)) {
+  if (
+    parsed.protocol === "http:" &&
+    opts.allowHttpLocalhostOnly &&
+    isLocalhostHost(parsed.hostname)
+  ) {
     return parsed
   }
 
@@ -141,13 +145,7 @@ function toOnboardingRedirectUrl(rawUrl: string) {
 
 function ensureRequiredScopesGranted(grantedScopes: string[], requiredScopes: string[]) {
   const granted = new Set(grantedScopes)
-  const required = new Set(requiredScopes)
   const missing = requiredScopes.filter((scope) => !granted.has(scope))
-  console.info("[TEMP_DIAGNOSTIC][google-oauth] scope validation", {
-    grantedScopes: Array.from(granted),
-    requiredScopes: Array.from(required),
-    missingScopes: missing,
-  })
   if (missing.length > 0) {
     throw new Error("GOOGLE_OAUTH_SCOPE_VALIDATION_FAILED")
   }
@@ -188,8 +186,16 @@ function createStateToken() {
   return `go_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
 }
 
-function ensureConfigured(config: GoogleOAuthServiceConfig, credentials: GoogleIdentityCredentials) {
-  if (!credentials.clientId || !credentials.clientSecret || !credentials.redirectUri || !config.successRedirectUri) {
+function ensureConfigured(
+  config: GoogleOAuthServiceConfig,
+  credentials: GoogleIdentityCredentials
+) {
+  if (
+    !credentials.clientId ||
+    !credentials.clientSecret ||
+    !credentials.redirectUri ||
+    !config.successRedirectUri
+  ) {
     throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
   }
 
@@ -235,15 +241,6 @@ async function exchangeAuthorizationCode(input: {
   } catch {
     throw new Error("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
   }
-
-  console.info("[TEMP_DIAGNOSTIC][google-oauth] token response fields", {
-    access_token_exists: Boolean(body.access_token),
-    refresh_token_exists: Boolean(body.refresh_token),
-    expires_in: body.expires_in ?? null,
-    token_type: body.token_type ?? null,
-    scope: typeof body.scope === "string" ? body.scope : "<missing>",
-    id_token_exists: Boolean((body as { id_token?: string }).id_token),
-  })
 
   if (!body.access_token || typeof body.access_token !== "string") {
     throw new Error("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
@@ -326,7 +323,10 @@ export class GoogleOAuthService {
     return { config: this.config, credentials }
   }
 
-  async startAuthorization(actor: AuthenticatedActor, input: GoogleOAuthStartInput = {}): Promise<GoogleOAuthStartResult> {
+  async startAuthorization(
+    actor: AuthenticatedActor,
+    input: GoogleOAuthStartInput = {}
+  ): Promise<GoogleOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
     const { config, credentials } = await this.loadResolvedConfig()
 
@@ -420,7 +420,10 @@ export class GoogleOAuthService {
     }
   }
 
-  async completeAuthorization(input: { state: string; code: string }): Promise<GoogleOAuthCallbackResult> {
+  async completeAuthorization(input: {
+    state: string
+    code: string
+  }): Promise<GoogleOAuthCallbackResult> {
     const { config, credentials } = await this.loadResolvedConfig()
 
     const state = await this.repository.findPendingStateByValue(input.state)
@@ -453,20 +456,21 @@ export class GoogleOAuthService {
         developerToken: credentials.developerToken,
       })
     } catch (error) {
-      customerDiscoveryError = error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
+      customerDiscoveryError =
+        error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
     }
 
-    const oauthAccountId = String(state.oauth_account_id ?? "")
-    if (!oauthAccountId) {
+    const connectionId = String(state.connection_id ?? "")
+    if (!connectionId) {
       throw new Error("GOOGLE_OAUTH_STATE_INVALID")
     }
 
-    const existingConnection = await this.repository.findConnectionByOAuthAccountId(oauthAccountId)
+    const existingConnection = await this.repository.findConnectionById(connectionId)
     if (!existingConnection) {
       throw new Error("GOOGLE_OAUTH_STATE_INVALID")
     }
 
-    const connectionId = existingConnection.id
+    const oauthAccountId = existingConnection.id
     const actorUserId = String(state.user_id)
     const organizationId = String(state.organization_id)
     const workspaceId = (state.workspace_id as string | null) ?? null
@@ -474,10 +478,6 @@ export class GoogleOAuthService {
     const now = new Date().toISOString()
 
     const scopedValues = parseScopes(token.scope)
-    console.info("[TEMP_DIAGNOSTIC][google-oauth] parsed granted scopes", {
-      rawScope: typeof token.scope === "string" ? token.scope : "<missing>",
-      grantedScopes: scopedValues,
-    })
     const scopes = scopedValues && scopedValues.length > 0 ? scopedValues : this.config.scopes
     ensureRequiredScopesGranted(scopes, REQUIRED_GOOGLE_SCOPES)
 
@@ -505,7 +505,9 @@ export class GoogleOAuthService {
         encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
         encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
         scopes,
-        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
+        tokenExpiresAt: token.expires_in
+          ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+          : null,
         status: "connected",
         connectionReference: profile.email ?? null,
         lastConnectedAt: now,

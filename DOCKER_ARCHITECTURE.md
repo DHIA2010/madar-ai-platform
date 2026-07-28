@@ -36,7 +36,8 @@ flowchart LR
 - Backend uses `IDENTITY_PLATFORM_POSTGRES_URL` for PostgreSQL.
 - Backend uses `IDENTITY_PLATFORM_REDIS_URL` for Redis.
 - Backend uses `IDENTITY_PLATFORM_SMTP_HOST=mailpit` for email delivery.
-- Storage uses `MINIO_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `S3_FORCE_PATH_STYLE=true`.
+- Storage uses `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_REGION`, and `S3_FORCE_PATH_STYLE=true`.
+- Backend startup fails fast if MinIO sentinel values leak into `AWS_*` while Secrets Manager integration is enabled.
 
 ## Persistence
 

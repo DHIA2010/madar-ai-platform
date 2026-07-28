@@ -49,6 +49,14 @@ function toSafeCallbackReason(error: unknown) {
   return `oauth_callback_failed_non_error_${toReasonSlug(typeof error)}`
 }
 
+function readHeader(request: IncomingMessage, name: string) {
+  const raw = request.headers[name]
+  if (Array.isArray(raw)) {
+    return raw[0] ?? null
+  }
+  return typeof raw === "string" ? raw : null
+}
+
 export class GoogleOAuthController {
   constructor(private readonly service: GoogleOAuthService) {}
 
@@ -64,13 +72,6 @@ export class GoogleOAuthController {
     const error = query.get("error")
     const code = query.get("code")
     const state = query.get("state")
-
-    console.info("[google-oauth] callback received", {
-      hasError: Boolean(error),
-      hasCode: Boolean(code),
-      hasState: Boolean(state),
-      error,
-    })
 
     if (error) {
       return {
@@ -99,8 +100,21 @@ export class GoogleOAuthController {
         },
       }
     } catch (error) {
-      console.error("[google-oauth] callback failed", error)
       const reason = toSafeCallbackReason(error)
+      console.error(
+        JSON.stringify({
+          level: "error",
+          service: "identity-platform",
+          event: "provider.error",
+          provider: "google-oauth",
+          endpoint: "/v1/integrations/google/oauth/callback",
+          statusCode: 500,
+          errorCode: reason,
+          requestId: readHeader(request, "x-request-id"),
+          correlationId: readHeader(request, "x-correlation-id"),
+          timestamp: new Date().toISOString(),
+        })
+      )
       return {
         status: 302,
         headers: {
