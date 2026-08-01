@@ -374,10 +374,18 @@ export class ConnectionManager {
 
   async deleteConnection(input: DeleteConnectionRequestDto): Promise<void> {
     await this.integrationGateway.deleteConnection(input)
-    this.states.delete(input.connectionId)
-    this.health.delete(input.connectionId)
-    this.schedulers.delete(input.connectionId)
-    this.history.delete(input.connectionId)
+    this.forgetConnection(input.connectionId)
+  }
+
+  forgetConnection(connectionId: string): void {
+    this.states.delete(connectionId)
+    this.health.delete(connectionId)
+    this.schedulers.delete(connectionId)
+    this.history.delete(connectionId)
+    this.syncSuccessCounts.delete(connectionId)
+    this.syncDurations.delete(connectionId)
+    this.connectedAt.delete(connectionId)
+    this.lastActivity.delete(connectionId)
   }
 
   async runSync(input: RunSyncRequestDto): Promise<SyncRun> {

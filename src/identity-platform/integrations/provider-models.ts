@@ -1,4 +1,4 @@
-export type IntegrationConnectionStatus = "pending" | "connected" | "disconnected" | "error"
+export type IntegrationConnectionStatus = "pending" | "connected" | "paused" | "disconnected" | "error"
 
 export type IntegrationSyncMode = "full" | "incremental"
 

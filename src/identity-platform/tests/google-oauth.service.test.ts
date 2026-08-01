@@ -8,6 +8,7 @@ import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { StaticGoogleIdentityCredentialsProvider } from "../google-oauth/google-identity-credentials"
 import { GoogleOAuthRepository } from "../google-oauth/repository"
 import { GoogleOAuthService } from "../google-oauth/service"
+import { GoogleAdsSyncService } from "../google-ads/sync-service"
 
 const ACTOR = {
   userId: "1f094f77-26e0-4321-b7bc-c90bbc17f001",
@@ -135,10 +136,9 @@ describe("google oauth service", () => {
       provider_email: string | null
     }>(
       `
-        select c.status, c.project_id, a.provider_email
-        from integration_connections c
-        left join oauth_accounts a on a.id = c.oauth_account_id
-        where c.id = $1
+        select status, project_id, provider_account_email as provider_email
+        from google_oauth_connections
+        where id = $1
       `,
       [started.connectionId]
     )
@@ -148,12 +148,9 @@ describe("google oauth service", () => {
 
     const tokenResult = await database.query<{ encrypted_refresh_token: string | null }>(
       `
-        select t.encrypted_refresh_token
-        from oauth_tokens t
-        join integration_connections c on c.oauth_account_id = t.oauth_account_id
-        where c.id = $1 and t.status = 'active'
-        order by t.updated_at desc
-        limit 1
+        select encrypted_refresh_token
+        from google_oauth_connections
+        where id = $1
       `,
       [started.connectionId]
     )
@@ -184,6 +181,91 @@ describe("google oauth service", () => {
     expect(fetchMock).toHaveBeenCalled()
   })
 
+  it("returns the canonical runtime connection id from the active connection view", async () => {
+    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString()
+
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "token-access-active-connection",
+            refresh_token: "token-refresh-active-connection",
+            expires_in: 3600,
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email",
+            token_type: "Bearer",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(
+          JSON.stringify({ id: "acct-active", email: "ads-active@example.com", name: "Ads Active" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("customers:listAccessibleCustomers")) {
+        return new Response(
+          JSON.stringify({ resourceNames: ["customers/123"] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    })
+
+    const started = await service.startAuthorization(ACTOR, {
+      workspaceId: ACTOR.workspaceId,
+      projectId: PROJECT_ID,
+    })
+
+    await service.completeAuthorization({
+      state: started.state,
+      code: "oauth-code-active-connection",
+    })
+
+    const active = await service.getActiveConnection(ACTOR)
+
+    const canonicalRow = await database.query<{ id: string }>(
+      "select id from integration_connections where organization_id = $1 and project_id = $2 and provider_id = 'google-ads' and deleted_at is null limit 1",
+      [ACTOR.organizationId, PROJECT_ID]
+    )
+
+    expect(active.connection?.id).toBe(canonicalRow.rows[0]?.id)
+    expect(active.connection?.providerAccountEmail).toBe("ads-active@example.com")
+    expect(active.connection?.status).toBe("connected")
+
+    const syncService = new GoogleAdsSyncService(
+      database,
+      {
+        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        tokenEndpoint: "https://oauth2.googleapis.com/token",
+        encryptionKey: "12345678901234567890123456789012",
+        developerToken: "developer-token-test",
+        maxRetries: 0,
+        minRequestIntervalMs: 0,
+      },
+      globalThis.fetch as typeof fetch
+    )
+
+    const syncRun = await syncService.sync(ACTOR, {
+      connectionId: String(active.connection?.id),
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-canonical-id-check",
+    })
+
+    expect(syncRun.status).toBe("completed")
+  })
+
   it("rejects invalid and expired states", async () => {
     const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
 
@@ -198,7 +280,7 @@ describe("google oauth service", () => {
     })
 
     await database.query(
-      "update oauth_states set expires_at = now() - interval '1 minute' where state = $1",
+      "update google_oauth_states set expires_at = now() - interval '1 minute' where state = $1",
       [started.state]
     )
 
@@ -367,6 +449,93 @@ describe("google oauth service", () => {
     })).rejects.toThrow("GOOGLE_OAUTH_SCOPE_VALIDATION_FAILED")
   })
 
+  it("preserves encrypted tokens when restarting authorization", async () => {
+    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString()
+
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "token-access-preserve",
+            refresh_token: "token-refresh-preserve",
+            expires_in: 3600,
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(
+          JSON.stringify({ id: "acct-preserve", email: "preserve@example.com", name: "Preserve" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("customers:listAccessibleCustomers")) {
+        return new Response(
+          JSON.stringify({ resourceNames: ["customers/123"] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      return new Response("{}", { status: 404 })
+    })
+
+    const firstStart = await service.startAuthorization(ACTOR, {
+      workspaceId: ACTOR.workspaceId,
+      projectId: PROJECT_ID,
+    })
+
+    await service.completeAuthorization({
+      state: firstStart.state,
+      code: "oauth-code-preserve",
+    })
+
+    const tokenBeforeRestart = await database.query<{
+      encrypted_refresh_token: string | null
+      encrypted_access_token: string | null
+    }>(
+      `
+        select encrypted_refresh_token, encrypted_access_token
+        from google_oauth_connections
+        where id = $1
+      `,
+      [firstStart.connectionId]
+    )
+
+    const encryptedRefreshBefore = tokenBeforeRestart.rows[0]?.encrypted_refresh_token ?? null
+    const encryptedAccessBefore = tokenBeforeRestart.rows[0]?.encrypted_access_token ?? null
+    expect(encryptedRefreshBefore).toBeTruthy()
+    expect(encryptedAccessBefore).toBeTruthy()
+
+    await service.startAuthorization(ACTOR, {
+      workspaceId: ACTOR.workspaceId,
+      projectId: PROJECT_ID,
+      connectionName: "Reconnect Preserve",
+    })
+
+    const afterRestart = await database.query<{
+      status: string
+      encrypted_refresh_token: string | null
+      encrypted_access_token: string | null
+    }>(
+      `
+        select status, encrypted_refresh_token, encrypted_access_token
+        from google_oauth_connections
+        where id = $1
+      `,
+      [firstStart.connectionId]
+    )
+
+    expect(afterRestart.rows[0]?.status).toBe("pending")
+    expect(afterRestart.rows[0]?.encrypted_refresh_token).toBe(encryptedRefreshBefore)
+    expect(afterRestart.rows[0]?.encrypted_access_token).toBe(encryptedAccessBefore)
+  })
+
   it("fails safely on database write failure and invalid encryption configuration", async () => {
     const repository = new GoogleOAuthRepository(database)
     const service = new GoogleOAuthService(repository, undefined, googleCredentialsProvider)
@@ -416,7 +585,7 @@ describe("google oauth service", () => {
     })).rejects.toThrow("db down")
 
     const connectionRow = await database.query<{ status: string }>(
-      "select status from integration_connections where id = $1",
+      "select status from google_oauth_connections where id = $1",
       [started.connectionId]
     )
     expect(connectionRow.rows[0]?.status).toBe("pending")
@@ -494,5 +663,184 @@ describe("google oauth service", () => {
       [started.connectionId]
     )
     expect(Number(connectedAudit.rows[0]?.count ?? "0")).toBe(1)
+  })
+
+  it("supports pause/resume/disconnect lifecycle transitions and reconnect start on same connection id", async () => {
+    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString()
+
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "token-access-lifecycle",
+            refresh_token: "token-refresh-lifecycle",
+            expires_in: 3600,
+            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(
+          JSON.stringify({ id: "acct-lifecycle", email: "lifecycle@example.com", name: "Lifecycle" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("customers:listAccessibleCustomers")) {
+        return new Response(
+          JSON.stringify({ resourceNames: ["customers/123"] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    })
+
+    const started = await service.startAuthorization(ACTOR, {
+      workspaceId: ACTOR.workspaceId,
+      projectId: PROJECT_ID,
+    })
+
+    await service.completeAuthorization({ state: started.state, code: "oauth-code-lifecycle" })
+
+    await database.query(
+      `insert into google_ads_sync_locks (
+        id, provider_key, connection_id, project_id, organization_id,
+        lock_token, locked_until, created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values (
+        $1, 'google-ads', $2, $3, $4,
+        $5, now() + interval '1 hour', $6, $6, now(), now()
+      )`,
+      [
+        "0b1406d4-9cec-4f03-a94e-996a8f151111",
+        started.connectionId,
+        PROJECT_ID,
+        ACTOR.organizationId,
+        "stale-lock-token",
+        ACTOR.userId,
+      ]
+    )
+
+    await database.query(
+      `insert into google_ads_sync_runs (
+        id, connection_id, organization_id, workspace_id, project_id, customer_id,
+        date_start, date_end, idempotency_key, status,
+        metrics, error_code, error_message,
+        started_at, completed_at,
+        created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values (
+        $1, $2, $3, $4, $5, '123',
+        '2026-06-01'::date, '2026-06-02'::date, 'stale-running-run', 'running',
+        '{}'::jsonb, null, null,
+        now() - interval '5 minutes', null,
+        $6, $6, now() - interval '5 minutes', now() - interval '5 minutes'
+      )`,
+      [
+        "0b1406d4-9cec-4f03-a94e-996a8f152222",
+        started.connectionId,
+        ACTOR.organizationId,
+        ACTOR.workspaceId,
+        PROJECT_ID,
+        ACTOR.userId,
+      ]
+    )
+
+    const paused = await service.pauseConnection(ACTOR, started.connectionId)
+    expect(paused.connectionId).toBe(started.connectionId)
+    expect(paused.status).toBe("paused")
+
+    const pausedStatus = await database.query<{ status: string }>(
+      "select status from integration_connections where id = $1",
+      [started.connectionId]
+    )
+    expect(pausedStatus.rows[0]?.status).toBe("paused")
+
+    const syncService = new GoogleAdsSyncService(
+      database,
+      {
+        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        tokenEndpoint: "https://oauth2.googleapis.com/token",
+        encryptionKey: "12345678901234567890123456789012",
+        developerToken: "developer-token-test",
+        maxRetries: 0,
+        minRequestIntervalMs: 0,
+      },
+      globalThis.fetch as typeof fetch
+    )
+
+    await expect(syncService.sync(ACTOR, {
+      connectionId: started.connectionId,
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-paused-check",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_READY", status: 409 })
+
+    const resumed = await service.resumeConnection(ACTOR, started.connectionId)
+    expect(resumed.status).toBe("connected")
+
+    const lockCountAfterResume = await database.query<{ count: string }>(
+      "select count(*)::text as count from google_ads_sync_locks where connection_id = $1",
+      [started.connectionId]
+    )
+    expect(Number(lockCountAfterResume.rows[0]?.count ?? "0")).toBe(0)
+
+    const runningRunsAfterResume = await database.query<{ count: string }>(
+      "select count(*)::text as count from google_ads_sync_runs where connection_id = $1 and status in ('pending', 'running')",
+      [started.connectionId]
+    )
+    expect(Number(runningRunsAfterResume.rows[0]?.count ?? "0")).toBe(0)
+
+    const resumedRun = await syncService.sync(ACTOR, {
+      connectionId: started.connectionId,
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-resume-idle-check",
+    })
+    expect(resumedRun.status).toBe("completed")
+
+    const disconnected = await service.disconnectConnection(ACTOR, {
+      connectionId: started.connectionId,
+      reason: "Lifecycle test disconnect",
+    })
+    expect(disconnected.status).toBe("disconnected")
+
+    await expect(syncService.sync(ACTOR, {
+      connectionId: started.connectionId,
+      customerId: "123",
+      startDate: "2026-06-01",
+      endDate: "2026-06-02",
+      idempotencyKey: "sync-disconnected-check",
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_READY", status: 409 })
+
+    const reconnect = await service.startReconnect(ACTOR, started.connectionId)
+    expect(reconnect.connectionId).toBe(started.connectionId)
+    expect(reconnect.authorizationUrl).toContain("accounts.google.com")
+
+    const lifecycleEvents = await database.query<{ event_type: string }>(
+      `
+        select event_type
+        from google_oauth_events
+        where connection_id = $1
+      `,
+      [started.connectionId]
+    )
+
+    expect(lifecycleEvents.rows.map((row) => row.event_type)).toEqual(
+      expect.arrayContaining([
+        "google.oauth.connection.paused",
+        "google.oauth.connection.resumed",
+        "google.oauth.connection.disconnected",
+        "google.oauth.connection.reconnect.started",
+      ])
+    )
   })
 })

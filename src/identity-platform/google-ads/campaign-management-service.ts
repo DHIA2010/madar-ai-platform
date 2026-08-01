@@ -54,13 +54,17 @@ export class GoogleAdsCampaignManagementService {
     actorUserId: string
   }) {
     const syncedAt = new Date().toISOString()
-    await this.repository.ensureIntegrationConnectionExists({
+    await this.repository.validateIntegrationConnection({
       connectionId: input.connection.id,
+      providerId: "google-ads",
+      providerFamily: "google",
+      platform: "marketing",
       organizationId: input.connection.organizationId,
       workspaceId: input.connection.workspaceId,
       projectId: input.connection.projectId,
       dataSourceId: input.connection.dataSourceId,
       status: input.connection.status,
+      oauthAccountId: null,
       connectionReference: input.connection.connectionReference,
       actorUserId: input.actorUserId,
       nowIso: syncedAt,

@@ -33,6 +33,14 @@ export class GoogleAdsIntegrationProvider {
     return this.service.sync(actor, input)
   }
 
+  retry(actor: AuthenticatedActor, input: { connectionId: string }) {
+    return this.service.retryLastFailed(actor, input)
+  }
+
+  getRetryStatus(actor: AuthenticatedActor, input: { connectionId: string }) {
+    return this.service.getRetryStatus(actor, input)
+  }
+
   listRecords(actor: AuthenticatedActor, query: GoogleAdsRecordQuery) {
     return this.service.listRecords(actor, query)
   }

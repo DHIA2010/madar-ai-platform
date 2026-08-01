@@ -1,5 +1,7 @@
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager"
 
+import { resolveEnvironmentThenAwsCredentials } from "../configuration/provider-credential-resolution"
+
 export interface GoogleIdentityCredentials {
   clientId: string
   clientSecret: string
@@ -12,6 +14,25 @@ export interface GoogleIdentityCredentialsProvider {
 }
 
 export const GOOGLE_INTEGRATION_SECRET_ID = "madar/stage/integrations/google"
+
+function readEnvGoogleIdentityCredentials(): GoogleIdentityCredentials | null {
+  const clientId = process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_ID?.trim() ?? ""
+  const clientSecret = process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? ""
+  const developerToken = process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN?.trim() ?? ""
+  const redirectUri = process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? ""
+
+  // Environment is selected only when the full credential set exists.
+  if (!clientId || !clientSecret || !developerToken || !redirectUri) {
+    return null
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    developerToken,
+    redirectUri,
+  }
+}
 
 function validateCredentials(value: GoogleIdentityCredentials) {
   if (!value.clientId.trim()) {
@@ -86,6 +107,22 @@ export class AwsSecretsGoogleIdentityCredentialsProvider implements GoogleIdenti
       clientSecret: String(parsed.clientSecret ?? "").trim(),
       developerToken: String(parsed.developerToken ?? "").trim(),
       redirectUri: String(parsed.redirectUri ?? "").trim(),
+    })
+  }
+}
+
+export class EnvironmentFirstGoogleIdentityCredentialsProvider
+implements GoogleIdentityCredentialsProvider {
+  constructor(
+    private readonly fallback: GoogleIdentityCredentialsProvider =
+      new AwsSecretsGoogleIdentityCredentialsProvider()
+  ) {}
+
+  async load() {
+    return resolveEnvironmentThenAwsCredentials({
+      readEnv: readEnvGoogleIdentityCredentials,
+      validate: validateCredentials,
+      loadFromAws: () => this.fallback.load(),
     })
   }
 }

@@ -71,16 +71,56 @@ interface GoogleActiveConnectionResponse {
     providerAccountName: string | null
     providerAccountEmail: string | null
     connectedAt: string | null
+    lastSyncedAt?: string | null
     developerTokenConfigured?: boolean
     customerAccounts: Array<{ customerId: string; displayName: string | null; isSelected: boolean }>
   } | null
+}
+
+interface GoogleConnectionLifecycleResponse {
+  connectionId: string
+  status: "connected" | "paused" | "disconnected"
+  updatedAt: string
+}
+
+interface GoogleTimelineEventApiItem {
+  id: string
+  action: string
+  occurredAt: string
+  actor: "system" | "user"
+  message: string
+}
+
+interface GoogleTimelineEventsApiResponse {
+  connectionId: string
+  items: GoogleTimelineEventApiItem[]
+}
+
+interface GoogleRetryStatusApiResponse {
+  connectionId: string
+  available: boolean
+  reason:
+    | "retryable_failure"
+    | "connection_not_connected"
+    | "sync_running"
+    | "no_previous_failure"
+    | "non_retryable_failure"
+  lastOperation?: {
+    syncRunId: string
+    status: "pending" | "running" | "completed" | "failed"
+    customerId: string
+    startDate: string
+    endDate: string
+    errorCode: string | null
+    errorMessage: string | null
+    createdAt: string
+  }
 }
 
 interface StoredState {
   connections: Record<string, Connection>
   jobs: Record<string, SyncJob>
   runs: Record<string, SyncRun[]>
-  events: Record<string, IntegrationEvent[]>
 }
 
 interface RuntimeProviderProfile {
@@ -101,6 +141,13 @@ interface RuntimeProviderProfile {
     sync: string
     records: string
     accounts: string
+    events: (connectionId: string) => string
+    retry: (connectionId: string) => string
+    retryStatus: (connectionId: string) => string
+    pause: (connectionId: string) => string
+    resume: (connectionId: string) => string
+    disconnect: (connectionId: string) => string
+    reconnect: (connectionId: string) => string
   }
   metadata: {
     availableAccountsKey: string
@@ -127,6 +174,13 @@ const GOOGLE_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
     sync: "/v1/integrations/google-ads/sync",
     records: "/v1/integrations/google-ads/records",
     accounts: "/v1/integrations/google-ads/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
   },
   metadata: {
     availableAccountsKey: "availableGoogleAdsCustomerAccounts",
@@ -186,22 +240,14 @@ function toLifecycleStatus(status: GoogleAdsSyncApiResponse["status"]): SyncJobS
   return "completed"
 }
 
-function toAction(status: SyncJobStatus): ConnectorLifecycleAction {
-  if (status === "failed") {
-    return "sync"
-  }
-
-  return "sync"
-}
-
 function loadState(): StoredState {
   if (typeof window === "undefined") {
-    return { connections: {}, jobs: {}, runs: {}, events: {} }
+    return { connections: {}, jobs: {}, runs: {} }
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY)
   if (!raw) {
-    return { connections: {}, jobs: {}, runs: {}, events: {} }
+    return { connections: {}, jobs: {}, runs: {} }
   }
 
   try {
@@ -210,10 +256,9 @@ function loadState(): StoredState {
       connections: parsed.connections ?? {},
       jobs: parsed.jobs ?? {},
       runs: parsed.runs ?? {},
-      events: parsed.events ?? {},
     }
   } catch {
-    return { connections: {}, jobs: {}, runs: {}, events: {} }
+    return { connections: {}, jobs: {}, runs: {} }
   }
 }
 
@@ -325,19 +370,57 @@ export class RestIntegrationRepository implements IntegrationRepository {
     return connection
   }
 
-  private appendEvent(connectionId: string, status: SyncJobStatus, message: string) {
-    const event: IntegrationEvent = {
-      eventId: generateUuid(),
-      connectionId,
-      action: toAction(status),
-      timestamp: nowIso(),
-      actor: "system",
-      message,
+  private removeConnectionArtifacts(connectionId: string) {
+    delete this.state.connections[connectionId]
+    delete this.state.jobs[connectionId]
+    delete this.state.runs[connectionId]
+  }
+
+  private pruneGoogleAdsConnections(validConnectionIds: string[]) {
+    const valid = new Set(validConnectionIds)
+    for (const [connectionId, connection] of Object.entries(this.state.connections)) {
+      if (connection.connectorDefinitionId !== GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId) {
+        continue
+      }
+
+      if (valid.has(connectionId)) {
+        continue
+      }
+
+      if (connection.status === "draft") {
+        continue
+      }
+
+      this.removeConnectionArtifacts(connectionId)
     }
 
-    const existing = this.state.events[connectionId] ?? []
-    this.state.events[connectionId] = [event, ...existing].slice(0, 20)
     this.persist()
+  }
+
+  private async fetchTimelineEvents(connectionId: string): Promise<IntegrationEvent[]> {
+    const response = await this.client.get<GoogleTimelineEventsApiResponse>(
+      GOOGLE_ADS_PROVIDER_PROFILE.endpoints.events(connectionId),
+      {
+        query: {
+          limit: 20,
+        },
+      }
+    )
+
+    return (response.items ?? []).map((event) => ({
+      eventId: event.id,
+      connectionId,
+      action: event.action as ConnectorLifecycleAction,
+      timestamp: event.occurredAt,
+      actor: event.actor,
+      message: event.message,
+    }))
+  }
+
+  private async fetchRetryStatus(connectionId: string): Promise<GoogleRetryStatusApiResponse> {
+    return this.client.get<GoogleRetryStatusApiResponse>(
+      GOOGLE_ADS_PROVIDER_PROFILE.endpoints.retryStatus(connectionId)
+    )
   }
 
   private mapSyncRun(connectionId: string, response: GoogleAdsSyncApiResponse): SyncRun {
@@ -450,12 +533,22 @@ export class RestIntegrationRepository implements IntegrationRepository {
       )
       const backendConn = backendResponse.connection
 
-      if (!backendConn || backendConn.status !== "connected") {
+      if (!backendConn) {
+        this.pruneGoogleAdsConnections([])
         return []
       }
 
+      this.pruneGoogleAdsConnections([backendConn.id])
+
+      const recoveredStatus: Connection["status"] =
+        backendConn.status === "paused"
+          ? "paused"
+          : backendConn.status === "disconnected"
+            ? "disconnected"
+            : "connected"
+
       const existing = this.state.connections[backendConn.id]
-      const accounts = backendConn.customerAccounts ?? []
+      const accounts = recoveredStatus === "connected" ? backendConn.customerAccounts ?? [] : []
       const selectedAccount = accounts.find((a) => a.isSelected) ?? accounts[0] ?? null
 
       const recovered: Connection = {
@@ -464,7 +557,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
           existing?.workspaceId ?? this.options?.getWorkspaceId?.() ?? DEFAULT_WORKSPACE_ID,
         connectorId: GOOGLE_ADS_PROVIDER_PROFILE.connectorId,
         connectorDefinitionId: GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId,
-        status: "connected",
+        status: recoveredStatus,
         metadata: {
           ...(existing?.metadata ?? {}),
           accountName:
@@ -479,6 +572,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
         createdAt: existing?.createdAt ?? nowIso(),
         updatedAt: nowIso(),
         lastValidatedAt: nowIso(),
+        lastSyncedAt: backendConn.lastSyncedAt ?? existing?.lastSyncedAt,
       }
 
       for (const [connectionId, connection] of Object.entries(this.state.connections)) {
@@ -487,7 +581,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
           connectionId !== backendConn.id &&
           connection.status === "draft"
         ) {
-          delete this.state.connections[connectionId]
+          this.removeConnectionArtifacts(connectionId)
         }
       }
 
@@ -588,6 +682,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
             providerAccountName: string | null
             providerAccountEmail: string | null
             connectedAt: string | null
+            lastSyncedAt?: string | null
             customerAccounts: Array<{
               customerId: string
               displayName: string | null
@@ -619,6 +714,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
             },
             updatedAt: nowIso(),
             lastValidatedAt: nowIso(),
+            lastSyncedAt: backendConn.lastSyncedAt ?? current.lastSyncedAt,
           }
 
           // Remove stale draft entry and store under canonical backend ID.
@@ -644,7 +740,35 @@ export class RestIntegrationRepository implements IntegrationRepository {
   async authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection> {
     try {
       const connection = this.getConnectionOrThrow(input.connectionId)
-      const authorizationUrl = connection.metadata.oauthAuthorizationUrl
+      const providerProfile = resolveProviderProfileByConnection(connection)
+      if (!providerProfile) {
+        throw new ValidationError({
+          code: "connector_not_supported",
+          message: "Only Google Ads is available in production integration runtime.",
+        })
+      }
+
+      let authorizationUrl = connection.metadata.oauthAuthorizationUrl
+
+      if (connection.status === "disconnected") {
+        const reconnect = await this.client.post<Record<string, never>, GoogleOAuthStartResponse>(
+          providerProfile.endpoints.reconnect(connection.connectionId),
+          {}
+        )
+
+        authorizationUrl = reconnect.authorizationUrl
+        const reconnectPending: Connection = {
+          ...connection,
+          status: "draft",
+          metadata: {
+            ...connection.metadata,
+            oauthState: reconnect.state,
+            oauthAuthorizationUrl: reconnect.authorizationUrl,
+          },
+          updatedAt: nowIso(),
+        }
+        this.upsertConnection(reconnectPending)
+      }
 
       if (!authorizationUrl) {
         throw new ValidationError({
@@ -683,14 +807,28 @@ export class RestIntegrationRepository implements IntegrationRepository {
   async disconnectConnection(input: DisconnectConnectionRequestDto): Promise<Connection> {
     try {
       const connection = this.getConnectionOrThrow(input.connectionId)
+      const providerProfile = resolveProviderProfileByConnection(connection)
+      if (!providerProfile) {
+        throw new ValidationError({
+          code: "connector_not_supported",
+          message: "Only Google Ads is available in production integration runtime.",
+        })
+      }
+
+      const response = await this.client.post<
+        { reason?: string },
+        GoogleConnectionLifecycleResponse
+      >(providerProfile.endpoints.disconnect(connection.connectionId), {
+        reason: input.reason,
+      })
+
       const next: Connection = {
         ...connection,
-        status: "disconnected",
+        status: response.status,
         updatedAt: nowIso(),
       }
 
       this.upsertConnection(next)
-      this.appendEvent(connection.connectionId, "completed", input.reason ?? "Disconnected")
       return next
     } catch (error) {
       throw mapRepositoryError(error)
@@ -705,7 +843,6 @@ export class RestIntegrationRepository implements IntegrationRepository {
       delete this.state.connections[input.connectionId]
       delete this.state.jobs[input.connectionId]
       delete this.state.runs[input.connectionId]
-      delete this.state.events[input.connectionId]
       this.persist()
     } catch (error) {
       throw mapRepositoryError(error)
@@ -823,6 +960,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
           endDate: string
           idempotencyKey: string
           mode: "incremental"
+          trigger: "manual" | "retry"
         },
         GoogleAdsSyncApiResponse
       >(GOOGLE_ADS_PROVIDER_PROFILE.endpoints.sync, {
@@ -832,6 +970,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
         endDate: endDate.toISOString().slice(0, 10),
         idempotencyKey: generateUuid(),
         mode: "incremental",
+        trigger: input.trigger === "retry" ? "retry" : "manual",
       })
 
       const run = this.mapSyncRun(connection.connectionId, response)
@@ -861,12 +1000,6 @@ export class RestIntegrationRepository implements IntegrationRepository {
         updatedAt: nowIso(),
       }
       this.upsertConnection(nextConnection)
-
-      this.appendEvent(
-        connection.connectionId,
-        run.status,
-        run.errorMessage ?? run.result?.message ?? "Sync completed"
-      )
       this.persist()
 
       return run
@@ -892,11 +1025,59 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
   async retrySync(input: RetrySyncRequestDto): Promise<SyncRun> {
     const connectionId = input.syncJobId.replace(/^sync_job_/, "")
-    return this.runSync({ connectionId, trigger: "retry" })
+    const retryStatus = await this.fetchRetryStatus(connectionId)
+    if (!retryStatus.available) {
+      throw new ValidationError({
+        code: "retry_not_available",
+        message: "Retry is unavailable for the latest operation.",
+      })
+    }
+
+    const response = await this.client.post<Record<string, never>, GoogleAdsSyncApiResponse>(
+      GOOGLE_ADS_PROVIDER_PROFILE.endpoints.retry(connectionId),
+      {}
+    )
+
+    const run = this.mapSyncRun(connectionId, response)
+    const existingRuns = this.state.runs[connectionId] ?? []
+    this.state.runs[connectionId] = [run, ...existingRuns].slice(0, 20)
+    this.state.jobs[connectionId] = {
+      syncJobId: `sync_job_${connectionId}`,
+      connectionId,
+      status: run.status,
+      trigger: "retry",
+      policy: { maxAttempts: 3, baseDelayMs: 250, backoffFactor: 2 },
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      latestRun: run,
+    }
+    this.persist()
+
+    return run
   }
 
   async pauseSync(input: PauseSyncRequestDto): Promise<SyncJob> {
     const connectionId = input.syncJobId.replace(/^sync_job_/, "")
+    const connection = this.getConnectionOrThrow(connectionId)
+    const providerProfile = resolveProviderProfileByConnection(connection)
+    if (!providerProfile) {
+      throw new ValidationError({
+        code: "connector_not_supported",
+        message: "Only Google Ads is available in production integration runtime.",
+      })
+    }
+
+    await this.client.post<Record<string, never>, GoogleConnectionLifecycleResponse>(
+      providerProfile.endpoints.pause(connectionId),
+      {}
+    )
+
+    this.upsertConnection({
+      ...connection,
+      status: "paused",
+      updatedAt: nowIso(),
+    })
+
     const existing = this.state.jobs[connectionId]
     const job: SyncJob = {
       ...(existing ?? {
@@ -917,6 +1098,26 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
   async resumeSync(input: ResumeSyncRequestDto): Promise<SyncJob> {
     const connectionId = input.syncJobId.replace(/^sync_job_/, "")
+    const connection = this.getConnectionOrThrow(connectionId)
+    const providerProfile = resolveProviderProfileByConnection(connection)
+    if (!providerProfile) {
+      throw new ValidationError({
+        code: "connector_not_supported",
+        message: "Only Google Ads is available in production integration runtime.",
+      })
+    }
+
+    await this.client.post<Record<string, never>, GoogleConnectionLifecycleResponse>(
+      providerProfile.endpoints.resume(connectionId),
+      {}
+    )
+
+    this.upsertConnection({
+      ...connection,
+      status: "connected",
+      updatedAt: nowIso(),
+    })
+
     const existing = this.state.jobs[connectionId]
     const job: SyncJob = {
       ...(existing ?? {
@@ -940,12 +1141,27 @@ export class RestIntegrationRepository implements IntegrationRepository {
       const connection = this.getConnectionOrThrow(input.connectionId)
       const latestJob = this.state.jobs[input.connectionId]
       const latestRun = (this.state.runs[input.connectionId] ?? [])[0]
+      const recentEvents = await this.fetchTimelineEvents(input.connectionId).catch(() => [])
+      const retryStatus = await this.fetchRetryStatus(input.connectionId).catch(() => null)
+      const enrichedConnection = retryStatus
+        ? {
+            ...connection,
+            metadata: {
+              ...connection.metadata,
+              retryAvailable: String(retryStatus.available),
+              retryReason: retryStatus.reason,
+              retryLastOperation: retryStatus.lastOperation
+                ? JSON.stringify(retryStatus.lastOperation)
+                : "",
+            },
+          }
+        : connection
 
       return {
-        connection,
+        connection: enrichedConnection,
         latestJob,
         latestRun,
-        recentEvents: this.state.events[input.connectionId] ?? [],
+        recentEvents,
       }
     } catch (error) {
       throw mapRepositoryError(error)

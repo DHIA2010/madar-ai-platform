@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  EllipsisVertical,
   Loader2,
   PlugZap,
   RefreshCcw,
@@ -23,11 +22,6 @@ import {
   AppCard,
   AppConfirmDialog,
   AppContainer,
-  AppDropdownMenu,
-  AppDropdownMenuContent,
-  AppDropdownMenuItem,
-  AppDropdownMenuSeparator,
-  AppDropdownMenuTrigger,
   AppGrid,
   AppInput,
   AppPage,
@@ -44,11 +38,18 @@ import {
   AppTableHead,
   AppTableHeader,
   AppTableRow,
+  RelativeTime,
 } from "@/components/app"
 
 import { useConnectionsCenter } from "../hooks"
-import { getCapabilityLabel } from "../services"
+import {
+  CONNECTION_ACTION_IDS,
+  type ConnectionActionDefinition,
+  connectionActionPolicy,
+  getCapabilityLabel,
+} from "../services"
 import type { ConnectionsFilterState, ConnectionsHealthState } from "../types"
+import { ConnectionActionsMenu } from "./connection-actions-menu"
 import { getSyncIndicatorClass, SyncAllDialog, SyncAllOverlay } from "./sync-all-dialog"
 
 const UI_TEXT = {
@@ -93,15 +94,6 @@ const UI_TEXT = {
     tableNoRows: "No connections matched the selected search and filters.",
   },
   overflow: {
-    reconnect: "Reconnect",
-    pauseSync: "Pause Sync",
-    resumeSync: "Resume Sync",
-    refreshToken: "Refresh Token",
-    retry: "Retry",
-    history: "History",
-    logs: "Logs",
-    disconnect: "Disconnect",
-    delete: "Delete Connection",
     moreActions: "More actions",
   },
 } as const
@@ -183,55 +175,6 @@ const HEALTH_STATUS_META: Record<
   Queued: { icon: "🟡", label: "Sync Queued", className: "bg-blue-100 text-blue-800" },
 }
 
-function formatRelativeDate(timestamp?: string): string {
-  if (!timestamp) {
-    return "Never"
-  }
-
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) {
-    return timestamp
-  }
-
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const absoluteDiffMs = Math.abs(diffMs)
-  const minutes = Math.floor(absoluteDiffMs / 60000)
-  const hours = Math.floor(absoluteDiffMs / 3600000)
-  const days = Math.floor(absoluteDiffMs / 86400000)
-
-  if (diffMs >= 0) {
-    if (minutes < 1) return "Just now"
-    if (minutes < 60) return `${minutes} min ago`
-    if (hours < 6) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`
-
-    const sameDay = now.toDateString() === date.toDateString()
-    if (sameDay) {
-      return `Today ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`
-    }
-
-    const yesterday = new Date(now)
-    yesterday.setDate(now.getDate() - 1)
-    if (yesterday.toDateString() === date.toDateString()) {
-      return "Yesterday"
-    }
-
-    if (days < 7) {
-      return `${days} days ago`
-    }
-  } else {
-    if (minutes < 60) return `In ${minutes} min`
-    if (hours < 24) return `In ${hours}h`
-  }
-
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
 function getHealthVisuals(
   healthState: ConnectionsHealthState,
   backendScore?: number,
@@ -299,17 +242,25 @@ function activityStateTone(state: "completed" | "running" | "queued") {
 function getActivityDetailLine(activity: {
   state: "completed" | "running" | "queued"
   records: string
-  time: string
+  time: React.ReactNode
 }) {
   if (activity.state === "running") {
     return "Running now"
   }
 
   if (activity.state === "queued") {
-    return activity.time.toLowerCase() === "now" ? "Queued now" : `Queued • ${activity.time}`
+    return (
+      <>
+        Queued • {activity.time}
+      </>
+    )
   }
 
-  return `${activity.records} • ${activity.time}`
+  return (
+    <>
+      {activity.records} • {activity.time}
+    </>
+  )
 }
 
 function getStatusItems(status: string, healthState: ConnectionsHealthState) {
@@ -600,7 +551,6 @@ export function ConnectionsOverview() {
     deleteConnection,
     pauseSync,
     resumeSync,
-    refreshToken,
     retrySync,
     runSync,
     records,
@@ -609,7 +559,10 @@ export function ConnectionsOverview() {
   const [syncAllDialogOpen, setSyncAllDialogOpen] = useState(false)
   const [isSyncingAll, setIsSyncingAll] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [pendingDeleteConnectionId, setPendingDeleteConnectionId] = useState<string | null>(null)
+  const [pendingDeleteAction, setPendingDeleteAction] = useState<{
+    connectionId: string
+    action: ConnectionActionDefinition
+  } | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
   const [syncProgress, setSyncProgress] = useState<
     Record<string, "queued" | "running" | "completed" | "failed">
@@ -723,27 +676,60 @@ export function ConnectionsOverview() {
     ]
   }, [categoryFilteredRecords])
 
-  const requestDeleteConnection = (connectionId: string) => {
-    setPendingDeleteConnectionId(connectionId)
+  const requestDeleteConnection = (connectionId: string, action: ConnectionActionDefinition) => {
+    setPendingDeleteAction({ connectionId, action })
     setDeleteDialogOpen(true)
   }
 
   const confirmDeleteConnection = async () => {
-    if (!pendingDeleteConnectionId || isDeletingConnection) {
+    if (!pendingDeleteAction || isDeletingConnection) {
       return
     }
 
     setIsDeletingConnection(true)
     try {
-      await deleteConnection(pendingDeleteConnectionId)
+      await deleteConnection(pendingDeleteAction.connectionId)
       setDeleteDialogOpen(false)
-      setPendingDeleteConnectionId(null)
+      setPendingDeleteAction(null)
       toast.success("Connection deleted successfully.")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete connection."
       toast.error(message)
     } finally {
       setIsDeletingConnection(false)
+    }
+  }
+
+  const handleConnectionAction = async (
+    record: (typeof categoryFilteredRecords)[number],
+    action: ConnectionActionDefinition
+  ) => {
+    if (action.requiresConfirmation) {
+      requestDeleteConnection(record.connection.connectionId, action)
+      return
+    }
+
+    switch (action.id) {
+      case CONNECTION_ACTION_IDS.RECONNECT:
+        await connect(record.connection.connectionId)
+        return
+      case CONNECTION_ACTION_IDS.PAUSE_SYNC:
+        await pauseSync(record)
+        return
+      case CONNECTION_ACTION_IDS.RESUME_SYNC:
+        await resumeSync(record)
+        return
+      case CONNECTION_ACTION_IDS.RETRY:
+        await retrySync(record)
+        return
+      case CONNECTION_ACTION_IDS.DISCONNECT:
+        await disconnect(record.connection.connectionId)
+        return
+      case CONNECTION_ACTION_IDS.DELETE_CONNECTION:
+        requestDeleteConnection(record.connection.connectionId, action)
+        return
+      default:
+        return
     }
   }
 
@@ -941,23 +927,39 @@ export function ConnectionsOverview() {
                         run.status === "failed"
                           ? (run.errorMessage ?? "Failed")
                           : `${run.result?.recordsWritten ?? 0} records`,
-                      time: formatRelativeDate(run.finishedAt ?? run.startedAt),
+                      time: <RelativeTime value={run.finishedAt ?? run.startedAt} fallback="Never" />,
                     }))
 
                   const syncActivityFromEvents = record.integrationStatus.recentEvents
                     .slice(0, 3)
                     .map((event) => ({
                       name: event.action,
-                      state: event.action === "sync" ? ("completed" as const) : ("queued" as const),
+                      state: event.action === "sync.failed"
+                        ? ("queued" as const)
+                        : event.action === "sync.started"
+                          ? ("running" as const)
+                          : event.action.startsWith("sync.")
+                            ? ("completed" as const)
+                            : ("queued" as const),
                       records: event.message,
-                      time: formatRelativeDate(event.timestamp),
+                      time: <RelativeTime value={event.timestamp} fallback="Never" />,
                     }))
 
                   const syncActivity =
                     syncActivityFromRuns.length > 0 ? syncActivityFromRuns : syncActivityFromEvents
                   const syncState = syncProgress[record.connection.connectionId]
                   const isSyncing = syncState && syncState !== "completed" && syncState !== "failed"
-                  const canRunSync = record.connection.status === "connected"
+                  const runSyncAction = connectionActionPolicy.getAction(
+                    {
+                      connection: record.connection,
+                      integrationStatus: record.integrationStatus,
+                    },
+                    CONNECTION_ACTION_IDS.RUN_SYNC
+                  )
+                  const availableActions = connectionActionPolicy.getAvailableActions({
+                    connection: record.connection,
+                    integrationStatus: record.integrationStatus,
+                  })
 
                   const handleRunSync = async () => {
                     try {
@@ -1013,7 +1015,7 @@ export function ConnectionsOverview() {
                             {UI_TEXT.sections.latestSync}
                           </p>
                           <p className="mt-1 text-sm font-medium text-foreground">
-                            {formatRelativeDate(record.lastSyncAt)}
+                            <RelativeTime value={record.lastSyncAt} fallback="Never" />
                           </p>
                         </div>
 
@@ -1097,14 +1099,10 @@ export function ConnectionsOverview() {
                             size="sm"
                             className="h-8 rounded-md px-3 shadow-sm transition-all hover:shadow"
                             onClick={() => void handleRunSync()}
-                            disabled={!canRunSync}
-                            title={
-                              !canRunSync
-                                ? "Connection must be connected before syncing"
-                                : undefined
-                            }
+                            disabled={!runSyncAction.enabled}
+                            title={runSyncAction.disabledReason}
                           >
-                            {UI_TEXT.buttons.runSync}
+                            {runSyncAction.label}
                           </AppButton>
 
                           <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
@@ -1127,94 +1125,13 @@ export function ConnectionsOverview() {
                             </AppButton>
                           </Link>
 
-                          <AppDropdownMenu>
-                            <AppDropdownMenuTrigger asChild>
-                              <AppButton
-                                size="sm"
-                                variant="outline"
-                                className="h-8 w-8 rounded-md p-0"
-                                aria-label={UI_TEXT.overflow.moreActions}
-                              >
-                                <EllipsisVertical className="size-4" />
-                              </AppButton>
-                            </AppDropdownMenuTrigger>
-                            <AppDropdownMenuContent align="end" className="w-44">
-                              <AppDropdownMenuItem
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  void connect(record.connection.connectionId)
-                                }}
-                              >
-                                {UI_TEXT.overflow.reconnect}
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuItem
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  void pauseSync(record)
-                                }}
-                              >
-                                {UI_TEXT.overflow.pauseSync}
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuItem
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  void resumeSync(record)
-                                }}
-                              >
-                                {UI_TEXT.overflow.resumeSync}
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuItem
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  void refreshToken(record.connection.connectionId)
-                                }}
-                              >
-                                {UI_TEXT.overflow.refreshToken}
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuItem
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  void retrySync(record)
-                                }}
-                              >
-                                {UI_TEXT.overflow.retry}
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuSeparator />
-                              <AppDropdownMenuItem asChild>
-                                <Link
-                                  href={ROUTES.integrationsHistory(record.connection.connectionId)}
-                                >
-                                  {UI_TEXT.overflow.history}
-                                </Link>
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuItem asChild>
-                                <Link
-                                  href={`${ROUTES.integrationsDetails(record.connection.connectionId)}#logs`}
-                                >
-                                  {UI_TEXT.overflow.logs}
-                                </Link>
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuSeparator />
-                              <AppDropdownMenuItem
-                                className="text-red-600 focus:text-red-700"
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  void disconnect(record.connection.connectionId)
-                                }}
-                              >
-                                {UI_TEXT.overflow.disconnect}
-                              </AppDropdownMenuItem>
-                              <AppDropdownMenuItem
-                                className="text-red-600 focus:text-red-700"
-                                onSelect={(event) => {
-                                  event.preventDefault()
-                                  requestDeleteConnection(record.connection.connectionId)
-                                }}
-                              >
-                                {UI_TEXT.overflow.delete}
-                              </AppDropdownMenuItem>
-                            </AppDropdownMenuContent>
-                          </AppDropdownMenu>
+                          <ConnectionActionsMenu
+                            actions={availableActions}
+                            menuLabel={UI_TEXT.overflow.moreActions}
+                            onActionSelect={(action) => {
+                              void handleConnectionAction(record, action)
+                            }}
+                          />
                         </div>
                       </div>
                     </AppCard>
@@ -1284,8 +1201,12 @@ export function ConnectionsOverview() {
                         HEALTH_STATUS_META[record.healthState]?.icon
                       )}
                     </AppTableCell>
-                    <AppTableCell>{formatRelativeDate(record.lastSyncAt)}</AppTableCell>
-                    <AppTableCell>{formatRelativeDate(record.nextSyncAt)}</AppTableCell>
+                    <AppTableCell>
+                      <RelativeTime value={record.lastSyncAt} fallback="Never" />
+                    </AppTableCell>
+                    <AppTableCell>
+                      <RelativeTime value={record.nextSyncAt} fallback="Never" />
+                    </AppTableCell>
                     <AppTableCell>
                       <div className="flex justify-end">
                         <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
@@ -1314,15 +1235,13 @@ export function ConnectionsOverview() {
           onOpenChange={(open) => {
             setDeleteDialogOpen(open)
             if (!open && !isDeletingConnection) {
-              setPendingDeleteConnectionId(null)
+              setPendingDeleteAction(null)
             }
           }}
-          title="Delete Connection"
-          description={
-            "This will permanently remove the connection, OAuth tokens, synced metadata, and history.\nThis action cannot be undone."
-          }
+          title={pendingDeleteAction?.action.confirmation?.title ?? ""}
+          description={pendingDeleteAction?.action.confirmation?.description ?? ""}
           cancelLabel="Cancel"
-          confirmLabel="Delete"
+          confirmLabel={pendingDeleteAction?.action.confirmation?.confirmLabel ?? ""}
           confirmTone="destructive"
           loading={isDeletingConnection}
           onCancel={() => {
@@ -1330,7 +1249,7 @@ export function ConnectionsOverview() {
               return
             }
             setDeleteDialogOpen(false)
-            setPendingDeleteConnectionId(null)
+            setPendingDeleteAction(null)
           }}
           onConfirm={() => {
             void confirmDeleteConnection()

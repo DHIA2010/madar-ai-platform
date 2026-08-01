@@ -1,30 +1,45 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { ROUTES } from "@/constants/routes"
 
 import {
-  AppButton,
   AppCard,
   AppConfirmDialog,
   AppContainer,
   AppPage,
   AppSection,
   AppStatusBadge,
+  RelativeTime,
 } from "@/components/app"
 
 import { useConnectionsCenter } from "../hooks"
-import { getHealthTone, getStatusTone } from "../services"
+import {
+  CONNECTION_ACTION_IDS,
+  type ConnectionActionDefinition,
+  connectionActionPolicy,
+  getHealthTone,
+  getStatusTone,
+} from "../services"
+import { ConnectionActionsMenu } from "./connection-actions-menu"
 
 export function ConnectionDetails({ connectionId }: { connectionId: string }) {
   const router = useRouter()
-  const { getConnectionById, deleteConnection } = useConnectionsCenter()
+  const {
+    connect,
+    deleteConnection,
+    disconnect,
+    getConnectionById,
+    pauseSync,
+    resumeSync,
+    retrySync,
+  } = useConnectionsCenter()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [pendingAction, setPendingAction] = useState<ConnectionActionDefinition | null>(null)
   const record = getConnectionById(connectionId)
 
   if (!record) {
@@ -39,6 +54,10 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
 
   const latestJob = record.integrationStatus.latestJob
   const latestRun = record.integrationStatus.latestRun
+  const availableActions = connectionActionPolicy.getAvailableActions({
+    connection: record.connection,
+    integrationStatus: record.integrationStatus,
+  })
 
   const onDeleteConnection = async () => {
     if (isDeleting) {
@@ -59,6 +78,38 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
     }
   }
 
+  const handleConnectionAction = async (action: ConnectionActionDefinition) => {
+    if (action.requiresConfirmation) {
+      setPendingAction(action)
+      setIsDeleteDialogOpen(true)
+      return
+    }
+
+    switch (action.id) {
+      case CONNECTION_ACTION_IDS.RECONNECT:
+        await connect(connectionId)
+        return
+      case CONNECTION_ACTION_IDS.PAUSE_SYNC:
+        await pauseSync(record)
+        return
+      case CONNECTION_ACTION_IDS.RESUME_SYNC:
+        await resumeSync(record)
+        return
+      case CONNECTION_ACTION_IDS.RETRY:
+        await retrySync(record)
+        return
+      case CONNECTION_ACTION_IDS.DISCONNECT:
+        await disconnect(connectionId)
+        return
+      case CONNECTION_ACTION_IDS.DELETE_CONNECTION:
+        setPendingAction(action)
+        setIsDeleteDialogOpen(true)
+        return
+      default:
+        return
+    }
+  }
+
   return (
     <AppPage>
       <AppContainer>
@@ -73,9 +124,9 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
         <AppSection className="grid gap-6 lg:grid-cols-2">
           <AppCard
             title={record.platformName}
-            subtitle={`${record.connectedAccounts.length} Accounts Connected`}
+            subtitle="Connection details"
             actions={
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <AppStatusBadge
                   status={getStatusTone(record.connection.status)}
                   label={record.connection.status}
@@ -83,6 +134,13 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
                 <AppStatusBadge
                   status={getHealthTone(record.healthState)}
                   label={record.healthState}
+                />
+                <ConnectionActionsMenu
+                  actions={availableActions}
+                  menuLabel="Connection actions"
+                  onActionSelect={(action) => {
+                    void handleConnectionAction(action)
+                  }}
                 />
               </div>
             }
@@ -106,41 +164,40 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
               <div>
                 <p className="text-sm font-medium">Connected Accounts</p>
                 <p className="text-xs text-muted-foreground">
-                  Manage accounts under the same connector.
+                  Current account and customer selection used by this connection.
                 </p>
               </div>
-              <ul className="space-y-2 text-sm">
-                {record.connectedAccounts.map((accountName) => (
-                  <li key={accountName} className="rounded-md border bg-background px-3 py-2">
-                    {accountName}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap gap-2">
-                <Link href={ROUTES.integrationsNew}>
-                  <AppButton size="sm" variant="outline">
-                    Connect another account
-                  </AppButton>
-                </Link>
-                <AppButton size="sm" variant="outline">
-                  Remove account
-                </AppButton>
-                <AppButton size="sm" variant="outline">
-                  Reconnect account
-                </AppButton>
-                <AppButton size="sm" variant="outline">
-                  Change default account
-                </AppButton>
-              </div>
+              <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                <div className="rounded-md border bg-background px-3 py-2">
+                  <dt className="text-xs text-muted-foreground">Connected Google Account</dt>
+                  <dd className="mt-1 font-medium">
+                    {record.connection.metadata.accountEmail?.trim() || record.connectedAccount || "-"}
+                  </dd>
+                </div>
+                <div className="rounded-md border bg-background px-3 py-2">
+                  <dt className="text-xs text-muted-foreground">Selected Customer</dt>
+                  <dd className="mt-1 font-medium">{record.connectedAccount || "-"}</dd>
+                </div>
+                <div className="rounded-md border bg-background px-3 py-2 sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">Customer ID</dt>
+                  <dd className="mt-1 font-medium">
+                    {record.connection.metadata.customerId?.trim() || "-"}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </AppCard>
 
           <AppCard title="Synchronization and Reliability">
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <dt className="text-muted-foreground">Last Sync</dt>
-              <dd>{record.lastSyncAt ?? "-"}</dd>
+              <dd>
+                <RelativeTime value={record.lastSyncAt} fallback="-" />
+              </dd>
               <dt className="text-muted-foreground">Next Sync</dt>
-              <dd>{record.nextSyncAt ?? "-"}</dd>
+              <dd>
+                <RelativeTime value={record.nextSyncAt} fallback="-" />
+              </dd>
               <dt className="text-muted-foreground">Sync Status</dt>
               <dd>{record.latestSyncStatus ?? "-"}</dd>
               <dt className="text-muted-foreground">Retry Count</dt>
@@ -174,7 +231,9 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
               {record.integrationStatus.recentEvents.map((event) => (
                 <div key={event.eventId} className="rounded-md border p-2">
                   <div className="font-medium">{event.action}</div>
-                  <div className="text-muted-foreground">{event.timestamp}</div>
+                  <div className="text-muted-foreground">
+                    <RelativeTime value={event.timestamp} fallback="-" />
+                  </div>
                   <div>{event.message}</div>
                 </div>
               ))}
@@ -182,48 +241,26 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
           </AppCard>
         </AppSection>
 
-        <AppSection>
-          <div className="flex flex-wrap gap-2">
-            <Link href={ROUTES.integrationsSettings(connectionId)}>
-              <AppButton variant="outline">Connection Settings</AppButton>
-            </Link>
-            <Link href={ROUTES.integrationsHistory(connectionId)}>
-              <AppButton variant="outline">Sync History</AppButton>
-            </Link>
-            <Link href={ROUTES.integrationsHealth}>
-              <AppButton variant="outline">Connection Health</AppButton>
-            </Link>
-            <Link href={ROUTES.integrations}>
-              <AppButton variant="outline">Back to Overview</AppButton>
-            </Link>
-            <AppButton
-              variant="destructive"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              disabled={isDeleting}
-            >
-              Delete Connection
-            </AppButton>
-          </div>
-        </AppSection>
-
         <AppConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={(open) => {
             if (!isDeleting) {
               setIsDeleteDialogOpen(open)
+              if (!open) {
+                setPendingAction(null)
+              }
             }
           }}
-          title="Delete Connection"
-          description={
-            "This will permanently remove the connection, OAuth tokens, synced metadata, and history.\nThis action cannot be undone."
-          }
+          title={pendingAction?.confirmation?.title ?? ""}
+          description={pendingAction?.confirmation?.description ?? ""}
           cancelLabel="Cancel"
-          confirmLabel="Delete"
+          confirmLabel={pendingAction?.confirmation?.confirmLabel ?? ""}
           confirmTone="destructive"
           loading={isDeleting}
           onCancel={() => {
             if (!isDeleting) {
               setIsDeleteDialogOpen(false)
+              setPendingAction(null)
             }
           }}
           onConfirm={() => {

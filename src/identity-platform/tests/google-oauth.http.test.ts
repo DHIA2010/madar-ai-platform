@@ -216,12 +216,9 @@ describe("google oauth http flow", () => {
       encrypted_refresh_token: string | null
     }>(
       `
-        select c.status, t.encrypted_refresh_token
-        from integration_connections c
-        left join oauth_tokens t on t.oauth_account_id = c.oauth_account_id and t.status = 'active'
-        where c.id = $1
-        order by t.updated_at desc
-        limit 1
+        select status, encrypted_refresh_token
+        from google_oauth_connections
+        where id = $1
       `,
       [started.connectionId]
     )
@@ -669,7 +666,7 @@ describe("google oauth http flow", () => {
       `insert into oauth_accounts (
         id, provider_family, organization_id, workspace_id, status,
         created_by_user_id, updated_by_user_id, created_at, updated_at
-      ) values ($1,'google',$2,$3,'connected',$4,$4,now(),now())`,
+      ) values ($1,'google',$2,$3,'active',$4,$4,now(),now())`,
       [oauthAccountId, actor.organizationId, workspaceId, actor.userId]
     )
     await database.query(
@@ -774,7 +771,7 @@ describe("google oauth http flow", () => {
       `insert into oauth_accounts (
         id, provider_family, organization_id, workspace_id, status,
         created_by_user_id, updated_by_user_id, created_at, updated_at
-      ) values ($1,'google',$2,$3,'connected',$4,$4,now(),now())`,
+      ) values ($1,'google',$2,$3,'active',$4,$4,now(),now())`,
       [oauthAccountId, actor.organizationId, workspaceId, actor.userId]
     )
     await database.query(

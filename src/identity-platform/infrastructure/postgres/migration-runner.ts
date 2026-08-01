@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 
 import { PostgresDatabase } from "./database"
@@ -15,11 +15,21 @@ export async function runSqlFile(database: PostgresDatabase, filePath: string) {
   }
 }
 
+export async function listIdentityMigrationFiles(rootPath: string) {
+  const migrationsDirectory = join(rootPath, "identity-platform/migrations")
+  const files = await readdir(migrationsDirectory, { withFileTypes: true })
+
+  return files
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => /^[0-9]+.*\.sql$/i.test(name))
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => join(migrationsDirectory, name))
+}
+
 export async function runIdentityMigrations(database: PostgresDatabase, rootPath: string) {
-  await runSqlFile(database, join(rootPath, "identity-platform/migrations/001_identity_core.sql"))
-  await runSqlFile(database, join(rootPath, "identity-platform/migrations/002_identity_production_foundation.sql"))
-  await runSqlFile(database, join(rootPath, "identity-platform/migrations/003_google_oauth_connections.sql"))
-  await runSqlFile(database, join(rootPath, "identity-platform/migrations/004_google_ads_integration_layer.sql"))
-  await runSqlFile(database, join(rootPath, "identity-platform/migrations/005_google_ads_account_onboarding.sql"))
-  await runSqlFile(database, join(rootPath, "identity-platform/migrations/006_snapchat_oauth_connections.sql"))
+  const migrationFiles = await listIdentityMigrationFiles(rootPath)
+  for (const filePath of migrationFiles) {
+    await runSqlFile(database, filePath)
+  }
 }

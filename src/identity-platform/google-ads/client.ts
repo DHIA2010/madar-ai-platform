@@ -14,6 +14,82 @@ interface GoogleAdsClientConfig {
   minRequestIntervalMs: number
 }
 
+interface GoogleAdsOutboundTraceContext {
+  endpoint: string
+  handler: string
+  connectionId: string
+  customerId: string
+  sequence: number
+}
+
+let outboundTraceContext: GoogleAdsOutboundTraceContext | null = null
+
+export function beginGoogleAdsSyncRequestTrace(input: {
+  endpoint: string
+  handler: string
+  connectionId: string
+  customerId: string
+}) {
+  outboundTraceContext = {
+    endpoint: input.endpoint,
+    handler: input.handler,
+    connectionId: input.connectionId,
+    customerId: input.customerId,
+    sequence: 0,
+  }
+}
+
+export function endGoogleAdsSyncRequestTrace() {
+  outboundTraceContext = null
+}
+
+function nextTraceSequence(connectionId: string) {
+  if (!outboundTraceContext || outboundTraceContext.connectionId !== connectionId) {
+    return null
+  }
+
+  outboundTraceContext.sequence += 1
+  return outboundTraceContext.sequence
+}
+
+function logGoogleAdsOutboundTrace(input: {
+  connectionId: string
+  endpoint: string
+  customerId: string | null
+  loginCustomerId: string | null
+  method: string
+  requestBody: string | null
+  statusCode: number
+  responseBody: string
+  requestId: string | null
+}) {
+  const sequence = nextTraceSequence(input.connectionId)
+  if (!sequence || !outboundTraceContext) {
+    return
+  }
+
+  console.info(
+    JSON.stringify({
+      level: "info",
+      service: "identity-platform",
+      event: "google_ads.outbound_trace",
+      sequence,
+      syncEndpoint: outboundTraceContext.endpoint,
+      syncHandler: outboundTraceContext.handler,
+      connectionId: input.connectionId,
+      customerId: input.customerId,
+      loginCustomerId: input.loginCustomerId,
+      method: input.method,
+      endpoint: input.endpoint,
+      requestBody: input.requestBody,
+      statusCode: input.statusCode,
+      responseBody: input.responseBody,
+      googleRequestId: input.requestId,
+      timestamp: new Date().toISOString(),
+    })
+  )
+}
+
 function readUpstreamRequestId(response: Response) {
   return (
     response.headers.get("request-id") ??
@@ -100,6 +176,19 @@ export class GoogleAdsClient {
         })
 
         const rawBody = await response.text()
+        const upstreamRequestId = readUpstreamRequestId(response)
+
+        logGoogleAdsOutboundTrace({
+          connectionId,
+          endpoint: requestUrl,
+          customerId: null,
+          loginCustomerId: this.config.loginCustomerId?.trim() || null,
+          method: "GET",
+          requestBody: null,
+          statusCode: response.status,
+          responseBody: rawBody,
+          requestId: upstreamRequestId,
+        })
 
         if (!response.ok) {
           const mapped = toGoogleAdsError({ status: response.status, body: rawBody })
@@ -108,7 +197,7 @@ export class GoogleAdsClient {
             statusCode: response.status,
             errorCode: mapped.code,
             correlationId: connectionId,
-            requestId: readUpstreamRequestId(response),
+            requestId: upstreamRequestId,
           })
           throw mapped
         }
@@ -210,6 +299,19 @@ export class GoogleAdsClient {
         })
 
         const rawBody = await response.text()
+        const upstreamRequestId = readUpstreamRequestId(response)
+
+        logGoogleAdsOutboundTrace({
+          connectionId: input.connectionId,
+          endpoint: requestUrl,
+          customerId: input.customerId,
+          loginCustomerId: this.config.loginCustomerId?.trim() || null,
+          method: "POST",
+          requestBody,
+          statusCode: response.status,
+          responseBody: rawBody,
+          requestId: upstreamRequestId,
+        })
 
         if (!response.ok) {
           const mapped = toGoogleAdsError({ status: response.status, body: rawBody })
@@ -218,7 +320,7 @@ export class GoogleAdsClient {
             statusCode: response.status,
             errorCode: mapped.code,
             correlationId: input.connectionId,
-            requestId: readUpstreamRequestId(response),
+            requestId: upstreamRequestId,
           })
           throw mapped
         }

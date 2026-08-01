@@ -25,6 +25,7 @@ import { InMemoryMetricsProvider } from "../infrastructure/observability/in-memo
 import { GoogleAdsSyncService } from "../google-ads/sync-service"
 import {
   AwsSecretsGoogleIdentityCredentialsProvider,
+  EnvironmentFirstGoogleIdentityCredentialsProvider,
   type GoogleIdentityCredentialsProvider,
 } from "../google-oauth/google-identity-credentials"
 import { GoogleOAuthController } from "../google-oauth/controller"
@@ -126,7 +127,9 @@ export function createIdentityPlatformContainer(options: {
   const featureFlags = new EnvironmentFeatureFlagProvider(config)
   const configuration = new EnvironmentConfigurationProvider()
   const metrics = new InMemoryMetricsProvider()
-  const googleIdentityCredentialsProvider = new AwsSecretsGoogleIdentityCredentialsProvider()
+  const googleIdentityCredentialsProvider = new EnvironmentFirstGoogleIdentityCredentialsProvider(
+    new AwsSecretsGoogleIdentityCredentialsProvider()
+  )
   const integrations = new IntegrationProviderRegistry()
   integrations.register(new SnapchatAdsIntegrationProvider(database))
   const googleOAuthController = new GoogleOAuthController(

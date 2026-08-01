@@ -121,7 +121,7 @@ services:
     command: >
       sh -c "npm ci --ignore-scripts &&
       node --import tsx scripts/local-backend-bootstrap.ts &&
-      node --import tsx src/identity-platform/server.ts"
+      npm run identity:dev"
     depends_on:
       postgres:
         condition: service_healthy

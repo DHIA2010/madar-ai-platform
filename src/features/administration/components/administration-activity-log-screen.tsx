@@ -11,6 +11,7 @@ import {
   AppSelectContent,
   AppSelectItem,
   AppSelectTrigger,
+  RelativeTime,
 } from "@/components/app"
 
 import { IAM_ACTIVITY_LOGS, IAM_USERS } from "../services"
@@ -105,7 +106,9 @@ export function AdministrationActivityLogScreen() {
                   <span className="font-semibold">{event.actor}</span> {event.action}{" "}
                   <span className="font-medium">{event.target}</span>
                 </p>
-                <AppBadge variant="outline">{event.createdAt}</AppBadge>
+                <AppBadge variant="outline">
+                  <RelativeTime value={event.createdAt} fallback="-" />
+                </AppBadge>
               </div>
             </article>
           ))}

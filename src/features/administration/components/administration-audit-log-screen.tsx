@@ -1,6 +1,6 @@
 "use client"
 
-import { AppBadge, AppCard, AppPageHeader } from "@/components/app"
+import { AppBadge, AppCard, AppPageHeader, RelativeTime } from "@/components/app"
 
 import { IAM_AUDIT_LOGS } from "../services"
 import { AdministrationModuleNav } from "./administration-module-nav"
@@ -29,7 +29,9 @@ export function AdministrationAuditLogScreen() {
                   <span className="font-medium">{event.target}</span>
                 </p>
                 <div className="flex gap-2">
-                  <AppBadge variant="outline">{event.createdAt}</AppBadge>
+                  <AppBadge variant="outline">
+                    <RelativeTime value={event.createdAt} fallback="-" />
+                  </AppBadge>
                   <AppBadge variant={event.severity === "high" ? "destructive" : "secondary"}>
                     {event.severity ?? "info"}
                   </AppBadge>

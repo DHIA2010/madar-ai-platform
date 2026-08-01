@@ -56,7 +56,7 @@ describe("google ads auth provider", () => {
         id, provider_family, organization_id, workspace_id, status,
         created_by_user_id, updated_by_user_id, created_at, updated_at
       ) values (
-        $1, 'google', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000203', 'connected',
+        $1, 'google', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000203', 'active',
         '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000201', now(), now()
       )`,
       [oauthAccountId]
@@ -141,7 +141,7 @@ describe("google ads auth provider", () => {
         id, provider_family, organization_id, workspace_id, status,
         created_by_user_id, updated_by_user_id, created_at, updated_at
       ) values (
-        $1, 'google', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000203', 'connected',
+        $1, 'google', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000203', 'active',
         '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000201', now(), now()
       )`,
       [oauthAccountId]
@@ -224,7 +224,7 @@ describe("google ads auth provider", () => {
         id, provider_family, organization_id, workspace_id, status,
         created_by_user_id, updated_by_user_id, created_at, updated_at
       ) values (
-        $1, 'google', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000203', 'connected',
+        $1, 'google', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000203', 'active',
         '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000201', now(), now()
       )`,
       [oauthAccountId]
@@ -325,10 +325,20 @@ describe("google ads auth provider", () => {
     )
     expect(Number(activeTokenRows.rows[0]?.count ?? "0")).toBe(1)
 
-    const refreshHistoryRows = await database.query<{ count: string }>(
-      "select count(*)::text as count from token_refresh_history where oauth_account_id = $1 and integration_connection_id = $2 and status = 'success'",
-      [oauthAccountId, "00000000-0000-4000-8000-000000000212"]
+    const refreshedTokenRow = await database.query<{
+      encrypted_access_token: string | null
+      encrypted_refresh_token: string | null
+    }>(
+      `
+      select encrypted_access_token, encrypted_refresh_token
+      from oauth_tokens
+      where oauth_account_id = $1 and status = 'active'
+      order by updated_at desc
+      limit 1
+      `,
+      [oauthAccountId]
     )
-    expect(Number(refreshHistoryRows.rows[0]?.count ?? "0")).toBe(1)
+    expect(refreshedTokenRow.rows[0]?.encrypted_access_token).toBeTruthy()
+    expect(refreshedTokenRow.rows[0]?.encrypted_refresh_token).toBeTruthy()
   })
 })

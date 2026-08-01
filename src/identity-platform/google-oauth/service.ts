@@ -11,6 +11,8 @@ import {
 import { GoogleOAuthRepository } from "./repository"
 import type {
   GoogleOAuthCallbackResult,
+  GoogleOAuthTimelineEvent,
+  GoogleOAuthTimelineResult,
   GoogleOAuthStartInput,
   GoogleOAuthStartResult,
 } from "./types"
@@ -58,15 +60,15 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
 
   return {
     successRedirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI ??
-      `${appUrl.replace(/\/$/, "")}/integrations/new`,
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI
+      ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
     tokenEncryptionKey:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
-      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
-      "",
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
+      ?? process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
+      ?? "",
     googleAdsApiBaseUrl:
-      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
-      "https://googleads.googleapis.com/v22",
+      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL
+      ?? "https://googleads.googleapis.com/v22",
     scopes: configuredScopes.length > 0 ? configuredScopes : defaultScopes,
   }
 }
@@ -117,11 +119,7 @@ function validateConfiguredUrl(raw: string, opts: { allowHttpLocalhostOnly: bool
     return parsed
   }
 
-  if (
-    parsed.protocol === "http:" &&
-    opts.allowHttpLocalhostOnly &&
-    isLocalhostHost(parsed.hostname)
-  ) {
+  if (parsed.protocol === "http:" && opts.allowHttpLocalhostOnly && isLocalhostHost(parsed.hostname)) {
     return parsed
   }
 
@@ -141,6 +139,68 @@ function toOnboardingRedirectUrl(rawUrl: string) {
     redirectUrl.pathname = "/integrations/new"
   }
   return redirectUrl
+}
+
+function toTimelineAction(eventType: string, payload: Record<string, unknown>) {
+  switch (eventType) {
+    case "google.oauth.authorization.completed":
+      return payload.reconnected === true ? "connection.reconnected" : "connection.connected"
+    case "google.oauth.connection.reconnected":
+      return "connection.reconnected"
+    case "google.oauth.connection.paused":
+      return "connection.paused"
+    case "google.oauth.connection.resumed":
+      return "connection.resumed"
+    case "google.oauth.connection.disconnected":
+      return "connection.disconnected"
+    case "google.oauth.connection.deleted":
+      return "connection.deleted"
+    case "google.ads.sync.retry":
+      return "sync.retry"
+    case "google.ads.sync.started":
+      return "sync.started"
+    case "google.ads.sync.completed":
+      return "sync.completed"
+    case "google.ads.sync.failed":
+      return "sync.failed"
+    case "google.oauth.token.refreshed":
+      return "token.refreshed"
+    default:
+      return eventType
+  }
+}
+
+function toTimelineMessage(action: string, payload: Record<string, unknown>) {
+  if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+    return payload.message
+  }
+
+  switch (action) {
+    case "connection.connected":
+      return "Connection established."
+    case "connection.reconnected":
+      return "Connection re-established."
+    case "connection.paused":
+      return "Connection paused."
+    case "connection.resumed":
+      return "Connection resumed."
+    case "connection.disconnected":
+      return "Connection disconnected."
+    case "connection.deleted":
+      return "Connection deleted."
+    case "sync.retry":
+      return "Sync retry requested."
+    case "sync.started":
+      return "Sync started."
+    case "sync.completed":
+      return "Sync completed successfully."
+    case "sync.failed":
+      return "Sync failed."
+    case "token.refreshed":
+      return "Access token refreshed."
+    default:
+      return action
+  }
 }
 
 function ensureRequiredScopesGranted(grantedScopes: string[], requiredScopes: string[]) {
@@ -186,16 +246,8 @@ function createStateToken() {
   return `go_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
 }
 
-function ensureConfigured(
-  config: GoogleOAuthServiceConfig,
-  credentials: GoogleIdentityCredentials
-) {
-  if (
-    !credentials.clientId ||
-    !credentials.clientSecret ||
-    !credentials.redirectUri ||
-    !config.successRedirectUri
-  ) {
+function ensureConfigured(config: GoogleOAuthServiceConfig, credentials: GoogleIdentityCredentials) {
+  if (!credentials.clientId || !credentials.clientSecret || !credentials.redirectUri || !config.successRedirectUri) {
     throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
   }
 
@@ -323,66 +375,122 @@ export class GoogleOAuthService {
     return { config: this.config, credentials }
   }
 
-  async startAuthorization(
-    actor: AuthenticatedActor,
-    input: GoogleOAuthStartInput = {}
-  ): Promise<GoogleOAuthStartResult> {
+  async startAuthorization(actor: AuthenticatedActor, input: GoogleOAuthStartInput = {}): Promise<GoogleOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
     const { config, credentials } = await this.loadResolvedConfig()
 
-    const resolvedProject = await this.repository.resolveProject({
-      organizationId: actor.organizationId,
-      workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
-      projectId: input.projectId ?? null,
-    })
+    const scopedConnectionId = input.connectionId ?? null
+    const existingConnection = scopedConnectionId
+      ? await this.repository.findConnectionById(scopedConnectionId)
+      : null
 
-    const existingConnection = await this.repository.findConnectionByProject(
-      actor.organizationId,
-      resolvedProject.projectId
-    )
-    const connectionId = existingConnection?.id ?? randomUUID()
-    const existingOwnership = existingConnection
-      ? await this.repository.findConnectionOwnershipById(existingConnection.id)
+    if (scopedConnectionId && (!existingConnection || existingConnection.organizationId !== actor.organizationId)) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    const resolvedProject = existingConnection
+      ? {
+        projectId: existingConnection.projectId,
+        workspaceId: existingConnection.workspaceId,
+      }
+      : await this.repository.resolveProject({
+        organizationId: actor.organizationId,
+        workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
+        projectId: input.projectId ?? null,
+      })
+
+    const projectConnection = existingConnection
+      ? existingConnection
+      : await this.repository.findConnectionByProject(actor.organizationId, resolvedProject.projectId)
+
+    const selectedConnection = existingConnection ?? projectConnection
+    const existingTokens = existingConnection
+      ? await this.repository.findConnectionTokensById(existingConnection.id)
+      : projectConnection
+        ? await this.repository.findConnectionTokensById(projectConnection.id)
+      : null
+    const connectionId = selectedConnection?.id ?? randomUUID()
+    const existingOwnership = selectedConnection
+      ? await this.repository.findConnectionOwnershipById(selectedConnection.id)
       : null
     const oauthAccountId = existingOwnership?.oauthAccountId ?? randomUUID()
     const state = createStateToken()
     const now = new Date()
+    const nowIso = now.toISOString()
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
 
-    await this.repository.upsertConnection({
-      id: connectionId,
-      oauthAccountId,
-      organizationId: actor.organizationId,
-      workspaceId: resolvedProject.workspaceId,
-      projectId: resolvedProject.projectId,
-      dataSourceId: null,
-      providerAccountId: null,
-      providerAccountName: null,
-      providerAccountEmail: null,
-      encryptedRefreshToken: null,
-      encryptedAccessToken: null,
-      scopes: this.config.scopes,
-      tokenExpiresAt: null,
-      status: "pending",
-      connectionReference: input.connectionName ?? null,
-      lastConnectedAt: null,
-      lastDisconnectedAt: null,
-      actorUserId: actor.userId,
-      nowIso: now.toISOString(),
-    })
+    await this.repository.withTransaction(async () => {
+      await this.repository.upsertOAuthAccount({
+        id: oauthAccountId,
+        providerFamily: "google",
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        providerSubjectId: null,
+        providerEmail: null,
+        providerDisplayName: input.connectionName ?? null,
+        grantedScopes: this.config.scopes,
+        status: "pending",
+        lastAuthenticatedAt: null,
+        actorUserId: actor.userId,
+        nowIso,
+      })
 
-    await this.repository.savePendingState({
-      id: randomUUID(),
-      state,
-      organizationId: actor.organizationId,
-      workspaceId: resolvedProject.workspaceId,
-      projectId: resolvedProject.projectId,
-      userId: actor.userId,
-      connectionId,
-      oauthAccountId,
-      requestedScopes: config.scopes,
-      redirectUri: credentials.redirectUri,
-      expiresAt,
+      await this.repository.upsertConnection({
+        id: connectionId,
+        oauthAccountId,
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        dataSourceId: null,
+        providerAccountId: null,
+        providerAccountName: null,
+        providerAccountEmail: null,
+        encryptedRefreshToken: existingTokens?.encryptedRefreshToken ?? null,
+        encryptedAccessToken: existingTokens?.encryptedAccessToken ?? null,
+        scopes: this.config.scopes,
+        tokenExpiresAt: null,
+        status: "pending",
+        connectionReference: input.connectionName ?? null,
+        lastConnectedAt: null,
+        lastDisconnectedAt: null,
+        actorUserId: actor.userId,
+        nowIso,
+      })
+
+      await this.repository.upsertIntegrationConnection({
+        id: connectionId,
+        providerId: "google-ads",
+        providerFamily: "google",
+        platform: "marketing",
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        oauthAccountId,
+        dataSourceId: null,
+        connectionReference: input.connectionName ?? null,
+        status: "pending",
+        lastConnectedAt: null,
+        lastDisconnectedAt: null,
+        actorUserId: actor.userId,
+        nowIso,
+      })
+
+      const stateRecord = {
+        id: randomUUID(),
+        state,
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        userId: actor.userId,
+        connectionId,
+        oauthAccountId,
+        requestedScopes: config.scopes,
+        redirectUri: credentials.redirectUri,
+        expiresAt,
+      }
+
+      await this.repository.savePendingState(stateRecord)
+      await this.repository.saveUnifiedPendingState(stateRecord)
     })
 
     const authorizationUrl = new URL(GOOGLE_AUTHORIZATION_URL)
@@ -394,7 +502,7 @@ export class GoogleOAuthService {
     authorizationUrl.searchParams.set("prompt", "consent")
     authorizationUrl.searchParams.set("state", state)
 
-    const startedAt = now.toISOString()
+    const startedAt = nowIso
     await this.recordLifecycle(
       {
         eventType: "google.oauth.authorization.started",
@@ -420,10 +528,197 @@ export class GoogleOAuthService {
     }
   }
 
-  async completeAuthorization(input: {
-    state: string
-    code: string
-  }): Promise<GoogleOAuthCallbackResult> {
+  async pauseConnection(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.repository.findConnectionById(connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    const ownership = await this.repository.findConnectionOwnershipById(connection.id)
+    const now = new Date().toISOString()
+    const nextStatus = "paused" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      const reconciliation = await this.repository.reconcileGoogleAdsSyncRuntimeState({
+        connectionId: connection.id,
+        actorUserId: actor.userId,
+        occurredAt: now,
+        reason: "connection_paused",
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "google.oauth.connection.paused",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+            oauthAccountId: ownership?.oauthAccountId ?? null,
+            releasedLocks: reconciliation.releasedLocks,
+            failedRuns: reconciliation.failedRuns,
+          },
+        },
+        "integration.google_oauth.paused"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async resumeConnection(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.repository.findConnectionById(connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    const ownership = await this.repository.findConnectionOwnershipById(connection.id)
+    const now = new Date().toISOString()
+    const nextStatus = "connected" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      const reconciliation = await this.repository.reconcileGoogleAdsSyncRuntimeState({
+        connectionId: connection.id,
+        actorUserId: actor.userId,
+        occurredAt: now,
+        reason: "connection_resumed",
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "google.oauth.connection.resumed",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+            oauthAccountId: ownership?.oauthAccountId ?? null,
+            releasedLocks: reconciliation.releasedLocks,
+            failedRuns: reconciliation.failedRuns,
+          },
+        },
+        "integration.google_oauth.resumed"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async disconnectConnection(actor: AuthenticatedActor, input: { connectionId: string; reason?: string }) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.repository.findConnectionById(input.connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    const ownership = await this.repository.findConnectionOwnershipById(connection.id)
+    const now = new Date().toISOString()
+    const nextStatus = "disconnected" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "google.oauth.connection.disconnected",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+            reason: input.reason ?? "Disconnected from connections center",
+            oauthAccountId: ownership?.oauthAccountId ?? null,
+          },
+        },
+        "integration.google_oauth.disconnected"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async startReconnect(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.repository.findConnectionById(connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    const now = new Date().toISOString()
+    await this.recordLifecycle(
+      {
+        eventType: "google.oauth.connection.reconnect.started",
+        aggregateId: connection.id,
+        actorUserId: actor.userId,
+        organizationId: actor.organizationId,
+        workspaceId: connection.workspaceId,
+        projectId: connection.projectId,
+        occurredAt: now,
+        payload: {
+          previousStatus: connection.status,
+        },
+      },
+      "integration.google_oauth.reconnect.started"
+    )
+
+    return this.startAuthorization(actor, {
+      connectionId: connection.id,
+      workspaceId: connection.workspaceId,
+      projectId: connection.projectId,
+      connectionName: connection.connectionReference,
+    })
+  }
+
+  async completeAuthorization(input: { state: string; code: string }): Promise<GoogleOAuthCallbackResult> {
     const { config, credentials } = await this.loadResolvedConfig()
 
     const state = await this.repository.findPendingStateByValue(input.state)
@@ -456,8 +751,7 @@ export class GoogleOAuthService {
         developerToken: credentials.developerToken,
       })
     } catch (error) {
-      customerDiscoveryError =
-        error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
+      customerDiscoveryError = error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
     }
 
     const connectionId = String(state.connection_id ?? "")
@@ -470,7 +764,8 @@ export class GoogleOAuthService {
       throw new Error("GOOGLE_OAUTH_STATE_INVALID")
     }
 
-    const oauthAccountId = existingConnection.id
+    const existingOwnership = await this.repository.findConnectionOwnershipById(connectionId)
+    const oauthAccountId = existingOwnership?.oauthAccountId ?? randomUUID()
     const actorUserId = String(state.user_id)
     const organizationId = String(state.organization_id)
     const workspaceId = (state.workspace_id as string | null) ?? null
@@ -492,6 +787,36 @@ export class GoogleOAuthService {
         throw new Error("GOOGLE_OAUTH_STATE_ALREADY_CONSUMED")
       }
 
+      await this.repository.consumeUnifiedStateByValue(String(state.state), now)
+
+      const encryptedRefreshToken = encryptSecret(refreshToken, config.tokenEncryptionKey)
+      const encryptedAccessToken = encryptSecret(token.access_token, config.tokenEncryptionKey)
+
+      await this.repository.upsertOAuthAccount({
+        id: oauthAccountId,
+        providerFamily: "google",
+        organizationId,
+        workspaceId,
+        providerSubjectId: profile.id ?? null,
+        providerEmail: profile.email ?? null,
+        providerDisplayName: profile.name ?? profile.email ?? "Google Ads Account",
+        grantedScopes: scopes,
+        status: "active",
+        lastAuthenticatedAt: now,
+        actorUserId,
+        nowIso: now,
+      })
+
+      await this.repository.upsertOAuthToken({
+        oauthAccountId,
+        encryptedRefreshToken,
+        encryptedAccessToken,
+        tokenType: token.token_type ?? "Bearer",
+        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
+        refreshTokenIssuedAt: now,
+        nowIso: now,
+      })
+
       await this.repository.upsertConnection({
         id: connectionId,
         oauthAccountId,
@@ -502,14 +827,30 @@ export class GoogleOAuthService {
         providerAccountId: profile.id ?? null,
         providerAccountName: profile.name ?? profile.email ?? "Google Ads Account",
         providerAccountEmail: profile.email ?? null,
-        encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
-        encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
+        encryptedRefreshToken,
+        encryptedAccessToken,
         scopes,
-        tokenExpiresAt: token.expires_in
-          ? new Date(Date.now() + token.expires_in * 1000).toISOString()
-          : null,
+        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
         status: "connected",
         connectionReference: profile.email ?? null,
+        lastConnectedAt: now,
+        lastDisconnectedAt: null,
+        actorUserId,
+        nowIso: now,
+      })
+
+      await this.repository.upsertIntegrationConnection({
+        id: connectionId,
+        providerId: "google-ads",
+        providerFamily: "google",
+        platform: "marketing",
+        organizationId,
+        workspaceId,
+        projectId,
+        oauthAccountId,
+        dataSourceId: null,
+        connectionReference: profile.email ?? null,
+        status: "connected",
         lastConnectedAt: now,
         lastDisconnectedAt: null,
         actorUserId,
@@ -530,9 +871,12 @@ export class GoogleOAuthService {
         })
       }
 
+      const reconnected = existingConnection.status === "disconnected"
       await this.recordLifecycle(
         {
-          eventType: "google.oauth.authorization.completed",
+          eventType: reconnected
+            ? "google.oauth.connection.reconnected"
+            : "google.oauth.authorization.completed",
           aggregateId: connectionId,
           actorUserId,
           organizationId,
@@ -546,9 +890,12 @@ export class GoogleOAuthService {
             customerDiscoveryStatus: customerDiscoveryError ? "failed" : "completed",
             customerDiscoveryError,
             scopes,
+            reconnected,
           },
         },
-        "integration.google_oauth.connected"
+        reconnected
+          ? "integration.google_oauth.reconnected"
+          : "integration.google_oauth.connected"
       )
     })
 
@@ -573,28 +920,34 @@ export class GoogleOAuthService {
       projectId: null,
     })
 
+    const runtimeConnection = await this.repository.findRuntimeConnectionByProject(
+      actor.organizationId,
+      resolvedProject.projectId
+    )
+
     const connection = await this.repository.findConnectionByProject(
       actor.organizationId,
       resolvedProject.projectId
     )
 
-    if (!connection) {
+    if (!runtimeConnection || !connection) {
       return { connection: null }
     }
 
     const customerAccounts =
-      connection.status === "connected"
-        ? await this.repository.listAccessibleCustomerAccounts(connection.id)
+      runtimeConnection.status === "connected"
+        ? await this.repository.listAccessibleCustomerAccounts(runtimeConnection.id)
         : []
 
     return {
       connection: {
-        id: connection.id,
-        status: connection.status,
+        id: runtimeConnection.id,
+        status: runtimeConnection.status as typeof connection.status,
         providerAccountId: connection.providerAccountId,
         providerAccountName: connection.providerAccountName,
         providerAccountEmail: connection.providerAccountEmail,
-        connectedAt: connection.lastConnectedAt,
+        connectedAt: runtimeConnection.lastConnectedAt,
+        lastSyncedAt: runtimeConnection.lastSyncedAt,
         developerTokenConfigured: credentials.developerToken.trim().length > 0,
         customerAccounts: customerAccounts.map((acc) => ({
           customerId: acc.customerId,
@@ -602,6 +955,34 @@ export class GoogleOAuthService {
           isSelected: acc.isSelected,
         })),
       },
+    }
+  }
+
+  async getRecentEvents(actor: AuthenticatedActor, input: { connectionId: string; limit: number }): Promise<GoogleOAuthTimelineResult> {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.repository.findConnectionById(input.connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    const events = await this.repository.listRecentOutboxEvents(connection.id, input.limit)
+    const items: GoogleOAuthTimelineEvent[] = events.map((event) => {
+      const payload = event.payload ?? {}
+      const action = toTimelineAction(event.eventType, payload)
+      const actorUserId = String((event.metadata ?? {}).actorUserId ?? "")
+      return {
+        id: event.id,
+        action,
+        occurredAt: event.occurredAt,
+        actor: actorUserId.length > 0 ? "user" : "system",
+        message: toTimelineMessage(action, payload),
+      }
+    })
+
+    return {
+      connectionId: connection.id,
+      items,
     }
   }
 

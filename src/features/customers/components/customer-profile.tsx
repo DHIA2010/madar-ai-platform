@@ -35,6 +35,7 @@ import {
   AppTableHead,
   AppTableHeader,
   AppTableRow,
+  RelativeTime,
 } from "@/components/app"
 
 import {
@@ -58,32 +59,6 @@ function formatCurrency(value: number): string {
     new Intl.NumberFormat("en-SA", { style: "decimal", maximumFractionDigits: 0 }).format(value) +
     " SAR"
   )
-}
-
-function formatDate(iso?: string): string {
-  if (!iso) {
-    return "—"
-  }
-
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  const days = Math.floor(diff / 86400000)
-  const hours = Math.floor(diff / 3600000)
-  const minutes = Math.floor(diff / 60000)
-
-  if (minutes < 60) {
-    return `${minutes}m ago`
-  }
-
-  if (hours < 24) {
-    return `${hours}h ago`
-  }
-
-  if (days < 7) {
-    return `${days}d ago`
-  }
-
-  return d.toLocaleDateString("en-SA", { month: "short", day: "numeric", year: "numeric" })
 }
 
 const STATUS_STYLE: Record<CustomerStatus, { label: string; className: string; dot: string }> = {
@@ -187,7 +162,8 @@ function IdentitySection({ customerId }: { customerId: string }) {
               <Tag className="size-3.5" /> {customer.customerId}
             </span>
             <span className="flex items-center gap-1">
-              <Calendar className="size-3.5" /> Customer since {formatDate(customer.createdAt)}
+              <Calendar className="size-3.5" /> Customer since {" "}
+              <RelativeTime value={customer.createdAt} fallback="—" />
             </span>
           </div>
           {customer.tags.length > 0 ? (
@@ -236,7 +212,9 @@ function TimelineSection({ customerId }: { customerId: string }) {
               </div>
               <div className="flex-1 rounded-xl border bg-background/70 px-3 py-2">
                 <p className="text-sm font-medium">{event.label}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(event.timestamp)}</p>
+                <p className="text-xs text-muted-foreground">
+                  <RelativeTime value={event.timestamp} fallback="—" />
+                </p>
               </div>
             </div>
           ))}
@@ -355,7 +333,7 @@ function CommerceSection({ customerId }: { customerId: string }) {
                   <AppTableCell>{formatCurrency(order.revenue)}</AppTableCell>
                   <AppTableCell>{order.itemCount}</AppTableCell>
                   <AppTableCell className="text-xs text-muted-foreground">
-                    {formatDate(order.createdAt)}
+                    <RelativeTime value={order.createdAt} fallback="—" />
                   </AppTableCell>
                 </AppTableRow>
               ))}
@@ -491,7 +469,8 @@ function SegmentsSection({ customerId }: { customerId: string }) {
                 >
                   <span>{seg.segmentName}</span>
                   <span className="text-muted-foreground">
-                    {formatDate(seg.joinedAt)} – {seg.leftAt ? formatDate(seg.leftAt) : "present"}
+                    <RelativeTime value={seg.joinedAt} fallback="—" /> - {" "}
+                    {seg.leftAt ? <RelativeTime value={seg.leftAt} fallback="—" /> : "present"}
                   </span>
                 </div>
               ))}
@@ -576,7 +555,7 @@ function NotesTagsSection({ customerId }: { customerId: string }) {
                 <div key={note.noteId} className="rounded-xl border bg-muted/30 px-3 py-2">
                   <p className="text-sm">{note.content}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {note.createdBy} · {formatDate(note.createdAt)}
+                    {note.createdBy} · <RelativeTime value={note.createdAt} fallback="—" />
                   </p>
                 </div>
               ))
@@ -662,7 +641,9 @@ function RecentActivityFeed({ customerId }: { customerId: string }) {
               <div className="flex items-center gap-2 text-muted-foreground">
                 <span>{session.pageViews} pages</span>
                 <span>·</span>
-                <span>{formatDate(session.startedAt)}</span>
+                <span>
+                  <RelativeTime value={session.startedAt} fallback="—" />
+                </span>
               </div>
             </div>
           ))}

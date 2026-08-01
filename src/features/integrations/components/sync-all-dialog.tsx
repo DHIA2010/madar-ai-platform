@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { AppButton, AppDialog } from "@/components/app"
 
+import { CONNECTION_ACTION_IDS,connectionActionPolicy } from "../services"
 import type { ConnectionCenterRecord } from "../types"
 
 interface SyncAllDialogProps {
@@ -29,25 +30,36 @@ export function SyncAllDialog({
   isSyncing,
   onRunSync,
 }: SyncAllDialogProps) {
+  const runnableRecords = useMemo(
+    () =>
+      records.filter((record) =>
+        connectionActionPolicy.getAction(
+          {
+            connection: record.connection,
+            integrationStatus: record.integrationStatus,
+          },
+          CONNECTION_ACTION_IDS.RUN_SYNC
+        ).enabled
+      ),
+    [records]
+  )
+
   const syncStats = useMemo(() => {
-    const activeConnections = records.filter(
-      (r) => r.connection.status !== "draft" && r.connection.status !== "disconnected"
-    )
     const disabledConnections = records.filter(
-      (r) =>
-        r.connection.status === "draft" ||
-        r.connection.status === "disconnected" ||
-        r.connection.status === "paused"
+      (record) =>
+        !runnableRecords.some(
+          (candidate) => candidate.connection.connectionId === record.connection.connectionId
+        )
     )
     const currentlySyncing = records.filter((r) => r.connection.status === "syncing").length
 
     return {
-      total: activeConnections.length,
+      total: runnableRecords.length,
       disabled: disabledConnections.length,
       syncing: currentlySyncing,
-      estimatedDuration: Math.ceil(activeConnections.length / 3) * 2,
+      estimatedDuration: Math.ceil(runnableRecords.length / 3) * 2,
     }
-  }, [records])
+  }, [records, runnableRecords])
 
   const executeSyncAll = async () => {
     if (syncStats.total === 0) {
@@ -59,14 +71,7 @@ export function SyncAllDialog({
     onSyncStart()
 
     try {
-      const activeConnections = records
-        .filter(
-          (r) =>
-            r.connection.status !== "draft" &&
-            r.connection.status !== "disconnected" &&
-            r.connection.status !== "paused"
-        )
-        .map((r) => r.connection.connectionId)
+      const activeConnections = runnableRecords.map((record) => record.connection.connectionId)
 
       const CONCURRENCY_LIMIT = 3
       const results = { completed: 0, failed: 0, failedIds: [] as string[] }

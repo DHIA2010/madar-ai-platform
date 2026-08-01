@@ -42,7 +42,7 @@ export interface ProviderConnectionUpsertInput {
   encryptedAccessToken: string | null
   scopes: string[]
   tokenExpiresAt: string | null
-  status: "pending" | "connected" | "disconnected" | "error"
+  status: "pending" | "connected" | "paused" | "disconnected" | "error"
   connectionReference: string | null
   lastConnectedAt: string | null
   lastDisconnectedAt: string | null
@@ -107,36 +107,12 @@ export interface ProviderAccountDiscoveryRepository {
   ): Promise<IntegrationDiscoveredAccountView | null>
 }
 
+export type ProviderSyncBundle<TBundle extends object = Record<string, unknown[]>> = {
+  [K in keyof TBundle]: unknown[]
+}
+
 export interface ProviderSyncRepository<
-  TBundle extends {
-    customers: unknown[]
-    campaigns: unknown[]
-    campaignMetrics: unknown[]
-    adGroups: unknown[]
-    adGroupMetrics: unknown[]
-    ads: unknown[]
-    adMetrics: unknown[]
-    keywords: unknown[]
-    keywordMetrics: unknown[]
-    searchTerms: unknown[]
-    geoMetrics: unknown[]
-    deviceMetrics: unknown[]
-    conversionActions: unknown[]
-  } = {
-    customers: unknown[]
-    campaigns: unknown[]
-    campaignMetrics: unknown[]
-    adGroups: unknown[]
-    adGroupMetrics: unknown[]
-    ads: unknown[]
-    adMetrics: unknown[]
-    keywords: unknown[]
-    keywordMetrics: unknown[]
-    searchTerms: unknown[]
-    geoMetrics: unknown[]
-    deviceMetrics: unknown[]
-    conversionActions: unknown[]
-  },
+  TBundle extends ProviderSyncBundle<TBundle> = Record<string, unknown[]>,
   TQuery extends {
     connectionId: string
     customerId: string

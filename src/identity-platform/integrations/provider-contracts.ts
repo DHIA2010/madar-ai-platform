@@ -25,6 +25,28 @@ export interface IntegrationProviderSyncInput {
   endDate: string
   idempotencyKey: string
   mode?: "full" | "incremental"
+  trigger?: "manual" | "retry"
+}
+
+export interface IntegrationProviderRetryStatus {
+  connectionId: string
+  available: boolean
+  reason:
+    | "retryable_failure"
+    | "connection_not_connected"
+    | "sync_running"
+    | "no_previous_failure"
+    | "non_retryable_failure"
+  lastOperation?: {
+    syncRunId: string
+    status: "pending" | "running" | "completed" | "failed"
+    customerId: string
+    startDate: string
+    endDate: string
+    errorCode: string | null
+    errorMessage: string | null
+    createdAt: string
+  }
 }
 
 export interface IntegrationProviderRecordQuery {
@@ -73,6 +95,8 @@ export interface IntegrationProvider {
   oauthCallback?(request: IncomingMessage, query: URLSearchParams): Promise<IntegrationProviderOAuthControllerResult>
   getActiveConnection?(actor: AuthenticatedActor): Promise<unknown>
   sync?(actor: AuthenticatedActor, input: IntegrationProviderSyncInput): Promise<unknown>
+  retry?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
+  getRetryStatus?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<IntegrationProviderRetryStatus>
   listRecords?(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery): Promise<unknown>
   listAccounts?(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery): Promise<unknown>
   selectAccount?(actor: AuthenticatedActor, input: IntegrationProviderAccountSelectionInput): Promise<unknown>

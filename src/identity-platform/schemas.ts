@@ -100,6 +100,7 @@ export const revokeSessionSchema = z.object({
 })
 
 export const googleOAuthStartSchema = z.object({
+  connectionId: z.string().uuid().nullable().optional(),
   workspaceId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   connectionName: z.string().min(1).max(200).nullable().optional(),
@@ -114,6 +115,7 @@ export const googleAdsSyncSchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   idempotencyKey: z.string().min(8).max(200),
   mode: z.enum(["full", "incremental"]).default("incremental"),
+  trigger: z.enum(["manual", "retry"]).default("manual"),
 })
 
 export const integrationSyncSchema = googleAdsSyncSchema
@@ -143,7 +145,14 @@ export const googleAdsRecordsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(1000).optional(),
 })
 
-export const integrationRecordsQuerySchema = googleAdsRecordsQuerySchema
+export const integrationRecordsQuerySchema = z.object({
+  connectionId: z.string().uuid(),
+  customerId: z.string().min(1).max(64),
+  entityType: z.string().min(1).max(128).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  pageSize: z.coerce.number().int().min(1).max(1000).optional(),
+})
 
 export const googleAdsAccountsQuerySchema = z.object({
   connectionId: z.string().uuid(),
@@ -157,3 +166,11 @@ export const googleAdsAccountSelectionSchema = z.object({
 })
 
 export const integrationAccountSelectionSchema = googleAdsAccountSelectionSchema
+
+export const integrationDisconnectSchema = z.object({
+  reason: z.string().min(1).max(300).optional(),
+})
+
+export const integrationEventsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+})

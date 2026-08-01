@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { ConnectionsOverview } from "./connections-overview"
@@ -68,8 +68,9 @@ const mockRecord = {
 }
 
 describe("ConnectionsOverview", () => {
-  it("renders connection cards and supports search/filter interactions", () => {
+  it("renders connection cards and supports search/filter interactions", async () => {
     const updateFilters = vi.fn()
+    const connect = vi.fn()
 
     mockUseConnectionsCenter.mockReturnValue({
       isLoading: false,
@@ -90,7 +91,7 @@ describe("ConnectionsOverview", () => {
         capabilities: ["campaigns", "ads", "traffic"],
       },
       updateFilters,
-      connect: vi.fn(),
+      connect,
       disconnect: vi.fn(),
       pauseSync: vi.fn(),
       resumeSync: vi.fn(),
@@ -111,5 +112,14 @@ describe("ConnectionsOverview", () => {
     expect(screen.getByText("Connections Overview")).toBeTruthy()
     expect(screen.getAllByText("3 Accounts Connected").length).toBeGreaterThan(0)
     expect(screen.getByRole("button", { name: "Run Sync" })).toBeTruthy()
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }))
+
+    expect(await screen.findByText("Pause Sync")).toBeTruthy()
+    expect(await screen.findByText("Disconnect")).toBeTruthy()
+    expect(await screen.findByText("Delete Connection")).toBeTruthy()
+    expect(screen.queryByText("Reconnect")).toBeNull()
+    expect(screen.queryByText("History")).toBeNull()
+    expect(screen.queryByText("Logs")).toBeNull()
   })
 })

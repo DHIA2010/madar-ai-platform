@@ -7,6 +7,7 @@ export class GoogleAdsIntegrationError extends IntegrationProviderError {
       | "GOOGLE_ADS_FORBIDDEN"
       | "GOOGLE_ADS_CONNECTION_NOT_FOUND"
       | "GOOGLE_ADS_CONNECTION_NOT_READY"
+      | "GOOGLE_ADS_INTEGRATION_CONNECTION_MISSING"
       | "GOOGLE_ADS_INVALID_CUSTOMER"
       | "GOOGLE_ADS_PERMISSION_DENIED"
       | "GOOGLE_ADS_QUOTA_EXCEEDED"
@@ -20,6 +21,18 @@ export class GoogleAdsIntegrationError extends IntegrationProviderError {
     public readonly details?: unknown
   ) {
     super(message, code, retryable, status, details)
+  }
+}
+
+export class IntegrationConnectionMissing extends GoogleAdsIntegrationError {
+  constructor(details?: unknown) {
+    super(
+      "Integration connection is missing or inconsistent for Google Ads sync.",
+      "GOOGLE_ADS_INTEGRATION_CONNECTION_MISSING",
+      false,
+      500,
+      details
+    )
   }
 }
 

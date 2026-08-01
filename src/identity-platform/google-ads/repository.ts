@@ -5,6 +5,7 @@ import type { ProviderSyncRepository } from "../integrations/provider-repositori
 
 import type { GoogleAdsEntityType, GoogleAdsNormalizedBundle } from "./models"
 import type { GoogleAdsRecordQuery, GoogleAdsRecordView, GoogleAdsSyncRunView } from "./types"
+import { IntegrationConnectionMissing } from "./errors"
 
 interface CreateSyncRunInput {
   connectionId: string
@@ -141,6 +142,39 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
     return result.rows[0] ? mapRun(result.rows[0]) : null
   }
 
+  async findLatestSyncRunByConnection(connectionId: string) {
+    const result = await this.db.query<Record<string, unknown>>(
+      `
+      select *
+      from google_ads_sync_runs
+      where connection_id = $1
+      order by created_at desc
+      limit 1
+      `,
+      [connectionId]
+    )
+
+    return result.rows[0] ? mapRun(result.rows[0]) : null
+  }
+
+  async hasActiveSyncLock(input: { providerKey: string; connectionId: string; projectId: string }) {
+    const result = await this.db.query<{ active: boolean }>(
+      `
+      select exists(
+        select 1
+        from google_ads_sync_locks
+        where provider_key = $1
+          and connection_id = $2
+          and project_id = $3
+          and locked_until > now()
+      ) as active
+      `,
+      [input.providerKey, input.connectionId, input.projectId]
+    )
+
+    return Boolean(result.rows[0]?.active)
+  }
+
   async markSyncRunRunning(syncRunId: string, actorUserId: string) {
     await this.db.query(
       `
@@ -180,56 +214,89 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
   async acquireSyncLock(input: SyncLockInput) {
     const lockToken = randomUUID()
     const leaseSeconds = input.leaseSeconds ?? 3600
+    const now = Date.now()
     const lockedUntil = new Date(Date.now() + leaseSeconds * 1000).toISOString()
-    const result = await this.db.withTransaction(async () => {
-      const current = await this.db.query<Record<string, unknown>>(
-        `
-        select lock_token, locked_until
-        from google_ads_sync_locks
-        where provider_key = $1 and connection_id = $2 and project_id = $3
-        limit 1
-        `,
-        [input.providerKey, input.connectionId, input.projectId]
-      )
+    const existing = await this.db.query<Record<string, unknown>>(
+      `
+      select *
+      from google_ads_sync_locks
+      where provider_key = $1
+        and connection_id = $2
+        and project_id = $3
+      limit 1
+      `,
+      [input.providerKey, input.connectionId, input.projectId]
+    )
 
-      const currentRow = current.rows[0]
-      if (currentRow) {
-        const currentLockedUntil = new Date(String(currentRow.locked_until)).getTime()
-        if (Number.isFinite(currentLockedUntil) && currentLockedUntil > Date.now()) {
-          return null
-        }
+    const current = existing.rows[0]
+    if (current) {
+      const currentLockedUntil = new Date(String(current.locked_until)).getTime()
+      if (!Number.isNaN(currentLockedUntil) && currentLockedUntil > now) {
+        return null
       }
 
-      return this.db.query<Record<string, unknown>>(
+      const refreshed = await this.db.query<Record<string, unknown>>(
         `
-        insert into google_ads_sync_locks (
-          id, provider_key, connection_id, project_id, organization_id, lock_token, locked_until, created_by_user_id, updated_by_user_id, created_at, updated_at
-        ) values (
-          $1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $8, now(), now()
-        )
-        on conflict (provider_key, connection_id, project_id)
-        do update set
-          lock_token = excluded.lock_token,
-          organization_id = excluded.organization_id,
-          locked_until = excluded.locked_until,
-          updated_by_user_id = excluded.updated_by_user_id,
-          updated_at = now()
+        update google_ads_sync_locks
+        set lock_token = $2,
+            organization_id = $3,
+            locked_until = $4::timestamptz,
+            updated_by_user_id = $5,
+            updated_at = now()
+        where id = $1
+          and lock_token = $6
         returning *
         `,
         [
-          randomUUID(),
-          input.providerKey,
-          input.connectionId,
-          input.projectId,
-          input.organizationId,
+          String(current.id),
           lockToken,
+          input.organizationId,
           lockedUntil,
           input.actorUserId,
+          String(current.lock_token),
         ]
       )
-    })
 
-    const row = result?.rows[0]
+      const refreshedRow = refreshed.rows[0]
+      if (!refreshedRow) {
+        return null
+      }
+
+      return {
+        id: String(refreshedRow.id),
+        providerKey: String(refreshedRow.provider_key),
+        connectionId: String(refreshedRow.connection_id),
+        projectId: String(refreshedRow.project_id),
+        organizationId: String(refreshedRow.organization_id),
+        lockToken: String(refreshedRow.lock_token),
+        lockedUntil: toJsonDate((refreshedRow.locked_until as string | null) ?? null) ?? new Date().toISOString(),
+      }
+    }
+
+    const inserted = await this.db.query<Record<string, unknown>>(
+      `
+      insert into google_ads_sync_locks (
+        id, provider_key, connection_id, project_id, organization_id, lock_token, locked_until, created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values (
+        $1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $8, now(), now()
+      )
+      on conflict (provider_key, connection_id, project_id)
+      do nothing
+      returning *
+      `,
+      [
+        randomUUID(),
+        input.providerKey,
+        input.connectionId,
+        input.projectId,
+        input.organizationId,
+        lockToken,
+        lockedUntil,
+        input.actorUserId,
+      ]
+    )
+
+    const row = inserted.rows[0]
     if (!row) {
       return null
     }
@@ -402,47 +469,74 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
     )
   }
 
-  async ensureIntegrationConnectionExists(input: {
+  async validateIntegrationConnection(input: {
     connectionId: string
+    providerId: string
+    providerFamily: string
+    platform: string
     organizationId: string
     workspaceId: string | null
     projectId: string
     dataSourceId: string | null
     status: string
+    oauthAccountId: string | null
     connectionReference: string | null
     actorUserId: string
     nowIso: string
   }) {
-    await this.db.query(
+    const found = await this.db.query<Record<string, unknown>>(
       `
-      insert into integration_connections (
-        id, provider_id, provider_family, platform,
-        organization_id, workspace_id, project_id, oauth_account_id, data_source_id,
-        connection_reference, configuration, status,
-        last_connected_at, last_disconnected_at, last_synced_at,
-        created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at
-      ) values (
-        $1, 'google-ads', 'google', 'marketing',
-        $2, $3, $4, null, $5,
-        $6, '{}'::jsonb, $7,
-        null, null, null,
-        $8, $8, $9, $9, null
-      )
-      on conflict (id)
-      do nothing
+      select *
+      from integration_connections
+      where id = $1
+        and deleted_at is null
+      limit 1
       `,
       [
         input.connectionId,
-        input.organizationId,
-        input.workspaceId,
-        input.projectId,
-        input.dataSourceId,
-        input.connectionReference,
-        input.status,
-        input.actorUserId,
-        input.nowIso,
       ]
     )
+
+    const row = found.rows[0]
+    if (!row) {
+      throw new IntegrationConnectionMissing({
+        reason: "missing",
+        connectionId: input.connectionId,
+        providerId: input.providerId,
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+      })
+    }
+
+    const mismatches: string[] = []
+
+    if (String(row.provider_id) !== input.providerId) {
+      mismatches.push("provider_id")
+    }
+    if (String(row.provider_family) !== input.providerFamily) {
+      mismatches.push("provider_family")
+    }
+    if (String(row.platform) !== input.platform) {
+      mismatches.push("platform")
+    }
+    if (String(row.organization_id) !== input.organizationId) {
+      mismatches.push("organization_id")
+    }
+    if (((row.workspace_id as string | null) ?? null) !== input.workspaceId) {
+      mismatches.push("workspace_id")
+    }
+    if (String(row.project_id) !== input.projectId) {
+      mismatches.push("project_id")
+    }
+
+    if (mismatches.length > 0) {
+      throw new IntegrationConnectionMissing({
+        reason: "mismatch",
+        connectionId: input.connectionId,
+        mismatches,
+      })
+    }
   }
 
   async loadSyncCheckpoint(input: { providerKey: string; connectionId: string; customerId: string }) {
@@ -526,46 +620,518 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       payload: object
     }> = []
 
+    const metadataEntries: Array<{
+      entityType: GoogleAdsEntityType
+      entityId: string
+      payload: object
+    }> = []
+
+    const metricsEntries: Array<{
+      entityType: GoogleAdsEntityType
+      entityId: string
+      recordDate: string
+      payload: object
+      metricScope: "campaign" | "ad_group" | "ad" | "keyword" | "search_term" | "geo" | "device"
+      campaignId: string | null
+      adGroupId: string | null
+      adId: string | null
+      keywordId: string | null
+      impressions: number
+      clicks: number
+      ctr: number
+      costMicros: number
+      averageCpc: number
+      averageCpm: number
+      conversions: number
+      conversionValue: number
+    }> = []
+
     for (const item of input.bundle.customers) {
       entries.push({ entityType: "customer_account", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      metadataEntries.push({ entityType: "customer_account", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.campaigns) {
       entries.push({ entityType: "campaign", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      metadataEntries.push({ entityType: "campaign", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.campaignMetrics) {
       entries.push({ entityType: "campaign_metric", entityId: item.campaignId, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "campaign_metric",
+        entityId: item.campaignId,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "campaign",
+        campaignId: item.campaignId,
+        adGroupId: null,
+        adId: null,
+        keywordId: null,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.ctr,
+        costMicros: item.costMicros,
+        averageCpc: item.cpcMicros,
+        averageCpm: item.cpmMicros,
+        conversions: item.conversions,
+        conversionValue: item.conversionValue,
+      })
     }
     for (const item of input.bundle.adGroups) {
       entries.push({ entityType: "ad_group", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      metadataEntries.push({ entityType: "ad_group", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.adGroupMetrics) {
       entries.push({ entityType: "ad_group_metric", entityId: item.adGroupId, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "ad_group_metric",
+        entityId: item.adGroupId,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "ad_group",
+        campaignId: item.campaignId,
+        adGroupId: item.adGroupId,
+        adId: null,
+        keywordId: null,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
+        costMicros: item.costMicros,
+        averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
+        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        conversions: item.conversions,
+        conversionValue: 0,
+      })
     }
     for (const item of input.bundle.ads) {
       entries.push({ entityType: "ad", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      metadataEntries.push({ entityType: "ad", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.adMetrics) {
       entries.push({ entityType: "ad_metric", entityId: item.adId, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "ad_metric",
+        entityId: item.adId,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "ad",
+        campaignId: item.campaignId,
+        adGroupId: item.adGroupId,
+        adId: item.adId,
+        keywordId: null,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
+        costMicros: item.costMicros,
+        averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
+        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        conversions: item.conversions,
+        conversionValue: 0,
+      })
     }
     for (const item of input.bundle.keywords) {
       entries.push({ entityType: "keyword", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      metadataEntries.push({ entityType: "keyword", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.keywordMetrics) {
       entries.push({ entityType: "keyword_metric", entityId: item.keywordId, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "keyword_metric",
+        entityId: item.keywordId,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "keyword",
+        campaignId: null,
+        adGroupId: null,
+        adId: null,
+        keywordId: item.keywordId,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
+        costMicros: item.costMicros,
+        averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
+        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        conversions: item.conversions,
+        conversionValue: 0,
+      })
     }
     for (const item of input.bundle.searchTerms) {
       entries.push({ entityType: "search_term", entityId: item.id, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "search_term",
+        entityId: item.id,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "search_term",
+        campaignId: null,
+        adGroupId: null,
+        adId: null,
+        keywordId: item.keywordId,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
+        costMicros: item.costMicros,
+        averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
+        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        conversions: item.conversions,
+        conversionValue: 0,
+      })
     }
     for (const item of input.bundle.geoMetrics) {
       entries.push({ entityType: "geo_metric", entityId: item.id, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "geo_metric",
+        entityId: item.id,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "geo",
+        campaignId: null,
+        adGroupId: null,
+        adId: null,
+        keywordId: null,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
+        costMicros: item.costMicros,
+        averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
+        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        conversions: item.conversions,
+        conversionValue: 0,
+      })
     }
     for (const item of input.bundle.deviceMetrics) {
       entries.push({ entityType: "device_metric", entityId: item.id, recordDate: item.date, payload: item })
+      metricsEntries.push({
+        entityType: "device_metric",
+        entityId: item.id,
+        recordDate: item.date,
+        payload: item,
+        metricScope: "device",
+        campaignId: null,
+        adGroupId: null,
+        adId: null,
+        keywordId: null,
+        impressions: item.impressions,
+        clicks: item.clicks,
+        ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
+        costMicros: item.costMicros,
+        averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
+        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        conversions: item.conversions,
+        conversionValue: 0,
+      })
     }
     for (const item of input.bundle.conversionActions) {
       entries.push({ entityType: "conversion_action", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      metadataEntries.push({ entityType: "conversion_action", entityId: item.id, payload: item })
     }
 
+    for (const entry of metadataEntries) {
+      if (entry.entityType === "customer_account") {
+        const item = entry.payload as {
+          id: string
+          name: string
+          currencyCode: string | null
+          timeZone: string | null
+        }
+        await this.db.query(
+          `
+          insert into google_ads_customer_accounts (
+            id, connection_id, customer_id, display_name, currency_code, time_zone,
+            status, discovered_at, updated_at
+          ) values (
+            $1,$2,$3,$4,$5,$6,'active',now(),now()
+          )
+          on conflict (connection_id, customer_id)
+          do update set
+            display_name = excluded.display_name,
+            currency_code = excluded.currency_code,
+            time_zone = excluded.time_zone,
+            status = 'active',
+            updated_at = now()
+          `,
+          [
+            randomUUID(),
+            input.connectionId,
+            item.id,
+            item.name,
+            item.currencyCode,
+            item.timeZone,
+          ]
+        )
+        continue
+      }
+
+      if (entry.entityType === "campaign") {
+        const item = entry.payload as {
+          id: string
+          customerId: string
+          name: string
+          status: string
+          channelType?: string | null
+          biddingStrategyType?: string | null
+          budgetMicros: number | null
+          startDate?: string | null
+          endDate?: string | null
+        }
+        await this.db.query(
+          `
+          insert into google_ads_campaigns (
+            id, connection_id, customer_id, campaign_id, name, status, channel_type,
+            bidding_strategy_type, budget_micros, start_date, end_date, payload, created_at, updated_at
+          ) values (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11::date,$12::jsonb,now(),now()
+          )
+          on conflict (connection_id, customer_id, campaign_id)
+          do update set
+            name = excluded.name,
+            status = excluded.status,
+            channel_type = excluded.channel_type,
+            bidding_strategy_type = excluded.bidding_strategy_type,
+            budget_micros = excluded.budget_micros,
+            start_date = excluded.start_date,
+            end_date = excluded.end_date,
+            payload = excluded.payload,
+            updated_at = now()
+          `,
+          [
+            randomUUID(),
+            input.connectionId,
+            item.customerId,
+            item.id,
+            item.name,
+            item.status,
+            item.channelType ?? null,
+            item.biddingStrategyType ?? null,
+            item.budgetMicros,
+            item.startDate ?? null,
+            item.endDate ?? null,
+            JSON.stringify(item),
+          ]
+        )
+        continue
+      }
+
+      if (entry.entityType === "ad_group") {
+        const item = entry.payload as {
+          id: string
+          customerId: string
+          campaignId: string
+          name: string
+          status: string
+        }
+        await this.db.query(
+          `
+          insert into google_ads_ad_groups (
+            id, connection_id, customer_id, ad_group_id, campaign_id, name, status, payload, created_at, updated_at
+          ) values (
+            $1,$2,$3,$4,$5,$6,$7,$8::jsonb,now(),now()
+          )
+          on conflict (connection_id, customer_id, ad_group_id)
+          do update set
+            campaign_id = excluded.campaign_id,
+            name = excluded.name,
+            status = excluded.status,
+            payload = excluded.payload,
+            updated_at = now()
+          `,
+          [
+            randomUUID(),
+            input.connectionId,
+            item.customerId,
+            item.id,
+            item.campaignId,
+            item.name,
+            item.status,
+            JSON.stringify(item),
+          ]
+        )
+        continue
+      }
+
+      if (entry.entityType === "ad") {
+        const item = entry.payload as {
+          id: string
+          customerId: string
+          campaignId: string
+          adGroupId: string
+          status: string
+          type: string
+          headline: string | null
+        }
+        await this.db.query(
+          `
+          insert into google_ads_ads (
+            id, connection_id, customer_id, ad_id, campaign_id, ad_group_id, status, ad_type, headline, payload, created_at, updated_at
+          ) values (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,now(),now()
+          )
+          on conflict (connection_id, customer_id, ad_id)
+          do update set
+            campaign_id = excluded.campaign_id,
+            ad_group_id = excluded.ad_group_id,
+            status = excluded.status,
+            ad_type = excluded.ad_type,
+            headline = excluded.headline,
+            payload = excluded.payload,
+            updated_at = now()
+          `,
+          [
+            randomUUID(),
+            input.connectionId,
+            item.customerId,
+            item.id,
+            item.campaignId,
+            item.adGroupId,
+            item.status,
+            item.type,
+            item.headline,
+            JSON.stringify(item),
+          ]
+        )
+        continue
+      }
+
+      if (entry.entityType === "keyword") {
+        const item = entry.payload as {
+          id: string
+          customerId: string
+          campaignId: string
+          adGroupId: string
+          text: string
+          matchType: string
+          status: string
+        }
+        await this.db.query(
+          `
+          insert into google_ads_keywords (
+            id, connection_id, customer_id, keyword_id, campaign_id, ad_group_id, keyword_text, match_type, status, payload, created_at, updated_at
+          ) values (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,now(),now()
+          )
+          on conflict (connection_id, customer_id, keyword_id)
+          do update set
+            campaign_id = excluded.campaign_id,
+            ad_group_id = excluded.ad_group_id,
+            keyword_text = excluded.keyword_text,
+            match_type = excluded.match_type,
+            status = excluded.status,
+            payload = excluded.payload,
+            updated_at = now()
+          `,
+          [
+            randomUUID(),
+            input.connectionId,
+            item.customerId,
+            item.id,
+            item.campaignId,
+            item.adGroupId,
+            item.text,
+            item.matchType,
+            item.status,
+            JSON.stringify(item),
+          ]
+        )
+        continue
+      }
+
+      if (entry.entityType === "conversion_action") {
+        const item = entry.payload as {
+          id: string
+          customerId: string
+          name: string
+          category: string
+          status: string
+          type: string
+        }
+        await this.db.query(
+          `
+          insert into google_ads_conversion_actions (
+            id, connection_id, customer_id, conversion_action_id, name, category, status, action_type, payload, created_at, updated_at
+          ) values (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,now(),now()
+          )
+          on conflict (connection_id, customer_id, conversion_action_id)
+          do update set
+            name = excluded.name,
+            category = excluded.category,
+            status = excluded.status,
+            action_type = excluded.action_type,
+            payload = excluded.payload,
+            updated_at = now()
+          `,
+          [
+            randomUUID(),
+            input.connectionId,
+            item.customerId,
+            item.id,
+            item.name,
+            item.category,
+            item.status,
+            item.type,
+            JSON.stringify(item),
+          ]
+        )
+      }
+    }
+
+    for (const metric of metricsEntries) {
+      await this.db.query(
+        `
+        insert into google_ads_daily_metrics (
+          id, connection_id, sync_run_id, customer_id, metric_scope, metric_entity_id,
+          campaign_id, ad_group_id, ad_id, keyword_id, metric_date,
+          impressions, clicks, ctr, cost_micros, average_cpc, average_cpm,
+          conversions, conversion_value, payload, created_at, updated_at
+        ) values (
+          $1,$2,$3,$4,$5,$6,
+          $7,$8,$9,$10,$11::date,
+          $12,$13,$14,$15,$16,$17,
+          $18,$19,$20::jsonb,now(),now()
+        )
+        on conflict (connection_id, customer_id, metric_scope, metric_entity_id, metric_date)
+        do update set
+          sync_run_id = excluded.sync_run_id,
+          campaign_id = excluded.campaign_id,
+          ad_group_id = excluded.ad_group_id,
+          ad_id = excluded.ad_id,
+          keyword_id = excluded.keyword_id,
+          impressions = excluded.impressions,
+          clicks = excluded.clicks,
+          ctr = excluded.ctr,
+          cost_micros = excluded.cost_micros,
+          average_cpc = excluded.average_cpc,
+          average_cpm = excluded.average_cpm,
+          conversions = excluded.conversions,
+          conversion_value = excluded.conversion_value,
+          payload = excluded.payload,
+          updated_at = now()
+        `,
+        [
+          randomUUID(),
+          input.connectionId,
+          input.syncRunId,
+          input.customerId,
+          metric.metricScope,
+          metric.entityId,
+          metric.campaignId,
+          metric.adGroupId,
+          metric.adId,
+          metric.keywordId,
+          metric.recordDate,
+          metric.impressions,
+          metric.clicks,
+          metric.ctr,
+          metric.costMicros,
+          metric.averageCpc,
+          metric.averageCpm,
+          metric.conversions,
+          metric.conversionValue,
+          JSON.stringify(metric.payload),
+        ]
+      )
+    }
+
+    // Keep legacy records query compatibility by mirroring normalized rows.
     for (const entry of entries) {
       await this.db.query(
         `
@@ -575,7 +1141,10 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
           $1,$2,$3,$4,$5,$6,$7::date,$8::jsonb,now(),now()
         )
         on conflict (connection_id, entity_type, customer_id, entity_id, record_date)
-        do update set sync_run_id = excluded.sync_run_id, payload = excluded.payload, updated_at = now()
+        do update set
+          sync_run_id = excluded.sync_run_id,
+          payload = excluded.payload,
+          updated_at = now()
         `,
         [
           randomUUID(),

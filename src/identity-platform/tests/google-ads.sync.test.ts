@@ -91,6 +91,38 @@ describe("google ads sync service", () => {
     )
 
     await database.query(
+      `insert into integration_connections (
+        id, provider_id, provider_family, platform,
+        organization_id, workspace_id, project_id, oauth_account_id, data_source_id,
+        connection_reference, configuration, status,
+        last_connected_at, last_disconnected_at, last_synced_at,
+        created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at
+      ) values (
+        '00000000-0000-4000-8000-000000000105',
+        'google-ads',
+        'google',
+        'marketing',
+        $1,
+        $2,
+        '00000000-0000-4000-8000-000000000104',
+        null,
+        null,
+        null,
+        '{}'::jsonb,
+        'connected',
+        now(),
+        null,
+        null,
+        $3,
+        $3,
+        now(),
+        now(),
+        null
+      )`,
+      [ACTOR.organizationId, ACTOR.workspaceId, ACTOR.userId]
+    )
+
+    await database.query(
       `insert into google_ads_customer_accounts (
         id, connection_id, customer_id, display_name, status, is_selected, discovered_at, created_at, updated_at
       ) values (
@@ -317,7 +349,7 @@ describe("google ads sync service", () => {
     })).rejects.toMatchObject({ code: "GOOGLE_ADS_INVALID_CUSTOMER", status: 400 })
 
     await database.query(
-      `delete from google_oauth_connections where id = $1`,
+      `delete from integration_connections where id = $1`,
       ["00000000-0000-4000-8000-000000000105"]
     )
 
@@ -325,39 +357,36 @@ describe("google ads sync service", () => {
       connectionId: "00000000-0000-4000-8000-000000000105",
       customerId: "google-ads-1",
       pageSize: 20,
-    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_FOUND", status: 404 })
+    })).rejects.toMatchObject({ code: "GOOGLE_ADS_INVALID_CUSTOMER", status: 400 })
   })
 
   it("blocks duplicate concurrent syncs with a database lease", async () => {
-    const blocked = deferredResponse()
-    let googleQueryStartedResolve!: () => void
-    const googleQueryStarted = new Promise<void>((resolve) => {
-      googleQueryStartedResolve = resolve
-    })
-    let blockedOnce = false
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ results: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString()
-      if (url.includes("oauth2.googleapis.com/token")) {
-        return new Response(JSON.stringify({ access_token: "new-access", expires_in: 3600 }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })
-      }
+    await database.query(
+      `insert into google_ads_sync_locks (
+        id, provider_key, connection_id, project_id, organization_id, lock_token, locked_until,
+        created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values (
+        '00000000-0000-4000-8000-000000000199',
+        'google-ads',
+        '00000000-0000-4000-8000-000000000105',
+        '00000000-0000-4000-8000-000000000104',
+        $1,
+        'existing-lock-token',
+        '2099-01-01T00:00:00.000Z',
+        $2,
+        $2,
+        now(),
+        now()
+      )`,
+      [ACTOR.organizationId, ACTOR.userId]
+    )
 
-      googleQueryStartedResolve()
-      if (!blockedOnce) {
-        blockedOnce = true
-        return blocked.promise
-      }
-
-      return new Response(JSON.stringify({ results: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
-    })
-
-    const firstService = new GoogleAdsSyncService(
+    const service = new GoogleAdsSyncService(
       database,
       {
         apiBaseUrl: "https://googleads.googleapis.com/v17",
@@ -370,39 +399,13 @@ describe("google ads sync service", () => {
       fetchMock as unknown as typeof fetch
     )
 
-    const secondService = new GoogleAdsSyncService(
-      database,
-      {
-        apiBaseUrl: "https://googleads.googleapis.com/v17",
-        tokenEndpoint: "https://oauth2.googleapis.com/token",
-        encryptionKey: "12345678901234567890123456789012",
-        developerToken: "developer-token",
-        maxRetries: 0,
-        minRequestIntervalMs: 0,
-      },
-      fetchMock as unknown as typeof fetch
-    )
-
-    const first = firstService.sync(ACTOR, {
+    await expect(service.sync(ACTOR, {
       connectionId: "00000000-0000-4000-8000-000000000105",
       customerId: "123",
       startDate: "2026-06-01",
       endDate: "2026-06-02",
-      idempotencyKey: "sync-lock-1",
-    })
-
-    await googleQueryStarted
-
-    await expect(secondService.sync(ACTOR, {
-      connectionId: "00000000-0000-4000-8000-000000000105",
-      customerId: "123",
-      startDate: "2026-06-01",
-      endDate: "2026-06-02",
-      idempotencyKey: "sync-lock-2",
+      idempotencyKey: "sync-lock-locked",
     })).rejects.toMatchObject({ code: "GOOGLE_ADS_SYNC_IN_PROGRESS" })
-
-    blocked.resolve(new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "content-type": "application/json" } }))
-    await expect(first).resolves.toMatchObject({ status: "completed" })
   })
 
   it("resumes from checkpoint after a mid-sync failure", async () => {

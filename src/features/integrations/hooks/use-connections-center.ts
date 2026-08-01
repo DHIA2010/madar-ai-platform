@@ -7,6 +7,8 @@ import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
 
 import {
   appendConnectorAccount,
+  CONNECTION_ACTION_IDS,
+  connectionActionPolicy,
   CONNECTOR_CATALOG,
   filterConnectionRecords,
   inferHealthState,
@@ -19,7 +21,7 @@ import {
 import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 
 import { useApplicationServices } from "@/application/context"
-import type { Connection, SyncHistoryViewModel, SyncJob } from "@/application/contracts"
+import type { Connection, SyncHistoryViewModel } from "@/application/contracts"
 
 const DEFAULT_FILTERS: ConnectionsFilterState = {
   search: "",
@@ -95,9 +97,19 @@ export function useConnectionsCenter() {
         return null
       }
 
-      const connectorHealth = await integrationApplicationService.getConnectorHealth({
-        connectorId: connection.connectorId,
-      })
+      const connectorHealth = await integrationApplicationService
+        .getConnectorHealth({
+          connectorId: connection.connectorId,
+        })
+        .catch(() => ({
+          payload: {
+            connectorId: connection.connectorId,
+            status: "degraded" as const,
+            score: 0,
+            lastCheckedAt: new Date().toISOString(),
+            checks: [],
+          },
+        }))
 
       if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
         return null
@@ -124,7 +136,7 @@ export function useConnectionsCenter() {
           : [catalogEntry?.connectedAccountLabel ?? "Connected account"]
       const lastErrorEvent =
         history?.events.find((event) => event.eventType === "sync_failed") ??
-        statusViewModel.payload.recentEvents.find((event) => event.action === "sync")
+        statusViewModel.payload.recentEvents.find((event) => event.action.startsWith("sync."))
 
       return {
         connectorDefinitionId: connection.connectorDefinitionId,
@@ -212,14 +224,22 @@ export function useConnectionsCenter() {
         }
       }
 
-      if (refs.length === 0) {
-        const recovered = await integrationApplicationService.recoverConnections()
-        for (const recoveredConnection of recovered) {
-          refs.push({
-            connectorDefinitionId: recoveredConnection.payload.connectorDefinitionId,
-            connectionId: recoveredConnection.payload.connectionId,
-          })
+      const recovered = await integrationApplicationService.recoverConnections()
+      for (const recoveredConnection of recovered) {
+        if (
+          refs.some(
+            (entry) =>
+              entry.connectorDefinitionId === recoveredConnection.payload.connectorDefinitionId
+              && entry.connectionId === recoveredConnection.payload.connectionId
+          )
+        ) {
+          continue
         }
+
+        refs.push({
+          connectorDefinitionId: recoveredConnection.payload.connectorDefinitionId,
+          connectionId: recoveredConnection.payload.connectionId,
+        })
       }
 
       const resolvedRefs: Array<{ connectorDefinitionId: string; connectionId: string }> = []
@@ -254,6 +274,7 @@ export function useConnectionsCenter() {
         }
 
         if (!connection) {
+          connectionManager.forgetConnection(storedRef.connectionId)
           continue
         }
 
@@ -267,9 +288,13 @@ export function useConnectionsCenter() {
           connectionId: connection.connectionId,
         })
 
-        const record = await buildRecord(connection, requestId)
-        if (record) {
-          nextRecords.push(record)
+        try {
+          const record = await buildRecord(connection, requestId)
+          if (record) {
+            nextRecords.push(record)
+          }
+        } catch {
+          connectionManager.forgetConnection(connection.connectionId)
         }
       }
 
@@ -290,7 +315,7 @@ export function useConnectionsCenter() {
         setIsLoading(false)
       }
     }
-  }, [buildRecord, integrationApplicationService, records.length])
+  }, [buildRecord, connectionManager, integrationApplicationService, records.length])
 
   useEffect(() => {
     void bootstrap()
@@ -328,14 +353,6 @@ export function useConnectionsCenter() {
       }
 
       return refreshed
-    },
-    [connectionManager, refreshConnection]
-  )
-
-  const refreshToken = useCallback(
-    async (connectionId: string) => {
-      await connectionManager.refreshConnection({ connectionId })
-      return refreshConnection(connectionId)
     },
     [connectionManager, refreshConnection]
   )
@@ -423,38 +440,21 @@ export function useConnectionsCenter() {
 
   const pauseSync = useCallback(
     async (record: ConnectionCenterRecord) => {
-      const latestJob: SyncJob | undefined = record.integrationStatus.latestJob
-      if (!latestJob) {
-        await connectionManager.runSync({
-          connectionId: record.connection.connectionId,
-          trigger: "manual",
-        })
-      }
-
       const jobId =
         record.integrationStatus.latestJob?.syncJobId ??
-        (
-          await integrationApplicationService.getIntegrationStatus({
-            connectionId: record.connection.connectionId,
-          })
-        ).payload.latestJob?.syncJobId
-
-      if (!jobId) {
-        return
-      }
+        `sync_job_${record.connection.connectionId}`
 
       await connectionManager.pauseSync(jobId)
       return refreshConnection(record.connection.connectionId)
     },
-    [connectionManager, integrationApplicationService, refreshConnection]
+    [connectionManager, refreshConnection]
   )
 
   const resumeSync = useCallback(
     async (record: ConnectionCenterRecord) => {
-      const jobId = record.integrationStatus.latestJob?.syncJobId
-      if (!jobId) {
-        return
-      }
+      const jobId =
+        record.integrationStatus.latestJob?.syncJobId ??
+        `sync_job_${record.connection.connectionId}`
 
       await connectionManager.resumeSync(jobId)
       return refreshConnection(record.connection.connectionId)
@@ -467,6 +467,19 @@ export function useConnectionsCenter() {
       const jobId = record.integrationStatus.latestJob?.syncJobId
       if (!jobId) {
         return
+      }
+
+      const retryAction = connectionActionPolicy.getAction(
+        {
+          connection: record.connection,
+          integrationStatus: record.integrationStatus,
+        },
+        CONNECTION_ACTION_IDS.RETRY
+      )
+      if (!retryAction.enabled) {
+        throw new Error(
+          retryAction.disabledReason ?? "Retry is unavailable for the latest operation."
+        )
       }
 
       await connectionManager.runRetryQueue(record.connection.connectionId)
@@ -513,7 +526,6 @@ export function useConnectionsCenter() {
     refetch: bootstrap,
     runSync,
     retrySync,
-    refreshToken,
     disconnect,
     deleteConnection,
     connect,

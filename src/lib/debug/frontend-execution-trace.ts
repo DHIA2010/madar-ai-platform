@@ -58,7 +58,4 @@ export function traceFrontendExecution(input: {
 
     window.__frontendExecutionTimeline.push(event)
   }
-
-  // Keep console logging for live debugging in browser devtools.
-  console.log("[frontend-execution-trace]", event)
 }

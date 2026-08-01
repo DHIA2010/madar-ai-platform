@@ -68,6 +68,26 @@ export class GoogleOAuthController {
     return this.service.getActiveConnection(actor)
   }
 
+  async pause(actor: AuthenticatedActor, connectionId: string) {
+    return this.service.pauseConnection(actor, connectionId)
+  }
+
+  async resume(actor: AuthenticatedActor, connectionId: string) {
+    return this.service.resumeConnection(actor, connectionId)
+  }
+
+  async disconnect(actor: AuthenticatedActor, input: { connectionId: string; reason?: string }) {
+    return this.service.disconnectConnection(actor, input)
+  }
+
+  async reconnect(actor: AuthenticatedActor, connectionId: string) {
+    return this.service.startReconnect(actor, connectionId)
+  }
+
+  async listRecentEvents(actor: AuthenticatedActor, input: { connectionId: string; limit: number }) {
+    return this.service.getRecentEvents(actor, input)
+  }
+
   async callback(request: IncomingMessage, query: URLSearchParams) {
     const error = query.get("error")
     const code = query.get("code")

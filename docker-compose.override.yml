@@ -1,8 +1,11 @@
 services:
   backend:
+    environment:
+      AWS_REGION: eu-central-1
     volumes:
       - ./:/workspace
       - backend_node_modules:/workspace/node_modules
+      - ${HOME}/.aws:/root/.aws:ro
 
   frontend:
     volumes:

@@ -30,6 +30,33 @@ vi.mock("../hooks", () => ({
   useConnectionsCenter: () => mockUseConnectionsCenter(),
 }))
 
+vi.mock("./connection-actions-menu", () => ({
+  ConnectionActionsMenu: ({
+    actions,
+    menuLabel,
+    onActionSelect,
+  }: {
+    actions: Array<{ id: string; label: string; enabled: boolean }>
+    menuLabel: string
+    onActionSelect: (action: { id: string; label: string; enabled: boolean }) => void
+  }) => (
+    <div aria-label={menuLabel}>
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          disabled={!action.enabled}
+          onClick={() => {
+            onActionSelect(action)
+          }}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  ),
+}))
+
 const record = {
   connectorDefinitionId: "connector_def_google_ads",
   connectorId: "google_ads",
@@ -76,7 +103,7 @@ describe("ConnectionDetails", () => {
       </QueryClientProvider>
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete Connection" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Connection" }))
     fireEvent.click(screen.getByRole("button", { name: "Delete" }))
 
     await waitFor(() => {

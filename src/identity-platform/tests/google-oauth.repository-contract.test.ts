@@ -84,6 +84,33 @@ describe("google oauth repository contract", () => {
       nowIso: new Date().toISOString(),
     })
 
+    await database.query(
+      `insert into oauth_accounts (
+        id, provider_family, organization_id, workspace_id, status,
+        created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values ($1,'google',$2,$3,'active',$4,$4,now(),now())
+      on conflict (id) do nothing`,
+      [OAUTH_ACCOUNT_ID, ORG_ID, WORKSPACE_ID, OWNER_ID]
+    )
+
+    await repository.upsertIntegrationConnection({
+      id: CONNECTION_ID,
+      providerId: "google-ads",
+      providerFamily: "google",
+      platform: "marketing",
+      organizationId: ORG_ID,
+      workspaceId: WORKSPACE_ID,
+      projectId: PROJECT_ID,
+      oauthAccountId: OAUTH_ACCOUNT_ID,
+      dataSourceId: null,
+      connectionReference: CONNECTION_ID,
+      status: "connected",
+      lastConnectedAt: new Date().toISOString(),
+      lastDisconnectedAt: null,
+      actorUserId: OWNER_ID,
+      nowIso: new Date().toISOString(),
+    })
+
     const loaded = await repository.findConnectionById(CONNECTION_ID)
     expect(loaded?.projectId).toBe(PROJECT_ID)
     expect(loaded?.status).toBe("connected")
@@ -119,18 +146,45 @@ describe("google oauth repository contract", () => {
     })
 
     await database.query(
-      `insert into oauth_states (
-        id, state, provider_family, provider_product,
-        organization_id, workspace_id, project_id, user_id, oauth_account_id,
-        requested_scopes, redirect_uri, status, expires_at, created_at, updated_at
-      ) values ($1,'state-delete','google','ads',$2,$3,$4,$5,$6,'["scope.a"]'::jsonb,'https://localhost/callback','pending',now() + interval '10 minutes',now(),now())`,
+      `insert into oauth_accounts (
+        id, provider_family, organization_id, workspace_id, status,
+        created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values ($1,'google',$2,$3,'active',$4,$4,now(),now())
+      on conflict (id) do nothing`,
+      [OAUTH_ACCOUNT_ID, ORG_ID, WORKSPACE_ID, OWNER_ID]
+    )
+
+    await repository.upsertIntegrationConnection({
+      id: CONNECTION_ID,
+      providerId: "google-ads",
+      providerFamily: "google",
+      platform: "marketing",
+      organizationId: ORG_ID,
+      workspaceId: WORKSPACE_ID,
+      projectId: PROJECT_ID,
+      oauthAccountId: OAUTH_ACCOUNT_ID,
+      dataSourceId: null,
+      connectionReference: CONNECTION_ID,
+      status: "connected",
+      lastConnectedAt: new Date().toISOString(),
+      lastDisconnectedAt: null,
+      actorUserId: OWNER_ID,
+      nowIso: new Date().toISOString(),
+    })
+
+    await database.query(
+      `insert into google_oauth_states (
+        id, state, provider, organization_id, workspace_id, project_id,
+        user_id, connection_id, requested_scopes, redirect_uri,
+        status, expires_at, created_at, updated_at
+      ) values ($1,'state-delete','google_ads',$2,$3,$4,$5,$6,'["scope.a"]'::jsonb,'https://localhost/callback','pending',now() + interval '10 minutes',now(),now())`,
       [
         "a1f57ce5-47e1-49f2-b9a5-04bd4a874b45",
         ORG_ID,
         WORKSPACE_ID,
         PROJECT_ID,
         OWNER_ID,
-        OAUTH_ACCOUNT_ID,
+        CONNECTION_ID,
       ]
     )
 
@@ -213,9 +267,7 @@ describe("google oauth repository contract", () => {
 
     const counts = await Promise.all([
       database.query<{ count: string }>("select count(*)::text as count from google_oauth_connections where id = $1", [CONNECTION_ID]),
-      database.query<{ count: string }>("select count(*)::text as count from oauth_states where oauth_account_id = $1", [OAUTH_ACCOUNT_ID]),
-      database.query<{ count: string }>("select count(*)::text as count from integration_connections where id = $1", [CONNECTION_ID]),
-      database.query<{ count: string }>("select count(*)::text as count from oauth_tokens where oauth_account_id = $1", [OAUTH_ACCOUNT_ID]),
+      database.query<{ count: string }>("select count(*)::text as count from google_oauth_states where connection_id = $1", [CONNECTION_ID]),
       database.query<{ count: string }>("select count(*)::text as count from google_oauth_events where connection_id = $1", [CONNECTION_ID]),
       database.query<{ count: string }>("select count(*)::text as count from google_ads_customer_accounts where connection_id = $1", [CONNECTION_ID]),
       database.query<{ count: string }>("select count(*)::text as count from google_ads_sync_runs where connection_id = $1", [CONNECTION_ID]),

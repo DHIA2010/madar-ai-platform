@@ -1,4 +1,4 @@
-import type { Role } from "../../types"
+type Role = "owner" | "admin" | "manager" | "analyst" | "viewer"
 
 export interface RequestContext {
   requestId: string

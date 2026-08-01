@@ -1,4 +1,5 @@
 export interface ProviderOAuthStartInputDto {
+  connectionId?: string | null
   workspaceId?: string | null
   projectId?: string | null
   connectionName?: string | null
@@ -30,6 +31,7 @@ export interface ProviderSyncRequestDto {
   endDate: string
   idempotencyKey: string
   mode?: "full" | "incremental"
+  trigger?: "manual" | "retry"
 }
 
 export interface ProviderRecordsQueryDto {

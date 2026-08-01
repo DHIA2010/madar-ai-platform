@@ -64,7 +64,7 @@ export class GoogleAdsCustomerService {
           customer_client.time_zone,
           customer_client.manager,
           customer_client.level,
-          customer_client.manager_customer
+          customer_client.client_customer
         FROM customer_client
       `,
     })
@@ -76,7 +76,7 @@ export class GoogleAdsCustomerService {
       timeZone: asString(rowValue(row, "customerClient.timeZone"), "") || null,
       manager: Boolean(rowValue(row, "customerClient.manager")),
       level: asNumber(rowValue(row, "customerClient.level")),
-      parentCustomerId: asString(rowValue(row, "customerClient.managerCustomer"), "") || null,
+      parentCustomerId: asString(rowValue(row, "customerClient.clientCustomer"), "") || null,
     }))
   }
 }
@@ -301,7 +301,7 @@ export class GoogleAdsInsightsService {
       connectionId: input.connectionId,
       customerId: input.customerId,
       query: `
-        SELECT search_term_view.search_term, ad_group_criterion.criterion_id, segments.date, metrics.clicks, metrics.impressions, metrics.conversions, metrics.cost_micros
+        SELECT search_term_view.search_term, segments.date, metrics.clicks, metrics.impressions, metrics.conversions, metrics.cost_micros
         FROM search_term_view
         WHERE segments.date BETWEEN '${input.startDate}' AND '${input.endDate}'
       `,
@@ -309,7 +309,7 @@ export class GoogleAdsInsightsService {
 
     return rows.map((row, index) => ({
       id: `${asString(rowValue(row, "searchTermView.searchTerm"), "term")}:${asString(rowValue(row, "segments.date"), input.startDate)}:${index}`,
-      keywordId: asString(rowValue(row, "adGroupCriterion.criterionId"), "") || null,
+      keywordId: null,
       customerId: input.customerId,
       term: asString(rowValue(row, "searchTermView.searchTerm"), ""),
       date: asString(rowValue(row, "segments.date"), input.startDate),

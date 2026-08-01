@@ -102,3 +102,17 @@ Tasks:
 - API versioning policy and deprecation lifecycle.
 - RBAC matrix enforcement tests.
 - SLO definition and alert thresholds.
+
+## Code Hygiene Cleanup
+Story: As an engineering team, we want to clean dead-code and duplicate-export findings so maintenance cost stays low while keeping runtime behavior unchanged.
+
+Acceptance criteria:
+- All current dead-code report findings are tracked in a single artifact.
+- Cleanup is executed in small PRs grouped by domain.
+- No cleanup PR changes runtime behavior without separate approval.
+
+Tasks:
+- Review and prioritize findings listed in CODE_HYGIENE_CLEANUP.md.
+- Remove or consolidate unused files/exports/types and duplicate exports in batches.
+- Remove confirmed unused dependencies after validating lockfile and build stability.
+- Keep check:deadcode as a non-blocking hygiene gate until backlog is burned down.

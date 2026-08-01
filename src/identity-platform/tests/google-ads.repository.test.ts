@@ -18,10 +18,7 @@ describe("google ads repository", () => {
     repository = new GoogleAdsRepository(database)
 
     await runIdentityMigrations(database, process.cwd())
-    await runSqlFile(
-      database,
-      `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
-    )
+    await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
 
     await database.query(
       `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -48,6 +45,45 @@ describe("google ads repository", () => {
         '00000000-0000-4000-8000-000000000002',
         '00000000-0000-4000-8000-000000000003',
         '00000000-0000-4000-8000-000000000004',
+        'connected',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000001',
+        now(),
+        now()
+      )`
+    )
+
+    await database.query(
+      `insert into oauth_accounts (
+        id, provider_family, organization_id, workspace_id, status,
+        created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values (
+        '00000000-0000-4000-8000-000000000005',
+        'google',
+        '00000000-0000-4000-8000-000000000002',
+        '00000000-0000-4000-8000-000000000003',
+        'active',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000001',
+        now(),
+        now()
+      )`
+    )
+
+    await database.query(
+      `insert into integration_connections (
+        id, provider_id, provider_family, platform,
+        organization_id, workspace_id, project_id, oauth_account_id,
+        status, created_by_user_id, updated_by_user_id, created_at, updated_at
+      ) values (
+        '00000000-0000-4000-8000-000000000005',
+        'google-ads',
+        'google',
+        'marketing',
+        '00000000-0000-4000-8000-000000000002',
+        '00000000-0000-4000-8000-000000000003',
+        '00000000-0000-4000-8000-000000000004',
+        '00000000-0000-4000-8000-000000000005',
         'connected',
         '00000000-0000-4000-8000-000000000001',
         '00000000-0000-4000-8000-000000000001',
@@ -89,43 +125,9 @@ describe("google ads repository", () => {
       connectionId: "00000000-0000-4000-8000-000000000005",
       customerId: "123456",
       bundle: {
-        customers: [
-          {
-            id: "123456",
-            name: "Acct",
-            currencyCode: "USD",
-            timeZone: "UTC",
-            manager: false,
-            level: 0,
-            parentCustomerId: null,
-          },
-        ],
-        campaigns: [
-          {
-            id: "cmp1",
-            customerId: "123456",
-            name: "Campaign",
-            status: "ENABLED",
-            budgetMicros: 1000,
-            biddingStrategyType: "MANUAL_CPC",
-          },
-        ],
-        campaignMetrics: [
-          {
-            campaignId: "cmp1",
-            customerId: "123456",
-            date: "2026-06-01",
-            costMicros: 100,
-            clicks: 5,
-            impressions: 100,
-            ctr: 0.05,
-            cpcMicros: 20,
-            cpmMicros: 1000,
-            conversions: 1,
-            conversionValue: 50,
-            roas: 0.5,
-          },
-        ],
+        customers: [{ id: "123456", name: "Acct", currencyCode: "USD", timeZone: "UTC", manager: false, level: 0, parentCustomerId: null }],
+        campaigns: [{ id: "cmp1", customerId: "123456", name: "Campaign", status: "ENABLED", budgetMicros: 1000, biddingStrategyType: "MANUAL_CPC" }],
+        campaignMetrics: [{ campaignId: "cmp1", customerId: "123456", date: "2026-06-01", costMicros: 100, clicks: 5, impressions: 100, ctr: 0.05, cpcMicros: 20, cpmMicros: 1000, conversions: 1, conversionValue: 50, roas: 0.5 }],
         adGroups: [],
         adGroupMetrics: [],
         ads: [],
@@ -203,14 +205,7 @@ describe("google ads repository", () => {
       customerId: "123456",
       checkpointKey: "sync",
       checkpointVersion: 1,
-      checkpointState: {
-        version: 1,
-        mode: "incremental",
-        stage: "campaignMetrics",
-        startDate: "2026-06-01",
-        endDate: "2026-06-10",
-        counts: { customers: 1 },
-      },
+      checkpointState: { version: 1, mode: "incremental", stage: "campaignMetrics", startDate: "2026-06-01", endDate: "2026-06-10", counts: { customers: 1 } },
       lastRecordDate: "2026-06-10",
       syncRunId: "00000000-0000-4000-8000-000000000006",
       status: "in_progress",
@@ -222,9 +217,6 @@ describe("google ads repository", () => {
       customerId: "123456",
     })
 
-    expect(checkpoint?.checkpointState).toMatchObject({
-      stage: "campaignMetrics",
-      mode: "incremental",
-    })
+    expect(checkpoint?.checkpointState).toMatchObject({ stage: "campaignMetrics", mode: "incremental" })
   })
 })

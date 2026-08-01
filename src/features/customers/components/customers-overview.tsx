@@ -40,6 +40,7 @@ import {
   AppTableHead,
   AppTableHeader,
   AppTableRow,
+  RelativeTime,
 } from "@/components/app"
 
 import { useCustomers } from "../hooks"
@@ -59,33 +60,6 @@ function formatCurrency(value: number): string {
     new Intl.NumberFormat("en-SA", { style: "decimal", maximumFractionDigits: 0 }).format(value) +
     " SAR"
   )
-}
-
-function formatDate(iso?: string): string {
-  if (!iso) {
-    return "—"
-  }
-
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  const days = Math.floor(diff / 86400000)
-  const hours = Math.floor(diff / 3600000)
-  const minutes = Math.floor(diff / 60000)
-
-  if (minutes < 60) {
-    return `${minutes}m ago`
-  }
-
-  if (hours < 24) {
-    return `${hours}h ago`
-  }
-
-  if (days < 7) {
-    return `${days}d ago`
-  }
-
-  return d.toLocaleDateString("en-SA", { month: "short", day: "numeric", year: "numeric" })
 }
 
 function CustomerAvatar({ name }: { name: string }) {
@@ -728,7 +702,9 @@ function CustomerRow({ record }: { record: CustomerRecord }) {
         </div>
       </AppTableCell>
       <AppTableCell className="hidden xl:table-cell">
-        <p className="text-xs text-muted-foreground">{formatDate(record.lastActivityAt)}</p>
+        <p className="text-xs text-muted-foreground">
+          <RelativeTime value={record.lastActivityAt} fallback="—" />
+        </p>
       </AppTableCell>
       <AppTableCell>
         <div className="flex justify-end">

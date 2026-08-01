@@ -1,5 +1,7 @@
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+import { randomUUID } from "node:crypto"
 
+import type { GoogleOAuthDomainEvent } from "../google-oauth/events"
 import { GoogleOAuthRepository } from "../google-oauth/repository"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
@@ -262,6 +264,50 @@ export class GoogleAdsSyncService {
 
     await this.repository.markSyncRunRunning(syncRun.id, actor.userId)
 
+    if (input.trigger === "retry") {
+      await this.recordLifecycle(
+        {
+          eventType: "google.ads.sync.retry",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: connection.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: new Date().toISOString(),
+          payload: {
+            syncRunId: syncRun.id,
+            customerId,
+            startDate,
+            endDate,
+            trigger: input.trigger,
+            message: "Sync retry requested.",
+          },
+        },
+        "integration.google_ads.sync.retry"
+      )
+    }
+
+    await this.recordLifecycle(
+      {
+        eventType: "google.ads.sync.started",
+        aggregateId: connection.id,
+        actorUserId: actor.userId,
+        organizationId: connection.organizationId,
+        workspaceId: connection.workspaceId,
+        projectId: connection.projectId,
+        occurredAt: new Date().toISOString(),
+        payload: {
+          syncRunId: syncRun.id,
+          customerId,
+          startDate,
+          endDate,
+          trigger: input.trigger ?? "manual",
+          message: input.trigger === "retry" ? "Retry sync started." : "Sync started.",
+        },
+      },
+      "integration.google_ads.sync.started"
+    )
+
     try {
       const campaignSync = await this.campaignManagementService.synchronizeCampaigns({
         connection,
@@ -329,6 +375,8 @@ export class GoogleAdsSyncService {
       ]
 
       for (let index = 0; index < stages.length; index += 1) {
+        await this.assertSyncCanContinue(connection.id, syncRun.id, actor.organizationId)
+
         const stage = stages[index]
         if (index < resumeFromStageIndex) {
           continue
@@ -339,6 +387,8 @@ export class GoogleAdsSyncService {
         ;(stageBundle[stage.bundleKey] as unknown[]).push(...(rows as never[]))
         await persistStage(stage.key, stageBundle, { [stage.countKey]: rows.length })
       }
+
+      await this.assertSyncCanContinue(connection.id, syncRun.id, actor.organizationId)
 
       await this.repository.withTransaction(async () => {
         await this.repository.markSyncRunCompleted(syncRun.id, actor.userId, {
@@ -388,6 +438,25 @@ export class GoogleAdsSyncService {
         )
       }
 
+      await this.recordLifecycle(
+        {
+          eventType: "google.ads.sync.completed",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: connection.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: new Date().toISOString(),
+          payload: {
+            syncRunId: syncRun.id,
+            customerId,
+            totalRecords: completed.metrics?.totalRecords ?? 0,
+            message: "Sync completed successfully.",
+          },
+        },
+        "integration.google_ads.sync.completed"
+      )
+
       return completed
     } catch (error) {
       const mapped = error instanceof GoogleAdsIntegrationError
@@ -400,6 +469,27 @@ export class GoogleAdsSyncService {
         )
 
       await this.repository.markSyncRunFailed(syncRun.id, actor.userId, mapped.code, mapped.message)
+
+      await this.recordLifecycle(
+        {
+          eventType: "google.ads.sync.failed",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: connection.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: new Date().toISOString(),
+          payload: {
+            syncRunId: syncRun.id,
+            customerId,
+            errorCode: mapped.code,
+            errorMessage: mapped.message,
+            message: mapped.message,
+          },
+        },
+        "integration.google_ads.sync.failed"
+      )
+
       throw mapped
     } finally {
       await this.repository.releaseSyncLock({
@@ -513,6 +603,135 @@ export class GoogleAdsSyncService {
     }
   }
 
+  async getRetryStatus(actor: AuthenticatedActor, input: { connectionId: string }) {
+    assertAuthorized(actor)
+
+    const connection = await this.oauthRepository.findConnectionById(input.connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new GoogleAdsIntegrationError(
+        "Google Ads connection not found.",
+        "GOOGLE_ADS_CONNECTION_NOT_FOUND",
+        false,
+        404
+      )
+    }
+
+    if (connection.status !== "connected") {
+      return {
+        connectionId: connection.id,
+        available: false,
+        reason: "connection_not_connected" as const,
+      }
+    }
+
+    const providerKey = "google-ads"
+    const [activeLock, latestRun] = await Promise.all([
+      this.repository.hasActiveSyncLock({
+        providerKey,
+        connectionId: connection.id,
+        projectId: connection.projectId,
+      }),
+      this.repository.findLatestSyncRunByConnection(connection.id),
+    ])
+
+    if (activeLock || latestRun?.status === "pending" || latestRun?.status === "running") {
+      return {
+        connectionId: connection.id,
+        available: false,
+        reason: "sync_running" as const,
+        lastOperation: latestRun
+          ? {
+              syncRunId: latestRun.id,
+              status: latestRun.status,
+              customerId: latestRun.customerId,
+              startDate: latestRun.dateStart,
+              endDate: latestRun.dateEnd,
+              errorCode: latestRun.errorCode,
+              errorMessage: latestRun.errorMessage,
+              createdAt: latestRun.createdAt,
+            }
+          : undefined,
+      }
+    }
+
+    if (!latestRun || latestRun.status !== "failed") {
+      return {
+        connectionId: connection.id,
+        available: false,
+        reason: "no_previous_failure" as const,
+        lastOperation: latestRun
+          ? {
+              syncRunId: latestRun.id,
+              status: latestRun.status,
+              customerId: latestRun.customerId,
+              startDate: latestRun.dateStart,
+              endDate: latestRun.dateEnd,
+              errorCode: latestRun.errorCode,
+              errorMessage: latestRun.errorMessage,
+              createdAt: latestRun.createdAt,
+            }
+          : undefined,
+      }
+    }
+
+    if (!this.isRetryableFailureCode(latestRun.errorCode)) {
+      return {
+        connectionId: connection.id,
+        available: false,
+        reason: "non_retryable_failure" as const,
+        lastOperation: {
+          syncRunId: latestRun.id,
+          status: latestRun.status,
+          customerId: latestRun.customerId,
+          startDate: latestRun.dateStart,
+          endDate: latestRun.dateEnd,
+          errorCode: latestRun.errorCode,
+          errorMessage: latestRun.errorMessage,
+          createdAt: latestRun.createdAt,
+        },
+      }
+    }
+
+    return {
+      connectionId: connection.id,
+      available: true,
+      reason: "retryable_failure" as const,
+      lastOperation: {
+        syncRunId: latestRun.id,
+        status: latestRun.status,
+        customerId: latestRun.customerId,
+        startDate: latestRun.dateStart,
+        endDate: latestRun.dateEnd,
+        errorCode: latestRun.errorCode,
+        errorMessage: latestRun.errorMessage,
+        createdAt: latestRun.createdAt,
+      },
+    }
+  }
+
+  async retryLastFailed(actor: AuthenticatedActor, input: { connectionId: string }) {
+    const retryStatus = await this.getRetryStatus(actor, input)
+
+    if (!retryStatus.available || !retryStatus.lastOperation) {
+      throw new GoogleAdsIntegrationError(
+        "Retry is not available for the latest operation.",
+        "GOOGLE_ADS_SYNC_FAILED",
+        false,
+        409
+      )
+    }
+
+    return this.sync(actor, {
+      connectionId: input.connectionId,
+      customerId: retryStatus.lastOperation.customerId,
+      startDate: retryStatus.lastOperation.startDate,
+      endDate: retryStatus.lastOperation.endDate,
+      idempotencyKey: `retry-${randomUUID()}`,
+      mode: "incremental",
+      trigger: "retry",
+    })
+  }
+
   private normalizeCheckpoint(raw: Record<string, unknown> | undefined, mode: "full" | "incremental", startDate: string, endDate: string): SyncCheckpointState {
     if (!raw) {
       return {
@@ -537,5 +756,67 @@ export class GoogleAdsSyncService {
       endDate: typeof raw.endDate === "string" ? raw.endDate : endDate,
       counts: (raw.counts as Record<string, number>) ?? {},
     }
+  }
+
+  private isRetryableFailureCode(errorCode: string | null) {
+    if (!errorCode) {
+      return false
+    }
+
+    return new Set([
+      "GOOGLE_ADS_SYNC_FAILED",
+      "GOOGLE_ADS_TRANSIENT_FAILURE",
+      "GOOGLE_ADS_QUOTA_EXCEEDED",
+      "GOOGLE_ADS_PROVIDER_FAILURE",
+      "GOOGLE_ADS_TOKEN_UNAVAILABLE",
+    ]).has(errorCode)
+  }
+
+  private async assertSyncCanContinue(connectionId: string, syncRunId: string, organizationId: string) {
+    const connection = await this.oauthRepository.findConnectionById(connectionId)
+    if (!connection || connection.organizationId !== organizationId || connection.status !== "connected") {
+      throw new GoogleAdsIntegrationError(
+        "Google Ads connection is not connected.",
+        "GOOGLE_ADS_CONNECTION_NOT_READY",
+        false,
+        409
+      )
+    }
+
+    const isRunning = await this.oauthRepository.isGoogleAdsSyncRunRunning(syncRunId)
+    if (!isRunning) {
+      throw new GoogleAdsIntegrationError(
+        "Google Ads sync was interrupted by lifecycle transition.",
+        "GOOGLE_ADS_SYNC_FAILED",
+        false,
+        409
+      )
+    }
+  }
+
+  private async recordLifecycle(event: GoogleOAuthDomainEvent, auditAction: string) {
+    await this.oauthRepository.saveEvent(event.aggregateId, event.eventType, event.payload)
+    await this.oauthRepository.appendAuditLog({
+      actorUserId: event.actorUserId,
+      organizationId: event.organizationId,
+      workspaceId: event.workspaceId,
+      action: auditAction,
+      entityId: event.aggregateId,
+      metadata: event.payload,
+      createdAt: event.occurredAt,
+    })
+
+    await this.oauthRepository.appendOutboxEvent({
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      occurredAt: event.occurredAt,
+      metadata: {
+        actorUserId: event.actorUserId,
+        organizationId: event.organizationId,
+        workspaceId: event.workspaceId,
+        projectId: event.projectId,
+      },
+      payload: event.payload,
+    })
   }
 }

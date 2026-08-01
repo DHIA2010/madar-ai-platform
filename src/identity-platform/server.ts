@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 import { createIdentityApiServer } from "./api"
 import { createIdentityPlatform } from "./bootstrap/create-identity-platform"
 import { validateAwsCredentialIsolationForSecretsManager } from "./configuration/aws-credential-guard"
+import { validateProductionIntegrationConfiguration } from "./configuration/production-integration-validation"
 
 function loadRuntimeEnvironment() {
   const cwd = process.cwd()
@@ -22,10 +23,10 @@ function loadRuntimeEnvironment() {
 
 loadRuntimeEnvironment()
 validateAwsCredentialIsolationForSecretsManager()
+validateProductionIntegrationConfiguration()
 
 const platform = createIdentityPlatform()
 const server = createIdentityApiServer(platform)
 
 server.listen(platform.config.port, () => {
-  console.log(`Identity Platform API listening on http://localhost:${platform.config.port}`)
 })

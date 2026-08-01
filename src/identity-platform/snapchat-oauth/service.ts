@@ -9,6 +9,10 @@ import type {
   SnapchatOAuthStartInput,
   SnapchatOAuthStartResult,
 } from "./types"
+import {
+  EnvironmentFirstSnapchatOAuthCredentialsProvider,
+  type SnapchatOAuthCredentialsProvider,
+} from "./snapchat-credentials"
 
 interface SnapchatOAuthServiceConfig {
   clientId: string
@@ -337,14 +341,33 @@ async function fetchOrganizationAccounts(config: SnapchatOAuthServiceConfig, acc
 
 export class SnapchatOAuthService {
   private readonly config: SnapchatOAuthServiceConfig
+  private readonly credentialsProvider: SnapchatOAuthCredentialsProvider
 
-  constructor(private readonly repository: SnapchatOAuthRepository, config?: Partial<SnapchatOAuthServiceConfig>) {
+  constructor(
+    private readonly repository: SnapchatOAuthRepository,
+    config?: Partial<SnapchatOAuthServiceConfig>,
+    credentialsProvider: SnapchatOAuthCredentialsProvider =
+      new EnvironmentFirstSnapchatOAuthCredentialsProvider()
+  ) {
     this.config = { ...buildDefaultConfig(), ...(config ?? {}) }
+    this.credentialsProvider = credentialsProvider
+  }
+
+  private async loadResolvedConfig() {
+    const credentials = await this.credentialsProvider.load()
+    const resolved = {
+      ...this.config,
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
+      redirectUri: credentials.redirectUri ?? this.config.redirectUri,
+    }
+    ensureConfigured(resolved)
+    return resolved
   }
 
   async startAuthorization(actor: AuthenticatedActor, input: SnapchatOAuthStartInput = {}): Promise<SnapchatOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
-    ensureConfigured(this.config)
+    const config = await this.loadResolvedConfig()
 
     const resolvedProject = await this.repository.resolveProject({
       organizationId: actor.organizationId,
@@ -372,7 +395,7 @@ export class SnapchatOAuthService {
       providerAccountEmail: null,
       encryptedRefreshToken: existingConnection ? null : null,
       encryptedAccessToken: existingConnection ? null : null,
-      scopes: this.config.scopes,
+      scopes: config.scopes,
       tokenExpiresAt: null,
       status: "pending",
       connectionReference: input.connectionName ?? null,
@@ -390,16 +413,16 @@ export class SnapchatOAuthService {
       projectId: resolvedProject.projectId,
       userId: actor.userId,
       connectionId,
-      requestedScopes: this.config.scopes,
-      redirectUri: this.config.redirectUri,
+      requestedScopes: config.scopes,
+      redirectUri: config.redirectUri,
       expiresAt,
     })
 
-    const authorizationUrl = new URL(this.config.authorizationUrl)
-    authorizationUrl.searchParams.set("client_id", this.config.clientId)
-    authorizationUrl.searchParams.set("redirect_uri", this.config.redirectUri)
+    const authorizationUrl = new URL(config.authorizationUrl)
+    authorizationUrl.searchParams.set("client_id", config.clientId)
+    authorizationUrl.searchParams.set("redirect_uri", config.redirectUri)
     authorizationUrl.searchParams.set("response_type", "code")
-    authorizationUrl.searchParams.set("scope", this.config.scopes.join(" "))
+    authorizationUrl.searchParams.set("scope", config.scopes.join(" "))
     authorizationUrl.searchParams.set("state", state)
 
     const startedAt = now.toISOString()
@@ -413,8 +436,8 @@ export class SnapchatOAuthService {
         projectId: resolvedProject.projectId,
         occurredAt: startedAt,
         payload: {
-          scopes: this.config.scopes,
-          authorizationEndpoint: this.config.authorizationUrl,
+          scopes: config.scopes,
+          authorizationEndpoint: config.authorizationUrl,
         },
       },
       "integration.snapchat_oauth.started"
@@ -430,7 +453,7 @@ export class SnapchatOAuthService {
   }
 
   async completeAuthorization(input: { state: string; code: string }): Promise<SnapchatOAuthCallbackResult> {
-    ensureConfigured(this.config)
+    const config = await this.loadResolvedConfig()
 
     const state = await this.repository.findPendingStateByValue(input.state)
     if (!state) {
@@ -448,7 +471,7 @@ export class SnapchatOAuthService {
 
     const token = await exchangeAuthorizationCode({
       code: input.code,
-      config: this.config,
+      config,
     })
 
     const connectionId = String(state.connection_id)
@@ -459,14 +482,14 @@ export class SnapchatOAuthService {
     const now = new Date().toISOString()
 
     const scopes = parseScopes(token.scope)
-    const effectiveScopes = scopes.length > 0 ? scopes : this.config.scopes
+    const effectiveScopes = scopes.length > 0 ? scopes : config.scopes
 
     if (!token.refresh_token || token.refresh_token.trim().length === 0) {
       throw new Error("SNAPCHAT_OAUTH_REFRESH_TOKEN_MISSING")
     }
     const refreshToken = token.refresh_token
 
-    const organizations = await fetchOrganizations(this.config, token.access_token)
+    const organizations = await fetchOrganizations(config, token.access_token)
     const discoveredAccounts: Array<{
       customerId: string
       displayName: string | null
@@ -478,7 +501,7 @@ export class SnapchatOAuthService {
     }> = []
 
     for (const organization of organizations) {
-      const accounts = await fetchOrganizationAccounts(this.config, token.access_token, organization.organization_id)
+      const accounts = await fetchOrganizationAccounts(config, token.access_token, organization.organization_id)
       for (const account of accounts) {
         discoveredAccounts.push({
           customerId: account.adaccount_id,
@@ -513,8 +536,8 @@ export class SnapchatOAuthService {
         providerAccountId: primaryAccount?.customerId ?? null,
         providerAccountName: primaryAccount?.displayName ?? "Snapchat Ads Account",
         providerAccountEmail: null,
-        encryptedRefreshToken: encryptSecret(refreshToken, this.config.tokenEncryptionKey),
-        encryptedAccessToken: encryptSecret(token.access_token, this.config.tokenEncryptionKey),
+        encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
+        encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
         scopes: effectiveScopes,
         tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
         status: "connected",
@@ -545,8 +568,8 @@ export class SnapchatOAuthService {
             accountId: primaryAccount.customerId,
             accountName: primaryAccount.displayName,
             discoveredAccountCount: discoveredAccounts.length,
-            tokenEndpoint: this.config.tokenUrl,
-            discoveryEndpoint: `${this.config.marketingApiBaseUrl.replace(/\/$/, "")}/organizations/{id}/adaccounts`,
+            tokenEndpoint: config.tokenUrl,
+            discoveryEndpoint: `${config.marketingApiBaseUrl.replace(/\/$/, "")}/organizations/{id}/adaccounts`,
             scopes: effectiveScopes,
           },
         },
@@ -567,7 +590,7 @@ export class SnapchatOAuthService {
   }
 
   async getActiveConnection(actor: AuthenticatedActor) {
-    ensureConfigured(this.config)
+    await this.loadResolvedConfig()
 
     const resolvedProject = await this.repository.resolveProject({
       organizationId: actor.organizationId,
@@ -607,7 +630,7 @@ export class SnapchatOAuthService {
   }
 
   async resolveAccessToken(connectionId: string) {
-    ensureConfigured(this.config)
+    const config = await this.loadResolvedConfig()
 
     const tokenMaterial = await this.repository.getRawTokenMaterial(connectionId)
     if (!tokenMaterial || !tokenMaterial.encryptedAccessToken || !tokenMaterial.encryptedRefreshToken) {
@@ -617,14 +640,14 @@ export class SnapchatOAuthService {
     if (tokenMaterial.tokenExpiresAt) {
       const expiresAt = new Date(tokenMaterial.tokenExpiresAt).getTime()
       if (!Number.isNaN(expiresAt) && expiresAt > Date.now() + 30_000) {
-        return decryptSecret(tokenMaterial.encryptedAccessToken, this.config.tokenEncryptionKey)
+        return decryptSecret(tokenMaterial.encryptedAccessToken, config.tokenEncryptionKey)
       }
     }
 
-    const refreshToken = decryptSecret(tokenMaterial.encryptedRefreshToken, this.config.tokenEncryptionKey)
+    const refreshToken = decryptSecret(tokenMaterial.encryptedRefreshToken, config.tokenEncryptionKey)
     const refreshed = await refreshAccessToken({
       refreshToken,
-      config: this.config,
+      config,
     })
 
     const nextRefreshToken = refreshed.refresh_token && refreshed.refresh_token.trim().length > 0
@@ -634,10 +657,10 @@ export class SnapchatOAuthService {
     const refreshedScopes = parseScopes(refreshed.scope)
     await this.repository.updateTokenMaterial({
       connectionId,
-      encryptedRefreshToken: encryptSecret(nextRefreshToken, this.config.tokenEncryptionKey),
-      encryptedAccessToken: encryptSecret(refreshed.access_token, this.config.tokenEncryptionKey),
+      encryptedRefreshToken: encryptSecret(nextRefreshToken, config.tokenEncryptionKey),
+      encryptedAccessToken: encryptSecret(refreshed.access_token, config.tokenEncryptionKey),
       tokenExpiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
-      scopes: refreshedScopes.length > 0 ? refreshedScopes : this.config.scopes,
+      scopes: refreshedScopes.length > 0 ? refreshedScopes : config.scopes,
     })
 
     return refreshed.access_token

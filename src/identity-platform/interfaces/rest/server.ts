@@ -10,6 +10,10 @@ import { GoogleOAuthController } from "../../google-oauth/controller"
 import { GoogleOAuthConnectionDeletionService } from "../../google-oauth/connection-deletion-service"
 import { GoogleOAuthRepository } from "../../google-oauth/repository"
 import { GoogleOAuthService } from "../../google-oauth/service"
+import {
+  beginGoogleAdsSyncRequestTrace,
+  endGoogleAdsSyncRequestTrace,
+} from "../../google-ads/client"
 import { createRequestContext, mapIdentityError } from "../middleware"
 import {
   assignRoleSchema,
@@ -18,6 +22,8 @@ import {
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
   integrationAccountsQuerySchema,
+  integrationDisconnectSchema,
+  integrationEventsQuerySchema,
   integrationOAuthStartSchema,
   integrationRecordsQuerySchema,
   integrationSyncSchema,
@@ -492,6 +498,112 @@ export function createIdentityApiServer(
         return send(200, await provider.getActiveConnection(actor))
       }
 
+      const pauseIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/pause$/)
+      if (method === "POST" && pauseIntegrationMatch) {
+        if (!googleOAuthController) {
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
+        }
+
+        return send(200, await googleOAuthController.pause(actor, pauseIntegrationMatch[1]))
+      }
+
+      const resumeIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/resume$/)
+      if (method === "POST" && resumeIntegrationMatch) {
+        if (!googleOAuthController) {
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
+        }
+
+        return send(200, await googleOAuthController.resume(actor, resumeIntegrationMatch[1]))
+      }
+
+      const disconnectIntegrationMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/disconnect$/
+      )
+      if (method === "POST" && disconnectIntegrationMatch) {
+        if (!googleOAuthController) {
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
+        }
+
+        const payload = integrationDisconnectSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await googleOAuthController.disconnect(actor, {
+            connectionId: disconnectIntegrationMatch[1],
+            reason: payload.reason,
+          })
+        )
+      }
+
+      const reconnectIntegrationMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/reconnect$/
+      )
+      if (method === "POST" && reconnectIntegrationMatch) {
+        if (!googleOAuthController) {
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
+        }
+
+        return send(200, await googleOAuthController.reconnect(actor, reconnectIntegrationMatch[1]))
+      }
+
+      const retryStatusIntegrationMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/retry-status$/
+      )
+      if (method === "GET" && retryStatusIntegrationMatch) {
+        const provider = container.infrastructure.integrations?.find("google-ads")
+        if (!provider || !provider.getRetryStatus) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        return send(
+          200,
+          await provider.getRetryStatus(actor, { connectionId: retryStatusIntegrationMatch[1] })
+        )
+      }
+
+      const retryIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/retry$/)
+      if (method === "POST" && retryIntegrationMatch) {
+        const provider = container.infrastructure.integrations?.find("google-ads")
+        if (!provider || !provider.retry) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        return send(200, await provider.retry(actor, { connectionId: retryIntegrationMatch[1] }))
+      }
+
+      const integrationEventsMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/events$/)
+      if (method === "GET" && integrationEventsMatch) {
+        if (!googleOAuthController) {
+          return send(503, {
+            code: "GOOGLE_OAUTH_UNAVAILABLE",
+            message: "Google OAuth is unavailable in memory mode.",
+          })
+        }
+
+        const query = integrationEventsQuerySchema.parse(
+          Object.fromEntries(url.searchParams.entries())
+        )
+
+        return send(
+          200,
+          await googleOAuthController.listRecentEvents(actor, {
+            connectionId: integrationEventsMatch[1],
+            limit: query.limit,
+          })
+        )
+      }
+
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)
       if (method === "DELETE" && deleteIntegrationMatch) {
         if (!googleOAuthDeletionService) {
@@ -553,7 +665,35 @@ export function createIdentityApiServer(
 
         if (action === "sync" && method === "POST" && provider.sync) {
           const payload = integrationSyncSchema.parse(await readJsonBody(request))
-          return send(200, await provider.sync(actor, payload))
+          const loginCustomerId =
+            process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID?.trim() || null
+
+          console.info(
+            JSON.stringify({
+              level: "info",
+              service: "identity-platform",
+              event: "google_ads.sync_request",
+              endpoint: url.pathname,
+              handler: "server.integration.sync",
+              connectionId: payload.connectionId,
+              customerId: payload.customerId,
+              loginCustomerId,
+              timestamp: new Date().toISOString(),
+            })
+          )
+
+          beginGoogleAdsSyncRequestTrace({
+            endpoint: url.pathname,
+            handler: "server.integration.sync",
+            connectionId: payload.connectionId,
+            customerId: payload.customerId,
+          })
+
+          try {
+            return send(200, await provider.sync(actor, payload))
+          } finally {
+            endGoogleAdsSyncRequestTrace()
+          }
         }
 
         if (action === "records" && method === "GET" && provider.listRecords) {

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import type { ConnectionCenterRecord } from "../types"
 import {
+  CONNECTION_ACTION_IDS,
+  connectionActionPolicy,
+} from "./connection-action-policy"
+import {
   CONNECTOR_CATALOG,
   filterConnectionRecords,
   inferHealthState,
@@ -168,5 +172,66 @@ describe("connections center service", () => {
     expect(
       merged.some((entry) => entry.connectorDefinitionId === "connector_def_future_channel")
     ).toBe(true)
+  })
+
+  it("centralizes available actions for connected, paused, failed, and disconnected states", () => {
+    const connectedActions = connectionActionPolicy.getAvailableActions({
+      connection: createRecord().connection,
+      integrationStatus: createRecord().integrationStatus,
+    })
+
+    const pausedRecord = createRecord({
+      connection: {
+        ...createRecord().connection,
+        status: "paused",
+      },
+    })
+    const pausedActions = connectionActionPolicy.getAvailableActions({
+      connection: pausedRecord.connection,
+      integrationStatus: pausedRecord.integrationStatus,
+    })
+
+    const failedRecord = createRecord({
+      connection: {
+        ...createRecord().connection,
+        status: "error",
+        metadata: { retryAvailable: "true" },
+      },
+    })
+    const failedActions = connectionActionPolicy.getAvailableActions({
+      connection: failedRecord.connection,
+      integrationStatus: failedRecord.integrationStatus,
+    })
+
+    const disconnectedRecord = createRecord({
+      connection: {
+        ...createRecord().connection,
+        status: "disconnected",
+      },
+    })
+    const disconnectedActions = connectionActionPolicy.getAvailableActions({
+      connection: disconnectedRecord.connection,
+      integrationStatus: disconnectedRecord.integrationStatus,
+    })
+
+    expect(connectedActions.map((action) => action.id)).toEqual([
+      CONNECTION_ACTION_IDS.PAUSE_SYNC,
+      CONNECTION_ACTION_IDS.DISCONNECT,
+      CONNECTION_ACTION_IDS.DELETE_CONNECTION,
+    ])
+    expect(pausedActions.map((action) => action.id)).toEqual([
+      CONNECTION_ACTION_IDS.RESUME_SYNC,
+      CONNECTION_ACTION_IDS.DISCONNECT,
+      CONNECTION_ACTION_IDS.DELETE_CONNECTION,
+    ])
+    expect(failedActions.map((action) => action.id)).toEqual([
+      CONNECTION_ACTION_IDS.RETRY,
+      CONNECTION_ACTION_IDS.RECONNECT,
+      CONNECTION_ACTION_IDS.DELETE_CONNECTION,
+    ])
+    expect(disconnectedActions.map((action) => action.id)).toEqual([
+      CONNECTION_ACTION_IDS.RECONNECT,
+      CONNECTION_ACTION_IDS.DELETE_CONNECTION,
+    ])
   })
 })

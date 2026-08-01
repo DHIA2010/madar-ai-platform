@@ -44,6 +44,38 @@ export class GoogleOAuthConnectionDeletionService {
         )
       }
 
+      const currentConnection = await this.repository.findConnectionById(connectionId)
+
+      const occurredAt = new Date().toISOString()
+      const payload = {
+        previousStatus: currentConnection?.status ?? null,
+        nextStatus: "deleted",
+        message: "Connection deleted.",
+      }
+
+      await this.repository.saveEvent(connectionId, "google.oauth.connection.deleted", payload)
+      await this.repository.appendAuditLog({
+        actorUserId: actor.userId,
+        organizationId: ownership.organizationId,
+        workspaceId: ownership.workspaceId,
+        action: "integration.google_oauth.deleted",
+        entityId: connectionId,
+        metadata: payload,
+        createdAt: occurredAt,
+      })
+      await this.repository.appendOutboxEvent({
+        eventType: "google.oauth.connection.deleted",
+        aggregateId: connectionId,
+        occurredAt,
+        metadata: {
+          actorUserId: actor.userId,
+          organizationId: ownership.organizationId,
+          workspaceId: ownership.workspaceId,
+          projectId: null,
+        },
+        payload,
+      })
+
       await this.repository.deleteConnectionCascade(connectionId)
     })
   }
