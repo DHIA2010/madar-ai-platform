@@ -162,7 +162,7 @@ function IdentitySection({ customerId }: { customerId: string }) {
               <Tag className="size-3.5" /> {customer.customerId}
             </span>
             <span className="flex items-center gap-1">
-              <Calendar className="size-3.5" /> Customer since {" "}
+              <Calendar className="size-3.5" /> Customer since{" "}
               <RelativeTime value={customer.createdAt} fallback="—" />
             </span>
           </div>
@@ -469,7 +469,7 @@ function SegmentsSection({ customerId }: { customerId: string }) {
                 >
                   <span>{seg.segmentName}</span>
                   <span className="text-muted-foreground">
-                    <RelativeTime value={seg.joinedAt} fallback="—" /> - {" "}
+                    <RelativeTime value={seg.joinedAt} fallback="—" /> -{" "}
                     {seg.leftAt ? <RelativeTime value={seg.leftAt} fallback="—" /> : "present"}
                   </span>
                 </div>

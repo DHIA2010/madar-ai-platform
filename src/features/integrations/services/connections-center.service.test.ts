@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { ConnectionCenterRecord } from "../types"
-import {
-  CONNECTION_ACTION_IDS,
-  connectionActionPolicy,
-} from "./connection-action-policy"
+import { CONNECTION_ACTION_IDS, connectionActionPolicy } from "./connection-action-policy"
 import {
   CONNECTOR_CATALOG,
   filterConnectionRecords,

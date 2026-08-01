@@ -63,10 +63,7 @@ function getRefreshIntervalMs(nowMs: number, targetMs: number) {
   return elapsedMs < 60_000 ? 10_000 : 60_000
 }
 
-export function useRelativeTime(
-  value: RelativeTimeInput,
-  options: UseRelativeTimeOptions = {}
-) {
+export function useRelativeTime(value: RelativeTimeInput, options: UseRelativeTimeOptions = {}) {
   const fallback = options.fallback ?? "Never"
   const [nowMs, setNowMs] = useState(() => Date.now())
 

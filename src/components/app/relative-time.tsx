@@ -1,6 +1,6 @@
 "use client"
 
-import { type RelativeTimeInput,useRelativeTime } from "@/hooks/use-relative-time"
+import { type RelativeTimeInput, useRelativeTime } from "@/hooks/use-relative-time"
 
 interface RelativeTimeProps {
   value?: RelativeTimeInput

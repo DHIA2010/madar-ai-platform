@@ -229,8 +229,8 @@ export function useConnectionsCenter() {
         if (
           refs.some(
             (entry) =>
-              entry.connectorDefinitionId === recoveredConnection.payload.connectorDefinitionId
-              && entry.connectionId === recoveredConnection.payload.connectionId
+              entry.connectorDefinitionId === recoveredConnection.payload.connectorDefinitionId &&
+              entry.connectionId === recoveredConnection.payload.connectionId
           )
         ) {
           continue

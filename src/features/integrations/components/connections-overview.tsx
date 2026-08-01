@@ -249,11 +249,7 @@ function getActivityDetailLine(activity: {
   }
 
   if (activity.state === "queued") {
-    return (
-      <>
-        Queued • {activity.time}
-      </>
-    )
+    return <>Queued • {activity.time}</>
   }
 
   return (
@@ -927,20 +923,23 @@ export function ConnectionsOverview() {
                         run.status === "failed"
                           ? (run.errorMessage ?? "Failed")
                           : `${run.result?.recordsWritten ?? 0} records`,
-                      time: <RelativeTime value={run.finishedAt ?? run.startedAt} fallback="Never" />,
+                      time: (
+                        <RelativeTime value={run.finishedAt ?? run.startedAt} fallback="Never" />
+                      ),
                     }))
 
                   const syncActivityFromEvents = record.integrationStatus.recentEvents
                     .slice(0, 3)
                     .map((event) => ({
                       name: event.action,
-                      state: event.action === "sync.failed"
-                        ? ("queued" as const)
-                        : event.action === "sync.started"
-                          ? ("running" as const)
-                          : event.action.startsWith("sync.")
-                            ? ("completed" as const)
-                            : ("queued" as const),
+                      state:
+                        event.action === "sync.failed"
+                          ? ("queued" as const)
+                          : event.action === "sync.started"
+                            ? ("running" as const)
+                            : event.action.startsWith("sync.")
+                              ? ("completed" as const)
+                              : ("queued" as const),
                       records: event.message,
                       time: <RelativeTime value={event.timestamp} fallback="Never" />,
                     }))

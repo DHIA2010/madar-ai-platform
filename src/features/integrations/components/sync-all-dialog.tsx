@@ -6,7 +6,7 @@ import { toast } from "sonner"
 
 import { AppButton, AppDialog } from "@/components/app"
 
-import { CONNECTION_ACTION_IDS,connectionActionPolicy } from "../services"
+import { CONNECTION_ACTION_IDS, connectionActionPolicy } from "../services"
 import type { ConnectionCenterRecord } from "../types"
 
 interface SyncAllDialogProps {
@@ -32,14 +32,15 @@ export function SyncAllDialog({
 }: SyncAllDialogProps) {
   const runnableRecords = useMemo(
     () =>
-      records.filter((record) =>
-        connectionActionPolicy.getAction(
-          {
-            connection: record.connection,
-            integrationStatus: record.integrationStatus,
-          },
-          CONNECTION_ACTION_IDS.RUN_SYNC
-        ).enabled
+      records.filter(
+        (record) =>
+          connectionActionPolicy.getAction(
+            {
+              connection: record.connection,
+              integrationStatus: record.integrationStatus,
+            },
+            CONNECTION_ACTION_IDS.RUN_SYNC
+          ).enabled
       ),
     [records]
   )

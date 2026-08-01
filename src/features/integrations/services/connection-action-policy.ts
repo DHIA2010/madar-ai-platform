@@ -10,8 +10,7 @@ export const CONNECTION_ACTION_IDS = {
   DELETE_CONNECTION: "delete_connection",
 } as const
 
-export type ConnectionActionId =
-  (typeof CONNECTION_ACTION_IDS)[keyof typeof CONNECTION_ACTION_IDS]
+export type ConnectionActionId = (typeof CONNECTION_ACTION_IDS)[keyof typeof CONNECTION_ACTION_IDS]
 
 export type ConnectionActionIcon =
   | "run_sync"
@@ -131,10 +130,7 @@ const ACTIONS_BY_STATE: Record<ConnectionActionState, ConnectionActionId[]> = {
     CONNECTION_ACTION_IDS.RECONNECT,
     CONNECTION_ACTION_IDS.DELETE_CONNECTION,
   ],
-  disconnected: [
-    CONNECTION_ACTION_IDS.RECONNECT,
-    CONNECTION_ACTION_IDS.DELETE_CONNECTION,
-  ],
+  disconnected: [CONNECTION_ACTION_IDS.RECONNECT, CONNECTION_ACTION_IDS.DELETE_CONNECTION],
   unsupported: [CONNECTION_ACTION_IDS.DELETE_CONNECTION],
 }
 
