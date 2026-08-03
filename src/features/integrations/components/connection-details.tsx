@@ -33,6 +33,7 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
     deleteConnection,
     disconnect,
     getConnectionById,
+    isLoading,
     pauseSync,
     resumeSync,
     retrySync,
@@ -46,7 +47,11 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
     return (
       <AppPage>
         <AppContainer>
-          <AppCard title="Connection Details" subtitle="Connection not found" state="empty" />
+          <AppCard
+            title="Connection Details"
+            subtitle={isLoading ? undefined : "Connection not found"}
+            state={isLoading ? "loading" : "empty"}
+          />
         </AppContainer>
       </AppPage>
     )
