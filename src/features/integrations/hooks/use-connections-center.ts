@@ -216,6 +216,18 @@ export function useConnectionsCenter() {
         }
       }
 
+      // Status for refs we already know about (from local storage) can be fetched
+      // concurrently with recoverConnections(), since recoverConnections() only ever
+      // adds refs on top of these — it never invalidates ones we already have.
+      const prefetchedStatus = new Map(
+        refs.map((ref) => [
+          ref.connectionId,
+          integrationApplicationService
+            .getIntegrationStatus({ connectionId: ref.connectionId })
+            .catch(() => null),
+        ])
+      )
+
       const recovered = await integrationApplicationService.recoverConnections()
       for (const recoveredConnection of recovered) {
         if (
@@ -248,10 +260,11 @@ export function useConnectionsCenter() {
         > | null = null
 
         try {
-          status = await integrationApplicationService.getIntegrationStatus({
-            connectionId: storedRef.connectionId,
-          })
-          connection = status.payload.connection
+          status = await (prefetchedStatus.get(storedRef.connectionId) ??
+            integrationApplicationService.getIntegrationStatus({
+              connectionId: storedRef.connectionId,
+            }))
+          connection = status?.payload.connection ?? null
         } catch {
           connection = null
         }
