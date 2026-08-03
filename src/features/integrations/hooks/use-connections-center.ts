@@ -64,7 +64,13 @@ export function useConnectionsCenter() {
   }, [])
 
   const buildRecord = useCallback(
-    async (connection: Connection, requestId?: number): Promise<ConnectionCenterRecord | null> => {
+    async (
+      connection: Connection,
+      statusViewModel: Awaited<
+        ReturnType<typeof integrationApplicationService.getIntegrationStatus>
+      >,
+      requestId?: number
+    ): Promise<ConnectionCenterRecord | null> => {
       traceFrontendExecution({
         step: "buildConnectionCards()",
         connectionId: connection.connectionId,
@@ -75,41 +81,27 @@ export function useConnectionsCenter() {
         connectionCount: records.length,
       })
 
-      const statusViewModel = await integrationApplicationService.getIntegrationStatus({
-        connectionId: connection.connectionId,
-      })
-
-      if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
-        return null
-      }
-
-      let syncHistory: SyncHistoryViewModel | undefined
-      try {
-        syncHistory = await integrationApplicationService.getSyncHistory({
-          connectionId: connection.connectionId,
-          limit: 20,
-        })
-      } catch {
-        syncHistory = undefined
-      }
-
-      if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
-        return null
-      }
-
-      const connectorHealth = await integrationApplicationService
-        .getConnectorHealth({
-          connectorId: connection.connectorId,
-        })
-        .catch(() => ({
-          payload: {
+      const [syncHistory, connectorHealth] = await Promise.all([
+        integrationApplicationService
+          .getSyncHistory({
+            connectionId: connection.connectionId,
+            limit: 20,
+          })
+          .catch(() => undefined as SyncHistoryViewModel | undefined),
+        integrationApplicationService
+          .getConnectorHealth({
             connectorId: connection.connectorId,
-            status: "degraded" as const,
-            score: 0,
-            lastCheckedAt: new Date().toISOString(),
-            checks: [],
-          },
-        }))
+          })
+          .catch(() => ({
+            payload: {
+              connectorId: connection.connectorId,
+              status: "degraded" as const,
+              score: 0,
+              lastCheckedAt: new Date().toISOString(),
+              checks: [],
+            },
+          })),
+      ])
 
       if (requestId !== undefined && requestId !== bootstrapRequestIdRef.current) {
         return null
@@ -251,9 +243,12 @@ export function useConnectionsCenter() {
         }
 
         let connection: Connection | null = null
+        let status: Awaited<
+          ReturnType<typeof integrationApplicationService.getIntegrationStatus>
+        > | null = null
 
         try {
-          const status = await integrationApplicationService.getIntegrationStatus({
+          status = await integrationApplicationService.getIntegrationStatus({
             connectionId: storedRef.connectionId,
           })
           connection = status.payload.connection
@@ -268,12 +263,15 @@ export function useConnectionsCenter() {
               connectionId: connection.connectionId,
             })
             connection = validated.payload
+            status = await integrationApplicationService.getIntegrationStatus({
+              connectionId: connection.connectionId,
+            })
           } catch {
             // Keep existing draft connection if sync fails.
           }
         }
 
-        if (!connection) {
+        if (!connection || !status) {
           connectionManager.forgetConnection(storedRef.connectionId)
           continue
         }
@@ -289,7 +287,7 @@ export function useConnectionsCenter() {
         })
 
         try {
-          const record = await buildRecord(connection, requestId)
+          const record = await buildRecord(connection, status, requestId)
           if (record) {
             nextRecords.push(record)
           }
@@ -324,7 +322,7 @@ export function useConnectionsCenter() {
   const refreshConnection = useCallback(
     async (connectionId: string) => {
       const status = await integrationApplicationService.getIntegrationStatus({ connectionId })
-      const next = await buildRecord(status.payload.connection)
+      const next = await buildRecord(status.payload.connection, status)
       if (!next) {
         return null
       }
