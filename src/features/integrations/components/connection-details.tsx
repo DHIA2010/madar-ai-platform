@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { ROUTES } from "@/constants/routes"
 
 import {
+  AppButton,
   AppCard,
   AppConfirmDialog,
   AppContainer,
@@ -26,6 +27,8 @@ import {
 } from "../services"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
 
+const EVENTS_PREVIEW_COUNT = 5
+
 export function ConnectionDetails({ connectionId }: { connectionId: string }) {
   const router = useRouter()
   const {
@@ -41,6 +44,7 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [pendingAction, setPendingAction] = useState<ConnectionActionDefinition | null>(null)
+  const [showAllEvents, setShowAllEvents] = useState(false)
   const record = getConnectionById(connectionId)
 
   if (!record) {
@@ -235,7 +239,10 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
 
           <AppCard id="logs" title="Recent Logs and Events">
             <div className="space-y-2 text-sm">
-              {record.integrationStatus.recentEvents.map((event) => (
+              {(showAllEvents
+                ? record.integrationStatus.recentEvents
+                : record.integrationStatus.recentEvents.slice(0, EVENTS_PREVIEW_COUNT)
+              ).map((event) => (
                 <div key={event.eventId} className="rounded-md border p-2">
                   <div className="font-medium">{event.action}</div>
                   <div className="text-muted-foreground">
@@ -245,6 +252,18 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
                 </div>
               ))}
             </div>
+            {record.integrationStatus.recentEvents.length > EVENTS_PREVIEW_COUNT ? (
+              <AppButton
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onClick={() => setShowAllEvents((current) => !current)}
+              >
+                {showAllEvents
+                  ? "Show less"
+                  : `Show ${record.integrationStatus.recentEvents.length - EVENTS_PREVIEW_COUNT} more`}
+              </AppButton>
+            ) : null}
           </AppCard>
         </AppSection>
 
