@@ -219,7 +219,8 @@ function mapLegacyScopes(value: unknown): string[] {
 }
 
 export class GoogleOAuthRepository
-implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryRepository {
+  implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryRepository
+{
   constructor(private readonly db: PostgresDatabase) {}
 
   async withTransaction<T>(work: () => Promise<T>) {
@@ -227,10 +228,9 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
   }
 
   async resolveProject(input: ResolveProjectInput): Promise<ResolveProjectResult> {
-    const result = await this.db.query<{ id: string; workspace_id: string | null }>(
-      {
-        name: "google-oauth-resolve-project",
-        text: `
+    const result = await this.db.query<{ id: string; workspace_id: string | null }>({
+      name: "google-oauth-resolve-project",
+      text: `
           SELECT p.id, p.workspace_id
           FROM projects p
           WHERE p.organization_id = $1
@@ -241,9 +241,8 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
           ORDER BY p.created_at DESC
           LIMIT 1
         `,
-        values: [input.organizationId, input.workspaceId, input.projectId],
-      }
-    )
+      values: [input.organizationId, input.workspaceId, input.projectId],
+    })
 
     const row = result.rows[0]
     if (!row) {
@@ -637,6 +636,25 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     })
   }
 
+  async listConnectionIdsByWorkspace(
+    workspaceId: string,
+    status: "connected" | "paused"
+  ): Promise<string[]> {
+    const result = await this.db.query<{ id: string }>({
+      name: "google-oauth-connections-list-by-workspace",
+      text: `
+        SELECT id
+        FROM integration_connections
+        WHERE workspace_id = $1
+          AND provider_id = 'google-ads'
+          AND deleted_at IS NULL
+          AND status = $2
+      `,
+      values: [workspaceId, status],
+    })
+    return result.rows.map((row) => row.id)
+  }
+
   async findConnectionTokensById(connectionId: string): Promise<ConnectionTokenRecord | null> {
     const unifiedResult = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-connection-find-tokens-unified",
@@ -709,7 +727,9 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     }
   }
 
-  async findConnectionOwnershipById(connectionId: string): Promise<ConnectionOwnershipRecord | null> {
+  async findConnectionOwnershipById(
+    connectionId: string
+  ): Promise<ConnectionOwnershipRecord | null> {
     const integrationResult = await this.db.query<Record<string, unknown>>({
       name: "google-oauth-connection-find-ownership",
       text: `
@@ -1020,7 +1040,13 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
         INSERT INTO google_oauth_events (id, connection_id, event_type, metadata, created_at)
         VALUES ($1, $2, $3, $4, $5)
       `,
-      values: [randomUUID(), connectionId, eventType, JSON.stringify(metadata), new Date().toISOString()],
+      values: [
+        randomUUID(),
+        connectionId,
+        eventType,
+        JSON.stringify(metadata),
+        new Date().toISOString(),
+      ],
     })
   }
 
@@ -1079,7 +1105,10 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     })
   }
 
-  async listRecentOutboxEvents(connectionId: string, limit: number): Promise<GoogleOAuthRecentEventView[]> {
+  async listRecentOutboxEvents(
+    connectionId: string,
+    limit: number
+  ): Promise<GoogleOAuthRecentEventView[]> {
     const result = await this.db.query<RecentOutboxEventRecord>({
       name: "google-oauth-outbox-recent-list",
       text: `
@@ -1126,23 +1155,23 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
       throw new Error("GOOGLE_ADS_CUSTOMER_DISCOVERY_EMPTY")
     }
 
-    const existingSelected = await this.db.query<{ customer_id: string }>(
-      {
-        name: "google-ads-customer-account-selected",
-        text: `
+    const existingSelected = await this.db.query<{ customer_id: string }>({
+      name: "google-ads-customer-account-selected",
+      text: `
           SELECT customer_id
           FROM google_ads_customer_accounts
           WHERE connection_id = $1
             AND is_selected = true
           LIMIT 1
         `,
-        values: [input.connectionId],
-      }
-    )
+      values: [input.connectionId],
+    })
 
-    const candidateSelected = input.selectedCustomerId && normalizedAccounts.some((account) => account.customerId === input.selectedCustomerId)
-      ? input.selectedCustomerId
-      : existingSelected.rows[0]?.customer_id ?? normalizedAccounts[0].customerId
+    const candidateSelected =
+      input.selectedCustomerId &&
+      normalizedAccounts.some((account) => account.customerId === input.selectedCustomerId)
+        ? input.selectedCustomerId
+        : (existingSelected.rows[0]?.customer_id ?? normalizedAccounts[0].customerId)
 
     await this.db.query({
       name: "google-ads-customer-account-deactivate-missing",
@@ -1261,10 +1290,7 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     return result.rows[0] ? mapAdsCustomerAccount(result.rows[0]) : null
   }
 
-  async selectAccessibleCustomerAccount(input: {
-    connectionId: string
-    customerId: string
-  }) {
+  async selectAccessibleCustomerAccount(input: { connectionId: string; customerId: string }) {
     const target = await this.findAccessibleCustomerAccount(input.connectionId, input.customerId)
     if (!target) {
       return null
@@ -1315,10 +1341,7 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     })
 
     const integrationConnectionIds = Array.from(
-      new Set([
-        connectionId,
-        ...integrationConnections.rows.map((row) => String(row.id)),
-      ])
+      new Set([connectionId, ...integrationConnections.rows.map((row) => String(row.id))])
     )
 
     const oauthAccountIds = Array.from(
@@ -1331,10 +1354,11 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
       ])
     )
 
-    const legacyOauthConnections = integrationConnections.rows.length > 0
-      ? await this.db.query<{ id: string }>({
-        name: "google-oauth-delete-legacy-connections-find",
-        text: `
+    const legacyOauthConnections =
+      integrationConnections.rows.length > 0
+        ? await this.db.query<{ id: string }>({
+            name: "google-oauth-delete-legacy-connections-find",
+            text: `
           SELECT DISTINCT g.id
           FROM google_oauth_connections g
           LEFT JOIN integration_connections ic
@@ -1347,9 +1371,9 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
               OR ic.id = ANY($2::uuid[])
             )
         `,
-        values: [oauthAccountIds, integrationConnectionIds],
-      })
-      : { rows: [] }
+            values: [oauthAccountIds, integrationConnectionIds],
+          })
+        : { rows: [] }
 
     const allConnectionIds = Array.from(
       new Set([
@@ -1360,31 +1384,27 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     )
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_ads_sync_cursors WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_ads_sync_cursors WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_ads_sync_checkpoints WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_ads_sync_checkpoints WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_ads_sync_locks WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_ads_sync_locks WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_ads_domain_records WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_ads_domain_records WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     await this.db.query({
@@ -1433,10 +1453,9 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     })
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_ads_sync_runs WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_ads_sync_runs WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     await this.db.query({
@@ -1446,38 +1465,33 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     })
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_oauth_states WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_oauth_states WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     for (const targetConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_oauth_events WHERE connection_id = $1",
-        [targetConnectionId]
-      )
+      await this.db.query("DELETE FROM google_oauth_events WHERE connection_id = $1", [
+        targetConnectionId,
+      ])
     }
 
     for (const runtimeConnectionId of integrationConnectionIds) {
-      await this.db.query(
-        "DELETE FROM oauth_states WHERE connection_id = $1",
-        [runtimeConnectionId]
-      )
+      await this.db.query("DELETE FROM oauth_states WHERE connection_id = $1", [
+        runtimeConnectionId,
+      ])
     }
 
     for (const runtimeOauthAccountId of oauthAccountIds) {
-      await this.db.query(
-        "DELETE FROM oauth_states WHERE oauth_account_id = $1",
-        [runtimeOauthAccountId]
-      )
+      await this.db.query("DELETE FROM oauth_states WHERE oauth_account_id = $1", [
+        runtimeOauthAccountId,
+      ])
     }
 
     for (const runtimeConnectionId of integrationConnectionIds) {
-      await this.db.query(
-        "DELETE FROM integration_connections WHERE id = $1",
-        [runtimeConnectionId]
-      )
+      await this.db.query("DELETE FROM integration_connections WHERE id = $1", [
+        runtimeConnectionId,
+      ])
     }
 
     await this.db.query({
@@ -1495,11 +1509,9 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     })
 
     for (const legacyConnectionId of allConnectionIds) {
-      await this.db.query(
-        "DELETE FROM google_oauth_connections WHERE id = $1",
-        [legacyConnectionId]
-      )
+      await this.db.query("DELETE FROM google_oauth_connections WHERE id = $1", [
+        legacyConnectionId,
+      ])
     }
   }
-
 }

@@ -4,6 +4,7 @@ import type { RequestContext, AuthenticatedActor, TokenPair } from "../dto/ident
 import type {
   AcceptInvitationCommand,
   ArchiveOrganizationCommand,
+  ArchiveWorkspaceCommand,
   AssignMemberRoleCommand,
   CancelInvitationCommand,
   ChangeEmailCommand,
@@ -21,6 +22,7 @@ import type {
   RemoveMemberCommand,
   ResendInvitationCommand,
   RestoreOrganizationCommand,
+  RestoreWorkspaceCommand,
   RegisterUserCommand,
   ResetPasswordCommand,
   RevokeSessionCommand,
@@ -1078,6 +1080,86 @@ export class IdentityCommandHandlers {
       "workspace",
       workspace.id
     )
+    return workspace.toState()
+  }
+
+  async archiveWorkspace(
+    actor: AuthenticatedActor,
+    command: ArchiveWorkspaceCommand,
+    context: RequestContext
+  ) {
+    const membership = await this.deps.repositories.memberships.findByUserAndWorkspace(
+      actor.userId,
+      command.workspaceId
+    )
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+    const workspaceState = await this.deps.repositories.workspaces.findById(command.workspaceId)
+    if (!workspaceState) {
+      throw ERRORS.notFound("Workspace")
+    }
+    const workspace = WorkspaceEntity.rehydrate(workspaceState)
+    workspace.update({ status: "archived" }, this.now)
+    await this.deps.repositories.workspaces.save(workspace.toState())
+    await this.audit(
+      "workspace.archived",
+      context,
+      actor.userId,
+      workspace.organizationId,
+      workspace.id,
+      "workspace",
+      workspace.id
+    )
+    await this.publishEvents(context, [
+      this.createEvent({
+        eventType: "WorkspaceArchived",
+        aggregateType: "workspace",
+        aggregateId: workspace.id,
+        context,
+        payload: { workspaceId: workspace.id, organizationId: workspace.organizationId },
+      }),
+    ])
+    return workspace.toState()
+  }
+
+  async restoreWorkspace(
+    actor: AuthenticatedActor,
+    command: RestoreWorkspaceCommand,
+    context: RequestContext
+  ) {
+    const membership = await this.deps.repositories.memberships.findByUserAndWorkspace(
+      actor.userId,
+      command.workspaceId
+    )
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+    const workspaceState = await this.deps.repositories.workspaces.findById(command.workspaceId)
+    if (!workspaceState) {
+      throw ERRORS.notFound("Workspace")
+    }
+    const workspace = WorkspaceEntity.rehydrate(workspaceState)
+    workspace.update({ status: "active" }, this.now)
+    await this.deps.repositories.workspaces.save(workspace.toState())
+    await this.audit(
+      "workspace.restored",
+      context,
+      actor.userId,
+      workspace.organizationId,
+      workspace.id,
+      "workspace",
+      workspace.id
+    )
+    await this.publishEvents(context, [
+      this.createEvent({
+        eventType: "WorkspaceRestored",
+        aggregateType: "workspace",
+        aggregateId: workspace.id,
+        context,
+        payload: { workspaceId: workspace.id, organizationId: workspace.organizationId },
+      }),
+    ])
     return workspace.toState()
   }
 

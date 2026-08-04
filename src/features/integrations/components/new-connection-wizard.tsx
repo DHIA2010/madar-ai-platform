@@ -1369,16 +1369,6 @@ export function NewConnectionWizard() {
                             </button>
                           ))}
                         </div>
-                        <AppButton
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() =>
-                            setSelectedAccountId(availableAccounts[0]?.id ?? ACCOUNT_FALLBACK.id)
-                          }
-                        >
-                          Add another account
-                        </AppButton>
                       </div>
                     </div>
                   </div>
@@ -1815,6 +1805,31 @@ export function NewConnectionWizard() {
                   managerMode
                   triggerLabel="Create Workspace"
                   triggerAriaLabel="Create workspace from workspace manager"
+                />
+              </div>
+            </AppCard>
+          </AppSection>
+        </AppContainer>
+      </AppPage>
+    )
+  }
+
+  if (currentWorkspace.status === "archived") {
+    return (
+      <AppPage>
+        <AppContainer>
+          <AppSection>
+            <AppCard
+              title="This workspace is archived."
+              subtitle="Restore it to add or reconnect integrations. All syncing stays paused until then."
+              state="empty"
+              className="border-border/70 bg-card/95"
+            >
+              <div className="pt-2">
+                <WorkspaceSelector
+                  managerMode
+                  triggerLabel="Manage Workspaces"
+                  triggerAriaLabel="Open workspace manager"
                 />
               </div>
             </AppCard>

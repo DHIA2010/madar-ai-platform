@@ -35,9 +35,11 @@ import {
   resetPasswordSchema,
   revokeSessionSchema,
   suspendMemberSchema,
+  switchWorkspaceSchema,
   updateMemberProfileSchema,
   updateOrganizationSchema,
   updateProfileSchema,
+  updateWorkspaceSchema,
   verifyEmailSchema,
 } from "../../schemas"
 
@@ -242,15 +244,28 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
 export function createIdentityApiServer(
   container: IdentityPlatformContainer = createIdentityPlatform()
 ) {
-  const googleOAuthController = container.infrastructure.database
-    ? new GoogleOAuthController(
-        new GoogleOAuthService(
-          new GoogleOAuthRepository(container.infrastructure.database),
-          undefined,
-          container.infrastructure.googleIdentityCredentialsProvider
-        )
+  const googleOAuthService = container.infrastructure.database
+    ? new GoogleOAuthService(
+        new GoogleOAuthRepository(container.infrastructure.database),
+        undefined,
+        container.infrastructure.googleIdentityCredentialsProvider
       )
     : null
+  const googleOAuthController = googleOAuthService
+    ? new GoogleOAuthController(googleOAuthService)
+    : null
+
+  // Pausing/resuming connections on org/workspace archive is a best-effort
+  // side effect -- the archive/restore itself has already succeeded by the
+  // time this runs, so a failure here must never turn a successful response
+  // into an error.
+  async function runConnectionCascade(run: () => Promise<unknown> | undefined) {
+    try {
+      await run()
+    } catch (error) {
+      console.error("connection lifecycle cascade failed", error)
+    }
+  }
   const googleOAuthDeletionService = container.infrastructure.database
     ? new GoogleOAuthConnectionDeletionService(
         new GoogleOAuthRepository(container.infrastructure.database)
@@ -1001,6 +1016,76 @@ export function createIdentityApiServer(
 
       if (method === "GET" && url.pathname === "/v1/workspaces") {
         return send(200, { items: await container.queries.listWorkspaces(actor) })
+      }
+
+      if (method === "POST" && url.pathname === "/v1/workspaces/switch") {
+        return send(
+          200,
+          await container.commands.switchWorkspace(
+            actor,
+            switchWorkspaceSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
+      }
+
+      const workspaceArchiveMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/archive$/)
+      if (method === "POST" && workspaceArchiveMatch) {
+        const result = await container.commands.archiveWorkspace(
+          actor,
+          { workspaceId: workspaceArchiveMatch[1] },
+          context
+        )
+        // archiveWorkspace already verified membership/authorization for this
+        // workspace's organization -- scope the cascade actor to it, since it
+        // may differ from the actor's active session organization.
+        await runConnectionCascade(() =>
+          googleOAuthService?.pauseConnectionsForWorkspace(
+            { ...actor, organizationId: result.organizationId },
+            workspaceArchiveMatch[1]
+          )
+        )
+        return send(200, result)
+      }
+
+      const workspaceRestoreMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/restore$/)
+      if (method === "POST" && workspaceRestoreMatch) {
+        const result = await container.commands.restoreWorkspace(
+          actor,
+          { workspaceId: workspaceRestoreMatch[1] },
+          context
+        )
+        await runConnectionCascade(() =>
+          googleOAuthService?.resumeConnectionsForWorkspace(
+            { ...actor, organizationId: result.organizationId },
+            workspaceRestoreMatch[1]
+          )
+        )
+        return send(200, result)
+      }
+
+      const workspaceMembersMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/members$/)
+      if (method === "GET" && workspaceMembersMatch) {
+        return send(
+          200,
+          await container.queries.listWorkspaceMembers(actor, workspaceMembersMatch[1])
+        )
+      }
+
+      const workspaceItemMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)$/)
+      if (workspaceItemMatch && method === "GET") {
+        return send(200, await container.queries.getWorkspace(actor, workspaceItemMatch[1]))
+      }
+      if (workspaceItemMatch && method === "PATCH") {
+        return send(
+          200,
+          await container.commands.updateWorkspace(
+            actor,
+            workspaceItemMatch[1],
+            updateWorkspaceSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
       }
 
       if (method === "GET" && url.pathname === "/v1/audit-logs") {

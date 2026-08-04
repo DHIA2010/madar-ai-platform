@@ -65,6 +65,21 @@ export class IdentityQueryHandlers {
     return items.filter((entry) => Boolean(entry.workspace))
   }
 
+  async getWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const membership = await this.repositories.memberships.findByUserAndWorkspace(
+      actor.userId,
+      workspaceId
+    )
+    if (!membership) {
+      throw ERRORS.forbidden()
+    }
+    const workspace = await this.repositories.workspaces.findById(workspaceId)
+    if (!workspace) {
+      throw ERRORS.notFound("Workspace")
+    }
+    return workspace
+  }
+
   async getOrganization(actor: AuthenticatedActor, organizationId: string) {
     const membership = await this.repositories.memberships.findByUserAndOrganization(
       actor.userId,

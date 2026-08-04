@@ -1,12 +1,14 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Building2, Check, Search, Sparkles } from "lucide-react"
+import { Archive, Building2, Check, Pencil, RotateCcw, Search, Sparkles } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 
-import { AppBadge, AppButton, AppCard, AppInput } from "@/components/app"
+import { AppBadge, AppButton, AppCard, AppConfirmDialog, AppInput } from "@/components/app"
 
+import { emitWorkspaceLifecycleChanged } from "../events"
 import { useWorkspace, useWorkspaceSwitcher } from "../hooks"
 import type { Organization, Workspace } from "../types"
 
@@ -32,7 +34,7 @@ function matchesSearch(organization: Organization, workspace: Workspace, searchT
     workspace.slug,
     workspace.settings.locale,
     workspace.settings.timezone,
-  ].some((value) => value.toLowerCase().includes(normalizedTerm))
+  ].some((value) => (value ?? "").toLowerCase().includes(normalizedTerm))
 }
 
 function matchesOrganization(organization: Organization, searchTerm: string) {
@@ -43,7 +45,7 @@ function matchesOrganization(organization: Organization, searchTerm: string) {
   }
 
   return [organization.name, organization.slug, getOrganizationPlanName(organization)].some(
-    (value) => value.toLowerCase().includes(normalizedTerm)
+    (value) => (value ?? "").toLowerCase().includes(normalizedTerm)
   )
 }
 
@@ -55,6 +57,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
     switchWorkspace,
     createOrganization,
     createWorkspace,
+    updateOrganization,
+    updateWorkspace,
+    archiveWorkspace,
+    restoreWorkspace,
     workspaceStatus,
   } = useWorkspaceSwitcher()
 
@@ -70,6 +76,15 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
   const [organizationName, setOrganizationName] = useState("")
   const [organizationBusinessType, setOrganizationBusinessType] = useState("Retail")
   const [organizationRegion, setOrganizationRegion] = useState("Middle East")
+  const [editingOrganizationId, setEditingOrganizationId] = useState<string | null>(null)
+  const [editingOrganizationName, setEditingOrganizationName] = useState("")
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null)
+  const [editingWorkspaceName, setEditingWorkspaceName] = useState("")
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
+  const [archiveConfirmTarget, setArchiveConfirmTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   const filteredOrganizations = useMemo(
     () =>
@@ -182,6 +197,86 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
     onComplete?.()
   }
 
+  function startEditOrganization(organization: Organization) {
+    setEditingOrganizationId(organization.id)
+    setEditingOrganizationName(organization.name)
+  }
+
+  async function handleUpdateOrganization(organizationId: string) {
+    if (!editingOrganizationName.trim()) {
+      return
+    }
+
+    setPendingActionId(organizationId)
+    try {
+      await updateOrganization(organizationId, { name: editingOrganizationName.trim() })
+      toast.success("Organization updated.")
+      setEditingOrganizationId(null)
+    } catch {
+      toast.error("Failed to update organization.")
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  function startEditWorkspace(workspace: Workspace) {
+    setEditingWorkspaceId(workspace.id)
+    setEditingWorkspaceName(workspace.name)
+  }
+
+  async function handleUpdateWorkspace(workspaceId: string) {
+    if (!editingWorkspaceName.trim()) {
+      return
+    }
+
+    setPendingActionId(workspaceId)
+    try {
+      await updateWorkspace(workspaceId, { name: editingWorkspaceName.trim() })
+      toast.success("Workspace updated.")
+      setEditingWorkspaceId(null)
+    } catch {
+      toast.error("Failed to update workspace.")
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  async function handleArchiveRestoreWorkspace(workspace: Workspace) {
+    if (workspace.status === "archived") {
+      setPendingActionId(workspace.id)
+      try {
+        await restoreWorkspace(workspace.id)
+        toast.success("Workspace restored.")
+        emitWorkspaceLifecycleChanged()
+      } catch {
+        toast.error("Failed to restore workspace.")
+      } finally {
+        setPendingActionId(null)
+      }
+      return
+    }
+
+    setArchiveConfirmTarget({ id: workspace.id, name: workspace.name })
+  }
+
+  async function confirmArchiveWorkspace() {
+    if (!archiveConfirmTarget) {
+      return
+    }
+    const { id } = archiveConfirmTarget
+    setPendingActionId(id)
+    try {
+      await archiveWorkspace(id)
+      toast.success("Workspace archived.")
+      setArchiveConfirmTarget(null)
+      emitWorkspaceLifecycleChanged()
+    } catch {
+      toast.error("Failed to archive workspace.")
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 overflow-hidden">
       <AppInput
@@ -275,62 +370,110 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
           <div role="list" aria-label="Organizations" className="space-y-3">
             {filteredOrganizations.map((organization) => {
               const isActive = organization.id === effectiveSelectedOrganizationId
-              const planName = getOrganizationPlanName(organization)
+              const isArchived = organization.status === "archived"
+              const isPending = pendingActionId === organization.id
+
+              if (editingOrganizationId === organization.id) {
+                return (
+                  <div
+                    key={organization.id}
+                    className="space-y-2 rounded-xl border bg-muted/20 p-3"
+                  >
+                    <AppInput
+                      value={editingOrganizationName}
+                      onChange={(event) => setEditingOrganizationName(event.target.value)}
+                      placeholder="Organization Name"
+                      aria-label="Edit organization name"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <AppButton
+                        size="sm"
+                        disabled={isPending}
+                        onClick={() => void handleUpdateOrganization(organization.id)}
+                      >
+                        Save
+                      </AppButton>
+                      <AppButton
+                        size="sm"
+                        variant="outline"
+                        disabled={isPending}
+                        onClick={() => setEditingOrganizationId(null)}
+                      >
+                        Cancel
+                      </AppButton>
+                    </div>
+                  </div>
+                )
+              }
 
               return (
-                <AppButton
-                  key={organization.id}
-                  type="button"
-                  variant={isActive ? "default" : "outline"}
-                  className={cn(
-                    "h-auto w-full justify-start overflow-hidden rounded-xl px-3 py-3 text-left transition-colors",
-                    "[&>span:last-child]:min-w-0 [&>span:last-child]:w-full [&>span:last-child]:flex-1",
-                    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    !isActive && "hover:bg-accent/40"
-                  )}
-                  onClick={() => {
-                    setSelectedOrganizationId(organization.id)
-                    setHighlightedIndex(0)
-                  }}
-                  aria-label={`Select organization ${organization.name}`}
-                  aria-pressed={isActive}
-                  icon={<Building2 className="size-4 shrink-0" />}
-                  iconPosition="start"
-                >
-                  <span className="flex min-w-0 w-full items-center justify-between gap-3">
-                    <span className="min-w-0 space-y-1">
-                      <span
-                        className={cn(
-                          "block min-w-0 truncate whitespace-nowrap font-medium",
-                          isActive ? "text-primary-foreground" : "text-foreground"
-                        )}
-                        title={organization.name}
-                      >
-                        {organization.name}
+                <div key={organization.id} className="flex items-center gap-2">
+                  <AppButton
+                    type="button"
+                    variant={isActive ? "default" : "outline"}
+                    className={cn(
+                      "h-auto flex-1 justify-start overflow-hidden rounded-xl px-3 py-3 text-left transition-colors",
+                      "[&>span:last-child]:min-w-0 [&>span:last-child]:w-full [&>span:last-child]:flex-1",
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      !isActive && "hover:bg-accent/40",
+                      isArchived && "opacity-60"
+                    )}
+                    onClick={() => {
+                      setSelectedOrganizationId(organization.id)
+                      setHighlightedIndex(0)
+                    }}
+                    aria-label={`Select organization ${organization.name}`}
+                    aria-pressed={isActive}
+                    icon={<Building2 className="size-4 shrink-0" />}
+                    iconPosition="start"
+                  >
+                    <span className="flex min-w-0 w-full items-center justify-between gap-3">
+                      <span className="min-w-0 space-y-1">
+                        <span
+                          className={cn(
+                            "block min-w-0 truncate whitespace-nowrap font-medium",
+                            isActive ? "text-primary-foreground" : "text-foreground"
+                          )}
+                          title={organization.name}
+                        >
+                          {organization.name}
+                        </span>
+                        <span
+                          className={cn(
+                            "block min-w-0 truncate whitespace-nowrap text-xs",
+                            isActive ? "text-primary-foreground/80" : "text-muted-foreground"
+                          )}
+                          title={organization.slug}
+                        >
+                          {organization.slug}
+                        </span>
                       </span>
-                      <span
+                      <AppBadge
+                        variant="outline"
                         className={cn(
-                          "block min-w-0 truncate whitespace-nowrap text-xs",
-                          isActive ? "text-primary-foreground/80" : "text-muted-foreground"
+                          "max-w-[9.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap border-transparent",
+                          isArchived
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "bg-green-500/15 text-green-600 dark:text-green-400"
                         )}
-                        title={organization.slug}
+                        title={isArchived ? "Archived" : "Active"}
                       >
-                        {organization.slug}
-                      </span>
+                        {isArchived ? "Archived" : "Active"}
+                      </AppBadge>
                     </span>
-                    <AppBadge
-                      variant={isActive ? "secondary" : "outline"}
-                      className={cn(
-                        "max-w-[9.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap",
-                        isActive &&
-                          "border-primary-foreground/20 bg-primary-foreground/15 text-primary-foreground"
-                      )}
-                      title={planName}
-                    >
-                      {planName}
-                    </AppBadge>
-                  </span>
-                </AppButton>
+                  </AppButton>
+                  <AppButton
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={isPending}
+                    aria-label={`Edit organization ${organization.name}`}
+                    onClick={() => startEditOrganization(organization)}
+                  >
+                    <Pencil className="size-4" />
+                  </AppButton>
+                </div>
               )
             })}
 
@@ -410,67 +553,138 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
               {filteredWorkspaces.map((workspace, index) => {
                 const isCurrent = currentWorkspace?.id === workspace.id
                 const isHighlighted = index === activeHighlightedIndex
+                const isArchived = workspace.status === "archived"
+                const isPending = pendingActionId === workspace.id
+
+                if (editingWorkspaceId === workspace.id) {
+                  return (
+                    <div key={workspace.id} className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                      <AppInput
+                        value={editingWorkspaceName}
+                        onChange={(event) => setEditingWorkspaceName(event.target.value)}
+                        placeholder="Workspace Name"
+                        aria-label="Edit workspace name"
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <AppButton
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => void handleUpdateWorkspace(workspace.id)}
+                        >
+                          Save
+                        </AppButton>
+                        <AppButton
+                          size="sm"
+                          variant="outline"
+                          disabled={isPending}
+                          onClick={() => setEditingWorkspaceId(null)}
+                        >
+                          Cancel
+                        </AppButton>
+                      </div>
+                    </div>
+                  )
+                }
 
                 return (
-                  <AppButton
-                    key={workspace.id}
-                    type="button"
-                    disabled={workspaceStatus === "switching"}
-                    onClick={() => void handleWorkspaceSelect(workspace)}
-                    className={cn(
-                      "h-auto w-full justify-start rounded-xl border px-4 py-4 text-left transition-colors",
-                      "[&>span:last-child]:min-w-0 [&>span:last-child]:w-full [&>span:last-child]:flex-1",
-                      "hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      "disabled:cursor-wait disabled:opacity-70",
-                      isCurrent ? "border-primary/40 bg-primary/5" : "bg-card",
-                      isHighlighted && "ring-2 ring-ring ring-offset-2"
-                    )}
-                    role="option"
-                    aria-label={`Switch to workspace ${workspace.name}`}
-                    aria-selected={isHighlighted}
-                    aria-current={isCurrent ? "true" : undefined}
-                  >
-                    <span className="flex min-w-0 w-full flex-col gap-3">
-                      <span className="flex min-w-0 items-start justify-between gap-3">
-                        <span className="min-w-0 space-y-1">
-                          <span
-                            className="block truncate whitespace-nowrap text-base font-semibold"
-                            title={workspace.name}
-                          >
-                            {workspace.name}
+                  <div key={workspace.id} className="flex items-center gap-2">
+                    <AppButton
+                      type="button"
+                      disabled={workspaceStatus === "switching"}
+                      onClick={() => void handleWorkspaceSelect(workspace)}
+                      className={cn(
+                        "h-auto flex-1 justify-start rounded-xl border px-4 py-4 text-left transition-colors",
+                        "[&>span:last-child]:min-w-0 [&>span:last-child]:w-full [&>span:last-child]:flex-1",
+                        "hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "disabled:cursor-wait disabled:opacity-70",
+                        isCurrent ? "border-primary/40 bg-primary/5" : "bg-card",
+                        isHighlighted && "ring-2 ring-ring ring-offset-2",
+                        isArchived && "opacity-60"
+                      )}
+                      role="option"
+                      aria-label={`Switch to workspace ${workspace.name}`}
+                      aria-selected={isHighlighted}
+                      aria-current={isCurrent ? "true" : undefined}
+                    >
+                      <span className="flex min-w-0 w-full flex-col gap-3">
+                        <span className="flex min-w-0 items-start justify-between gap-3">
+                          <span className="min-w-0 space-y-1">
+                            <span
+                              className="block truncate whitespace-nowrap text-base font-semibold"
+                              title={workspace.name}
+                            >
+                              {workspace.name}
+                            </span>
+                            <span
+                              className="block truncate whitespace-nowrap text-sm text-muted-foreground"
+                              title={workspace.slug}
+                            >
+                              {workspace.slug}
+                            </span>
                           </span>
-                          <span
-                            className="block truncate whitespace-nowrap text-sm text-muted-foreground"
-                            title={workspace.slug}
-                          >
-                            {workspace.slug}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          {isCurrent ? (
-                            <AppBadge variant="outline" className="whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1">
-                                <Check className="size-3" />
-                                Current
-                              </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            {isCurrent ? (
+                              <AppBadge variant="outline" className="whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1">
+                                  <Check className="size-3" />
+                                  Current
+                                </span>
+                              </AppBadge>
+                            ) : null}
+                            <AppBadge
+                              variant="outline"
+                              className={cn(
+                                "whitespace-nowrap border-transparent",
+                                isArchived
+                                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                  : "bg-green-500/15 text-green-600 dark:text-green-400"
+                              )}
+                            >
+                              {isArchived ? "Archived" : "Active"}
                             </AppBadge>
-                          ) : null}
-                          <AppBadge variant="secondary" className="whitespace-nowrap">
-                            {workspace.settings.locale}
-                          </AppBadge>
+                          </span>
                         </span>
-                      </span>
 
-                      <span className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <span className="min-w-0 truncate whitespace-nowrap text-sm text-muted-foreground">
-                          {selectedOrganization.name} · {workspace.settings.timezone}
-                        </span>
-                        <span className="shrink-0 whitespace-nowrap text-sm font-medium text-foreground">
-                          {isCurrent ? "Current workspace" : "Press Enter to switch"}
+                        <span className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="min-w-0 truncate whitespace-nowrap text-sm text-muted-foreground">
+                            {selectedOrganization.name} · {workspace.settings.timezone}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap text-sm font-medium text-foreground">
+                            {isCurrent ? "Current workspace" : "Press Enter to switch"}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                  </AppButton>
+                    </AppButton>
+                    <AppButton
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={isPending}
+                      aria-label={`Edit workspace ${workspace.name}`}
+                      onClick={() => startEditWorkspace(workspace)}
+                    >
+                      <Pencil className="size-4" />
+                    </AppButton>
+                    <AppButton
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={isPending}
+                      aria-label={
+                        isArchived
+                          ? `Restore workspace ${workspace.name}`
+                          : `Archive workspace ${workspace.name}`
+                      }
+                      onClick={() => void handleArchiveRestoreWorkspace(workspace)}
+                    >
+                      {isArchived ? (
+                        <RotateCcw className="size-4" />
+                      ) : (
+                        <Archive className="size-4" />
+                      )}
+                    </AppButton>
+                  </div>
                 )
               })}
             </div>
@@ -485,6 +699,29 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
           )}
         </AppCard>
       </div>
+
+      <AppConfirmDialog
+        open={archiveConfirmTarget !== null}
+        onOpenChange={(open) => {
+          if (!pendingActionId && !open) {
+            setArchiveConfirmTarget(null)
+          }
+        }}
+        title={`Archive ${archiveConfirmTarget?.name ?? ""}?`}
+        description="All connections and syncing under this will stop immediately and stay paused until you restore it. Nothing is deleted."
+        cancelLabel="Cancel"
+        confirmLabel="Archive"
+        confirmTone="default"
+        loading={pendingActionId === archiveConfirmTarget?.id}
+        onCancel={() => {
+          if (!pendingActionId) {
+            setArchiveConfirmTarget(null)
+          }
+        }}
+        onConfirm={() => {
+          void confirmArchiveWorkspace()
+        }}
+      />
     </div>
   )
 }

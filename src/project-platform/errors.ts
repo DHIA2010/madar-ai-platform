@@ -1,7 +1,8 @@
+import { IdentityError } from "../identity-platform/application/errors/IdentityError"
 import { ProjectError } from "./application/errors/ProjectError"
 
 export function mapProjectError(error: unknown) {
-  if (error instanceof ProjectError) {
+  if (error instanceof ProjectError || error instanceof IdentityError) {
     return {
       status: error.status,
       body: {

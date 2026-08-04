@@ -29,6 +29,7 @@ export interface Organization {
   name: string
   slug: string
   subscription: Subscription
+  status?: "active" | "archived" | "deleted"
 }
 
 export interface Workspace {
@@ -37,6 +38,7 @@ export interface Workspace {
   name: string
   slug: string
   settings: WorkspaceSettings
+  status?: "active" | "archived"
 }
 
 export interface Membership {

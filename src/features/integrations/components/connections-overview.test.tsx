@@ -28,6 +28,10 @@ vi.mock("../hooks", () => ({
   useConnectionsCenter: () => mockUseConnectionsCenter(),
 }))
 
+vi.mock("@/features/workspace", () => ({
+  useWorkspace: () => ({ availableWorkspaces: [], currentWorkspace: null }),
+}))
+
 const mockRecord = {
   connectorDefinitionId: "connector_def_google_ads",
   connectorId: "google_ads",

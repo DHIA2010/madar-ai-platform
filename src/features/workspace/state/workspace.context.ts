@@ -22,6 +22,12 @@ export interface WorkspaceContextValue {
   switchWorkspace: (payload: WorkspaceSelectionPayload) => Promise<void>
   createOrganization: (payload: OrganizationCreatePayload) => Promise<Organization>
   createWorkspace: (payload: WorkspaceCreatePayload) => Promise<Workspace>
+  updateOrganization: (organizationId: string, payload: { name?: string }) => Promise<Organization>
+  archiveOrganization: (organizationId: string) => Promise<Organization>
+  restoreOrganization: (organizationId: string) => Promise<Organization>
+  updateWorkspace: (workspaceId: string, payload: { name?: string }) => Promise<Workspace>
+  archiveWorkspace: (workspaceId: string) => Promise<Workspace>
+  restoreWorkspace: (workspaceId: string) => Promise<Workspace>
 }
 
 export const WorkspaceContextStore = createContext<WorkspaceContextValue | null>(null)

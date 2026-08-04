@@ -110,6 +110,14 @@ export interface UpdateWorkspaceCommand {
   settings?: Record<string, string | boolean | number>
 }
 
+export interface ArchiveWorkspaceCommand {
+  workspaceId: string
+}
+
+export interface RestoreWorkspaceCommand {
+  workspaceId: string
+}
+
 export interface InviteMemberCommand {
   organizationId: string
   workspaceId?: string

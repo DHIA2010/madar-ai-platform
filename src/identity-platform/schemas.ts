@@ -39,6 +39,17 @@ export const createWorkspaceSchema = z.object({
   metadata: z.record(z.string(), z.string()).optional(),
 })
 
+export const updateWorkspaceSchema = z.object({
+  name: z.string().min(2).max(200).optional(),
+  status: z.enum(["active", "archived"]).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+})
+
+export const switchWorkspaceSchema = z.object({
+  workspaceId: z.string().uuid(),
+})
+
 export const inviteMemberSchema = z.object({
   organizationId: z.string().uuid(),
   workspaceId: z.string().uuid().optional(),
@@ -140,8 +151,14 @@ export const googleAdsRecordsQuerySchema = z.object({
       "conversion_action",
     ])
     .optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   pageSize: z.coerce.number().int().min(1).max(1000).optional(),
 })
 
@@ -149,8 +166,14 @@ export const integrationRecordsQuerySchema = z.object({
   connectionId: z.string().uuid(),
   customerId: z.string().min(1).max(64),
   entityType: z.string().min(1).max(128).optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   pageSize: z.coerce.number().int().min(1).max(1000).optional(),
 })
 

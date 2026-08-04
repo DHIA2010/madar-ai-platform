@@ -17,6 +17,8 @@ import {
   RelativeTime,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { useConnectionsCenter } from "../hooks"
 import {
   CONNECTION_ACTION_IDS,
@@ -31,6 +33,7 @@ const EVENTS_PREVIEW_COUNT = 5
 
 export function ConnectionDetails({ connectionId }: { connectionId: string }) {
   const router = useRouter()
+  const { availableWorkspaces } = useWorkspace()
   const {
     connect,
     deleteConnection,
@@ -63,9 +66,13 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
 
   const latestJob = record.integrationStatus.latestJob
   const latestRun = record.integrationStatus.latestRun
+  const workspaceStatus = availableWorkspaces.find(
+    (workspace) => workspace.id === record.connection.workspaceId
+  )?.status
   const availableActions = connectionActionPolicy.getAvailableActions({
     connection: record.connection,
     integrationStatus: record.integrationStatus,
+    workspaceStatus,
   })
 
   const onDeleteConnection = async () => {

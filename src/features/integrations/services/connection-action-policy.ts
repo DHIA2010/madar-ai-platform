@@ -42,6 +42,7 @@ export interface ConnectionActionDefinition {
 export interface ConnectionActionPolicyInput {
   connection: Pick<Connection, "connectionId" | "status" | "metadata">
   integrationStatus?: Pick<IntegrationStatusDto, "latestJob" | "latestRun">
+  workspaceStatus?: "active" | "archived" | "deleted"
 }
 
 export type ConnectionActionState =
@@ -139,8 +140,14 @@ function isRetryAvailable(input: ConnectionActionPolicyInput) {
 }
 
 function isRunSyncEnabled(input: ConnectionActionPolicyInput) {
-  return input.connection.status === "connected"
+  return input.connection.status === "connected" && !isWorkspaceArchived(input)
 }
+
+function isWorkspaceArchived(input: ConnectionActionPolicyInput) {
+  return input.workspaceStatus === "archived"
+}
+
+const WORKSPACE_ARCHIVED_REASON = "Workspace is archived. Restore it to resume sync."
 
 export function resolveConnectionActionState(status: ConnectionStatus): ConnectionActionState {
   if (status === "connected" || status === "valid" || status === "authorized") {
@@ -174,17 +181,36 @@ function toActionDefinition(
       ...action,
       visible: true,
       enabled,
-      disabledReason: enabled ? undefined : "Connection must be connected before syncing",
+      disabledReason: enabled
+        ? undefined
+        : isWorkspaceArchived(input)
+          ? WORKSPACE_ARCHIVED_REASON
+          : "Connection must be connected before syncing",
     }
   }
 
   if (actionId === CONNECTION_ACTION_IDS.RETRY) {
     const retryVisible = isRetryAvailable(input)
+    const enabled = retryVisible && !isWorkspaceArchived(input)
     return {
       ...action,
       visible: retryVisible,
-      enabled: retryVisible,
-      disabledReason: retryVisible ? undefined : "Retry is unavailable for the latest operation.",
+      enabled,
+      disabledReason: !retryVisible
+        ? "Retry is unavailable for the latest operation."
+        : enabled
+          ? undefined
+          : WORKSPACE_ARCHIVED_REASON,
+    }
+  }
+
+  if (actionId === CONNECTION_ACTION_IDS.RESUME_SYNC) {
+    const enabled = !isWorkspaceArchived(input)
+    return {
+      ...action,
+      visible: true,
+      enabled,
+      disabledReason: enabled ? undefined : WORKSPACE_ARCHIVED_REASON,
     }
   }
 

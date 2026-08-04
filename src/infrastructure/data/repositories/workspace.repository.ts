@@ -123,6 +123,153 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
       throw mapRepositoryError(error)
     }
   }
+
+  async createOrganization(payload: {
+    name: string
+    metadata?: Record<string, string>
+  }): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.createOrganization(payload)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.createOrganization(payload)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async createWorkspace(payload: {
+    organizationId: string
+    name: string
+    metadata?: Record<string, string>
+    settings?: Record<string, string | boolean | number>
+  }): Promise<WorkspaceDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.createWorkspace(payload)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.createWorkspace(payload)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async updateOrganization(
+    organizationId: string,
+    payload: { name?: string }
+  ): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.updateOrganization(organizationId, payload)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.updateOrganization(organizationId, payload)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async archiveOrganization(organizationId: string): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.archiveOrganization(organizationId)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.archiveOrganization(organizationId)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async restoreOrganization(organizationId: string): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.restoreOrganization(organizationId)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.restoreOrganization(organizationId)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async updateWorkspace(workspaceId: string, payload: { name?: string }): Promise<WorkspaceDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.updateWorkspace(workspaceId, payload)
+        this.cache.invalidateWorkspace(workspaceId)
+        return dto
+      }
+
+      const dto = await this.adapter.updateWorkspace(workspaceId, payload)
+      this.cache.invalidateWorkspace(workspaceId)
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async archiveWorkspace(workspaceId: string): Promise<WorkspaceDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.archiveWorkspace(workspaceId)
+        this.cache.invalidateWorkspace(workspaceId)
+        return dto
+      }
+
+      const dto = await this.adapter.archiveWorkspace(workspaceId)
+      this.cache.invalidateWorkspace(workspaceId)
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async restoreWorkspace(workspaceId: string): Promise<WorkspaceDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.restoreWorkspace(workspaceId)
+        this.cache.invalidateWorkspace(workspaceId)
+        return dto
+      }
+
+      const dto = await this.adapter.restoreWorkspace(workspaceId)
+      this.cache.invalidateWorkspace(workspaceId)
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
 }
 
 export function createWorkspaceRepository(options?: {

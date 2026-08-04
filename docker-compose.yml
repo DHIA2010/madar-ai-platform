@@ -148,6 +148,41 @@ services:
     networks:
       - madar-local
 
+  project-platform:
+    image: node:22-alpine
+    container_name: madar-project-platform
+    working_dir: /workspace
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: development
+      PROJECT_PLATFORM_PORT: ${PROJECT_PLATFORM_PORT:-4001}
+      IDENTITY_PLATFORM_POSTGRES_URL: postgresql://${POSTGRES_USER:-madar}:${POSTGRES_PASSWORD:-madar_password}@postgres:5432/${POSTGRES_DB:-madar}
+      IDENTITY_PLATFORM_REDIS_URL: redis://redis:6379
+      IDENTITY_PLATFORM_JWT_SECRET: ${IDENTITY_PLATFORM_JWT_SECRET:-dev_identity_secret_change_me_32_chars}
+      IDENTITY_PLATFORM_TOKEN_HASH_SECRET: ${IDENTITY_PLATFORM_TOKEN_HASH_SECRET:-dev_identity_token_hash_change_me_32_chars}
+      IDENTITY_PLATFORM_EMAIL_FROM: ${IDENTITY_PLATFORM_EMAIL_FROM:-identity@madar.local}
+      ROOT_PATH: /workspace
+    command: >
+      sh -c "npm ci --ignore-scripts &&
+      npm run project:dev"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${PROJECT_PLATFORM_PORT:-4001}:4001"
+    volumes:
+      - ./:/workspace
+      - project_platform_node_modules:/workspace/node_modules
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks:
+      - madar-local
+
   frontend:
     image: node:22-alpine
     container_name: madar-frontend
@@ -258,5 +293,6 @@ volumes:
   pgadmin_data:
   backend_node_modules:
   frontend_node_modules:
+  project_platform_node_modules:
   backend_storage:
   n8n_data:

@@ -11,9 +11,7 @@ import { useAuth } from "@/features/authentication"
 import { buildTenantContext } from "../mappers/workspace.mapper"
 import { useWorkspaceStore, WorkspaceContextStore } from "../state"
 import type {
-  Organization,
   OrganizationCreatePayload,
-  Workspace,
   WorkspaceCreatePayload,
   WorkspaceSelectionPayload,
 } from "../types"
@@ -30,18 +28,6 @@ function getConfigurationErrorMessage(error: unknown): string | null {
   }
 
   return error.message || "Runtime configuration is invalid."
-}
-
-function toSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
-function withUniqueId(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`
 }
 
 function mergeById<T extends { id: string }>(base: T[], additions: T[]): T[] {
@@ -193,27 +179,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const createOrganization = useCallback(
     async (payload: OrganizationCreatePayload) => {
-      const nowIso = new Date().toISOString()
-      const slug = toSlug(payload.name)
-      const organization: Organization = {
-        id: withUniqueId("org_local"),
+      const organization = await workspaceApplicationService.createOrganization({
         name: payload.name.trim(),
-        slug: slug || withUniqueId("organization"),
-        subscription: {
-          id: withUniqueId("sub_local"),
-          status: "active",
-          seats: 1,
-          renewsAt: nowIso,
-          plan: {
-            id: withUniqueId("plan_local"),
-            code: payload.businessType.trim().toLowerCase().replace(/\s+/g, "-") || "custom",
-            name: `${payload.businessType.trim() || "Custom"} (${payload.region.trim() || "Global"})`,
-            tier: "starter",
-            workspaceLimit: 25,
-            memberLimit: 100,
-          },
+        metadata: {
+          businessType: payload.businessType.trim(),
+          region: payload.region.trim(),
         },
-      }
+      })
 
       addCustomOrganization(organization)
       setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
@@ -225,23 +197,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       availableOrganizations,
       setAvailableOrganizations,
       setCurrentOrganization,
+      workspaceApplicationService,
     ]
   )
 
   const createWorkspace = useCallback(
     async (payload: WorkspaceCreatePayload) => {
-      const workspace: Workspace = {
-        id: withUniqueId("ws_local"),
+      const workspace = await workspaceApplicationService.createWorkspace({
         organizationId: payload.organizationId,
         name: payload.name.trim(),
-        slug: toSlug(payload.name) || withUniqueId("workspace"),
+        metadata: payload.description.trim()
+          ? { description: payload.description.trim() }
+          : undefined,
         settings: {
           locale: payload.language.trim() || "en-US",
           timezone: payload.timezone.trim() || "UTC",
-          currency: "USD",
-          dateFormat: "dd/MM/yyyy",
         },
-      }
+      })
 
       const nextOrganization = [...availableOrganizations, ...customOrganizations].find(
         (organization) => organization.id === payload.organizationId
@@ -263,7 +235,83 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setCurrentOrganization,
       setCurrentWorkspace,
       setWorkspaceStatus,
+      workspaceApplicationService,
     ]
+  )
+
+  const updateOrganization = useCallback(
+    async (organizationId: string, payload: { name?: string }) => {
+      const organization = await workspaceApplicationService.updateOrganization(
+        organizationId,
+        payload
+      )
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      if (currentOrganization?.id === organizationId) {
+        setCurrentOrganization(organization)
+      }
+      return organization
+    },
+    [
+      availableOrganizations,
+      currentOrganization?.id,
+      setAvailableOrganizations,
+      setCurrentOrganization,
+      workspaceApplicationService,
+    ]
+  )
+
+  const archiveOrganization = useCallback(
+    async (organizationId: string) => {
+      const organization = await workspaceApplicationService.archiveOrganization(organizationId)
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      return organization
+    },
+    [availableOrganizations, setAvailableOrganizations, workspaceApplicationService]
+  )
+
+  const restoreOrganization = useCallback(
+    async (organizationId: string) => {
+      const organization = await workspaceApplicationService.restoreOrganization(organizationId)
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      return organization
+    },
+    [availableOrganizations, setAvailableOrganizations, workspaceApplicationService]
+  )
+
+  const updateWorkspace = useCallback(
+    async (workspaceId: string, payload: { name?: string }) => {
+      const workspace = await workspaceApplicationService.updateWorkspace(workspaceId, payload)
+      setAvailableWorkspaces(mergeById(availableWorkspaces, [workspace]))
+      if (currentWorkspace?.id === workspaceId) {
+        setCurrentWorkspace(workspace)
+      }
+      return workspace
+    },
+    [
+      availableWorkspaces,
+      currentWorkspace?.id,
+      setAvailableWorkspaces,
+      setCurrentWorkspace,
+      workspaceApplicationService,
+    ]
+  )
+
+  const archiveWorkspace = useCallback(
+    async (workspaceId: string) => {
+      const workspace = await workspaceApplicationService.archiveWorkspace(workspaceId)
+      setAvailableWorkspaces(mergeById(availableWorkspaces, [workspace]))
+      return workspace
+    },
+    [availableWorkspaces, setAvailableWorkspaces, workspaceApplicationService]
+  )
+
+  const restoreWorkspace = useCallback(
+    async (workspaceId: string) => {
+      const workspace = await workspaceApplicationService.restoreWorkspace(workspaceId)
+      setAvailableWorkspaces(mergeById(availableWorkspaces, [workspace]))
+      return workspace
+    },
+    [availableWorkspaces, setAvailableWorkspaces, workspaceApplicationService]
   )
 
   const tenantContext = useMemo(
@@ -282,16 +330,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       switchWorkspace,
       createOrganization,
       createWorkspace,
+      updateOrganization,
+      archiveOrganization,
+      restoreOrganization,
+      updateWorkspace,
+      archiveWorkspace,
+      restoreWorkspace,
     }),
     [
+      archiveOrganization,
+      archiveWorkspace,
       availableOrganizations,
       availableWorkspaces,
       createOrganization,
       createWorkspace,
       currentOrganization,
       currentWorkspace,
+      restoreOrganization,
+      restoreWorkspace,
       switchWorkspace,
       tenantContext,
+      updateOrganization,
+      updateWorkspace,
       workspaceStatus,
     ]
   )

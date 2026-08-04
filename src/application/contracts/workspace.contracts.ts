@@ -18,6 +18,7 @@ export interface OrganizationDto {
   name: string
   slug: string
   subscription: SubscriptionDto
+  status?: "active" | "archived" | "deleted"
 }
 
 export interface WorkspaceDto {
@@ -31,6 +32,7 @@ export interface WorkspaceDto {
     currency: string
     dateFormat: string
   }
+  status?: "active" | "archived"
 }
 
 export interface WorkspaceSelectionDto {
@@ -48,6 +50,22 @@ export interface WorkspaceRepository {
   getWorkspaces(organizationId?: string): Promise<WorkspaceDto[]>
   getCurrentWorkspace(selection: WorkspaceServiceSelectionDto): Promise<WorkspaceDto | null>
   switchWorkspace(payload: WorkspaceSelectionDto): Promise<WorkspaceDto>
+  createOrganization(payload: {
+    name: string
+    metadata?: Record<string, string>
+  }): Promise<OrganizationDto>
+  updateOrganization(organizationId: string, payload: { name?: string }): Promise<OrganizationDto>
+  archiveOrganization(organizationId: string): Promise<OrganizationDto>
+  restoreOrganization(organizationId: string): Promise<OrganizationDto>
+  createWorkspace(payload: {
+    organizationId: string
+    name: string
+    metadata?: Record<string, string>
+    settings?: Record<string, string | boolean | number>
+  }): Promise<WorkspaceDto>
+  updateWorkspace(workspaceId: string, payload: { name?: string }): Promise<WorkspaceDto>
+  archiveWorkspace(workspaceId: string): Promise<WorkspaceDto>
+  restoreWorkspace(workspaceId: string): Promise<WorkspaceDto>
 }
 
 export type WorkspaceGateway = WorkspaceRepository

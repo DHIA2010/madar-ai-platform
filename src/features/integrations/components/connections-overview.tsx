@@ -41,6 +41,8 @@ import {
   RelativeTime,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { useConnectionsCenter } from "../hooks"
 import {
   CONNECTION_ACTION_IDS,
@@ -535,6 +537,8 @@ function FilterSelect({
 
 export function ConnectionsOverview() {
   const router = useRouter()
+  const { availableWorkspaces, currentWorkspace } = useWorkspace()
+  const isCurrentWorkspaceArchived = currentWorkspace?.status === "archived"
   const {
     isLoading,
     error,
@@ -841,11 +845,22 @@ export function ConnectionsOverview() {
                     </>
                   )}
                 </AppButton>
-                <Link href={ROUTES.integrationsNew}>
-                  <AppButton size="sm" className="h-10 rounded-lg px-4 shadow-sm">
+                {isCurrentWorkspaceArchived ? (
+                  <AppButton
+                    size="sm"
+                    className="h-10 rounded-lg px-4 shadow-sm"
+                    disabled
+                    title="Workspace is archived. Restore it to add a new connection."
+                  >
                     {UI_TEXT.buttons.newConnection}
                   </AppButton>
-                </Link>
+                ) : (
+                  <Link href={ROUTES.integrationsNew}>
+                    <AppButton size="sm" className="h-10 rounded-lg px-4 shadow-sm">
+                      {UI_TEXT.buttons.newConnection}
+                    </AppButton>
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -948,16 +963,21 @@ export function ConnectionsOverview() {
                     syncActivityFromRuns.length > 0 ? syncActivityFromRuns : syncActivityFromEvents
                   const syncState = syncProgress[record.connection.connectionId]
                   const isSyncing = syncState && syncState !== "completed" && syncState !== "failed"
+                  const workspaceStatus = availableWorkspaces.find(
+                    (workspace) => workspace.id === record.connection.workspaceId
+                  )?.status
                   const runSyncAction = connectionActionPolicy.getAction(
                     {
                       connection: record.connection,
                       integrationStatus: record.integrationStatus,
+                      workspaceStatus,
                     },
                     CONNECTION_ACTION_IDS.RUN_SYNC
                   )
                   const availableActions = connectionActionPolicy.getAvailableActions({
                     connection: record.connection,
                     integrationStatus: record.integrationStatus,
+                    workspaceStatus,
                   })
 
                   const handleRunSync = async () => {
@@ -1111,16 +1131,6 @@ export function ConnectionsOverview() {
                               className="h-8 rounded-md px-3 transition-colors"
                             >
                               {UI_TEXT.buttons.details}
-                            </AppButton>
-                          </Link>
-
-                          <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
-                            <AppButton
-                              size="sm"
-                              variant="outline"
-                              className="h-8 rounded-md px-3 transition-colors"
-                            >
-                              Add another account
                             </AppButton>
                           </Link>
 

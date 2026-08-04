@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toAppError } from "@/lib/app-errors"
 import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
 
+import { onWorkspaceLifecycleChanged } from "@/features/workspace"
+
 import {
   appendConnectorAccount,
   CONNECTION_ACTION_IDS,
@@ -331,6 +333,11 @@ export function useConnectionsCenter() {
   useEffect(() => {
     void bootstrap()
   }, [bootstrap])
+
+  // Archiving/restoring a workspace pauses/resumes its connections on the
+  // backend; refetch so this stays in sync without requiring a manual
+  // page refresh.
+  useEffect(() => onWorkspaceLifecycleChanged(() => void bootstrap()), [bootstrap])
 
   const refreshConnection = useCallback(
     async (connectionId: string) => {

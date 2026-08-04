@@ -30,6 +30,10 @@ vi.mock("../hooks", () => ({
   useConnectionsCenter: () => mockUseConnectionsCenter(),
 }))
 
+vi.mock("@/features/workspace", () => ({
+  useWorkspace: () => ({ availableWorkspaces: [], currentWorkspace: null }),
+}))
+
 vi.mock("./connection-actions-menu", () => ({
   ConnectionActionsMenu: ({
     actions,

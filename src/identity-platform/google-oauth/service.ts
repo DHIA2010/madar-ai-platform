@@ -60,15 +60,15 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
 
   return {
     successRedirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI
-      ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI ??
+      `${appUrl.replace(/\/$/, "")}/integrations/new`,
     tokenEncryptionKey:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
-      ?? process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
-      ?? "",
+      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+      "",
     googleAdsApiBaseUrl:
-      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL
-      ?? "https://googleads.googleapis.com/v22",
+      process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+      "https://googleads.googleapis.com/v22",
     scopes: configuredScopes.length > 0 ? configuredScopes : defaultScopes,
   }
 }
@@ -119,7 +119,11 @@ function validateConfiguredUrl(raw: string, opts: { allowHttpLocalhostOnly: bool
     return parsed
   }
 
-  if (parsed.protocol === "http:" && opts.allowHttpLocalhostOnly && isLocalhostHost(parsed.hostname)) {
+  if (
+    parsed.protocol === "http:" &&
+    opts.allowHttpLocalhostOnly &&
+    isLocalhostHost(parsed.hostname)
+  ) {
     return parsed
   }
 
@@ -246,8 +250,16 @@ function createStateToken() {
   return `go_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
 }
 
-function ensureConfigured(config: GoogleOAuthServiceConfig, credentials: GoogleIdentityCredentials) {
-  if (!credentials.clientId || !credentials.clientSecret || !credentials.redirectUri || !config.successRedirectUri) {
+function ensureConfigured(
+  config: GoogleOAuthServiceConfig,
+  credentials: GoogleIdentityCredentials
+) {
+  if (
+    !credentials.clientId ||
+    !credentials.clientSecret ||
+    !credentials.redirectUri ||
+    !config.successRedirectUri
+  ) {
     throw new Error("GOOGLE_OAUTH_CONFIGURATION_ERROR")
   }
 
@@ -375,7 +387,10 @@ export class GoogleOAuthService {
     return { config: this.config, credentials }
   }
 
-  async startAuthorization(actor: AuthenticatedActor, input: GoogleOAuthStartInput = {}): Promise<GoogleOAuthStartResult> {
+  async startAuthorization(
+    actor: AuthenticatedActor,
+    input: GoogleOAuthStartInput = {}
+  ): Promise<GoogleOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
     const { config, credentials } = await this.loadResolvedConfig()
 
@@ -384,31 +399,37 @@ export class GoogleOAuthService {
       ? await this.repository.findConnectionById(scopedConnectionId)
       : null
 
-    if (scopedConnectionId && (!existingConnection || existingConnection.organizationId !== actor.organizationId)) {
+    if (
+      scopedConnectionId &&
+      (!existingConnection || existingConnection.organizationId !== actor.organizationId)
+    ) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
 
     const resolvedProject = existingConnection
       ? {
-        projectId: existingConnection.projectId,
-        workspaceId: existingConnection.workspaceId,
-      }
+          projectId: existingConnection.projectId,
+          workspaceId: existingConnection.workspaceId,
+        }
       : await this.repository.resolveProject({
-        organizationId: actor.organizationId,
-        workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
-        projectId: input.projectId ?? null,
-      })
+          organizationId: actor.organizationId,
+          workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
+          projectId: input.projectId ?? null,
+        })
 
     const projectConnection = existingConnection
       ? existingConnection
-      : await this.repository.findConnectionByProject(actor.organizationId, resolvedProject.projectId)
+      : await this.repository.findConnectionByProject(
+          actor.organizationId,
+          resolvedProject.projectId
+        )
 
     const selectedConnection = existingConnection ?? projectConnection
     const existingTokens = existingConnection
       ? await this.repository.findConnectionTokensById(existingConnection.id)
       : projectConnection
         ? await this.repository.findConnectionTokensById(projectConnection.id)
-      : null
+        : null
     const connectionId = selectedConnection?.id ?? randomUUID()
     const existingOwnership = selectedConnection
       ? await this.repository.findConnectionOwnershipById(selectedConnection.id)
@@ -638,7 +659,35 @@ export class GoogleOAuthService {
     }
   }
 
-  async disconnectConnection(actor: AuthenticatedActor, input: { connectionId: string; reason?: string }) {
+  // Cascades used when a workspace is archived/restored -- every connected
+  // connection in scope is paused (or every paused one in scope is resumed),
+  // reusing the same per-connection lifecycle logic so sync locks and
+  // in-flight runs are handled consistently either way.
+  async pauseConnectionsForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const connectionIds = await this.repository.listConnectionIdsByWorkspace(
+      workspaceId,
+      "connected"
+    )
+    const results = []
+    for (const connectionId of connectionIds) {
+      results.push(await this.pauseConnection(actor, connectionId))
+    }
+    return results
+  }
+
+  async resumeConnectionsForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const connectionIds = await this.repository.listConnectionIdsByWorkspace(workspaceId, "paused")
+    const results = []
+    for (const connectionId of connectionIds) {
+      results.push(await this.resumeConnection(actor, connectionId))
+    }
+    return results
+  }
+
+  async disconnectConnection(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; reason?: string }
+  ) {
     assertActorCanManageIntegrations(actor)
 
     const connection = await this.repository.findConnectionById(input.connectionId)
@@ -718,7 +767,10 @@ export class GoogleOAuthService {
     })
   }
 
-  async completeAuthorization(input: { state: string; code: string }): Promise<GoogleOAuthCallbackResult> {
+  async completeAuthorization(input: {
+    state: string
+    code: string
+  }): Promise<GoogleOAuthCallbackResult> {
     const { config, credentials } = await this.loadResolvedConfig()
 
     const state = await this.repository.findPendingStateByValue(input.state)
@@ -751,7 +803,8 @@ export class GoogleOAuthService {
         developerToken: credentials.developerToken,
       })
     } catch (error) {
-      customerDiscoveryError = error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
+      customerDiscoveryError =
+        error instanceof Error ? error.message : "GOOGLE_ADS_CUSTOMER_DISCOVERY_FAILED"
     }
 
     const connectionId = String(state.connection_id ?? "")
@@ -812,7 +865,9 @@ export class GoogleOAuthService {
         encryptedRefreshToken,
         encryptedAccessToken,
         tokenType: token.token_type ?? "Bearer",
-        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
+        tokenExpiresAt: token.expires_in
+          ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+          : null,
         refreshTokenIssuedAt: now,
         nowIso: now,
       })
@@ -830,7 +885,9 @@ export class GoogleOAuthService {
         encryptedRefreshToken,
         encryptedAccessToken,
         scopes,
-        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
+        tokenExpiresAt: token.expires_in
+          ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+          : null,
         status: "connected",
         connectionReference: profile.email ?? null,
         lastConnectedAt: now,
@@ -893,9 +950,7 @@ export class GoogleOAuthService {
             reconnected,
           },
         },
-        reconnected
-          ? "integration.google_oauth.reconnected"
-          : "integration.google_oauth.connected"
+        reconnected ? "integration.google_oauth.reconnected" : "integration.google_oauth.connected"
       )
     })
 
@@ -958,7 +1013,10 @@ export class GoogleOAuthService {
     }
   }
 
-  async getRecentEvents(actor: AuthenticatedActor, input: { connectionId: string; limit: number }): Promise<GoogleOAuthTimelineResult> {
+  async getRecentEvents(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; limit: number }
+  ): Promise<GoogleOAuthTimelineResult> {
     assertActorCanManageIntegrations(actor)
 
     const connection = await this.repository.findConnectionById(input.connectionId)
