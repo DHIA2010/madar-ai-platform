@@ -795,10 +795,19 @@ export class IdentityCommandHandlers {
       settings: command.settings,
       now: this.now,
     })
+    // Every organization needs an initial workspace for its owner to operate
+    // in -- memberships.workspace_id is NOT NULL, so the owner membership
+    // below must reference a real workspace, not null.
+    const workspace = WorkspaceEntity.create({
+      id: this.deps.uuid.generate(),
+      organizationId: organization.id,
+      name: `${command.name} - Default`,
+      now: this.now,
+    })
     const ownerMembership = MembershipEntity.create({
       id: this.deps.uuid.generate(),
       organizationId: organization.id,
-      workspaceId: null,
+      workspaceId: workspace.id,
       userId: actor.userId,
       role: "owner",
       status: "active",
@@ -807,6 +816,7 @@ export class IdentityCommandHandlers {
     })
 
     await this.deps.repositories.organizations.save(organization.toState())
+    await this.deps.repositories.workspaces.save(workspace.toState())
     await this.deps.repositories.memberships.save(ownerMembership.toState())
     await this.audit(
       "organization.created",
@@ -824,6 +834,13 @@ export class IdentityCommandHandlers {
         aggregateId: organization.id,
         context,
         payload: { organizationId: organization.id, ownerUserId: actor.userId },
+      }),
+      this.createEvent({
+        eventType: "WorkspaceCreated",
+        aggregateType: "workspace",
+        aggregateId: workspace.id,
+        context,
+        payload: { workspaceId: workspace.id, organizationId: organization.id },
       }),
     ])
     this.deps.metrics?.recordHistogram("organization_create_duration", Date.now() - startedAt, {
