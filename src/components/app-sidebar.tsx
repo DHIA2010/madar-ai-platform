@@ -1,11 +1,14 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import Link from "next/link"
 
 import { ROUTES } from "@/constants/routes"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { WorkspaceSelector } from "@/features/workspace"
 import {
   Sidebar,
   SidebarContent,
@@ -15,19 +18,21 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import {
   ChartNoAxesCombined,
   CircleUserRound,
   ShieldCheck,
   Gauge,
   Grid2x2,
-  LayoutDashboard,
   LayoutGrid,
   SendIcon,
   Settings2,
   Tv,
   House,
   ShoppingBag,
+  HelpCircle,
+  Sparkles,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -40,7 +45,7 @@ const data = {
   },
   navMain: [
     {
-      title: "لوحة التحكم",
+      title: "الرئيسية",
       url: ROUTES.dashboard,
       icon: <House />,
       isActive: true,
@@ -107,19 +112,23 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   return (
     <div onMouseEnter={() => onHoverChange?.(true)} onMouseLeave={() => onHoverChange?.(false)}>
-      <Sidebar side="right" collapsible="icon" {...props} className="shadow-lg">
-        <SidebarHeader className="h-16 justify-center px-3 border-b">
+      <Sidebar side="right" collapsible="icon" {...props} className="border-none shadow-sm">
+        <SidebarHeader className="h-20 justify-center px-4" dir="rtl">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" asChild className="p-2">
-                <Link href={ROUTES.dashboard}>
-                  <div className="flex aspect-square size-8 items-center justify-center mx-auto rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                    <LayoutDashboard className="size-4" />
+              <SidebarMenuButton size="lg" asChild className="p-1 hover:bg-transparent">
+                <Link href={ROUTES.dashboard} className="flex items-center justify-center gap-2.5">
+                  <div className="hidden aspect-square size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm group-data-[collapsible=icon]:flex">
+                    <Sparkles className="size-5" />
                   </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">MADAR</span>
-                    <span className="truncate text-xs">Marketing Intelligence</span>
-                  </div>
+                  <Image
+                    src="/images/madar-logo.png"
+                    alt="مدار MADAR"
+                    width={778}
+                    height={325}
+                    priority
+                    className="h-12 w-auto group-data-[collapsible=icon]:hidden"
+                  />
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -132,8 +141,20 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
             </div>
           </ScrollArea>
         </SidebarContent>
-        <SidebarFooter className="border-t justify-center px-3">
+        <SidebarFooter className="gap-3 px-3 pb-4" dir="rtl">
+          <WorkspaceSelector compact />
           <NavUser user={data.user} />
+          <div className="flex items-center justify-center gap-1 border-t border-sidebar-border pt-3">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" className="size-9 rounded-full" asChild>
+              <Link href={ROUTES.settings} aria-label="Settings">
+                <Settings2 className="size-4" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" className="size-9 rounded-full" aria-label="Help">
+              <HelpCircle className="size-4" />
+            </Button>
+          </div>
         </SidebarFooter>
       </Sidebar>
     </div>

@@ -1,7 +1,6 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
 import Link from "next/link"
 
 import { ChevronRight } from "lucide-react"
@@ -15,6 +14,15 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+
+import { cn } from "@/lib/utils"
+
+const NAV_ITEM_CLASSNAME = cn(
+  "h-11 gap-3 rounded-xl px-3 text-[15px] font-medium text-sidebar-foreground",
+  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+  "data-active:bg-sidebar-primary data-active:text-sidebar-primary-foreground data-active:shadow-sm data-active:hover:bg-sidebar-primary data-active:hover:text-sidebar-primary-foreground",
+  "[&>svg:first-child]:size-[18px]"
+)
 
 type NavLeafItem = {
   title: string
@@ -43,7 +51,7 @@ function ParentMenuItem({ item, pathname }: { item: NavWithChildren; pathname: s
     <Collapsible key={`${item.title}:${pathname}`} defaultOpen={parentActive} className="group">
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton className="group" isActive={parentActive}>
+          <SidebarMenuButton className={cn(NAV_ITEM_CLASSNAME, "group")} isActive={parentActive}>
             {item.icon}
             <span>{item.title}</span>
             <ChevronRight className="ms-auto h-4 w-4 transition-transform duration-200 rtl:rotate-180 group-data-[state=open]:rotate-90" />
@@ -79,13 +87,13 @@ export function NavMain({ items }: { items: NavItem[] }) {
   }
 
   return (
-    <SidebarMenu className="px-3 py-2" dir="rtl">
+    <SidebarMenu className="gap-1 px-3 py-2" dir="rtl">
       {items.map((item) => {
         return hasChildren(item) ? (
           <ParentMenuItem key={item.title} item={item} pathname={pathname} />
         ) : (
           <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton asChild isActive={isActive(item.url)}>
+            <SidebarMenuButton asChild isActive={isActive(item.url)} className={NAV_ITEM_CLASSNAME}>
               <Link href={item.url}>
                 {item.icon}
 

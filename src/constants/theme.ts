@@ -4,4 +4,4 @@ export const THEME_KEYS = {
   semiDark: "semi-dark",
 } as const
 
-export const DEFAULT_THEME = THEME_KEYS.darkBlue
+export const DEFAULT_THEME = "light"

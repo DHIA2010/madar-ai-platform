@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react"
 
+import { RefreshCw } from "lucide-react"
+
 import { AppSidebar } from "@/components/app-sidebar"
 import { NotificationDropdown } from "@/components/notification-dropdown"
-import { TeamSwitcher } from "@/components/team-switcher"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { GlobalSearch } from "@/components/global-search"
 import { UserDropdown } from "@/components/UserDropdown"
+import { Button } from "@/components/ui/button"
 
 import Footer from "@/components/layout/Footer"
 
@@ -22,8 +23,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [hovered, setHovered] = useState(false)
 
   const isExpanded = open || hovered
-
-  const [themesopen, themessetOpen] = useState(false)
 
   // Handle header background on scroll
   useEffect(() => {
@@ -65,10 +64,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="ms-auto">
             <div className="flex items-center gap-2">
               <GlobalSearch />
-              <div className="hidden lg:block">
-                <TeamSwitcher />
-              </div>
-              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10 rounded-full hover:bg-muted/60"
+                aria-label="Refresh"
+              >
+                <RefreshCw className="size-4" />
+              </Button>
               <div className="relative hidden md:inline-flex">
                 <NotificationDropdown />
               </div>

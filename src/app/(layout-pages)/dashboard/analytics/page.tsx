@@ -1,10 +1,5 @@
-import AnalyticsDashboard from "./AnalyticsDashboard"
-import { DashboardProvider } from "@/features/dashboard/providers"
+import HomeDashboard from "./HomeDashboard"
 
 export default function Page() {
-  return (
-    <DashboardProvider>
-      <AnalyticsDashboard />
-    </DashboardProvider>
-  )
+  return <HomeDashboard />
 }

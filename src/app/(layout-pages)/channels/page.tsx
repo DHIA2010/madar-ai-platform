@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import ChannelsDashboard from "./ChannelsDashboard"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="القنوات" />
+  return <ChannelsDashboard />
 }

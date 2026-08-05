@@ -1,5 +1,5 @@
-import MadarPlaceholderPage from "@/components/madar-placeholder-page"
+import SettingsDashboard from "./SettingsDashboard"
 
 export default function Page() {
-  return <MadarPlaceholderPage title="الإعدادات" />
+  return <SettingsDashboard />
 }

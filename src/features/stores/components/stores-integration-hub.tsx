@@ -1,23 +1,39 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { addMonths, format, getMonth, getYear, setMonth, setYear } from "date-fns"
+import { type ReactNode, useEffect, useMemo, useState } from "react"
 import {
+  addMonths,
+  endOfMonth,
+  format,
+  getMonth,
+  getYear,
+  setMonth,
+  setYear,
+  startOfMonth,
+  subDays,
+  subMonths,
+} from "date-fns"
+import {
+  Activity,
   CalendarIcon,
   ChevronLeft,
   ChevronRight,
   ChevronRight as ChevronRightSmall,
   Globe,
+  type LucideIcon,
+  Package,
   Plug,
   Search,
   ShieldAlert,
   ShieldCheck,
+  ShoppingCart,
   Store,
   StoreIcon,
   TriangleAlert,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
+import { cn } from "@/lib/utils"
 import { useStoreContextStore } from "@/store/store-context.store"
 
 import {
@@ -215,6 +231,20 @@ const monthOptions = [
   "Dec",
 ]
 const yearOptions = Array.from({ length: 21 }, (_, index) => 2018 + index)
+
+function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
+  const today = new Date()
+  const lastMonth = subMonths(today, 1)
+
+  return [
+    { label: "Yesterday", range: { from: subDays(today, 1), to: subDays(today, 1) } },
+    { label: "Last 7 Days", range: { from: subDays(today, 6), to: today } },
+    { label: "Last 30 Days", range: { from: subDays(today, 29), to: today } },
+    { label: "This Month", range: { from: startOfMonth(today), to: endOfMonth(today) } },
+    { label: "Last Month", range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) } },
+  ]
+}
+
 const PAGE_SIZE = 6
 const STORE_TABLE_COLUMN_WIDTHS = [
   "22%",
@@ -230,10 +260,45 @@ const STORE_TABLE_COLUMN_WIDTHS = [
   "7.8%",
 ]
 const TABLE_ALIGN_START = "text-start rtl:text-start"
-const TABLE_ALIGN_CENTER = "text-center rtl:text-center"
+const TABLE_ALIGN_CENTER = "!text-center rtl:!text-center"
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value)
+}
+
+interface StoreKpiCardData {
+  label: string
+  value: string
+  footnote: ReactNode
+  icon: LucideIcon
+  tone: "blue" | "violet" | "green" | "orange"
+}
+
+const STORE_KPI_TONE_CLASSNAMES: Record<StoreKpiCardData["tone"], string> = {
+  blue: "bg-blue-50 text-blue-600",
+  violet: "bg-violet-50 text-violet-600",
+  green: "bg-emerald-50 text-emerald-600",
+  orange: "bg-orange-50 text-orange-600",
+}
+
+function StoreKpiCard({ kpi }: { kpi: StoreKpiCardData }) {
+  const Icon = kpi.icon
+
+  return (
+    <AppCard className="overflow-hidden rounded-2xl border-border/60 bg-card p-4 shadow-sm">
+      <div
+        className={cn(
+          "flex size-10 items-center justify-center rounded-xl",
+          STORE_KPI_TONE_CLASSNAMES[kpi.tone]
+        )}
+      >
+        <Icon className="size-5" />
+      </div>
+      <p className="mt-3 text-sm text-muted-foreground">{kpi.label}</p>
+      <p className="mt-1 text-2xl font-bold text-foreground">{kpi.value}</p>
+      <div className="mt-2 text-xs text-muted-foreground">{kpi.footnote}</div>
+    </AppCard>
+  )
 }
 
 function formatDateRangeLabel(range: DateRange | undefined) {
@@ -243,16 +308,16 @@ function formatDateRangeLabel(range: DateRange | undefined) {
 }
 
 function getConnectionStatusClasses(status: ConnectionStatus) {
-  if (status === "Connected") return "border-emerald-400/30 bg-emerald-500/12 text-emerald-300"
-  if (status === "Needs Reconnect") return "border-amber-400/30 bg-amber-500/12 text-amber-300"
-  if (status === "Sync Error") return "border-rose-400/30 bg-rose-500/12 text-rose-300"
-  return "border-slate-500/40 bg-slate-700/25 text-slate-300"
+  if (status === "Connected") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  if (status === "Needs Reconnect") return "border-amber-200 bg-amber-50 text-amber-700"
+  if (status === "Sync Error") return "border-rose-200 bg-rose-50 text-rose-700"
+  return "border-border bg-muted text-muted-foreground"
 }
 
 function getSyncHealthClasses(health: SyncHealth) {
-  if (health === "Healthy") return "text-emerald-300"
-  if (health === "Warning") return "text-amber-300"
-  return "text-rose-300"
+  if (health === "Healthy") return "text-emerald-600"
+  if (health === "Warning") return "text-amber-600"
+  return "text-rose-600"
 }
 
 function getSyncHealthTooltip(health: SyncHealth) {
@@ -277,11 +342,11 @@ function getDataCoverageTooltip(level: StoreRow["dataCoverageLevel"]) {
 
 function getLogoColor(logoText: string) {
   const palettes = [
-    "bg-sky-500/20 text-sky-300",
-    "bg-emerald-500/20 text-emerald-300",
-    "bg-amber-500/20 text-amber-300",
-    "bg-rose-500/20 text-rose-300",
-    "bg-indigo-500/20 text-indigo-300",
+    "bg-sky-50 text-sky-600",
+    "bg-emerald-50 text-emerald-600",
+    "bg-amber-50 text-amber-600",
+    "bg-rose-50 text-rose-600",
+    "bg-indigo-50 text-indigo-600",
   ]
   return palettes[logoText.charCodeAt(0) % palettes.length]
 }
@@ -324,48 +389,52 @@ function DateRangeFilter({
       <AppPopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-11 w-[190px] items-center justify-between rounded-md border border-slate-700 bg-slate-900/80 px-3 text-sm text-slate-100 ring-offset-background transition-colors hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/35 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+          className="flex h-11 w-[220px] items-center justify-between rounded-md border border-border bg-muted/60 px-3 text-sm text-foreground ring-offset-background transition-colors hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/35 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
         >
           <span className="truncate text-left">{formatDateRangeLabel(value)}</span>
-          <CalendarIcon className="size-4 shrink-0 text-slate-300" />
+          <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
         </button>
       </AppPopoverTrigger>
       <AppPopoverContent
         align="start"
         sideOffset={10}
-        className="w-[min(27rem,calc(100vw-2rem))] rounded-[24px] border border-sky-400/15 bg-slate-950/92 p-5 text-slate-100 shadow-[0_28px_90px_-38px_rgba(14,165,233,0.55)] ring-1 ring-sky-400/10 backdrop-blur-2xl"
+        dir="ltr"
+        collisionPadding={16}
+        className="max-h-[var(--radix-popover-content-available-height)] w-[min(23rem,calc(100vw-2rem))] overflow-y-auto rounded-[20px] border border-sky-400/15 bg-card p-3.5 text-foreground shadow-[0_28px_90px_-38px_rgba(14,165,233,0.55)] ring-1 ring-sky-400/10 backdrop-blur-2xl"
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <AppButton
             type="button"
             size="icon"
             variant="ghost"
-            className="size-10 rounded-full border border-slate-700/80 bg-slate-900/80 text-slate-300 transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-slate-50 focus-visible:ring-2 focus-visible:ring-sky-400/35"
+            className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
             onClick={() => setDisplayMonth((current) => addMonths(current, -1))}
             aria-label="Previous month"
           >
             <ChevronLeft className="size-4" />
           </AppButton>
 
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
             <AppSelect
               value={String(monthIndex)}
               onValueChange={(next) =>
                 setDisplayMonth((current) => setMonth(current, Number(next)))
               }
             >
-              <AppSelectTrigger className="h-11 w-[9.25rem] rounded-full border border-slate-700/70 bg-slate-900/75 px-4 text-sm font-semibold text-slate-50 shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
+              <AppSelectTrigger className="h-9 w-[7.75rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
                 <span>{monthOptions[monthIndex]}</span>
               </AppSelectTrigger>
               <AppSelectContent
-                className="rounded-2xl border border-slate-700/70 bg-slate-950/95 p-1.5 text-slate-100 shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
+                position="popper"
+                className="rounded-2xl border border-border bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
                 align="center"
+                sideOffset={4}
               >
                 {monthOptions.map((monthLabel, index) => (
                   <AppSelectItem
                     key={monthLabel}
                     value={String(index)}
-                    className="rounded-xl px-3 py-2 text-sm text-slate-100 focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
+                    className="rounded-xl px-3 py-2 text-sm text-foreground focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
                   >
                     {monthLabel}
                   </AppSelectItem>
@@ -377,18 +446,20 @@ function DateRangeFilter({
               value={String(yearValue)}
               onValueChange={(next) => setDisplayMonth((current) => setYear(current, Number(next)))}
             >
-              <AppSelectTrigger className="h-11 w-[7.5rem] rounded-full border border-slate-700/70 bg-slate-900/75 px-4 text-sm font-semibold text-slate-50 shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
+              <AppSelectTrigger className="h-9 w-[6rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
                 <span>{yearValue}</span>
               </AppSelectTrigger>
               <AppSelectContent
-                className="max-h-72 rounded-2xl border border-slate-700/70 bg-slate-950/95 p-1.5 text-slate-100 shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
+                position="popper"
+                className="max-h-56 rounded-2xl border border-border bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
                 align="center"
+                sideOffset={4}
               >
                 {yearOptions.map((yearOption) => (
                   <AppSelectItem
                     key={yearOption}
                     value={String(yearOption)}
-                    className="rounded-xl px-3 py-2 text-sm text-slate-100 focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
+                    className="rounded-xl px-3 py-2 text-sm text-foreground focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
                   >
                     {yearOption}
                   </AppSelectItem>
@@ -401,7 +472,7 @@ function DateRangeFilter({
             type="button"
             size="icon"
             variant="ghost"
-            className="size-10 rounded-full border border-slate-700/80 bg-slate-900/80 text-slate-300 transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-slate-50 focus-visible:ring-2 focus-visible:ring-sky-400/35"
+            className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
             onClick={() => setDisplayMonth((current) => addMonths(current, 1))}
             aria-label="Next month"
           >
@@ -439,38 +510,57 @@ function DateRangeFilter({
           endMonth={new Date(2038, 11)}
           captionLayout="label"
           formatters={{ formatWeekdayName: (date) => format(date, "EEE") }}
-          className="rounded-[18px] bg-transparent p-0 [--cell-size:40px]"
+          className="rounded-[18px] bg-transparent p-0 [--cell-size:32px]"
           classNames={{
             root: "w-full",
             months: "w-full",
-            month: "w-full gap-4",
+            month: "w-full gap-2",
             nav: "hidden",
             month_caption: "hidden",
-            caption_label: "text-base font-semibold text-slate-50",
-            weekdays: "mb-4 grid grid-cols-7 gap-2.5",
+            caption_label: "text-base font-semibold text-foreground",
+            weekdays: "mb-1.5 grid grid-cols-7 gap-1.5",
             weekday:
-              "h-8 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500",
-            week: "mt-2.5 grid grid-cols-7 gap-2.5",
-            day: "rounded-full text-slate-100",
+              "h-6 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground",
+            week: "mt-1.5 grid grid-cols-7 gap-1.5",
+            day: "rounded-full text-foreground",
             day_button:
-              "size-10 rounded-full border border-transparent bg-transparent text-sm font-medium text-slate-100 transition-all duration-200 ease-out hover:border-sky-300/40 hover:bg-sky-500/14 hover:text-slate-50 focus-visible:ring-2 focus-visible:ring-sky-400/35",
-            today: "rounded-full border border-sky-400/60 bg-transparent text-slate-50 shadow-none",
+              "size-8 rounded-full border border-transparent bg-transparent text-xs font-medium text-foreground transition-all duration-200 ease-out hover:border-sky-300/40 hover:bg-sky-500/14 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
+            today:
+              "rounded-full border border-sky-400/60 bg-transparent text-foreground shadow-none",
             selected:
-              "rounded-full border border-sky-300 bg-sky-400 text-slate-950 shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)] hover:bg-sky-300 hover:text-slate-950",
-            range_middle: "rounded-full border border-transparent bg-sky-500/14 text-slate-50",
-            range_start: "rounded-full border border-sky-300 bg-sky-400 text-slate-950",
-            range_end: "rounded-full border border-sky-300 bg-sky-400 text-slate-950",
-            outside: "text-slate-600 opacity-40",
-            disabled: "text-slate-600 opacity-35",
+              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)] hover:bg-sky-300 hover:text-foreground",
+            range_middle: "rounded-full border border-transparent bg-sky-500/14 text-foreground",
+            range_start: "rounded-full border border-sky-300 bg-sky-400 text-foreground",
+            range_end: "rounded-full border border-sky-300 bg-sky-400 text-foreground",
+            outside: "text-muted-foreground opacity-40",
+            disabled: "text-muted-foreground opacity-35",
           }}
         />
 
-        <div className="mt-5 flex items-center justify-end gap-3 border-t border-slate-800 pt-4">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+          {getDateRangePresets().map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
+              onClick={() => {
+                onChange(preset.range)
+                setRangeAnchor(undefined)
+                setDisplayMonth(preset.range.from ?? new Date())
+                setOpen(false)
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center justify-end gap-2">
           <AppButton
             type="button"
             size="sm"
             variant="outline"
-            className="h-10 rounded-xl border-slate-700 bg-slate-900/70 px-4 text-sm font-medium text-slate-300 transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-slate-50"
+            className="h-9 rounded-xl border-border bg-muted/60 px-3.5 text-sm font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
             onClick={() => {
               onChange(undefined)
               setRangeAnchor(undefined)
@@ -483,7 +573,7 @@ function DateRangeFilter({
           <AppButton
             type="button"
             size="sm"
-            className="h-10 rounded-xl bg-sky-400 px-4 text-sm font-semibold text-slate-950 shadow-[0_18px_34px_-18px_rgba(14,165,233,0.8)] transition-all hover:bg-sky-300"
+            className="h-9 rounded-xl bg-sky-400 px-3.5 text-sm font-semibold text-foreground shadow-[0_18px_34px_-18px_rgba(14,165,233,0.8)] transition-all hover:bg-sky-300"
             onClick={() => {
               const today = new Date()
               onChange({ from: today, to: today })
@@ -610,66 +700,53 @@ export function StoresIntegrationHub() {
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <AppCard
-          className="overflow-hidden border border-slate-800/80 bg-slate-950/55"
-          contentClassName="pt-0"
-        >
-          <div className="space-y-1">
-            <p className="text-sm text-slate-400">Connected Stores</p>
-            <p className="text-2xl font-semibold text-slate-100">
-              {formatNumber(kpiMetrics.connectedStores)}
-            </p>
-            <p className="text-xs text-slate-500">Across 3 commerce platforms</p>
-          </div>
-        </AppCard>
-
-        <AppCard
-          className="overflow-hidden border border-slate-800/80 bg-slate-950/55"
-          contentClassName="pt-0"
-        >
-          <div className="space-y-1">
-            <p className="text-sm text-slate-400">Connected Products</p>
-            <p className="text-2xl font-semibold text-slate-100">
-              {formatNumber(kpiMetrics.connectedProducts)}
-            </p>
-            <p className="text-xs text-slate-500">Across all connected stores</p>
-          </div>
-        </AppCard>
-
-        <AppCard
-          className="overflow-hidden border border-slate-800/80 bg-slate-950/55"
-          contentClassName="pt-0"
-        >
-          <div className="space-y-1">
-            <p className="text-sm text-slate-400">Orders Synced</p>
-            <p className="text-2xl font-semibold text-slate-100">
-              {formatNumber(kpiMetrics.ordersSynced)}
-            </p>
-            <p className="text-xs text-slate-500">Historical orders available</p>
-          </div>
-        </AppCard>
-
-        <AppCard
-          className="overflow-hidden border border-slate-800/80 bg-slate-950/55"
-          contentClassName="pt-0"
-        >
-          <div className="space-y-1">
-            <p className="text-sm text-slate-400">Sync Health</p>
-            <p className="text-2xl font-semibold text-slate-100">
-              {kpiMetrics.syncHealth.toFixed(1)}%
-            </p>
-            <p
-              className={`text-xs font-medium ${getSyncHealthClasses(kpiMetrics.syncHealthState as SyncHealth)}`}
-            >
-              {kpiMetrics.syncHealthState}
-            </p>
-            <p className="text-xs text-slate-500">Overall integration health</p>
-          </div>
-        </AppCard>
+        {(
+          [
+            {
+              label: "Connected Stores",
+              value: formatNumber(kpiMetrics.connectedStores),
+              footnote: "Across 3 commerce platforms",
+              icon: Store,
+              tone: "blue",
+            },
+            {
+              label: "Connected Products",
+              value: formatNumber(kpiMetrics.connectedProducts),
+              footnote: "Across all connected stores",
+              icon: Package,
+              tone: "violet",
+            },
+            {
+              label: "Orders Synced",
+              value: formatNumber(kpiMetrics.ordersSynced),
+              footnote: "Historical orders available",
+              icon: ShoppingCart,
+              tone: "green",
+            },
+            {
+              label: "Sync Health",
+              value: `${kpiMetrics.syncHealth.toFixed(1)}%`,
+              footnote: (
+                <span
+                  className={cn(
+                    "font-medium",
+                    getSyncHealthClasses(kpiMetrics.syncHealthState as SyncHealth)
+                  )}
+                >
+                  {kpiMetrics.syncHealthState}
+                </span>
+              ),
+              icon: Activity,
+              tone: "orange",
+            },
+          ] satisfies StoreKpiCardData[]
+        ).map((kpi) => (
+          <StoreKpiCard key={kpi.label} kpi={kpi} />
+        ))}
       </section>
 
       <AppCard
-        className="overflow-hidden border border-slate-800/90 bg-slate-950/35"
+        className="overflow-hidden border border-border bg-card"
         contentClassName="space-y-4 p-6"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -755,16 +832,18 @@ export function StoresIntegrationHub() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-slate-300">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <button
               type="button"
-              className="text-slate-200 hover:text-slate-50"
+              className="text-foreground/90 hover:text-foreground"
               onClick={clearStoreContext}
             >
               Stores
             </button>
-            {selectedStore ? <span className="text-slate-500">&gt;</span> : null}
-            {selectedStore ? <span className="text-slate-200">{selectedStore.name}</span> : null}
+            {selectedStore ? <span className="text-muted-foreground">&gt;</span> : null}
+            {selectedStore ? (
+              <span className="text-foreground/90">{selectedStore.name}</span>
+            ) : null}
           </div>
 
           {selectedStore ? (
@@ -775,12 +854,12 @@ export function StoresIntegrationHub() {
         </div>
 
         {noStoresExist ? (
-          <div className="rounded-2xl border border-slate-800/80 bg-slate-950/55 p-10 text-center">
-            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900/60 text-slate-300">
+          <div className="rounded-2xl border border-border bg-card p-10 text-center">
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-border bg-muted/60 text-muted-foreground">
               <Store className="size-7" />
             </div>
-            <p className="text-base font-semibold text-slate-100">Connect your first store</p>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="text-base font-semibold text-foreground">Connect your first store</p>
+            <p className="mt-2 text-sm text-muted-foreground">
               Bring your commerce platform data into MADAR to unlock intelligence.
             </p>
             <div className="mt-5">
@@ -796,50 +875,50 @@ export function StoresIntegrationHub() {
                 ))}
               </colgroup>
               <AppTableHeader>
-                <AppTableRow className="border-slate-800/80 hover:bg-transparent">
-                  <AppTableHead className={`${TABLE_ALIGN_START} text-slate-400`}>
+                <AppTableRow className="border-border hover:bg-transparent">
+                  <AppTableHead className={`${TABLE_ALIGN_START} text-muted-foreground`}>
                     Store
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_START} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_START} text-muted-foreground`}>
                     Platform
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Country
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Currency
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Products
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Orders
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Customers
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Connection Status
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Data Coverage
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Last Sync
                   </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_START} text-slate-400`}>
+                  <AppTableHead className={`${TABLE_ALIGN_START} text-muted-foreground`}>
                     Sync Health
                   </AppTableHead>
                 </AppTableRow>
               </AppTableHeader>
               <AppTableBody>
                 {paginatedRows.length === 0 ? (
-                  <AppTableRow className="border-slate-800/70">
+                  <AppTableRow className="border-border">
                     <AppTableCell colSpan={11} className="py-10 text-center">
-                      <p className="text-base font-semibold text-slate-100">
+                      <p className="text-base font-semibold text-foreground">
                         No stores match the current filters
                       </p>
-                      <p className="mt-2 text-sm text-slate-400">
+                      <p className="mt-2 text-sm text-muted-foreground">
                         Try adjusting platform, country, status, date, or search.
                       </p>
                     </AppTableCell>
@@ -848,12 +927,12 @@ export function StoresIntegrationHub() {
                   paginatedRows.map((store) => (
                     <AppTableRow
                       key={store.id}
-                      className="border-slate-800/70 transition-colors hover:bg-slate-900/45"
+                      className="border-border transition-colors hover:bg-muted"
                     >
                       <AppTableCell className={TABLE_ALIGN_START}>
                         <button
                           type="button"
-                          className={`group flex w-full items-center gap-3 rounded-md py-1 ${TABLE_ALIGN_START} transition-colors hover:bg-slate-900/60`}
+                          className={`group flex w-full items-center gap-3 rounded-md py-1 ${TABLE_ALIGN_START} transition-colors hover:bg-muted`}
                           onClick={() => openStoreDetails(store)}
                         >
                           <div
@@ -862,31 +941,37 @@ export function StoresIntegrationHub() {
                             {store.logoText}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-slate-100">{store.name}</p>
-                            <p className="text-xs text-slate-400">{store.url}</p>
+                            <p className="font-medium text-foreground">{store.name}</p>
+                            <p className="text-xs text-muted-foreground">{store.url}</p>
                           </div>
-                          <ChevronRightSmall className="size-4 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" />
+                          <ChevronRightSmall className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                         </button>
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_START} text-slate-200`}>
+                      <AppTableCell className={`${TABLE_ALIGN_START} text-foreground/90`}>
                         <span className="inline-flex items-center gap-2">
                           <PlatformIcon platform={store.platform} />
                           {store.platform}
                         </span>
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-slate-200`}>
+                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
                         {store.country}
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-slate-200`}>
+                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
                         {store.currency}
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} tabular-nums text-slate-200`}>
+                      <AppTableCell
+                        className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
+                      >
                         {formatNumber(store.products)}
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} tabular-nums text-slate-200`}>
+                      <AppTableCell
+                        className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
+                      >
                         {formatNumber(store.orders)}
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} tabular-nums text-slate-200`}>
+                      <AppTableCell
+                        className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
+                      >
                         {formatNumber(store.customers)}
                       </AppTableCell>
                       <AppTableCell className={TABLE_ALIGN_CENTER}>
@@ -899,18 +984,18 @@ export function StoresIntegrationHub() {
                       </AppTableCell>
                       <AppTableCell className={TABLE_ALIGN_CENTER}>
                         <span
-                          className="inline-flex flex-col items-center text-xs text-slate-200"
+                          className="inline-flex flex-col items-center text-xs text-foreground/90"
                           title={getDataCoverageTooltip(store.dataCoverageLevel)}
                         >
-                          <span className="text-sm font-medium text-slate-100">
+                          <span className="text-sm font-medium text-foreground">
                             {store.dataCoveragePercent}%
                           </span>
-                          <span className="text-[11px] text-slate-400">
+                          <span className="text-[11px] text-muted-foreground">
                             {store.dataCoverageLevel}
                           </span>
                         </span>
                       </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-slate-200`}>
+                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
                         {store.lastSyncLabel}
                       </AppTableCell>
                       <AppTableCell className={TABLE_ALIGN_START}>
@@ -939,7 +1024,7 @@ export function StoresIntegrationHub() {
         )}
 
         {!noStoresExist ? (
-          <div className="flex flex-col gap-3 rounded-[20px] border border-slate-800/80 bg-slate-950/55 px-4 py-3 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <div>
               {scopedStores.length === 0
                 ? "Showing 0 of 0"
@@ -950,19 +1035,19 @@ export function StoresIntegrationHub() {
               <AppButton
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-slate-700 bg-slate-900/80 text-slate-200 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-slate-50"
+                className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
                 onClick={() => setPage((previous) => Math.max(1, previous - 1))}
                 disabled={currentPage === 1}
               >
                 Prev
               </AppButton>
-              <span className="min-w-24 text-center text-slate-300">
+              <span className="min-w-24 text-center text-muted-foreground">
                 Page {currentPage} of {totalPages}
               </span>
               <AppButton
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-slate-700 bg-slate-900/80 text-slate-200 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-slate-50"
+                className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
                 onClick={() => setPage((previous) => Math.min(totalPages, previous + 1))}
                 disabled={currentPage === totalPages}
               >

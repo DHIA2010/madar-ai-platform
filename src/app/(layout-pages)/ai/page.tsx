@@ -1,5 +1,5 @@
-import { AIIntelligencePage } from "@/features/ai"
+import AIAssistantDashboard from "./AIAssistantDashboard"
 
 export default function Page() {
-  return <AIIntelligencePage />
+  return <AIAssistantDashboard />
 }
