@@ -7,6 +7,7 @@ export type CampaignChannel = "meta" | "google" | "tiktok" | "snapchat" | "linke
 export interface CampaignListQueryDto {
   page: number
   pageSize: number
+  workspaceId?: string
   search?: string
   status?: CampaignStatus
   channel?: CampaignChannel
@@ -29,6 +30,7 @@ export interface CampaignListQueryDto {
 
 export interface CampaignListItemDto {
   id: string
+  workspaceId?: string
   name: string
   status: CampaignStatus
   channel: CampaignChannel
@@ -79,6 +81,7 @@ export interface CampaignActivityEntryDto {
 
 export interface CampaignDetailsDto {
   id: string
+  workspaceId?: string
   name: string
   status: CampaignStatus
   objective: string
@@ -108,6 +111,7 @@ export interface CampaignDetailsDto {
 }
 
 export interface CreateCampaignRequestDto {
+  workspaceId?: string
   name: string
   objective: string
   channel: CampaignChannel

@@ -1,10 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { CustomerProfile } from "./customer-profile"
 import { CustomersOverview } from "./customers-overview"
 
-// CustomersOverview uses no context — it calls customerListService directly via hooks.
+vi.mock("@/features/workspace", () => ({
+  useWorkspace: () => ({ currentWorkspace: null }),
+}))
+
+// CustomersOverview calls customerListService directly via hooks, scoped by useWorkspace.
 
 describe("CustomersOverview", () => {
   it("renders the page header and customer table", () => {

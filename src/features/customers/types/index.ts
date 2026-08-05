@@ -11,6 +11,7 @@ export type CustomerSegmentLabel =
 
 export interface CustomerRecord {
   customerId: string
+  workspaceId?: string
   name: string
   email: string
   phone?: string
@@ -118,6 +119,7 @@ export interface CustomerSegmentHistory {
 }
 
 export interface CustomerFilterState {
+  workspaceId?: string
   search: string
   status: CustomerStatus | "all"
   segment: string

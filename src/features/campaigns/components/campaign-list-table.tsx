@@ -41,6 +41,8 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { useCampaignList } from "../hooks"
 import type { CampaignChannel, CampaignStatus } from "../types"
 import {
@@ -57,7 +59,6 @@ type SortableColumn =
   | "channel"
   | "owner"
   | "country"
-  | "workspace"
   | "lastUpdated"
   | "startDate"
   | "endDate"
@@ -81,7 +82,6 @@ type DecoratedCampaign = {
   objective: string
   owner: string
   country: string
-  workspace: string
   startDate: string
   endDate: string
   lastUpdated: string
@@ -95,7 +95,6 @@ type DecoratedCampaign = {
 
 const OBJECTIVES = ["Awareness", "Traffic", "Leads", "Conversions", "Sales", "Engagement"]
 const COUNTRIES = ["Saudi Arabia", "United Arab Emirates", "Qatar", "Kuwait", "Bahrain", "Jordan"]
-const WORKSPACES = ["Madar Growth", "Retail Expansion", "Enterprise Pipeline"]
 
 const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
   { key: "all", label: "All" },
@@ -179,6 +178,7 @@ function exportSelectedRows(rows: DecoratedCampaign[]) {
 
 export function CampaignListTable() {
   const router = useRouter()
+  const { currentWorkspace } = useWorkspace()
 
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -190,7 +190,6 @@ export function CampaignListTable() {
   const [ownerFilter, setOwnerFilter] = useState("")
   const [objectiveFilter, setObjectiveFilter] = useState("")
   const [countryFilter, setCountryFilter] = useState("")
-  const [workspaceFilter, setWorkspaceFilter] = useState("")
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("all")
   const [budgetRangeFilter, setBudgetRangeFilter] = useState<BudgetRangeFilter>("all")
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all")
@@ -207,13 +206,14 @@ export function CampaignListTable() {
     () => ({
       page: 1,
       pageSize: 200,
+      workspaceId: currentWorkspace?.id,
       search: search || undefined,
       status: status || undefined,
       channel: channel || undefined,
       sortBy: "startDate" as const,
       sortDirection: "desc" as const,
     }),
-    [channel, search, status]
+    [channel, currentWorkspace?.id, search, status]
   )
 
   const campaignListQuery = useCampaignList(queryInput)
@@ -224,7 +224,6 @@ export function CampaignListTable() {
       .map((campaign) => {
         const objective = OBJECTIVES[hashIndex(campaign.id, OBJECTIVES.length)]
         const country = COUNTRIES[hashIndex(campaign.id + campaign.owner, COUNTRIES.length)]
-        const workspace = WORKSPACES[hashIndex(campaign.id + campaign.channel, WORKSPACES.length)]
         const statusValue = statusOverrides[campaign.id] ?? campaign.status
         const ownerValue = ownerOverrides[campaign.id] ?? campaign.owner
         const lastUpdated = campaign.endDate
@@ -243,7 +242,6 @@ export function CampaignListTable() {
           objective,
           owner: ownerValue,
           country,
-          workspace,
           startDate: campaign.startDate,
           endDate: campaign.endDate,
           lastUpdated,
@@ -276,7 +274,6 @@ export function CampaignListTable() {
       .filter((campaign) => (!ownerFilter ? true : campaign.owner === ownerFilter))
       .filter((campaign) => (!objectiveFilter ? true : campaign.objective === objectiveFilter))
       .filter((campaign) => (!countryFilter ? true : campaign.country === countryFilter))
-      .filter((campaign) => (!workspaceFilter ? true : campaign.workspace === workspaceFilter))
       .filter((campaign) => {
         if (budgetRangeFilter === "all") return true
         if (budgetRangeFilter === "lt50k") return campaign.budget < 50000
@@ -321,7 +318,6 @@ export function CampaignListTable() {
     referenceNow,
     sortBy,
     sortDirection,
-    workspaceFilter,
   ])
 
   const totalRows = filteredCampaigns.length
@@ -358,7 +354,6 @@ export function CampaignListTable() {
     ownerFilter !== "" ||
     objectiveFilter !== "" ||
     countryFilter !== "" ||
-    workspaceFilter !== "" ||
     dateRangeFilter !== "all" ||
     budgetRangeFilter !== "all" ||
     quickFilter !== "all" ||
@@ -381,7 +376,6 @@ export function CampaignListTable() {
     setOwnerFilter("")
     setObjectiveFilter("")
     setCountryFilter("")
-    setWorkspaceFilter("")
     setDateRangeFilter("all")
     setBudgetRangeFilter("all")
     setQuickFilter("all")
@@ -553,32 +547,6 @@ export function CampaignListTable() {
               </AppSelect>
 
               <AppSelect
-                value={workspaceFilter || "all"}
-                onValueChange={(value) => {
-                  setWorkspaceFilter(value === "all" ? "" : value)
-                  setPage(1)
-                }}
-              >
-                <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Workspace" />
-                </AppSelectTrigger>
-                <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
-                  <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Workspace
-                  </AppSelectItem>
-                  {WORKSPACES.map((workspace) => (
-                    <AppSelectItem
-                      key={workspace}
-                      value={workspace}
-                      className={CAMPAIGN_SELECT_ITEM_CLASSNAME}
-                    >
-                      {workspace}
-                    </AppSelectItem>
-                  ))}
-                </AppSelectContent>
-              </AppSelect>
-
-              <AppSelect
                 value={objectiveFilter || "all"}
                 onValueChange={(value) => {
                   setObjectiveFilter(value === "all" ? "" : value)
@@ -727,11 +695,10 @@ export function CampaignListTable() {
             </div>
           ) : null}
 
-          {[status, channel, ownerFilter, objectiveFilter, countryFilter, workspaceFilter].filter(
-            Boolean
-          ).length > 0 ? (
+          {[status, channel, ownerFilter, objectiveFilter, countryFilter].filter(Boolean).length >
+          0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              {[status, channel, ownerFilter, objectiveFilter, countryFilter, workspaceFilter]
+              {[status, channel, ownerFilter, objectiveFilter, countryFilter]
                 .filter(Boolean)
                 .map((chip) => (
                   <AppBadge
@@ -1043,9 +1010,7 @@ export function CampaignListTable() {
                           <AppTableCell className="sticky left-12 z-10 bg-card">
                             <div className="space-y-0.5">
                               <p className="font-medium text-foreground">{campaign.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {campaign.workspace} · {campaign.country}
-                              </p>
+                              <p className="text-xs text-muted-foreground">{campaign.country}</p>
                             </div>
                           </AppTableCell>
                           <AppTableCell>

@@ -1,8 +1,8 @@
-// Archiving/restoring a workspace pauses/resumes its connections on the
-// backend, but any already-mounted view of those connections (e.g. the
-// integrations page) has no way to know that happened -- it only has its
-// own fetched-at-mount-time state. This event lets such views refetch
-// without requiring a shared cache/query layer.
+// Switching, archiving, or restoring a workspace changes what data is
+// scoped to the active workspace on the backend, but any already-mounted
+// view (e.g. the integrations page) has no way to know that happened -- it
+// only has its own fetched-at-mount-time state. This event lets such views
+// refetch without requiring a shared cache/query layer.
 export const WORKSPACE_LIFECYCLE_CHANGED_EVENT = "madar:workspace-lifecycle-changed"
 
 export function emitWorkspaceLifecycleChanged() {

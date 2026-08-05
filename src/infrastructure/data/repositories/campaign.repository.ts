@@ -12,9 +12,24 @@ import { campaignDetailsMockData, createCampaignFromPayload } from "@/infrastruc
 
 let campaignsDb: CampaignDetailsDto[] = [...campaignDetailsMockData]
 
+// The seed dataset predates workspace scoping and carries no workspaceId. On
+// first use, retroactively assign it to whichever workspace is active so it
+// doesn't just disappear for existing sessions; from then on, campaigns are
+// scoped per-workspace like any real record would be.
+function seedWorkspaceIdIfMissing(workspaceId: string | null | undefined) {
+  if (!workspaceId) {
+    return
+  }
+
+  campaignsDb = campaignsDb.map((campaign) =>
+    campaign.workspaceId ? campaign : { ...campaign, workspaceId }
+  )
+}
+
 function toListItem(campaign: CampaignDetailsDto): CampaignListItemDto {
   return {
     id: campaign.id,
+    workspaceId: campaign.workspaceId,
     name: campaign.name,
     status: campaign.status,
     channel: campaign.channel,
@@ -50,6 +65,10 @@ function sortCampaigns(items: CampaignListItemDto[], input: CampaignListQueryDto
 
 function filterCampaigns(items: CampaignListItemDto[], input: CampaignListQueryDto) {
   return items.filter((item) => {
+    if (input.workspaceId && item.workspaceId !== input.workspaceId) {
+      return false
+    }
+
     if (input.status && item.status !== input.status) {
       return false
     }
@@ -71,8 +90,13 @@ function filterCampaigns(items: CampaignListItemDto[], input: CampaignListQueryD
 }
 
 export class DataCampaignRepository implements CampaignRepository {
+  constructor(private readonly options: { getWorkspaceId?: () => string | null } = {}) {
+    seedWorkspaceIdIfMissing(this.options.getWorkspaceId?.())
+  }
+
   async getCampaigns(input: CampaignListQueryDto): Promise<CampaignListResponseDto> {
     try {
+      seedWorkspaceIdIfMissing(input.workspaceId ?? this.options.getWorkspaceId?.())
       const filtered = filterCampaigns(campaignsDb.map(toListItem), input)
       const sorted = sortCampaigns(filtered, input)
       const total = sorted.length
@@ -102,7 +126,14 @@ export class DataCampaignRepository implements CampaignRepository {
     try {
       const nextId = `cmp_${String(campaignsDb.length + 1).padStart(2, "0")}`
       const nowIso = new Date().toISOString()
-      const created = createCampaignFromPayload(nextId, payload, nowIso)
+      const created = createCampaignFromPayload(
+        nextId,
+        {
+          ...payload,
+          workspaceId: payload.workspaceId ?? this.options.getWorkspaceId?.() ?? undefined,
+        },
+        nowIso
+      )
       campaignsDb = [created, ...campaignsDb]
       return created
     } catch (error) {
@@ -123,6 +154,7 @@ export class DataCampaignRepository implements CampaignRepository {
       const updated: CampaignDetailsDto = {
         ...current,
         ...payload,
+        workspaceId: payload.workspaceId ?? current.workspaceId,
       }
 
       campaignsDb = campaignsDb.map((campaign) => (campaign.id === campaignId ? updated : campaign))
@@ -134,6 +166,8 @@ export class DataCampaignRepository implements CampaignRepository {
   }
 }
 
-export function createCampaignRepository(): CampaignRepository {
-  return new DataCampaignRepository()
+export function createCampaignRepository(options?: {
+  getWorkspaceId?: () => string | null
+}): CampaignRepository {
+  return new DataCampaignRepository(options)
 }

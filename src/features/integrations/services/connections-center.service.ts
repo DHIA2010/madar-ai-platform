@@ -101,6 +101,7 @@ export const CONNECTOR_ACCOUNTS_STORAGE_KEY = "connections-center:connector-acco
 export interface StoredConnectionReference {
   connectorDefinitionId: string
   connectionId: string
+  workspaceId?: string
 }
 
 export interface StoredConnectorAccountRegistry {

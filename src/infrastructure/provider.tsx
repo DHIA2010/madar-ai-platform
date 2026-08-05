@@ -74,7 +74,9 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
       getWorkspaceId: getWorkspaceIdFromStorage,
     })
   )
-  const [campaignRepository] = useState(() => createCampaignRepository())
+  const [campaignRepository] = useState(() =>
+    createCampaignRepository({ getWorkspaceId: getWorkspaceIdFromStorage })
+  )
   const [customerIntelligenceRepository] = useState(() => createCustomerIntelligenceRepository())
   const [segmentationRepository] = useState(() => createSegmentationRepository())
   const [notificationRepository] = useState(() => createNotificationRepository())

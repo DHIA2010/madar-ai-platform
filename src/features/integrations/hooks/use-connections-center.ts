@@ -5,8 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toAppError } from "@/lib/app-errors"
 import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
 
-import { onWorkspaceLifecycleChanged } from "@/features/workspace"
+import { onWorkspaceLifecycleChanged, useWorkspace } from "@/features/workspace"
 
+import type { StoredConnectionReference } from "../services"
 import {
   appendConnectorAccount,
   CONNECTION_ACTION_IDS,
@@ -36,6 +37,8 @@ const DEFAULT_FILTERS: ConnectionsFilterState = {
 
 export function useConnectionsCenter() {
   const { connectionManager, integrationApplicationService } = useApplicationServices()
+  const { currentWorkspace } = useWorkspace()
+  const currentWorkspaceId = currentWorkspace?.id ?? null
   const [records, setRecords] = useState<ConnectionCenterRecord[]>([])
   const [filters, setFilters] = useState<ConnectionsFilterState>(DEFAULT_FILTERS)
   const [isLoading, setIsLoading] = useState(true)
@@ -179,7 +182,11 @@ export function useConnectionsCenter() {
       const callbackConnectionId = callbackParams?.get("google_connection_id")
       const callbackAccountName = callbackParams?.get("google_account_name")
 
-      const refs = loadStoredConnectionReferences()
+      const allStoredRefs = loadStoredConnectionReferences()
+      const otherWorkspaceRefs = allStoredRefs.filter(
+        (ref) => ref.workspaceId && ref.workspaceId !== currentWorkspaceId
+      )
+      const refs = allStoredRefs.filter((ref) => ref.workspaceId === currentWorkspaceId)
       traceFrontendExecution({
         step: "fetchConnections()",
         connectionId: callbackConnectionId,
@@ -209,6 +216,7 @@ export function useConnectionsCenter() {
             refs.push({
               connectorDefinitionId: googleCatalog.connectorDefinitionId,
               connectionId: callbackConnectionId,
+              workspaceId: currentWorkspaceId ?? undefined,
             })
           }
 
@@ -232,6 +240,19 @@ export function useConnectionsCenter() {
 
       const recovered = await integrationApplicationService.recoverConnections()
       for (const recoveredConnection of recovered) {
+        // recoverConnections() can restore a connection into the repository's
+        // local state that a concurrently-fired prefetch above raced against
+        // and missed (e.g. right after switching back from a workspace with no
+        // connection, which prunes that local state). Refresh the status now
+        // that recovery has settled, so the loop below doesn't use a stale
+        // failed prefetch for a connection that actually exists.
+        prefetchedStatus.set(
+          recoveredConnection.payload.connectionId,
+          integrationApplicationService
+            .getIntegrationStatus({ connectionId: recoveredConnection.payload.connectionId })
+            .catch(() => null)
+        )
+
         if (
           refs.some(
             (entry) =>
@@ -245,10 +266,11 @@ export function useConnectionsCenter() {
         refs.push({
           connectorDefinitionId: recoveredConnection.payload.connectorDefinitionId,
           connectionId: recoveredConnection.payload.connectionId,
+          workspaceId: currentWorkspaceId ?? undefined,
         })
       }
 
-      const resolvedRefs: Array<{ connectorDefinitionId: string; connectionId: string }> = []
+      const resolvedRefs: StoredConnectionReference[] = []
       const nextRecords: ConnectionCenterRecord[] = []
 
       for (const storedRef of refs) {
@@ -299,6 +321,7 @@ export function useConnectionsCenter() {
         resolvedRefs.push({
           connectorDefinitionId: storedRef.connectorDefinitionId,
           connectionId: connection.connectionId,
+          workspaceId: currentWorkspaceId ?? undefined,
         })
 
         try {
@@ -315,7 +338,7 @@ export function useConnectionsCenter() {
         return
       }
 
-      storeConnectionReferences(resolvedRefs)
+      storeConnectionReferences([...otherWorkspaceRefs, ...resolvedRefs])
       setRecords(nextRecords)
     } catch (error) {
       if (requestId !== bootstrapRequestIdRef.current) {
@@ -328,7 +351,13 @@ export function useConnectionsCenter() {
         setIsLoading(false)
       }
     }
-  }, [buildRecord, connectionManager, integrationApplicationService, records.length])
+  }, [
+    buildRecord,
+    connectionManager,
+    currentWorkspaceId,
+    integrationApplicationService,
+    records.length,
+  ])
 
   useEffect(() => {
     void bootstrap()

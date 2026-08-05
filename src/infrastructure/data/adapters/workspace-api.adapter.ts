@@ -115,7 +115,11 @@ export class WorkspaceApiAdapter {
 
   switchWorkspace(payload: WorkspaceSelectionDto): Promise<WorkspaceDto> {
     return this.client
-      .get<{ items: Array<{ workspace: WorkspaceDto }> }>("/v1/workspaces")
+      .post<{ workspaceId: string }, { success: boolean; activeWorkspaceId: string }>(
+        "/v1/workspaces/switch",
+        { workspaceId: payload.workspaceId }
+      )
+      .then(() => this.client.get<{ items: Array<{ workspace: WorkspaceDto }> }>("/v1/workspaces"))
       .then((response) => {
         const workspaces = response.items.map((item) => item.workspace)
         const selectedWorkspace =

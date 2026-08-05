@@ -1761,15 +1761,31 @@ export class IdentityCommandHandlers {
     if (!userState || userState.deletedAt) {
       throw ERRORS.tokenInvalid()
     }
+
+    let organizationId = session.organizationId
+    let workspaceId = session.workspaceId
+
+    if (userState.activeWorkspaceId) {
+      const activeMembership = await this.deps.repositories.memberships.findByUserAndWorkspace(
+        payload.sub,
+        userState.activeWorkspaceId
+      )
+      if (activeMembership) {
+        organizationId = activeMembership.organizationId
+        workspaceId = userState.activeWorkspaceId
+      }
+    }
+
     const roles = (await this.deps.repositories.memberships.listRolesByUserInOrganization(
       payload.sub,
-      session.organizationId
+      organizationId
     )) as Role[]
+
     return {
       userId: payload.sub,
       sessionId: payload.sid,
-      organizationId: session.organizationId,
-      workspaceId: session.workspaceId,
+      organizationId,
+      workspaceId,
       roles,
     }
   }

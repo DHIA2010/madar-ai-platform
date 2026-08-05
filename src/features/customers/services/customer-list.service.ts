@@ -22,7 +22,7 @@ function mockPath(...segments: string[]): string {
 
 // ─── Mock seed data ──────────────────────────────────────────────────────────
 
-const SEED_CUSTOMERS: CustomerRecord[] = [
+let SEED_CUSTOMERS: CustomerRecord[] = [
   {
     customerId: "cust_001",
     name: "Sara Al-Amri",
@@ -183,6 +183,20 @@ const SEED_CUSTOMERS: CustomerRecord[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// The seed dataset predates workspace scoping and carries no workspaceId. On
+// first use, retroactively assign it to whichever workspace is active so it
+// doesn't just disappear for existing sessions; from then on, customers are
+// scoped per-workspace like any real record would be.
+function seedWorkspaceIdIfMissing(workspaceId: string | undefined) {
+  if (!workspaceId) {
+    return
+  }
+
+  SEED_CUSTOMERS = SEED_CUSTOMERS.map((record) =>
+    record.workspaceId ? record : { ...record, workspaceId }
+  )
+}
+
 function matchesSearch(record: CustomerRecord, query: string): boolean {
   const needle = query.toLowerCase().trim()
   if (!needle) {
@@ -226,7 +240,12 @@ function sortRecords(
 
 export const customerListService = {
   listCustomers(filters: CustomerFilterState): CustomerListViewModel {
+    seedWorkspaceIdIfMissing(filters.workspaceId)
     let records = [...SEED_CUSTOMERS]
+
+    if (filters.workspaceId) {
+      records = records.filter((record) => record.workspaceId === filters.workspaceId)
+    }
 
     if (filters.search) {
       records = records.filter((record) => matchesSearch(record, filters.search))

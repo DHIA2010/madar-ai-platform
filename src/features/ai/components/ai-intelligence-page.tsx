@@ -54,6 +54,8 @@ import {
   AppToolbar,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { useAIIntelligence } from "../hooks"
 import {
   formatCurrency,
@@ -116,8 +118,12 @@ function InsightList({ insights }: { insights: AIInsightItemDto[] }) {
 }
 
 export function AIIntelligencePage() {
+  const { currentWorkspace } = useWorkspace()
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d")
-  const intelligenceQuery = useAIIntelligence({ workspaceId: null, period })
+  const intelligenceQuery = useAIIntelligence({
+    workspaceId: currentWorkspace?.id ?? null,
+    period,
+  })
 
   const dashboard = intelligenceQuery.data?.payload
 

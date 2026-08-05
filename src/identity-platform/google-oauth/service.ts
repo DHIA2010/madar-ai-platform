@@ -969,11 +969,19 @@ export class GoogleOAuthService {
   async getActiveConnection(actor: AuthenticatedActor) {
     const { credentials } = await this.loadResolvedConfig()
 
-    const resolvedProject = await this.repository.resolveProject({
-      organizationId: actor.organizationId,
-      workspaceId: actor.workspaceId ?? null,
-      projectId: null,
-    })
+    let resolvedProject: Awaited<ReturnType<typeof this.repository.resolveProject>>
+    try {
+      resolvedProject = await this.repository.resolveProject({
+        organizationId: actor.organizationId,
+        workspaceId: actor.workspaceId ?? null,
+        projectId: null,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+        return { connection: null }
+      }
+      throw error
+    }
 
     const runtimeConnection = await this.repository.findRuntimeConnectionByProject(
       actor.organizationId,

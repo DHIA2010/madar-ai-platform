@@ -2,7 +2,8 @@ import { z } from "zod"
 
 export const campaignListQuerySchema = z.object({
   page: z.number().int().min(1),
-  pageSize: z.number().int().min(1).max(100),
+  pageSize: z.number().int().min(1).max(200),
+  workspaceId: z.string().optional(),
   search: z.string().optional(),
   status: z.enum(["draft", "scheduled", "active", "paused", "completed", "archived"]).optional(),
   channel: z.enum(["meta", "google", "tiktok", "snapchat", "linkedin", "email"]).optional(),
@@ -32,6 +33,7 @@ export const campaignIdSchema = z.object({
 
 export const campaignMutationSchema = z
   .object({
+    workspaceId: z.string().optional(),
     name: z.string().min(2),
     objective: z.string().min(2),
     channel: z.enum(["meta", "google", "tiktok", "snapchat", "linkedin", "email"]),

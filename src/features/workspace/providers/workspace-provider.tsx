@@ -8,6 +8,7 @@ import { AppEmpty, AppLoading } from "@/components/app"
 
 import { useAuth } from "@/features/authentication"
 
+import { emitWorkspaceLifecycleChanged } from "../events"
 import { buildTenantContext } from "../mappers/workspace.mapper"
 import { useWorkspaceStore, WorkspaceContextStore } from "../state"
 import type {
@@ -145,6 +146,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCurrentOrganization(localOrganization)
         setCurrentWorkspace(localWorkspace)
         setWorkspaceStatus("ready")
+        emitWorkspaceLifecycleChanged()
         return
       }
 
@@ -157,6 +159,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCurrentOrganization(nextOrganization ?? null)
         setCurrentWorkspace(nextWorkspace)
         setWorkspaceStatus("ready")
+        emitWorkspaceLifecycleChanged()
       } catch (error) {
         const message = getConfigurationErrorMessage(error)
         if (message) {

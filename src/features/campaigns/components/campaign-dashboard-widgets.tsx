@@ -34,6 +34,8 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { useCampaignList } from "../hooks"
 import { CampaignStatusBadge } from "./campaign-status-badge"
 
@@ -139,9 +141,11 @@ function formatCurrency(value: number) {
 }
 
 export function useCampaignDashboardData() {
+  const { currentWorkspace } = useWorkspace()
   const campaignListQuery = useCampaignList({
     page: 1,
     pageSize: 100,
+    workspaceId: currentWorkspace?.id,
     sortBy: "startDate",
     sortDirection: "desc",
   })

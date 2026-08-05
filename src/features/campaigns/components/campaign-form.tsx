@@ -51,6 +51,8 @@ import {
   AppTextarea,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { useCampaignMutations } from "../hooks"
 import type { CampaignDetailsResult, CampaignFormValues } from "../types"
 import { campaignFormSchema, type CampaignFormSchemaValues } from "../validators"
@@ -728,6 +730,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
   const router = useRouter()
   const searchParams = useSearchParams()
   const { createCampaign, updateCampaign } = useCampaignMutations()
+  const { currentWorkspace } = useWorkspace()
 
   const selectedCreative = searchParams.get("creative")
 
@@ -786,7 +789,10 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
     }
 
     if (mode === "create") {
-      const created = await createCampaign.mutateAsync(payload)
+      const created = await createCampaign.mutateAsync({
+        ...payload,
+        workspaceId: currentWorkspace?.id,
+      })
       router.push(ROUTES.campaignsDetails(created.payload.id))
       return
     }

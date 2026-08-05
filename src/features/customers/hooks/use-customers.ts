@@ -2,10 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react"
 
+import { useWorkspace } from "@/features/workspace"
+
 import { customerListService } from "../services"
 import type { CustomerFilterState, CustomerListViewModel } from "../types"
 
-const DEFAULT_FILTERS: CustomerFilterState = {
+const DEFAULT_FILTERS: Omit<CustomerFilterState, "workspaceId"> = {
   search: "",
   status: "all",
   segment: "",
@@ -18,11 +20,17 @@ const DEFAULT_FILTERS: CustomerFilterState = {
 }
 
 export function useCustomers() {
-  const [filters, setFilters] = useState<CustomerFilterState>(DEFAULT_FILTERS)
+  const { currentWorkspace } = useWorkspace()
+  const [filters, setFilters] = useState<Omit<CustomerFilterState, "workspaceId">>(DEFAULT_FILTERS)
+
+  const scopedFilters = useMemo<CustomerFilterState>(
+    () => ({ ...filters, workspaceId: currentWorkspace?.id }),
+    [filters, currentWorkspace?.id]
+  )
 
   const listResult: CustomerListViewModel = useMemo(
-    () => customerListService.listCustomers(filters),
-    [filters]
+    () => customerListService.listCustomers(scopedFilters),
+    [scopedFilters]
   )
 
   const availableFilters = useMemo(() => customerListService.getAvailableFilters(), [])
