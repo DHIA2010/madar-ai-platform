@@ -324,6 +324,14 @@ export class SnapchatAdsIntegrationProvider {
     return this.requireController().pause(actor, input.connectionId)
   }
 
+  async pauseAllForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    return this.requireService().pauseConnectionsForWorkspace(actor, workspaceId)
+  }
+
+  async resumeAllForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    return this.requireService().resumeConnectionsForWorkspace(actor, workspaceId)
+  }
+
   async resume(actor: AuthenticatedActor, input: { connectionId: string }) {
     return this.requireController().resume(actor, input.connectionId)
   }

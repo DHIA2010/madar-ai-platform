@@ -150,6 +150,8 @@ export interface IntegrationProvider {
   ): Promise<unknown>
   pause?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
   resume?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
+  pauseAllForWorkspace?(actor: AuthenticatedActor, workspaceId: string): Promise<unknown>
+  resumeAllForWorkspace?(actor: AuthenticatedActor, workspaceId: string): Promise<unknown>
   disconnect?(
     actor: AuthenticatedActor,
     input: IntegrationProviderDisconnectInput

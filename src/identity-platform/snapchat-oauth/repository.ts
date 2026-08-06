@@ -673,6 +673,24 @@ export class SnapchatOAuthRepository
     })
   }
 
+  async listConnectionIdsByWorkspace(
+    workspaceId: string,
+    status: "connected" | "paused"
+  ): Promise<string[]> {
+    const result = await this.db.query<{ id: string }>({
+      name: "snapchat-oauth-connections-list-by-workspace",
+      text: `
+        SELECT id
+        FROM snapchat_oauth_connections
+        WHERE workspace_id = $1
+          AND deleted_at IS NULL
+          AND status = $2
+      `,
+      values: [workspaceId, status],
+    })
+    return result.rows.map((row) => row.id)
+  }
+
   async listRecentOutboxEvents(connectionId: string, limit: number) {
     const result = await this.db.query<{
       id: string

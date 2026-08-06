@@ -850,6 +850,31 @@ export class SnapchatOAuthService {
     }
   }
 
+  // Cascades used when a workspace is archived/restored -- every connected
+  // connection in scope is paused (or every paused one in scope is resumed),
+  // reusing the same per-connection lifecycle logic so events/audit trail stay
+  // consistent either way. Mirrors GoogleOAuthService's cascade methods.
+  async pauseConnectionsForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const connectionIds = await this.repository.listConnectionIdsByWorkspace(
+      workspaceId,
+      "connected"
+    )
+    const results = []
+    for (const connectionId of connectionIds) {
+      results.push(await this.pauseConnection(actor, connectionId))
+    }
+    return results
+  }
+
+  async resumeConnectionsForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const connectionIds = await this.repository.listConnectionIdsByWorkspace(workspaceId, "paused")
+    const results = []
+    for (const connectionId of connectionIds) {
+      results.push(await this.resumeConnection(actor, connectionId))
+    }
+    return results
+  }
+
   async disconnectConnection(
     actor: AuthenticatedActor,
     input: { connectionId: string; reason?: string }

@@ -204,7 +204,10 @@ function toActionDefinition(
     }
   }
 
-  if (actionId === CONNECTION_ACTION_IDS.RESUME_SYNC) {
+  if (
+    actionId === CONNECTION_ACTION_IDS.RESUME_SYNC ||
+    actionId === CONNECTION_ACTION_IDS.PAUSE_SYNC
+  ) {
     const enabled = !isWorkspaceArchived(input)
     return {
       ...action,

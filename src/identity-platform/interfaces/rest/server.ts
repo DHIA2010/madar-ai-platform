@@ -1162,12 +1162,18 @@ export function createIdentityApiServer(
         // archiveWorkspace already verified membership/authorization for this
         // workspace's organization -- scope the cascade actor to it, since it
         // may differ from the actor's active session organization.
+        const archiveCascadeActor = { ...actor, organizationId: result.organizationId }
         await runConnectionCascade(() =>
           googleOAuthService?.pauseConnectionsForWorkspace(
-            { ...actor, organizationId: result.organizationId },
+            archiveCascadeActor,
             workspaceArchiveMatch[1]
           )
         )
+        for (const provider of container.infrastructure.integrations?.list() ?? []) {
+          await runConnectionCascade(() =>
+            provider.pauseAllForWorkspace?.(archiveCascadeActor, workspaceArchiveMatch[1])
+          )
+        }
         return send(200, result)
       }
 
@@ -1178,12 +1184,18 @@ export function createIdentityApiServer(
           { workspaceId: workspaceRestoreMatch[1] },
           context
         )
+        const restoreCascadeActor = { ...actor, organizationId: result.organizationId }
         await runConnectionCascade(() =>
           googleOAuthService?.resumeConnectionsForWorkspace(
-            { ...actor, organizationId: result.organizationId },
+            restoreCascadeActor,
             workspaceRestoreMatch[1]
           )
         )
+        for (const provider of container.infrastructure.integrations?.list() ?? []) {
+          await runConnectionCascade(() =>
+            provider.resumeAllForWorkspace?.(restoreCascadeActor, workspaceRestoreMatch[1])
+          )
+        }
         return send(200, result)
       }
 
