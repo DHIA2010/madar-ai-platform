@@ -13,7 +13,7 @@ export interface SnapchatOAuthCredentialsProvider {
 }
 
 export const SNAPCHAT_INTEGRATION_SECRET_ID =
-  process.env.IDENTITY_PLATFORM_SNAPCHAT_OAUTH_SECRET_ID?.trim() || "madar/stage/integrations/snapchat"
+  process.env.IDENTITY_PLATFORM_SNAPCHAT_OAUTH_SECRET_ID?.trim() || "madar/prod/connectors/snapchat"
 
 function readEnvSnapchatCredentials(): SnapchatOAuthCredentials | null {
   const clientId = process.env.SNAPCHAT_CLIENT_ID?.trim() ?? ""
@@ -102,11 +102,9 @@ export class AwsSecretsSnapchatOAuthCredentialsProvider implements SnapchatOAuth
   }
 }
 
-export class EnvironmentFirstSnapchatOAuthCredentialsProvider
-implements SnapchatOAuthCredentialsProvider {
+export class EnvironmentFirstSnapchatOAuthCredentialsProvider implements SnapchatOAuthCredentialsProvider {
   constructor(
-    private readonly fallback: SnapchatOAuthCredentialsProvider =
-      new AwsSecretsSnapchatOAuthCredentialsProvider()
+    private readonly fallback: SnapchatOAuthCredentialsProvider = new AwsSecretsSnapchatOAuthCredentialsProvider()
   ) {}
 
   async load() {

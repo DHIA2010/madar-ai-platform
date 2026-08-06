@@ -3,11 +3,15 @@ import type { IntegrationProvider } from "./provider-contracts"
 export type {
   IntegrationProvider,
   IntegrationProviderAccountsQuery,
+  IntegrationProviderDisconnectInput,
+  IntegrationProviderEventsQuery,
   IntegrationProviderOAuthCallbackInput,
   IntegrationProviderOAuthControllerResult,
   IntegrationProviderOAuthStartInput,
   IntegrationProviderRecordQuery,
   IntegrationProviderSyncInput,
+  IntegrationProviderTimelineEvent,
+  IntegrationProviderTimelineResult,
 } from "./provider-contracts"
 
 export class IntegrationProviderRegistry {

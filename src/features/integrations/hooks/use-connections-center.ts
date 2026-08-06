@@ -26,6 +26,41 @@ import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 import { useApplicationServices } from "@/application/context"
 import type { Connection, SyncHistoryViewModel } from "@/application/contracts"
 
+interface OAuthCallbackParamProfile {
+  statusParam: string
+  connectionIdParam: string
+  accountNameParam: string
+  allParams: string[]
+}
+
+const OAUTH_CALLBACK_PARAMS_BY_CONNECTOR_ID: Record<string, OAuthCallbackParamProfile> = {
+  google_ads: {
+    statusParam: "google_oauth",
+    connectionIdParam: "google_connection_id",
+    accountNameParam: "google_account_name",
+    allParams: [
+      "google_oauth",
+      "google_connection_id",
+      "google_connection_name",
+      "google_account_name",
+      "google_account_email",
+    ],
+  },
+  snapchat_ads: {
+    statusParam: "snapchat_oauth",
+    connectionIdParam: "snapchat_connection_id",
+    accountNameParam: "snapchat_account_name",
+    allParams: [
+      "snapchat_oauth",
+      "snapchat_connection_id",
+      "snapchat_project_id",
+      "snapchat_status",
+      "snapchat_account_name",
+      "snapchat_connected_at",
+    ],
+  },
+}
+
 const DEFAULT_FILTERS: ConnectionsFilterState = {
   search: "",
   status: "all",
@@ -51,16 +86,16 @@ export function useConnectionsCenter() {
     }
 
     const params = new URLSearchParams(window.location.search)
-    const callbackConnectionId = params.get("google_connection_id")
-    if (callbackConnectionId !== connectionId && params.get("google_oauth") !== "connected") {
+    const matchedProfile = Object.values(OAUTH_CALLBACK_PARAMS_BY_CONNECTOR_ID).find(
+      (profile) => params.get(profile.connectionIdParam) === connectionId
+    )
+    if (!matchedProfile) {
       return
     }
 
-    params.delete("google_oauth")
-    params.delete("google_connection_id")
-    params.delete("google_connection_name")
-    params.delete("google_account_name")
-    params.delete("google_account_email")
+    for (const param of matchedProfile.allParams) {
+      params.delete(param)
+    }
     params.delete("reason")
 
     const nextQuery = params.toString()
@@ -178,9 +213,19 @@ export function useConnectionsCenter() {
     try {
       const callbackParams =
         typeof window === "undefined" ? null : new URLSearchParams(window.location.search)
-      const callbackConnected = callbackParams?.get("google_oauth") === "connected"
-      const callbackConnectionId = callbackParams?.get("google_connection_id")
-      const callbackAccountName = callbackParams?.get("google_account_name")
+      const matchedCallbackEntry = callbackParams
+        ? Object.entries(OAUTH_CALLBACK_PARAMS_BY_CONNECTOR_ID).find(
+            ([, profile]) => callbackParams.get(profile.statusParam) === "connected"
+          )
+        : undefined
+      const callbackConnectorId = matchedCallbackEntry?.[0] ?? null
+      const callbackConnected = Boolean(matchedCallbackEntry)
+      const callbackConnectionId = matchedCallbackEntry
+        ? callbackParams?.get(matchedCallbackEntry[1].connectionIdParam)
+        : null
+      const callbackAccountName = matchedCallbackEntry
+        ? callbackParams?.get(matchedCallbackEntry[1].accountNameParam)
+        : null
 
       const allStoredRefs = loadStoredConnectionReferences()
       const otherWorkspaceRefs = allStoredRefs.filter(
@@ -194,10 +239,12 @@ export function useConnectionsCenter() {
         details: "loaded stored connection references",
       })
 
-      if (callbackConnected && callbackConnectionId) {
-        const googleCatalog = CONNECTOR_CATALOG.find((entry) => entry.connectorId === "google_ads")
+      if (callbackConnected && callbackConnectionId && callbackConnectorId) {
+        const matchedCatalog = CONNECTOR_CATALOG.find(
+          (entry) => entry.connectorId === callbackConnectorId
+        )
 
-        if (googleCatalog) {
+        if (matchedCatalog) {
           try {
             await integrationApplicationService.validateConnection({
               connectionId: callbackConnectionId,
@@ -209,19 +256,19 @@ export function useConnectionsCenter() {
           if (
             !refs.some(
               (entry) =>
-                entry.connectorDefinitionId === googleCatalog.connectorDefinitionId &&
+                entry.connectorDefinitionId === matchedCatalog.connectorDefinitionId &&
                 entry.connectionId === callbackConnectionId
             )
           ) {
             refs.push({
-              connectorDefinitionId: googleCatalog.connectorDefinitionId,
+              connectorDefinitionId: matchedCatalog.connectorDefinitionId,
               connectionId: callbackConnectionId,
               workspaceId: currentWorkspaceId ?? undefined,
             })
           }
 
           if (callbackAccountName) {
-            appendConnectorAccount(googleCatalog.connectorDefinitionId, callbackAccountName)
+            appendConnectorAccount(matchedCatalog.connectorDefinitionId, callbackAccountName)
           }
         }
       }

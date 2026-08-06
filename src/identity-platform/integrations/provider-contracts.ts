@@ -3,7 +3,13 @@ import type { IncomingMessage } from "node:http"
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import type { MarketingPlatformAdapter, MarketingPlatformKey } from "./marketing-platform"
 
-export type IntegrationProviderFamily = "google" | "meta" | "snapchat" | "tiktok" | "linkedin" | "other"
+export type IntegrationProviderFamily =
+  | "google"
+  | "meta"
+  | "snapchat"
+  | "tiktok"
+  | "linkedin"
+  | "other"
 
 export interface IntegrationProviderCapability {
   key: string
@@ -83,6 +89,29 @@ export interface IntegrationProviderOAuthControllerResult {
   headers: Record<string, string>
 }
 
+export interface IntegrationProviderDisconnectInput {
+  connectionId: string
+  reason?: string
+}
+
+export interface IntegrationProviderEventsQuery {
+  connectionId: string
+  limit: number
+}
+
+export interface IntegrationProviderTimelineEvent {
+  id: string
+  action: string
+  occurredAt: string
+  actor: "user" | "system"
+  message: string
+}
+
+export interface IntegrationProviderTimelineResult {
+  connectionId: string
+  items: IntegrationProviderTimelineEvent[]
+}
+
 export interface IntegrationProvider {
   providerId: string
   displayName: string
@@ -91,14 +120,43 @@ export interface IntegrationProvider {
   products?: IntegrationProviderProduct[]
   capabilities?: IntegrationProviderCapability[]
   marketingAdapter?: MarketingPlatformAdapter
-  oauthStart?(actor: AuthenticatedActor, input: IntegrationProviderOAuthStartInput): Promise<unknown>
-  oauthCallback?(request: IncomingMessage, query: URLSearchParams): Promise<IntegrationProviderOAuthControllerResult>
+  oauthStart?(
+    actor: AuthenticatedActor,
+    input: IntegrationProviderOAuthStartInput
+  ): Promise<unknown>
+  oauthCallback?(
+    request: IncomingMessage,
+    query: URLSearchParams
+  ): Promise<IntegrationProviderOAuthControllerResult>
   getActiveConnection?(actor: AuthenticatedActor): Promise<unknown>
   sync?(actor: AuthenticatedActor, input: IntegrationProviderSyncInput): Promise<unknown>
   retry?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
-  getRetryStatus?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<IntegrationProviderRetryStatus>
+  getRetryStatus?(
+    actor: AuthenticatedActor,
+    input: { connectionId: string }
+  ): Promise<IntegrationProviderRetryStatus>
   listRecords?(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery): Promise<unknown>
-  listAccounts?(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery): Promise<unknown>
-  selectAccount?(actor: AuthenticatedActor, input: IntegrationProviderAccountSelectionInput): Promise<unknown>
-  getSelectedAccount?(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery): Promise<unknown>
+  listAccounts?(
+    actor: AuthenticatedActor,
+    query: IntegrationProviderAccountsQuery
+  ): Promise<unknown>
+  selectAccount?(
+    actor: AuthenticatedActor,
+    input: IntegrationProviderAccountSelectionInput
+  ): Promise<unknown>
+  getSelectedAccount?(
+    actor: AuthenticatedActor,
+    query: IntegrationProviderAccountsQuery
+  ): Promise<unknown>
+  pause?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
+  resume?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
+  disconnect?(
+    actor: AuthenticatedActor,
+    input: IntegrationProviderDisconnectInput
+  ): Promise<unknown>
+  reconnect?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>
+  listEvents?(
+    actor: AuthenticatedActor,
+    query: IntegrationProviderEventsQuery
+  ): Promise<IntegrationProviderTimelineResult>
 }

@@ -8,6 +8,8 @@ import type {
   SnapchatOAuthCallbackResult,
   SnapchatOAuthStartInput,
   SnapchatOAuthStartResult,
+  SnapchatOAuthTimelineEvent,
+  SnapchatOAuthTimelineResult,
 } from "./types"
 import {
   EnvironmentFirstSnapchatOAuthCredentialsProvider,
@@ -65,14 +67,14 @@ function buildDefaultConfig(): SnapchatOAuthServiceConfig {
     clientId: process.env.SNAPCHAT_CLIENT_ID ?? "",
     clientSecret: process.env.SNAPCHAT_CLIENT_SECRET ?? "",
     redirectUri:
-      process.env.SNAPCHAT_REDIRECT_URI
-      ?? "http://localhost:4000/v1/integrations/snapchat-ads/oauth/callback",
+      process.env.SNAPCHAT_REDIRECT_URI ??
+      "http://localhost:4000/v1/integrations/snapchat-ads/oauth/callback",
     successRedirectUri:
-      process.env.SNAPCHAT_SUCCESS_REDIRECT_URI
-      ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+      process.env.SNAPCHAT_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
     tokenEncryptionKey:
-      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
-      ?? "",
+      process.env.IDENTITY_PLATFORM_SNAPCHAT_OAUTH_TOKEN_ENCRYPTION_KEY ??
+      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+      "",
     authorizationUrl: process.env.SNAPCHAT_AUTHORIZATION_URL ?? SNAPCHAT_AUTHORIZATION_URL,
     tokenUrl: process.env.SNAPCHAT_TOKEN_URL ?? SNAPCHAT_TOKEN_URL,
     marketingApiBaseUrl: process.env.SNAPCHAT_MARKETING_API_BASE_URL ?? SNAPCHAT_API_BASE_URL,
@@ -126,7 +128,11 @@ function validateConfiguredUrl(raw: string, opts: { allowHttpLocalhostOnly: bool
     return parsed
   }
 
-  if (parsed.protocol === "http:" && opts.allowHttpLocalhostOnly && isLocalhostHost(parsed.hostname)) {
+  if (
+    parsed.protocol === "http:" &&
+    opts.allowHttpLocalhostOnly &&
+    isLocalhostHost(parsed.hostname)
+  ) {
     return parsed
   }
 
@@ -179,12 +185,63 @@ function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
   }
 }
 
+function toTimelineAction(eventType: string, payload: Record<string, unknown>) {
+  switch (eventType) {
+    case "snapchat.oauth.authorization.completed":
+      return payload.reconnected === true ? "connection.reconnected" : "connection.connected"
+    case "snapchat.oauth.connection.reconnect.started":
+      return "connection.reconnected"
+    case "snapchat.oauth.connection.paused":
+      return "connection.paused"
+    case "snapchat.oauth.connection.resumed":
+      return "connection.resumed"
+    case "snapchat.oauth.connection.disconnected":
+      return "connection.disconnected"
+    case "snapchat.oauth.connection.deleted":
+      return "connection.deleted"
+    case "snapchat.oauth.token.refreshed":
+      return "token.refreshed"
+    default:
+      return eventType
+  }
+}
+
+function toTimelineMessage(action: string, payload: Record<string, unknown>) {
+  if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+    return payload.message
+  }
+
+  switch (action) {
+    case "connection.connected":
+      return "Connection established."
+    case "connection.reconnected":
+      return "Connection re-established."
+    case "connection.paused":
+      return "Connection paused."
+    case "connection.resumed":
+      return "Connection resumed."
+    case "connection.disconnected":
+      return "Connection disconnected."
+    case "connection.deleted":
+      return "Connection deleted."
+    case "token.refreshed":
+      return "Access token refreshed."
+    default:
+      return action
+  }
+}
+
 function createStateToken() {
   return `sc_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
 }
 
 function ensureConfigured(config: SnapchatOAuthServiceConfig) {
-  if (!config.clientId || !config.clientSecret || !config.redirectUri || !config.successRedirectUri) {
+  if (
+    !config.clientId ||
+    !config.clientSecret ||
+    !config.redirectUri ||
+    !config.successRedirectUri
+  ) {
     throw new Error("SNAPCHAT_OAUTH_CONFIGURATION_ERROR")
   }
 
@@ -283,20 +340,24 @@ async function fetchOrganizations(config: SnapchatOAuthServiceConfig, accessToke
 
   const nested = Array.isArray(body.data)
     ? body.data.flatMap((entry) => {
-      if (Array.isArray(entry.organizations)) {
-        return entry.organizations
-      }
-      if (entry.organization) {
-        return [entry.organization]
-      }
-      return []
-    })
+        if (Array.isArray(entry.organizations)) {
+          return entry.organizations
+        }
+        if (entry.organization) {
+          return [entry.organization]
+        }
+        return []
+      })
     : []
 
   return [...direct, ...nested].filter((org) => Boolean(org.organization_id))
 }
 
-async function fetchOrganizationAccounts(config: SnapchatOAuthServiceConfig, accessToken: string, organizationId: string) {
+async function fetchOrganizationAccounts(
+  config: SnapchatOAuthServiceConfig,
+  accessToken: string,
+  organizationId: string
+) {
   const url = `${config.marketingApiBaseUrl.replace(/\/$/, "")}/organizations/${encodeURIComponent(organizationId)}/adaccounts`
   const response = await fetch(url, {
     headers: {
@@ -312,7 +373,11 @@ async function fetchOrganizationAccounts(config: SnapchatOAuthServiceConfig, acc
   const body = (await response.json()) as {
     adaccounts?: SnapchatAdAccount[]
     ad_accounts?: SnapchatAdAccount[]
-    data?: Array<{ adaccount?: SnapchatAdAccount; adaccounts?: SnapchatAdAccount[]; ad_accounts?: SnapchatAdAccount[] }>
+    data?: Array<{
+      adaccount?: SnapchatAdAccount
+      adaccounts?: SnapchatAdAccount[]
+      ad_accounts?: SnapchatAdAccount[]
+    }>
   }
 
   const direct = Array.isArray(body.adaccounts)
@@ -323,17 +388,17 @@ async function fetchOrganizationAccounts(config: SnapchatOAuthServiceConfig, acc
 
   const nested = Array.isArray(body.data)
     ? body.data.flatMap((entry) => {
-      if (Array.isArray(entry.adaccounts)) {
-        return entry.adaccounts
-      }
-      if (Array.isArray(entry.ad_accounts)) {
-        return entry.ad_accounts
-      }
-      if (entry.adaccount) {
-        return [entry.adaccount]
-      }
-      return []
-    })
+        if (Array.isArray(entry.adaccounts)) {
+          return entry.adaccounts
+        }
+        if (Array.isArray(entry.ad_accounts)) {
+          return entry.ad_accounts
+        }
+        if (entry.adaccount) {
+          return [entry.adaccount]
+        }
+        return []
+      })
     : []
 
   return [...direct, ...nested].filter((account) => Boolean(account.adaccount_id))
@@ -346,8 +411,7 @@ export class SnapchatOAuthService {
   constructor(
     private readonly repository: SnapchatOAuthRepository,
     config?: Partial<SnapchatOAuthServiceConfig>,
-    credentialsProvider: SnapchatOAuthCredentialsProvider =
-      new EnvironmentFirstSnapchatOAuthCredentialsProvider()
+    credentialsProvider: SnapchatOAuthCredentialsProvider = new EnvironmentFirstSnapchatOAuthCredentialsProvider()
   ) {
     this.config = { ...buildDefaultConfig(), ...(config ?? {}) }
     this.credentialsProvider = credentialsProvider
@@ -355,17 +419,24 @@ export class SnapchatOAuthService {
 
   private async loadResolvedConfig() {
     const credentials = await this.credentialsProvider.load()
+    // An explicit SNAPCHAT_REDIRECT_URI always wins, even when client credentials come
+    // from AWS Secrets Manager -- this lets local/dev environments redirect back to
+    // themselves instead of the production callback baked into the shared secret.
+    const explicitRedirectUri = process.env.SNAPCHAT_REDIRECT_URI?.trim()
     const resolved = {
       ...this.config,
       clientId: credentials.clientId,
       clientSecret: credentials.clientSecret,
-      redirectUri: credentials.redirectUri ?? this.config.redirectUri,
+      redirectUri: explicitRedirectUri || credentials.redirectUri || this.config.redirectUri,
     }
     ensureConfigured(resolved)
     return resolved
   }
 
-  async startAuthorization(actor: AuthenticatedActor, input: SnapchatOAuthStartInput = {}): Promise<SnapchatOAuthStartResult> {
+  async startAuthorization(
+    actor: AuthenticatedActor,
+    input: SnapchatOAuthStartInput = {}
+  ): Promise<SnapchatOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
     const config = await this.loadResolvedConfig()
 
@@ -452,7 +523,10 @@ export class SnapchatOAuthService {
     }
   }
 
-  async completeAuthorization(input: { state: string; code: string }): Promise<SnapchatOAuthCallbackResult> {
+  async completeAuthorization(input: {
+    state: string
+    code: string
+  }): Promise<SnapchatOAuthCallbackResult> {
     const config = await this.loadResolvedConfig()
 
     const state = await this.repository.findPendingStateByValue(input.state)
@@ -501,7 +575,11 @@ export class SnapchatOAuthService {
     }> = []
 
     for (const organization of organizations) {
-      const accounts = await fetchOrganizationAccounts(config, token.access_token, organization.organization_id)
+      const accounts = await fetchOrganizationAccounts(
+        config,
+        token.access_token,
+        organization.organization_id
+      )
       for (const account of accounts) {
         discoveredAccounts.push({
           customerId: account.adaccount_id,
@@ -510,7 +588,8 @@ export class SnapchatOAuthService {
           timeZone: account.timezone ?? null,
           organizationId: account.organization_id ?? organization.organization_id,
           organizationName: organization.organization_name ?? null,
-          status: account.status && account.status.toLowerCase() === "inactive" ? "inactive" : "active",
+          status:
+            account.status && account.status.toLowerCase() === "inactive" ? "inactive" : "active",
         })
       }
     }
@@ -539,7 +618,9 @@ export class SnapchatOAuthService {
         encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
         encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
         scopes: effectiveScopes,
-        tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null,
+        tokenExpiresAt: token.expires_in
+          ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+          : null,
         status: "connected",
         connectionReference: primaryAccount?.displayName ?? null,
         lastConnectedAt: now,
@@ -633,7 +714,11 @@ export class SnapchatOAuthService {
     const config = await this.loadResolvedConfig()
 
     const tokenMaterial = await this.repository.getRawTokenMaterial(connectionId)
-    if (!tokenMaterial || !tokenMaterial.encryptedAccessToken || !tokenMaterial.encryptedRefreshToken) {
+    if (
+      !tokenMaterial ||
+      !tokenMaterial.encryptedAccessToken ||
+      !tokenMaterial.encryptedRefreshToken
+    ) {
       throw new Error("SNAPCHAT_OAUTH_CONNECTION_NOT_READY")
     }
 
@@ -644,26 +729,226 @@ export class SnapchatOAuthService {
       }
     }
 
-    const refreshToken = decryptSecret(tokenMaterial.encryptedRefreshToken, config.tokenEncryptionKey)
+    const refreshToken = decryptSecret(
+      tokenMaterial.encryptedRefreshToken,
+      config.tokenEncryptionKey
+    )
     const refreshed = await refreshAccessToken({
       refreshToken,
       config,
     })
 
-    const nextRefreshToken = refreshed.refresh_token && refreshed.refresh_token.trim().length > 0
-      ? refreshed.refresh_token
-      : refreshToken
+    const nextRefreshToken =
+      refreshed.refresh_token && refreshed.refresh_token.trim().length > 0
+        ? refreshed.refresh_token
+        : refreshToken
 
     const refreshedScopes = parseScopes(refreshed.scope)
     await this.repository.updateTokenMaterial({
       connectionId,
       encryptedRefreshToken: encryptSecret(nextRefreshToken, config.tokenEncryptionKey),
       encryptedAccessToken: encryptSecret(refreshed.access_token, config.tokenEncryptionKey),
-      tokenExpiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
+      tokenExpiresAt: refreshed.expires_in
+        ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
+        : null,
       scopes: refreshedScopes.length > 0 ? refreshedScopes : config.scopes,
     })
 
     return refreshed.access_token
+  }
+
+  private async findOwnedConnectionOrThrow(actor: AuthenticatedActor, connectionId: string) {
+    const connection = await this.repository.findConnectionById(connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("SNAPCHAT_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
+      throw new Error("SNAPCHAT_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    return connection
+  }
+
+  async pauseConnection(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, connectionId)
+    const now = new Date().toISOString()
+    const nextStatus = "paused" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "snapchat.oauth.connection.paused",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+          },
+        },
+        "integration.snapchat_oauth.paused"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async resumeConnection(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, connectionId)
+    const now = new Date().toISOString()
+    const nextStatus = "connected" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "snapchat.oauth.connection.resumed",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+          },
+        },
+        "integration.snapchat_oauth.resumed"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async disconnectConnection(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; reason?: string }
+  ) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, input.connectionId)
+    const now = new Date().toISOString()
+    const nextStatus = "disconnected" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "snapchat.oauth.connection.disconnected",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+            reason: input.reason ?? "Disconnected from connections center",
+          },
+        },
+        "integration.snapchat_oauth.disconnected"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async startReconnect(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, connectionId)
+    const now = new Date().toISOString()
+
+    await this.recordLifecycle(
+      {
+        eventType: "snapchat.oauth.connection.reconnect.started",
+        aggregateId: connection.id,
+        actorUserId: actor.userId,
+        organizationId: actor.organizationId,
+        workspaceId: connection.workspaceId,
+        projectId: connection.projectId,
+        occurredAt: now,
+        payload: {
+          previousStatus: connection.status,
+        },
+      },
+      "integration.snapchat_oauth.reconnect.started"
+    )
+
+    return this.startAuthorization(actor, {
+      workspaceId: connection.workspaceId,
+      projectId: connection.projectId,
+      connectionName: connection.connectionReference,
+    })
+  }
+
+  async getRecentEvents(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; limit: number }
+  ): Promise<SnapchatOAuthTimelineResult> {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, input.connectionId)
+    const events = await this.repository.listRecentOutboxEvents(connection.id, input.limit)
+
+    const items: SnapchatOAuthTimelineEvent[] = events.map((event) => {
+      const payload = event.payload ?? {}
+      const action = toTimelineAction(event.eventType, payload)
+      const actorUserId = String((event.metadata ?? {}).actorUserId ?? "")
+      return {
+        id: event.id,
+        action,
+        occurredAt: event.occurredAt,
+        actor: actorUserId.length > 0 ? "user" : "system",
+        message: toTimelineMessage(action, payload),
+      }
+    })
+
+    return {
+      connectionId: connection.id,
+      items,
+    }
   }
 
   buildSuccessRedirect(result: SnapchatOAuthCallbackResult) {

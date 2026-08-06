@@ -22,12 +22,44 @@ describe("auth validators", () => {
     expect(parsed.success).toBe(false)
   })
 
+  it("accepts a complete signup payload", () => {
+    const parsed = signupSchema.safeParse({
+      fullName: "Demo",
+      email: "user@madar.ai",
+      password: "password123",
+      confirmPassword: "password123",
+      jobRole: "marketing-manager",
+      acceptTerms: true,
+      companyName: "Madar",
+      industry: "ecommerce",
+      companySize: "1-10",
+    })
+
+    expect(parsed.success).toBe(true)
+  })
+
   it("rejects mismatched signup passwords", () => {
     const parsed = signupSchema.safeParse({
       fullName: "Demo",
       email: "user@madar.ai",
       password: "password123",
       confirmPassword: "different-password",
+      jobRole: "marketing-manager",
+      acceptTerms: true,
+      companyName: "Madar",
+      industry: "ecommerce",
+      companySize: "1-10",
+    })
+
+    expect(parsed.success).toBe(false)
+  })
+
+  it("rejects signup payload missing required onboarding fields", () => {
+    const parsed = signupSchema.safeParse({
+      fullName: "Demo",
+      email: "user@madar.ai",
+      password: "password123",
+      confirmPassword: "password123",
     })
 
     expect(parsed.success).toBe(false)

@@ -1,4 +1,5 @@
 export { AuthProvider } from "./auth-provider"
+export { AuthShowcasePanel, AuthTrustBadge } from "./auth-showcase-panel"
 export { ForgotPasswordForm } from "./forgot-password-form"
 export { GuestRoute } from "./guest-route"
 export { LoginForm } from "./login-form"

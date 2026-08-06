@@ -32,7 +32,8 @@ function toSafeCallbackReason(error: unknown) {
       return mappedReason
     }
 
-    const message = error.message && error.message.trim().length > 0 ? error.message : "error_without_message"
+    const message =
+      error.message && error.message.trim().length > 0 ? error.message : "error_without_message"
     return `oauth_callback_failed_${toReasonSlug(message)}`
   }
 
@@ -41,7 +42,8 @@ function toSafeCallbackReason(error: unknown) {
   }
 
   if (error && typeof error === "object") {
-    const constructorName = (error as { constructor?: { name?: string } }).constructor?.name ?? "object"
+    const constructorName =
+      (error as { constructor?: { name?: string } }).constructor?.name ?? "object"
     return `oauth_callback_failed_non_error_${toReasonSlug(constructorName)}`
   }
 
@@ -57,6 +59,29 @@ export class SnapchatOAuthController {
 
   async getActiveConnection(actor: AuthenticatedActor) {
     return this.service.getActiveConnection(actor)
+  }
+
+  async pause(actor: AuthenticatedActor, connectionId: string) {
+    return this.service.pauseConnection(actor, connectionId)
+  }
+
+  async resume(actor: AuthenticatedActor, connectionId: string) {
+    return this.service.resumeConnection(actor, connectionId)
+  }
+
+  async disconnect(actor: AuthenticatedActor, input: { connectionId: string; reason?: string }) {
+    return this.service.disconnectConnection(actor, input)
+  }
+
+  async reconnect(actor: AuthenticatedActor, connectionId: string) {
+    return this.service.startReconnect(actor, connectionId)
+  }
+
+  async listRecentEvents(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; limit: number }
+  ) {
+    return this.service.getRecentEvents(actor, input)
   }
 
   async callback(_request: IncomingMessage, query: URLSearchParams) {

@@ -3,6 +3,7 @@
 MADAR is a Next.js 16 application for AI-assisted marketing intelligence workflows.
 
 This repository is deployment-ready from an engineering perspective and includes:
+
 - Frontend application (App Router, TypeScript, Tailwind)
 - Terraform infrastructure definitions
 - Container build artifacts
@@ -12,6 +13,7 @@ This repository is deployment-ready from an engineering perspective and includes
 ## Quick Start
 
 Prerequisites:
+
 - Node.js 20+
 - npm 10+
 - Terraform 1.8+
@@ -44,19 +46,8 @@ terraform -chdir=terraform/environments/production validate
 - `npm run typecheck`
 - `npm test`
 - `npm run build`
-- `npm run lint:boundaries`
-- `npm run check:circular`
-- `npm run identity:openapi`
-- `npm run project:openapi`
-- `npm run identity:migrations:validate`
-- `npm run project:migrations:validate`
-- `docker compose config -q`
 - `terraform fmt -recursive`
 - `terraform validate` for each root environment
-
-Security gate:
-
-- `npm audit --audit-level=low`
 
 ## Repository Structure
 
@@ -91,16 +82,7 @@ docs/                  # Engineering and platform documentation
 - `docs/DEPLOYMENT_GUIDE.md`
 - `docs/ENVIRONMENT_GUIDE.md`
 - `docs/CONTRIBUTING.md`
-- `BACKEND_FOUNDATION.md`
-- `REPOSITORY_BASELINE_AUDIT.md`
-- `RELEASE_BASELINE.md`
 - `docs/archive/sprint/` (historical sprint documents)
-
-## Sprint 5.6 Baseline Status
-
-- Backend foundation consolidation completed without adding new integration/OAuth feature behavior.
-- Quality, architecture, OpenAPI, migration, and Docker health gates are green.
-- Release baseline remains blocked by unresolved `npm audit` vulnerabilities pending controlled dependency remediation.
 
 ## Deployment Safety
 

@@ -40,7 +40,7 @@ export interface ConnectionActionDefinition {
 }
 
 export interface ConnectionActionPolicyInput {
-  connection: Pick<Connection, "connectionId" | "status" | "metadata">
+  connection: Pick<Connection, "connectionId" | "connectorId" | "status" | "metadata">
   integrationStatus?: Pick<IntegrationStatusDto, "latestJob" | "latestRun">
   workspaceStatus?: "active" | "archived" | "deleted"
 }

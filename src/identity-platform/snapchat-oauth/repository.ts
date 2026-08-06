@@ -54,18 +54,22 @@ function mapSnapchatAccount(row: Record<string, unknown>): SnapchatAdsAccountVie
 }
 
 export class SnapchatOAuthRepository
-implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryRepository {
+  implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryRepository
+{
   constructor(private readonly db: PostgresDatabase) {}
 
   async withTransaction<T>(work: () => Promise<T>) {
     return this.db.withTransaction(work)
   }
 
-  async resolveProject(input: { organizationId: string; workspaceId: string | null; projectId: string | null }) {
-    const result = await this.db.query<{ id: string; workspace_id: string | null }>(
-      {
-        name: "snapchat-oauth-resolve-project",
-        text: `
+  async resolveProject(input: {
+    organizationId: string
+    workspaceId: string | null
+    projectId: string | null
+  }) {
+    const result = await this.db.query<{ id: string; workspace_id: string | null }>({
+      name: "snapchat-oauth-resolve-project",
+      text: `
           SELECT p.id, p.workspace_id
           FROM projects p
           WHERE p.organization_id = $1
@@ -76,9 +80,8 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
           ORDER BY p.created_at DESC
           LIMIT 1
         `,
-        values: [input.organizationId, input.workspaceId, input.projectId],
-      }
-    )
+      values: [input.organizationId, input.workspaceId, input.projectId],
+    })
 
     const row = result.rows[0]
     if (!row) {
@@ -289,7 +292,13 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
         INSERT INTO snapchat_oauth_events (id, connection_id, event_type, metadata, created_at)
         VALUES ($1, $2, $3, $4, $5)
       `,
-      values: [randomUUID(), connectionId, eventType, JSON.stringify(metadata), new Date().toISOString()],
+      values: [
+        randomUUID(),
+        connectionId,
+        eventType,
+        JSON.stringify(metadata),
+        new Date().toISOString(),
+      ],
     })
   }
 
@@ -383,23 +392,23 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
       throw new Error("SNAPCHAT_OAUTH_ACCOUNT_DISCOVERY_EMPTY")
     }
 
-    const existingSelected = await this.db.query<{ account_id: string }>(
-      {
-        name: "snapchat-ads-account-selected",
-        text: `
+    const existingSelected = await this.db.query<{ account_id: string }>({
+      name: "snapchat-ads-account-selected",
+      text: `
           SELECT account_id
           FROM snapchat_ads_accounts
           WHERE connection_id = $1
             AND is_selected = true
           LIMIT 1
         `,
-        values: [input.connectionId],
-      }
-    )
+      values: [input.connectionId],
+    })
 
-    const candidateSelected = input.selectedCustomerId && normalizedAccounts.some((account) => account.customerId === input.selectedCustomerId)
-      ? input.selectedCustomerId
-      : existingSelected.rows[0]?.account_id ?? normalizedAccounts[0].customerId
+    const candidateSelected =
+      input.selectedCustomerId &&
+      normalizedAccounts.some((account) => account.customerId === input.selectedCustomerId)
+        ? input.selectedCustomerId
+        : (existingSelected.rows[0]?.account_id ?? normalizedAccounts[0].customerId)
 
     await this.db.query({
       name: "snapchat-ads-account-deactivate-missing",
@@ -489,6 +498,36 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
     return result.rows.map(mapSnapchatAccount)
   }
 
+  async selectCustomerAccount(connectionId: string, customerId: string) {
+    return this.db.withTransaction(async () => {
+      await this.db.query({
+        name: "snapchat-ads-account-select-clear",
+        text: `
+          UPDATE snapchat_ads_accounts
+          SET is_selected = false,
+              updated_at = now()
+          WHERE connection_id = $1
+        `,
+        values: [connectionId],
+      })
+
+      const result = await this.db.query({
+        name: "snapchat-ads-account-select-set",
+        text: `
+          UPDATE snapchat_ads_accounts
+          SET is_selected = true,
+              updated_at = now()
+          WHERE connection_id = $1
+            AND account_id = $2
+            AND status = 'active'
+        `,
+        values: [connectionId, customerId],
+      })
+
+      return result.rowCount > 0
+    })
+  }
+
   async findAccessibleCustomerAccount(connectionId: string, customerId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "snapchat-ads-account-find",
@@ -571,10 +610,10 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
 
     return result.rows[0]
       ? {
-        encryptedAccessToken: result.rows[0].encrypted_access_token,
-        encryptedRefreshToken: result.rows[0].encrypted_refresh_token,
-        tokenExpiresAt: toIso(result.rows[0].token_expires_at),
-      }
+          encryptedAccessToken: result.rows[0].encrypted_access_token,
+          encryptedRefreshToken: result.rows[0].encrypted_refresh_token,
+          tokenExpiresAt: toIso(result.rows[0].token_expires_at),
+        }
       : null
   }
 
@@ -606,5 +645,65 @@ implements ProviderConnectionLifecycleRepository, ProviderAccountDiscoveryReposi
         JSON.stringify(input.scopes),
       ],
     })
+  }
+
+  async setConnectionLifecycleStatus(input: {
+    connectionId: string
+    status: "connected" | "paused" | "disconnected"
+    actorUserId: string
+    occurredAt: string
+  }) {
+    await this.db.query({
+      name: "snapchat-oauth-connection-lifecycle-update",
+      text: `
+        UPDATE snapchat_oauth_connections
+        SET status = $2::varchar,
+            last_connected_at = CASE WHEN $2::varchar = 'connected' THEN $3 ELSE last_connected_at END,
+            last_disconnected_at = CASE
+              WHEN $2::varchar = 'disconnected' THEN $3
+              WHEN $2::varchar = 'connected' THEN NULL
+              ELSE last_disconnected_at
+            END,
+            updated_by_user_id = $4,
+            updated_at = $3
+        WHERE id = $1
+          AND deleted_at IS NULL
+      `,
+      values: [input.connectionId, input.status, input.occurredAt, input.actorUserId],
+    })
+  }
+
+  async listRecentOutboxEvents(connectionId: string, limit: number) {
+    const result = await this.db.query<{
+      id: string
+      eventType: string
+      occurredAt: Date | string
+      metadata: Record<string, unknown>
+      payload: Record<string, unknown>
+    }>({
+      name: "snapchat-oauth-outbox-recent-list",
+      text: `
+        SELECT
+          id,
+          event_type AS "eventType",
+          occurred_at AS "occurredAt",
+          metadata,
+          payload
+        FROM outbox_events
+        WHERE aggregate_type = 'snapchat_oauth_connection'
+          AND aggregate_id = $1
+        ORDER BY occurred_at DESC, created_at DESC
+        LIMIT $2
+      `,
+      values: [connectionId, Math.max(1, Math.min(limit, 100))],
+    })
+
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      eventType: String(row.eventType),
+      occurredAt: toIso(row.occurredAt) ?? new Date().toISOString(),
+      metadata: (row.metadata as Record<string, unknown>) ?? {},
+      payload: (row.payload as Record<string, unknown>) ?? {},
+    }))
   }
 }

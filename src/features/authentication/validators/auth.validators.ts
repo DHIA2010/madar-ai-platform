@@ -1,36 +1,43 @@
 import { z } from "zod"
 
 export const loginSchema = z.object({
-  email: z.email("Please enter a valid email address."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
+  email: z.email("يرجى إدخال بريد إلكتروني صحيح."),
+  password: z.string().min(8, "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."),
   rememberMe: z.boolean().optional(),
 })
 
 export const signupSchema = z
   .object({
-    fullName: z.string().min(2, "Full name must be at least 2 characters."),
-    email: z.email("Please enter a valid email address."),
-    password: z.string().min(8, "Password must be at least 8 characters."),
-    confirmPassword: z.string().min(8, "Please confirm your password."),
+    fullName: z.string().min(2, "يجب أن يتكون الاسم الكامل من حرفين على الأقل."),
+    email: z.email("يرجى إدخال بريد إلكتروني صحيح."),
+    password: z.string().min(8, "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."),
+    confirmPassword: z.string().min(8, "يرجى تأكيد كلمة المرور."),
+    jobRole: z.string().min(1, "يرجى اختيار دورك الوظيفي."),
+    acceptTerms: z.boolean().refine((value) => value === true, {
+      message: "يجب الموافقة على الشروط والأحكام وسياسة الخصوصية.",
+    }),
+    companyName: z.string().min(2, "يجب أن يتكون اسم الشركة من حرفين على الأقل."),
+    industry: z.string().min(1, "يرجى اختيار مجال عملك."),
+    companySize: z.string().min(1, "يرجى اختيار حجم الشركة."),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
-    message: "Passwords do not match.",
+    message: "كلمتا المرور غير متطابقتين.",
   })
 
 export const forgotPasswordSchema = z.object({
-  email: z.email("Please enter a valid email address."),
+  email: z.email("يرجى إدخال بريد إلكتروني صحيح."),
 })
 
 export const resetPasswordSchema = z
   .object({
-    token: z.string().min(1, "Reset token is required."),
-    password: z.string().min(8, "Password must be at least 8 characters."),
-    confirmPassword: z.string().min(8, "Please confirm your password."),
+    token: z.string().min(1, "رمز إعادة التعيين مطلوب."),
+    password: z.string().min(8, "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."),
+    confirmPassword: z.string().min(8, "يرجى تأكيد كلمة المرور."),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
-    message: "Passwords do not match.",
+    message: "كلمتا المرور غير متطابقتين.",
   })
 
 export type LoginFormValues = z.infer<typeof loginSchema>

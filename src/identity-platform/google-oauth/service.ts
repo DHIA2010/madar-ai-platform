@@ -405,6 +405,14 @@ export class GoogleOAuthService {
     ) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
+    if (
+      scopedConnectionId &&
+      actor.workspaceId &&
+      existingConnection &&
+      existingConnection.workspaceId !== actor.workspaceId
+    ) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
 
     const resolvedProject = existingConnection
       ? {
@@ -556,6 +564,9 @@ export class GoogleOAuthService {
     if (!connection || connection.organizationId !== actor.organizationId) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
 
     const ownership = await this.repository.findConnectionOwnershipById(connection.id)
     const now = new Date().toISOString()
@@ -609,6 +620,9 @@ export class GoogleOAuthService {
 
     const connection = await this.repository.findConnectionById(connectionId)
     if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
 
@@ -694,6 +708,9 @@ export class GoogleOAuthService {
     if (!connection || connection.organizationId !== actor.organizationId) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
 
     const ownership = await this.repository.findConnectionOwnershipById(connection.id)
     const now = new Date().toISOString()
@@ -739,6 +756,9 @@ export class GoogleOAuthService {
 
     const connection = await this.repository.findConnectionById(connectionId)
     if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
 
@@ -1029,6 +1049,9 @@ export class GoogleOAuthService {
 
     const connection = await this.repository.findConnectionById(input.connectionId)
     if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
+    }
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
       throw new Error("GOOGLE_OAUTH_CONNECTION_NOT_FOUND")
     }
 

@@ -284,7 +284,32 @@ function StepDot({ state }: { state: "done" | "active" | "todo" }) {
   return <Circle className="size-3.5" />
 }
 
-function parseAccessibleGoogleAdsAccounts(rawValue: string | undefined): AccountOption[] {
+interface OAuthConnectorProfile {
+  callbackParam: string
+  connectionIdParam: string
+  accountsMetadataKey: string
+  fallbackAccountLabel: string
+}
+
+const OAUTH_CONNECTOR_PROFILES: Record<string, OAuthConnectorProfile> = {
+  google_ads: {
+    callbackParam: "google_oauth",
+    connectionIdParam: "google_connection_id",
+    accountsMetadataKey: "availableGoogleAdsCustomerAccounts",
+    fallbackAccountLabel: "Google Ads",
+  },
+  snapchat_ads: {
+    callbackParam: "snapchat_oauth",
+    connectionIdParam: "snapchat_connection_id",
+    accountsMetadataKey: "availableSnapchatAdsCustomerAccounts",
+    fallbackAccountLabel: "Snapchat Ads",
+  },
+}
+
+function parseAccessibleProviderAccounts(
+  rawValue: string | undefined,
+  fallbackLabel: string
+): AccountOption[] {
   if (!rawValue) {
     return []
   }
@@ -305,7 +330,7 @@ function parseAccessibleGoogleAdsAccounts(rawValue: string | undefined): Account
 
         return {
           id,
-          label: displayName ?? `Google Ads ${id}`,
+          label: displayName ?? `${fallbackLabel} ${id}`,
           description: `Customer ID: ${id}`,
         } satisfies AccountOption
       })
@@ -465,7 +490,7 @@ export function NewConnectionWizard() {
   const [isRunningFirstSync, setIsRunningFirstSync] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
-  const [googleAdsAccounts, setGoogleAdsAccounts] = useState<AccountOption[]>([])
+  const [discoveredProviderAccounts, setDiscoveredProviderAccounts] = useState<AccountOption[]>([])
 
   const workspaceId = currentWorkspace?.id ?? null
   const workspaceLabel = currentWorkspace?.name ?? "Madar Workspace"
@@ -497,12 +522,12 @@ export function NewConnectionWizard() {
       return []
     }
 
-    if (selectedConnector.connectorId === "google_ads") {
-      return googleAdsAccounts.length > 0 ? googleAdsAccounts : [ACCOUNT_FALLBACK]
+    if (selectedConnector.connectorId in OAUTH_CONNECTOR_PROFILES) {
+      return discoveredProviderAccounts.length > 0 ? discoveredProviderAccounts : [ACCOUNT_FALLBACK]
     }
 
     return selectedConnectorDetails?.accounts ?? [ACCOUNT_FALLBACK]
-  }, [googleAdsAccounts, selectedConnector, selectedConnectorDetails])
+  }, [discoveredProviderAccounts, selectedConnector, selectedConnectorDetails])
   const selectedAccount =
     availableAccounts.find((account) => account.id === selectedAccountId) ??
     availableAccounts[0] ??
@@ -526,8 +551,8 @@ export function NewConnectionWizard() {
       return
     }
 
-    if (selectedConnector.connectorId !== "google_ads") {
-      setGoogleAdsAccounts([])
+    if (!(selectedConnector.connectorId in OAUTH_CONNECTOR_PROFILES)) {
+      setDiscoveredProviderAccounts([])
     }
 
     setSelectedObjects((current) => {
@@ -546,11 +571,15 @@ export function NewConnectionWizard() {
     }
 
     const callbackParams = new URLSearchParams(window.location.search)
-    if (callbackParams.get("google_oauth") !== "connected") {
+    const matchedProfileEntry = Object.entries(OAUTH_CONNECTOR_PROFILES).find(
+      ([, profile]) => callbackParams.get(profile.callbackParam) === "connected"
+    )
+    if (!matchedProfileEntry) {
       return
     }
+    const [, matchedProfile] = matchedProfileEntry
 
-    const callbackConnectionId = callbackParams.get("google_connection_id")
+    const callbackConnectionId = callbackParams.get(matchedProfile.connectionIdParam)
     if (!callbackConnectionId) {
       return
     }
@@ -572,17 +601,19 @@ export function NewConnectionWizard() {
           return
         }
 
-        if (validated.payload.connectorId !== "google_ads") {
+        const providerProfile = OAUTH_CONNECTOR_PROFILES[validated.payload.connectorId]
+        if (!providerProfile) {
           return
         }
 
         setSelectedConnectorDefinitionId(validated.payload.connectorDefinitionId)
 
-        const accounts = parseAccessibleGoogleAdsAccounts(
-          validated.payload.metadata.availableGoogleAdsCustomerAccounts
+        const accounts = parseAccessibleProviderAccounts(
+          validated.payload.metadata[providerProfile.accountsMetadataKey],
+          providerProfile.fallbackAccountLabel
         )
         if (accounts.length > 0) {
-          setGoogleAdsAccounts(accounts)
+          setDiscoveredProviderAccounts(accounts)
           const selectedCustomerId =
             validated.payload.metadata.customerId &&
             accounts.some((account) => account.id === validated.payload.metadata.customerId)
@@ -717,7 +748,7 @@ export function NewConnectionWizard() {
       })
 
       const requiresProviderCallback =
-        selectedConnector.connectorId === "google_ads" && setupMode === "oauth"
+        selectedConnector.connectorId in OAUTH_CONNECTOR_PROFILES && setupMode === "oauth"
 
       if (!requiresProviderCallback) {
         setStepIndex(2)

@@ -8,15 +8,28 @@ import type {
   IntegrationDiscoveredAccountView,
 } from "../integrations/provider-models"
 
-export interface SnapchatOAuthStartInput extends ProviderOAuthStartInputDto {}
+export type SnapchatOAuthStartInput = ProviderOAuthStartInputDto
 
-export interface SnapchatOAuthStartResult extends ProviderOAuthStartResultDto {}
+export type SnapchatOAuthStartResult = ProviderOAuthStartResultDto
 
-export interface SnapchatOAuthCallbackResult extends ProviderOAuthCallbackResultDto {}
+export type SnapchatOAuthCallbackResult = ProviderOAuthCallbackResultDto
 
-export interface SnapchatOAuthConnectionView extends IntegrationConnectionView {}
+export type SnapchatOAuthConnectionView = IntegrationConnectionView
 
 export interface SnapchatAdsAccountView extends IntegrationDiscoveredAccountView {
   organizationId: string | null
   organizationName: string | null
+}
+
+export interface SnapchatOAuthTimelineEvent {
+  id: string
+  action: string
+  occurredAt: string
+  actor: "system" | "user"
+  message: string
+}
+
+export interface SnapchatOAuthTimelineResult {
+  connectionId: string
+  items: SnapchatOAuthTimelineEvent[]
 }

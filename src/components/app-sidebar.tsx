@@ -4,6 +4,7 @@ import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
 
+import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -122,7 +123,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
                     <Sparkles className="size-5" />
                   </div>
                   <Image
-                    src="/images/madar-logo.png"
+                    src={ASSETS.logo}
                     alt="مدار MADAR"
                     width={778}
                     height={325}

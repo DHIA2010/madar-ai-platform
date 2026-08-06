@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Search } from "lucide-react"
+import { Eye, EyeOff, Search } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -99,6 +99,87 @@ export const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
 )
 
 AppInput.displayName = "AppInput"
+
+export interface AppPasswordInputProps
+  extends
+    Omit<BaseFieldProps, "endIcon">,
+    Omit<React.ComponentPropsWithoutRef<typeof Input>, "id" | "type"> {}
+
+export const AppPasswordInput = React.forwardRef<HTMLInputElement, AppPasswordInputProps>(
+  (
+    {
+      id,
+      label,
+      helperText,
+      errorText,
+      required = false,
+      className,
+      wrapperClassName,
+      labelClassName,
+      helperClassName,
+      errorClassName,
+      startIcon,
+      ...props
+    },
+    ref
+  ) => {
+    const generatedId = React.useId()
+    const inputId = id ?? generatedId
+    const [visible, setVisible] = React.useState(false)
+    const describedBy = [
+      helperText ? `${inputId}-help` : null,
+      errorText ? `${inputId}-error` : null,
+    ]
+      .filter(Boolean)
+      .join(" ")
+
+    return (
+      <AppFormField
+        id={inputId}
+        label={label}
+        helperText={helperText}
+        errorText={errorText}
+        required={required}
+        className={wrapperClassName}
+        labelClassName={labelClassName}
+        helperClassName={helperClassName}
+        errorClassName={errorClassName}
+      >
+        <div className={cn("relative", startIcon && "[&>input]:ps-9", "[&>input]:pe-9")}>
+          {startIcon ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 start-2 flex items-center text-muted-foreground"
+            >
+              {startIcon}
+            </span>
+          ) : null}
+          <Input
+            ref={ref}
+            id={inputId}
+            type={visible ? "text" : "password"}
+            aria-invalid={Boolean(errorText)}
+            aria-describedby={describedBy || undefined}
+            aria-required={required || undefined}
+            className={className}
+            {...props}
+          />
+          <button
+            type="button"
+            onClick={() => setVisible((current) => !current)}
+            className="absolute inset-y-0 end-2 flex items-center text-muted-foreground transition-colors hover:text-foreground"
+            aria-label={visible ? "Hide password" : "Show password"}
+            tabIndex={-1}
+          >
+            {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
+      </AppFormField>
+    )
+  }
+)
+
+AppPasswordInput.displayName = "AppPasswordInput"
 
 export interface AppTextareaProps
   extends BaseFieldProps, Omit<React.ComponentPropsWithoutRef<typeof Textarea>, "id"> {}

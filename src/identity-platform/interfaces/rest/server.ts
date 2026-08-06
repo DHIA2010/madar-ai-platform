@@ -10,10 +10,14 @@ import { GoogleOAuthController } from "../../google-oauth/controller"
 import { GoogleOAuthConnectionDeletionService } from "../../google-oauth/connection-deletion-service"
 import { GoogleOAuthRepository } from "../../google-oauth/repository"
 import { GoogleOAuthService } from "../../google-oauth/service"
+import { SnapchatOAuthConnectionDeletionService } from "../../snapchat-oauth/connection-deletion-service"
+import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
+import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
   endGoogleAdsSyncRequestTrace,
 } from "../../google-ads/client"
+import { IdentityError } from "../../application/errors/IdentityError"
 import { createRequestContext, mapIdentityError } from "../middleware"
 import {
   assignRoleSchema,
@@ -241,6 +245,32 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
   return {}
 }
 
+// Providers signal that a connectionId isn't theirs by throwing an Error whose
+// message ends in "_CONNECTION_NOT_FOUND" (e.g. GOOGLE_OAUTH_CONNECTION_NOT_FOUND,
+// SNAPCHAT_OAUTH_CONNECTION_NOT_FOUND) -- this lets connection-lifecycle routes try
+// every registered provider in turn without bespoke per-connector wiring here, so a
+// new connector gets pause/resume/disconnect/reconnect/events automatically once it
+// implements the IntegrationProvider methods.
+function isConnectionNotFoundError(error: unknown) {
+  return error instanceof Error && /_CONNECTION_NOT_FOUND$/.test(error.message)
+}
+
+async function dispatchToProviders<T>(
+  providers: IntegrationProvider[],
+  attempt: (provider: IntegrationProvider) => Promise<T> | undefined
+): Promise<{ found: true; value: T } | { found: false }> {
+  for (const provider of providers) {
+    const call = attempt(provider)
+    if (call === undefined) continue
+    try {
+      return { found: true, value: await call }
+    } catch (error) {
+      if (!isConnectionNotFoundError(error)) throw error
+    }
+  }
+  return { found: false }
+}
+
 export function createIdentityApiServer(
   container: IdentityPlatformContainer = createIdentityPlatform()
 ) {
@@ -269,6 +299,11 @@ export function createIdentityApiServer(
   const googleOAuthDeletionService = container.infrastructure.database
     ? new GoogleOAuthConnectionDeletionService(
         new GoogleOAuthRepository(container.infrastructure.database)
+      )
+    : null
+  const snapchatOAuthDeletionService = container.infrastructure.database
+    ? new SnapchatOAuthConnectionDeletionService(
+        new SnapchatOAuthRepository(container.infrastructure.database)
       )
     : null
 
@@ -515,61 +550,105 @@ export function createIdentityApiServer(
 
       const pauseIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/pause$/)
       if (method === "POST" && pauseIntegrationMatch) {
-        if (!googleOAuthController) {
-          return send(503, {
-            code: "GOOGLE_OAUTH_UNAVAILABLE",
-            message: "Google OAuth is unavailable in memory mode.",
-          })
+        const connectionId = pauseIntegrationMatch[1]
+
+        if (googleOAuthController) {
+          try {
+            return send(200, await googleOAuthController.pause(actor, connectionId))
+          } catch (error) {
+            if (!isConnectionNotFoundError(error)) throw error
+          }
         }
 
-        return send(200, await googleOAuthController.pause(actor, pauseIntegrationMatch[1]))
+        const dispatched = await dispatchToProviders(
+          container.infrastructure.integrations?.list() ?? [],
+          (provider) => provider.pause?.(actor, { connectionId })
+        )
+        if (dispatched.found) {
+          return send(200, dispatched.value)
+        }
+
+        return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
       }
 
       const resumeIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/resume$/)
       if (method === "POST" && resumeIntegrationMatch) {
-        if (!googleOAuthController) {
-          return send(503, {
-            code: "GOOGLE_OAUTH_UNAVAILABLE",
-            message: "Google OAuth is unavailable in memory mode.",
-          })
+        const connectionId = resumeIntegrationMatch[1]
+
+        if (googleOAuthController) {
+          try {
+            return send(200, await googleOAuthController.resume(actor, connectionId))
+          } catch (error) {
+            if (!isConnectionNotFoundError(error)) throw error
+          }
         }
 
-        return send(200, await googleOAuthController.resume(actor, resumeIntegrationMatch[1]))
+        const dispatched = await dispatchToProviders(
+          container.infrastructure.integrations?.list() ?? [],
+          (provider) => provider.resume?.(actor, { connectionId })
+        )
+        if (dispatched.found) {
+          return send(200, dispatched.value)
+        }
+
+        return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
       }
 
       const disconnectIntegrationMatch = url.pathname.match(
         /^\/v1\/integrations\/([^/]+)\/disconnect$/
       )
       if (method === "POST" && disconnectIntegrationMatch) {
-        if (!googleOAuthController) {
-          return send(503, {
-            code: "GOOGLE_OAUTH_UNAVAILABLE",
-            message: "Google OAuth is unavailable in memory mode.",
-          })
+        const connectionId = disconnectIntegrationMatch[1]
+        const payload = integrationDisconnectSchema.parse(await readJsonBody(request))
+
+        if (googleOAuthController) {
+          try {
+            return send(
+              200,
+              await googleOAuthController.disconnect(actor, {
+                connectionId,
+                reason: payload.reason,
+              })
+            )
+          } catch (error) {
+            if (!isConnectionNotFoundError(error)) throw error
+          }
         }
 
-        const payload = integrationDisconnectSchema.parse(await readJsonBody(request))
-        return send(
-          200,
-          await googleOAuthController.disconnect(actor, {
-            connectionId: disconnectIntegrationMatch[1],
-            reason: payload.reason,
-          })
+        const dispatched = await dispatchToProviders(
+          container.infrastructure.integrations?.list() ?? [],
+          (provider) => provider.disconnect?.(actor, { connectionId, reason: payload.reason })
         )
+        if (dispatched.found) {
+          return send(200, dispatched.value)
+        }
+
+        return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
       }
 
       const reconnectIntegrationMatch = url.pathname.match(
         /^\/v1\/integrations\/([^/]+)\/reconnect$/
       )
       if (method === "POST" && reconnectIntegrationMatch) {
-        if (!googleOAuthController) {
-          return send(503, {
-            code: "GOOGLE_OAUTH_UNAVAILABLE",
-            message: "Google OAuth is unavailable in memory mode.",
-          })
+        const connectionId = reconnectIntegrationMatch[1]
+
+        if (googleOAuthController) {
+          try {
+            return send(200, await googleOAuthController.reconnect(actor, connectionId))
+          } catch (error) {
+            if (!isConnectionNotFoundError(error)) throw error
+          }
         }
 
-        return send(200, await googleOAuthController.reconnect(actor, reconnectIntegrationMatch[1]))
+        const dispatched = await dispatchToProviders(
+          container.infrastructure.integrations?.list() ?? [],
+          (provider) => provider.reconnect?.(actor, { connectionId })
+        )
+        if (dispatched.found) {
+          return send(200, dispatched.value)
+        }
+
+        return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
       }
 
       const retryStatusIntegrationMatch = url.pathname.match(
@@ -599,36 +678,80 @@ export function createIdentityApiServer(
 
       const integrationEventsMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)\/events$/)
       if (method === "GET" && integrationEventsMatch) {
-        if (!googleOAuthController) {
-          return send(503, {
-            code: "GOOGLE_OAUTH_UNAVAILABLE",
-            message: "Google OAuth is unavailable in memory mode.",
-          })
-        }
-
+        const connectionId = integrationEventsMatch[1]
         const query = integrationEventsQuerySchema.parse(
           Object.fromEntries(url.searchParams.entries())
         )
 
-        return send(
-          200,
-          await googleOAuthController.listRecentEvents(actor, {
-            connectionId: integrationEventsMatch[1],
-            limit: query.limit,
-          })
+        if (googleOAuthController) {
+          try {
+            return send(
+              200,
+              await googleOAuthController.listRecentEvents(actor, {
+                connectionId,
+                limit: query.limit,
+              })
+            )
+          } catch (error) {
+            if (!isConnectionNotFoundError(error)) throw error
+          }
+        }
+
+        const dispatched = await dispatchToProviders(
+          container.infrastructure.integrations?.list() ?? [],
+          (provider) => provider.listEvents?.(actor, { connectionId, limit: query.limit })
         )
+        if (dispatched.found) {
+          return send(200, dispatched.value)
+        }
+
+        return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
       }
 
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)
       if (method === "DELETE" && deleteIntegrationMatch) {
-        if (!googleOAuthDeletionService) {
+        if (!googleOAuthDeletionService && !snapchatOAuthDeletionService) {
           return send(503, {
-            code: "GOOGLE_OAUTH_UNAVAILABLE",
-            message: "Google OAuth is unavailable in memory mode.",
+            code: "INTEGRATION_OAUTH_UNAVAILABLE",
+            message: "Integration OAuth is unavailable in memory mode.",
           })
         }
 
-        await googleOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+        let deleted = false
+
+        if (googleOAuthDeletionService) {
+          try {
+            await googleOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError && error.code === "GOOGLE_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && snapchatOAuthDeletionService) {
+          try {
+            await snapchatOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError && error.code === "SNAPCHAT_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted) {
+          return send(404, {
+            code: "CONNECTION_NOT_FOUND",
+            message: "Connection not found.",
+          })
+        }
+
         response.writeHead(204, corsHeaders)
         response.end()
         return
