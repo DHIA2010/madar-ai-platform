@@ -1,6 +1,8 @@
 import type {
   AIIntelligenceGateway,
   AIIntelligenceRepository,
+  AdministrationGateway,
+  AdministrationRepository,
   AttributionGateway,
   AttributionRepository,
   IntegrationGateway,
@@ -26,6 +28,7 @@ import type { WorkspaceGateway } from "@/application/contracts/workspace.contrac
 
 export interface InfrastructureServices {
   aiIntelligenceRepository: AIIntelligenceRepository
+  administrationRepository: AdministrationRepository
   authenticationRepository: AuthenticationRepository
   attributionRepository: AttributionRepository
   integrationRepository: IntegrationRepository
@@ -37,6 +40,7 @@ export interface InfrastructureServices {
   notificationRepository: NotificationRepository
 
   aiIntelligenceGateway: AIIntelligenceGateway
+  administrationGateway: AdministrationGateway
   authenticationGateway: AuthenticationGateway
   attributionGateway: AttributionGateway
   integrationGateway: IntegrationGateway
@@ -54,6 +58,8 @@ export interface InfrastructureServices {
 export type {
   AIIntelligenceGateway,
   AIIntelligenceRepository,
+  AdministrationGateway,
+  AdministrationRepository,
   AttributionGateway,
   AttributionRepository,
   IntegrationGateway,

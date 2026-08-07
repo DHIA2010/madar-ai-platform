@@ -7,37 +7,60 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppBadge, AppButton, AppCard, AppInput, AppPageHeader } from "@/components/app"
 
-import { IAM_INVITATIONS, IAM_ROLES, IAM_TEAMS, IAM_USERS } from "../services"
+import { useWorkspace } from "@/features/workspace"
+
+import { useInvitationsQuery } from "../queries/use-invitations-query"
+import { useRolesQuery } from "../queries/use-roles-query"
+import { useTeamsQuery } from "../queries/use-teams-query"
+import { useUsersQuery } from "../queries/use-users-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
 
+import { useApplicationServices } from "@/application"
+
 export function AdministrationDashboardScreen() {
+  const { administrationApplicationService } = useApplicationServices()
+  const { currentOrganization } = useWorkspace()
+  const organizationId = currentOrganization?.id
+
+  const usersQuery = useUsersQuery(administrationApplicationService, organizationId)
+  const rolesQuery = useRolesQuery(administrationApplicationService, organizationId)
+  const teamsQuery = useTeamsQuery(administrationApplicationService, organizationId)
+  const invitationsQuery = useInvitationsQuery(administrationApplicationService, organizationId)
+
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
+  const roles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data])
+  const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data])
+  const invitations = useMemo(() => invitationsQuery.data ?? [], [invitationsQuery.data])
+
   const [query, setQuery] = useState("")
 
   const searchResults = useMemo(() => {
     const term = query.trim().toLowerCase()
     if (!term) return []
 
-    const users = IAM_USERS.filter((user) => {
-      return user.fullName.toLowerCase().includes(term) || user.email.toLowerCase().includes(term)
-    }).map((user) => ({ type: "User", label: `${user.fullName} · ${user.email}` }))
+    const userResults = users
+      .filter(
+        (user) =>
+          user.fullName.toLowerCase().includes(term) || user.email.toLowerCase().includes(term)
+      )
+      .map((user) => ({ type: "User", label: `${user.fullName} · ${user.email}` }))
 
-    const teams = IAM_TEAMS.filter((team) => team.name.toLowerCase().includes(term)).map(
-      (team) => ({ type: "Team", label: team.name })
-    )
-    const roles = IAM_ROLES.filter((role) => role.name.toLowerCase().includes(term)).map(
-      (role) => ({ type: "Role", label: role.name })
-    )
-    const invitations = IAM_INVITATIONS.filter((invitation) =>
-      invitation.email.toLowerCase().includes(term)
-    ).map((invitation) => ({
-      type: "Invitation",
-      label: invitation.email,
-    }))
+    const teamResults = teams
+      .filter((team) => team.name.toLowerCase().includes(term))
+      .map((team) => ({ type: "Team", label: team.name }))
 
-    return [...users, ...teams, ...roles, ...invitations].slice(0, 10)
-  }, [query])
+    const roleResults = roles
+      .filter((role) => role.name.toLowerCase().includes(term))
+      .map((role) => ({ type: "Role", label: role.name }))
 
-  const pendingInvitations = IAM_INVITATIONS.filter(
+    const invitationResults = invitations
+      .filter((invitation) => invitation.email.toLowerCase().includes(term))
+      .map((invitation) => ({ type: "Invitation", label: invitation.email }))
+
+    return [...userResults, ...teamResults, ...roleResults, ...invitationResults].slice(0, 10)
+  }, [invitations, query, roles, teams, users])
+
+  const pendingInvitations = invitations.filter(
     (invitation) => invitation.status === "pending"
   ).length
 
@@ -65,7 +88,7 @@ export function AdministrationDashboardScreen() {
           className="shadow-sm"
           contentClassName="pt-0"
         >
-          <p className="text-3xl font-semibold">{IAM_USERS.length}</p>
+          <p className="text-3xl font-semibold">{users.length}</p>
         </AppCard>
         <AppCard
           title="Roles"
@@ -73,7 +96,7 @@ export function AdministrationDashboardScreen() {
           className="shadow-sm"
           contentClassName="pt-0"
         >
-          <p className="text-3xl font-semibold">{IAM_ROLES.length}</p>
+          <p className="text-3xl font-semibold">{roles.length}</p>
         </AppCard>
         <AppCard
           title="Teams"
@@ -81,7 +104,7 @@ export function AdministrationDashboardScreen() {
           className="shadow-sm"
           contentClassName="pt-0"
         >
-          <p className="text-3xl font-semibold">{IAM_TEAMS.length}</p>
+          <p className="text-3xl font-semibold">{teams.length}</p>
         </AppCard>
         <AppCard
           title="Invitations"
@@ -89,7 +112,7 @@ export function AdministrationDashboardScreen() {
           className="shadow-sm"
           contentClassName="pt-0"
         >
-          <p className="text-3xl font-semibold">{IAM_INVITATIONS.length}</p>
+          <p className="text-3xl font-semibold">{invitations.length}</p>
         </AppCard>
       </div>
 

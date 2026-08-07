@@ -3,6 +3,10 @@ export {
   DataAIIntelligenceRepository,
 } from "./ai-intelligence.repository"
 export {
+  createAdministrationRepository,
+  DataAdministrationRepository,
+} from "./administration.repository"
+export {
   createAuthenticationRepository,
   DataAuthenticationRepository,
 } from "./authentication.repository"

@@ -23,12 +23,17 @@ import {
   AppTableHeader,
   AppTablePagination,
   AppTableRow,
+  RelativeTime,
 } from "@/components/app"
 
-import { IAM_ROLES, IAM_USERS, IAM_WORKSPACES } from "../services"
-import type { IamStatus, IamUser } from "../types"
+import { useWorkspace } from "@/features/workspace"
+
+import { useUsersQuery } from "../queries/use-users-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
 import { AdministrationUserProfileDrawer } from "./administration-user-profile-drawer"
+
+import { useApplicationServices } from "@/application/context"
+import type { AdministrationUserDto, AdministrationUserStatus } from "@/application/contracts"
 
 const PAGE_SIZE = 5
 
@@ -43,20 +48,41 @@ function initials(name: string) {
     .toUpperCase()
 }
 
+function humanizeRole(roleId: string) {
+  return roleId.charAt(0).toUpperCase() + roleId.slice(1)
+}
+
 export function AdministrationUsersScreen() {
+  const { administrationApplicationService } = useApplicationServices()
+  const { currentOrganization } = useWorkspace()
+  const { data, isLoading, isError } = useUsersQuery(
+    administrationApplicationService,
+    currentOrganization?.id
+  )
+  const allUsers = useMemo(() => data ?? [], [data])
+
   const [query, setQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | IamStatus>("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | AdministrationUserStatus>("all")
   const [workspaceFilter, setWorkspaceFilter] = useState<"all" | string>("all")
   const [sortBy, setSortBy] = useState<SortKey>("fullName")
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [selectedUser, setSelectedUser] = useState<IamUser | undefined>()
+  const [selectedUser, setSelectedUser] = useState<AdministrationUserDto | undefined>()
   const [profileOpen, setProfileOpen] = useState(false)
-  const [simulateLoading, setSimulateLoading] = useState(false)
+
+  const availableWorkspaces = useMemo(() => {
+    const names = new Set<string>()
+    for (const user of allUsers) {
+      for (const workspace of user.workspaces) {
+        names.add(workspace)
+      }
+    }
+    return Array.from(names).sort()
+  }, [allUsers])
 
   const filteredUsers = useMemo(() => {
     const term = query.trim().toLowerCase()
-    const rows = IAM_USERS.filter((user) => {
+    const rows = allUsers.filter((user) => {
       const matchesTerm =
         term === "" ||
         user.fullName.toLowerCase().includes(term) ||
@@ -72,7 +98,7 @@ export function AdministrationUsersScreen() {
       if (sortBy === "lastLogin") return left.lastLogin.localeCompare(right.lastLogin)
       return left.fullName.localeCompare(right.fullName)
     })
-  }, [query, sortBy, statusFilter, workspaceFilter])
+  }, [allUsers, query, sortBy, statusFilter, workspaceFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
   const paginatedUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -95,9 +121,6 @@ export function AdministrationUsersScreen() {
         subtitle="Manage enterprise identities, access posture, and workspace assignment."
         actions={
           <div className="flex items-center gap-2">
-            <AppButton variant="outline" onClick={() => setSimulateLoading((value) => !value)}>
-              {simulateLoading ? "Stop loading state" : "Show loading state"}
-            </AppButton>
             <AppBadge variant="outline">Selected: {selectedIds.length}</AppBadge>
           </div>
         }
@@ -122,7 +145,7 @@ export function AdministrationUsersScreen() {
           <AppSelect
             value={statusFilter}
             onValueChange={(next) => {
-              setStatusFilter(next as "all" | IamStatus)
+              setStatusFilter(next as "all" | AdministrationUserStatus)
               setPage(1)
             }}
           >
@@ -150,7 +173,7 @@ export function AdministrationUsersScreen() {
             </AppSelectTrigger>
             <AppSelectContent>
               <AppSelectItem value="all">All workspaces</AppSelectItem>
-              {IAM_WORKSPACES.map((workspace) => (
+              {availableWorkspaces.map((workspace) => (
                 <AppSelectItem key={workspace} value={workspace}>
                   {workspace}
                 </AppSelectItem>
@@ -197,8 +220,10 @@ export function AdministrationUsersScreen() {
         subtitle="Identity records with role, workspace, and security posture."
         className="shadow-sm"
       >
-        {simulateLoading ? (
+        {isLoading ? (
           <AppLoading variant="table" rows={5} columns={10} />
+        ) : isError ? (
+          <p className="text-sm text-destructive">Failed to load users.</p>
         ) : filteredUsers.length === 0 ? (
           <AppEmpty
             title="No users found"
@@ -229,7 +254,6 @@ export function AdministrationUsersScreen() {
                 </AppTableHeader>
                 <AppTableBody>
                   {paginatedUsers.map((user) => {
-                    const role = IAM_ROLES.find((item) => item.id === user.roleId)
                     const selected = selectedIds.includes(user.id)
                     return (
                       <AppTableRow key={user.id}>
@@ -253,13 +277,15 @@ export function AdministrationUsersScreen() {
                             </div>
                           </div>
                         </AppTableCell>
-                        <AppTableCell>{user.department}</AppTableCell>
-                        <AppTableCell>{role?.name ?? "N/A"}</AppTableCell>
-                        <AppTableCell>{user.workspaces.join(", ")}</AppTableCell>
+                        <AppTableCell>{user.department || "—"}</AppTableCell>
+                        <AppTableCell>{humanizeRole(user.roleId)}</AppTableCell>
+                        <AppTableCell>{user.workspaces.join(", ") || "—"}</AppTableCell>
                         <AppTableCell>
                           <AppBadge variant="outline">{user.status}</AppBadge>
                         </AppTableCell>
-                        <AppTableCell>{user.lastLogin}</AppTableCell>
+                        <AppTableCell>
+                          <RelativeTime value={user.lastLogin} fallback="Never" />
+                        </AppTableCell>
                         <AppTableCell>
                           <AppBadge variant={user.mfaEnabled ? "default" : "secondary"}>
                             {user.mfaEnabled ? "Enabled" : "Disabled"}
@@ -298,7 +324,6 @@ export function AdministrationUsersScreen() {
         open={profileOpen}
         onOpenChange={setProfileOpen}
         user={selectedUser}
-        role={IAM_ROLES.find((role) => role.id === selectedUser?.roleId)}
       />
     </div>
   )

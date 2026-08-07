@@ -6,6 +6,7 @@ import { createSessionManager } from "./identity"
 import type { InfrastructureServices } from "./gateways"
 import {
   createAIIntelligenceRepository,
+  createAdministrationRepository,
   createAuthenticationRepository,
   createAttributionRepository,
   createCampaignRepository,
@@ -66,6 +67,12 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
       getWorkspaceId: getWorkspaceIdFromStorage,
     })
   )
+  const [administrationRepository] = useState(() =>
+    createAdministrationRepository({
+      getSession: () => sessionStorageGateway.restore(),
+      getWorkspaceId: getWorkspaceIdFromStorage,
+    })
+  )
   const [attributionRepository] = useState(() => createAttributionRepository())
   const [aiIntelligenceRepository] = useState(() => createAIIntelligenceRepository())
   const [integrationRepository] = useState(() =>
@@ -82,6 +89,7 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
   const [notificationRepository] = useState(() => createNotificationRepository())
 
   const aiIntelligenceGateway = aiIntelligenceRepository
+  const administrationGateway = administrationRepository
   const authenticationGateway = authenticationRepository
   const attributionGateway = attributionRepository
   const integrationGateway = integrationRepository
@@ -98,6 +106,7 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
   const value = useMemo<InfrastructureServices>(
     () => ({
       aiIntelligenceRepository,
+      administrationRepository,
       authenticationRepository,
       attributionRepository,
       integrationRepository,
@@ -108,6 +117,7 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
       segmentationRepository,
       notificationRepository,
       aiIntelligenceGateway,
+      administrationGateway,
       authenticationGateway,
       attributionGateway,
       integrationGateway,
@@ -124,6 +134,8 @@ export function InfrastructureProvider({ children }: { children: React.ReactNode
     [
       aiIntelligenceGateway,
       aiIntelligenceRepository,
+      administrationGateway,
+      administrationRepository,
       authenticationRepository,
       authenticationGateway,
       attributionGateway,

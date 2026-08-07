@@ -1,22 +1,32 @@
+import { randomUUID } from "node:crypto"
+
 import type { TokenService } from "../../application/ports"
 import type {
   IdentityRepositories,
   AuditLogRepository,
+  CustomRoleListItem,
+  CustomRolePermission,
+  CustomRoleRepository,
   EmailVerificationRepository,
   InvitationRepository,
   MembershipRepository,
   OrganizationRepository,
   PasswordResetRepository,
+  TeamListItem,
+  TeamRepository,
   UserRepository,
   WorkspaceRepository,
 } from "../../domain/repositories"
 import type {
   AuditLogState,
+  CustomRoleState,
   EmailVerificationState,
   InvitationState,
   MembershipState,
   OrganizationState,
   PasswordResetState,
+  TeamMemberState,
+  TeamState,
   UserState,
   WorkspaceState,
 } from "../../domain/entities"
@@ -727,7 +737,7 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       ],
     })
   }
-  async listRecent(page: number, pageSize: number) {
+  async listRecent(organizationId: string, page: number, pageSize: number) {
     const offset = (page - 1) * pageSize
     const toIsoString = (value: unknown): string | null => {
       if (!value) return null
@@ -736,12 +746,20 @@ class PostgresAuditLogRepository implements AuditLogRepository {
     }
     const result = await this.db.query({
       name: "identity-audit-list-recent",
-      text: "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-      values: [pageSize, offset],
+      text: `
+        SELECT a.*, u.full_name AS actor_name
+        FROM audit_logs a
+        LEFT JOIN users u ON u.id = a.actor_user_id
+        WHERE a.organization_id = $1
+        ORDER BY a.created_at DESC
+        LIMIT $2 OFFSET $3
+      `,
+      values: [organizationId, pageSize, offset],
     })
     return result.rows.map((row) => ({
       id: String(row.id),
       actorUserId: (row.actor_user_id as string | null) ?? null,
+      actorName: (row.actor_name as string | null) ?? null,
       organizationId: (row.organization_id as string | null) ?? null,
       workspaceId: (row.workspace_id as string | null) ?? null,
       action: String(row.action),
@@ -757,12 +775,281 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       createdAt: toIsoString(row.created_at) ?? "",
     }))
   }
-  async count() {
+  async count(organizationId: string) {
     const result = await this.db.query<{ count: string }>({
       name: "identity-audit-count",
-      text: "SELECT COUNT(*)::text AS count FROM audit_logs",
+      text: "SELECT COUNT(*)::text AS count FROM audit_logs WHERE organization_id = $1",
+      values: [organizationId],
     })
     return Number(result.rows[0]?.count ?? 0)
+  }
+  async getLastLoginTimestamps(organizationId: string) {
+    const toIsoString = (value: unknown): string | null => {
+      if (!value) return null
+      if (value instanceof Date) return value.toISOString()
+      return String(value)
+    }
+    const result = await this.db.query<{ actor_user_id: string; last_login: unknown }>({
+      name: "identity-audit-last-login",
+      text: `
+        SELECT actor_user_id, MAX(created_at) AS last_login
+        FROM audit_logs
+        WHERE organization_id = $1
+          AND action = 'auth.login'
+          AND actor_user_id IS NOT NULL
+        GROUP BY actor_user_id
+      `,
+      values: [organizationId],
+    })
+
+    const map: Record<string, string> = {}
+    for (const row of result.rows) {
+      const iso = toIsoString(row.last_login)
+      if (iso) {
+        map[row.actor_user_id] = iso
+      }
+    }
+    return map
+  }
+}
+
+function mapTeam(row: Record<string, unknown>): TeamState {
+  const toIsoString = (value: unknown): string | null => {
+    if (!value) return null
+    if (value instanceof Date) return value.toISOString()
+    return String(value)
+  }
+
+  return {
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    workspaceId: (row.workspace_id as string | null) ?? null,
+    name: String(row.name),
+    description: String(row.description ?? ""),
+    color: String(row.color),
+    managerUserId: (row.manager_user_id as string | null) ?? null,
+    createdByUserId: String(row.created_by_user_id),
+    status: row.status as TeamState["status"],
+    createdAt: toIsoString(row.created_at) ?? "",
+    updatedAt: toIsoString(row.updated_at) ?? "",
+    deletedAt: toIsoString(row.deleted_at),
+  }
+}
+
+class PostgresTeamRepository implements TeamRepository {
+  constructor(private readonly db: PostgresDatabase) {}
+
+  async findById(id: string) {
+    const result = await this.db.query({
+      name: "identity-teams-find-by-id",
+      text: "SELECT * FROM teams WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
+      values: [id],
+    })
+    return result.rows[0] ? mapTeam(result.rows[0]) : null
+  }
+
+  async save(team: TeamState) {
+    await this.db.query({
+      name: "identity-teams-upsert",
+      text: `
+        INSERT INTO teams (
+          id, organization_id, workspace_id, name, description, color,
+          manager_user_id, created_by_user_id, status, created_at, updated_at, deleted_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT (id) DO UPDATE SET
+          workspace_id = EXCLUDED.workspace_id,
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          color = EXCLUDED.color,
+          manager_user_id = EXCLUDED.manager_user_id,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at,
+          deleted_at = EXCLUDED.deleted_at
+      `,
+      values: [
+        team.id,
+        team.organizationId,
+        team.workspaceId,
+        team.name,
+        team.description,
+        team.color,
+        team.managerUserId,
+        team.createdByUserId,
+        team.status,
+        team.createdAt,
+        team.updatedAt,
+        team.deletedAt,
+      ],
+    })
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<TeamListItem[]> {
+    const result = await this.db.query({
+      name: "identity-teams-list-by-org",
+      text: `
+        SELECT
+          t.*,
+          manager.full_name AS manager_name,
+          w.name AS workspace_name,
+          COUNT(tm.id)::int AS member_count
+        FROM teams t
+        LEFT JOIN users manager ON manager.id = t.manager_user_id
+        LEFT JOIN workspaces w ON w.id = t.workspace_id
+        LEFT JOIN team_members tm ON tm.team_id = t.id
+        WHERE t.organization_id = $1
+          AND t.deleted_at IS NULL
+        GROUP BY t.id, manager.full_name, w.name
+        ORDER BY t.created_at DESC
+      `,
+      values: [organizationId],
+    })
+
+    return result.rows.map((row) => ({
+      ...mapTeam(row),
+      managerName: (row.manager_name as string | null) ?? null,
+      workspaceName: (row.workspace_name as string | null) ?? null,
+      memberCount: Number(row.member_count ?? 0),
+    }))
+  }
+
+  async addMember(member: TeamMemberState) {
+    await this.db.query({
+      name: "identity-team-members-insert",
+      text: `
+        INSERT INTO team_members (id, team_id, user_id, added_by_user_id, created_at)
+        VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (team_id, user_id) DO NOTHING
+      `,
+      values: [member.id, member.teamId, member.userId, member.addedByUserId, member.createdAt],
+    })
+  }
+}
+
+function mapCustomRole(row: Record<string, unknown>): CustomRoleState {
+  const toIsoString = (value: unknown): string | null => {
+    if (!value) return null
+    if (value instanceof Date) return value.toISOString()
+    return String(value)
+  }
+
+  return {
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    name: String(row.name),
+    description: String(row.description ?? ""),
+    createdByUserId: String(row.created_by_user_id),
+    createdAt: toIsoString(row.created_at) ?? "",
+    updatedAt: toIsoString(row.updated_at) ?? "",
+    deletedAt: toIsoString(row.deleted_at),
+  }
+}
+
+class PostgresCustomRoleRepository implements CustomRoleRepository {
+  constructor(private readonly db: PostgresDatabase) {}
+
+  async findById(id: string) {
+    const result = await this.db.query({
+      name: "identity-custom-roles-find-by-id",
+      text: "SELECT * FROM custom_roles WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
+      values: [id],
+    })
+    return result.rows[0] ? mapCustomRole(result.rows[0]) : null
+  }
+
+  async save(role: CustomRoleState) {
+    await this.db.query({
+      name: "identity-custom-roles-upsert",
+      text: `
+        INSERT INTO custom_roles (
+          id, organization_id, name, description, created_by_user_id, created_at, updated_at, deleted_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          updated_at = EXCLUDED.updated_at,
+          deleted_at = EXCLUDED.deleted_at
+      `,
+      values: [
+        role.id,
+        role.organizationId,
+        role.name,
+        role.description,
+        role.createdByUserId,
+        role.createdAt,
+        role.updatedAt,
+        role.deletedAt,
+      ],
+    })
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<CustomRoleListItem[]> {
+    const rolesResult = await this.db.query({
+      name: "identity-custom-roles-list-by-org",
+      text: `
+        SELECT * FROM custom_roles
+        WHERE organization_id = $1
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+      `,
+      values: [organizationId],
+    })
+
+    const roles = rolesResult.rows.map(mapCustomRole)
+    if (roles.length === 0) {
+      return []
+    }
+
+    const permissionsResult = await this.db.query<{
+      role_id: string
+      module: string
+      action: string
+    }>({
+      name: "identity-custom-role-permissions-list-by-org",
+      text: `
+        SELECT crp.role_id, crp.module, crp.action
+        FROM custom_role_permissions crp
+        JOIN custom_roles cr ON cr.id = crp.role_id
+        WHERE cr.organization_id = $1
+          AND cr.deleted_at IS NULL
+      `,
+      values: [organizationId],
+    })
+
+    const permissionsByRole = new Map<string, CustomRolePermission[]>()
+    for (const row of permissionsResult.rows) {
+      const existing = permissionsByRole.get(row.role_id) ?? []
+      existing.push({ module: row.module, action: row.action })
+      permissionsByRole.set(row.role_id, existing)
+    }
+
+    return roles.map((role) => ({
+      ...role,
+      permissions: permissionsByRole.get(role.id) ?? [],
+    }))
+  }
+
+  async replacePermissions(roleId: string, permissions: CustomRolePermission[]) {
+    await this.db.withTransaction(async () => {
+      await this.db.query({
+        name: "identity-custom-role-permissions-clear",
+        text: "DELETE FROM custom_role_permissions WHERE role_id = $1",
+        values: [roleId],
+      })
+
+      for (const permission of permissions) {
+        await this.db.query({
+          name: "identity-custom-role-permissions-insert",
+          text: `
+            INSERT INTO custom_role_permissions (id, role_id, module, action, created_at)
+            VALUES ($1,$2,$3,$4,now())
+            ON CONFLICT (role_id, module, action) DO NOTHING
+          `,
+          values: [randomUUID(), roleId, permission.module, permission.action],
+        })
+      }
+    })
   }
 }
 
@@ -781,5 +1068,7 @@ export function createPostgresRepositories(input: {
     passwordResets: new PostgresPasswordResetRepository(input.db),
     invitations: new PostgresInvitationRepository(input.db, input.tokenService),
     auditLogs: new PostgresAuditLogRepository(input.db),
+    teams: new PostgresTeamRepository(input.db),
+    customRoles: new PostgresCustomRoleRepository(input.db),
   }
 }

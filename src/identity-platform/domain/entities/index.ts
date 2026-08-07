@@ -115,13 +115,16 @@ export class UserEntity {
     this.state.updatedAt = now
   }
 
-  updateProfile(payload: {
-    fullName?: string
-    avatarUrl?: string | null
-    timezone?: string
-    language?: string
-    preferences?: Record<string, string | number | boolean>
-  }, now: string) {
+  updateProfile(
+    payload: {
+      fullName?: string
+      avatarUrl?: string | null
+      timezone?: string
+      language?: string
+      preferences?: Record<string, string | number | boolean>
+    },
+    now: string
+  ) {
     if (payload.fullName !== undefined) this.state.fullName = payload.fullName
     if (payload.avatarUrl !== undefined) this.state.avatarUrl = payload.avatarUrl
     if (payload.timezone !== undefined) this.state.timezone = payload.timezone
@@ -262,18 +265,21 @@ export class OrganizationEntity {
     this.state.updatedAt = now
   }
 
-  update(payload: {
-    name?: string
-    status?: "active" | "archived" | "deleted"
-    metadata?: Record<string, string>
-    branding?: Record<string, string>
-    logoUrl?: string | null
-    timezone?: string
-    locale?: string
-    currency?: string
-    subscriptionReference?: string | null
-    settings?: Record<string, string | boolean | number>
-  }, now: string) {
+  update(
+    payload: {
+      name?: string
+      status?: "active" | "archived" | "deleted"
+      metadata?: Record<string, string>
+      branding?: Record<string, string>
+      logoUrl?: string | null
+      timezone?: string
+      locale?: string
+      currency?: string
+      subscriptionReference?: string | null
+      settings?: Record<string, string | boolean | number>
+    },
+    now: string
+  ) {
     this.ensureWritable()
     if (payload.name !== undefined) this.rename(payload.name, now)
     if (payload.status === "archived") this.archive(now)
@@ -285,7 +291,8 @@ export class OrganizationEntity {
     if (payload.timezone !== undefined) this.state.timezone = payload.timezone
     if (payload.locale !== undefined) this.state.locale = payload.locale
     if (payload.currency !== undefined) this.state.currency = payload.currency
-    if (payload.subscriptionReference !== undefined) this.state.subscriptionReference = payload.subscriptionReference
+    if (payload.subscriptionReference !== undefined)
+      this.state.subscriptionReference = payload.subscriptionReference
     if (payload.settings !== undefined) this.state.settings = payload.settings
     this.state.updatedAt = now
   }
@@ -349,12 +356,15 @@ export class WorkspaceEntity {
     return this.state.organizationId
   }
 
-  update(payload: {
-    name?: string
-    status?: "active" | "archived"
-    metadata?: Record<string, string>
-    settings?: Record<string, string | boolean | number>
-  }, now: string) {
+  update(
+    payload: {
+      name?: string
+      status?: "active" | "archived"
+      metadata?: Record<string, string>
+      settings?: Record<string, string | boolean | number>
+    },
+    now: string
+  ) {
     if (payload.name !== undefined) this.state.name = payload.name
     if (payload.status !== undefined) this.state.status = payload.status
     if (payload.metadata !== undefined) this.state.metadata = payload.metadata
@@ -428,9 +438,9 @@ export class MembershipEntity {
       suspendedAt: null,
       removedAt: null,
       history: input.history ?? [],
-      roleHistory:
-        input.roleHistory
-        ?? [{ role: input.role, actorUserId: input.invitedByUserId ?? null, occurredAt: input.now }],
+      roleHistory: input.roleHistory ?? [
+        { role: input.role, actorUserId: input.invitedByUserId ?? null, occurredAt: input.now },
+      ],
       createdAt: input.now,
       updatedAt: input.now,
       deletedAt: null,
@@ -842,4 +852,139 @@ export class AuditLogEntity {
   toState(): AuditLogState {
     return { ...this.state }
   }
+}
+
+export interface TeamState {
+  id: string
+  organizationId: string
+  workspaceId: string | null
+  name: string
+  description: string
+  color: string
+  managerUserId: string | null
+  createdByUserId: string
+  status: "active" | "archived"
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export class TeamEntity {
+  private constructor(private readonly state: TeamState) {}
+
+  static create(input: {
+    id: string
+    organizationId: string
+    workspaceId: string | null
+    name: string
+    description: string
+    color: string
+    managerUserId: string | null
+    createdByUserId: string
+    now: string
+  }) {
+    return new TeamEntity({
+      id: input.id,
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      name: input.name,
+      description: input.description,
+      color: input.color,
+      managerUserId: input.managerUserId,
+      createdByUserId: input.createdByUserId,
+      status: "active",
+      createdAt: input.now,
+      updatedAt: input.now,
+      deletedAt: null,
+    })
+  }
+
+  static rehydrate(state: TeamState) {
+    return new TeamEntity({ ...state })
+  }
+
+  get id() {
+    return this.state.id
+  }
+
+  get organizationId() {
+    return this.state.organizationId
+  }
+
+  toState(): TeamState {
+    return { ...this.state }
+  }
+}
+
+export interface TeamMemberState {
+  id: string
+  teamId: string
+  userId: string
+  addedByUserId: string | null
+  createdAt: string
+}
+
+export interface CustomRoleState {
+  id: string
+  organizationId: string
+  name: string
+  description: string
+  createdByUserId: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export class CustomRoleEntity {
+  private constructor(private readonly state: CustomRoleState) {}
+
+  static create(input: {
+    id: string
+    organizationId: string
+    name: string
+    description: string
+    createdByUserId: string
+    now: string
+  }) {
+    return new CustomRoleEntity({
+      id: input.id,
+      organizationId: input.organizationId,
+      name: input.name,
+      description: input.description,
+      createdByUserId: input.createdByUserId,
+      createdAt: input.now,
+      updatedAt: input.now,
+      deletedAt: null,
+    })
+  }
+
+  static rehydrate(state: CustomRoleState) {
+    return new CustomRoleEntity({ ...state })
+  }
+
+  get id() {
+    return this.state.id
+  }
+
+  get organizationId() {
+    return this.state.organizationId
+  }
+
+  update(payload: { name?: string; description?: string }, now: string) {
+    if (payload.name !== undefined) this.state.name = payload.name
+    if (payload.description !== undefined) this.state.description = payload.description
+    this.state.updatedAt = now
+  }
+
+  toState(): CustomRoleState {
+    return { ...this.state }
+  }
+}
+
+export interface CustomRolePermissionState {
+  id: string
+  roleId: string
+  module: string
+  action: string
+  createdAt: string
 }

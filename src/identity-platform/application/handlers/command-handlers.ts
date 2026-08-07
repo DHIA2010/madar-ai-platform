@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import type { Role } from "../../types"
 import type { IdentityPlatformConfig } from "../../configuration"
 import type { RequestContext, AuthenticatedActor, TokenPair } from "../dto/identity-dtos"
@@ -9,7 +11,9 @@ import type {
   CancelInvitationCommand,
   ChangeEmailCommand,
   ChangePasswordCommand,
+  CreateCustomRoleCommand,
   CreateOrganizationCommand,
+  CreateTeamCommand,
   CreateWorkspaceCommand,
   DeclineInvitationCommand,
   DeleteOrganizationCommand,
@@ -29,6 +33,7 @@ import type {
   SuspendMemberCommand,
   SwitchWorkspaceCommand,
   TransferOwnershipCommand,
+  UpdateCustomRoleCommand,
   UpdateMemberProfileCommand,
   UpdateOrganizationCommand,
   UpdateProfileCommand,
@@ -50,12 +55,14 @@ import type {
 import type { IdentityRepositories } from "../../domain/repositories"
 import {
   AuditLogEntity,
+  CustomRoleEntity,
   EmailVerificationEntity,
   InvitationEntity,
   MembershipEntity,
   OrganizationEntity,
   PasswordResetEntity,
   SessionEntity,
+  TeamEntity,
   UserEntity,
   WorkspaceEntity,
 } from "../../domain/entities"
@@ -513,13 +520,24 @@ export class IdentityCommandHandlers {
     context: RequestContext,
     actor: AuthenticatedActor
   ) {
-    if (!hasPermission(actor.roles, "session:revoke")) {
-      throw ERRORS.forbidden()
-    }
     const sessionState = await this.deps.repositories.sessions.findById(command.sessionId)
     if (!sessionState) {
       throw ERRORS.notFound("Session")
     }
+
+    const isOwnSession = sessionState.userId === actor.userId
+    if (!isOwnSession) {
+      // Revoking another user's session is an admin action scoped to the actor's
+      // own organization -- a session from a different org is treated as not
+      // found rather than forbidden, so its existence isn't leaked cross-tenant.
+      if (sessionState.organizationId !== actor.organizationId) {
+        throw ERRORS.notFound("Session")
+      }
+      if (!hasPermission(actor.roles, "session:revoke")) {
+        throw ERRORS.forbidden()
+      }
+    }
+
     const session = SessionEntity.rehydrate(sessionState)
     session.revoke(this.now)
     await this.deps.repositories.sessions.save(session.toState())
@@ -1051,6 +1069,136 @@ export class IdentityCommandHandlers {
     return workspace.toState()
   }
 
+  async createTeam(actor: AuthenticatedActor, command: CreateTeamCommand, context: RequestContext) {
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      command.organizationId
+    )
+    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+    let workspaceState = null
+    if (command.workspaceId) {
+      workspaceState = await this.deps.repositories.workspaces.findById(command.workspaceId)
+      if (!workspaceState || workspaceState.organizationId !== command.organizationId) {
+        throw ERRORS.notFound("Workspace")
+      }
+    }
+
+    const team = TeamEntity.create({
+      id: this.deps.uuid.generate(),
+      organizationId: command.organizationId,
+      workspaceId: command.workspaceId ?? null,
+      name: command.name,
+      description: command.description ?? "",
+      color: command.color ?? "bg-blue-500",
+      managerUserId: actor.userId,
+      createdByUserId: actor.userId,
+      now: this.now,
+    })
+    await this.deps.repositories.teams.save(team.toState())
+    await this.deps.repositories.teams.addMember({
+      id: this.deps.uuid.generate(),
+      teamId: team.id,
+      userId: actor.userId,
+      addedByUserId: actor.userId,
+      createdAt: this.now,
+    })
+    await this.audit(
+      "team.created",
+      context,
+      actor.userId,
+      command.organizationId,
+      command.workspaceId ?? null,
+      "team",
+      team.id
+    )
+
+    const manager = await this.deps.repositories.users.findById(actor.userId)
+    return {
+      ...team.toState(),
+      managerName: manager?.fullName ?? null,
+      workspaceName: workspaceState?.name ?? null,
+      memberCount: 1,
+    }
+  }
+
+  async createCustomRole(
+    actor: AuthenticatedActor,
+    command: CreateCustomRoleCommand,
+    context: RequestContext
+  ) {
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      command.organizationId
+    )
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+
+    const role = CustomRoleEntity.create({
+      id: this.deps.uuid.generate(),
+      organizationId: command.organizationId,
+      name: command.name,
+      description: command.description ?? "",
+      createdByUserId: actor.userId,
+      now: this.now,
+    })
+    await this.deps.repositories.customRoles.save(role.toState())
+    await this.deps.repositories.customRoles.replacePermissions(role.id, command.permissions)
+    await this.audit(
+      "role.created",
+      context,
+      actor.userId,
+      command.organizationId,
+      null,
+      "custom_role",
+      role.id
+    )
+
+    return { ...role.toState(), permissions: command.permissions }
+  }
+
+  async updateCustomRole(
+    actor: AuthenticatedActor,
+    command: UpdateCustomRoleCommand,
+    context: RequestContext
+  ) {
+    const roleState = await this.deps.repositories.customRoles.findById(command.roleId)
+    if (!roleState) {
+      throw ERRORS.notFound("Role")
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      roleState.organizationId
+    )
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+
+    const role = CustomRoleEntity.rehydrate(roleState)
+    role.update({ name: command.name, description: command.description }, this.now)
+    await this.deps.repositories.customRoles.save(role.toState())
+    if (command.permissions) {
+      await this.deps.repositories.customRoles.replacePermissions(role.id, command.permissions)
+    }
+    await this.audit(
+      "role.updated",
+      context,
+      actor.userId,
+      roleState.organizationId,
+      null,
+      "custom_role",
+      role.id
+    )
+
+    const orgRoles = await this.deps.repositories.customRoles.listByOrganizationId(
+      roleState.organizationId
+    )
+    const current = orgRoles.find((item) => item.id === role.id)
+    return { ...role.toState(), permissions: current?.permissions ?? [] }
+  }
+
   async updateWorkspace(
     actor: AuthenticatedActor,
     workspaceId: string,
@@ -1182,7 +1330,11 @@ export class IdentityCommandHandlers {
     }
     const idempotencyKey =
       command.idempotencyKey ??
-      `${command.organizationId}:${command.email.toLowerCase()}:${command.role}`
+      createHash("sha256")
+        .update(
+          `${command.organizationId}:${command.email.toLowerCase()}:${command.role}:${command.workspaceId ?? "org"}`
+        )
+        .digest("hex")
     const existingInvitation = await this.deps.repositories.invitations.findPendingByIdempotencyKey(
       command.organizationId,
       idempotencyKey

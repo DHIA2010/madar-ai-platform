@@ -7,8 +7,8 @@ import {
   AppBadge,
   AppButton,
   AppCard,
+  AppCheckbox,
   AppDialog,
-  AppInput,
   AppPageHeader,
   AppSelect,
   AppSelectContent,
@@ -22,31 +22,59 @@ import {
   AppTableHeader,
   AppTableRow,
   AppTextarea,
+  RelativeTime,
 } from "@/components/app"
 
-import { IAM_INVITATIONS, IAM_ROLES, IAM_WORKSPACES } from "../services"
+import { useWorkspace } from "@/features/workspace"
+
+import { useInvitationMutations } from "../queries/use-invitation-mutations"
+import { useInvitationsQuery } from "../queries/use-invitations-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
+
+import { useApplicationServices } from "@/application"
+
+const ROLE_OPTIONS = [
+  { id: "owner", name: "Owner" },
+  { id: "admin", name: "Admin" },
+  { id: "manager", name: "Manager" },
+  { id: "analyst", name: "Analyst" },
+  { id: "viewer", name: "Viewer" },
+]
+
+function humanizeRole(roleId: string) {
+  return ROLE_OPTIONS.find((role) => role.id === roleId)?.name ?? roleId
+}
 
 type InvitationDraft = {
   emails: string
   roleId: string
-  workspace: string
-  department: string
-  message: string
+  workspaceIds: string[]
 }
 
 const defaultDraft: InvitationDraft = {
   emails: "",
-  roleId: "marketing-specialist",
-  workspace: IAM_WORKSPACES[0],
-  department: "Marketing",
-  message: "",
+  roleId: "viewer",
+  workspaceIds: [],
 }
 
 export function AdministrationInvitationsScreen() {
+  const { administrationApplicationService } = useApplicationServices()
+  const { currentOrganization, availableWorkspaces } = useWorkspace()
+  const { data, isLoading, isError } = useInvitationsQuery(
+    administrationApplicationService,
+    currentOrganization?.id
+  )
+  const { sendInvitation, cancelInvitation, resendInvitation } = useInvitationMutations(
+    currentOrganization?.id
+  )
+  const invitations = data ?? []
+  const inviteableWorkspaces = useMemo(
+    () => availableWorkspaces.filter((workspace) => workspace.status !== "archived"),
+    [availableWorkspaces]
+  )
+
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(defaultDraft)
-  const [invitations, setInvitations] = useState(IAM_INVITATIONS)
 
   const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length
 
@@ -57,25 +85,60 @@ export function AdministrationInvitationsScreen() {
       .filter(Boolean)
   }, [draft.emails])
 
-  function sendInvitations() {
-    if (parsedEmails.length === 0) return
-
-    const next = parsedEmails.map((email, index) => ({
-      id: `new-${Date.now()}-${index}`,
-      email,
-      roleId: draft.roleId,
-      workspace: draft.workspace,
-      department: draft.department,
-      status: "pending" as const,
-      invitedAt: "Today",
-      expiresAt: "In 14 days",
+  function toggleWorkspace(workspaceId: string, checked: boolean) {
+    setDraft((current) => ({
+      ...current,
+      workspaceIds: checked
+        ? [...current.workspaceIds, workspaceId]
+        : current.workspaceIds.filter((id) => id !== workspaceId),
     }))
+  }
 
-    setInvitations((current) => [...next, ...current])
-    setDraft(defaultDraft)
-    setOpen(false)
+  async function handleSendInvitations() {
+    if (parsedEmails.length === 0 || !currentOrganization) return
 
-    toast.success(`Invitation sent to ${parsedEmails.length} recipient(s)`)
+    const workspaceIds = draft.workspaceIds.length > 0 ? draft.workspaceIds : [undefined]
+
+    try {
+      await Promise.all(
+        parsedEmails.flatMap((email) =>
+          workspaceIds.map((workspaceId) =>
+            sendInvitation.mutateAsync({
+              organizationId: currentOrganization.id,
+              email,
+              roleId: draft.roleId,
+              workspaceId,
+            })
+          )
+        )
+      )
+      setDraft(defaultDraft)
+      setOpen(false)
+      const total = parsedEmails.length * workspaceIds.length
+      toast.success(
+        `Invitation sent to ${parsedEmails.length} recipient(s)${total > parsedEmails.length ? ` across ${workspaceIds.length} workspaces` : ""}`
+      )
+    } catch {
+      toast.error("Failed to send one or more invitations")
+    }
+  }
+
+  async function handleResend(invitationId: string, email: string) {
+    try {
+      await resendInvitation.mutateAsync(invitationId)
+      toast.success(`Invitation resent to ${email}`)
+    } catch {
+      toast.error("Failed to resend invitation")
+    }
+  }
+
+  async function handleCancel(invitationId: string) {
+    try {
+      await cancelInvitation.mutateAsync(invitationId)
+      toast.success("Invitation canceled")
+    } catch {
+      toast.error("Failed to cancel invitation")
+    }
   }
 
   return (
@@ -98,77 +161,78 @@ export function AdministrationInvitationsScreen() {
         subtitle="Resend, cancel, and monitor expiration windows."
         className="shadow-sm"
       >
-        <div className="overflow-x-auto rounded-xl border border-border/70">
-          <AppTable>
-            <AppTableHeader>
-              <AppTableRow>
-                <AppTableHead>Email</AppTableHead>
-                <AppTableHead>Role</AppTableHead>
-                <AppTableHead>Workspace</AppTableHead>
-                <AppTableHead>Department</AppTableHead>
-                <AppTableHead>Status</AppTableHead>
-                <AppTableHead>Expires</AppTableHead>
-                <AppTableHead className="text-right">Actions</AppTableHead>
-              </AppTableRow>
-            </AppTableHeader>
-            <AppTableBody>
-              {invitations.map((invitation) => {
-                const role = IAM_ROLES.find((item) => item.id === invitation.roleId)
-                return (
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading invitations…</p>
+        ) : isError ? (
+          <p className="text-sm text-destructive">Failed to load invitations.</p>
+        ) : invitations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No invitations yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-border/70">
+            <AppTable>
+              <AppTableHeader>
+                <AppTableRow>
+                  <AppTableHead>Email</AppTableHead>
+                  <AppTableHead>Role</AppTableHead>
+                  <AppTableHead>Workspace</AppTableHead>
+                  <AppTableHead>Status</AppTableHead>
+                  <AppTableHead>Expires</AppTableHead>
+                  <AppTableHead className="text-right">Actions</AppTableHead>
+                </AppTableRow>
+              </AppTableHeader>
+              <AppTableBody>
+                {invitations.map((invitation) => (
                   <AppTableRow key={invitation.id}>
                     <AppTableCell>{invitation.email}</AppTableCell>
-                    <AppTableCell>{role?.name ?? "N/A"}</AppTableCell>
+                    <AppTableCell>{humanizeRole(invitation.roleId)}</AppTableCell>
                     <AppTableCell>{invitation.workspace}</AppTableCell>
-                    <AppTableCell>{invitation.department}</AppTableCell>
                     <AppTableCell>
                       <AppBadge variant="outline">{invitation.status}</AppBadge>
                     </AppTableCell>
-                    <AppTableCell>{invitation.expiresAt}</AppTableCell>
+                    <AppTableCell>
+                      <RelativeTime value={invitation.expiresAt} fallback="-" />
+                    </AppTableCell>
                     <AppTableCell>
                       <div className="flex justify-end gap-2">
                         <AppButton
                           size="sm"
                           variant="outline"
-                          onClick={() => toast.success(`Invitation resent to ${invitation.email}`)}
+                          disabled={invitation.status !== "pending"}
+                          onClick={() => handleResend(invitation.id, invitation.email)}
                         >
                           Resend
                         </AppButton>
                         <AppButton
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setInvitations((current) =>
-                              current.map((item) => {
-                                if (item.id !== invitation.id) return item
-                                return { ...item, status: "canceled" }
-                              })
-                            )
-                            toast.success("Invitation canceled")
-                          }}
+                          disabled={invitation.status !== "pending"}
+                          onClick={() => handleCancel(invitation.id)}
                         >
                           Cancel
                         </AppButton>
                       </div>
                     </AppTableCell>
                   </AppTableRow>
-                )
-              })}
-            </AppTableBody>
-          </AppTable>
-        </div>
+                ))}
+              </AppTableBody>
+            </AppTable>
+          </div>
+        )}
       </AppCard>
 
       <AppDialog
         open={open}
         onOpenChange={setOpen}
         title="Invite Users"
-        description="Send one or many invitations with workspace, role, and department context."
+        description="Send one or many invitations with workspace and role context."
         footer={
           <>
             <AppButton variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </AppButton>
-            <AppButton onClick={sendInvitations}>Send invitation</AppButton>
+            <AppButton onClick={handleSendInvitations} disabled={sendInvitation.isPending}>
+              Send invitation
+            </AppButton>
           </>
         }
         contentClassName="sm:max-w-2xl"
@@ -194,7 +258,7 @@ export function AdministrationInvitationsScreen() {
               <AppSelectValue placeholder="Role" />
             </AppSelectTrigger>
             <AppSelectContent position="popper" align="start">
-              {IAM_ROLES.map((role) => (
+              {ROLE_OPTIONS.map((role) => (
                 <AppSelectItem key={role.id} value={role.id}>
                   {role.name}
                 </AppSelectItem>
@@ -202,40 +266,33 @@ export function AdministrationInvitationsScreen() {
             </AppSelectContent>
           </AppSelect>
 
-          <AppSelect
-            value={draft.workspace}
-            onValueChange={(next) => setDraft((current) => ({ ...current, workspace: next }))}
-          >
-            <AppSelectTrigger className="h-10">
-              <AppSelectValue placeholder="Workspace" />
-            </AppSelectTrigger>
-            <AppSelectContent position="popper" align="start">
-              {IAM_WORKSPACES.map((workspace) => (
-                <AppSelectItem key={workspace} value={workspace}>
-                  {workspace}
-                </AppSelectItem>
-              ))}
-            </AppSelectContent>
-          </AppSelect>
-
-          <AppInput
-            label="Department"
-            value={draft.department}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, department: event.target.value }))
-            }
-          />
-
-          <AppTextarea
-            label="Optional message"
-            className="min-h-[90px]"
-            placeholder="Welcome to MADAR IAM."
-            wrapperClassName="md:col-span-2"
-            value={draft.message}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, message: event.target.value }))
-            }
-          />
+          <div className="space-y-2 rounded-lg border border-border/70 p-3 md:col-span-2">
+            <p className="text-sm font-medium">Workspaces (optional)</p>
+            <p className="text-xs text-muted-foreground">
+              Leave unselected to grant org-wide access. Selecting multiple sends one invitation per
+              workspace.
+            </p>
+            {inviteableWorkspaces.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No workspaces available.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {inviteableWorkspaces.map((workspace) => (
+                  <label
+                    key={workspace.id}
+                    className="flex items-center gap-2 text-sm"
+                    htmlFor={`invite-workspace-${workspace.id}`}
+                  >
+                    <AppCheckbox
+                      id={`invite-workspace-${workspace.id}`}
+                      checked={draft.workspaceIds.includes(workspace.id)}
+                      onCheckedChange={(checked) => toggleWorkspace(workspace.id, checked === true)}
+                    />
+                    {workspace.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </AppDialog>
     </div>

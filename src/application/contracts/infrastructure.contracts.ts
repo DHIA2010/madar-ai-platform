@@ -1,6 +1,7 @@
 import type { PermissionContext } from "@/lib/permissions"
 
 import type { AIIntelligenceGateway as AIIntelligenceGatewayContract } from "./ai-intelligence.contracts"
+import type { AdministrationGateway as AdministrationGatewayContract } from "./administration.contracts"
 import type { AttributionGateway as AttributionGatewayContract } from "./attribution.contracts"
 import type { AuthGateway, SessionStoragePort } from "./authentication.contracts"
 import type { CampaignGateway as CampaignGatewayContract } from "./campaign.contracts"
@@ -20,6 +21,8 @@ export type CustomerIntelligenceGateway = CustomerIntelligenceGatewayContract
 export type SegmentationGateway = SegmentationGatewayContract
 export type IntegrationGateway = IntegrationGatewayContract
 export type AIIntelligenceGateway = AIIntelligenceGatewayContract
+export type AdministrationGateway = AdministrationGatewayContract
+export type AdministrationRepository = AdministrationGatewayContract
 export type AuthenticationRepository = AuthGateway
 export type AttributionRepository = AttributionGatewayContract
 export type DashboardRepository = DashboardGatewayContract

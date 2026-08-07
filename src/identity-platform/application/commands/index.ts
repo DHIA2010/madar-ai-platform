@@ -103,6 +103,33 @@ export interface CreateWorkspaceCommand {
   settings?: Record<string, string | boolean | number>
 }
 
+export interface CreateTeamCommand {
+  organizationId: string
+  workspaceId?: string
+  name: string
+  description?: string
+  color?: string
+}
+
+export interface RolePermissionInput {
+  module: string
+  action: string
+}
+
+export interface CreateCustomRoleCommand {
+  organizationId: string
+  name: string
+  description?: string
+  permissions: RolePermissionInput[]
+}
+
+export interface UpdateCustomRoleCommand {
+  roleId: string
+  name?: string
+  description?: string
+  permissions?: RolePermissionInput[]
+}
+
 export interface UpdateWorkspaceCommand {
   name?: string
   status?: "active" | "archived"

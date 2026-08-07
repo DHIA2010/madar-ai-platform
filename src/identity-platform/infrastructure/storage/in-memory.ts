@@ -3,23 +3,31 @@ import { randomUUID } from "node:crypto"
 import type {
   IdentityRepositories,
   AuditLogRepository,
+  CustomRoleListItem,
+  CustomRolePermission,
+  CustomRoleRepository,
   EmailVerificationRepository,
   InvitationRepository,
   MembershipRepository,
   OrganizationRepository,
   PasswordResetRepository,
   SessionRepository,
+  TeamListItem,
+  TeamRepository,
   UserRepository,
   WorkspaceRepository,
 } from "../../domain/repositories"
 import type {
   AuditLogState,
+  CustomRoleState,
   EmailVerificationState,
   InvitationState,
   MembershipState,
   OrganizationState,
   PasswordResetState,
   SessionState,
+  TeamMemberState,
+  TeamState,
   UserState,
   WorkspaceState,
 } from "../../domain/entities"
@@ -35,6 +43,10 @@ export interface InMemoryIdentityDataStore {
   passwordResets: Map<string, PasswordResetState>
   invitations: Map<string, InvitationState>
   auditLogs: AuditLogState[]
+  teams: Map<string, TeamState>
+  teamMembers: TeamMemberState[]
+  customRoles: Map<string, CustomRoleState>
+  customRolePermissions: Map<string, CustomRolePermission[]>
 }
 
 export function createInMemoryIdentityDataStore(): InMemoryIdentityDataStore {
@@ -49,6 +61,10 @@ export function createInMemoryIdentityDataStore(): InMemoryIdentityDataStore {
     passwordResets: new Map(),
     invitations: new Map(),
     auditLogs: [],
+    teams: new Map(),
+    teamMembers: [],
+    customRoles: new Map(),
+    customRolePermissions: new Map(),
   }
 }
 
@@ -274,15 +290,104 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
   async append(entry: AuditLogState) {
     this.store.auditLogs.push({ ...entry })
   }
-  async listRecent(page: number, pageSize: number) {
+  async listRecent(organizationId: string, page: number, pageSize: number) {
     const start = (page - 1) * pageSize
     return this.store.auditLogs
+      .filter((entry) => entry.organizationId === organizationId)
       .slice()
       .reverse()
       .slice(start, start + pageSize)
+      .map((entry) => ({
+        ...entry,
+        actorName: entry.actorUserId
+          ? (this.store.users.get(entry.actorUserId)?.fullName ?? null)
+          : null,
+      }))
   }
-  async count() {
-    return this.store.auditLogs.length
+  async count(organizationId: string) {
+    return this.store.auditLogs.filter((entry) => entry.organizationId === organizationId).length
+  }
+  async getLastLoginTimestamps(organizationId: string) {
+    const map: Record<string, string> = {}
+    for (const entry of this.store.auditLogs) {
+      if (
+        entry.organizationId !== organizationId ||
+        entry.action !== "auth.login" ||
+        !entry.actorUserId
+      ) {
+        continue
+      }
+      const current = map[entry.actorUserId]
+      if (!current || entry.createdAt > current) {
+        map[entry.actorUserId] = entry.createdAt
+      }
+    }
+    return map
+  }
+}
+
+class InMemoryTeamRepository implements TeamRepository {
+  constructor(private readonly store: InMemoryIdentityDataStore) {}
+
+  async findById(id: string) {
+    const team = this.store.teams.get(id)
+    return team && !team.deletedAt ? { ...team } : null
+  }
+
+  async save(team: TeamState) {
+    this.store.teams.set(team.id, { ...team })
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<TeamListItem[]> {
+    return Array.from(this.store.teams.values())
+      .filter((team) => team.organizationId === organizationId && !team.deletedAt)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .map((team) => ({
+        ...team,
+        managerName: team.managerUserId
+          ? (this.store.users.get(team.managerUserId)?.fullName ?? null)
+          : null,
+        workspaceName: team.workspaceId
+          ? (this.store.workspaces.get(team.workspaceId)?.name ?? null)
+          : null,
+        memberCount: this.store.teamMembers.filter((member) => member.teamId === team.id).length,
+      }))
+  }
+
+  async addMember(member: TeamMemberState) {
+    const exists = this.store.teamMembers.some(
+      (entry) => entry.teamId === member.teamId && entry.userId === member.userId
+    )
+    if (!exists) {
+      this.store.teamMembers.push({ ...member })
+    }
+  }
+}
+
+class InMemoryCustomRoleRepository implements CustomRoleRepository {
+  constructor(private readonly store: InMemoryIdentityDataStore) {}
+
+  async findById(id: string) {
+    const role = this.store.customRoles.get(id)
+    return role && !role.deletedAt ? { ...role } : null
+  }
+
+  async save(role: CustomRoleState) {
+    this.store.customRoles.set(role.id, { ...role })
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<CustomRoleListItem[]> {
+    return Array.from(this.store.customRoles.values())
+      .filter((role) => role.organizationId === organizationId && !role.deletedAt)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .map((role) => ({
+        ...role,
+        permissions: this.store.customRolePermissions.get(role.id) ?? [],
+      }))
+  }
+
+  async replacePermissions(roleId: string, permissions: CustomRolePermission[]) {
+    this.store.customRolePermissions.set(roleId, [...permissions])
   }
 }
 
@@ -299,6 +404,8 @@ export function createInMemoryRepositories(
     passwordResets: new InMemoryPasswordResetRepository(store),
     invitations: new InMemoryInvitationRepository(store),
     auditLogs: new InMemoryAuditLogRepository(store),
+    teams: new InMemoryTeamRepository(store),
+    customRoles: new InMemoryCustomRoleRepository(store),
   }
 }
 

@@ -6,6 +6,7 @@ import { InfrastructureProvider, useInfrastructureServices } from "@/infrastruct
 
 import {
   AIIntelligenceApplicationService,
+  AdministrationApplicationService,
   AuthenticationApplicationService,
   AttributionApplicationService,
   CampaignApplicationService,
@@ -20,6 +21,7 @@ import {
 
 export interface ApplicationServicesContextValue {
   aiIntelligenceApplicationService: AIIntelligenceApplicationService
+  administrationApplicationService: AdministrationApplicationService
   authenticationApplicationService: AuthenticationApplicationService
   attributionApplicationService: AttributionApplicationService
   integrationApplicationService: IntegrationApplicationService
@@ -37,6 +39,7 @@ const ApplicationServicesContext = createContext<ApplicationServicesContextValue
 function ApplicationServicesProvider({ children }: { children: React.ReactNode }) {
   const {
     aiIntelligenceRepository,
+    administrationRepository,
     authenticationRepository,
     attributionRepository,
     integrationRepository,
@@ -53,6 +56,9 @@ function ApplicationServicesProvider({ children }: { children: React.ReactNode }
     () => ({
       aiIntelligenceApplicationService: new AIIntelligenceApplicationService(
         aiIntelligenceRepository
+      ),
+      administrationApplicationService: new AdministrationApplicationService(
+        administrationRepository
       ),
       authenticationApplicationService: new AuthenticationApplicationService(
         authenticationRepository,
@@ -72,6 +78,7 @@ function ApplicationServicesProvider({ children }: { children: React.ReactNode }
     }),
     [
       aiIntelligenceRepository,
+      administrationRepository,
       authenticationRepository,
       attributionRepository,
       integrationRepository,

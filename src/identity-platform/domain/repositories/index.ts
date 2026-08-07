@@ -1,11 +1,14 @@
 import type {
   AuditLogState,
+  CustomRoleState,
   EmailVerificationState,
   InvitationState,
   MembershipState,
   OrganizationState,
   PasswordResetState,
   SessionState,
+  TeamMemberState,
+  TeamState,
   UserState,
   WorkspaceState,
 } from "../entities"
@@ -76,10 +79,44 @@ export interface InvitationRepository {
   save(entry: InvitationState): Promise<void>
 }
 
+export interface AuditLogListItem extends AuditLogState {
+  actorName: string | null
+}
+
 export interface AuditLogRepository {
   append(entry: AuditLogState): Promise<void>
-  listRecent(page: number, pageSize: number): Promise<AuditLogState[]>
-  count(): Promise<number>
+  listRecent(organizationId: string, page: number, pageSize: number): Promise<AuditLogListItem[]>
+  count(organizationId: string): Promise<number>
+  getLastLoginTimestamps(organizationId: string): Promise<Record<string, string>>
+}
+
+export interface TeamListItem extends TeamState {
+  managerName: string | null
+  workspaceName: string | null
+  memberCount: number
+}
+
+export interface TeamRepository {
+  findById(id: string): Promise<TeamState | null>
+  save(team: TeamState): Promise<void>
+  listByOrganizationId(organizationId: string): Promise<TeamListItem[]>
+  addMember(member: TeamMemberState): Promise<void>
+}
+
+export interface CustomRolePermission {
+  module: string
+  action: string
+}
+
+export interface CustomRoleListItem extends CustomRoleState {
+  permissions: CustomRolePermission[]
+}
+
+export interface CustomRoleRepository {
+  findById(id: string): Promise<CustomRoleState | null>
+  save(role: CustomRoleState): Promise<void>
+  listByOrganizationId(organizationId: string): Promise<CustomRoleListItem[]>
+  replacePermissions(roleId: string, permissions: CustomRolePermission[]): Promise<void>
 }
 
 export interface IdentityRepositories {
@@ -92,4 +129,6 @@ export interface IdentityRepositories {
   passwordResets: PasswordResetRepository
   invitations: InvitationRepository
   auditLogs: AuditLogRepository
+  teams: TeamRepository
+  customRoles: CustomRoleRepository
 }

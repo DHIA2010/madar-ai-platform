@@ -21,7 +21,9 @@ import { IdentityError } from "../../application/errors/IdentityError"
 import { createRequestContext, mapIdentityError } from "../middleware"
 import {
   assignRoleSchema,
+  createCustomRoleSchema,
   createOrganizationSchema,
+  createTeamSchema,
   createWorkspaceSchema,
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
@@ -40,6 +42,7 @@ import {
   revokeSessionSchema,
   suspendMemberSchema,
   switchWorkspaceSchema,
+  updateCustomRoleSchema,
   updateMemberProfileSchema,
   updateOrganizationSchema,
   updateProfileSchema,
@@ -941,6 +944,67 @@ export function createIdentityApiServer(
         return send(
           200,
           await container.queries.listOrganizationMembers(actor, organizationMembersMatch[1])
+        )
+      }
+
+      const organizationTeamsMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/teams$/)
+      if (method === "GET" && organizationTeamsMatch) {
+        return send(200, await container.queries.listTeams(actor, organizationTeamsMatch[1]))
+      }
+      if (method === "POST" && organizationTeamsMatch) {
+        const payload = createTeamSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await container.commands.createTeam(
+            actor,
+            {
+              organizationId: organizationTeamsMatch[1],
+              workspaceId: payload.workspaceId,
+              name: payload.name,
+              description: payload.description,
+              color: payload.color,
+            },
+            context
+          )
+        )
+      }
+
+      const organizationRolesMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/roles$/)
+      if (method === "GET" && organizationRolesMatch) {
+        return send(200, await container.queries.listRoles(actor, organizationRolesMatch[1]))
+      }
+      if (method === "POST" && organizationRolesMatch) {
+        const payload = createCustomRoleSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await container.commands.createCustomRole(
+            actor,
+            {
+              organizationId: organizationRolesMatch[1],
+              name: payload.name,
+              description: payload.description,
+              permissions: payload.permissions,
+            },
+            context
+          )
+        )
+      }
+
+      const customRoleMatch = url.pathname.match(/^\/v1\/organizations\/roles\/([^/]+)$/)
+      if (method === "PATCH" && customRoleMatch) {
+        const payload = updateCustomRoleSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await container.commands.updateCustomRole(
+            actor,
+            {
+              roleId: customRoleMatch[1],
+              name: payload.name,
+              description: payload.description,
+              permissions: payload.permissions,
+            },
+            context
+          )
         )
       }
 

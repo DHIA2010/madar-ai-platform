@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 
 import {
   AppBadge,
@@ -16,36 +17,53 @@ import {
   AppTextarea,
 } from "@/components/app"
 
-import { IAM_PERMISSION_GROUPS, IAM_ROLES } from "../services"
-import type { IamRole } from "../types"
+import { useWorkspace } from "@/features/workspace"
+
+import { useRoleMutations } from "../queries/use-role-mutations"
+import { useRolesQuery } from "../queries/use-roles-query"
+import { IAM_PERMISSION_GROUPS } from "../services"
 import { AdministrationModuleNav } from "./administration-module-nav"
 import { PermissionMatrix } from "./permission-matrix"
+
+import { useApplicationServices } from "@/application"
+import type { AdministrationRoleDto, RolePermissionDto } from "@/application/contracts"
 
 type CustomRoleDraft = {
   name: string
   description: string
   cloneFrom: string
-  permissions: IamRole["permissions"]
+  permissions: Record<string, string[]>
 }
 
-function clonePermissions(permissions: IamRole["permissions"]): IamRole["permissions"] {
+function clonePermissions(permissions: Record<string, string[]>): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(permissions).map(([module, actions]) => [module, [...actions]])
-  ) as IamRole["permissions"]
+  )
 }
 
-const defaultDraft: CustomRoleDraft = {
-  name: "",
-  description: "",
-  cloneFrom: IAM_ROLES[0]?.id ?? "",
-  permissions: clonePermissions(IAM_ROLES[0]?.permissions ?? IAM_ROLES[0].permissions),
+function permissionsToList(permissions: Record<string, string[]>): RolePermissionDto[] {
+  return Object.entries(permissions).flatMap(([module, actions]) =>
+    actions.map((action) => ({ module, action }))
+  )
+}
+
+function emptyDraft(): CustomRoleDraft {
+  return { name: "", description: "", cloneFrom: "", permissions: {} }
 }
 
 export function AdministrationRolesScreen() {
-  const [roles, setRoles] = useState(IAM_ROLES)
+  const { administrationApplicationService } = useApplicationServices()
+  const { currentOrganization } = useWorkspace()
+  const { data, isLoading, isError } = useRolesQuery(
+    administrationApplicationService,
+    currentOrganization?.id
+  )
+  const { createRole, updateRole } = useRoleMutations(currentOrganization?.id)
+  const roles = useMemo(() => data ?? [], [data])
+
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState(defaultDraft)
-  const [selectedRole, setSelectedRole] = useState<IamRole | null>(null)
+  const [draft, setDraft] = useState<CustomRoleDraft>(emptyDraft())
+  const [selectedRole, setSelectedRole] = useState<AdministrationRoleDto | null>(null)
   const [editingRole, setEditingRole] = useState(false)
   const [cloningRole, setCloningRole] = useState(false)
 
@@ -70,24 +88,27 @@ export function AdministrationRolesScreen() {
   }
 
   function resetDialogState() {
-    const fallback = roles[0]
     setSelectedRole(null)
     setEditingRole(false)
     setCloningRole(false)
-    setDraft({
-      name: "",
-      description: "",
-      cloneFrom: fallback?.id ?? "",
-      permissions: clonePermissions(fallback?.permissions ?? IAM_ROLES[0].permissions),
-    })
+    setDraft(emptyDraft())
   }
 
   function openCreateDialog() {
     resetDialogState()
+    const fallback = roles[0]
+    if (fallback) {
+      setDraft({
+        name: "",
+        description: "",
+        cloneFrom: fallback.id,
+        permissions: clonePermissions(fallback.permissions),
+      })
+    }
     setOpen(true)
   }
 
-  function openEditDialog(role: IamRole) {
+  function openEditDialog(role: AdministrationRoleDto) {
     setSelectedRole(role)
     setEditingRole(true)
     setCloningRole(false)
@@ -100,7 +121,7 @@ export function AdministrationRolesScreen() {
     setOpen(true)
   }
 
-  function openCloneDialog(role: IamRole) {
+  function openCloneDialog(role: AdministrationRoleDto) {
     setSelectedRole(role)
     setEditingRole(false)
     setCloningRole(true)
@@ -118,36 +139,31 @@ export function AdministrationRolesScreen() {
     resetDialogState()
   }
 
-  function saveRole() {
-    if (!draft.name.trim()) return
+  async function saveRole() {
+    if (!draft.name.trim() || !currentOrganization) return
 
-    if (editingRole && selectedRole) {
-      setRoles((current) =>
-        current.map((role) => {
-          if (role.id !== selectedRole.id) return role
-          return {
-            ...role,
-            name: draft.name.trim(),
-            description: draft.description.trim() || role.description,
-            permissions: clonePermissions(draft.permissions),
-          }
+    try {
+      if (editingRole && selectedRole) {
+        await updateRole.mutateAsync({
+          roleId: selectedRole.id,
+          name: draft.name.trim(),
+          description: draft.description.trim() || undefined,
+          permissions: permissionsToList(draft.permissions),
         })
-      )
+        toast.success(`Role "${draft.name.trim()}" updated`)
+      } else {
+        await createRole.mutateAsync({
+          organizationId: currentOrganization.id,
+          name: draft.name.trim(),
+          description: draft.description.trim() || undefined,
+          permissions: permissionsToList(draft.permissions),
+        })
+        toast.success(`Role "${draft.name.trim()}" created`)
+      }
       closeDialog()
-      return
+    } catch {
+      toast.error("Failed to save role")
     }
-
-    const nextRole: IamRole = {
-      id: `custom-${Date.now()}`,
-      name: draft.name.trim(),
-      description: draft.description.trim() || "Custom role",
-      userCount: 0,
-      isDefault: false,
-      permissions: clonePermissions(draft.permissions),
-    }
-
-    setRoles((current) => [...current, nextRole])
-    closeDialog()
   }
 
   const dialogTitle = editingRole
@@ -159,6 +175,7 @@ export function AdministrationRolesScreen() {
     ? "Update role details while preserving the assigned users and baseline access profile."
     : "Define a reusable role with cloned baseline permissions."
   const saveLabel = editingRole ? "Save changes" : "Create role"
+  const isSaving = createRole.isPending || updateRole.isPending
 
   return (
     <div className="space-y-4">
@@ -170,39 +187,47 @@ export function AdministrationRolesScreen() {
         actions={<AppButton onClick={openCreateDialog}>Create Custom Role</AppButton>}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {roles.map((role) => (
-          <AppCard
-            key={role.id}
-            title={role.name}
-            subtitle={role.description}
-            className="shadow-sm"
-            contentClassName="space-y-3"
-            actions={
-              role.isDefault ? (
-                <AppBadge variant="outline">Default role</AppBadge>
-              ) : (
-                <AppBadge variant="secondary">Custom</AppBadge>
-              )
-            }
-          >
-            <p className="text-sm text-muted-foreground">Users assigned: {role.userCount}</p>
-            <p className="text-sm text-muted-foreground">
-              Permission summary:{" "}
-              {Object.values(role.permissions).reduce((total, list) => total + list.length, 0)}{" "}
-              grants
-            </p>
-            <div className="flex gap-2">
-              <AppButton size="sm" variant="outline" onClick={() => openEditDialog(role)}>
-                Edit
-              </AppButton>
-              <AppButton size="sm" variant="outline" onClick={() => openCloneDialog(role)}>
-                Clone
-              </AppButton>
-            </div>
-          </AppCard>
-        ))}
-      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading roles…</p>
+      ) : isError ? (
+        <p className="text-sm text-destructive">Failed to load roles.</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {roles.map((role) => (
+            <AppCard
+              key={role.id}
+              title={role.name}
+              subtitle={role.description}
+              className="shadow-sm"
+              contentClassName="space-y-3"
+              actions={
+                role.isDefault ? (
+                  <AppBadge variant="outline">Default role</AppBadge>
+                ) : (
+                  <AppBadge variant="secondary">Custom</AppBadge>
+                )
+              }
+            >
+              <p className="text-sm text-muted-foreground">Users assigned: {role.userCount}</p>
+              <p className="text-sm text-muted-foreground">
+                Permission summary:{" "}
+                {Object.values(role.permissions).reduce((total, list) => total + list.length, 0)}{" "}
+                grants
+              </p>
+              <div className="flex gap-2">
+                {role.editable ? (
+                  <AppButton size="sm" variant="outline" onClick={() => openEditDialog(role)}>
+                    Edit
+                  </AppButton>
+                ) : null}
+                <AppButton size="sm" variant="outline" onClick={() => openCloneDialog(role)}>
+                  Clone
+                </AppButton>
+              </div>
+            </AppCard>
+          ))}
+        </div>
+      )}
 
       <PermissionMatrix
         groups={IAM_PERMISSION_GROUPS}
@@ -222,7 +247,9 @@ export function AdministrationRolesScreen() {
             <AppButton variant="outline" onClick={closeDialog}>
               Cancel
             </AppButton>
-            <AppButton onClick={saveRole}>{saveLabel}</AppButton>
+            <AppButton onClick={saveRole} disabled={isSaving || draft.name.trim().length === 0}>
+              {saveLabel}
+            </AppButton>
           </>
         }
       >

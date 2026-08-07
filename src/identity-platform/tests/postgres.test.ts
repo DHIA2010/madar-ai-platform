@@ -58,10 +58,29 @@ describe("postgres foundation", () => {
     const user = await repositories.users.findByEmail("owner@test.local")
     expect(user?.email).toBe("owner@test.local")
 
+    const organizationId = "00000000-0000-0000-0000-000000000004"
+    await repositories.organizations.save({
+      id: organizationId,
+      name: "Test Org",
+      ownerUserId: userId,
+      status: "active",
+      metadata: {},
+      branding: {},
+      logoUrl: null,
+      timezone: "UTC",
+      locale: "en",
+      currency: "USD",
+      subscriptionReference: null,
+      settings: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null,
+    })
+
     await repositories.auditLogs.append({
       id: "00000000-0000-0000-0000-000000000002",
       actorUserId: userId,
-      organizationId: null,
+      organizationId,
       workspaceId: null,
       action: "auth.login",
       targetType: "session",
@@ -72,6 +91,6 @@ describe("postgres foundation", () => {
       createdAt: new Date().toISOString(),
     })
 
-    expect(await repositories.auditLogs.count()).toBe(1)
+    expect(await repositories.auditLogs.count(organizationId)).toBe(1)
   })
 })

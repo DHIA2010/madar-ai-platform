@@ -14,18 +14,27 @@ import {
   RelativeTime,
 } from "@/components/app"
 
-import { IAM_ACTIVITY_LOGS, IAM_USERS } from "../services"
+import { useAuditLogsQuery } from "../queries/use-audit-logs-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
 
+import { useApplicationServices } from "@/application"
+
 export function AdministrationActivityLogScreen() {
+  const { administrationApplicationService } = useApplicationServices()
+  const { data, isLoading, isError } = useAuditLogsQuery(administrationApplicationService, 1, 200)
+  const allEvents = useMemo(() => data?.items ?? [], [data])
+
   const [query, setQuery] = useState("")
   const [userFilter, setUserFilter] = useState("all")
   const [actionFilter, setActionFilter] = useState("all")
-  const [dateRange, setDateRange] = useState("last7")
+
+  const availableActors = useMemo(() => {
+    return Array.from(new Set(allEvents.map((event) => event.actor))).sort()
+  }, [allEvents])
 
   const events = useMemo(() => {
     const term = query.trim().toLowerCase()
-    return IAM_ACTIVITY_LOGS.filter((event) => {
+    return allEvents.filter((event) => {
       const matchesQuery =
         term === "" ||
         event.actor.toLowerCase().includes(term) ||
@@ -33,9 +42,9 @@ export function AdministrationActivityLogScreen() {
         event.target.toLowerCase().includes(term)
       const matchesUser = userFilter === "all" || event.actor === userFilter
       const matchesAction = actionFilter === "all" || event.action.includes(actionFilter)
-      return matchesQuery && matchesUser && matchesAction && Boolean(dateRange)
+      return matchesQuery && matchesUser && matchesAction
     })
-  }, [actionFilter, dateRange, query, userFilter])
+  }, [actionFilter, allEvents, query, userFilter])
 
   return (
     <div className="space-y-4">
@@ -46,7 +55,7 @@ export function AdministrationActivityLogScreen() {
       />
 
       <AppCard title="Filters" className="shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <AppInput
             placeholder="Search activity"
             value={query}
@@ -59,9 +68,9 @@ export function AdministrationActivityLogScreen() {
             </AppSelectTrigger>
             <AppSelectContent>
               <AppSelectItem value="all">All users</AppSelectItem>
-              {IAM_USERS.map((user) => (
-                <AppSelectItem key={user.id} value={user.fullName}>
-                  {user.fullName}
+              {availableActors.map((actor) => (
+                <AppSelectItem key={actor} value={actor}>
+                  {actor}
                 </AppSelectItem>
               ))}
             </AppSelectContent>
@@ -74,20 +83,10 @@ export function AdministrationActivityLogScreen() {
             <AppSelectContent>
               <AppSelectItem value="all">All actions</AppSelectItem>
               <AppSelectItem value="created">Created</AppSelectItem>
-              <AppSelectItem value="uploaded">Uploaded</AppSelectItem>
               <AppSelectItem value="connected">Connected</AppSelectItem>
-              <AppSelectItem value="changed">Changed</AppSelectItem>
-            </AppSelectContent>
-          </AppSelect>
-
-          <AppSelect value={dateRange} onValueChange={setDateRange}>
-            <AppSelectTrigger className="h-10">
-              <span>Date range</span>
-            </AppSelectTrigger>
-            <AppSelectContent>
-              <AppSelectItem value="today">Today</AppSelectItem>
-              <AppSelectItem value="last7">Last 7 days</AppSelectItem>
-              <AppSelectItem value="last30">Last 30 days</AppSelectItem>
+              <AppSelectItem value="resumed">Resumed</AppSelectItem>
+              <AppSelectItem value="paused">Paused</AppSelectItem>
+              <AppSelectItem value="disconnected">Disconnected</AppSelectItem>
             </AppSelectContent>
           </AppSelect>
         </div>
@@ -98,21 +97,32 @@ export function AdministrationActivityLogScreen() {
         subtitle="Operational events for user and team visibility."
         className="shadow-sm"
       >
-        <div className="space-y-3">
-          {events.map((event) => (
-            <article key={event.id} className="rounded-xl border border-border/70 bg-muted/20 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm">
-                  <span className="font-semibold">{event.actor}</span> {event.action}{" "}
-                  <span className="font-medium">{event.target}</span>
-                </p>
-                <AppBadge variant="outline">
-                  <RelativeTime value={event.createdAt} fallback="-" />
-                </AppBadge>
-              </div>
-            </article>
-          ))}
-        </div>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading activity…</p>
+        ) : isError ? (
+          <p className="text-sm text-destructive">Failed to load activity.</p>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No activity found.</p>
+        ) : (
+          <div className="space-y-3">
+            {events.map((event) => (
+              <article
+                key={event.id}
+                className="rounded-xl border border-border/70 bg-muted/20 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm">
+                    <span className="font-semibold">{event.actor}</span> {event.action}{" "}
+                    <span className="font-medium">{event.target}</span>
+                  </p>
+                  <AppBadge variant="outline">
+                    <RelativeTime value={event.createdAt} fallback="-" />
+                  </AppBadge>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </AppCard>
     </div>
   )

@@ -39,6 +39,30 @@ export const createWorkspaceSchema = z.object({
   metadata: z.record(z.string(), z.string()).optional(),
 })
 
+export const createTeamSchema = z.object({
+  workspaceId: z.string().uuid().optional(),
+  name: z.string().min(2).max(200),
+  description: z.string().max(2000).optional(),
+  color: z.string().max(50).optional(),
+})
+
+const rolePermissionSchema = z.object({
+  module: z.string().min(1).max(50),
+  action: z.string().min(1).max(50),
+})
+
+export const createCustomRoleSchema = z.object({
+  name: z.string().min(2).max(200),
+  description: z.string().max(2000).optional(),
+  permissions: z.array(rolePermissionSchema),
+})
+
+export const updateCustomRoleSchema = z.object({
+  name: z.string().min(2).max(200).optional(),
+  description: z.string().max(2000).optional(),
+  permissions: z.array(rolePermissionSchema).optional(),
+})
+
 export const updateWorkspaceSchema = z.object({
   name: z.string().min(2).max(200).optional(),
   status: z.enum(["active", "archived"]).optional(),
