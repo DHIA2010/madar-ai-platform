@@ -91,7 +91,7 @@ export class UserEntity {
     if (this.state.status === "pending_verification") {
       return { allowed: false, reason: "pending_verification" }
     }
-    if (this.state.status !== "active") {
+    if (this.state.status !== "active" && this.state.status !== "locked") {
       return { allowed: false, reason: "forbidden" }
     }
     return { allowed: true as const }
@@ -142,6 +142,11 @@ export class UserEntity {
 
   changePassword(passwordHash: string, now: string) {
     this.state.passwordHash = passwordHash
+    this.state.failedLoginAttempts = 0
+    this.state.lockoutUntil = null
+    if (this.state.status === "locked") {
+      this.state.status = this.state.emailVerifiedAt ? "active" : "pending_verification"
+    }
     this.state.updatedAt = now
   }
 
