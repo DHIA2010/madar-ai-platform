@@ -19,6 +19,11 @@ export interface IdentityPlatformConfig {
   smtpPort?: number
   smtpUser?: string
   smtpPassword?: string
+  resendApiKey?: string
+  resendFromEmail?: string
+  resendFromName?: string
+  resendReplyTo?: string
+  appUrl: string
   featureFlags: Record<string, boolean>
 }
 
@@ -41,6 +46,11 @@ const configSchema = z.object({
   smtpPort: z.number().int().positive().optional(),
   smtpUser: z.string().optional(),
   smtpPassword: z.string().optional(),
+  resendApiKey: z.string().optional(),
+  resendFromEmail: z.string().optional(),
+  resendFromName: z.string().optional(),
+  resendReplyTo: z.string().optional(),
+  appUrl: z.string().min(1),
   featureFlags: z.record(z.string(), z.boolean()),
 })
 
@@ -103,6 +113,15 @@ export function loadIdentityPlatformConfig(
         : undefined),
     smtpUser: overrides.smtpUser ?? process.env.IDENTITY_PLATFORM_SMTP_USER,
     smtpPassword: overrides.smtpPassword ?? process.env.IDENTITY_PLATFORM_SMTP_PASSWORD,
+    resendApiKey: overrides.resendApiKey ?? process.env.IDENTITY_PLATFORM_RESEND_API_KEY,
+    resendFromEmail: overrides.resendFromEmail ?? process.env.IDENTITY_PLATFORM_RESEND_FROM_EMAIL,
+    resendFromName: overrides.resendFromName ?? process.env.IDENTITY_PLATFORM_RESEND_FROM_NAME,
+    resendReplyTo: overrides.resendReplyTo ?? process.env.IDENTITY_PLATFORM_RESEND_REPLY_TO,
+    appUrl:
+      overrides.appUrl ??
+      process.env.NEXT_PUBLIC_APP_URL ??
+      process.env.APP_URL ??
+      "http://localhost:3000",
     featureFlags: featureFlagsRaw,
   })
 }

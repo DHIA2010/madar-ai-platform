@@ -4,11 +4,15 @@ import { loadIdentityPlatformConfig, type IdentityPlatformConfig } from "../conf
 import { IdentityCommandHandlers } from "../application/handlers/command-handlers"
 import { IdentityQueryHandlers } from "../application/handlers/query-handlers"
 import type { Clock, UuidGenerator } from "../application/ports"
-import { createInMemoryRepositories, type InMemoryIdentityDataStore } from "../infrastructure/storage/in-memory"
+import {
+  createInMemoryRepositories,
+  type InMemoryIdentityDataStore,
+} from "../infrastructure/storage/in-memory"
 import { ScryptPasswordHasher, HmacTokenService } from "../infrastructure/jwt/token-service"
 import { ConsoleLogger } from "../infrastructure/logger/console-logger"
 import { InMemoryEmailGateway } from "../infrastructure/email/in-memory-email-gateway"
 import { SmtpEmailGateway } from "../infrastructure/email/smtp-email-gateway"
+import { ResendEmailGateway } from "../infrastructure/email/resend-email-gateway"
 import { InMemoryEventPublisher } from "../infrastructure/queue/in-memory-event-publisher"
 import { InMemoryRateLimiter } from "../infrastructure/redis/in-memory-rate-limiter"
 import { NodeRedisClient } from "../infrastructure/redis/node-redis-client"
@@ -67,11 +71,13 @@ export interface IdentityPlatformContainer {
   }
 }
 
-export function createIdentityPlatformContainer(options: {
-  config?: Partial<IdentityPlatformConfig>
-  store?: InMemoryIdentityDataStore
-  mode?: "memory" | "production"
-} = {}): IdentityPlatformContainer {
+export function createIdentityPlatformContainer(
+  options: {
+    config?: Partial<IdentityPlatformConfig>
+    store?: InMemoryIdentityDataStore
+    mode?: "memory" | "production"
+  } = {}
+): IdentityPlatformContainer {
   const config = loadIdentityPlatformConfig(options.config)
   const clock = new SystemClock()
   const uuid = new CryptoUuidGenerator()
@@ -143,19 +149,25 @@ export function createIdentityPlatformContainer(options: {
   integrations.register(
     new GoogleAdsIntegrationProvider(
       new GoogleAdsSyncService(database, {
-        apiBaseUrl: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ?? "https://googleads.googleapis.com/v22",
-        tokenEndpoint: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ?? "https://oauth2.googleapis.com/token",
+        apiBaseUrl:
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
+          "https://googleads.googleapis.com/v22",
+        tokenEndpoint:
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
+          "https://oauth2.googleapis.com/token",
         encryptionKey:
-          process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY
-          ?? process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET
-          ?? "",
+          process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
+          process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+          "",
         developerToken:
-          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN
-          ?? process.env.GOOGLE_ADS_DEVELOPER_TOKEN
-          ?? "",
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_DEVELOPER_TOKEN ??
+          process.env.GOOGLE_ADS_DEVELOPER_TOKEN ??
+          "",
         loginCustomerId: process.env.IDENTITY_PLATFORM_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
         maxRetries: Number(process.env.IDENTITY_PLATFORM_GOOGLE_ADS_MAX_RETRIES ?? "2"),
-        minRequestIntervalMs: Number(process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"),
+        minRequestIntervalMs: Number(
+          process.env.IDENTITY_PLATFORM_GOOGLE_ADS_RATE_LIMIT_MS ?? "75"
+        ),
       })
     )
   )
@@ -167,7 +179,9 @@ export function createIdentityPlatformContainer(options: {
     hasher: new ScryptPasswordHasher(),
     tokenService,
     rateLimiter: new RedisRateLimiter(redis, config),
-    emailGateway: new SmtpEmailGateway(config),
+    emailGateway: config.resendApiKey
+      ? new ResendEmailGateway(config)
+      : new SmtpEmailGateway(config),
     logger: new ConsoleLogger(),
     eventPublisher: new PostgresOutboxEventPublisher(database),
     featureFlags,

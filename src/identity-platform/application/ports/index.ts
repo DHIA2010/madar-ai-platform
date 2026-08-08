@@ -51,6 +51,8 @@ export interface EmailGateway {
     token: string
     organizationId: string
     workspaceId?: string
+    organizationName?: string
+    workspaceName?: string
   }): Promise<void>
 }
 

@@ -1554,11 +1554,13 @@ export class IdentityCommandHandlers {
     if (!organizationState || organizationState.status !== "active") {
       throw ERRORS.notFound("Organization")
     }
+    let workspaceName: string | undefined
     if (command.workspaceId) {
       const workspaceState = await this.deps.repositories.workspaces.findById(command.workspaceId)
       if (!workspaceState || workspaceState.organizationId !== command.organizationId) {
         throw ERRORS.notFound("Workspace")
       }
+      workspaceName = workspaceState.name
     }
 
     const now = this.now
@@ -1586,6 +1588,8 @@ export class IdentityCommandHandlers {
       token: invitation.token,
       organizationId: command.organizationId,
       workspaceId: command.workspaceId,
+      organizationName: organizationState.name,
+      workspaceName,
     })
     await this.audit(
       "organization.invite_created",
@@ -1775,11 +1779,19 @@ export class IdentityCommandHandlers {
     )
     invitation.resend(this.now)
     await this.deps.repositories.invitations.save(invitation.toState())
+    const organizationState = await this.deps.repositories.organizations.findById(
+      invitation.organizationId
+    )
+    const workspaceState = invitation.workspaceId
+      ? await this.deps.repositories.workspaces.findById(invitation.workspaceId)
+      : null
     await this.deps.emailGateway.sendInvitationEmail({
       email: invitation.email,
       token: invitation.token,
       organizationId: invitation.organizationId,
       workspaceId: invitation.workspaceId ?? undefined,
+      organizationName: organizationState?.name,
+      workspaceName: workspaceState?.name ?? undefined,
     })
     await this.audit(
       "organization.invitation_resent",
