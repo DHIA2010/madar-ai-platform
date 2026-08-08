@@ -1,7 +1,9 @@
 "use client"
 
+import Image from "next/image"
+
 import { cn } from "@/lib/utils"
-import { GalleryVerticalEnd } from "lucide-react"
+import { ASSETS } from "@/constants/assets"
 import { ResetPasswordForm as AuthResetPasswordForm } from "@/features/authentication/components"
 
 export default function ResetPasswordForm({
@@ -13,10 +15,14 @@ export default function ResetPasswordForm({
       <div className="max-w-lg">
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-center gap-2 font-medium">
-            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md">
-              <GalleryVerticalEnd className="size-5" />
-            </div>
-            <span className="text-lg">Acme Inc.</span>
+            <Image
+              src={ASSETS.logo}
+              alt="مدار MADAR"
+              width={778}
+              height={325}
+              priority
+              className="h-14 w-auto"
+            />
           </div>
 
           <AuthResetPasswordForm

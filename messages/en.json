@@ -95,7 +95,7 @@
       "emailPlaceholder": "Enter your email",
       "passwordLabel": "Password",
       "passwordPlaceholder": "Create a strong password",
-      "passwordHelper": "At least 8 characters, including an uppercase letter, a number, and a special character.",
+      "passwordHelper": "At least 12 characters, including an uppercase letter, a number, and a special character.",
       "confirmPasswordLabel": "Confirm password",
       "confirmPasswordPlaceholder": "Re-enter your password",
       "jobRoleLabel": "Job role",
@@ -175,6 +175,40 @@
       "invitationEmailLocked": "This account will be created for the invited email address.",
       "genericError": "Couldn't create your account. Please try again.",
       "invitationAccountExists": "You already have an account with this email. Sign in instead to accept the invitation."
+    },
+    "forgotPassword": {
+      "heading": "Forgot password?",
+      "description": "Enter the email linked to your account and we'll send you a secure link to reset your password.",
+      "submittedDescription": "We sent a password reset link to {email}. Check your inbox (and spam folder).",
+      "emailLabel": "Email",
+      "emailPlaceholder": "name@madar.ai",
+      "submit": "Send reset link",
+      "or": "or",
+      "backToLogin": "Back to login",
+      "resend": "Resend",
+      "resendCountdown": "Resend in {seconds} seconds",
+      "needHelp": "Need help?",
+      "supportEmail": "support@madar.my",
+      "genericError": "Couldn't process your request right now. Please try again.",
+      "showcase": {
+        "eyebrow": "Secure account recovery",
+        "heading": "Get back into your account safely.",
+        "description": "Enter your email and we'll send you a secure link to reset your password.",
+        "features": [
+          {
+            "title": "Sent straight to your inbox",
+            "description": "The reset link goes only to the email on file for your account."
+          },
+          {
+            "title": "Expires in 1 hour",
+            "description": "Reset links are single-use and expire automatically for your security."
+          },
+          {
+            "title": "Your data stays protected",
+            "description": "Passwords are hashed and never stored or visible to anyone, including us."
+          }
+        ]
+      }
     }
   }
 }

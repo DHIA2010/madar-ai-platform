@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 
@@ -13,15 +14,11 @@ import { AppButton, AppCard, AppForm, AppInput } from "@/components/app"
 import { useAuthRecovery } from "../hooks"
 import { type ResetPasswordFormValues, resetPasswordSchema } from "../validators"
 
-interface ResetPasswordFormProps extends React.ComponentPropsWithoutRef<"div"> {
-  token?: string
-}
+type ResetPasswordFormProps = React.ComponentPropsWithoutRef<"div">
 
-export function ResetPasswordForm({
-  className,
-  token = "mock-reset-token",
-  ...props
-}: ResetPasswordFormProps) {
+export function ResetPasswordForm({ className, ...props }: ResetPasswordFormProps) {
+  const searchParams = useSearchParams()
+  const token = searchParams.get("token") ?? ""
   const recovery = useAuthRecovery()
   const [formError, setFormError] = useState<string | null>(null)
   const [isUpdated, setIsUpdated] = useState(false)

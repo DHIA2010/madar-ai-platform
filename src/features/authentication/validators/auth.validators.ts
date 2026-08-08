@@ -9,8 +9,8 @@ export const loginSchema = z.object({
 const signupBaseFields = {
   fullName: z.string().min(2, "يجب أن يتكون الاسم الكامل من حرفين على الأقل."),
   email: z.email("يرجى إدخال بريد إلكتروني صحيح."),
-  password: z.string().min(8, "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."),
-  confirmPassword: z.string().min(8, "يرجى تأكيد كلمة المرور."),
+  password: z.string().min(12, "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل."),
+  confirmPassword: z.string().min(12, "يرجى تأكيد كلمة المرور."),
   jobRole: z.string().min(1, "يرجى اختيار دورك الوظيفي."),
   acceptTerms: z.boolean().refine((value) => value === true, {
     message: "يجب الموافقة على الشروط والأحكام وسياسة الخصوصية.",
@@ -50,8 +50,8 @@ export const forgotPasswordSchema = z.object({
 export const resetPasswordSchema = z
   .object({
     token: z.string().min(1, "رمز إعادة التعيين مطلوب."),
-    password: z.string().min(8, "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."),
-    confirmPassword: z.string().min(8, "يرجى تأكيد كلمة المرور."),
+    password: z.string().min(12, "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل."),
+    confirmPassword: z.string().min(12, "يرجى تأكيد كلمة المرور."),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],

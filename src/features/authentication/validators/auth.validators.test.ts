@@ -6,7 +6,7 @@ describe("auth validators", () => {
   it("accepts valid login payload", () => {
     const parsed = loginSchema.safeParse({
       email: "user@madar.ai",
-      password: "password123",
+      password: "password12345",
       rememberMe: true,
     })
 
@@ -26,8 +26,8 @@ describe("auth validators", () => {
     const parsed = signupSchema.safeParse({
       fullName: "Demo",
       email: "user@madar.ai",
-      password: "password123",
-      confirmPassword: "password123",
+      password: "password12345",
+      confirmPassword: "password12345",
       jobRole: "marketing-manager",
       acceptTerms: true,
       companyName: "Madar",
@@ -42,8 +42,8 @@ describe("auth validators", () => {
     const parsed = signupSchema.safeParse({
       fullName: "Demo",
       email: "user@madar.ai",
-      password: "password123",
-      confirmPassword: "different-password",
+      password: "password12345",
+      confirmPassword: "different-password123",
       jobRole: "marketing-manager",
       acceptTerms: true,
       companyName: "Madar",
@@ -58,8 +58,8 @@ describe("auth validators", () => {
     const parsed = signupSchema.safeParse({
       fullName: "Demo",
       email: "user@madar.ai",
-      password: "password123",
-      confirmPassword: "password123",
+      password: "password12345",
+      confirmPassword: "password12345",
     })
 
     expect(parsed.success).toBe(false)
@@ -76,8 +76,8 @@ describe("auth validators", () => {
   it("validates reset password payload", () => {
     const parsed = resetPasswordSchema.safeParse({
       token: "reset-token",
-      password: "password123",
-      confirmPassword: "password123",
+      password: "password12345",
+      confirmPassword: "password12345",
     })
 
     expect(parsed.success).toBe(true)
