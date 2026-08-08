@@ -173,7 +173,8 @@
       },
       "invitationBanner": "You've been invited to join a MADAR organization. Create your account below to accept.",
       "invitationEmailLocked": "This account will be created for the invited email address.",
-      "genericError": "Couldn't create your account. Please try again."
+      "genericError": "Couldn't create your account. Please try again.",
+      "invitationAccountExists": "You already have an account with this email. Sign in instead to accept the invitation."
     }
   }
 }

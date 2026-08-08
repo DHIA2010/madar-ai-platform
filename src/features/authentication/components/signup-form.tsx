@@ -223,6 +223,11 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         invitationToken: invitationToken ?? undefined,
       })
     } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : ""
+      if (isInvitationMode && code.toLowerCase().includes("email_exists")) {
+        setFormError(t("invitationAccountExists"))
+        return
+      }
       setFormError(error instanceof Error ? error.message : t("genericError"))
     }
   })
@@ -482,7 +487,19 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               )}
             </div>
 
-            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+            {formError ? (
+              <p className="text-sm text-destructive">
+                {formError}{" "}
+                {isInvitationMode ? (
+                  <Link
+                    href={`${ROUTES.login}?invitation=${encodeURIComponent(invitationToken ?? "")}`}
+                    className="font-semibold underline underline-offset-4"
+                  >
+                    {t("signIn")}
+                  </Link>
+                ) : null}
+              </p>
+            ) : null}
 
             <div className="flex gap-3">
               <AppButton

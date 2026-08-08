@@ -132,7 +132,7 @@ export class ResendEmailGateway implements EmailGateway {
     organizationName?: string
     workspaceName?: string
   }) {
-    const url = `${this.config.appUrl.replace(/\/$/, "")}/auth/basic/login?invitation=${encodeURIComponent(input.token)}`
+    const url = `${this.config.appUrl.replace(/\/$/, "")}/auth/basic/register?invitation=${encodeURIComponent(input.token)}&email=${encodeURIComponent(input.email)}`
     const orgLabel = input.organizationName ?? "a MADAR organization"
     const scope = input.workspaceName
       ? ` &mdash; workspace <strong>${escapeHtml(input.workspaceName)}</strong>`
