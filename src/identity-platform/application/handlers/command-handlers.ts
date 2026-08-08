@@ -1917,7 +1917,7 @@ export class IdentityCommandHandlers {
       20,
       60_000
     )
-    invitation.resend(this.now)
+    invitation.resend(this.now, this.deps.tokenService.generateOpaqueToken())
     await this.deps.repositories.invitations.save(invitation.toState())
     const organizationState = await this.deps.repositories.organizations.findById(
       invitation.organizationId

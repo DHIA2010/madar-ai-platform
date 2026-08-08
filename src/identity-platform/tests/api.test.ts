@@ -163,6 +163,70 @@ describe("Identity API", () => {
     expect(invite1.id).toBe(invite2.id)
   })
 
+  it("resending an invitation issues a working new token instead of an unusable empty one", async () => {
+    const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "resend-owner@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Resend Owner",
+        organizationName: "Resend Owner Org",
+      }),
+    })
+    const ownerRegistration = await registerOwner.json()
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: ownerRegistration.verificationToken }),
+    })
+    const ownerLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "resend-owner@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    const ownerLogin = await ownerLoginRes.json()
+
+    const inviteRes = await fetch(
+      `${baseUrl}/v1/organizations/${ownerRegistration.organizationId}/invitations`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${ownerLogin.session.accessToken}`,
+        },
+        body: JSON.stringify({ email: "resend-invitee@madar.test", role: "viewer" }),
+      }
+    )
+    const invite = await inviteRes.json()
+
+    const resendRes = await fetch(`${baseUrl}/v1/organizations/invitations/${invite.id}/resend`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+    })
+    expect(resendRes.status).toBe(200)
+    const resent = await resendRes.json()
+
+    // the resent token must actually be usable...
+    expect(resent.token).toBeTruthy()
+    expect(resent.token).not.toBe(invite.token)
+
+    const registerInviteeRes = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "resend-invitee@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Resend Invitee",
+        invitationToken: resent.token,
+      }),
+    })
+    expect(registerInviteeRes.status).toBe(201)
+  })
+
   it("lets a brand-new user register via an invitation link and joins the inviting org", async () => {
     const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
       method: "POST",

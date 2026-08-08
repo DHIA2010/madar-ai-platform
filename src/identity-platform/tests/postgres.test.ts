@@ -180,4 +180,73 @@ describe("postgres foundation", () => {
     expect(user?.activeWorkspaceId).toBe(result.workspaceId)
     expect(organization?.ownerUserId).toBe(result.userId)
   })
+
+  it("resending an invitation against real Postgres yields a token that still round-trips", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+
+    const owner = await commands.register(
+      {
+        email: "resend-pg-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Resend PG Owner",
+        organizationName: "Resend PG Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const ownerLogin = await commands.login(
+      { email: "resend-pg-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const actor = await commands.resolveActorFromAccessToken(ownerLogin.session.accessToken)
+
+    const invitation = await commands.inviteMember(
+      actor,
+      {
+        organizationId: owner.organizationId,
+        email: "resend-pg-invitee@test.local",
+        role: "viewer",
+      },
+      context
+    )
+
+    // Postgres only ever stores the token's hash, never the plaintext, so findById
+    // (used internally by resend) cannot see the original token — the repository must
+    // mint and persist a fresh one rather than silently hashing an empty string.
+    const resent = await commands.resendInvitation(actor, { invitationId: invitation.id }, context)
+    expect(resent.token).toBeTruthy()
+    expect(resent.token).not.toBe(invitation.token)
+
+    const foundByNewToken = await repositories.invitations.findByToken(resent.token)
+    expect(foundByNewToken?.id).toBe(invitation.id)
+  })
 })

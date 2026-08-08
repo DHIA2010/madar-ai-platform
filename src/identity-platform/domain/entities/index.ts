@@ -820,10 +820,13 @@ export class InvitationEntity {
     this.state.declinedAt = this.state.declinedAt ?? now
   }
 
-  resend(now: string) {
+  // Only the token's hash is persisted (never the plaintext), so a resend can't reuse
+  // the original link — it must mint a fresh token, which also invalidates old links.
+  resend(now: string, newToken: string) {
     if (this.state.status !== "pending") {
       throw new Error("Only pending invitations can be resent.")
     }
+    this.state.token = newToken
     this.state.lastSentAt = now
     this.state.resendCount += 1
   }
