@@ -163,6 +163,103 @@ describe("Identity API", () => {
     expect(invite1.id).toBe(invite2.id)
   })
 
+  it("lets a brand-new user register via an invitation link and joins the inviting org", async () => {
+    const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "invite-owner@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Invite Owner",
+        organizationName: "Invite Owner Org",
+      }),
+    })
+    const ownerRegistration = await registerOwner.json()
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: ownerRegistration.verificationToken }),
+    })
+    const ownerLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "invite-owner@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    const ownerLogin = await ownerLoginRes.json()
+
+    const inviteRes = await fetch(
+      `${baseUrl}/v1/organizations/${ownerRegistration.organizationId}/invitations`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${ownerLogin.session.accessToken}`,
+        },
+        body: JSON.stringify({ email: "new-invitee@madar.test", role: "analyst" }),
+      }
+    )
+    expect(inviteRes.status).toBe(201)
+    const invite = await inviteRes.json()
+
+    const registerInviteeRes = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "new-invitee@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "New Invitee",
+        invitationToken: invite.token,
+      }),
+    })
+    expect(registerInviteeRes.status).toBe(201)
+    const inviteeRegistration = await registerInviteeRes.json()
+    // must join the inviting org, not get a brand-new one of their own
+    expect(inviteeRegistration.organizationId).toBe(ownerRegistration.organizationId)
+
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: inviteeRegistration.verificationToken }),
+    })
+    const inviteeLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "new-invitee@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    expect(inviteeLoginRes.status).toBe(200)
+    const inviteeLogin = await inviteeLoginRes.json()
+
+    const membersRes = await fetch(
+      `${baseUrl}/v1/organizations/${ownerRegistration.organizationId}/members`,
+      { headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` } }
+    )
+    const members = await membersRes.json()
+    const inviteeMember = members.members.find(
+      (member: { userId: string }) => member.userId === inviteeLogin.user.id
+    )
+    expect(inviteeMember).toBeTruthy()
+    expect(inviteeMember.role).toBe("analyst")
+
+    // the invitation is now consumed — reusing it must fail rather than create a duplicate membership
+    const secondAttempt = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "another-invitee@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Another Invitee",
+        invitationToken: invite.token,
+      }),
+    })
+    expect(secondAttempt.status).toBe(401)
+  })
+
   it("creates a team and lists it with the creator as manager and first member", async () => {
     const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
       method: "POST",
