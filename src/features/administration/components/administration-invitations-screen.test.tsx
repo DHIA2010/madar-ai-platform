@@ -62,94 +62,6 @@ vi.mock("../queries/use-invitation-mutations", () => ({
   }),
 }))
 
-vi.mock("@/components/ui/select", async () => {
-  const React = await import("react")
-
-  const SelectContext = React.createContext<{
-    value?: string
-    onValueChange?: (value: string) => void
-  } | null>(null)
-
-  function Select({
-    value,
-    onValueChange,
-    children,
-  }: React.PropsWithChildren<{ value?: string; onValueChange?: (value: string) => void }>) {
-    return (
-      <SelectContext.Provider value={{ value, onValueChange }}>{children}</SelectContext.Provider>
-    )
-  }
-
-  function SelectTrigger({ children, ...props }: React.ComponentProps<"button">) {
-    return (
-      <button
-        type="button"
-        role="combobox"
-        aria-expanded="false"
-        aria-controls="select-options"
-        data-slot="select-trigger"
-        {...props}
-      >
-        {children}
-      </button>
-    )
-  }
-
-  function SelectContent({ children, ...props }: React.ComponentProps<"div">) {
-    return (
-      <div data-slot="select-content" {...props}>
-        {children}
-      </div>
-    )
-  }
-
-  function SelectItem({
-    value,
-    children,
-    ...props
-  }: React.ComponentProps<"button"> & { value: string }) {
-    const context = React.useContext(SelectContext)
-    return (
-      <button
-        type="button"
-        role="option"
-        aria-selected={context?.value === value}
-        onClick={() => context?.onValueChange?.(value)}
-        {...props}
-      >
-        {children}
-      </button>
-    )
-  }
-
-  function SelectGroup({ children }: React.PropsWithChildren) {
-    return <div>{children}</div>
-  }
-
-  function SelectLabel({ children }: React.PropsWithChildren) {
-    return <div>{children}</div>
-  }
-
-  function SelectSeparator() {
-    return <hr />
-  }
-
-  function SelectValue({ children }: React.PropsWithChildren) {
-    return <span>{children}</span>
-  }
-
-  return {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectSeparator,
-    SelectTrigger,
-    SelectValue,
-  }
-})
-
 vi.mock("./administration-module-nav", () => ({
   AdministrationModuleNav: () => <nav data-testid="administration-nav" />,
 }))
@@ -170,18 +82,16 @@ describe("AdministrationInvitationsScreen", () => {
 
     expect(screen.getByRole("dialog", { name: "Invite Users" })).toBeTruthy()
     expect(
-      screen.getByText("Send one or many invitations with workspace and role context.")
+      screen.getByText(
+        "New members start with no permissions — add them to a team afterward to grant access."
+      )
     ).toBeTruthy()
   })
 
-  it("supports role selection and a single workspace checkbox when sending an invitation", async () => {
+  it("defaults invited members to no role and supports a single workspace checkbox", async () => {
     render(<AdministrationInvitationsScreen />)
 
     fireEvent.click(screen.getByRole("button", { name: "Invite Users" }))
-
-    const roleTrigger = screen.getByRole("combobox")
-    fireEvent.click(roleTrigger)
-    fireEvent.click(await screen.findByRole("option", { name: "Viewer" }))
 
     fireEvent.click(screen.getByLabelText("Retail Expansion"))
 

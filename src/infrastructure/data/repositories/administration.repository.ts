@@ -1,9 +1,11 @@
 import type {
+  AddTeamMemberRequestDto,
   AdministrationInvitationDto,
   AdministrationRepository,
   AdministrationRoleDto,
   AdministrationSessionDto,
   AdministrationTeamDto,
+  AdministrationTeamMemberDto,
   AdministrationUserDto,
   AdministrationUserStatus,
   AuditLogEventDto,
@@ -11,15 +13,20 @@ import type {
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
   GetRolesRequestDto,
+  GetTeamMembersRequestDto,
   GetTeamsRequestDto,
   GetUsersRequestDto,
+  RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
+  RolePermissionDto,
   SendInvitationRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateTeamRequestDto,
 } from "@/application/contracts/administration.contracts"
 import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
 
@@ -33,6 +40,7 @@ import {
   type RoleApiEntry,
   type SessionApiEntry,
   type TeamApiEntry,
+  type TeamMemberApiEntry,
 } from "../adapters/administration-api.adapter"
 import { createHttpDataClient } from "../api/http-data-client"
 import { resolveAuthenticationApiBaseUrl } from "./repository-runtime"
@@ -139,7 +147,7 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       status: pickAggregateStatus(rows.map((row) => row.status)),
       lastLogin: lastLoginAt ?? "",
       mfaEnabled: false,
-      teams: [],
+      teams: Array.from(new Set(first.teams.map((team) => team.name))),
       recentActivity: [],
       devices: [],
     }
@@ -218,6 +226,16 @@ function hashColorForId(id: string) {
   return TEAM_COLOR_PALETTE[hash % TEAM_COLOR_PALETTE.length]
 }
 
+function permissionsListToRecord(permissions: RolePermissionDto[]): Record<string, string[]> {
+  const record: Record<string, string[]> = {}
+  for (const permission of permissions) {
+    const existing = record[permission.module] ?? []
+    existing.push(permission.action)
+    record[permission.module] = existing
+  }
+  return record
+}
+
 function mapTeamEntry(entry: TeamApiEntry): AdministrationTeamDto {
   return {
     id: entry.id,
@@ -225,8 +243,21 @@ function mapTeamEntry(entry: TeamApiEntry): AdministrationTeamDto {
     manager: entry.managerName ?? "Unassigned",
     members: entry.memberCount,
     workspace: entry.workspaceName ?? "Organization-wide",
+    workspaceId: entry.workspaceId,
     description: entry.description,
     color: hashColorForId(entry.id),
+    roleReference: entry.roleReference,
+    permissions: entry.permissions,
+  }
+}
+
+function mapTeamMemberEntry(entry: TeamMemberApiEntry): AdministrationTeamMemberDto {
+  return {
+    id: entry.id,
+    userId: entry.userId,
+    fullName: entry.userFullName,
+    email: entry.userEmail,
+    addedAt: entry.createdAt,
   }
 }
 
@@ -243,12 +274,6 @@ function mapRoleEntry(entry: RoleApiEntry): AdministrationRoleDto {
 }
 
 function mapCustomRoleEntry(entry: CustomRoleApiEntry): AdministrationRoleDto {
-  const permissions: Record<string, string[]> = {}
-  for (const permission of entry.permissions) {
-    const existing = permissions[permission.module] ?? []
-    existing.push(permission.action)
-    permissions[permission.module] = existing
-  }
   return {
     id: entry.id,
     name: entry.name,
@@ -256,7 +281,7 @@ function mapCustomRoleEntry(entry: CustomRoleApiEntry): AdministrationRoleDto {
     userCount: 0,
     isDefault: false,
     editable: true,
-    permissions,
+    permissions: permissionsListToRecord(entry.permissions),
   }
 }
 
@@ -369,6 +394,48 @@ export class DataAdministrationRepository implements AdministrationRepository {
     try {
       const entry = await this.adapter.createTeam(request)
       return mapTeamEntry(entry)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async getTeamMembers(request: GetTeamMembersRequestDto): Promise<AdministrationTeamMemberDto[]> {
+    try {
+      const items = await this.adapter.getTeamMembers(request.teamId)
+      return items.map(mapTeamMemberEntry)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async addTeamMember(request: AddTeamMemberRequestDto): Promise<void> {
+    try {
+      await this.adapter.addTeamMember(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async removeTeamMember(request: RemoveTeamMemberRequestDto): Promise<void> {
+    try {
+      await this.adapter.removeTeamMember(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async updateTeam(request: UpdateTeamRequestDto): Promise<AdministrationTeamDto> {
+    try {
+      const entry = await this.adapter.updateTeam(request)
+      return mapTeamEntry(entry)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async deleteTeam(request: DeleteTeamRequestDto): Promise<void> {
+    try {
+      await this.adapter.deleteTeam(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

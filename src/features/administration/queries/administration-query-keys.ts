@@ -9,6 +9,8 @@ export const administrationQueryKeys = {
   sessions: () => [...administrationQueryKeys.all, "sessions"] as const,
   teams: (organizationId: string | null | undefined) =>
     [...administrationQueryKeys.all, "teams", organizationId ?? "none"] as const,
+  teamMembers: (teamId: string | null | undefined) =>
+    [...administrationQueryKeys.all, "team-members", teamId ?? "none"] as const,
   roles: (organizationId: string | null | undefined) =>
     [...administrationQueryKeys.all, "roles", organizationId ?? "none"] as const,
 } as const

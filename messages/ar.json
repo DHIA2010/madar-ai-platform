@@ -1,0 +1,173 @@
+{
+  "common": {
+    "language": "اللغة",
+    "languageArabic": "العربية",
+    "languageEnglish": "English",
+    "settings": "الإعدادات",
+    "help": "مساعدة",
+    "next": "التالي",
+    "back": "رجوع",
+    "cancel": "إلغاء"
+  },
+  "authShowcase": {
+    "preview": {
+      "title": "نظرة عامة على الأداء",
+      "roas": "ROAS",
+      "revenue": "الإيرادات",
+      "spend": "الإنفاق",
+      "topChannels": "أفضل القنوات",
+      "days": {
+        "sat": "السبت",
+        "sun": "الأحد",
+        "mon": "الاثنين",
+        "tue": "الثلاثاء",
+        "wed": "الأربعاء"
+      },
+      "otherChannel": "أخرى"
+    },
+    "trustBadge": "بياناتك آمنة ومشفرة بالكامل — نحن نلتزم بحماية بياناتك وخصوصيتك."
+  },
+  "sidebar": {
+    "nav": {
+      "home": "الرئيسية",
+      "channels": "القنوات",
+      "campaigns": "الحملات",
+      "stores": "المتاجر",
+      "products": "المنتجات",
+      "customers": "العملاء",
+      "reports": "التقارير",
+      "ai": "الذكاء الاصطناعي",
+      "integrations": "التكاملات",
+      "administration": "الإدارة",
+      "settings": "الإعدادات"
+    }
+  },
+  "auth": {
+    "login": {
+      "heading": "مرحباً بك في مدار",
+      "subheading": "سجّل الدخول للوصول إلى حسابك ومتابعة أداء حملاتك",
+      "emailLabel": "البريد الإلكتروني",
+      "emailPlaceholder": "أدخل بريدك الإلكتروني",
+      "passwordLabel": "كلمة المرور",
+      "passwordPlaceholder": "أدخل كلمة المرور",
+      "rememberMe": "تذكرني",
+      "forgotPassword": "نسيت كلمة المرور؟",
+      "submit": "تسجيل الدخول",
+      "orContinueWith": "أو سجّل الدخول باستخدام",
+      "comingSoon": "قريباً",
+      "noAccount": "ليس لديك حساب؟",
+      "createAccount": "إنشاء حساب جديد",
+      "genericError": "تعذّر تسجيل الدخول. يرجى المحاولة مرة أخرى.",
+      "showcase": {
+        "eyebrow": "منصة تحليلات تسويقية متكاملة",
+        "heading": "اجمع بيانات حملاتك الإعلانية في مكان واحد.",
+        "description": "حلّل الأداء، واتخذ قرارات ذكية لتحقيق أفضل النتائج.",
+        "features": [
+          {
+            "title": "اربط جميع قنواتك الإعلانية",
+            "description": "Google و Meta و Snapchat و TikTok وغيرها بسهولة في مكان واحد."
+          },
+          {
+            "title": "تقارير وتحليلات ذكية",
+            "description": "لوحات تحكم مصممة خصيصاً لتمنحك رؤى واضحة عن أداء حملاتك."
+          },
+          {
+            "title": "توصيات ذكية لتحسين الأداء",
+            "description": "احصل على توصيات مدعومة بالذكاء الاصطناعي لتحسين نتائج حملاتك وزيادة العائد."
+          }
+        ]
+      }
+    },
+    "register": {
+      "heading": "إنشاء حساب جديد",
+      "subheading": "ابدأ رحلتك مع مدار لتحليل حملاتك التسويقية وتحقيق أفضل النتائج",
+      "steps": {
+        "account": "معلومات الحساب",
+        "company": "تفاصيل الشركة",
+        "confirm": "تأكيد الحساب"
+      },
+      "fullNameLabel": "الاسم الكامل",
+      "fullNamePlaceholder": "أدخل اسمك الكامل",
+      "emailLabel": "البريد الإلكتروني",
+      "emailPlaceholder": "أدخل بريدك الإلكتروني",
+      "passwordLabel": "كلمة المرور",
+      "passwordPlaceholder": "إنشاء كلمة مرور قوية",
+      "passwordHelper": "8 أحرف على الأقل، تتضمن حرفاً كبيراً ورقماً ورمزاً خاصاً.",
+      "confirmPasswordLabel": "تأكيد كلمة المرور",
+      "confirmPasswordPlaceholder": "أعد إدخال كلمة المرور",
+      "jobRoleLabel": "الدور الوظيفي",
+      "jobRolePlaceholder": "اختر دورك الوظيفي",
+      "jobRoles": {
+        "marketingManager": "مدير تسويق",
+        "founderCeo": "مؤسس / رئيس تنفيذي",
+        "growthMarketer": "أخصائي نمو",
+        "agencyOwner": "صاحب وكالة تسويق",
+        "other": "أخرى"
+      },
+      "acceptTermsPrefix": "أوافق على",
+      "termsAndConditions": "الشروط والأحكام",
+      "and": "و",
+      "privacyPolicy": "سياسة الخصوصية",
+      "companyNameLabel": "اسم الشركة",
+      "companyNamePlaceholder": "أدخل اسم شركتك أو متجرك",
+      "industryLabel": "المجال",
+      "industryPlaceholder": "اختر مجال عملك",
+      "industries": {
+        "ecommerce": "التجارة الإلكترونية",
+        "retail": "تجارة التجزئة",
+        "fashion": "الأزياء والموضة",
+        "foodBeverage": "الأغذية والمشروبات",
+        "technology": "التكنولوجيا",
+        "other": "أخرى"
+      },
+      "companySizeLabel": "حجم الشركة",
+      "companySizePlaceholder": "اختر عدد الموظفين",
+      "companySizes": {
+        "1-10": "1-10 موظفين",
+        "11-50": "11-50 موظف",
+        "51-200": "51-200 موظف",
+        "200+": "أكثر من 200 موظف"
+      },
+      "next": "التالي",
+      "back": "رجوع",
+      "submit": "إنشاء الحساب",
+      "alreadyHaveAccount": "لديك حساب بالفعل؟",
+      "signIn": "تسجيل الدخول",
+      "summary": {
+        "fullName": "الاسم الكامل",
+        "email": "البريد الإلكتروني",
+        "jobRole": "الدور الوظيفي",
+        "companyName": "اسم الشركة",
+        "industry": "المجال",
+        "companySize": "حجم الشركة",
+        "empty": "—"
+      },
+      "success": {
+        "heading": "تم إنشاء حسابك بنجاح!",
+        "description": "مرحباً بك في مدار، يمكنك الآن تسجيل الدخول والبدء في إدارة حملاتك.",
+        "goToLogin": "الذهاب لتسجيل الدخول"
+      },
+      "showcase": {
+        "eyebrow": "كل أدوات التحليل",
+        "heading": "في مكان واحد",
+        "description": "اربط قنواتك الإعلانية، حلل البيانات، واحصل على توصيات ذكية تساعدك على النمو.",
+        "features": [
+          {
+            "title": "اربط جميع القنوات",
+            "description": "Google و Meta و Snapchat و TikTok وغيرها بسهولة في مكان واحد."
+          },
+          {
+            "title": "توصيات ذكية",
+            "description": "احصل على توصيات مبنية على الذكاء الاصطناعي لتحسين أداء حملاتك وزيادة العائد."
+          },
+          {
+            "title": "آمن وموثوق",
+            "description": "نحمي بياناتك بأعلى معايير الأمان والخصوصية."
+          }
+        ],
+        "footerPrefix": "تحتاج مساعدة؟",
+        "footerSuffix": "فريق الدعم جاهز لمساعدتك في أي وقت."
+      }
+    }
+  }
+}

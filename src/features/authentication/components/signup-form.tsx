@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Briefcase, Building2, Check, Lock, Mail, User, Users } from "lucide-react"
 import { Controller, useForm, useWatch } from "react-hook-form"
@@ -36,40 +37,49 @@ const STEP_1_FIELDS = [
 ] as const
 const STEP_2_FIELDS = ["companyName", "industry", "companySize"] as const
 
-const JOB_ROLES = [
-  { value: "marketing-manager", label: "مدير تسويق" },
-  { value: "founder-ceo", label: "مؤسس / رئيس تنفيذي" },
-  { value: "growth-marketer", label: "أخصائي نمو" },
-  { value: "agency-owner", label: "صاحب وكالة تسويق" },
-  { value: "other", label: "أخرى" },
-]
-
-const INDUSTRIES = [
-  { value: "ecommerce", label: "التجارة الإلكترونية" },
-  { value: "retail", label: "تجارة التجزئة" },
-  { value: "fashion", label: "الأزياء والموضة" },
-  { value: "food-beverage", label: "الأغذية والمشروبات" },
-  { value: "technology", label: "التكنولوجيا" },
-  { value: "other", label: "أخرى" },
-]
-
-const COMPANY_SIZES = [
-  { value: "1-10", label: "1-10 موظفين" },
-  { value: "11-50", label: "11-50 موظف" },
-  { value: "51-200", label: "51-200 موظف" },
-  { value: "200+", label: "أكثر من 200 موظف" },
-]
-
-const STEPS = [
-  { step: 1, label: "معلومات الحساب" },
-  { step: 2, label: "تفاصيل الشركة" },
-  { step: 3, label: "تأكيد الحساب" },
+const JOB_ROLE_VALUES = [
+  "marketing-manager",
+  "founder-ceo",
+  "growth-marketer",
+  "agency-owner",
+  "other",
 ] as const
+const INDUSTRY_VALUES = [
+  "ecommerce",
+  "retail",
+  "fashion",
+  "food-beverage",
+  "technology",
+  "other",
+] as const
+const COMPANY_SIZE_VALUES = ["1-10", "11-50", "51-200", "200+"] as const
 
-function StepIndicator({ current }: { current: number }) {
+const JOB_ROLE_KEYS: Record<(typeof JOB_ROLE_VALUES)[number], string> = {
+  "marketing-manager": "marketingManager",
+  "founder-ceo": "founderCeo",
+  "growth-marketer": "growthMarketer",
+  "agency-owner": "agencyOwner",
+  other: "other",
+}
+const INDUSTRY_KEYS: Record<(typeof INDUSTRY_VALUES)[number], string> = {
+  ecommerce: "ecommerce",
+  retail: "retail",
+  fashion: "fashion",
+  "food-beverage": "foodBeverage",
+  technology: "technology",
+  other: "other",
+}
+
+function StepIndicator({
+  current,
+  steps,
+}: {
+  current: number
+  steps: { step: 1 | 2 | 3; label: string }[]
+}) {
   return (
     <div className="flex items-start">
-      {STEPS.map((item, index) => {
+      {steps.map((item, index) => {
         const isComplete = current > item.step
         const isActive = current === item.step
 
@@ -97,7 +107,7 @@ function StepIndicator({ current }: { current: number }) {
                 {item.label}
               </span>
             </div>
-            {index < STEPS.length - 1 ? (
+            {index < steps.length - 1 ? (
               <span
                 className={cn(
                   "mx-2 mb-5 h-0.5 flex-1",
@@ -124,6 +134,26 @@ function SummaryRow({ label, value }: { label: string; value?: string }) {
 export function SignupForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [submitted, setSubmitted] = useState(false)
+  const t = useTranslations("auth.register")
+
+  const steps: { step: 1 | 2 | 3; label: string }[] = [
+    { step: 1, label: t("steps.account") },
+    { step: 2, label: t("steps.company") },
+    { step: 3, label: t("steps.confirm") },
+  ]
+
+  const jobRoles = JOB_ROLE_VALUES.map((value) => ({
+    value,
+    label: t(`jobRoles.${JOB_ROLE_KEYS[value]}`),
+  }))
+  const industries = INDUSTRY_VALUES.map((value) => ({
+    value,
+    label: t(`industries.${INDUSTRY_KEYS[value]}`),
+  }))
+  const companySizes = COMPANY_SIZE_VALUES.map((value) => ({
+    value,
+    label: t(`companySizes.${value}`),
+  }))
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -167,17 +197,15 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
           <Check className="size-8" />
         </span>
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold text-slate-900">تم إنشاء حسابك بنجاح!</h1>
-          <p className="text-sm text-slate-500">
-            مرحباً بك في مدار، يمكنك الآن تسجيل الدخول والبدء في إدارة حملاتك.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">{t("success.heading")}</h1>
+          <p className="text-sm text-slate-500">{t("success.description")}</p>
         </div>
         <AppButton
           asChild
           fullWidth
           className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
         >
-          <Link href={ROUTES.login}>الذهاب لتسجيل الدخول</Link>
+          <Link href={ROUTES.login}>{t("success.goToLogin")}</Link>
         </AppButton>
       </div>
     )
@@ -195,21 +223,19 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
           className="h-14 w-auto"
         />
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold text-slate-900">إنشاء حساب جديد</h1>
-          <p className="text-sm text-slate-500">
-            ابدأ رحلتك مع مدار لتحليل حملاتك التسويقية وتحقيق أفضل النتائج
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">{t("heading")}</h1>
+          <p className="text-sm text-slate-500">{t("subheading")}</p>
         </div>
       </div>
 
-      <StepIndicator current={step} />
+      <StepIndicator current={step} steps={steps} />
 
       <AppForm onSubmit={onSubmit} className="space-y-5">
         {step === 1 ? (
           <>
             <AppInput
-              label="الاسم الكامل"
-              placeholder="أدخل اسمك الكامل"
+              label={t("fullNameLabel")}
+              placeholder={t("fullNamePlaceholder")}
               autoComplete="name"
               startIcon={<User className="size-4" />}
               errorText={form.formState.errors.fullName?.message}
@@ -219,8 +245,8 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
 
             <AppInput
               type="email"
-              label="البريد الإلكتروني"
-              placeholder="أدخل بريدك الإلكتروني"
+              label={t("emailLabel")}
+              placeholder={t("emailPlaceholder")}
               autoComplete="email"
               startIcon={<Mail className="size-4" />}
               errorText={form.formState.errors.email?.message}
@@ -229,19 +255,19 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
             />
 
             <AppPasswordInput
-              label="كلمة المرور"
-              placeholder="إنشاء كلمة مرور قوية"
+              label={t("passwordLabel")}
+              placeholder={t("passwordPlaceholder")}
               autoComplete="new-password"
               startIcon={<Lock className="size-4" />}
               errorText={form.formState.errors.password?.message}
-              helperText="8 أحرف على الأقل، تتضمن حرفاً كبيراً ورقماً ورمزاً خاصاً."
+              helperText={t("passwordHelper")}
               required
               {...form.register("password")}
             />
 
             <AppPasswordInput
-              label="تأكيد كلمة المرور"
-              placeholder="أعد إدخال كلمة المرور"
+              label={t("confirmPasswordLabel")}
+              placeholder={t("confirmPasswordPlaceholder")}
               autoComplete="new-password"
               startIcon={<Lock className="size-4" />}
               errorText={form.formState.errors.confirmPassword?.message}
@@ -251,7 +277,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">
-                الدور الوظيفي <span aria-hidden="true">*</span>
+                {t("jobRoleLabel")} <span aria-hidden="true">*</span>
               </label>
               <Controller
                 control={form.control}
@@ -260,10 +286,10 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                   <AppSelect value={field.value} onValueChange={field.onChange}>
                     <AppSelectTrigger className="h-10 w-full">
                       <Briefcase className="size-4 shrink-0 text-muted-foreground" />
-                      <AppSelectValue placeholder="اختر دورك الوظيفي" />
+                      <AppSelectValue placeholder={t("jobRolePlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
-                      {JOB_ROLES.map((role) => (
+                      {jobRoles.map((role) => (
                         <AppSelectItem key={role.value} value={role.value}>
                           {role.label}
                         </AppSelectItem>
@@ -291,12 +317,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                   )}
                 />
                 <span>
-                  أوافق على <span className="font-medium text-violet-600">الشروط والأحكام</span> و{" "}
+                  {t("acceptTermsPrefix")}{" "}
+                  <span className="font-medium text-violet-600">{t("termsAndConditions")}</span>{" "}
+                  {t("and")}{" "}
                   <Link
                     href={ROUTES.privacy}
                     className="font-medium text-violet-600 underline-offset-4 hover:underline"
                   >
-                    سياسة الخصوصية
+                    {t("privacyPolicy")}
                   </Link>
                 </span>
               </label>
@@ -313,7 +341,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               fullWidth
               className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
             >
-              التالي
+              {t("next")}
             </AppButton>
           </>
         ) : null}
@@ -321,8 +349,8 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         {step === 2 ? (
           <>
             <AppInput
-              label="اسم الشركة"
-              placeholder="أدخل اسم شركتك أو متجرك"
+              label={t("companyNameLabel")}
+              placeholder={t("companyNamePlaceholder")}
               startIcon={<Building2 className="size-4" />}
               errorText={form.formState.errors.companyName?.message}
               required
@@ -331,7 +359,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">
-                المجال <span aria-hidden="true">*</span>
+                {t("industryLabel")} <span aria-hidden="true">*</span>
               </label>
               <Controller
                 control={form.control}
@@ -339,10 +367,10 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 render={({ field }) => (
                   <AppSelect value={field.value} onValueChange={field.onChange}>
                     <AppSelectTrigger className="h-10 w-full">
-                      <AppSelectValue placeholder="اختر مجال عملك" />
+                      <AppSelectValue placeholder={t("industryPlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
-                      {INDUSTRIES.map((industry) => (
+                      {industries.map((industry) => (
                         <AppSelectItem key={industry.value} value={industry.value}>
                           {industry.label}
                         </AppSelectItem>
@@ -358,7 +386,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">
-                حجم الشركة <span aria-hidden="true">*</span>
+                {t("companySizeLabel")} <span aria-hidden="true">*</span>
               </label>
               <Controller
                 control={form.control}
@@ -367,10 +395,10 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                   <AppSelect value={field.value} onValueChange={field.onChange}>
                     <AppSelectTrigger className="h-10 w-full">
                       <Users className="size-4 shrink-0 text-muted-foreground" />
-                      <AppSelectValue placeholder="اختر عدد الموظفين" />
+                      <AppSelectValue placeholder={t("companySizePlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
-                      {COMPANY_SIZES.map((size) => (
+                      {companySizes.map((size) => (
                         <AppSelectItem key={size.value} value={size.value}>
                           {size.label}
                         </AppSelectItem>
@@ -393,14 +421,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 onClick={goBack}
                 className="h-11 flex-1 text-base font-semibold"
               >
-                رجوع
+                {t("back")}
               </AppButton>
               <AppButton
                 type="button"
                 onClick={goNext}
                 className="h-11 flex-1 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
               >
-                التالي
+                {t("next")}
               </AppButton>
             </div>
           </>
@@ -409,20 +437,20 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         {step === 3 ? (
           <>
             <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-              <SummaryRow label="الاسم الكامل" value={values.fullName} />
-              <SummaryRow label="البريد الإلكتروني" value={values.email} />
+              <SummaryRow label={t("summary.fullName")} value={values.fullName} />
+              <SummaryRow label={t("summary.email")} value={values.email} />
               <SummaryRow
-                label="الدور الوظيفي"
-                value={JOB_ROLES.find((role) => role.value === values.jobRole)?.label}
+                label={t("summary.jobRole")}
+                value={jobRoles.find((role) => role.value === values.jobRole)?.label}
               />
-              <SummaryRow label="اسم الشركة" value={values.companyName} />
+              <SummaryRow label={t("summary.companyName")} value={values.companyName} />
               <SummaryRow
-                label="المجال"
-                value={INDUSTRIES.find((industry) => industry.value === values.industry)?.label}
+                label={t("summary.industry")}
+                value={industries.find((industry) => industry.value === values.industry)?.label}
               />
               <SummaryRow
-                label="حجم الشركة"
-                value={COMPANY_SIZES.find((size) => size.value === values.companySize)?.label}
+                label={t("summary.companySize")}
+                value={companySizes.find((size) => size.value === values.companySize)?.label}
               />
             </div>
 
@@ -433,14 +461,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 onClick={goBack}
                 className="h-11 flex-1 text-base font-semibold"
               >
-                رجوع
+                {t("back")}
               </AppButton>
               <AppButton
                 type="submit"
                 loading={form.formState.isSubmitting}
                 className="h-11 flex-1 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
               >
-                إنشاء الحساب
+                {t("submit")}
               </AppButton>
             </div>
           </>
@@ -449,12 +477,12 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
 
       {step === 1 ? (
         <p className="text-center text-sm text-slate-600">
-          لديك حساب بالفعل؟{" "}
+          {t("alreadyHaveAccount")}{" "}
           <Link
             href={ROUTES.login}
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
           >
-            تسجيل الدخول
+            {t("signIn")}
           </Link>
         </p>
       ) : null}

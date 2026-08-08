@@ -20,6 +20,7 @@ import {
 import { IdentityError } from "../../application/errors/IdentityError"
 import { createRequestContext, mapIdentityError } from "../middleware"
 import {
+  addTeamMemberSchema,
   assignRoleSchema,
   createCustomRoleSchema,
   createOrganizationSchema,
@@ -46,6 +47,7 @@ import {
   updateMemberProfileSchema,
   updateOrganizationSchema,
   updateProfileSchema,
+  updateTeamSchema,
   updateWorkspaceSchema,
   verifyEmailSchema,
 } from "../../schemas"
@@ -963,9 +965,66 @@ export function createIdentityApiServer(
               name: payload.name,
               description: payload.description,
               color: payload.color,
+              roleReference: payload.roleReference,
             },
             context
           )
+        )
+      }
+
+      const teamMembersMatch = url.pathname.match(/^\/v1\/organizations\/teams\/([^/]+)\/members$/)
+      if (method === "GET" && teamMembersMatch) {
+        return send(200, await container.queries.listTeamMembers(actor, teamMembersMatch[1]))
+      }
+      if (method === "POST" && teamMembersMatch) {
+        const payload = addTeamMemberSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await container.commands.addTeamMember(
+            actor,
+            { teamId: teamMembersMatch[1], userId: payload.userId },
+            context
+          )
+        )
+      }
+
+      const teamMemberMatch = url.pathname.match(
+        /^\/v1\/organizations\/teams\/([^/]+)\/members\/([^/]+)$/
+      )
+      if (method === "DELETE" && teamMemberMatch) {
+        return send(
+          200,
+          await container.commands.removeTeamMember(
+            actor,
+            { teamId: teamMemberMatch[1], userId: teamMemberMatch[2] },
+            context
+          )
+        )
+      }
+
+      const teamMatch = url.pathname.match(/^\/v1\/organizations\/teams\/([^/]+)$/)
+      if (method === "PATCH" && teamMatch) {
+        const payload = updateTeamSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await container.commands.updateTeam(
+            actor,
+            {
+              teamId: teamMatch[1],
+              name: payload.name,
+              description: payload.description,
+              workspaceId: payload.workspaceId,
+              color: payload.color,
+              roleReference: payload.roleReference,
+            },
+            context
+          )
+        )
+      }
+      if (method === "DELETE" && teamMatch) {
+        return send(
+          200,
+          await container.commands.deleteTeam(actor, { teamId: teamMatch[1] }, context)
         )
       }
 

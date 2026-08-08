@@ -13,6 +13,7 @@ import type {
   PasswordResetRepository,
   SessionRepository,
   TeamListItem,
+  TeamMemberListItem,
   TeamRepository,
   UserRepository,
   WorkspaceRepository,
@@ -354,6 +355,22 @@ class InMemoryTeamRepository implements TeamRepository {
       }))
   }
 
+  async listMemberTeamNames(organizationId: string) {
+    const orgTeamIds = new Set(
+      Array.from(this.store.teams.values())
+        .filter((team) => team.organizationId === organizationId && !team.deletedAt)
+        .map((team) => team.id)
+    )
+
+    return this.store.teamMembers
+      .filter((member) => orgTeamIds.has(member.teamId))
+      .map((member) => ({
+        userId: member.userId,
+        teamId: member.teamId,
+        teamName: this.store.teams.get(member.teamId)?.name ?? "",
+      }))
+  }
+
   async addMember(member: TeamMemberState) {
     const exists = this.store.teamMembers.some(
       (entry) => entry.teamId === member.teamId && entry.userId === member.userId
@@ -361,6 +378,26 @@ class InMemoryTeamRepository implements TeamRepository {
     if (!exists) {
       this.store.teamMembers.push({ ...member })
     }
+  }
+
+  async listMembers(teamId: string): Promise<TeamMemberListItem[]> {
+    return this.store.teamMembers
+      .filter((member) => member.teamId === teamId)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .map((member) => {
+        const user = this.store.users.get(member.userId)
+        return {
+          ...member,
+          userFullName: user?.fullName ?? "",
+          userEmail: user?.email ?? "",
+        }
+      })
+  }
+
+  async removeMember(teamId: string, userId: string) {
+    this.store.teamMembers = this.store.teamMembers.filter(
+      (entry) => !(entry.teamId === teamId && entry.userId === userId)
+    )
   }
 }
 

@@ -1,23 +1,29 @@
 import type {
+  AddTeamMemberRequestDto,
   AdministrationGateway,
   AdministrationInvitationDto,
   AdministrationRoleDto,
   AdministrationSessionDto,
   AdministrationTeamDto,
+  AdministrationTeamMemberDto,
   AdministrationUserDto,
   AuditLogListDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
   GetRolesRequestDto,
+  GetTeamMembersRequestDto,
   GetTeamsRequestDto,
   GetUsersRequestDto,
+  RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   SendInvitationRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateTeamRequestDto,
 } from "../contracts"
 
 export class AdministrationApplicationService {
@@ -61,6 +67,26 @@ export class AdministrationApplicationService {
 
   createTeam(request: CreateTeamRequestDto): Promise<AdministrationTeamDto> {
     return this.gateway.createTeam(request)
+  }
+
+  getTeamMembers(request: GetTeamMembersRequestDto): Promise<AdministrationTeamMemberDto[]> {
+    return this.gateway.getTeamMembers(request)
+  }
+
+  addTeamMember(request: AddTeamMemberRequestDto): Promise<void> {
+    return this.gateway.addTeamMember(request)
+  }
+
+  removeTeamMember(request: RemoveTeamMemberRequestDto): Promise<void> {
+    return this.gateway.removeTeamMember(request)
+  }
+
+  updateTeam(request: UpdateTeamRequestDto): Promise<AdministrationTeamDto> {
+    return this.gateway.updateTeam(request)
+  }
+
+  deleteTeam(request: DeleteTeamRequestDto): Promise<void> {
+    return this.gateway.deleteTeam(request)
   }
 
   getRoles(request: GetRolesRequestDto): Promise<AdministrationRoleDto[]> {

@@ -99,8 +99,11 @@ export interface AdministrationTeamDto {
   manager: string
   members: number
   workspace: string
+  workspaceId: string | null
   description: string
   color: string
+  roleReference: string | null
+  permissions: Record<string, string[]>
 }
 
 export interface GetTeamsRequestDto {
@@ -112,6 +115,41 @@ export interface CreateTeamRequestDto {
   name: string
   description?: string
   workspaceId?: string
+  roleReference?: string | null
+}
+
+export interface AdministrationTeamMemberDto {
+  id: string
+  userId: string
+  fullName: string
+  email: string
+  addedAt: string
+}
+
+export interface GetTeamMembersRequestDto {
+  teamId: string
+}
+
+export interface AddTeamMemberRequestDto {
+  teamId: string
+  userId: string
+}
+
+export interface RemoveTeamMemberRequestDto {
+  teamId: string
+  userId: string
+}
+
+export interface UpdateTeamRequestDto {
+  teamId: string
+  name?: string
+  description?: string
+  workspaceId?: string | null
+  roleReference?: string | null
+}
+
+export interface DeleteTeamRequestDto {
+  teamId: string
 }
 
 export interface RolePermissionDto {
@@ -158,6 +196,11 @@ export interface AdministrationGateway {
   revokeSession(request: RevokeSessionRequestDto): Promise<void>
   getTeams(request: GetTeamsRequestDto): Promise<AdministrationTeamDto[]>
   createTeam(request: CreateTeamRequestDto): Promise<AdministrationTeamDto>
+  getTeamMembers(request: GetTeamMembersRequestDto): Promise<AdministrationTeamMemberDto[]>
+  addTeamMember(request: AddTeamMemberRequestDto): Promise<void>
+  removeTeamMember(request: RemoveTeamMemberRequestDto): Promise<void>
+  updateTeam(request: UpdateTeamRequestDto): Promise<AdministrationTeamDto>
+  deleteTeam(request: DeleteTeamRequestDto): Promise<void>
   getRoles(request: GetRolesRequestDto): Promise<AdministrationRoleDto[]>
   createCustomRole(request: CreateCustomRoleRequestDto): Promise<AdministrationRoleDto>
   updateCustomRole(request: UpdateCustomRoleRequestDto): Promise<AdministrationRoleDto>

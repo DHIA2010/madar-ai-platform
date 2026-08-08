@@ -1391,7 +1391,7 @@ export function NewConnectionWizard() {
                                 "rounded-full border px-2.5 py-1 text-[11px] font-medium",
                                 WIZARD_INTERACTION_CLASS,
                                 selectedAccount.id === account.id
-                                  ? "border-sky-300 bg-sky-500/15 text-sky-100"
+                                  ? "border-sky-200 bg-sky-50 text-sky-700"
                                   : "border-border/70 bg-background text-foreground/80"
                               )}
                               onClick={() => setSelectedAccountId(account.id)}

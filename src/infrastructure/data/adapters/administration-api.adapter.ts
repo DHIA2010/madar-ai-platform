@@ -1,13 +1,17 @@
 import type {
+  AddTeamMemberRequestDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
+  RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateTeamRequestDto,
 } from "@/application/contracts/administration.contracts"
 import type { ApiClient } from "@/infrastructure/http"
 
@@ -44,6 +48,7 @@ export interface OrganizationMemberApiEntry {
   workspaceId: string | null
   workspaceName: string | null
   lastLoginAt: string | null
+  teams: Array<{ id: string; name: string }>
 }
 
 export interface OrganizationMembersApiResponse {
@@ -97,11 +102,28 @@ export interface TeamApiEntry {
   managerUserId: string | null
   managerName: string | null
   memberCount: number
+  roleReference: string | null
+  permissions: Record<string, string[]>
 }
 
 export interface OrganizationTeamsApiResponse {
   organizationId: string
   items: TeamApiEntry[]
+}
+
+export interface TeamMemberApiEntry {
+  id: string
+  teamId: string
+  userId: string
+  addedByUserId: string | null
+  createdAt: string
+  userFullName: string
+  userEmail: string
+}
+
+export interface TeamMembersApiResponse {
+  teamId: string
+  items: TeamMemberApiEntry[]
 }
 
 export interface RoleApiEntry {
@@ -199,13 +221,65 @@ export class AdministrationApiAdapter {
 
   createTeam(request: CreateTeamRequestDto): Promise<TeamApiEntry> {
     return this.client.post<
-      { name: string; description?: string; workspaceId?: string },
+      {
+        name: string
+        description?: string
+        workspaceId?: string
+        roleReference?: string | null
+      },
       TeamApiEntry
     >(`/v1/organizations/${request.organizationId}/teams`, {
       name: request.name,
       description: request.description,
       workspaceId: request.workspaceId,
+      roleReference: request.roleReference,
     })
+  }
+
+  getTeamMembers(teamId: string): Promise<TeamMemberApiEntry[]> {
+    return this.client
+      .get<TeamMembersApiResponse>(`/v1/organizations/teams/${teamId}/members`)
+      .then((response) => response.items)
+  }
+
+  addTeamMember(request: AddTeamMemberRequestDto): Promise<void> {
+    return this.client
+      .post<
+        { userId: string },
+        { added: boolean }
+      >(`/v1/organizations/teams/${request.teamId}/members`, { userId: request.userId })
+      .then(() => undefined)
+  }
+
+  removeTeamMember(request: RemoveTeamMemberRequestDto): Promise<void> {
+    return this.client
+      .delete<{
+        removed: boolean
+      }>(`/v1/organizations/teams/${request.teamId}/members/${request.userId}`)
+      .then(() => undefined)
+  }
+
+  updateTeam(request: UpdateTeamRequestDto): Promise<TeamApiEntry> {
+    return this.client.patch<
+      {
+        name?: string
+        description?: string
+        workspaceId?: string | null
+        roleReference?: string | null
+      },
+      TeamApiEntry
+    >(`/v1/organizations/teams/${request.teamId}`, {
+      name: request.name,
+      description: request.description,
+      workspaceId: request.workspaceId,
+      roleReference: request.roleReference,
+    })
+  }
+
+  deleteTeam(request: DeleteTeamRequestDto): Promise<void> {
+    return this.client
+      .delete<{ deleted: boolean }>(`/v1/organizations/teams/${request.teamId}`)
+      .then(() => undefined)
   }
 
   getRoles(organizationId: string): Promise<RoleApiEntry[]> {

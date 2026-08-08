@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Lock, Mail } from "lucide-react"
 import { Controller, useForm } from "react-hook-form"
@@ -53,6 +54,7 @@ function MicrosoftIcon() {
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const { login, authStatus } = useAuth()
   const [formError, setFormError] = useState<string | null>(null)
+  const t = useTranslations("auth.login")
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -69,9 +71,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
     try {
       await login(values)
     } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "تعذّر تسجيل الدخول. يرجى المحاولة مرة أخرى."
-      )
+      setFormError(error instanceof Error ? error.message : t("genericError"))
     }
   })
 
@@ -87,16 +87,16 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           className="h-14 w-auto"
         />
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold text-slate-900">مرحباً بك في مدار</h1>
-          <p className="text-sm text-slate-500">سجّل الدخول للوصول إلى حسابك ومتابعة أداء حملاتك</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t("heading")}</h1>
+          <p className="text-sm text-slate-500">{t("subheading")}</p>
         </div>
       </div>
 
       <AppForm onSubmit={onSubmit} className="space-y-5">
         <AppInput
           type="email"
-          label="البريد الإلكتروني"
-          placeholder="أدخل بريدك الإلكتروني"
+          label={t("emailLabel")}
+          placeholder={t("emailPlaceholder")}
           autoComplete="email"
           startIcon={<Mail className="size-4" />}
           errorText={form.formState.errors.email?.message}
@@ -105,8 +105,8 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         />
 
         <AppPasswordInput
-          label="كلمة المرور"
-          placeholder="أدخل كلمة المرور"
+          label={t("passwordLabel")}
+          placeholder={t("passwordPlaceholder")}
           autoComplete="current-password"
           startIcon={<Lock className="size-4" />}
           errorText={form.formState.errors.password?.message}
@@ -123,13 +123,13 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
                 <AppCheckbox checked={field.value} onCheckedChange={field.onChange} />
               )}
             />
-            تذكرني
+            {t("rememberMe")}
           </label>
           <Link
             href={ROUTES.forgotPassword}
             className="font-medium text-violet-600 underline-offset-4 hover:underline"
           >
-            نسيت كلمة المرور؟
+            {t("forgotPassword")}
           </Link>
         </div>
 
@@ -141,19 +141,19 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           loading={form.formState.isSubmitting || authStatus === "loading"}
           className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
         >
-          تسجيل الدخول
+          {t("submit")}
         </AppButton>
 
         <div className="flex items-center gap-3 text-xs text-slate-400">
           <span className="h-px flex-1 bg-slate-200" />
-          أو سجّل الدخول باستخدام
+          {t("orContinueWith")}
           <span className="h-px flex-1 bg-slate-200" />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
-            title="قريباً"
+            title={t("comingSoon")}
             className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <GoogleIcon />
@@ -161,7 +161,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           </button>
           <button
             type="button"
-            title="قريباً"
+            title={t("comingSoon")}
             className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <MicrosoftIcon />
@@ -170,12 +170,12 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         </div>
 
         <p className="text-center text-sm text-slate-600">
-          ليس لديك حساب؟{" "}
+          {t("noAccount")}{" "}
           <Link
             href={ROUTES.register}
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
           >
-            إنشاء حساب جديد
+            {t("createAccount")}
           </Link>
         </p>
       </AppForm>

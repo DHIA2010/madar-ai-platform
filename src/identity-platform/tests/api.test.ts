@@ -230,6 +230,335 @@ describe("Identity API", () => {
     expect(listedTeams.items[0].memberCount).toBe(1)
   })
 
+  it("adds and removes a team member", async () => {
+    const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-members-owner@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Team Members Owner",
+        organizationName: "Team Members Org",
+      }),
+    })
+    const ownerRegistration = await registerOwner.json()
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: ownerRegistration.verificationToken }),
+    })
+    const ownerLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-members-owner@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    const ownerLogin = await ownerLoginRes.json()
+
+    const createOrgRes = await fetch(`${baseUrl}/v1/organizations`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({
+        name: "Team Members Platform Org",
+        timezone: "Asia/Riyadh",
+        locale: "ar-SA",
+        currency: "SAR",
+      }),
+    })
+    const createdOrg = await createOrgRes.json()
+
+    const createTeamRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/teams`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({ name: "Support" }),
+    })
+    const createdTeam = await createTeamRes.json()
+
+    const registerInvitee = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-members-invitee@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Team Members Invitee",
+        organizationName: "Invitee Own Org",
+      }),
+    })
+    const inviteeRegistration = await registerInvitee.json()
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: inviteeRegistration.verificationToken }),
+    })
+    const inviteeLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-members-invitee@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    const inviteeLogin = await inviteeLoginRes.json()
+
+    const inviteRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/invitations`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({ email: "team-members-invitee@madar.test", role: "viewer" }),
+    })
+    const invite = await inviteRes.json()
+
+    const acceptRes = await fetch(
+      `${baseUrl}/v1/organizations/invitations/${invite.token}/accept`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${inviteeLogin.session.accessToken}`,
+        },
+        body: "{}",
+      }
+    )
+    expect(acceptRes.status).toBe(200)
+
+    const inviteeProfileRes = await fetch(`${baseUrl}/v1/identity/profile`, {
+      headers: { authorization: `Bearer ${inviteeLogin.session.accessToken}` },
+    })
+    const inviteeProfile = await inviteeProfileRes.json()
+
+    const addMemberRes = await fetch(
+      `${baseUrl}/v1/organizations/teams/${createdTeam.id}/members`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${ownerLogin.session.accessToken}`,
+        },
+        body: JSON.stringify({ userId: inviteeProfile.id }),
+      }
+    )
+    expect(addMemberRes.status).toBe(201)
+
+    const membersAfterAddRes = await fetch(
+      `${baseUrl}/v1/organizations/teams/${createdTeam.id}/members`,
+      { headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` } }
+    )
+    const membersAfterAdd = await membersAfterAddRes.json()
+    expect(membersAfterAdd.items).toHaveLength(2)
+    expect(membersAfterAdd.items.map((item: { userId: string }) => item.userId)).toContain(
+      inviteeProfile.id
+    )
+
+    const removeMemberRes = await fetch(
+      `${baseUrl}/v1/organizations/teams/${createdTeam.id}/members/${inviteeProfile.id}`,
+      {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+      }
+    )
+    expect(removeMemberRes.status).toBe(200)
+
+    const membersAfterRemoveRes = await fetch(
+      `${baseUrl}/v1/organizations/teams/${createdTeam.id}/members`,
+      { headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` } }
+    )
+    const membersAfterRemove = await membersAfterRemoveRes.json()
+    expect(membersAfterRemove.items).toHaveLength(1)
+  })
+
+  it("updates and deletes a team", async () => {
+    const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-edit-owner@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Team Edit Owner",
+        organizationName: "Team Edit Org",
+      }),
+    })
+    const ownerRegistration = await registerOwner.json()
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: ownerRegistration.verificationToken }),
+    })
+    const ownerLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-edit-owner@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    const ownerLogin = await ownerLoginRes.json()
+
+    const createOrgRes = await fetch(`${baseUrl}/v1/organizations`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({
+        name: "Team Edit Platform Org",
+        timezone: "Asia/Riyadh",
+        locale: "ar-SA",
+        currency: "SAR",
+      }),
+    })
+    const createdOrg = await createOrgRes.json()
+
+    const createTeamRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/teams`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({ name: "Original Name", description: "Original description" }),
+    })
+    const createdTeam = await createTeamRes.json()
+
+    const updateRes = await fetch(`${baseUrl}/v1/organizations/teams/${createdTeam.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({ name: "Renamed Team", description: "Updated description" }),
+    })
+    expect(updateRes.status).toBe(200)
+    const updatedTeam = await updateRes.json()
+    expect(updatedTeam.name).toBe("Renamed Team")
+    expect(updatedTeam.description).toBe("Updated description")
+
+    const listAfterUpdateRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/teams`, {
+      headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+    })
+    const listAfterUpdate = await listAfterUpdateRes.json()
+    expect(listAfterUpdate.items).toHaveLength(1)
+    expect(listAfterUpdate.items[0].name).toBe("Renamed Team")
+
+    const deleteRes = await fetch(`${baseUrl}/v1/organizations/teams/${createdTeam.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+    })
+    expect(deleteRes.status).toBe(200)
+
+    const listAfterDeleteRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/teams`, {
+      headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+    })
+    const listAfterDelete = await listAfterDeleteRes.json()
+    expect(listAfterDelete.items).toHaveLength(0)
+  })
+
+  it("assigns permissions to a team and reflects them on member listings", async () => {
+    const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-perms-owner@madar.test",
+        password: "VeryStrongPassword123!",
+        fullName: "Team Perms Owner",
+        organizationName: "Team Perms Org",
+      }),
+    })
+    const ownerRegistration = await registerOwner.json()
+    await fetch(`${baseUrl}/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: ownerRegistration.verificationToken }),
+    })
+    const ownerLoginRes = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "team-perms-owner@madar.test",
+        password: "VeryStrongPassword123!",
+      }),
+    })
+    const ownerLogin = await ownerLoginRes.json()
+
+    const createOrgRes = await fetch(`${baseUrl}/v1/organizations`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({
+        name: "Team Perms Platform Org",
+        timezone: "Asia/Riyadh",
+        locale: "ar-SA",
+        currency: "SAR",
+      }),
+    })
+    const createdOrg = await createOrgRes.json()
+
+    const createTeamRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/teams`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({ name: "Growth", roleReference: "viewer" }),
+    })
+    expect(createTeamRes.status).toBe(201)
+    const createdTeam = await createTeamRes.json()
+    expect(createdTeam.roleReference).toBe("viewer")
+    expect(createdTeam.permissions.campaigns).toEqual(["view"])
+    expect(createdTeam.permissions.dashboard).toEqual(["view"])
+
+    const listTeamsRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/teams`, {
+      headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+    })
+    const listedTeams = await listTeamsRes.json()
+    expect(listedTeams.items[0].permissions.campaigns).toEqual(["view"])
+
+    const createRoleRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/roles`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({
+        name: "Reports Only",
+        permissions: [{ module: "reports", action: "view" }],
+      }),
+    })
+    const createdRole = await createRoleRes.json()
+
+    const updateRes = await fetch(`${baseUrl}/v1/organizations/teams/${createdTeam.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ownerLogin.session.accessToken}`,
+      },
+      body: JSON.stringify({ roleReference: createdRole.id }),
+    })
+    expect(updateRes.status).toBe(200)
+    const updatedTeam = await updateRes.json()
+    expect(updatedTeam.roleReference).toBe(createdRole.id)
+    expect(updatedTeam.permissions).toEqual({ reports: ["view"] })
+
+    const membersRes = await fetch(`${baseUrl}/v1/organizations/${createdOrg.id}/members`, {
+      headers: { authorization: `Bearer ${ownerLogin.session.accessToken}` },
+    })
+    const membersBody = await membersRes.json()
+    const ownerMember = membersBody.members.find(
+      (member: { email: string }) => member.email === "team-perms-owner@madar.test"
+    )
+    expect(ownerMember.teams).toEqual([{ id: createdTeam.id, name: "Growth" }])
+  })
+
   it("lists system roles with real member counts and supports creating/editing a custom role", async () => {
     const registerOwner = await fetch(`${baseUrl}/v1/auth/register`, {
       method: "POST",

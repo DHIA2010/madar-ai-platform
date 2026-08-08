@@ -3,9 +3,11 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 
 import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -37,71 +39,10 @@ import {
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
-// nav menues
-const data = {
-  user: {
-    name: "محمد",
-    email: "admin@madar.ai",
-    avatar: "https://untitledui.com/images/avatars/madeleine-pitts",
-  },
-  navMain: [
-    {
-      title: "الرئيسية",
-      url: ROUTES.dashboard,
-      icon: <House />,
-      isActive: true,
-    },
-    {
-      title: "القنوات",
-      url: "/channels",
-      icon: <Tv />,
-    },
-    {
-      title: "الحملات",
-      url: "/campaigns",
-      icon: <SendIcon />,
-    },
-    {
-      title: "المتاجر",
-      url: "/stores",
-      icon: <ShoppingBag />,
-    },
-    {
-      title: "المنتجات",
-      url: "/products",
-      icon: <Grid2x2 />,
-    },
-    {
-      title: "العملاء",
-      url: "/customers",
-      icon: <CircleUserRound />,
-    },
-    {
-      title: "التقارير",
-      url: "/reports",
-      icon: <ChartNoAxesCombined />,
-    },
-    {
-      title: "الذكاء الاصطناعي",
-      url: "/ai",
-      icon: <Gauge />,
-    },
-    {
-      title: "التكاملات",
-      url: "/integrations",
-      icon: <LayoutGrid />,
-    },
-    {
-      title: "الإدارة",
-      url: ROUTES.administration,
-      icon: <ShieldCheck />,
-    },
-    {
-      title: "الإعدادات",
-      url: "/settings",
-      icon: <Settings2 />,
-    },
-  ],
+const user = {
+  name: "محمد",
+  email: "admin@madar.ai",
+  avatar: "https://untitledui.com/images/avatars/madeleine-pitts",
 }
 
 // This is the sidebar component used in the app layout.
@@ -111,10 +52,34 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 
 // The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
+  const t = useTranslations("sidebar.nav")
+  const tCommon = useTranslations("common")
+
+  const navMain = [
+    { title: t("home"), url: ROUTES.dashboard, icon: <House />, isActive: true },
+    { title: t("channels"), url: "/channels", icon: <Tv /> },
+    { title: t("campaigns"), url: "/campaigns", icon: <SendIcon /> },
+    { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },
+    { title: t("products"), url: "/products", icon: <Grid2x2 /> },
+    { title: t("customers"), url: "/customers", icon: <CircleUserRound /> },
+    { title: t("reports"), url: "/reports", icon: <ChartNoAxesCombined /> },
+    { title: t("ai"), url: "/ai", icon: <Gauge /> },
+    { title: t("integrations"), url: "/integrations", icon: <LayoutGrid /> },
+    { title: t("administration"), url: ROUTES.administration, icon: <ShieldCheck /> },
+    { title: t("settings"), url: "/settings", icon: <Settings2 /> },
+  ]
+
   return (
     <div onMouseEnter={() => onHoverChange?.(true)} onMouseLeave={() => onHoverChange?.(false)}>
-      <Sidebar side="right" collapsible="icon" {...props} className="border-none shadow-sm">
-        <SidebarHeader className="h-20 justify-center px-4" dir="rtl">
+      <Sidebar
+        side={locale === "ar" ? "right" : "left"}
+        collapsible="icon"
+        {...props}
+        className="border-none shadow-sm"
+      >
+        <SidebarHeader className="h-20 justify-center px-4" dir={dir}>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild className="p-1 hover:bg-transparent">
@@ -138,21 +103,26 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
         <SidebarContent className="overflow-hidden">
           <ScrollArea className="h-full">
             <div className="flex min-h-full flex-col">
-              <NavMain items={data.navMain} />
+              <NavMain items={navMain} />
             </div>
           </ScrollArea>
         </SidebarContent>
-        <SidebarFooter className="gap-3 px-3 pb-4" dir="rtl">
+        <SidebarFooter className="gap-3 px-3 pb-4" dir={dir}>
           <WorkspaceSelector compact />
-          <NavUser user={data.user} />
+          <NavUser user={user} />
           <div className="flex items-center justify-center gap-1 border-t border-sidebar-border pt-3">
             <ThemeToggle />
             <Button variant="ghost" size="icon" className="size-9 rounded-full" asChild>
-              <Link href={ROUTES.settings} aria-label="Settings">
+              <Link href={ROUTES.settings} aria-label={tCommon("settings")}>
                 <Settings2 className="size-4" />
               </Link>
             </Button>
-            <Button variant="ghost" size="icon" className="size-9 rounded-full" aria-label="Help">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 rounded-full"
+              aria-label={tCommon("help")}
+            >
               <HelpCircle className="size-4" />
             </Button>
           </div>

@@ -869,6 +869,7 @@ export interface TeamState {
   managerUserId: string | null
   createdByUserId: string
   status: "active" | "archived"
+  roleReference: string | null
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -886,6 +887,7 @@ export class TeamEntity {
     color: string
     managerUserId: string | null
     createdByUserId: string
+    roleReference?: string | null
     now: string
   }) {
     return new TeamEntity({
@@ -898,6 +900,7 @@ export class TeamEntity {
       managerUserId: input.managerUserId,
       createdByUserId: input.createdByUserId,
       status: "active",
+      roleReference: input.roleReference ?? null,
       createdAt: input.now,
       updatedAt: input.now,
       deletedAt: null,
@@ -914,6 +917,30 @@ export class TeamEntity {
 
   get organizationId() {
     return this.state.organizationId
+  }
+
+  update(
+    payload: {
+      name?: string
+      description?: string
+      workspaceId?: string | null
+      color?: string
+      roleReference?: string | null
+    },
+    now: string
+  ) {
+    if (payload.name !== undefined) this.state.name = payload.name
+    if (payload.description !== undefined) this.state.description = payload.description
+    if (payload.workspaceId !== undefined) this.state.workspaceId = payload.workspaceId
+    if (payload.color !== undefined) this.state.color = payload.color
+    if (payload.roleReference !== undefined) this.state.roleReference = payload.roleReference
+    this.state.updatedAt = now
+  }
+
+  delete(now: string) {
+    this.state.status = "archived"
+    this.state.deletedAt = now
+    this.state.updatedAt = now
   }
 
   toState(): TeamState {

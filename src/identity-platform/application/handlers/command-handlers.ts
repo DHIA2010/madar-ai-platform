@@ -5,6 +5,7 @@ import type { IdentityPlatformConfig } from "../../configuration"
 import type { RequestContext, AuthenticatedActor, TokenPair } from "../dto/identity-dtos"
 import type {
   AcceptInvitationCommand,
+  AddTeamMemberCommand,
   ArchiveOrganizationCommand,
   ArchiveWorkspaceCommand,
   AssignMemberRoleCommand,
@@ -17,6 +18,7 @@ import type {
   CreateWorkspaceCommand,
   DeclineInvitationCommand,
   DeleteOrganizationCommand,
+  DeleteTeamCommand,
   ForgotPasswordCommand,
   InviteMemberCommand,
   LoginUserCommand,
@@ -28,6 +30,7 @@ import type {
   RestoreOrganizationCommand,
   RestoreWorkspaceCommand,
   RegisterUserCommand,
+  RemoveTeamMemberCommand,
   ResetPasswordCommand,
   RevokeSessionCommand,
   SuspendMemberCommand,
@@ -37,6 +40,7 @@ import type {
   UpdateMemberProfileCommand,
   UpdateOrganizationCommand,
   UpdateProfileCommand,
+  UpdateTeamCommand,
   UpdateWorkspaceCommand,
   VerifyEmailCommand,
 } from "../commands"
@@ -69,6 +73,7 @@ import {
 import type { DomainEvent } from "../../domain/events"
 import { ERRORS, IdentityError } from "../errors/IdentityError"
 import { hasPermission, resolvePermissions } from "../../domain/domain-services/permission-service"
+import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 
 export interface IdentityCommandHandlerDependencies {
   config: IdentityPlatformConfig
@@ -239,9 +244,17 @@ export class IdentityCommandHandlers {
       now: timestamp,
     })
 
-    await this.deps.repositories.users.save(user.toState())
+    // users.primary_organization_id and organizations.owner_user_id form a circular
+    // foreign key, so the user row is inserted first with those references nulled out,
+    // then re-saved once the organization and workspace it points to actually exist.
+    await this.deps.repositories.users.save({
+      ...user.toState(),
+      primaryOrganizationId: null,
+      activeWorkspaceId: null,
+    })
     await this.deps.repositories.organizations.save(organization.toState())
     await this.deps.repositories.workspaces.save(workspace.toState())
+    await this.deps.repositories.users.save(user.toState())
     await this.deps.repositories.memberships.save(membership.toState())
 
     const verificationToken = this.deps.tokenService.generateOpaqueToken()
@@ -756,6 +769,31 @@ export class IdentityCommandHandlers {
     return { success: true }
   }
 
+  private async resolveTeamPermissions(
+    organizationId: string,
+    roleReference: string | null
+  ): Promise<Record<string, string[]>> {
+    if (!roleReference) return {}
+
+    const systemRole = SYSTEM_ROLE_DEFINITIONS.find(
+      (definition) => definition.role === roleReference
+    )
+    if (systemRole) return systemRole.permissions
+
+    const customRoles =
+      await this.deps.repositories.customRoles.listByOrganizationId(organizationId)
+    const customRole = customRoles.find((role) => role.id === roleReference)
+    if (!customRole) return {}
+
+    const record: Record<string, string[]> = {}
+    for (const permission of customRole.permissions) {
+      const existing = record[permission.module] ?? []
+      existing.push(permission.action)
+      record[permission.module] = existing
+    }
+    return record
+  }
+
   private async requireOrganizationMembership(userId: string, organizationId: string) {
     const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
       userId,
@@ -1094,6 +1132,7 @@ export class IdentityCommandHandlers {
       color: command.color ?? "bg-blue-500",
       managerUserId: actor.userId,
       createdByUserId: actor.userId,
+      roleReference: command.roleReference ?? null,
       now: this.now,
     })
     await this.deps.repositories.teams.save(team.toState())
@@ -1120,7 +1159,167 @@ export class IdentityCommandHandlers {
       managerName: manager?.fullName ?? null,
       workspaceName: workspaceState?.name ?? null,
       memberCount: 1,
+      permissions: await this.resolveTeamPermissions(
+        command.organizationId,
+        team.toState().roleReference
+      ),
     }
+  }
+
+  async addTeamMember(
+    actor: AuthenticatedActor,
+    command: AddTeamMemberCommand,
+    context: RequestContext
+  ) {
+    const teamState = await this.deps.repositories.teams.findById(command.teamId)
+    if (!teamState) {
+      throw ERRORS.notFound("Team")
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      teamState.organizationId
+    )
+    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+    const targetMembership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.userId,
+      teamState.organizationId
+    )
+    if (!targetMembership || targetMembership.status !== "active") {
+      throw ERRORS.notFound("User")
+    }
+
+    await this.deps.repositories.teams.addMember({
+      id: this.deps.uuid.generate(),
+      teamId: teamState.id,
+      userId: command.userId,
+      addedByUserId: actor.userId,
+      createdAt: this.now,
+    })
+    await this.audit(
+      "team.member_added",
+      context,
+      actor.userId,
+      teamState.organizationId,
+      teamState.workspaceId,
+      "team",
+      teamState.id
+    )
+
+    return { added: true }
+  }
+
+  async removeTeamMember(
+    actor: AuthenticatedActor,
+    command: RemoveTeamMemberCommand,
+    context: RequestContext
+  ) {
+    const teamState = await this.deps.repositories.teams.findById(command.teamId)
+    if (!teamState) {
+      throw ERRORS.notFound("Team")
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      teamState.organizationId
+    )
+    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+
+    await this.deps.repositories.teams.removeMember(teamState.id, command.userId)
+    await this.audit(
+      "team.member_removed",
+      context,
+      actor.userId,
+      teamState.organizationId,
+      teamState.workspaceId,
+      "team",
+      teamState.id
+    )
+
+    return { removed: true }
+  }
+
+  async updateTeam(actor: AuthenticatedActor, command: UpdateTeamCommand, context: RequestContext) {
+    const teamState = await this.deps.repositories.teams.findById(command.teamId)
+    if (!teamState) {
+      throw ERRORS.notFound("Team")
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      teamState.organizationId
+    )
+    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+    if (command.workspaceId) {
+      const workspaceState = await this.deps.repositories.workspaces.findById(command.workspaceId)
+      if (!workspaceState || workspaceState.organizationId !== teamState.organizationId) {
+        throw ERRORS.notFound("Workspace")
+      }
+    }
+
+    const team = TeamEntity.rehydrate(teamState)
+    team.update(
+      {
+        name: command.name,
+        description: command.description,
+        workspaceId: command.workspaceId,
+        color: command.color,
+        roleReference: command.roleReference,
+      },
+      this.now
+    )
+    await this.deps.repositories.teams.save(team.toState())
+    await this.audit(
+      "team.updated",
+      context,
+      actor.userId,
+      teamState.organizationId,
+      team.toState().workspaceId,
+      "team",
+      team.id
+    )
+
+    const teams = await this.deps.repositories.teams.listByOrganizationId(teamState.organizationId)
+    const updated = teams.find((item) => item.id === team.id) ?? team.toState()
+    return {
+      ...updated,
+      permissions: await this.resolveTeamPermissions(
+        teamState.organizationId,
+        team.toState().roleReference
+      ),
+    }
+  }
+
+  async deleteTeam(actor: AuthenticatedActor, command: DeleteTeamCommand, context: RequestContext) {
+    const teamState = await this.deps.repositories.teams.findById(command.teamId)
+    if (!teamState) {
+      throw ERRORS.notFound("Team")
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      teamState.organizationId
+    )
+    if (!membership || !["owner", "admin", "manager"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+
+    const team = TeamEntity.rehydrate(teamState)
+    team.delete(this.now)
+    await this.deps.repositories.teams.save(team.toState())
+    await this.audit(
+      "team.deleted",
+      context,
+      actor.userId,
+      teamState.organizationId,
+      teamState.workspaceId,
+      "team",
+      team.id
+    )
+
+    return { deleted: true }
   }
 
   async createCustomRole(

@@ -1,7 +1,7 @@
-import type { Role } from "../../types"
 import type { AuthenticatedActor } from "../dto/identity-dtos"
 import type { ListAuditLogsQuery, ListInvitationsQuery, ListOrganizationsQuery } from "../queries"
-import type { IdentityRepositories } from "../../domain/repositories"
+import type { CustomRoleListItem, IdentityRepositories } from "../../domain/repositories"
+import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 import { ERRORS } from "../errors/IdentityError"
 import {
   hasPermission,
@@ -9,124 +9,26 @@ import {
   resolvePermissions,
 } from "../../domain/domain-services/permission-service"
 
-// Fixed, non-editable default permission matrices for the platform's real
-// membership roles -- unlike custom roles, these are not backed by
-// custom_role_permissions and don't affect actual authorization checks (those
-// still run on the fixed owner/admin/manager/analyst/viewer role system).
-// This just gives the granular Roles UI something honest to display for the
-// roles a member can actually be assigned.
-const SYSTEM_ROLE_DEFINITIONS: Array<{
-  role: Role
-  name: string
-  description: string
-  permissions: Record<string, string[]>
-}> = [
-  {
-    role: "owner",
-    name: "Owner",
-    description: "Full control across security, billing, and workspace governance.",
-    permissions: {
-      dashboard: ["view", "export"],
-      campaigns: ["view", "create", "edit", "delete", "approve", "publish"],
-      customers: ["view", "create", "edit", "delete", "export", "import"],
-      products: ["view", "create", "edit", "delete", "export", "import"],
-      reports: ["view", "export", "approve"],
-      connections: ["view", "create", "edit", "delete", "manage"],
-      creativeLibrary: ["view", "create", "edit", "delete", "publish"],
-      ai: ["view", "manage"],
-      settings: ["view", "edit", "manage"],
-      workspace: ["view", "edit", "manage"],
-      users: ["view", "create", "edit", "delete", "manage"],
-      billing: ["view", "edit", "manage"],
-      notifications: ["view", "edit", "manage"],
-      api: ["view", "create", "delete", "manage"],
-    },
-  },
-  {
-    role: "admin",
-    name: "Admin",
-    description: "Manages users, roles, and operational settings.",
-    permissions: {
-      dashboard: ["view"],
-      campaigns: ["view", "create", "edit", "delete", "approve", "publish"],
-      customers: ["view"],
-      products: ["view"],
-      reports: ["view"],
-      connections: ["view"],
-      creativeLibrary: ["view"],
-      ai: ["view"],
-      settings: ["view", "edit", "manage"],
-      workspace: ["view", "edit", "manage"],
-      users: ["view", "create", "edit", "delete", "manage"],
-      billing: ["view"],
-      notifications: ["view"],
-      api: ["view"],
-    },
-  },
-  {
-    role: "manager",
-    name: "Manager",
-    description: "Owns campaign planning, approvals, and reporting.",
-    permissions: {
-      dashboard: ["view"],
-      campaigns: ["view", "create", "edit", "approve", "publish"],
-      customers: ["view"],
-      products: ["view"],
-      reports: ["view", "export"],
-      connections: ["view"],
-      creativeLibrary: ["view", "create", "edit", "publish"],
-      ai: ["view"],
-      settings: ["view"],
-      workspace: ["view"],
-      users: ["view"],
-      billing: ["view"],
-      notifications: ["view"],
-      api: ["view"],
-    },
-  },
-  {
-    role: "analyst",
-    name: "Analyst",
-    description: "Analyzes KPI trends and exports reporting data.",
-    permissions: {
-      dashboard: ["view", "export"],
-      campaigns: ["view"],
-      customers: ["view"],
-      products: ["view"],
-      reports: ["view", "export"],
-      connections: ["view"],
-      creativeLibrary: ["view"],
-      ai: ["view"],
-      settings: ["view"],
-      workspace: ["view"],
-      users: ["view"],
-      billing: ["view"],
-      notifications: ["view"],
-      api: ["view"],
-    },
-  },
-  {
-    role: "viewer",
-    name: "Viewer",
-    description: "Read-only access across approved modules.",
-    permissions: {
-      dashboard: ["view"],
-      campaigns: ["view"],
-      customers: ["view"],
-      products: ["view"],
-      reports: ["view"],
-      connections: ["view"],
-      creativeLibrary: ["view"],
-      ai: ["view"],
-      settings: ["view"],
-      workspace: ["view"],
-      users: ["view"],
-      billing: ["view"],
-      notifications: ["view"],
-      api: ["view"],
-    },
-  },
-]
+function resolveRolePermissions(
+  roleReference: string | null,
+  customRoleById: Map<string, CustomRoleListItem>
+): Record<string, string[]> {
+  if (!roleReference) return {}
+
+  const systemRole = SYSTEM_ROLE_DEFINITIONS.find((definition) => definition.role === roleReference)
+  if (systemRole) return systemRole.permissions
+
+  const customRole = customRoleById.get(roleReference)
+  if (!customRole) return {}
+
+  const record: Record<string, string[]> = {}
+  for (const permission of customRole.permissions) {
+    const existing = record[permission.module] ?? []
+    existing.push(permission.action)
+    record[permission.module] = existing
+  }
+  return record
+}
 
 export class IdentityQueryHandlers {
   constructor(private readonly repositories: IdentityRepositories) {}
@@ -251,6 +153,13 @@ export class IdentityQueryHandlers {
     const rows = await this.repositories.memberships.listByOrganizationId(organizationId)
     const lastLoginTimestamps =
       await this.repositories.auditLogs.getLastLoginTimestamps(organizationId)
+    const memberTeamRows = await this.repositories.teams.listMemberTeamNames(organizationId)
+    const teamsByUserId = new Map<string, Array<{ id: string; name: string }>>()
+    for (const row of memberTeamRows) {
+      const existing = teamsByUserId.get(row.userId) ?? []
+      existing.push({ id: row.teamId, name: row.teamName })
+      teamsByUserId.set(row.userId, existing)
+    }
     const members = await Promise.all(
       rows.map(async (row) => {
         const user = await this.repositories.users.findById(row.userId)
@@ -270,6 +179,7 @@ export class IdentityQueryHandlers {
           workspaceId: row.workspaceId,
           workspaceName: workspace?.name ?? null,
           lastLoginAt: lastLoginTimestamps[row.userId] ?? null,
+          teams: teamsByUserId.get(row.userId) ?? [],
         }
       })
     )
@@ -318,7 +228,36 @@ export class IdentityQueryHandlers {
       throw ERRORS.forbidden()
     }
     const items = await this.repositories.teams.listByOrganizationId(organizationId)
-    return { organizationId, items }
+    if (items.length === 0) {
+      return { organizationId, items: [] }
+    }
+
+    const customRoles = await this.repositories.customRoles.listByOrganizationId(organizationId)
+    const customRoleById = new Map(customRoles.map((role) => [role.id, role]))
+
+    return {
+      organizationId,
+      items: items.map((team) => ({
+        ...team,
+        permissions: resolveRolePermissions(team.roleReference, customRoleById),
+      })),
+    }
+  }
+
+  async listTeamMembers(actor: AuthenticatedActor, teamId: string) {
+    const teamState = await this.repositories.teams.findById(teamId)
+    if (!teamState) {
+      throw ERRORS.notFound("Team")
+    }
+    const membership = await this.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      teamState.organizationId
+    )
+    if (!membership) {
+      throw ERRORS.forbidden()
+    }
+    const items = await this.repositories.teams.listMembers(teamId)
+    return { teamId, items }
   }
 
   async listRoles(actor: AuthenticatedActor, organizationId: string) {

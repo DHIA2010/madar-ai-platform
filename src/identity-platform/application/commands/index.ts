@@ -109,6 +109,30 @@ export interface CreateTeamCommand {
   name: string
   description?: string
   color?: string
+  roleReference?: string | null
+}
+
+export interface AddTeamMemberCommand {
+  teamId: string
+  userId: string
+}
+
+export interface RemoveTeamMemberCommand {
+  teamId: string
+  userId: string
+}
+
+export interface UpdateTeamCommand {
+  teamId: string
+  name?: string
+  description?: string
+  workspaceId?: string | null
+  color?: string
+  roleReference?: string | null
+}
+
+export interface DeleteTeamCommand {
+  teamId: string
 }
 
 export interface RolePermissionInput {

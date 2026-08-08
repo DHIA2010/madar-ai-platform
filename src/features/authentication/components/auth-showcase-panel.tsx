@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server"
 import type { LucideIcon } from "lucide-react"
 import { ShieldCheck } from "lucide-react"
 
@@ -15,15 +16,17 @@ interface AuthShowcasePanelProps {
   footer?: React.ReactNode
 }
 
-const channelLegend = [
-  { label: "Google", color: "#4285F4" },
-  { label: "Snapchat", color: "#22c55e" },
-  { label: "Meta", color: "#8b5cf6" },
-  { label: "TikTok", color: "#ec4899" },
-  { label: "أخرى", color: "#cbd5e1" },
-]
+async function DashboardPreviewCard() {
+  const t = await getTranslations("authShowcase.preview")
 
-function DashboardPreviewCard() {
+  const channelLegend = [
+    { label: "Google", color: "#4285F4" },
+    { label: "Snapchat", color: "#22c55e" },
+    { label: "Meta", color: "#8b5cf6" },
+    { label: "TikTok", color: "#ec4899" },
+    { label: t("otherChannel"), color: "#cbd5e1" },
+  ]
+
   return (
     <div className="relative mx-auto w-full max-w-md">
       <span className="absolute -top-5 end-4 z-10 flex size-14 -rotate-6 items-center justify-center rounded-2xl bg-white/90 text-violet-600 shadow-lg backdrop-blur">
@@ -50,21 +53,21 @@ function DashboardPreviewCard() {
       </span>
 
       <div className="rounded-[28px] border border-white/60 bg-white/95 p-5 shadow-2xl backdrop-blur">
-        <p className="text-sm font-semibold text-slate-900">نظرة عامة على الأداء</p>
+        <p className="text-sm font-semibold text-slate-900">{t("title")}</p>
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-[11px] text-slate-500">ROAS</p>
+            <p className="text-[11px] text-slate-500">{t("roas")}</p>
             <p className="text-base font-bold text-slate-900">5.42</p>
             <p className="text-[11px] font-medium text-emerald-600">18.2%</p>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-[11px] text-slate-500">الإيرادات</p>
+            <p className="text-[11px] text-slate-500">{t("revenue")}</p>
             <p className="text-base font-bold text-slate-900">345,678</p>
             <p className="text-[11px] font-medium text-emerald-600">24.6%</p>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-[11px] text-slate-500">الإنفاق</p>
+            <p className="text-[11px] text-slate-500">{t("spend")}</p>
             <p className="text-base font-bold text-slate-900">63,850</p>
             <p className="text-[11px] font-medium text-emerald-600">12.8%</p>
           </div>
@@ -97,16 +100,16 @@ function DashboardPreviewCard() {
         </div>
 
         <div className="mt-3 flex justify-between text-[10px] text-slate-400">
-          <span>السبت</span>
-          <span>الأحد</span>
-          <span>الاثنين</span>
-          <span>الثلاثاء</span>
-          <span>الأربعاء</span>
+          <span>{t("days.sat")}</span>
+          <span>{t("days.sun")}</span>
+          <span>{t("days.mon")}</span>
+          <span>{t("days.tue")}</span>
+          <span>{t("days.wed")}</span>
         </div>
       </div>
 
       <div className="absolute -bottom-8 -start-8 w-52 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur">
-        <p className="text-xs font-semibold text-slate-900">أفضل القنوات</p>
+        <p className="text-xs font-semibold text-slate-900">{t("topChannels")}</p>
         <div className="mt-3 flex items-center gap-3">
           <div
             className="size-14 shrink-0 rounded-full"
@@ -185,11 +188,13 @@ export function AuthShowcasePanel({
   )
 }
 
-export function AuthTrustBadge() {
+export async function AuthTrustBadge() {
+  const t = await getTranslations("authShowcase")
+
   return (
     <>
       <ShieldCheck className="size-4 shrink-0 text-emerald-600" />
-      بياناتك آمنة ومشفرة بالكامل — نحن نلتزم بحماية بياناتك وخصوصيتك.
+      {t("trustBadge")}
     </>
   )
 }

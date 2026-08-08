@@ -221,7 +221,7 @@ export function AdministrationUsersScreen() {
         className="shadow-sm"
       >
         {isLoading ? (
-          <AppLoading variant="table" rows={5} columns={10} />
+          <AppLoading variant="table" rows={5} columns={11} />
         ) : isError ? (
           <p className="text-sm text-destructive">Failed to load users.</p>
         ) : filteredUsers.length === 0 ? (
@@ -245,6 +245,7 @@ export function AdministrationUsersScreen() {
                     <AppTableHead>User</AppTableHead>
                     <AppTableHead>Department</AppTableHead>
                     <AppTableHead>Role</AppTableHead>
+                    <AppTableHead>Teams</AppTableHead>
                     <AppTableHead>Workspace</AppTableHead>
                     <AppTableHead>Status</AppTableHead>
                     <AppTableHead>Last Login</AppTableHead>
@@ -279,6 +280,19 @@ export function AdministrationUsersScreen() {
                         </AppTableCell>
                         <AppTableCell>{user.department || "—"}</AppTableCell>
                         <AppTableCell>{humanizeRole(user.roleId)}</AppTableCell>
+                        <AppTableCell>
+                          {user.teams.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {user.teams.map((teamName) => (
+                                <AppBadge key={teamName} variant="secondary">
+                                  {teamName}
+                                </AppBadge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">No teams</span>
+                          )}
+                        </AppTableCell>
                         <AppTableCell>{user.workspaces.join(", ") || "—"}</AppTableCell>
                         <AppTableCell>
                           <AppBadge variant="outline">{user.status}</AppBadge>

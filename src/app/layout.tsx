@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { Inter } from "next/font/google"
+import { NextIntlClientProvider } from "next-intl"
+import { getLocale, getMessages } from "next-intl/server"
 import { ThemeProvider } from "next-themes"
 import { ApplicationProvider } from "@/application"
 import { AuthProvider, PermissionProvider } from "@/features/authentication/components"
 import { WorkspaceProvider } from "@/features/workspace"
 import { DEFAULT_THEME, THEME_KEYS } from "@/constants/theme"
+import { localeDirection } from "@/i18n/locales"
 import StoreContextProvider from "@/providers/store-context-provider"
 import QueryProvider from "../providers/query-provider"
 
@@ -93,39 +96,44 @@ export const viewport: Viewport = {
   themeColor: "#0f172a",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const locale = await getLocale()
+  const messages = await getMessages()
+
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang={locale} dir={localeDirection(locale as "ar" | "en")} suppressHydrationWarning>
       <body className={`${inter.className} antialiased`} suppressHydrationWarning>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme={DEFAULT_THEME}
-          themes={[
-            "light",
-            "dark",
-            THEME_KEYS.darkBlue,
-            THEME_KEYS.gaussianBlack,
-            THEME_KEYS.semiDark,
-          ]}
-          enableSystem
-          disableTransitionOnChange
-        >
-          <QueryProvider>
-            <ApplicationProvider>
-              <AuthProvider>
-                <WorkspaceProvider>
-                  <PermissionProvider>
-                    <StoreContextProvider>{children}</StoreContextProvider>
-                  </PermissionProvider>
-                </WorkspaceProvider>
-              </AuthProvider>
-            </ApplicationProvider>
-          </QueryProvider>
-        </ThemeProvider>
+        <NextIntlClientProvider messages={messages}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme={DEFAULT_THEME}
+            themes={[
+              "light",
+              "dark",
+              THEME_KEYS.darkBlue,
+              THEME_KEYS.gaussianBlack,
+              THEME_KEYS.semiDark,
+            ]}
+            enableSystem
+            disableTransitionOnChange
+          >
+            <QueryProvider>
+              <ApplicationProvider>
+                <AuthProvider>
+                  <WorkspaceProvider>
+                    <PermissionProvider>
+                      <StoreContextProvider>{children}</StoreContextProvider>
+                    </PermissionProvider>
+                  </WorkspaceProvider>
+                </AuthProvider>
+              </ApplicationProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   )

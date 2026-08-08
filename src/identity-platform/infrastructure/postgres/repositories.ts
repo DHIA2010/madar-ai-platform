@@ -13,6 +13,7 @@ import type {
   OrganizationRepository,
   PasswordResetRepository,
   TeamListItem,
+  TeamMemberListItem,
   TeamRepository,
   UserRepository,
   WorkspaceRepository,
@@ -830,6 +831,7 @@ function mapTeam(row: Record<string, unknown>): TeamState {
     managerUserId: (row.manager_user_id as string | null) ?? null,
     createdByUserId: String(row.created_by_user_id),
     status: row.status as TeamState["status"],
+    roleReference: (row.role_reference as string | null) ?? null,
     createdAt: toIsoString(row.created_at) ?? "",
     updatedAt: toIsoString(row.updated_at) ?? "",
     deletedAt: toIsoString(row.deleted_at),
@@ -854,9 +856,10 @@ class PostgresTeamRepository implements TeamRepository {
       text: `
         INSERT INTO teams (
           id, organization_id, workspace_id, name, description, color,
-          manager_user_id, created_by_user_id, status, created_at, updated_at, deleted_at
+          manager_user_id, created_by_user_id, status, role_reference,
+          created_at, updated_at, deleted_at
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
           name = EXCLUDED.name,
@@ -864,6 +867,7 @@ class PostgresTeamRepository implements TeamRepository {
           color = EXCLUDED.color,
           manager_user_id = EXCLUDED.manager_user_id,
           status = EXCLUDED.status,
+          role_reference = EXCLUDED.role_reference,
           updated_at = EXCLUDED.updated_at,
           deleted_at = EXCLUDED.deleted_at
       `,
@@ -877,6 +881,7 @@ class PostgresTeamRepository implements TeamRepository {
         team.managerUserId,
         team.createdByUserId,
         team.status,
+        team.roleReference,
         team.createdAt,
         team.updatedAt,
         team.deletedAt,
@@ -913,6 +918,27 @@ class PostgresTeamRepository implements TeamRepository {
     }))
   }
 
+  async listMemberTeamNames(organizationId: string) {
+    const result = await this.db.query<{ user_id: string; team_id: string; team_name: string }>({
+      name: "identity-team-member-names-list-by-org",
+      text: `
+        SELECT tm.user_id, t.id AS team_id, t.name AS team_name
+        FROM team_members tm
+        JOIN teams t ON t.id = tm.team_id
+        WHERE t.organization_id = $1
+          AND t.deleted_at IS NULL
+        ORDER BY t.name ASC
+      `,
+      values: [organizationId],
+    })
+
+    return result.rows.map((row) => ({
+      userId: String(row.user_id),
+      teamId: String(row.team_id),
+      teamName: String(row.team_name),
+    }))
+  }
+
   async addMember(member: TeamMemberState) {
     await this.db.query({
       name: "identity-team-members-insert",
@@ -922,6 +948,44 @@ class PostgresTeamRepository implements TeamRepository {
         ON CONFLICT (team_id, user_id) DO NOTHING
       `,
       values: [member.id, member.teamId, member.userId, member.addedByUserId, member.createdAt],
+    })
+  }
+
+  async listMembers(teamId: string): Promise<TeamMemberListItem[]> {
+    const toIsoString = (value: unknown): string | null => {
+      if (!value) return null
+      if (value instanceof Date) return value.toISOString()
+      return String(value)
+    }
+
+    const result = await this.db.query({
+      name: "identity-team-members-list",
+      text: `
+        SELECT tm.*, u.full_name AS user_full_name, u.email AS user_email
+        FROM team_members tm
+        JOIN users u ON u.id = tm.user_id
+        WHERE tm.team_id = $1
+        ORDER BY tm.created_at ASC
+      `,
+      values: [teamId],
+    })
+
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      teamId: String(row.team_id),
+      userId: String(row.user_id),
+      addedByUserId: (row.added_by_user_id as string | null) ?? null,
+      createdAt: toIsoString(row.created_at) ?? "",
+      userFullName: String(row.user_full_name),
+      userEmail: String(row.user_email),
+    }))
+  }
+
+  async removeMember(teamId: string, userId: string) {
+    await this.db.query({
+      name: "identity-team-members-delete",
+      text: "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2",
+      values: [teamId, userId],
     })
   }
 }

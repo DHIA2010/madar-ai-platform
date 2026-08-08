@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { RefreshCw } from "lucide-react"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { LanguageSwitcher } from "@/components/language-switcher"
 import { NotificationDropdown } from "@/components/notification-dropdown"
 import { GlobalSearch } from "@/components/global-search"
 import { UserDropdown } from "@/components/UserDropdown"
@@ -75,6 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="relative hidden md:inline-flex">
                 <NotificationDropdown />
               </div>
+              <LanguageSwitcher />
               <UserDropdown />
             </div>
           </div>

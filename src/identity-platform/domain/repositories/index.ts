@@ -90,10 +90,20 @@ export interface AuditLogRepository {
   getLastLoginTimestamps(organizationId: string): Promise<Record<string, string>>
 }
 
+export interface CustomRolePermission {
+  module: string
+  action: string
+}
+
 export interface TeamListItem extends TeamState {
   managerName: string | null
   workspaceName: string | null
   memberCount: number
+}
+
+export interface TeamMemberListItem extends TeamMemberState {
+  userFullName: string
+  userEmail: string
 }
 
 export interface TeamRepository {
@@ -101,11 +111,11 @@ export interface TeamRepository {
   save(team: TeamState): Promise<void>
   listByOrganizationId(organizationId: string): Promise<TeamListItem[]>
   addMember(member: TeamMemberState): Promise<void>
-}
-
-export interface CustomRolePermission {
-  module: string
-  action: string
+  listMembers(teamId: string): Promise<TeamMemberListItem[]>
+  removeMember(teamId: string, userId: string): Promise<void>
+  listMemberTeamNames(
+    organizationId: string
+  ): Promise<Array<{ userId: string; teamId: string; teamName: string }>>
 }
 
 export interface CustomRoleListItem extends CustomRoleState {

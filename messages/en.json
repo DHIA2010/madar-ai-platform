@@ -1,0 +1,173 @@
+{
+  "common": {
+    "language": "Language",
+    "languageArabic": "العربية",
+    "languageEnglish": "English",
+    "settings": "Settings",
+    "help": "Help",
+    "next": "Next",
+    "back": "Back",
+    "cancel": "Cancel"
+  },
+  "authShowcase": {
+    "preview": {
+      "title": "Performance overview",
+      "roas": "ROAS",
+      "revenue": "Revenue",
+      "spend": "Spend",
+      "topChannels": "Top channels",
+      "days": {
+        "sat": "Sat",
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed"
+      },
+      "otherChannel": "Other"
+    },
+    "trustBadge": "Your data is fully secure and encrypted — we're committed to protecting your data and privacy."
+  },
+  "sidebar": {
+    "nav": {
+      "home": "Home",
+      "channels": "Channels",
+      "campaigns": "Campaigns",
+      "stores": "Stores",
+      "products": "Products",
+      "customers": "Customers",
+      "reports": "Reports",
+      "ai": "AI",
+      "integrations": "Integrations",
+      "administration": "Administration",
+      "settings": "Settings"
+    }
+  },
+  "auth": {
+    "login": {
+      "heading": "Welcome to MADAR",
+      "subheading": "Sign in to access your account and keep track of your campaigns.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "Enter your email",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "rememberMe": "Remember me",
+      "forgotPassword": "Forgot password?",
+      "submit": "Sign in",
+      "orContinueWith": "Or sign in with",
+      "comingSoon": "Coming soon",
+      "noAccount": "Don't have an account?",
+      "createAccount": "Create a new account",
+      "genericError": "Couldn't sign in. Please try again.",
+      "showcase": {
+        "eyebrow": "An all-in-one marketing analytics platform",
+        "heading": "Bring all your ad campaign data into one place.",
+        "description": "Analyze performance and make smart decisions to get the best results.",
+        "features": [
+          {
+            "title": "Connect all your advertising channels",
+            "description": "Google, Meta, Snapchat, TikTok, and more — all in one place."
+          },
+          {
+            "title": "Smart reports and analytics",
+            "description": "Dashboards built to give you clear insight into your campaign performance."
+          },
+          {
+            "title": "AI-powered recommendations",
+            "description": "Get AI-powered recommendations to improve your campaign results and boost ROI."
+          }
+        ]
+      }
+    },
+    "register": {
+      "heading": "Create a new account",
+      "subheading": "Start your journey with MADAR to analyze your marketing campaigns and get the best results",
+      "steps": {
+        "account": "Account info",
+        "company": "Company details",
+        "confirm": "Confirm account"
+      },
+      "fullNameLabel": "Full name",
+      "fullNamePlaceholder": "Enter your full name",
+      "emailLabel": "Email",
+      "emailPlaceholder": "Enter your email",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Create a strong password",
+      "passwordHelper": "At least 8 characters, including an uppercase letter, a number, and a special character.",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "Re-enter your password",
+      "jobRoleLabel": "Job role",
+      "jobRolePlaceholder": "Select your job role",
+      "jobRoles": {
+        "marketingManager": "Marketing Manager",
+        "founderCeo": "Founder / CEO",
+        "growthMarketer": "Growth Marketer",
+        "agencyOwner": "Marketing Agency Owner",
+        "other": "Other"
+      },
+      "acceptTermsPrefix": "I agree to the",
+      "termsAndConditions": "Terms and Conditions",
+      "and": "and",
+      "privacyPolicy": "Privacy Policy",
+      "companyNameLabel": "Company name",
+      "companyNamePlaceholder": "Enter your company or store name",
+      "industryLabel": "Industry",
+      "industryPlaceholder": "Select your industry",
+      "industries": {
+        "ecommerce": "E-commerce",
+        "retail": "Retail",
+        "fashion": "Fashion",
+        "foodBeverage": "Food & Beverage",
+        "technology": "Technology",
+        "other": "Other"
+      },
+      "companySizeLabel": "Company size",
+      "companySizePlaceholder": "Select the number of employees",
+      "companySizes": {
+        "1-10": "1-10 employees",
+        "11-50": "11-50 employees",
+        "51-200": "51-200 employees",
+        "200+": "200+ employees"
+      },
+      "next": "Next",
+      "back": "Back",
+      "submit": "Create account",
+      "alreadyHaveAccount": "Already have an account?",
+      "signIn": "Sign in",
+      "summary": {
+        "fullName": "Full name",
+        "email": "Email",
+        "jobRole": "Job role",
+        "companyName": "Company name",
+        "industry": "Industry",
+        "companySize": "Company size",
+        "empty": "—"
+      },
+      "success": {
+        "heading": "Your account has been created!",
+        "description": "Welcome to MADAR — you can now sign in and start managing your campaigns.",
+        "goToLogin": "Go to sign in"
+      },
+      "showcase": {
+        "eyebrow": "Every analytics tool",
+        "heading": "In one place",
+        "description": "Connect your advertising channels, analyze your data, and get smart recommendations to help you grow.",
+        "features": [
+          {
+            "title": "Connect all your channels",
+            "description": "Google, Meta, Snapchat, TikTok, and more — all in one place."
+          },
+          {
+            "title": "Smart recommendations",
+            "description": "Get AI-driven recommendations to improve your campaign performance and boost ROI."
+          },
+          {
+            "title": "Secure and trusted",
+            "description": "We protect your data with the highest security and privacy standards."
+          }
+        ],
+        "footerPrefix": "Need help?",
+        "footerSuffix": "Our support team is ready to help you anytime."
+      }
+    }
+  }
+}

@@ -10,11 +10,6 @@ import {
   AppCheckbox,
   AppDialog,
   AppPageHeader,
-  AppSelect,
-  AppSelectContent,
-  AppSelectItem,
-  AppSelectTrigger,
-  AppSelectValue,
   AppTable,
   AppTableBody,
   AppTableCell,
@@ -33,27 +28,17 @@ import { AdministrationModuleNav } from "./administration-module-nav"
 
 import { useApplicationServices } from "@/application"
 
-const ROLE_OPTIONS = [
-  { id: "owner", name: "Owner" },
-  { id: "admin", name: "Admin" },
-  { id: "manager", name: "Manager" },
-  { id: "analyst", name: "Analyst" },
-  { id: "viewer", name: "Viewer" },
-]
-
-function humanizeRole(roleId: string) {
-  return ROLE_OPTIONS.find((role) => role.id === roleId)?.name ?? roleId
-}
+// Invitations no longer grant a role: new members start with no permissions
+// and gain access only once an admin adds them to a team.
+const DEFAULT_INVITE_ROLE_ID = "viewer"
 
 type InvitationDraft = {
   emails: string
-  roleId: string
   workspaceIds: string[]
 }
 
 const defaultDraft: InvitationDraft = {
   emails: "",
-  roleId: "viewer",
   workspaceIds: [],
 }
 
@@ -106,7 +91,7 @@ export function AdministrationInvitationsScreen() {
             sendInvitation.mutateAsync({
               organizationId: currentOrganization.id,
               email,
-              roleId: draft.roleId,
+              roleId: DEFAULT_INVITE_ROLE_ID,
               workspaceId,
             })
           )
@@ -173,7 +158,6 @@ export function AdministrationInvitationsScreen() {
               <AppTableHeader>
                 <AppTableRow>
                   <AppTableHead>Email</AppTableHead>
-                  <AppTableHead>Role</AppTableHead>
                   <AppTableHead>Workspace</AppTableHead>
                   <AppTableHead>Status</AppTableHead>
                   <AppTableHead>Expires</AppTableHead>
@@ -184,7 +168,6 @@ export function AdministrationInvitationsScreen() {
                 {invitations.map((invitation) => (
                   <AppTableRow key={invitation.id}>
                     <AppTableCell>{invitation.email}</AppTableCell>
-                    <AppTableCell>{humanizeRole(invitation.roleId)}</AppTableCell>
                     <AppTableCell>{invitation.workspace}</AppTableCell>
                     <AppTableCell>
                       <AppBadge variant="outline">{invitation.status}</AppBadge>
@@ -224,7 +207,7 @@ export function AdministrationInvitationsScreen() {
         open={open}
         onOpenChange={setOpen}
         title="Invite Users"
-        description="Send one or many invitations with workspace and role context."
+        description="New members start with no permissions — add them to a team afterward to grant access."
         footer={
           <>
             <AppButton variant="outline" onClick={() => setOpen(false)}>
@@ -249,22 +232,6 @@ export function AdministrationInvitationsScreen() {
               setDraft((current) => ({ ...current, emails: event.target.value }))
             }
           />
-
-          <AppSelect
-            value={draft.roleId}
-            onValueChange={(next) => setDraft((current) => ({ ...current, roleId: next }))}
-          >
-            <AppSelectTrigger className="h-10">
-              <AppSelectValue placeholder="Role" />
-            </AppSelectTrigger>
-            <AppSelectContent position="popper" align="start">
-              {ROLE_OPTIONS.map((role) => (
-                <AppSelectItem key={role.id} value={role.id}>
-                  {role.name}
-                </AppSelectItem>
-              ))}
-            </AppSelectContent>
-          </AppSelect>
 
           <div className="space-y-2 rounded-lg border border-border/70 p-3 md:col-span-2">
             <p className="text-sm font-medium">Workspaces (optional)</p>
