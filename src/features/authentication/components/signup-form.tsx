@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Briefcase, Building2, Check, Lock, Mail, User, Users } from "lucide-react"
-import { Controller, useForm, useWatch } from "react-hook-form"
+import { Controller, type Resolver, useForm, useWatch } from "react-hook-form"
 
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
@@ -25,7 +26,8 @@ import {
   AppSelectValue,
 } from "@/components/app"
 
-import { type SignupFormValues, signupSchema } from "../validators"
+import { useAuth } from "../hooks"
+import { type SignupFormValues, signupInvitationSchema, signupSchema } from "../validators"
 
 const STEP_1_FIELDS = [
   "fullName",
@@ -132,15 +134,26 @@ function SummaryRow({ label, value }: { label: string; value?: string }) {
 }
 
 export function SignupForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
+  const { register } = useAuth()
+  const searchParams = useSearchParams()
+  const invitationToken = searchParams.get("invitation")
+  const invitationEmail = searchParams.get("email") ?? ""
+  const isInvitationMode = Boolean(invitationToken)
+
   const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [submitted, setSubmitted] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const t = useTranslations("auth.register")
 
-  const steps: { step: 1 | 2 | 3; label: string }[] = [
-    { step: 1, label: t("steps.account") },
-    { step: 2, label: t("steps.company") },
-    { step: 3, label: t("steps.confirm") },
-  ]
+  const steps: { step: 1 | 2 | 3; label: string }[] = isInvitationMode
+    ? [
+        { step: 1, label: t("steps.account") },
+        { step: 3, label: t("steps.confirm") },
+      ]
+    : [
+        { step: 1, label: t("steps.account") },
+        { step: 2, label: t("steps.company") },
+        { step: 3, label: t("steps.confirm") },
+      ]
 
   const jobRoles = JOB_ROLE_VALUES.map((value) => ({
     value,
@@ -155,11 +168,19 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
     label: t(`companySizes.${value}`),
   }))
 
+  const resolver = useMemo(
+    () =>
+      zodResolver(
+        isInvitationMode ? signupInvitationSchema : signupSchema
+      ) as unknown as Resolver<SignupFormValues>,
+    [isInvitationMode]
+  )
+
   const form = useForm<SignupFormValues>({
-    resolver: zodResolver(signupSchema),
+    resolver,
     defaultValues: {
       fullName: "",
-      email: "",
+      email: invitationEmail,
       password: "",
       confirmPassword: "",
       jobRole: "",
@@ -173,43 +194,38 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   const values = useWatch({ control: form.control })
 
   const goNext = async () => {
+    if (isInvitationMode) {
+      const valid = await form.trigger(STEP_1_FIELDS)
+      if (valid) setStep(3)
+      return
+    }
     const fields = step === 1 ? STEP_1_FIELDS : STEP_2_FIELDS
     const valid = await form.trigger(fields)
     if (valid) setStep((current) => (current === 1 ? 2 : 3) as 1 | 2 | 3)
   }
 
   const goBack = () => {
+    if (isInvitationMode) {
+      setStep(1)
+      return
+    }
     setStep((current) => (current === 3 ? 2 : 1) as 1 | 2 | 3)
   }
 
-  const onSubmit = form.handleSubmit(async () => {
-    await Promise.resolve()
-    setSubmitted(true)
+  const onSubmit = form.handleSubmit(async (formValues) => {
+    setFormError(null)
+    try {
+      await register({
+        fullName: formValues.fullName,
+        email: formValues.email,
+        password: formValues.password,
+        organizationName: isInvitationMode ? undefined : formValues.companyName,
+        invitationToken: invitationToken ?? undefined,
+      })
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : t("genericError"))
+    }
   })
-
-  if (submitted) {
-    return (
-      <div
-        className={cn("flex w-full max-w-md flex-col items-center gap-6 text-center", className)}
-        {...props}
-      >
-        <span className="flex size-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-          <Check className="size-8" />
-        </span>
-        <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold text-slate-900">{t("success.heading")}</h1>
-          <p className="text-sm text-slate-500">{t("success.description")}</p>
-        </div>
-        <AppButton
-          asChild
-          fullWidth
-          className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
-        >
-          <Link href={ROUTES.login}>{t("success.goToLogin")}</Link>
-        </AppButton>
-      </div>
-    )
-  }
 
   return (
     <div className={cn("flex w-full max-w-lg flex-col gap-8", className)} {...props}>
@@ -227,6 +243,12 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
           <p className="text-sm text-slate-500">{t("subheading")}</p>
         </div>
       </div>
+
+      {isInvitationMode ? (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+          {t("invitationBanner")}
+        </div>
+      ) : null}
 
       <StepIndicator current={step} steps={steps} />
 
@@ -247,9 +269,11 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               type="email"
               label={t("emailLabel")}
               placeholder={t("emailPlaceholder")}
+              helperText={isInvitationMode ? t("invitationEmailLocked") : undefined}
               autoComplete="email"
               startIcon={<Mail className="size-4" />}
               errorText={form.formState.errors.email?.message}
+              readOnly={isInvitationMode}
               required
               {...form.register("email")}
             />
@@ -443,16 +467,22 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 label={t("summary.jobRole")}
                 value={jobRoles.find((role) => role.value === values.jobRole)?.label}
               />
-              <SummaryRow label={t("summary.companyName")} value={values.companyName} />
-              <SummaryRow
-                label={t("summary.industry")}
-                value={industries.find((industry) => industry.value === values.industry)?.label}
-              />
-              <SummaryRow
-                label={t("summary.companySize")}
-                value={companySizes.find((size) => size.value === values.companySize)?.label}
-              />
+              {isInvitationMode ? null : (
+                <>
+                  <SummaryRow label={t("summary.companyName")} value={values.companyName} />
+                  <SummaryRow
+                    label={t("summary.industry")}
+                    value={industries.find((industry) => industry.value === values.industry)?.label}
+                  />
+                  <SummaryRow
+                    label={t("summary.companySize")}
+                    value={companySizes.find((size) => size.value === values.companySize)?.label}
+                  />
+                </>
+              )}
             </div>
+
+            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 
             <div className="flex gap-3">
               <AppButton
@@ -479,7 +509,11 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         <p className="text-center text-sm text-slate-600">
           {t("alreadyHaveAccount")}{" "}
           <Link
-            href={ROUTES.login}
+            href={
+              invitationToken
+                ? `${ROUTES.login}?invitation=${encodeURIComponent(invitationToken)}`
+                : ROUTES.login
+            }
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
           >
             {t("signIn")}

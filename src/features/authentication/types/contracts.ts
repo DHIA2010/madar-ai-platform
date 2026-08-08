@@ -6,6 +6,7 @@ import type {
   LoginRequest,
   LoginResponse,
   RefreshToken,
+  RegisterRequest,
   ResetPasswordRequest,
   Session,
   VerifyEmailRequest,
@@ -32,6 +33,7 @@ export interface AuthContextValue {
   currentUser: CurrentUser["user"]
   authStatus: "idle" | "loading" | "authenticated" | "unauthenticated"
   login: (payload: LoginRequest) => Promise<void>
+  register: (payload: RegisterRequest) => Promise<void>
   logout: () => Promise<void>
 }
 

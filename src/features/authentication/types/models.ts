@@ -44,6 +44,15 @@ export interface LoginRequest {
   rememberMe?: boolean
 }
 
+export interface RegisterRequest {
+  fullName: string
+  email: string
+  password: string
+  organizationName?: string
+  invitationToken?: string
+  rememberMe?: boolean
+}
+
 export interface LoginResponse {
   user: User
   session: Session

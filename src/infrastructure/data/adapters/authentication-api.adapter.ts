@@ -1,10 +1,12 @@
 import type {
+  AcceptInvitationResponseDto,
   AuthSessionDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
   RefreshSessionRequestDto,
+  RegisterRequestDto,
   ResetPasswordRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
@@ -129,6 +131,37 @@ export class AuthenticationApiAdapter {
     }
   }
 
+  async register(payload: RegisterRequestDto): Promise<LoginResponseDto> {
+    const response = await this.client.post<
+      Omit<RegisterRequestDto, "rememberMe"> & { timezone: string; language: string },
+      {
+        userId: string
+        organizationId: string
+        workspaceId: string | null
+        verificationToken: string
+      }
+    >("/v1/auth/register", {
+      fullName: payload.fullName,
+      email: payload.email,
+      password: payload.password,
+      organizationName: payload.organizationName,
+      invitationToken: payload.invitationToken,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      language: "en",
+    })
+
+    // register() leaves the account "pending_verification" (login is blocked until
+    // verified), so immediately consume the verification token the backend just handed
+    // back before logging in — mirrors clicking the verification email link inline.
+    await this.verifyEmail({ token: response.verificationToken })
+
+    return this.login({
+      email: payload.email,
+      password: payload.password,
+      rememberMe: payload.rememberMe,
+    })
+  }
+
   logout(_session: AuthSessionDto | null): Promise<void> {
     return this.client.post<Record<string, never>, void>("/v1/auth/logout", {})
   }
@@ -167,5 +200,12 @@ export class AuthenticationApiAdapter {
 
   verifyEmail(payload: VerifyEmailRequestDto): Promise<void> {
     return this.client.post<VerifyEmailRequestDto, void>("/v1/auth/verify-email", payload)
+  }
+
+  acceptInvitation(token: string): Promise<AcceptInvitationResponseDto> {
+    return this.client.post<Record<string, never>, AcceptInvitationResponseDto>(
+      `/v1/organizations/invitations/${encodeURIComponent(token)}/accept`,
+      {}
+    )
   }
 }

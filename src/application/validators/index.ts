@@ -28,6 +28,7 @@ export {
 export {
   forgotPasswordRequestDtoSchema,
   loginRequestDtoSchema,
+  registerRequestDtoSchema,
   resetPasswordRequestDtoSchema,
   verifyEmailRequestDtoSchema,
 } from "./auth.validators"

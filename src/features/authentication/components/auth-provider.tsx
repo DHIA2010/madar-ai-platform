@@ -8,7 +8,7 @@ import { AppEmpty, AppLoading } from "@/components/app"
 
 import { AuthContext } from "../state/auth.context"
 import { useAuthStore } from "../state/auth.store"
-import type { LoginRequest } from "../types"
+import type { LoginRequest, RegisterRequest } from "../types"
 
 import { useApplicationServices } from "@/application"
 
@@ -95,6 +95,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [authenticate, authenticationApplicationService, setStatus]
   )
 
+  const register = useCallback(
+    async (payload: RegisterRequest) => {
+      setStatus("loading")
+      setConfigurationError(null)
+
+      try {
+        const result = await authenticationApplicationService.register(payload)
+        authenticate(result.user, result.session)
+      } catch (error) {
+        const message = getConfigurationErrorMessage(error)
+        if (message) {
+          setConfigurationError(message)
+        }
+        setStatus("unauthenticated")
+        throw error
+      }
+    },
+    [authenticate, authenticationApplicationService, setStatus]
+  )
+
   const logout = useCallback(async () => {
     try {
       await authenticationApplicationService.logout(session)
@@ -109,9 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       currentUser: user,
       authStatus,
       login,
+      register,
       logout,
     }),
-    [authStatus, login, logout, user]
+    [authStatus, login, register, logout, user]
   )
 
   if (authStatus === "idle" || authStatus === "loading") {

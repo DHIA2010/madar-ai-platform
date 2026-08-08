@@ -25,6 +25,7 @@ const authValue: AuthContextValue = {
   currentUser: mockUser,
   authStatus: "authenticated",
   login: vi.fn(),
+  register: vi.fn(),
   logout: vi.fn(),
 }
 

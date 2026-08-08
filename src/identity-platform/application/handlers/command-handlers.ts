@@ -208,6 +208,14 @@ export class IdentityCommandHandlers {
       throw ERRORS.emailAlreadyExists()
     }
 
+    if (command.invitationToken) {
+      return this.registerViaInvitation(command, command.invitationToken, context)
+    }
+
+    if (!command.organizationName) {
+      throw ERRORS.validation({ organizationName: "organizationName is required" })
+    }
+
     const timestamp = this.now
     const userId = this.deps.uuid.generate()
     const organizationId = this.deps.uuid.generate()
@@ -319,6 +327,138 @@ export class IdentityCommandHandlers {
       userId,
       organizationId,
       workspaceId,
+      verificationToken,
+    }
+  }
+
+  // A user registering off an invitation link joins the inviting organization directly
+  // instead of getting a brand-new org of their own, matching what acceptInvitation does
+  // for a user who already had an account.
+  private async registerViaInvitation(
+    command: RegisterUserCommand,
+    invitationToken: string,
+    context: RequestContext
+  ) {
+    const invitationState = await this.deps.repositories.invitations.findByToken(invitationToken)
+    if (!invitationState) {
+      throw ERRORS.tokenInvalid()
+    }
+    const invitation = InvitationEntity.rehydrate(invitationState)
+    if (
+      !invitation.canAccept(Date.now()) ||
+      invitation.email.toLowerCase() !== command.email.toLowerCase()
+    ) {
+      throw ERRORS.tokenInvalid()
+    }
+
+    const timestamp = this.now
+    const userId = this.deps.uuid.generate()
+    const user = UserEntity.register({
+      id: userId,
+      email: command.email,
+      passwordHash: this.deps.hasher.hash(command.password),
+      fullName: command.fullName,
+      timezone: command.timezone,
+      language: command.language,
+      organizationId: invitation.organizationId,
+      workspaceId: invitation.workspaceId ?? undefined,
+      now: timestamp,
+    })
+    await this.deps.repositories.users.save(user.toState())
+
+    invitation.accept(this.now)
+    await this.deps.repositories.invitations.save(invitation.toState())
+    const membership = MembershipEntity.create({
+      id: this.deps.uuid.generate(),
+      organizationId: invitation.organizationId,
+      workspaceId: invitation.workspaceId,
+      userId,
+      role: invitation.role,
+      status: "active",
+      invitedByUserId: invitation.invitedBy,
+      acceptedAt: this.now,
+      now: timestamp,
+    })
+    await this.deps.repositories.memberships.save(membership.toState())
+
+    const verificationToken = this.deps.tokenService.generateOpaqueToken()
+    const verification = EmailVerificationEntity.create({
+      id: this.deps.uuid.generate(),
+      userId,
+      tokenHash: this.deps.tokenService.hashOpaqueToken(verificationToken),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      consumedAt: null,
+      createdAt: timestamp,
+    })
+    await this.deps.repositories.emailVerifications.save(verification.toState())
+    await this.deps.emailGateway.sendVerificationEmail({
+      email: user.email,
+      token: verificationToken,
+    })
+
+    await this.audit(
+      "auth.register",
+      context,
+      userId,
+      invitation.organizationId,
+      invitation.workspaceId,
+      "user",
+      userId,
+      { email: user.email, viaInvitation: true }
+    )
+    await this.audit(
+      "organization.invitation_accepted",
+      context,
+      userId,
+      invitation.organizationId,
+      invitation.workspaceId,
+      "invitation",
+      invitation.toState().id
+    )
+    await this.publishEvents(context, [
+      this.createEvent({
+        eventType: "UserRegistered",
+        aggregateType: "user",
+        aggregateId: userId,
+        context,
+        payload: {
+          userId,
+          organizationId: invitation.organizationId,
+          workspaceId: invitation.workspaceId,
+          email: user.email,
+        },
+      }),
+      this.createEvent({
+        eventType: "InvitationAccepted",
+        aggregateType: "invitation",
+        aggregateId: invitation.toState().id,
+        context,
+        payload: {
+          invitationId: invitation.toState().id,
+          userId,
+          workspaceId: invitation.workspaceId,
+        },
+      }),
+      this.createEvent({
+        eventType: "MemberJoined",
+        aggregateType: "organization",
+        aggregateId: invitation.organizationId,
+        context,
+        payload: { organizationId: invitation.organizationId, userId, role: invitation.role },
+      }),
+      this.createEvent({
+        eventType: "EmailVerificationRequested",
+        aggregateType: "user",
+        aggregateId: userId,
+        context,
+        payload: { userId, email: user.email },
+      }),
+    ])
+
+    return {
+      userId,
+      organizationId: invitation.organizationId,
+      workspaceId: invitation.workspaceId,
       verificationToken,
     }
   }

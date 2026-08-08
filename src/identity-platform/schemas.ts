@@ -1,14 +1,20 @@
 import { z } from "zod"
 
-export const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(12),
-  fullName: z.string().min(2),
-  organizationName: z.string().min(2),
-  rememberMe: z.boolean().optional(),
-  timezone: z.string().default("UTC"),
-  language: z.string().default("en"),
-})
+export const registerSchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(12),
+    fullName: z.string().min(2),
+    organizationName: z.string().min(2).optional(),
+    invitationToken: z.string().optional(),
+    rememberMe: z.boolean().optional(),
+    timezone: z.string().default("UTC"),
+    language: z.string().default("en"),
+  })
+  .refine((value) => Boolean(value.organizationName) || Boolean(value.invitationToken), {
+    message: "organizationName is required unless registering via an invitation",
+    path: ["organizationName"],
+  })
 
 export const loginSchema = z.object({
   email: z.string().email(),

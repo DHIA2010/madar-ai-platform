@@ -93,6 +93,7 @@ export type {
   Touchpoint,
 } from "./attribution.contracts"
 export type {
+  AcceptInvitationResponseDto,
   AuthGateway,
   AuthenticationRepository,
   AuthenticationGateway,
@@ -103,6 +104,7 @@ export type {
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
+  RegisterRequestDto,
   RefreshSessionRequestDto,
   ResetPasswordRequestDto,
   SessionStoragePort,

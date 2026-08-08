@@ -76,7 +76,10 @@
             "description": "Get AI-powered recommendations to improve your campaign results and boost ROI."
           }
         ]
-      }
+      },
+      "invitationBanner": "You've been invited to join a MADAR organization. Sign in to accept the invitation.",
+      "invitationAccepted": "Invitation accepted — welcome aboard!",
+      "invitationError": "Signed in, but we couldn't accept the invitation. It may have expired or already been used."
     },
     "register": {
       "heading": "Create a new account",
@@ -167,7 +170,10 @@
         ],
         "footerPrefix": "Need help?",
         "footerSuffix": "Our support team is ready to help you anytime."
-      }
+      },
+      "invitationBanner": "You've been invited to join a MADAR organization. Create your account below to accept.",
+      "invitationEmailLocked": "This account will be created for the invited email address.",
+      "genericError": "Couldn't create your account. Please try again."
     }
   }
 }

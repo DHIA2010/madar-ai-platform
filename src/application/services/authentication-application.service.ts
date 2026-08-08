@@ -1,20 +1,23 @@
 import type {
+  AcceptInvitationResponseDto,
   AuthGateway,
   AuthSessionDto,
   AuthSessionViewModel,
   AuthUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
+  RegisterRequestDto,
   ResetPasswordRequestDto,
   SessionStoragePort,
   VerifyEmailRequestDto,
 } from "../contracts"
 import { GetCurrentUserQuery } from "../queries"
-import { LoginUseCase, LogoutUseCase, RestoreSessionUseCase } from "../use-cases"
+import { LoginUseCase, LogoutUseCase, RegisterUseCase, RestoreSessionUseCase } from "../use-cases"
 
 export class AuthenticationApplicationService {
   private readonly restoreSessionUseCase: RestoreSessionUseCase
   private readonly loginUseCase: LoginUseCase
+  private readonly registerUseCase: RegisterUseCase
   private readonly logoutUseCase: LogoutUseCase
   private readonly getCurrentUserQuery: GetCurrentUserQuery
 
@@ -24,6 +27,7 @@ export class AuthenticationApplicationService {
   ) {
     this.restoreSessionUseCase = new RestoreSessionUseCase(gateway, sessionStorage)
     this.loginUseCase = new LoginUseCase(gateway, sessionStorage)
+    this.registerUseCase = new RegisterUseCase(gateway, sessionStorage)
     this.logoutUseCase = new LogoutUseCase(gateway, sessionStorage)
     this.getCurrentUserQuery = new GetCurrentUserQuery(gateway)
   }
@@ -34,6 +38,10 @@ export class AuthenticationApplicationService {
 
   login(payload: LoginRequestDto): Promise<AuthSessionViewModel> {
     return this.loginUseCase.execute(payload)
+  }
+
+  register(payload: RegisterRequestDto): Promise<AuthSessionViewModel> {
+    return this.registerUseCase.execute(payload)
   }
 
   refreshSession(refreshToken: string): Promise<AuthSessionDto> {
@@ -59,5 +67,9 @@ export class AuthenticationApplicationService {
 
   verifyEmail(payload: VerifyEmailRequestDto): Promise<void> {
     return this.gateway.verifyEmail(payload)
+  }
+
+  acceptInvitation(token: string): Promise<AcceptInvitationResponseDto> {
+    return this.gateway.acceptInvitation(token)
   }
 }

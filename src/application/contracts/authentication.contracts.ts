@@ -32,6 +32,15 @@ export interface LoginRequestDto {
   rememberMe?: boolean
 }
 
+export interface RegisterRequestDto {
+  fullName: string
+  email: string
+  password: string
+  organizationName?: string
+  invitationToken?: string
+  rememberMe?: boolean
+}
+
 export interface ForgotPasswordRequestDto {
   email: string
 }
@@ -44,6 +53,11 @@ export interface ResetPasswordRequestDto {
 
 export interface VerifyEmailRequestDto {
   token: string
+}
+
+export interface AcceptInvitationResponseDto {
+  success: boolean
+  membershipId?: string
 }
 
 export interface LoginResponseDto {
@@ -61,12 +75,14 @@ export interface RefreshSessionRequestDto {
 
 export interface AuthenticationRepository {
   login(payload: LoginRequestDto): Promise<LoginResponseDto>
+  register(payload: RegisterRequestDto): Promise<LoginResponseDto>
   logout(session: AuthSessionDto | null): Promise<void>
   currentUser(session: AuthSessionDto | null): Promise<CurrentUserDto>
   refreshSession(payload: RefreshSessionRequestDto): Promise<AuthSessionDto>
   forgotPassword(payload: ForgotPasswordRequestDto): Promise<void>
   resetPassword(payload: ResetPasswordRequestDto): Promise<void>
   verifyEmail(payload: VerifyEmailRequestDto): Promise<void>
+  acceptInvitation(token: string): Promise<AcceptInvitationResponseDto>
 }
 
 export type AuthGateway = AuthenticationRepository

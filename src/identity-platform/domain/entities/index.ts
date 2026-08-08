@@ -33,7 +33,7 @@ export class UserEntity {
     timezone: string
     language: string
     organizationId: string
-    workspaceId: string
+    workspaceId?: string | null
     now: string
   }) {
     const email = new EmailAddress(input.email)
@@ -50,7 +50,7 @@ export class UserEntity {
       preferences: {},
       failedLoginAttempts: 0,
       lockoutUntil: null,
-      activeWorkspaceId: input.workspaceId,
+      activeWorkspaceId: input.workspaceId ?? null,
       primaryOrganizationId: input.organizationId,
       deletedAt: null,
       createdAt: input.now,

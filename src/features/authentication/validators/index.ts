@@ -8,5 +8,6 @@ export {
   forgotPasswordSchema,
   loginSchema,
   resetPasswordSchema,
+  signupInvitationSchema,
   signupSchema,
 } from "./auth.validators"

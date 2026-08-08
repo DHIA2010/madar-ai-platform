@@ -13,6 +13,7 @@ export type {
   LoginResponse,
   Permission,
   RefreshToken,
+  RegisterRequest,
   ResetPasswordRequest,
   Role,
   Session,

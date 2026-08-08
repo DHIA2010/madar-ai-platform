@@ -4,7 +4,8 @@ export interface RegisterUserCommand {
   email: string
   password: string
   fullName: string
-  organizationName: string
+  organizationName?: string
+  invitationToken?: string
   rememberMe?: boolean
   timezone: string
   language: string

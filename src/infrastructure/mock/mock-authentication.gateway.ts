@@ -1,5 +1,6 @@
 import { AuthorizationError, ValidationError } from "@/lib/app-errors"
 import type {
+  AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
   CurrentUserDto,
@@ -7,6 +8,7 @@ import type {
   LoginRequestDto,
   LoginResponseDto,
   RefreshSessionRequestDto,
+  RegisterRequestDto,
   ResetPasswordRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
@@ -122,6 +124,21 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
     }
   }
 
+  async register(payload: RegisterRequestDto): Promise<LoginResponseDto> {
+    if (!payload.email || !payload.password || !payload.fullName) {
+      throw new ValidationError({
+        code: "auth_invalid_request",
+        message: "Full name, email, and password are required.",
+      })
+    }
+
+    const user = { ...createMockUser(payload.email), fullName: payload.fullName }
+    const session = createSession(user, payload.rememberMe)
+    this.sessionsByRefreshToken.set(session.refreshToken.token, { session, user })
+
+    return { user, session }
+  }
+
   async logout(session: AuthSessionDto | null): Promise<void> {
     if (session?.refreshToken?.token) {
       this.sessionsByRefreshToken.delete(session.refreshToken.token)
@@ -203,6 +220,17 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
         message: "Verification token is required.",
       })
     }
+  }
+
+  async acceptInvitation(token: string): Promise<AcceptInvitationResponseDto> {
+    if (!token) {
+      throw new ValidationError({
+        code: "auth_invitation_token_required",
+        message: "Invitation token is required.",
+      })
+    }
+
+    return { success: true }
   }
 }
 

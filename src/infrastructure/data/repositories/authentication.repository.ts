@@ -1,11 +1,13 @@
 import type { AuthenticationRepository } from "@/application/contracts/infrastructure.contracts"
 import type {
+  AcceptInvitationResponseDto,
   AuthSessionDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
   RefreshSessionRequestDto,
+  RegisterRequestDto,
   ResetPasswordRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
@@ -41,6 +43,19 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
       }
 
       return await this.adapter.login(payload)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async register(payload: RegisterRequestDto): Promise<LoginResponseDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.register(payload)
+      }
+
+      return await this.adapter.register(payload)
     } catch (error) {
       throw mapAuthenticationRepositoryError(error)
     }
@@ -123,6 +138,19 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
       }
 
       await this.adapter.verifyEmail(payload)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async acceptInvitation(token: string): Promise<AcceptInvitationResponseDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.acceptInvitation(token)
+      }
+
+      return await this.adapter.acceptInvitation(token)
     } catch (error) {
       throw mapAuthenticationRepositoryError(error)
     }

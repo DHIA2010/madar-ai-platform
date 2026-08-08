@@ -3,10 +3,12 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Lock, Mail } from "lucide-react"
 import { Controller, useForm } from "react-hook-form"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
@@ -16,6 +18,8 @@ import { AppButton, AppCheckbox, AppForm, AppInput, AppPasswordInput } from "@/c
 
 import { useAuth } from "../hooks"
 import { type LoginFormValues, loginSchema } from "../validators"
+
+import { useApplicationServices } from "@/application"
 
 function GoogleIcon() {
   return (
@@ -53,8 +57,11 @@ function MicrosoftIcon() {
 
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const { login, authStatus } = useAuth()
+  const { authenticationApplicationService } = useApplicationServices()
   const [formError, setFormError] = useState<string | null>(null)
   const t = useTranslations("auth.login")
+  const searchParams = useSearchParams()
+  const invitationToken = searchParams.get("invitation")
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -72,6 +79,16 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       await login(values)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : t("genericError"))
+      return
+    }
+
+    if (invitationToken) {
+      try {
+        await authenticationApplicationService.acceptInvitation(invitationToken)
+        toast.success(t("invitationAccepted"))
+      } catch {
+        toast.error(t("invitationError"))
+      }
     }
   })
 
@@ -91,6 +108,12 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           <p className="text-sm text-slate-500">{t("subheading")}</p>
         </div>
       </div>
+
+      {invitationToken ? (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+          {t("invitationBanner")}
+        </div>
+      ) : null}
 
       <AppForm onSubmit={onSubmit} className="space-y-5">
         <AppInput
@@ -172,7 +195,11 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         <p className="text-center text-sm text-slate-600">
           {t("noAccount")}{" "}
           <Link
-            href={ROUTES.register}
+            href={
+              invitationToken
+                ? `${ROUTES.register}?invitation=${encodeURIComponent(invitationToken)}&email=${encodeURIComponent(form.getValues("email"))}`
+                : ROUTES.register
+            }
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
           >
             {t("createAccount")}
