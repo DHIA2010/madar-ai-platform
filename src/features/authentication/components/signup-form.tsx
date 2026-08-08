@@ -139,6 +139,11 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   const invitationToken = searchParams.get("invitation")
   const invitationEmail = searchParams.get("email") ?? ""
   const isInvitationMode = Boolean(invitationToken)
+  // The email only arrives pre-filled when the invite link itself carried it (the normal
+  // case). If someone reaches this page via a token-only link (e.g. from the login
+  // page's "create account" link), there's no known email to lock in — let them type it;
+  // the server still rejects it if it doesn't match the invitation.
+  const isEmailLocked = isInvitationMode && Boolean(invitationEmail)
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [formError, setFormError] = useState<string | null>(null)
@@ -274,11 +279,11 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               type="email"
               label={t("emailLabel")}
               placeholder={t("emailPlaceholder")}
-              helperText={isInvitationMode ? t("invitationEmailLocked") : undefined}
+              helperText={isEmailLocked ? t("invitationEmailLocked") : undefined}
               autoComplete="email"
               startIcon={<Mail className="size-4" />}
               errorText={form.formState.errors.email?.message}
-              readOnly={isInvitationMode}
+              readOnly={isEmailLocked}
               required
               {...form.register("email")}
             />

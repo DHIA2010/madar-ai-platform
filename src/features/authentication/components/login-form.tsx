@@ -197,7 +197,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           <Link
             href={
               invitationToken
-                ? `${ROUTES.register}?invitation=${encodeURIComponent(invitationToken)}&email=${encodeURIComponent(form.getValues("email"))}`
+                ? `${ROUTES.register}?invitation=${encodeURIComponent(invitationToken)}`
                 : ROUTES.register
             }
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
