@@ -209,6 +209,40 @@
           }
         ]
       }
+    },
+    "resetPassword": {
+      "heading": "Reset your password",
+      "description": "Choose a new password for your account.",
+      "updatedDescription": "Your password has been updated successfully.",
+      "missingToken": "This reset link is missing or invalid. Please request a new one.",
+      "goToLogin": "Go to login",
+      "newPasswordLabel": "New password",
+      "newPasswordPlaceholder": "Enter new password",
+      "passwordHelper": "At least 12 characters, including an uppercase letter, a number, and a special character.",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "Repeat new password",
+      "submit": "Update password",
+      "backToLogin": "Back to login",
+      "genericError": "Unable to reset your password right now. Please try again.",
+      "showcase": {
+        "eyebrow": "Secure account recovery",
+        "heading": "Set a new password and get back in.",
+        "description": "Choose a strong password to keep your MADAR account safe.",
+        "features": [
+          {
+            "title": "Encrypted end to end",
+            "description": "Your new password is hashed and never stored in plain text."
+          },
+          {
+            "title": "One-time secure link",
+            "description": "This reset link can only be used once and expires automatically."
+          },
+          {
+            "title": "Account protection",
+            "description": "We monitor for suspicious login attempts to keep your account safe."
+          }
+        ]
+      }
     }
   }
 }

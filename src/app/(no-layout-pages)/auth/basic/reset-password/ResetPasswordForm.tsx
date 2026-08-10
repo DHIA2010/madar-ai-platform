@@ -1,36 +1,37 @@
-"use client"
+import { KeyRound, Lock, ShieldCheck } from "lucide-react"
+import { getLocale, getTranslations } from "next-intl/server"
 
-import Image from "next/image"
+import { localeDirection, type Locale } from "@/i18n/locales"
 
-import { cn } from "@/lib/utils"
-import { ASSETS } from "@/constants/assets"
-import { ResetPasswordForm as AuthResetPasswordForm } from "@/features/authentication/components"
+import {
+  AuthShowcasePanel,
+  AuthTrustBadge,
+  ResetPasswordForm as AuthResetPasswordForm,
+} from "@/features/authentication/components"
 
-export default function ResetPasswordForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+const FEATURE_ICONS = [Lock, KeyRound, ShieldCheck]
+
+export default async function ResetPasswordPage() {
+  const locale = (await getLocale()) as Locale
+  const t = await getTranslations("auth.resetPassword.showcase")
+  const features = t.raw("features") as { title: string; description: string }[]
+
   return (
-    <div className="bg-muted min-h-svh w-full flex items-center justify-center p-6 md:p-10">
-      <div className="max-w-lg">
-        <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-center gap-2 font-medium">
-            <Image
-              src={ASSETS.logo}
-              alt="مدار MADAR"
-              width={778}
-              height={325}
-              priority
-              className="h-14 w-auto"
-            />
-          </div>
-
-          <AuthResetPasswordForm
-            className={cn("mx-auto w-full max-w-sm flex flex-col gap-6", className)}
-            {...props}
-          />
-        </div>
+    <div className="grid min-h-svh w-full lg:grid-cols-2" dir={localeDirection(locale)}>
+      <div className="flex items-center justify-center p-6 md:p-10">
+        <AuthResetPasswordForm />
       </div>
+
+      <AuthShowcasePanel
+        eyebrow={t("eyebrow")}
+        heading={t("heading")}
+        description={t("description")}
+        features={features.map((feature, index) => ({
+          ...feature,
+          icon: FEATURE_ICONS[index] ?? ShieldCheck,
+        }))}
+        footer={<AuthTrustBadge />}
+      />
     </div>
   )
 }
