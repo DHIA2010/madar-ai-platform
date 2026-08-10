@@ -14,6 +14,7 @@ import {
   AppSelectContent,
   AppSelectItem,
   AppSelectTrigger,
+  AppSelectValue,
   AppTextarea,
 } from "@/components/app"
 
@@ -229,11 +230,6 @@ export function AdministrationRolesScreen() {
         </div>
       )}
 
-      <PermissionMatrix
-        groups={IAM_PERMISSION_GROUPS}
-        subtitle="Role permission map preview (UI-only for backend-ready extension)."
-      />
-
       <AppDialog
         open={open}
         onOpenChange={(nextOpen) => {
@@ -242,6 +238,7 @@ export function AdministrationRolesScreen() {
         }}
         title={dialogTitle}
         description={dialogDescription}
+        contentClassName="max-w-4xl"
         footer={
           <>
             <AppButton variant="outline" onClick={closeDialog}>
@@ -253,37 +250,51 @@ export function AdministrationRolesScreen() {
           </>
         }
       >
-        <div className="grid gap-3">
-          <AppInput
-            label="Role name"
-            value={draft.name}
-            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-          />
+        <div className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <AppInput
+              label="Role name"
+              value={draft.name}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, name: event.target.value }))
+              }
+            />
+            <AppSelect value={draft.cloneFrom} onValueChange={syncPermissionsFromRole}>
+              <AppSelectTrigger className="h-10">
+                <AppSelectValue placeholder="Start from (optional)" />
+              </AppSelectTrigger>
+              <AppSelectContent>
+                {roles.map((role) => (
+                  <AppSelectItem key={role.id} value={role.id}>
+                    {role.name}
+                  </AppSelectItem>
+                ))}
+              </AppSelectContent>
+            </AppSelect>
+          </div>
           <AppTextarea
             label="Description"
-            className="min-h-[90px]"
+            className="min-h-[70px]"
             value={draft.description}
             onChange={(event) =>
               setDraft((current) => ({ ...current, description: event.target.value }))
             }
           />
-          <AppSelect value={draft.cloneFrom} onValueChange={syncPermissionsFromRole}>
-            <AppSelectTrigger className="h-10">
-              <span>Permission baseline</span>
-            </AppSelectTrigger>
-            <AppSelectContent>
-              {roles.map((role) => (
-                <AppSelectItem key={role.id} value={role.id}>
-                  {role.name}
-                </AppSelectItem>
-              ))}
-            </AppSelectContent>
-          </AppSelect>
 
           <div className="rounded-lg border border-border/70 p-3 text-sm text-muted-foreground">
-            Selected baseline grants: {permissionGrantCount}
-            {selectedClone ? <span className="ms-1">from {selectedClone.name}</span> : null}
+            {permissionGrantCount} permission{permissionGrantCount === 1 ? "" : "s"} selected
+            {selectedClone ? (
+              <span className="ms-1">(started from {selectedClone.name})</span>
+            ) : null}
           </div>
+
+          <PermissionMatrix
+            groups={IAM_PERMISSION_GROUPS}
+            value={draft.permissions}
+            onChange={(next) => setDraft((current) => ({ ...current, permissions: next }))}
+            title="Permissions"
+            subtitle="Pick exactly what this role can do — use a baseline above as a starting point, then adjust."
+          />
         </div>
       </AppDialog>
     </div>

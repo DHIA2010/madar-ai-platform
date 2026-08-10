@@ -31,30 +31,21 @@ const ACTION_COLUMNS: IamPermissionAction[] = [
 
 type PermissionMatrixProps = {
   groups: IamPermissionGroup[]
+  value: Record<string, string[]>
+  onChange: (value: Record<string, string[]>) => void
   title?: string
   subtitle?: string
 }
 
-function getKey(module: string, action: string) {
-  return `${module}:${action}`
-}
-
 export function PermissionMatrix({
   groups,
+  value,
+  onChange,
   title = "Permission Matrix",
   subtitle,
 }: PermissionMatrixProps) {
   const [query, setQuery] = useState("")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [selected, setSelected] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {}
-    groups.forEach((group) => {
-      group.actions.forEach((action) => {
-        initial[getKey(group.module, action)] = action === "view"
-      })
-    })
-    return initial
-  })
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -74,18 +65,22 @@ export function PermissionMatrix({
     }))
   }
 
-  function setAll(value: boolean) {
-    setSelected((current) => {
-      const next = { ...current }
-      filtered.forEach((group) => {
-        ACTION_COLUMNS.forEach((action) => {
-          if (group.actions.includes(action)) {
-            next[getKey(group.module, action)] = value
-          }
-        })
-      })
-      return next
+  function toggleAction(module: string, action: string, checked: boolean) {
+    const current = value[module] ?? []
+    const next = checked
+      ? current.includes(action)
+        ? current
+        : [...current, action]
+      : current.filter((entry) => entry !== action)
+    onChange({ ...value, [module]: next })
+  }
+
+  function setAll(checked: boolean) {
+    const next = { ...value }
+    filtered.forEach((group) => {
+      next[group.module] = checked ? [...group.actions] : []
     })
+    onChange(next)
   }
 
   return (
@@ -142,18 +137,15 @@ export function PermissionMatrix({
                   </AppTableCell>
                   {ACTION_COLUMNS.map((action) => {
                     const enabled = group.actions.includes(action)
-                    const key = getKey(group.module, action)
+                    const key = `${group.module}:${action}`
                     return (
                       <AppTableCell key={key} className="text-center">
                         {enabled ? (
                           <AppCheckbox
-                            checked={selected[key] ?? false}
-                            onCheckedChange={(checked) => {
-                              setSelected((current) => ({
-                                ...current,
-                                [key]: Boolean(checked),
-                              }))
-                            }}
+                            checked={value[group.module]?.includes(action) ?? false}
+                            onCheckedChange={(checked) =>
+                              toggleAction(group.module, action, Boolean(checked))
+                            }
                             aria-label={`${group.label} ${action}`}
                           />
                         ) : (
