@@ -334,6 +334,19 @@ export class IdentityCommandHandlers {
   // A user registering off an invitation link joins the inviting organization directly
   // instead of getting a brand-new org of their own, matching what acceptInvitation does
   // for a user who already had an account.
+  // memberships.workspace_id is NOT NULL, so an org-wide invitation (no specific
+  // workspace chosen) can't be persisted as-is -- fall back to the organization's
+  // earliest workspace, mirroring what a fresh registration would create.
+  private async resolveMembershipWorkspaceId(organizationId: string, workspaceId: string | null) {
+    if (workspaceId) return workspaceId
+    const fallback =
+      await this.deps.repositories.workspaces.findFirstByOrganizationId(organizationId)
+    if (!fallback) {
+      throw ERRORS.notFound("Workspace")
+    }
+    return fallback.id
+  }
+
   private async registerViaInvitation(
     command: RegisterUserCommand,
     invitationToken: string,
@@ -350,6 +363,10 @@ export class IdentityCommandHandlers {
     ) {
       throw ERRORS.tokenInvalid()
     }
+    const membershipWorkspaceId = await this.resolveMembershipWorkspaceId(
+      invitation.organizationId,
+      invitation.workspaceId
+    )
 
     const timestamp = this.now
     const userId = this.deps.uuid.generate()
@@ -361,7 +378,7 @@ export class IdentityCommandHandlers {
       timezone: command.timezone,
       language: command.language,
       organizationId: invitation.organizationId,
-      workspaceId: invitation.workspaceId ?? undefined,
+      workspaceId: membershipWorkspaceId,
       now: timestamp,
     })
     await this.deps.repositories.users.save(user.toState())
@@ -371,7 +388,7 @@ export class IdentityCommandHandlers {
     const membership = MembershipEntity.create({
       id: this.deps.uuid.generate(),
       organizationId: invitation.organizationId,
-      workspaceId: invitation.workspaceId,
+      workspaceId: membershipWorkspaceId,
       userId,
       role: invitation.role,
       status: "active",
@@ -1801,7 +1818,10 @@ export class IdentityCommandHandlers {
     const membership = MembershipEntity.create({
       id: this.deps.uuid.generate(),
       organizationId: invitation.organizationId,
-      workspaceId: invitation.workspaceId,
+      workspaceId: await this.resolveMembershipWorkspaceId(
+        invitation.organizationId,
+        invitation.workspaceId
+      ),
       userId: actor.userId,
       role: invitation.role,
       status: "active",

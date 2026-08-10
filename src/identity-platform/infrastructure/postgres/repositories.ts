@@ -382,6 +382,14 @@ class PostgresWorkspaceRepository implements WorkspaceRepository {
     })
     return result.rows[0] ? mapWorkspace(result.rows[0]) : null
   }
+  async findFirstByOrganizationId(organizationId: string) {
+    const result = await this.db.query({
+      name: "identity-workspaces-find-first-by-org",
+      text: "SELECT * FROM workspaces WHERE organization_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1",
+      values: [organizationId],
+    })
+    return result.rows[0] ? mapWorkspace(result.rows[0]) : null
+  }
   async save(workspace: WorkspaceState) {
     await this.db.query({
       name: "identity-workspaces-upsert",

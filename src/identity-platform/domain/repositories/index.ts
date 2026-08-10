@@ -33,6 +33,7 @@ export interface OrganizationRepository {
 
 export interface WorkspaceRepository {
   findById(id: string): Promise<WorkspaceState | null>
+  findFirstByOrganizationId(organizationId: string): Promise<WorkspaceState | null>
   save(workspace: WorkspaceState): Promise<void>
 }
 

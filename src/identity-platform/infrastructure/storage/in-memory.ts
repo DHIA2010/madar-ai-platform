@@ -134,6 +134,12 @@ class InMemoryWorkspaceRepository implements WorkspaceRepository {
   async findById(id: string) {
     return this.store.workspaces.get(id) ?? null
   }
+  async findFirstByOrganizationId(organizationId: string) {
+    const matches = Array.from(this.store.workspaces.values())
+      .filter((workspace) => workspace.organizationId === organizationId && !workspace.deletedAt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    return matches[0] ?? null
+  }
   async save(workspace: WorkspaceState) {
     this.store.workspaces.set(workspace.id, { ...workspace })
   }

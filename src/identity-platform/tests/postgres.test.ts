@@ -249,4 +249,81 @@ describe("postgres foundation", () => {
     const foundByNewToken = await repositories.invitations.findByToken(resent.token)
     expect(foundByNewToken?.id).toBe(invitation.id)
   })
+
+  it("registering via an org-wide invitation (no workspace chosen) doesn't violate the memberships schema", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+
+    const owner = await commands.register(
+      {
+        email: "orgwide-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Org Wide Owner",
+        organizationName: "Org Wide Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const ownerLogin = await commands.login(
+      { email: "orgwide-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const actor = await commands.resolveActorFromAccessToken(ownerLogin.session.accessToken)
+
+    // no workspaceId -- an org-wide invitation, which memberships.workspace_id (NOT NULL)
+    // can't represent directly; registerViaInvitation must fall back to a real workspace.
+    const invitation = await commands.inviteMember(
+      actor,
+      { organizationId: owner.organizationId, email: "orgwide-invitee@test.local", role: "viewer" },
+      context
+    )
+    expect(invitation.workspaceId).toBeNull()
+
+    const inviteeRegistration = await commands.register(
+      {
+        email: "orgwide-invitee@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Org Wide Invitee",
+        invitationToken: invitation.token,
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+
+    const membership = await repositories.memberships.findByUserAndOrganization(
+      inviteeRegistration.userId,
+      owner.organizationId
+    )
+    expect(membership?.workspaceId).toBeTruthy()
+    expect(membership?.workspaceId).toBe(owner.workspaceId)
+  })
 })
