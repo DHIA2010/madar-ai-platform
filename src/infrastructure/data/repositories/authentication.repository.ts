@@ -2,6 +2,7 @@ import type { AuthenticationRepository } from "@/application/contracts/infrastru
 import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
+  AuthUserDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -9,6 +10,8 @@ import type {
   RefreshSessionRequestDto,
   RegisterRequestDto,
   ResetPasswordRequestDto,
+  UpdateProfileRequestDto,
+  UploadAvatarRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
 
@@ -151,6 +154,45 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
       }
 
       return await this.adapter.acceptInvitation(token)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.updateProfile(payload)
+      }
+
+      return await this.adapter.updateProfile(payload)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.uploadAvatar(payload)
+      }
+
+      return await this.adapter.uploadAvatar(payload)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async removeAvatar(): Promise<AuthUserDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.removeAvatar()
+      }
+
+      return await this.adapter.removeAvatar()
     } catch (error) {
       throw mapAuthenticationRepositoryError(error)
     }

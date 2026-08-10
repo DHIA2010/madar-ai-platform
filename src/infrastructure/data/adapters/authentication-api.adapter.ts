@@ -1,6 +1,7 @@
 import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
+  AuthUserDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -8,6 +9,8 @@ import type {
   RefreshSessionRequestDto,
   RegisterRequestDto,
   ResetPasswordRequestDto,
+  UpdateProfileRequestDto,
+  UploadAvatarRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
 import type { ApiClient } from "@/infrastructure/http"
@@ -57,6 +60,7 @@ interface IdentityLoginResponse {
     id: string
     email: string
     fullName: string
+    avatarUrl?: string | null
     status?: string
   }
   session: {
@@ -73,10 +77,19 @@ interface IdentitySessionResponse {
     id: string
     email: string
     fullName: string
+    avatarUrl?: string | null
     status?: string
     emailVerifiedAt?: string | null
   }
   roles?: string[]
+}
+
+interface IdentityProfileResponse {
+  id: string
+  email: string
+  fullName: string
+  avatarUrl: string | null
+  emailVerifiedAt?: string | null
 }
 
 function mapRoles(roles: string[] | undefined) {
@@ -91,6 +104,18 @@ function mapRoles(roles: string[] | undefined) {
 function mapPermissions(roles: string[] | undefined) {
   const roleEntries = mapRoles(roles)
   return Array.from(new Set(roleEntries.flatMap((role) => role.permissions)))
+}
+
+function mapProfileResponse(response: IdentityProfileResponse): AuthUserDto {
+  return {
+    id: response.id,
+    email: response.email,
+    fullName: response.fullName,
+    avatarUrl: response.avatarUrl,
+    emailVerified: Boolean(response.emailVerifiedAt),
+    roles: [],
+    permissions: [],
+  }
 }
 
 function mapSession(session: IdentityLoginResponse["session"]): AuthSessionDto {
@@ -123,6 +148,7 @@ export class AuthenticationApiAdapter {
         id: response.user.id,
         email: response.user.email,
         fullName: response.user.fullName,
+        avatarUrl: response.user.avatarUrl ?? null,
         emailVerified: true,
         roles: mapRoles(["owner"]),
         permissions: mapPermissions(["owner"]),
@@ -174,6 +200,7 @@ export class AuthenticationApiAdapter {
             id: response.user.id,
             email: response.user.email,
             fullName: response.user.fullName,
+            avatarUrl: response.user.avatarUrl ?? null,
             emailVerified: Boolean(response.user.emailVerifiedAt),
             roles: mapRoles(response.roles),
             permissions: mapPermissions(response.roles),
@@ -207,5 +234,28 @@ export class AuthenticationApiAdapter {
       `/v1/organizations/invitations/${encodeURIComponent(token)}/accept`,
       {}
     )
+  }
+
+  async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
+    const response = await this.client.patch<UpdateProfileRequestDto, IdentityProfileResponse>(
+      "/v1/identity/profile",
+      payload
+    )
+    return mapProfileResponse(response)
+  }
+
+  async uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto> {
+    const response = await this.client.post<UploadAvatarRequestDto, IdentityProfileResponse>(
+      "/v1/identity/profile/avatar",
+      payload
+    )
+    return mapProfileResponse(response)
+  }
+
+  async removeAvatar(): Promise<AuthUserDto> {
+    const response = await this.client.delete<IdentityProfileResponse>(
+      "/v1/identity/profile/avatar"
+    )
+    return mapProfileResponse(response)
   }
 }

@@ -72,6 +72,10 @@ export interface StorageProvider {
   deleteObject(key: string): Promise<void>
 }
 
+export interface ObjectStorageGateway {
+  uploadPublicObject(input: { key: string; body: Buffer; contentType: string }): Promise<string>
+}
+
 export interface CacheProvider {
   get(key: string): Promise<string | null>
   set(key: string, value: string, ttlSeconds?: number): Promise<void>

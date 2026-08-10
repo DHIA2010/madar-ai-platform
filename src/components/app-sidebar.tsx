@@ -39,12 +39,6 @@ import {
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
-const user = {
-  name: "محمد",
-  email: "admin@madar.ai",
-  avatar: "https://untitledui.com/images/avatars/madeleine-pitts",
-}
-
 // This is the sidebar component used in the app layout.
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onHoverChange?: (value: boolean) => void
@@ -109,7 +103,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
         </SidebarContent>
         <SidebarFooter className="gap-3 px-3 pb-4" dir={dir}>
           <WorkspaceSelector compact />
-          <NavUser user={user} />
+          <NavUser />
           <div className="flex items-center justify-center gap-1 border-t border-sidebar-border pt-3">
             <ThemeToggle />
             <Button variant="ghost" size="icon" className="size-9 rounded-full" asChild>

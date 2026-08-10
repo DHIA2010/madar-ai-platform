@@ -36,4 +36,6 @@ export const ERRORS = {
     new IdentityError("RESOURCE_NOT_FOUND", 404, "business", `${entity} not found.`),
   validation: (details: Record<string, unknown>) =>
     new IdentityError("VALIDATION_ERROR", 400, "validation", "Request validation failed.", details),
+  serviceUnavailable: (message: string) =>
+    new IdentityError("SERVICE_UNAVAILABLE", 503, "infrastructure", message),
 }

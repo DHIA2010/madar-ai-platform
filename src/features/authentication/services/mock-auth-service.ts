@@ -25,6 +25,7 @@ function createMockUser(email: string) {
     fullName: inferredName
       ? inferredName.replace(/\b\w/g, (char) => char.toUpperCase())
       : "MADAR User",
+    avatarUrl: null,
     emailVerified: true,
     roles: [
       {

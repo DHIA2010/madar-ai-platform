@@ -49,6 +49,7 @@ import {
   updateProfileSchema,
   updateTeamSchema,
   updateWorkspaceSchema,
+  uploadAvatarSchema,
   verifyEmailSchema,
 } from "../../schemas"
 
@@ -491,6 +492,24 @@ export function createIdentityApiServer(
             updateProfileSchema.parse(await readJsonBody(request)),
             context
           )
+        )
+      }
+
+      if (method === "POST" && url.pathname === "/v1/identity/profile/avatar") {
+        return send(
+          200,
+          await container.commands.uploadAvatar(
+            actor,
+            uploadAvatarSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
+      }
+
+      if (method === "DELETE" && url.pathname === "/v1/identity/profile/avatar") {
+        return send(
+          200,
+          await container.commands.updateProfile(actor, { avatarUrl: null }, context)
         )
       }
 
@@ -1064,6 +1083,12 @@ export function createIdentityApiServer(
             },
             context
           )
+        )
+      }
+      if (method === "DELETE" && customRoleMatch) {
+        return send(
+          200,
+          await container.commands.deleteCustomRole(actor, { roleId: customRoleMatch[1] }, context)
         )
       }
 

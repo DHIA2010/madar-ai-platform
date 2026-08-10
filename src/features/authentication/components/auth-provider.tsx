@@ -2,15 +2,30 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import { AppError } from "@/lib/app-errors"
+import { AppError, ValidationError } from "@/lib/app-errors"
 
 import { AppEmpty, AppLoading } from "@/components/app"
 
 import { AuthContext } from "../state/auth.context"
 import { useAuthStore } from "../state/auth.store"
-import type { LoginRequest, RegisterRequest } from "../types"
+import type { LoginRequest, RegisterRequest, UpdateProfileRequest } from "../types"
 
 import { useApplicationServices } from "@/application"
+
+const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      resolve(result.slice(result.indexOf(",") + 1))
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
 
 function getConfigurationErrorMessage(error: unknown): string | null {
   if (!(error instanceof AppError)) {
@@ -33,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authStatus = useAuthStore((state) => state.status)
   const setSession = useAuthStore((state) => state.setSession)
   const setStatus = useAuthStore((state) => state.setStatus)
+  const setUser = useAuthStore((state) => state.setUser)
   const authenticate = useAuthStore((state) => state.authenticate)
   const clear = useAuthStore((state) => state.clear)
 
@@ -124,6 +140,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authenticationApplicationService, clear, session, setStatus])
 
+  const updateProfile = useCallback(
+    async (payload: UpdateProfileRequest) => {
+      const updated = await authenticationApplicationService.updateProfile(payload)
+      if (user) {
+        setUser({ ...user, fullName: updated.fullName })
+      }
+    },
+    [authenticationApplicationService, setUser, user]
+  )
+
+  const uploadAvatar = useCallback(
+    async (file: File) => {
+      if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+        throw new ValidationError({
+          code: "avatar_invalid_type",
+          message: "Please choose a PNG, JPEG, WEBP, or GIF image.",
+        })
+      }
+      if (file.size > MAX_AVATAR_BYTES) {
+        throw new ValidationError({
+          code: "avatar_too_large",
+          message: "Images must be 3MB or smaller.",
+        })
+      }
+
+      const dataBase64 = await fileToBase64(file)
+      const updated = await authenticationApplicationService.uploadAvatar({
+        contentType: file.type,
+        dataBase64,
+      })
+      if (user) {
+        setUser({ ...user, avatarUrl: updated.avatarUrl })
+      }
+    },
+    [authenticationApplicationService, setUser, user]
+  )
+
+  const removeAvatar = useCallback(async () => {
+    const updated = await authenticationApplicationService.removeAvatar()
+    if (user) {
+      setUser({ ...user, avatarUrl: updated.avatarUrl })
+    }
+  }, [authenticationApplicationService, setUser, user])
+
   const value = useMemo(
     () => ({
       currentUser: user,
@@ -131,8 +191,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
+      updateProfile,
+      uploadAvatar,
+      removeAvatar,
     }),
-    [authStatus, login, register, logout, user]
+    [authStatus, login, register, logout, updateProfile, uploadAvatar, removeAvatar, user]
   )
 
   if (authStatus === "idle" || authStatus === "loading") {

@@ -9,6 +9,7 @@ import type {
   RegisterRequest,
   ResetPasswordRequest,
   Session,
+  UpdateProfileRequest,
   VerifyEmailRequest,
 } from "./models"
 
@@ -35,6 +36,9 @@ export interface AuthContextValue {
   login: (payload: LoginRequest) => Promise<void>
   register: (payload: RegisterRequest) => Promise<void>
   logout: () => Promise<void>
+  updateProfile: (payload: UpdateProfileRequest) => Promise<void>
+  uploadAvatar: (file: File) => Promise<void>
+  removeAvatar: () => Promise<void>
 }
 
 export interface AuthCommandResult<T> {

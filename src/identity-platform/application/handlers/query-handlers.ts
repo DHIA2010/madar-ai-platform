@@ -171,6 +171,7 @@ export class IdentityQueryHandlers {
           userId: row.userId,
           email: user?.email ?? null,
           fullName: user?.fullName ?? null,
+          avatarUrl: user?.avatarUrl ?? null,
           role: row.role,
           status: row.status,
           profile: row.profile,

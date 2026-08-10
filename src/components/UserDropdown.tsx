@@ -19,8 +19,20 @@ import { User, Settings, LayoutDashboard, LogOut } from "lucide-react"
 
 import { useAuth } from "@/features/authentication/hooks/use-auth"
 
+function getInitials(fullName: string | undefined) {
+  if (!fullName) {
+    return "?"
+  }
+  const parts = fullName.trim().split(/\s+/)
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+  return initials.toUpperCase() || "?"
+}
+
 export function UserDropdown() {
-  const { logout } = useAuth()
+  const { currentUser, logout } = useAuth()
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
@@ -38,14 +50,16 @@ export function UserDropdown() {
     }
   }
 
+  const initials = getInitials(currentUser?.fullName)
+
   return (
     <DropdownMenu>
       {/* Trigger */}
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="rounded-full h-10 w-10 p-0 overflow-hidden ms-2">
           <Avatar className="h-10 w-10 border-border rounded-full">
-            <AvatarImage src="https://untitledui.com/images/avatars/madeleine-pitts" />
-            <AvatarFallback>م</AvatarFallback>
+            {currentUser?.avatarUrl ? <AvatarImage src={currentUser.avatarUrl} /> : null}
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
@@ -56,18 +70,21 @@ export function UserDropdown() {
         <DropdownMenuLabel className="border-border rounded-xl border-1 mb-3 bg-muted/50">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src="https://untitledui.com/images/avatars/madeleine-pitts" />
-              <AvatarFallback>م</AvatarFallback>
+              {currentUser?.avatarUrl ? <AvatarImage src={currentUser.avatarUrl} /> : null}
+              <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
-            <div>
-              <p className="text-sm font-medium">محمد</p>
-              <p className="text-xs text-muted-foreground">admin@madar.ai</p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{currentUser?.fullName ?? "—"}</p>
+              <p className="truncate text-xs text-muted-foreground">{currentUser?.email ?? ""}</p>
             </div>
           </div>
         </DropdownMenuLabel>
 
         {/* Items */}
-        <DropdownMenuItem className="gap-2 h-9">
+        <DropdownMenuItem
+          className="gap-2 h-9"
+          onClick={() => router.push("/account/edit-profile")}
+        >
           <User className="!size-5" />
           Profile
         </DropdownMenuItem>

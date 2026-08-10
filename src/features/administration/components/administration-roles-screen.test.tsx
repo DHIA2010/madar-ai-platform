@@ -10,6 +10,7 @@ const { toastSuccess, toastError } = vi.hoisted(() => ({
 
 const mockCreateRoleMutateAsync = vi.fn().mockResolvedValue({})
 const mockUpdateRoleMutateAsync = vi.fn().mockResolvedValue({})
+const mockDeleteRoleMutateAsync = vi.fn().mockResolvedValue({})
 
 const mockRoles = [
   {
@@ -71,6 +72,7 @@ vi.mock("../queries/use-role-mutations", () => ({
   useRoleMutations: () => ({
     createRole: { mutateAsync: mockCreateRoleMutateAsync, isPending: false },
     updateRole: { mutateAsync: mockUpdateRoleMutateAsync, isPending: false },
+    deleteRole: { mutateAsync: mockDeleteRoleMutateAsync, isPending: false },
   }),
 }))
 
@@ -216,6 +218,23 @@ describe("AdministrationRolesScreen", () => {
       )
     })
     expect(toastSuccess).toHaveBeenCalledWith('Role "Owner Copy" created')
+  })
+
+  it("deletes a custom role after confirming, but never offers delete for default roles", async () => {
+    render(<AdministrationRolesScreen />)
+
+    expect(screen.queryByRole("button", { name: "Delete Owner" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Delete Viewer" })).toBeNull()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete RevOps" }))
+    expect(screen.getByRole("dialog", { name: "Delete role" })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete role" }))
+
+    await vi.waitFor(() => {
+      expect(mockDeleteRoleMutateAsync).toHaveBeenCalledWith({ roleId: "custom-revops" })
+    })
+    expect(toastSuccess).toHaveBeenCalledWith('Role "RevOps" deleted')
   })
 
   it("closes dialog on Escape", () => {

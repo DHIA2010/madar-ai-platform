@@ -1,154 +1,145 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
+import { useRef, useState } from "react"
+import { toast } from "sonner"
+
+import {
+  AppAvatar,
+  AppAvatarFallback,
+  AppAvatarImage,
+  AppButton,
+  AppCard,
+  AppInput,
+  AppPageHeader,
+} from "@/components/app"
+
+import { useAuth } from "@/features/authentication"
+
+function getInitials(fullName: string | undefined) {
+  if (!fullName) {
+    return "?"
+  }
+  const parts = fullName.trim().split(/\s+/)
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+  return initials.toUpperCase() || "?"
+}
 
 export default function EditProfile() {
+  const { currentUser, updateProfile, uploadAvatar, removeAvatar } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [fullName, setFullName] = useState(currentUser?.fullName ?? "")
+  const [isSavingName, setIsSavingName] = useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [isRemovingAvatar, setIsRemovingAvatar] = useState(false)
+
+  const nameChanged = fullName.trim().length > 0 && fullName.trim() !== currentUser?.fullName
+
+  async function handleSaveName() {
+    if (!nameChanged) return
+    setIsSavingName(true)
+    try {
+      await updateProfile({ fullName: fullName.trim() })
+      toast.success("Profile updated")
+    } catch {
+      toast.error("Failed to update profile")
+    } finally {
+      setIsSavingName(false)
+    }
+  }
+
+  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+
+    setIsUploadingAvatar(true)
+    try {
+      await uploadAvatar(file)
+      toast.success("Profile photo updated")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to upload photo")
+    } finally {
+      setIsUploadingAvatar(false)
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    setIsRemovingAvatar(true)
+    try {
+      await removeAvatar()
+      toast.success("Profile photo removed")
+    } catch {
+      toast.error("Failed to remove photo")
+    } finally {
+      setIsRemovingAvatar(false)
+    }
+  }
+
   return (
     <div className="flex justify-center">
-      <Card className="w-full max-w-4xl p-8">
+      <div className="w-full max-w-2xl space-y-4">
+        <AppPageHeader title="Edit profile" subtitle="Update your name and profile photo." />
 
-        <h2 className="text-xl font-semibold mb-6">
-          Edit Profile
-        </h2>
-
-        <Tabs defaultValue="profile" className="w-full">
-
-          {/* Tabs Header */}
-          <TabsList className="mb-8">
-            <TabsTrigger value="profile" className="px-6 py-3">Profile</TabsTrigger>
-            <TabsTrigger value="security" className="px-6 py-3">Security</TabsTrigger>
-            <TabsTrigger value="social" className="px-6 py-3">Social</TabsTrigger>
-          </TabsList>
-
-          {/* ================= PROFILE TAB ================= */}
-          <TabsContent value="profile" className="space-y-6">
-
-            <div className="flex items-center gap-6 flex-wrap">
-              <img
-                src="https://randomuser.me/api/portraits/men/32.jpg"
-                className="w-28 h-28 rounded-full shadow-md"
+        <AppCard contentClassName="space-y-6">
+          <div className="flex flex-wrap items-center gap-6">
+            <AppAvatar className="h-24 w-24">
+              {currentUser?.avatarUrl ? <AppAvatarImage src={currentUser.avatarUrl} /> : null}
+              <AppAvatarFallback className="text-2xl">
+                {getInitials(currentUser?.fullName)}
+              </AppAvatarFallback>
+            </AppAvatar>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <AppButton
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                >
+                  {isUploadingAvatar ? "Uploading…" : "Upload new photo"}
+                </AppButton>
+                {currentUser?.avatarUrl ? (
+                  <AppButton
+                    variant="ghost"
+                    onClick={handleRemoveAvatar}
+                    disabled={isRemovingAvatar}
+                  >
+                    {isRemovingAvatar ? "Removing…" : "Remove"}
+                  </AppButton>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Optional. PNG, JPEG, WEBP, or GIF, up to 3MB.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAvatarChange}
               />
-              <div>
-                <Button variant="outline" className="rounded-full px-6">
-                  Upload new image
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  1200x1200 px • PNG or JPG
-                </p>
-              </div>
             </div>
+          </div>
 
-            <div className="space-y-4">
-              <div>
-                <Label className="mb-3">Name</Label>
-                <Input placeholder="Username or email" />
-              </div>
+          <div className="space-y-3">
+            <AppInput
+              label="Name"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+            />
+            <AppInput label="Email" value={currentUser?.email ?? ""} disabled />
+          </div>
 
-              <div>
-                <Label className="mb-3">Location</Label>
-                <Input placeholder="City, Country" />
-              </div>
-
-              <div>
-                <Label className="mb-3">Bio</Label>
-                <Textarea
-                  placeholder="Write something about yourself..."
-                  className="min-h-[120px]"
-                />
-              </div>
-            </div>
-
-            <Button className="rounded-full px-6 h-9">
-              Save Profile
-            </Button>
-
-          </TabsContent>
-
-          {/* ================= SECURITY TAB ================= */}
-          <TabsContent value="security" className="space-y-6">
-
-            <div className="space-y-4">
-              <div>
-                <Label className="mb-3">Current Password</Label>
-                <Input type="password" />
-              </div>
-
-              <div>
-                <Label className="mb-3">New Password</Label>
-                <Input type="password" />
-              </div>
-
-              <div>
-                <Label className="mb-3">Confirm Password</Label>
-                <Input type="password" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between border rounded-xl p-4">
-              <div>
-                <p className="font-medium">Two-Factor Authentication</p>
-                <p className="text-sm text-muted-foreground">
-                  Add extra security to your account
-                </p>
-              </div>
-              <Switch />
-            </div>
-
-            <Button className="rounded-full px-6 h-9">
-              Update Security
-            </Button>
-
-          </TabsContent>
-
-         {/* ================= SOCIAL TAB ================= */}
-          <TabsContent value="social" className="space-y-6">
-
-            <div className="flex items-center justify-between border rounded-xl p-4 hover:bg-muted/40 transition">
-              <div className="flex items-center gap-3">
-                <i className="bi bi-facebook text-blue-600 text-lg"></i>
-                <span className="font-medium">Facebook</span>
-              </div>
-              <Switch />
-            </div>
-
-            <div className="flex items-center justify-between border rounded-xl p-4 hover:bg-muted/40 transition">
-              <div className="flex items-center gap-3">
-                <i className="bi bi-twitter-x text-black text-lg"></i>
-                <span className="font-medium">Twitter</span>
-              </div>
-              <Switch />
-            </div>
-
-            <div className="flex items-center justify-between border rounded-xl p-4 hover:bg-muted/40 transition">
-              <div className="flex items-center gap-3">
-                <i className="bi bi-instagram text-pink-500 text-lg"></i>
-                <span className="font-medium">Instagram</span>
-              </div>
-              <Switch />
-            </div>
-
-            <div className="flex items-center justify-between border rounded-xl p-4 hover:bg-muted/40 transition">
-              <div className="flex items-center gap-3">
-                <i className="bi bi-linkedin text-blue-700 text-lg"></i>
-                <span className="font-medium">LinkedIn</span>
-              </div>
-              <Switch />
-            </div>
-
-            <Button className="rounded-full px-6 h-9">
-              Save Social Settings
-            </Button>
-
-          </TabsContent>
-
-        </Tabs>
-      </Card>
+          <div className="flex justify-end">
+            <AppButton onClick={handleSaveName} disabled={!nameChanged || isSavingName}>
+              {isSavingName ? "Saving…" : "Save changes"}
+            </AppButton>
+          </div>
+        </AppCard>
+      </div>
     </div>
   )
 }

@@ -10,6 +10,8 @@ import type {
   RefreshSessionRequestDto,
   RegisterRequestDto,
   ResetPasswordRequestDto,
+  UpdateProfileRequestDto,
+  UploadAvatarRequestDto,
   VerifyEmailRequestDto,
 } from "@/application/contracts/authentication.contracts"
 import type { AuthenticationGateway } from "@/application/contracts/infrastructure.contracts"
@@ -27,6 +29,7 @@ function createMockUser(email: string): AuthUserDto {
     fullName: inferredName
       ? inferredName.replace(/\b\w/g, (char) => char.toUpperCase())
       : "MADAR User",
+    avatarUrl: null,
     emailVerified: true,
     roles: [
       {
@@ -231,6 +234,21 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
     }
 
     return { success: true }
+  }
+
+  async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
+    const user = createMockUser("mock.user@madar.local")
+    return { ...user, fullName: payload.fullName ?? user.fullName }
+  }
+
+  async uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto> {
+    const user = createMockUser("mock.user@madar.local")
+    return { ...user, avatarUrl: `data:${payload.contentType};base64,${payload.dataBase64}` }
+  }
+
+  async removeAvatar(): Promise<AuthUserDto> {
+    const user = createMockUser("mock.user@madar.local")
+    return { ...user, avatarUrl: null }
   }
 }
 

@@ -50,6 +50,11 @@ export interface UpdateProfileCommand {
   preferences?: Record<string, string | number | boolean>
 }
 
+export interface UploadAvatarCommand {
+  contentType: string
+  dataBase64: string
+}
+
 export interface ChangeEmailCommand {
   newEmail: string
   password: string
@@ -153,6 +158,10 @@ export interface UpdateCustomRoleCommand {
   name?: string
   description?: string
   permissions?: RolePermissionInput[]
+}
+
+export interface DeleteCustomRoleCommand {
+  roleId: string
 }
 
 export interface UpdateWorkspaceCommand {

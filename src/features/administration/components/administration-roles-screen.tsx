@@ -1,12 +1,14 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
   AppBadge,
   AppButton,
   AppCard,
+  AppConfirmDialog,
   AppDialog,
   AppInput,
   AppPageHeader,
@@ -59,12 +61,13 @@ export function AdministrationRolesScreen() {
     administrationApplicationService,
     currentOrganization?.id
   )
-  const { createRole, updateRole } = useRoleMutations(currentOrganization?.id)
+  const { createRole, updateRole, deleteRole } = useRoleMutations(currentOrganization?.id)
   const roles = useMemo(() => data ?? [], [data])
 
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<CustomRoleDraft>(emptyDraft())
   const [selectedRole, setSelectedRole] = useState<AdministrationRoleDto | null>(null)
+  const [deletingRole, setDeletingRole] = useState<AdministrationRoleDto | null>(null)
   const [editingRole, setEditingRole] = useState(false)
   const [cloningRole, setCloningRole] = useState(false)
 
@@ -167,6 +170,18 @@ export function AdministrationRolesScreen() {
     }
   }
 
+  async function handleDeleteRole() {
+    if (!deletingRole) return
+
+    try {
+      await deleteRole.mutateAsync({ roleId: deletingRole.id })
+      toast.success(`Role "${deletingRole.name}" deleted`)
+      setDeletingRole(null)
+    } catch {
+      toast.error("Failed to delete role")
+    }
+  }
+
   const dialogTitle = editingRole
     ? "Edit Role"
     : cloningRole
@@ -224,6 +239,16 @@ export function AdministrationRolesScreen() {
                 <AppButton size="sm" variant="outline" onClick={() => openCloneDialog(role)}>
                   Clone
                 </AppButton>
+                {role.editable ? (
+                  <AppButton
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDeletingRole(role)}
+                    aria-label={`Delete ${role.name}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </AppButton>
+                ) : null}
               </div>
             </AppCard>
           ))}
@@ -297,6 +322,24 @@ export function AdministrationRolesScreen() {
           />
         </div>
       </AppDialog>
+
+      <AppConfirmDialog
+        open={Boolean(deletingRole)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setDeletingRole(null)
+        }}
+        title="Delete role"
+        description={
+          deletingRole
+            ? `This permanently removes "${deletingRole.name}". Members currently assigned this role will lose the permissions it granted. This can't be undone.`
+            : undefined
+        }
+        confirmLabel="Delete role"
+        confirmTone="destructive"
+        loading={deleteRole.isPending}
+        onConfirm={handleDeleteRole}
+        onCancel={() => setDeletingRole(null)}
+      />
     </div>
   )
 }

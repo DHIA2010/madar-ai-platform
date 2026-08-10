@@ -15,6 +15,7 @@ export type {
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
@@ -22,11 +23,13 @@ export type {
   GetTeamMembersRequestDto,
   GetTeamsRequestDto,
   GetUsersRequestDto,
+  ReactivateMemberRequestDto,
   RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
 } from "./administration.contracts"
@@ -109,6 +112,8 @@ export type {
   ResetPasswordRequestDto,
   SessionStoragePort,
   SessionStorageGateway,
+  UpdateProfileRequestDto,
+  UploadAvatarRequestDto,
   VerifyEmailRequestDto,
 } from "./authentication.contracts"
 export type {

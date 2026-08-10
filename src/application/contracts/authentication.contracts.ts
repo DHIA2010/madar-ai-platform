@@ -2,6 +2,7 @@ export interface AuthUserDto {
   id: string
   email: string
   fullName: string
+  avatarUrl: string | null
   emailVerified: boolean
   roles: Array<{
     id: string
@@ -9,6 +10,15 @@ export interface AuthUserDto {
     permissions: string[]
   }>
   permissions: string[]
+}
+
+export interface UpdateProfileRequestDto {
+  fullName?: string
+}
+
+export interface UploadAvatarRequestDto {
+  contentType: string
+  dataBase64: string
 }
 
 export interface AuthSessionDto {
@@ -83,6 +93,9 @@ export interface AuthenticationRepository {
   resetPassword(payload: ResetPasswordRequestDto): Promise<void>
   verifyEmail(payload: VerifyEmailRequestDto): Promise<void>
   acceptInvitation(token: string): Promise<AcceptInvitationResponseDto>
+  updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto>
+  uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto>
+  removeAvatar(): Promise<AuthUserDto>
 }
 
 export type AuthGateway = AuthenticationRepository

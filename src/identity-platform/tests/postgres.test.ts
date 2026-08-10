@@ -326,4 +326,140 @@ describe("postgres foundation", () => {
     expect(membership?.workspaceId).toBeTruthy()
     expect(membership?.workspaceId).toBe(owner.workspaceId)
   })
+
+  it("uploads an avatar through the object storage gateway and never leaks the password hash from profile responses", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+
+    const uploadedObjects: Array<{ key: string; contentType: string }> = []
+    const objectStorage = {
+      async uploadPublicObject(input: { key: string; body: Buffer; contentType: string }) {
+        uploadedObjects.push({ key: input.key, contentType: input.contentType })
+        return `https://cdn.test.local/avatars-bucket/${input.key}`
+      },
+    }
+
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+      objectStorage,
+    })
+
+    const owner = await commands.register(
+      {
+        email: "avatar-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Avatar Owner",
+        organizationName: "Avatar Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const login = await commands.login(
+      { email: "avatar-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const actor = await commands.resolveActorFromAccessToken(login.session.accessToken)
+
+    const updateResult = await commands.updateProfile(actor, { fullName: "Renamed Owner" }, context)
+    expect(updateResult.fullName).toBe("Renamed Owner")
+    expect(updateResult).not.toHaveProperty("passwordHash")
+
+    const avatarResult = await commands.uploadAvatar(
+      actor,
+      { contentType: "image/png", dataBase64: Buffer.from("fake-png-bytes").toString("base64") },
+      context
+    )
+    expect(avatarResult.avatarUrl).toBe(
+      `https://cdn.test.local/avatars-bucket/${uploadedObjects[0].key}`
+    )
+    expect(avatarResult).not.toHaveProperty("passwordHash")
+    expect(uploadedObjects[0].key).toMatch(new RegExp(`^avatars/${actor.userId}/.+\\.png$`))
+    expect(uploadedObjects[0].contentType).toBe("image/png")
+
+    const persistedUser = await repositories.users.findById(actor.userId)
+    expect(persistedUser?.avatarUrl).toBe(avatarResult.avatarUrl)
+  })
+
+  it("rejects avatar uploads when object storage isn't configured, and rejects oversized images", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+
+    const owner = await commands.register(
+      {
+        email: "avatar-unavailable@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "No Storage Owner",
+        organizationName: "No Storage Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const login = await commands.login(
+      { email: "avatar-unavailable@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const actor = await commands.resolveActorFromAccessToken(login.session.accessToken)
+
+    await expect(
+      commands.uploadAvatar(
+        actor,
+        { contentType: "image/png", dataBase64: Buffer.from("fake").toString("base64") },
+        context
+      )
+    ).rejects.toThrowError(/not available/i)
+  })
 })

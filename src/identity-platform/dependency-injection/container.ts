@@ -23,6 +23,7 @@ import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createPostgresRepositories } from "../infrastructure/postgres/repositories"
 import { PostgresOutboxEventPublisher } from "../infrastructure/postgres/outbox-event-publisher"
 import { LocalStorageProvider } from "../infrastructure/storage/local-storage-provider"
+import { S3ObjectStorageGateway } from "../infrastructure/object-storage/s3-object-storage-gateway"
 import { EnvironmentFeatureFlagProvider } from "../infrastructure/feature-flags/environment-feature-flag-provider"
 import { EnvironmentConfigurationProvider } from "../infrastructure/configuration/environment-configuration-provider"
 import { InMemoryMetricsProvider } from "../infrastructure/observability/in-memory-metrics-provider"
@@ -68,6 +69,7 @@ export interface IdentityPlatformContainer {
     metrics?: InMemoryMetricsProvider
     integrations?: IntegrationProviderRegistry
     googleIdentityCredentialsProvider?: GoogleIdentityCredentialsProvider
+    objectStorage?: S3ObjectStorageGateway
   }
 }
 
@@ -130,6 +132,7 @@ export function createIdentityPlatformContainer(
   })
   const cache = new RedisCacheProvider(redis, config)
   const storage = new LocalStorageProvider(config)
+  const objectStorage = config.objectStorageBucket ? new S3ObjectStorageGateway(config) : undefined
   const featureFlags = new EnvironmentFeatureFlagProvider(config)
   const configuration = new EnvironmentConfigurationProvider()
   const metrics = new InMemoryMetricsProvider()
@@ -186,6 +189,7 @@ export function createIdentityPlatformContainer(
     eventPublisher: new PostgresOutboxEventPublisher(database),
     featureFlags,
     metrics,
+    objectStorage,
   })
   const queries = new IdentityQueryHandlers(repositories)
   return {
@@ -201,6 +205,7 @@ export function createIdentityPlatformContainer(
       metrics,
       integrations,
       googleIdentityCredentialsProvider,
+      objectStorage,
     },
   }
 }

@@ -1,13 +1,16 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 
 import {
   AppAvatar,
   AppAvatarFallback,
+  AppAvatarImage,
   AppBadge,
   AppButton,
   AppCard,
+  AppConfirmDialog,
   AppEmpty,
   AppInput,
   AppLoading,
@@ -23,11 +26,14 @@ import {
   AppTableHeader,
   AppTablePagination,
   AppTableRow,
+  AppTextarea,
   RelativeTime,
 } from "@/components/app"
 
+import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
+import { useUserMutations } from "../queries/use-user-mutations"
 import { useUsersQuery } from "../queries/use-users-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
 import { AdministrationUserProfileDrawer } from "./administration-user-profile-drawer"
@@ -55,10 +61,12 @@ function humanizeRole(roleId: string) {
 export function AdministrationUsersScreen() {
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization } = useWorkspace()
+  const { currentUser } = useAuth()
   const { data, isLoading, isError } = useUsersQuery(
     administrationApplicationService,
     currentOrganization?.id
   )
+  const { suspendUser, reactivateUser } = useUserMutations(currentOrganization?.id)
   const allUsers = useMemo(() => data ?? [], [data])
 
   const [query, setQuery] = useState("")
@@ -69,6 +77,8 @@ export function AdministrationUsersScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [selectedUser, setSelectedUser] = useState<AdministrationUserDto | undefined>()
   const [profileOpen, setProfileOpen] = useState(false)
+  const [deactivatingUser, setDeactivatingUser] = useState<AdministrationUserDto | null>(null)
+  const [deactivateReason, setDeactivateReason] = useState("")
 
   const availableWorkspaces = useMemo(() => {
     const names = new Set<string>()
@@ -110,6 +120,41 @@ export function AdministrationUsersScreen() {
       }
       return [...current, userId]
     })
+  }
+
+  async function handleDeactivateUser() {
+    if (!deactivatingUser || !currentOrganization) return
+    if (deactivateReason.trim().length < 2) {
+      toast.error("Please enter a reason (at least 2 characters)")
+      return
+    }
+
+    try {
+      await suspendUser.mutateAsync({
+        organizationId: currentOrganization.id,
+        memberUserId: deactivatingUser.id,
+        reason: deactivateReason.trim(),
+      })
+      toast.success(`${deactivatingUser.fullName} deactivated`)
+      setDeactivatingUser(null)
+      setDeactivateReason("")
+    } catch {
+      toast.error("Failed to deactivate user")
+    }
+  }
+
+  async function handleReactivateUser(user: AdministrationUserDto) {
+    if (!currentOrganization) return
+
+    try {
+      await reactivateUser.mutateAsync({
+        organizationId: currentOrganization.id,
+        memberUserId: user.id,
+      })
+      toast.success(`${user.fullName} reactivated`)
+    } catch {
+      toast.error("Failed to reactivate user")
+    }
   }
 
   return (
@@ -270,6 +315,7 @@ export function AdministrationUsersScreen() {
                         <AppTableCell>
                           <div className="flex items-center gap-2">
                             <AppAvatar size="sm">
+                              {user.avatarUrl ? <AppAvatarImage src={user.avatarUrl} /> : null}
                               <AppAvatarFallback>{initials(user.fullName)}</AppAvatarFallback>
                             </AppAvatar>
                             <div>
@@ -320,6 +366,27 @@ export function AdministrationUsersScreen() {
                             <AppButton size="sm" variant="outline">
                               Edit
                             </AppButton>
+                            {user.id === currentUser?.id ? null : user.status === "suspended" ? (
+                              <AppButton
+                                size="sm"
+                                variant="outline"
+                                loading={
+                                  reactivateUser.isPending &&
+                                  reactivateUser.variables?.memberUserId === user.id
+                                }
+                                onClick={() => handleReactivateUser(user)}
+                              >
+                                Reactivate
+                              </AppButton>
+                            ) : (
+                              <AppButton
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDeactivatingUser(user)}
+                              >
+                                Deactivate
+                              </AppButton>
+                            )}
                           </div>
                         </AppTableCell>
                       </AppTableRow>
@@ -339,6 +406,37 @@ export function AdministrationUsersScreen() {
         onOpenChange={setProfileOpen}
         user={selectedUser}
       />
+
+      <AppConfirmDialog
+        open={Boolean(deactivatingUser)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setDeactivatingUser(null)
+            setDeactivateReason("")
+          }
+        }}
+        title="Deactivate user"
+        description={
+          deactivatingUser
+            ? `${deactivatingUser.fullName} will immediately lose access to this organization. You can reactivate them at any time.`
+            : undefined
+        }
+        confirmLabel="Deactivate"
+        confirmTone="destructive"
+        loading={suspendUser.isPending}
+        onConfirm={handleDeactivateUser}
+        onCancel={() => {
+          setDeactivatingUser(null)
+          setDeactivateReason("")
+        }}
+      >
+        <AppTextarea
+          label="Reason"
+          placeholder="Why is this user being deactivated?"
+          value={deactivateReason}
+          onChange={(event) => setDeactivateReason(event.target.value)}
+        />
+      </AppConfirmDialog>
     </div>
   )
 }

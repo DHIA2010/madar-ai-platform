@@ -9,6 +9,8 @@ import type {
   RegisterRequestDto,
   ResetPasswordRequestDto,
   SessionStoragePort,
+  UpdateProfileRequestDto,
+  UploadAvatarRequestDto,
   VerifyEmailRequestDto,
 } from "../contracts"
 import { GetCurrentUserQuery } from "../queries"
@@ -71,5 +73,17 @@ export class AuthenticationApplicationService {
 
   acceptInvitation(token: string): Promise<AcceptInvitationResponseDto> {
     return this.gateway.acceptInvitation(token)
+  }
+
+  updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
+    return this.gateway.updateProfile(payload)
+  }
+
+  uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto> {
+    return this.gateway.uploadAvatar(payload)
+  }
+
+  removeAvatar(): Promise<AuthUserDto> {
+    return this.gateway.removeAvatar()
   }
 }

@@ -14,9 +14,14 @@ export interface User {
   id: string
   email: string
   fullName: string
+  avatarUrl: string | null
   emailVerified: boolean
   roles: Role[]
   permissions: string[]
+}
+
+export interface UpdateProfileRequest {
+  fullName?: string
 }
 
 export interface AccessToken {

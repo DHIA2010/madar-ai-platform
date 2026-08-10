@@ -17,6 +17,7 @@ export type {
   ResetPasswordRequest,
   Role,
   Session,
+  UpdateProfileRequest,
   User,
   VerifyEmailRequest,
 } from "./models"

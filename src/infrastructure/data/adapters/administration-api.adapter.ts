@@ -3,13 +3,16 @@ import type {
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
+  ReactivateMemberRequestDto,
   RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
 } from "@/application/contracts/administration.contracts"
@@ -42,6 +45,7 @@ export interface OrganizationMemberApiEntry {
   userId: string
   email: string | null
   fullName: string | null
+  avatarUrl: string | null
   role: string
   status: "invited" | "active" | "suspended" | "removed"
   profile: Record<string, string>
@@ -308,5 +312,29 @@ export class AdministrationApiAdapter {
       description: request.description,
       permissions: request.permissions,
     })
+  }
+
+  deleteCustomRole(request: DeleteCustomRoleRequestDto): Promise<void> {
+    return this.client
+      .delete<{ success: boolean }>(`/v1/organizations/roles/${request.roleId}`)
+      .then(() => undefined)
+  }
+
+  suspendMember(request: SuspendMemberRequestDto): Promise<void> {
+    return this.client
+      .post<
+        { reason?: string },
+        unknown
+      >(`/v1/organizations/${request.organizationId}/members/${request.memberUserId}/suspend`, { reason: request.reason })
+      .then(() => undefined)
+  }
+
+  reactivateMember(request: ReactivateMemberRequestDto): Promise<void> {
+    return this.client
+      .post<
+        Record<string, never>,
+        unknown
+      >(`/v1/organizations/${request.organizationId}/members/${request.memberUserId}/reactivate`, {})
+      .then(() => undefined)
   }
 }

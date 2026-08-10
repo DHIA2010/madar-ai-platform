@@ -13,6 +13,7 @@ import type {
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
@@ -20,11 +21,13 @@ import type {
   GetTeamMembersRequestDto,
   GetTeamsRequestDto,
   GetUsersRequestDto,
+  ReactivateMemberRequestDto,
   RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
 } from "@/application/contracts/administration.contracts"
@@ -141,6 +144,7 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       id: userId,
       fullName: first.fullName ?? first.email ?? "Unknown",
       email: first.email ?? "",
+      avatarUrl: first.avatarUrl,
       department: "",
       roleId: pickPrimaryRole(rows.map((row) => row.role)),
       workspaces,
@@ -463,6 +467,30 @@ export class DataAdministrationRepository implements AdministrationRepository {
     try {
       const entry = await this.adapter.updateCustomRole(request)
       return mapCustomRoleEntry(entry)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async deleteCustomRole(request: DeleteCustomRoleRequestDto): Promise<void> {
+    try {
+      await this.adapter.deleteCustomRole(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async suspendMember(request: SuspendMemberRequestDto): Promise<void> {
+    try {
+      await this.adapter.suspendMember(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async reactivateMember(request: ReactivateMemberRequestDto): Promise<void> {
+    try {
+      await this.adapter.reactivateMember(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

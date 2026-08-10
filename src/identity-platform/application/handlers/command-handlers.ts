@@ -17,6 +17,7 @@ import type {
   CreateTeamCommand,
   CreateWorkspaceCommand,
   DeclineInvitationCommand,
+  DeleteCustomRoleCommand,
   DeleteOrganizationCommand,
   DeleteTeamCommand,
   ForgotPasswordCommand,
@@ -42,6 +43,7 @@ import type {
   UpdateProfileCommand,
   UpdateTeamCommand,
   UpdateWorkspaceCommand,
+  UploadAvatarCommand,
   VerifyEmailCommand,
 } from "../commands"
 import type {
@@ -51,6 +53,7 @@ import type {
   FeatureFlagProvider,
   Logger,
   MetricsProvider,
+  ObjectStorageGateway,
   PasswordHasher,
   RateLimiter,
   TokenService,
@@ -70,6 +73,7 @@ import {
   UserEntity,
   WorkspaceEntity,
 } from "../../domain/entities"
+import type { UserState } from "../../domain/entities"
 import type { DomainEvent } from "../../domain/events"
 import { ERRORS, IdentityError } from "../errors/IdentityError"
 import { hasPermission, resolvePermissions } from "../../domain/domain-services/permission-service"
@@ -88,6 +92,7 @@ export interface IdentityCommandHandlerDependencies {
   eventPublisher: EventPublisher
   featureFlags?: FeatureFlagProvider
   metrics?: MetricsProvider
+  objectStorage?: ObjectStorageGateway
 }
 
 export class IdentityCommandHandlers {
@@ -815,6 +820,22 @@ export class IdentityCommandHandlers {
     ])
   }
 
+  private toProfileDto(state: UserState) {
+    return {
+      id: state.id,
+      email: state.email,
+      fullName: state.fullName,
+      avatarUrl: state.avatarUrl,
+      timezone: state.timezone,
+      language: state.language,
+      status: state.status,
+      preferences: state.preferences,
+      activeWorkspaceId: state.activeWorkspaceId,
+      primaryOrganizationId: state.primaryOrganizationId,
+      emailVerifiedAt: state.emailVerifiedAt,
+    }
+  }
+
   async updateProfile(
     actor: AuthenticatedActor,
     command: UpdateProfileCommand,
@@ -836,7 +857,51 @@ export class IdentityCommandHandlers {
       "user",
       actor.userId
     )
-    return user.toState()
+    return this.toProfileDto(user.toState())
+  }
+
+  async uploadAvatar(
+    actor: AuthenticatedActor,
+    command: UploadAvatarCommand,
+    context: RequestContext
+  ) {
+    if (!this.deps.objectStorage) {
+      throw ERRORS.serviceUnavailable("Avatar uploads are not available right now.")
+    }
+
+    const buffer = Buffer.from(command.dataBase64, "base64")
+    const MAX_AVATAR_BYTES = 3 * 1024 * 1024
+    if (buffer.length === 0 || buffer.length > MAX_AVATAR_BYTES) {
+      throw ERRORS.validation({ avatar: "Image must be between 1 byte and 3MB." })
+    }
+
+    const userState = await this.deps.repositories.users.findById(actor.userId)
+    if (!userState) {
+      throw ERRORS.notFound("User")
+    }
+
+    const extension =
+      command.contentType.split("/")[1] === "jpeg" ? "jpg" : command.contentType.split("/")[1]
+    const key = `avatars/${actor.userId}/${this.deps.uuid.generate()}.${extension}`
+    const avatarUrl = await this.deps.objectStorage.uploadPublicObject({
+      key,
+      body: buffer,
+      contentType: command.contentType,
+    })
+
+    const user = UserEntity.rehydrate(userState)
+    user.updateProfile({ avatarUrl }, this.now)
+    await this.deps.repositories.users.save(user.toState())
+    await this.audit(
+      "identity.avatar_uploaded",
+      context,
+      actor.userId,
+      actor.organizationId,
+      actor.workspaceId,
+      "user",
+      actor.userId
+    )
+    return this.toProfileDto(user.toState())
   }
 
   async changeEmail(
@@ -1553,6 +1618,39 @@ export class IdentityCommandHandlers {
     )
     const current = orgRoles.find((item) => item.id === role.id)
     return { ...role.toState(), permissions: current?.permissions ?? [] }
+  }
+
+  async deleteCustomRole(
+    actor: AuthenticatedActor,
+    command: DeleteCustomRoleCommand,
+    context: RequestContext
+  ) {
+    const roleState = await this.deps.repositories.customRoles.findById(command.roleId)
+    if (!roleState) {
+      throw ERRORS.notFound("Role")
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      roleState.organizationId
+    )
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      throw ERRORS.forbidden()
+    }
+
+    const role = CustomRoleEntity.rehydrate(roleState)
+    role.delete(this.now)
+    await this.deps.repositories.customRoles.save(role.toState())
+    await this.audit(
+      "role.deleted",
+      context,
+      actor.userId,
+      roleState.organizationId,
+      null,
+      "custom_role",
+      role.id
+    )
+
+    return { success: true }
   }
 
   async updateWorkspace(

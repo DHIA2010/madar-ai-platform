@@ -69,7 +69,8 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin123} &&
       mc mb --ignore-existing local/${MINIO_BUCKET:-madar-local} &&
-      mc anonymous set private local/${MINIO_BUCKET:-madar-local}
+      mc anonymous set private local/${MINIO_BUCKET:-madar-local} &&
+      mc anonymous set download local/${MINIO_BUCKET:-madar-local}/avatars
       "
     restart: "no"
     networks:
@@ -113,6 +114,7 @@ services:
       IDENTITY_PLATFORM_JWT_SECRET: ${IDENTITY_PLATFORM_JWT_SECRET:-dev_identity_secret_change_me_32_chars}
       IDENTITY_PLATFORM_TOKEN_HASH_SECRET: ${IDENTITY_PLATFORM_TOKEN_HASH_SECRET:-dev_identity_token_hash_change_me_32_chars}
       MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
       MINIO_BUCKET: ${MINIO_BUCKET:-madar-local}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin123}}

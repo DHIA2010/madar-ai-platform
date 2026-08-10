@@ -1011,6 +1011,11 @@ export class CustomRoleEntity {
     this.state.updatedAt = now
   }
 
+  delete(now: string) {
+    this.state.deletedAt = now
+    this.state.updatedAt = now
+  }
+
   toState(): CustomRoleState {
     return { ...this.state }
   }

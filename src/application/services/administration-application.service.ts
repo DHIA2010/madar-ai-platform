@@ -11,6 +11,7 @@ import type {
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
+  DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
@@ -18,10 +19,12 @@ import type {
   GetTeamMembersRequestDto,
   GetTeamsRequestDto,
   GetUsersRequestDto,
+  ReactivateMemberRequestDto,
   RemoveTeamMemberRequestDto,
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   SendInvitationRequestDto,
+  SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
 } from "../contracts"
@@ -35,6 +38,14 @@ export class AdministrationApplicationService {
 
   getUsers(request: GetUsersRequestDto): Promise<AdministrationUserDto[]> {
     return this.gateway.getUsers(request)
+  }
+
+  suspendMember(request: SuspendMemberRequestDto): Promise<void> {
+    return this.gateway.suspendMember(request)
+  }
+
+  reactivateMember(request: ReactivateMemberRequestDto): Promise<void> {
+    return this.gateway.reactivateMember(request)
   }
 
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]> {
@@ -99,5 +110,9 @@ export class AdministrationApplicationService {
 
   updateCustomRole(request: UpdateCustomRoleRequestDto): Promise<AdministrationRoleDto> {
     return this.gateway.updateCustomRole(request)
+  }
+
+  deleteCustomRole(request: DeleteCustomRoleRequestDto): Promise<void> {
+    return this.gateway.deleteCustomRole(request)
   }
 }

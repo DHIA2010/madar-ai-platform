@@ -26,6 +26,7 @@ export interface AdministrationUserDto {
   id: string
   fullName: string
   email: string
+  avatarUrl: string | null
   department: string
   roleId: string
   workspaces: string[]
@@ -39,6 +40,17 @@ export interface AdministrationUserDto {
 
 export interface GetUsersRequestDto {
   organizationId: string
+}
+
+export interface SuspendMemberRequestDto {
+  organizationId: string
+  memberUserId: string
+  reason?: string
+}
+
+export interface ReactivateMemberRequestDto {
+  organizationId: string
+  memberUserId: string
 }
 
 export type AdministrationInvitationStatus =
@@ -185,9 +197,15 @@ export interface UpdateCustomRoleRequestDto {
   permissions?: RolePermissionDto[]
 }
 
+export interface DeleteCustomRoleRequestDto {
+  roleId: string
+}
+
 export interface AdministrationGateway {
   getAuditLogs(request: GetAuditLogsRequestDto): Promise<AuditLogListDto>
   getUsers(request: GetUsersRequestDto): Promise<AdministrationUserDto[]>
+  suspendMember(request: SuspendMemberRequestDto): Promise<void>
+  reactivateMember(request: ReactivateMemberRequestDto): Promise<void>
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]>
   sendInvitation(request: SendInvitationRequestDto): Promise<AdministrationInvitationDto>
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>
@@ -204,6 +222,7 @@ export interface AdministrationGateway {
   getRoles(request: GetRolesRequestDto): Promise<AdministrationRoleDto[]>
   createCustomRole(request: CreateCustomRoleRequestDto): Promise<AdministrationRoleDto>
   updateCustomRole(request: UpdateCustomRoleRequestDto): Promise<AdministrationRoleDto>
+  deleteCustomRole(request: DeleteCustomRoleRequestDto): Promise<void>
 }
 
 export type AdministrationRepository = AdministrationGateway

@@ -25,6 +25,12 @@ export interface IdentityPlatformConfig {
   resendReplyTo?: string
   appUrl: string
   featureFlags: Record<string, boolean>
+  objectStorageEndpoint?: string
+  objectStoragePublicEndpoint?: string
+  objectStorageBucket?: string
+  objectStorageAccessKeyId?: string
+  objectStorageSecretAccessKey?: string
+  objectStorageRegion?: string
 }
 
 const configSchema = z.object({
@@ -52,6 +58,12 @@ const configSchema = z.object({
   resendReplyTo: z.string().optional(),
   appUrl: z.string().min(1),
   featureFlags: z.record(z.string(), z.boolean()),
+  objectStorageEndpoint: z.string().optional(),
+  objectStoragePublicEndpoint: z.string().optional(),
+  objectStorageBucket: z.string().optional(),
+  objectStorageAccessKeyId: z.string().optional(),
+  objectStorageSecretAccessKey: z.string().optional(),
+  objectStorageRegion: z.string().optional(),
 })
 
 export function loadIdentityPlatformConfig(
@@ -123,5 +135,15 @@ export function loadIdentityPlatformConfig(
       process.env.APP_URL ??
       "http://localhost:3000",
     featureFlags: featureFlagsRaw,
+    objectStorageEndpoint: overrides.objectStorageEndpoint ?? process.env.MINIO_ENDPOINT,
+    objectStoragePublicEndpoint:
+      overrides.objectStoragePublicEndpoint ??
+      process.env.MINIO_PUBLIC_ENDPOINT ??
+      process.env.MINIO_ENDPOINT,
+    objectStorageBucket: overrides.objectStorageBucket ?? process.env.MINIO_BUCKET,
+    objectStorageAccessKeyId: overrides.objectStorageAccessKeyId ?? process.env.MINIO_ACCESS_KEY,
+    objectStorageSecretAccessKey:
+      overrides.objectStorageSecretAccessKey ?? process.env.MINIO_SECRET_KEY,
+    objectStorageRegion: overrides.objectStorageRegion ?? process.env.MINIO_REGION,
   })
 }

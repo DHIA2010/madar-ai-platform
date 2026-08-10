@@ -149,6 +149,11 @@ export const updateProfileSchema = z.object({
   preferences: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 })
 
+export const uploadAvatarSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+  dataBase64: z.string().min(1),
+})
+
 export const revokeSessionSchema = z.object({
   sessionId: z.string().uuid(),
 })

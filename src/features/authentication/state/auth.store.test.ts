@@ -7,6 +7,7 @@ const mockUser: User = {
   id: "user-1",
   email: "demo@madar.ai",
   fullName: "Demo User",
+  avatarUrl: null,
   emailVerified: true,
   roles: [{ id: "role-1", name: "Admin", permissions: ["dashboard:view"] }],
   permissions: ["dashboard:view"],

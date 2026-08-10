@@ -21,6 +21,7 @@ const mockUser: AuthContextValue["currentUser"] = {
   id: "user_1",
   email: "demo@madar.ai",
   fullName: "Demo User",
+  avatarUrl: null,
   emailVerified: true,
   roles: [],
   permissions: ["dashboard:view", "campaigns:manage"],
@@ -32,6 +33,9 @@ const authValue: AuthContextValue = {
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  updateProfile: vi.fn(),
+  uploadAvatar: vi.fn(),
+  removeAvatar: vi.fn(),
 }
 
 function TestPermissionProvider({ children }: { children: React.ReactNode }) {

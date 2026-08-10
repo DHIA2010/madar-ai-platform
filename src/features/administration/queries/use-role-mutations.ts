@@ -9,6 +9,7 @@ import { administrationQueryKeys } from "./administration-query-keys"
 import { useApplicationServices } from "@/application"
 import type {
   CreateCustomRoleRequestDto,
+  DeleteCustomRoleRequestDto,
   UpdateCustomRoleRequestDto,
 } from "@/application/contracts"
 
@@ -43,5 +44,17 @@ export function useRoleMutations(organizationId: string | null | undefined) {
     onSuccess: invalidate,
   })
 
-  return { createRole, updateRole }
+  const deleteRole = useMutation({
+    mutationKey: ["administration", "roles", "delete"],
+    mutationFn: async (request: DeleteCustomRoleRequestDto) => {
+      try {
+        return await administrationApplicationService.deleteCustomRole(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  return { createRole, updateRole, deleteRole }
 }
