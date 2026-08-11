@@ -28,7 +28,6 @@ import {
 
 import { useWorkspace } from "@/features/workspace"
 
-import { useRolesQuery } from "../queries/use-roles-query"
 import { useTeamMembersQuery } from "../queries/use-team-members-query"
 import { useTeamMutations } from "../queries/use-team-mutations"
 import { useTeamsQuery } from "../queries/use-teams-query"
@@ -42,14 +41,12 @@ type TeamDraft = {
   name: string
   description: string
   workspaceId: string
-  roleReference: string
 }
 
 const defaultDraft: TeamDraft = {
   name: "",
   description: "",
   workspaceId: "",
-  roleReference: "",
 }
 
 function TeamDialog({
@@ -73,7 +70,6 @@ function TeamDialog({
           name: team.name,
           description: team.description === "—" ? "" : team.description,
           workspaceId: team.workspaceId ?? "",
-          roleReference: team.roleReference ?? "",
         }
       : defaultDraft
   )
@@ -88,11 +84,6 @@ function TeamDialog({
     administrationApplicationService,
     currentOrganization?.id
   )
-  const { data: roleData } = useRolesQuery(
-    administrationApplicationService,
-    currentOrganization?.id
-  )
-  const roles = useMemo(() => roleData ?? [], [roleData])
 
   const members = useMemo(() => memberData ?? [], [memberData])
   const users = useMemo(() => userData ?? [], [userData])
@@ -147,7 +138,6 @@ function TeamDialog({
           name: draft.name.trim(),
           description: draft.description.trim() || undefined,
           workspaceId: draft.workspaceId || null,
-          roleReference: draft.roleReference || null,
         })
         toast.success(`Team "${draft.name.trim()}" updated`)
       } else {
@@ -156,7 +146,6 @@ function TeamDialog({
           name: draft.name.trim(),
           description: draft.description.trim() || undefined,
           workspaceId: draft.workspaceId || undefined,
-          roleReference: draft.roleReference || null,
         })
         if (selectedNewMemberIds.length > 0) {
           await Promise.all(
@@ -216,28 +205,6 @@ function TeamDialog({
             ))}
           </AppSelectContent>
         </AppSelect>
-
-        <div className="md:col-span-2">
-          <AppSelect
-            value={draft.roleReference}
-            onValueChange={(next) => setDraft((current) => ({ ...current, roleReference: next }))}
-          >
-            <AppSelectTrigger className="h-10 w-full">
-              <AppSelectValue placeholder="Role (optional) — members inherit this role's permissions" />
-            </AppSelectTrigger>
-            <AppSelectContent position="popper" align="start">
-              {roles.map((role) => (
-                <AppSelectItem key={role.id} value={role.id}>
-                  {role.name}
-                </AppSelectItem>
-              ))}
-            </AppSelectContent>
-          </AppSelect>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Members of this team gain whatever this role grants — invited users start with no role
-            and no permissions until they join a team.
-          </p>
-        </div>
 
         <AppTextarea
           label="Description"

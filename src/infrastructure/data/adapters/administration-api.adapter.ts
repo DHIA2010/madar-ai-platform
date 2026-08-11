@@ -1,5 +1,6 @@
 import type {
   AddTeamMemberRequestDto,
+  AssignMemberRoleRequestDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateTeamRequestDto,
@@ -335,6 +336,17 @@ export class AdministrationApiAdapter {
         Record<string, never>,
         unknown
       >(`/v1/organizations/${request.organizationId}/members/${request.memberUserId}/reactivate`, {})
+      .then(() => undefined)
+  }
+
+  assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void> {
+    return this.client
+      .post<{ role: string }, unknown>(
+        `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/roles`,
+        {
+          role: request.role,
+        }
+      )
       .then(() => undefined)
   }
 }

@@ -8,6 +8,7 @@ import type {
   AdministrationTeamMemberDto,
   AdministrationUserDto,
   AdministrationUserStatus,
+  AssignMemberRoleRequestDto,
   AuditLogEventDto,
   AuditLogListDto,
   CancelInvitationRequestDto,
@@ -491,6 +492,14 @@ export class DataAdministrationRepository implements AdministrationRepository {
   async reactivateMember(request: ReactivateMemberRequestDto): Promise<void> {
     try {
       await this.adapter.reactivateMember(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void> {
+    try {
+      await this.adapter.assignMemberRole(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

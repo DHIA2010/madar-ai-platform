@@ -19,6 +19,7 @@ import {
   AppSelectContent,
   AppSelectItem,
   AppSelectTrigger,
+  AppSelectValue,
   AppTable,
   AppTableBody,
   AppTableCell,
@@ -33,6 +34,7 @@ import {
 import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
+import { useRolesQuery } from "../queries/use-roles-query"
 import { useUserMutations } from "../queries/use-user-mutations"
 import { useUsersQuery } from "../queries/use-users-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
@@ -66,8 +68,16 @@ export function AdministrationUsersScreen() {
     administrationApplicationService,
     currentOrganization?.id
   )
-  const { suspendUser, reactivateUser } = useUserMutations(currentOrganization?.id)
+  const { data: rolesData } = useRolesQuery(
+    administrationApplicationService,
+    currentOrganization?.id
+  )
+  const { suspendUser, reactivateUser, assignRole } = useUserMutations(currentOrganization?.id)
   const allUsers = useMemo(() => data ?? [], [data])
+  const assignableRoles = useMemo(
+    () => (rolesData ?? []).filter((role) => role.isDefault),
+    [rolesData]
+  )
 
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | AdministrationUserStatus>("all")
@@ -157,6 +167,21 @@ export function AdministrationUsersScreen() {
     }
   }
 
+  async function handleAssignRole(user: AdministrationUserDto, role: string) {
+    if (!currentOrganization || role === user.roleId) return
+
+    try {
+      await assignRole.mutateAsync({
+        organizationId: currentOrganization.id,
+        memberUserId: user.id,
+        role,
+      })
+      toast.success(`${user.fullName} is now ${humanizeRole(role)}`)
+    } catch {
+      toast.error("Failed to update role")
+    }
+  }
+
   return (
     <div className="space-y-4">
       <AdministrationModuleNav />
@@ -195,7 +220,7 @@ export function AdministrationUsersScreen() {
             }}
           >
             <AppSelectTrigger className="h-10">
-              <span className="truncate">Status</span>
+              <AppSelectValue placeholder="Status" />
             </AppSelectTrigger>
             <AppSelectContent>
               <AppSelectItem value="all">All statuses</AppSelectItem>
@@ -214,7 +239,7 @@ export function AdministrationUsersScreen() {
             }}
           >
             <AppSelectTrigger className="h-10">
-              <span className="truncate">Workspace</span>
+              <AppSelectValue placeholder="Workspace" />
             </AppSelectTrigger>
             <AppSelectContent>
               <AppSelectItem value="all">All workspaces</AppSelectItem>
@@ -234,7 +259,7 @@ export function AdministrationUsersScreen() {
             }}
           >
             <AppSelectTrigger className="h-10">
-              <span className="truncate">Sort</span>
+              <AppSelectValue placeholder="Sort" />
             </AppSelectTrigger>
             <AppSelectContent>
               <AppSelectItem value="fullName">Name</AppSelectItem>
@@ -325,7 +350,36 @@ export function AdministrationUsersScreen() {
                           </div>
                         </AppTableCell>
                         <AppTableCell>{user.department || "—"}</AppTableCell>
-                        <AppTableCell>{humanizeRole(user.roleId)}</AppTableCell>
+                        <AppTableCell>
+                          <AppSelect
+                            value={user.roleId}
+                            onValueChange={(next) => handleAssignRole(user, next)}
+                          >
+                            <AppSelectTrigger
+                              className="h-8 w-32"
+                              aria-label={`Role for ${user.fullName}`}
+                              disabled={
+                                assignRole.isPending &&
+                                assignRole.variables?.memberUserId === user.id
+                              }
+                            >
+                              <AppSelectValue placeholder={humanizeRole(user.roleId)} />
+                            </AppSelectTrigger>
+                            <AppSelectContent>
+                              {assignableRoles.length === 0 ? (
+                                <AppSelectItem value={user.roleId}>
+                                  {humanizeRole(user.roleId)}
+                                </AppSelectItem>
+                              ) : (
+                                assignableRoles.map((role) => (
+                                  <AppSelectItem key={role.id} value={role.id}>
+                                    {role.name}
+                                  </AppSelectItem>
+                                ))
+                              )}
+                            </AppSelectContent>
+                          </AppSelect>
+                        </AppTableCell>
                         <AppTableCell>
                           {user.teams.length > 0 ? (
                             <div className="flex flex-wrap gap-1">

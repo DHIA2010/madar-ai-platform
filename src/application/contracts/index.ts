@@ -10,6 +10,7 @@ export type {
   AdministrationTeamMemberDto,
   AdministrationUserDto,
   AdministrationUserStatus,
+  AssignMemberRoleRequestDto,
   AuditLogEventDto,
   AuditLogListDto,
   CancelInvitationRequestDto,

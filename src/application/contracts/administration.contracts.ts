@@ -201,11 +201,18 @@ export interface DeleteCustomRoleRequestDto {
   roleId: string
 }
 
+export interface AssignMemberRoleRequestDto {
+  organizationId: string
+  memberUserId: string
+  role: string
+}
+
 export interface AdministrationGateway {
   getAuditLogs(request: GetAuditLogsRequestDto): Promise<AuditLogListDto>
   getUsers(request: GetUsersRequestDto): Promise<AdministrationUserDto[]>
   suspendMember(request: SuspendMemberRequestDto): Promise<void>
   reactivateMember(request: ReactivateMemberRequestDto): Promise<void>
+  assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void>
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]>
   sendInvitation(request: SendInvitationRequestDto): Promise<AdministrationInvitationDto>
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>

@@ -7,7 +7,11 @@ import { toAppError } from "@/lib/app-errors"
 import { administrationQueryKeys } from "./administration-query-keys"
 
 import { useApplicationServices } from "@/application"
-import type { ReactivateMemberRequestDto, SuspendMemberRequestDto } from "@/application/contracts"
+import type {
+  AssignMemberRoleRequestDto,
+  ReactivateMemberRequestDto,
+  SuspendMemberRequestDto,
+} from "@/application/contracts"
 
 export function useUserMutations(organizationId: string | null | undefined) {
   const queryClient = useQueryClient()
@@ -40,5 +44,17 @@ export function useUserMutations(organizationId: string | null | undefined) {
     onSuccess: invalidate,
   })
 
-  return { suspendUser, reactivateUser }
+  const assignRole = useMutation({
+    mutationKey: ["administration", "users", "assign-role"],
+    mutationFn: async (request: AssignMemberRoleRequestDto) => {
+      try {
+        return await administrationApplicationService.assignMemberRole(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  return { suspendUser, reactivateUser, assignRole }
 }
