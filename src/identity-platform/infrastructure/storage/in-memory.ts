@@ -415,6 +415,14 @@ class InMemoryCustomRoleRepository implements CustomRoleRepository {
     return role && !role.deletedAt ? { ...role } : null
   }
 
+  async findByIdWithPermissions(id: string): Promise<CustomRoleListItem | null> {
+    const role = this.store.customRoles.get(id)
+    if (!role || role.deletedAt) {
+      return null
+    }
+    return { ...role, permissions: this.store.customRolePermissions.get(id) ?? [] }
+  }
+
   async save(role: CustomRoleState) {
     this.store.customRoles.set(role.id, { ...role })
   }

@@ -72,10 +72,15 @@ export function AdministrationUsersScreen() {
     administrationApplicationService,
     currentOrganization?.id
   )
-  const { suspendUser, reactivateUser, assignRole } = useUserMutations(currentOrganization?.id)
+  const { suspendUser, reactivateUser, assignRole, assignCustomRole, setModuleAccess } =
+    useUserMutations(currentOrganization?.id)
   const allUsers = useMemo(() => data ?? [], [data])
   const assignableRoles = useMemo(
     () => (rolesData ?? []).filter((role) => role.isDefault),
+    [rolesData]
+  )
+  const assignableCustomRoles = useMemo(
+    () => (rolesData ?? []).filter((role) => !role.isDefault),
     [rolesData]
   )
 
@@ -167,18 +172,49 @@ export function AdministrationUsersScreen() {
     }
   }
 
-  async function handleAssignRole(user: AdministrationUserDto, role: string) {
-    if (!currentOrganization || role === user.roleId) return
+  function accessValueFor(user: AdministrationUserDto) {
+    if (user.moduleAccessRevoked) return "none"
+    return user.customRoleId ?? user.roleId
+  }
+
+  async function handleAssignAccess(user: AdministrationUserDto, value: string) {
+    if (!currentOrganization || value === accessValueFor(user)) return
+    const organizationId = currentOrganization.id
 
     try {
-      await assignRole.mutateAsync({
-        organizationId: currentOrganization.id,
+      if (value === "none") {
+        await setModuleAccess.mutateAsync({ organizationId, memberUserId: user.id, revoked: true })
+        toast.success(`${user.fullName} now has no access`)
+        return
+      }
+
+      if (user.moduleAccessRevoked) {
+        await setModuleAccess.mutateAsync({ organizationId, memberUserId: user.id, revoked: false })
+      }
+
+      const systemRole = assignableRoles.find((role) => role.id === value)
+      if (systemRole) {
+        await assignRole.mutateAsync({ organizationId, memberUserId: user.id, role: value })
+        if (user.customRoleId) {
+          await assignCustomRole.mutateAsync({
+            organizationId,
+            memberUserId: user.id,
+            customRoleId: null,
+          })
+        }
+        toast.success(`${user.fullName} is now ${humanizeRole(value)}`)
+        return
+      }
+
+      await assignCustomRole.mutateAsync({
+        organizationId,
         memberUserId: user.id,
-        role,
+        customRoleId: value,
       })
-      toast.success(`${user.fullName} is now ${humanizeRole(role)}`)
+      const customRole = assignableCustomRoles.find((role) => role.id === value)
+      toast.success(`${user.fullName} now has the "${customRole?.name ?? "custom"}" role`)
     } catch {
-      toast.error("Failed to update role")
+      toast.error("Failed to update access")
     }
   }
 
@@ -352,31 +388,35 @@ export function AdministrationUsersScreen() {
                         <AppTableCell>{user.department || "—"}</AppTableCell>
                         <AppTableCell>
                           <AppSelect
-                            value={user.roleId}
-                            onValueChange={(next) => handleAssignRole(user, next)}
+                            value={accessValueFor(user)}
+                            onValueChange={(next) => handleAssignAccess(user, next)}
                           >
                             <AppSelectTrigger
-                              className="h-8 w-32"
+                              className="h-8 w-40"
                               aria-label={`Role for ${user.fullName}`}
                               disabled={
-                                assignRole.isPending &&
-                                assignRole.variables?.memberUserId === user.id
+                                (assignRole.isPending &&
+                                  assignRole.variables?.memberUserId === user.id) ||
+                                (assignCustomRole.isPending &&
+                                  assignCustomRole.variables?.memberUserId === user.id) ||
+                                (setModuleAccess.isPending &&
+                                  setModuleAccess.variables?.memberUserId === user.id)
                               }
                             >
-                              <AppSelectValue placeholder={humanizeRole(user.roleId)} />
+                              <AppSelectValue placeholder="None" />
                             </AppSelectTrigger>
                             <AppSelectContent>
-                              {assignableRoles.length === 0 ? (
-                                <AppSelectItem value={user.roleId}>
-                                  {humanizeRole(user.roleId)}
+                              <AppSelectItem value="none">None (no access)</AppSelectItem>
+                              {assignableRoles.map((role) => (
+                                <AppSelectItem key={role.id} value={role.id}>
+                                  {role.name}
                                 </AppSelectItem>
-                              ) : (
-                                assignableRoles.map((role) => (
-                                  <AppSelectItem key={role.id} value={role.id}>
-                                    {role.name}
-                                  </AppSelectItem>
-                                ))
-                              )}
+                              ))}
+                              {assignableCustomRoles.map((role) => (
+                                <AppSelectItem key={role.id} value={role.id}>
+                                  {role.name}
+                                </AppSelectItem>
+                              ))}
                             </AppSelectContent>
                           </AppSelect>
                         </AppTableCell>

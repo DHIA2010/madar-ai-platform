@@ -41,6 +41,7 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { Can, usePermissions } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
 import { useCampaignList } from "../hooks"
@@ -179,6 +180,7 @@ function exportSelectedRows(rows: DecoratedCampaign[]) {
 export function CampaignListTable() {
   const router = useRouter()
   const { currentWorkspace } = useWorkspace()
+  const { can } = usePermissions()
 
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -778,16 +780,18 @@ export function CampaignListTable() {
               >
                 Archive
               </AppButton>
-              <AppButton
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setHiddenIds((current) => [...new Set([...current, ...selectedIds])])
-                  setSelectedIds([])
-                }}
-              >
-                Delete
-              </AppButton>
+              <Can permission="campaigns:delete">
+                <AppButton
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setHiddenIds((current) => [...new Set([...current, ...selectedIds])])
+                    setSelectedIds([])
+                  }}
+                >
+                  Delete
+                </AppButton>
+              </Can>
               <AppSelect value={bulkOwner || ""} onValueChange={setBulkOwner}>
                 <AppSelectTrigger className="h-8 w-[180px]">
                   <AppSelectValue placeholder="Assign Owner" />
@@ -1090,17 +1094,19 @@ export function CampaignListTable() {
                                   <Archive className="size-4" />
                                   Archive
                                 </AppDropdownMenuItem>
-                                <AppDropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() =>
-                                    setHiddenIds((current) => [
-                                      ...new Set([...current, campaign.id]),
-                                    ])
-                                  }
-                                >
-                                  <Trash2Icon />
-                                  Delete
-                                </AppDropdownMenuItem>
+                                {can("campaigns:delete") ? (
+                                  <AppDropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() =>
+                                      setHiddenIds((current) => [
+                                        ...new Set([...current, campaign.id]),
+                                      ])
+                                    }
+                                  >
+                                    <Trash2Icon />
+                                    Delete
+                                  </AppDropdownMenuItem>
+                                ) : null}
                                 <AppDropdownMenuItem
                                   onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
                                 >

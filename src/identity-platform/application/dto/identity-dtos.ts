@@ -14,6 +14,7 @@ export interface AuthenticatedActor {
   organizationId: string
   workspaceId: string | null
   roles: Role[]
+  modulePermissions: string[]
 }
 
 export interface TokenPair {

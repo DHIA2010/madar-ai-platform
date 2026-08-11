@@ -18,6 +18,7 @@ export interface User {
   emailVerified: boolean
   roles: Role[]
   permissions: string[]
+  modulePermissions: string[]
 }
 
 export interface UpdateProfileRequest {

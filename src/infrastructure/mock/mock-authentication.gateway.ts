@@ -39,6 +39,7 @@ function createMockUser(email: string): AuthUserDto {
       },
     ],
     permissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
+    modulePermissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
   }
 }
 

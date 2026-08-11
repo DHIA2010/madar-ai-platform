@@ -35,6 +35,7 @@ function createMockUser(email: string) {
       },
     ],
     permissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
+    modulePermissions: ["dashboard:view", "campaigns:manage", "customers:manage"],
   }
 }
 

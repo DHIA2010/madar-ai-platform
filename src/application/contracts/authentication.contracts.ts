@@ -10,6 +10,7 @@ export interface AuthUserDto {
     permissions: string[]
   }>
   permissions: string[]
+  modulePermissions: string[]
 }
 
 export interface UpdateProfileRequestDto {

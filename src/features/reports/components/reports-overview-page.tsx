@@ -21,6 +21,8 @@ import {
   AppToolbar,
 } from "@/components/app"
 
+import { Can } from "@/features/authentication"
+
 import type { ReportsOverviewItem } from "../types"
 
 const REPORTS: ReportsOverviewItem[] = [
@@ -86,9 +88,11 @@ export function ReportsOverviewPage() {
           title="Reports"
           subtitle="Recurring business reporting for leadership, performance teams, and operators."
           actions={
-            <AppButton variant="outline" icon={<Download className="size-4" />}>
-              Export library
-            </AppButton>
+            <Can permission="reports:export">
+              <AppButton variant="outline" icon={<Download className="size-4" />}>
+                Export library
+              </AppButton>
+            </Can>
           }
         />
 

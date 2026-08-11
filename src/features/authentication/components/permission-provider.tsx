@@ -22,7 +22,9 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     }
 
     const rolePermissions = currentUser.roles.flatMap((role) => role.permissions)
-    return Array.from(new Set([...currentUser.permissions, ...rolePermissions]))
+    return Array.from(
+      new Set([...currentUser.permissions, ...rolePermissions, ...currentUser.modulePermissions])
+    )
   }, [currentUser])
 
   const defaultContext = useMemo<PermissionContext>(

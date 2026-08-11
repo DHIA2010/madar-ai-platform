@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils"
 
 import { AppCard } from "@/components/app"
 import { Button } from "@/components/ui/button"
+import { Can } from "@/features/authentication/components"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -747,10 +748,12 @@ export default function ProductsPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => exportToCSV(filteredProducts)}>
-                <Download className="mr-2 size-4" />
-                Export
-              </Button>
+              <Can permission="products:export">
+                <Button size="sm" variant="outline" onClick={() => exportToCSV(filteredProducts)}>
+                  <Download className="mr-2 size-4" />
+                  Export
+                </Button>
+              </Can>
             </div>
           </div>
 

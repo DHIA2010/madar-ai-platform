@@ -25,6 +25,7 @@ const mockUser: AuthContextValue["currentUser"] = {
   emailVerified: true,
   roles: [],
   permissions: ["dashboard:view", "campaigns:manage"],
+  modulePermissions: ["dashboard:view", "campaigns:manage"],
 }
 
 const authValue: AuthContextValue = {

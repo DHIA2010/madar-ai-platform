@@ -41,6 +41,7 @@ import {
   RelativeTime,
 } from "@/components/app"
 
+import { Can } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
 import { useConnectionsCenter } from "../hooks"
@@ -845,22 +846,24 @@ export function ConnectionsOverview() {
                     </>
                   )}
                 </AppButton>
-                {isCurrentWorkspaceArchived ? (
-                  <AppButton
-                    size="sm"
-                    className="h-10 rounded-lg px-4 shadow-sm"
-                    disabled
-                    title="Workspace is archived. Restore it to add a new connection."
-                  >
-                    {UI_TEXT.buttons.newConnection}
-                  </AppButton>
-                ) : (
-                  <Link href={ROUTES.integrationsNew}>
-                    <AppButton size="sm" className="h-10 rounded-lg px-4 shadow-sm">
+                <Can permission="connections:create">
+                  {isCurrentWorkspaceArchived ? (
+                    <AppButton
+                      size="sm"
+                      className="h-10 rounded-lg px-4 shadow-sm"
+                      disabled
+                      title="Workspace is archived. Restore it to add a new connection."
+                    >
                       {UI_TEXT.buttons.newConnection}
                     </AppButton>
-                  </Link>
-                )}
+                  ) : (
+                    <Link href={ROUTES.integrationsNew}>
+                      <AppButton size="sm" className="h-10 rounded-lg px-4 shadow-sm">
+                        {UI_TEXT.buttons.newConnection}
+                      </AppButton>
+                    </Link>
+                  )}
+                </Can>
               </div>
             </div>
           </div>

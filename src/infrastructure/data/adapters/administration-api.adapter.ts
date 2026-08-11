@@ -1,5 +1,6 @@
 import type {
   AddTeamMemberRequestDto,
+  AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
@@ -13,6 +14,7 @@ import type {
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
@@ -48,6 +50,8 @@ export interface OrganizationMemberApiEntry {
   fullName: string | null
   avatarUrl: string | null
   role: string
+  customRoleId: string | null
+  moduleAccessRevoked: boolean
   status: "invited" | "active" | "suspended" | "removed"
   profile: Record<string, string>
   workspaceId: string | null
@@ -345,6 +349,28 @@ export class AdministrationApiAdapter {
         `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/roles`,
         {
           role: request.role,
+        }
+      )
+      .then(() => undefined)
+  }
+
+  assignMemberCustomRole(request: AssignMemberCustomRoleRequestDto): Promise<void> {
+    return this.client
+      .post<{ customRoleId: string | null }, unknown>(
+        `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/custom-role`,
+        {
+          customRoleId: request.customRoleId,
+        }
+      )
+      .then(() => undefined)
+  }
+
+  setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void> {
+    return this.client
+      .post<{ revoked: boolean }, unknown>(
+        `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/module-access`,
+        {
+          revoked: request.revoked,
         }
       )
       .then(() => undefined)

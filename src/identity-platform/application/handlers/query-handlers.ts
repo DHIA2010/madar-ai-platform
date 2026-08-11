@@ -50,6 +50,7 @@ export class IdentityQueryHandlers {
       activeWorkspaceId: user.activeWorkspaceId,
       primaryOrganizationId: user.primaryOrganizationId,
       emailVerifiedAt: user.emailVerifiedAt,
+      modulePermissions: actor.modulePermissions,
     }
   }
 
@@ -173,6 +174,8 @@ export class IdentityQueryHandlers {
           fullName: user?.fullName ?? null,
           avatarUrl: user?.avatarUrl ?? null,
           role: row.role,
+          customRoleId: row.customRoleId,
+          moduleAccessRevoked: row.moduleAccessRevoked,
           status: row.status,
           profile: row.profile,
           history: row.history,

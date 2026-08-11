@@ -11,6 +11,7 @@ import { localeDirection, type Locale } from "@/i18n/locales"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { usePermissions } from "@/features/authentication"
 import { WorkspaceSelector } from "@/features/workspace"
 import {
   Sidebar,
@@ -50,20 +51,42 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const dir = localeDirection(locale)
   const t = useTranslations("sidebar.nav")
   const tCommon = useTranslations("common")
+  const { can } = usePermissions()
 
   const navMain = [
-    { title: t("home"), url: ROUTES.dashboard, icon: <House />, isActive: true },
+    {
+      title: t("home"),
+      url: ROUTES.dashboard,
+      icon: <House />,
+      isActive: true,
+      permission: "dashboard:view",
+    },
     { title: t("channels"), url: "/channels", icon: <Tv /> },
-    { title: t("campaigns"), url: "/campaigns", icon: <SendIcon /> },
+    { title: t("campaigns"), url: "/campaigns", icon: <SendIcon />, permission: "campaigns:view" },
     { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },
-    { title: t("products"), url: "/products", icon: <Grid2x2 /> },
-    { title: t("customers"), url: "/customers", icon: <CircleUserRound /> },
-    { title: t("reports"), url: "/reports", icon: <ChartNoAxesCombined /> },
-    { title: t("ai"), url: "/ai", icon: <Gauge /> },
-    { title: t("integrations"), url: "/integrations", icon: <LayoutGrid /> },
+    { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
+    {
+      title: t("customers"),
+      url: "/customers",
+      icon: <CircleUserRound />,
+      permission: "customers:view",
+    },
+    {
+      title: t("reports"),
+      url: "/reports",
+      icon: <ChartNoAxesCombined />,
+      permission: "reports:view",
+    },
+    { title: t("ai"), url: "/ai", icon: <Gauge />, permission: "ai:view" },
+    {
+      title: t("integrations"),
+      url: "/integrations",
+      icon: <LayoutGrid />,
+      permission: "connections:view",
+    },
     { title: t("administration"), url: ROUTES.administration, icon: <ShieldCheck /> },
     { title: t("settings"), url: "/settings", icon: <Settings2 /> },
-  ]
+  ].filter((item) => !item.permission || can(item.permission))
 
   return (
     <div onMouseEnter={() => onHoverChange?.(true)} onMouseLeave={() => onHoverChange?.(false)}>

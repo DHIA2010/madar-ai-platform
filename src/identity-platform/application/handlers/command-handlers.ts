@@ -8,6 +8,7 @@ import type {
   AddTeamMemberCommand,
   ArchiveOrganizationCommand,
   ArchiveWorkspaceCommand,
+  AssignMemberCustomRoleCommand,
   AssignMemberRoleCommand,
   CancelInvitationCommand,
   ChangeEmailCommand,
@@ -34,6 +35,7 @@ import type {
   RemoveTeamMemberCommand,
   ResetPasswordCommand,
   RevokeSessionCommand,
+  SetMemberModuleAccessCommand,
   SuspendMemberCommand,
   SwitchWorkspaceCommand,
   TransferOwnershipCommand,
@@ -77,6 +79,7 @@ import type { UserState } from "../../domain/entities"
 import type { DomainEvent } from "../../domain/events"
 import { ERRORS, IdentityError } from "../errors/IdentityError"
 import { hasPermission, resolvePermissions } from "../../domain/domain-services/permission-service"
+import { resolveMembershipModulePermissions } from "../../domain/domain-services/module-permission-service"
 import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 
 export interface IdentityCommandHandlerDependencies {
@@ -598,6 +601,11 @@ export class IdentityCommandHandlers {
       sessionId
     )
 
+    const modulePermissions = await resolveMembershipModulePermissions(
+      membership,
+      this.deps.repositories.customRoles
+    )
+
     return {
       user: {
         id: user.id,
@@ -607,6 +615,7 @@ export class IdentityCommandHandlers {
         timezone: user.toState().timezone,
         language: user.toState().language,
         status: user.status,
+        modulePermissions,
       },
       session: {
         sessionId,
@@ -2317,6 +2326,72 @@ export class IdentityCommandHandlers {
     return member.toState()
   }
 
+  async assignMemberCustomRole(
+    actor: AuthenticatedActor,
+    command: AssignMemberCustomRoleCommand,
+    context: RequestContext
+  ) {
+    await this.requireOrganizationWriteAccess(actor, command.organizationId)
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.memberUserId,
+      command.organizationId
+    )
+    if (!memberState) {
+      throw ERRORS.notFound("Membership")
+    }
+
+    if (command.customRoleId) {
+      const customRole = await this.deps.repositories.customRoles.findById(command.customRoleId)
+      if (!customRole || customRole.organizationId !== command.organizationId) {
+        throw ERRORS.notFound("Role")
+      }
+    }
+
+    const member = MembershipEntity.rehydrate(memberState)
+    member.assignCustomRole(command.customRoleId, this.now, actor.userId)
+    await this.deps.repositories.memberships.save(member.toState())
+    await this.audit(
+      "membership.custom_role_assigned",
+      context,
+      actor.userId,
+      command.organizationId,
+      memberState.workspaceId,
+      "membership",
+      memberState.id,
+      { customRoleId: command.customRoleId ?? "" }
+    )
+    return member.toState()
+  }
+
+  async setMemberModuleAccess(
+    actor: AuthenticatedActor,
+    command: SetMemberModuleAccessCommand,
+    context: RequestContext
+  ) {
+    await this.requireOrganizationWriteAccess(actor, command.organizationId)
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.memberUserId,
+      command.organizationId
+    )
+    if (!memberState) {
+      throw ERRORS.notFound("Membership")
+    }
+
+    const member = MembershipEntity.rehydrate(memberState)
+    member.setModuleAccessRevoked(command.revoked, this.now, actor.userId)
+    await this.deps.repositories.memberships.save(member.toState())
+    await this.audit(
+      command.revoked ? "membership.module_access_revoked" : "membership.module_access_restored",
+      context,
+      actor.userId,
+      command.organizationId,
+      memberState.workspaceId,
+      "membership",
+      memberState.id
+    )
+    return member.toState()
+  }
+
   async updateMemberProfile(
     actor: AuthenticatedActor,
     command: UpdateMemberProfileCommand,
@@ -2421,12 +2496,18 @@ export class IdentityCommandHandlers {
       organizationId
     )) as Role[]
 
+    const modulePermissions = await resolveMembershipModulePermissions(
+      membership,
+      this.deps.repositories.customRoles
+    )
+
     return {
       userId: payload.sub,
       sessionId: payload.sid,
       organizationId,
       workspaceId,
       roles,
+      modulePermissions,
     }
   }
 

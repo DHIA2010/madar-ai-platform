@@ -156,6 +156,7 @@ export class IdentityPlatformService {
         organizationId: "system",
         workspaceId: null,
         roles: actorRoles,
+        modulePermissions: [],
       },
       { page: 1, pageSize: 100 }
     )
@@ -168,6 +169,7 @@ export class IdentityPlatformService {
       organizationId: "legacy",
       workspaceId: null,
       roles,
+      modulePermissions: [],
     }
   }
 }

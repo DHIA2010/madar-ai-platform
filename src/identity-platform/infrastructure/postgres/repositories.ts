@@ -120,6 +120,8 @@ function mapMembership(row: Record<string, unknown>): MembershipState {
     workspaceId: (row.workspace_id as string | null) ?? null,
     userId: String(row.user_id),
     role: row.role_code as MembershipState["role"],
+    customRoleId: (row.custom_role_id as string | null) ?? null,
+    moduleAccessRevoked: Boolean(row.module_access_revoked),
     status: (row.status as MembershipState["status"]) ?? "active",
     profile: (row.metadata as Record<string, string>) ?? {},
     statusReason: (row.status_reason as string | null) ?? null,
@@ -435,17 +437,20 @@ class PostgresMembershipRepository implements MembershipRepository {
       name: "identity-memberships-upsert",
       text: `
         INSERT INTO memberships (
-          id, user_id, organization_id, workspace_id, role_code, status,
+          id, user_id, organization_id, workspace_id, role_code, custom_role_id,
+          module_access_revoked, status,
           metadata, status_reason, invited_by_user_id, accepted_at, suspended_at,
           removed_at, history, role_history,
           created_at, updated_at, deleted_at
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         ON CONFLICT (id) DO UPDATE SET
           user_id = EXCLUDED.user_id,
           organization_id = EXCLUDED.organization_id,
           workspace_id = EXCLUDED.workspace_id,
           role_code = EXCLUDED.role_code,
+          custom_role_id = EXCLUDED.custom_role_id,
+          module_access_revoked = EXCLUDED.module_access_revoked,
           status = EXCLUDED.status,
           metadata = EXCLUDED.metadata,
           status_reason = EXCLUDED.status_reason,
@@ -464,6 +469,8 @@ class PostgresMembershipRepository implements MembershipRepository {
         membership.organizationId,
         membership.workspaceId,
         membership.role,
+        membership.customRoleId,
+        membership.moduleAccessRevoked,
         membership.status,
         JSON.stringify(membership.profile),
         membership.statusReason,
@@ -1027,6 +1034,32 @@ class PostgresCustomRoleRepository implements CustomRoleRepository {
       values: [id],
     })
     return result.rows[0] ? mapCustomRole(result.rows[0]) : null
+  }
+
+  async findByIdWithPermissions(id: string): Promise<CustomRoleListItem | null> {
+    const roleResult = await this.db.query({
+      name: "identity-custom-roles-find-by-id",
+      text: "SELECT * FROM custom_roles WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
+      values: [id],
+    })
+    if (!roleResult.rows[0]) {
+      return null
+    }
+    const role = mapCustomRole(roleResult.rows[0])
+
+    const permissionsResult = await this.db.query<{ module: string; action: string }>({
+      name: "identity-custom-role-permissions-list-by-role",
+      text: "SELECT module, action FROM custom_role_permissions WHERE role_id = $1",
+      values: [id],
+    })
+
+    return {
+      ...role,
+      permissions: permissionsResult.rows.map((row) => ({
+        module: row.module,
+        action: row.action,
+      })),
+    }
   }
 
   async save(role: CustomRoleState) {

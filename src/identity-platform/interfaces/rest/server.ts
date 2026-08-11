@@ -21,6 +21,7 @@ import { IdentityError } from "../../application/errors/IdentityError"
 import { createRequestContext, mapIdentityError } from "../middleware"
 import {
   addTeamMemberSchema,
+  assignCustomRoleSchema,
   assignRoleSchema,
   createCustomRoleSchema,
   createOrganizationSchema,
@@ -41,6 +42,7 @@ import {
   registerSchema,
   resetPasswordSchema,
   revokeSessionSchema,
+  setMemberModuleAccessSchema,
   suspendMemberSchema,
   switchWorkspaceSchema,
   updateCustomRoleSchema,
@@ -1187,7 +1189,7 @@ export function createIdentityApiServer(
       }
 
       const memberActionMatch = url.pathname.match(
-        /^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/(suspend|reactivate|remove|transfer-ownership|roles|profile)$/
+        /^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/(suspend|reactivate|remove|transfer-ownership|roles|custom-role|module-access|profile)$/
       )
       if (memberActionMatch && method === "POST") {
         const organizationId = memberActionMatch[1]
@@ -1253,6 +1255,35 @@ export function createIdentityApiServer(
                 organizationId,
                 memberUserId,
                 role: assignRoleSchema.parse(await readJsonBody(request)).role,
+              },
+              context
+            )
+          )
+        }
+        if (action === "custom-role") {
+          return send(
+            200,
+            await container.commands.assignMemberCustomRole(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                customRoleId: assignCustomRoleSchema.parse(await readJsonBody(request))
+                  .customRoleId,
+              },
+              context
+            )
+          )
+        }
+        if (action === "module-access") {
+          return send(
+            200,
+            await container.commands.setMemberModuleAccess(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                revoked: setMemberModuleAccessSchema.parse(await readJsonBody(request)).revoked,
               },
               context
             )

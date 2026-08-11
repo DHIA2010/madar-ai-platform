@@ -7,6 +7,7 @@ import type {
   AdministrationTeamDto,
   AdministrationTeamMemberDto,
   AdministrationUserDto,
+  AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
   AuditLogListDto,
   CancelInvitationRequestDto,
@@ -25,6 +26,7 @@ import type {
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   SendInvitationRequestDto,
+  SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
@@ -51,6 +53,14 @@ export class AdministrationApplicationService {
 
   assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void> {
     return this.gateway.assignMemberRole(request)
+  }
+
+  assignMemberCustomRole(request: AssignMemberCustomRoleRequestDto): Promise<void> {
+    return this.gateway.assignMemberCustomRole(request)
+  }
+
+  setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void> {
+    return this.gateway.setMemberModuleAccess(request)
   }
 
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]> {

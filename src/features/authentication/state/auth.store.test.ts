@@ -11,6 +11,7 @@ const mockUser: User = {
   emailVerified: true,
   roles: [{ id: "role-1", name: "Admin", permissions: ["dashboard:view"] }],
   permissions: ["dashboard:view"],
+  modulePermissions: ["dashboard:view"],
 }
 
 const mockSession: Session = {

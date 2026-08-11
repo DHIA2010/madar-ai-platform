@@ -8,6 +8,7 @@ import type {
   AdministrationTeamMemberDto,
   AdministrationUserDto,
   AdministrationUserStatus,
+  AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
   AuditLogEventDto,
   AuditLogListDto,
@@ -28,6 +29,7 @@ import type {
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
   UpdateTeamRequestDto,
@@ -148,6 +150,8 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       avatarUrl: first.avatarUrl,
       department: "",
       roleId: pickPrimaryRole(rows.map((row) => row.role)),
+      customRoleId: first.customRoleId,
+      moduleAccessRevoked: first.moduleAccessRevoked,
       workspaces,
       status: pickAggregateStatus(rows.map((row) => row.status)),
       lastLogin: lastLoginAt ?? "",
@@ -500,6 +504,22 @@ export class DataAdministrationRepository implements AdministrationRepository {
   async assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void> {
     try {
       await this.adapter.assignMemberRole(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async assignMemberCustomRole(request: AssignMemberCustomRoleRequestDto): Promise<void> {
+    try {
+      await this.adapter.assignMemberCustomRole(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void> {
+    try {
+      await this.adapter.setMemberModuleAccess(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

@@ -79,6 +79,7 @@ describe("google oauth connection deletion service", () => {
         organizationId: ORG_ID,
         workspaceId: WS_ID,
         roles: ["owner"],
+        modulePermissions: [],
       },
       CONNECTION_ID
     )
@@ -96,6 +97,7 @@ describe("google oauth connection deletion service", () => {
           organizationId: ORG_ID,
           workspaceId: WS_ID,
           roles: ["viewer"],
+          modulePermissions: [],
         },
         CONNECTION_ID
       )
@@ -118,6 +120,7 @@ describe("google oauth connection deletion service", () => {
           organizationId: ORG_ID,
           workspaceId: otherWorkspaceId,
           roles: ["owner"],
+          modulePermissions: [],
         },
         CONNECTION_ID
       )

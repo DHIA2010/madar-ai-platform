@@ -129,6 +129,14 @@ export const assignRoleSchema = z.object({
   role: z.enum(["owner", "admin", "manager", "analyst", "viewer"]),
 })
 
+export const assignCustomRoleSchema = z.object({
+  customRoleId: z.string().uuid().nullable(),
+})
+
+export const setMemberModuleAccessSchema = z.object({
+  revoked: z.boolean(),
+})
+
 export const suspendMemberSchema = z.object({
   reason: z.string().min(2),
 })

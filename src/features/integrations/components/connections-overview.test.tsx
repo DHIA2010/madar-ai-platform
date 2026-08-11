@@ -32,6 +32,10 @@ vi.mock("@/features/workspace", () => ({
   useWorkspace: () => ({ availableWorkspaces: [], currentWorkspace: null }),
 }))
 
+vi.mock("@/features/authentication", () => ({
+  Can: ({ children }: { children: React.ReactNode }) => children,
+}))
+
 const mockRecord = {
   connectorDefinitionId: "connector_def_google_ads",
   connectorId: "google_ads",

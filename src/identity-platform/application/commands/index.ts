@@ -231,6 +231,18 @@ export interface AssignMemberRoleCommand {
   role: Role
 }
 
+export interface AssignMemberCustomRoleCommand {
+  organizationId: string
+  memberUserId: string
+  customRoleId: string | null
+}
+
+export interface SetMemberModuleAccessCommand {
+  organizationId: string
+  memberUserId: string
+  revoked: boolean
+}
+
 export interface UpdateMemberProfileCommand {
   organizationId: string
   memberUserId: string

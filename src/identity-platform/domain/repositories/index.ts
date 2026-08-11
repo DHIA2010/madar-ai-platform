@@ -125,6 +125,7 @@ export interface CustomRoleListItem extends CustomRoleState {
 
 export interface CustomRoleRepository {
   findById(id: string): Promise<CustomRoleState | null>
+  findByIdWithPermissions(id: string): Promise<CustomRoleListItem | null>
   save(role: CustomRoleState): Promise<void>
   listByOrganizationId(organizationId: string): Promise<CustomRoleListItem[]>
   replacePermissions(roleId: string, permissions: CustomRolePermission[]): Promise<void>

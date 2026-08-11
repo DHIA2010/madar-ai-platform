@@ -62,6 +62,7 @@ interface IdentityLoginResponse {
     fullName: string
     avatarUrl?: string | null
     status?: string
+    modulePermissions?: string[]
   }
   session: {
     accessToken: string
@@ -80,6 +81,7 @@ interface IdentitySessionResponse {
     avatarUrl?: string | null
     status?: string
     emailVerifiedAt?: string | null
+    modulePermissions?: string[]
   }
   roles?: string[]
 }
@@ -90,6 +92,7 @@ interface IdentityProfileResponse {
   fullName: string
   avatarUrl: string | null
   emailVerifiedAt?: string | null
+  modulePermissions?: string[]
 }
 
 function mapRoles(roles: string[] | undefined) {
@@ -115,6 +118,7 @@ function mapProfileResponse(response: IdentityProfileResponse): AuthUserDto {
     emailVerified: Boolean(response.emailVerifiedAt),
     roles: [],
     permissions: [],
+    modulePermissions: response.modulePermissions ?? [],
   }
 }
 
@@ -152,6 +156,7 @@ export class AuthenticationApiAdapter {
         emailVerified: true,
         roles: mapRoles(["owner"]),
         permissions: mapPermissions(["owner"]),
+        modulePermissions: response.user.modulePermissions ?? [],
       },
       session: mapSession(response.session),
     }
@@ -204,6 +209,7 @@ export class AuthenticationApiAdapter {
             emailVerified: Boolean(response.user.emailVerifiedAt),
             roles: mapRoles(response.roles),
             permissions: mapPermissions(response.roles),
+            modulePermissions: response.user.modulePermissions ?? [],
           }
         : null,
     }

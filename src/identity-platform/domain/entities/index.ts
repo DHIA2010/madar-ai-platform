@@ -388,6 +388,8 @@ export interface MembershipState {
   workspaceId: string | null
   userId: string
   role: Role
+  customRoleId: string | null
+  moduleAccessRevoked: boolean
   status: "invited" | "active" | "suspended" | "removed"
   profile: Record<string, string>
   statusReason: string | null
@@ -435,6 +437,8 @@ export class MembershipEntity {
       workspaceId: input.workspaceId,
       userId: input.userId,
       role: input.role,
+      customRoleId: null,
+      moduleAccessRevoked: false,
       status,
       profile: input.profile ?? {},
       statusReason: null,
@@ -462,6 +466,14 @@ export class MembershipEntity {
 
   get role() {
     return this.state.role
+  }
+
+  get customRoleId() {
+    return this.state.customRoleId
+  }
+
+  get moduleAccessRevoked() {
+    return this.state.moduleAccessRevoked
   }
 
   activate(now: string, actorUserId: string | null) {
@@ -538,6 +550,28 @@ export class MembershipEntity {
       actorUserId,
       occurredAt: now,
       details: { role },
+    })
+  }
+
+  assignCustomRole(customRoleId: string | null, now: string, actorUserId: string | null) {
+    this.state.customRoleId = customRoleId
+    this.state.updatedAt = now
+    this.state.history.push({
+      action: "membership.custom_role_assigned",
+      actorUserId,
+      occurredAt: now,
+      details: { customRoleId: customRoleId ?? "" },
+    })
+  }
+
+  setModuleAccessRevoked(revoked: boolean, now: string, actorUserId: string | null) {
+    this.state.moduleAccessRevoked = revoked
+    this.state.updatedAt = now
+    this.state.history.push({
+      action: revoked ? "membership.module_access_revoked" : "membership.module_access_restored",
+      actorUserId,
+      occurredAt: now,
+      details: {},
     })
   }
 

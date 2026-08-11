@@ -29,6 +29,8 @@ export interface AdministrationUserDto {
   avatarUrl: string | null
   department: string
   roleId: string
+  customRoleId: string | null
+  moduleAccessRevoked: boolean
   workspaces: string[]
   status: AdministrationUserStatus
   lastLogin: string
@@ -207,12 +209,26 @@ export interface AssignMemberRoleRequestDto {
   role: string
 }
 
+export interface AssignMemberCustomRoleRequestDto {
+  organizationId: string
+  memberUserId: string
+  customRoleId: string | null
+}
+
+export interface SetMemberModuleAccessRequestDto {
+  organizationId: string
+  memberUserId: string
+  revoked: boolean
+}
+
 export interface AdministrationGateway {
   getAuditLogs(request: GetAuditLogsRequestDto): Promise<AuditLogListDto>
   getUsers(request: GetUsersRequestDto): Promise<AdministrationUserDto[]>
   suspendMember(request: SuspendMemberRequestDto): Promise<void>
   reactivateMember(request: ReactivateMemberRequestDto): Promise<void>
   assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void>
+  assignMemberCustomRole(request: AssignMemberCustomRoleRequestDto): Promise<void>
+  setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void>
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]>
   sendInvitation(request: SendInvitationRequestDto): Promise<AdministrationInvitationDto>
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>

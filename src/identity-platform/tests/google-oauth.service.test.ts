@@ -16,6 +16,7 @@ const ACTOR = {
   organizationId: "0ef62f6e-8d8b-420d-b2bc-70a0d4282c77",
   workspaceId: "769cbf82-5945-40b2-a0c0-4fbc59a8d2dd",
   roles: ["owner" as const],
+  modulePermissions: [],
 }
 const PROJECT_ID = "01f088b8-8a6f-490c-840b-cce24e975c69"
 const googleCredentialsProvider = new StaticGoogleIdentityCredentialsProvider({
@@ -43,7 +44,10 @@ beforeEach(async () => {
   database = new PostgresDatabase(new adapter.Pool())
 
   await runIdentityMigrations(database, process.cwd())
-  await runSqlFile(database, `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`)
+  await runSqlFile(
+    database,
+    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+  )
 
   await database.query(
     `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -74,43 +78,45 @@ afterEach(async () => {
 
 describe("google oauth service", () => {
   it("starts oauth, exchanges code, and persists encrypted tokens with audit evidence", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = typeof input === "string" ? input : input.toString()
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString()
 
-        if (url.includes("oauth2.googleapis.com/token")) {
-          return new Response(
-            JSON.stringify({
-              access_token: "token-access-1",
-              refresh_token: "token-refresh-1",
-              expires_in: 3600,
-              scope:
-                "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email",
-              token_type: "Bearer",
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          )
-        }
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "token-access-1",
+            refresh_token: "token-refresh-1",
+            expires_in: 3600,
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email",
+            token_type: "Bearer",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
 
-        if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
-          return new Response(
-            JSON.stringify({ id: "acct-1", email: "ads-user@example.com", name: "Ads User" }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          )
-        }
+      if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(
+          JSON.stringify({ id: "acct-1", email: "ads-user@example.com", name: "Ads User" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
 
-        if (url.includes("customers:listAccessibleCustomers")) {
-          return new Response(
-            JSON.stringify({ resourceNames: ["customers/123"] }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          )
-        }
+      if (url.includes("customers:listAccessibleCustomers")) {
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
 
-        return new Response("{}", { status: 404 })
-      })
+      return new Response("{}", { status: 404 })
+    })
 
     const started = await service.startAuthorization(ACTOR, {
       workspaceId: ACTOR.workspaceId,
@@ -182,7 +188,11 @@ describe("google oauth service", () => {
   })
 
   it("returns the canonical runtime connection id from the active connection view", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.toString()
@@ -203,16 +213,20 @@ describe("google oauth service", () => {
 
       if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
         return new Response(
-          JSON.stringify({ id: "acct-active", email: "ads-active@example.com", name: "Ads Active" }),
+          JSON.stringify({
+            id: "acct-active",
+            email: "ads-active@example.com",
+            name: "Ads Active",
+          }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response(JSON.stringify({ results: [] }), {
@@ -267,12 +281,18 @@ describe("google oauth service", () => {
   })
 
   it("rejects invalid and expired states", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
-    await expect(service.completeAuthorization({
-      state: "missing-state",
-      code: "oauth-code",
-    })).rejects.toThrow("GOOGLE_OAUTH_STATE_INVALID")
+    await expect(
+      service.completeAuthorization({
+        state: "missing-state",
+        code: "oauth-code",
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_STATE_INVALID")
 
     const started = await service.startAuthorization(ACTOR, {
       workspaceId: ACTOR.workspaceId,
@@ -284,14 +304,20 @@ describe("google oauth service", () => {
       [started.state]
     )
 
-    await expect(service.completeAuthorization({
-      state: started.state,
-      code: "oauth-code",
-    })).rejects.toThrow("GOOGLE_OAUTH_STATE_EXPIRED")
+    await expect(
+      service.completeAuthorization({
+        state: started.state,
+        code: "oauth-code",
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_STATE_EXPIRED")
   })
 
   it("handles duplicate callback safely by consuming state once", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.toString()
@@ -302,7 +328,8 @@ describe("google oauth service", () => {
             access_token: "token-access-dup",
             refresh_token: "token-refresh-dup",
             expires_in: 3600,
-            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -316,10 +343,10 @@ describe("google oauth service", () => {
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
@@ -332,14 +359,20 @@ describe("google oauth service", () => {
 
     await service.completeAuthorization({ state: started.state, code: "oauth-code" })
 
-    await expect(service.completeAuthorization({
-      state: started.state,
-      code: "oauth-code",
-    })).rejects.toThrow("GOOGLE_OAUTH_STATE_INVALID")
+    await expect(
+      service.completeAuthorization({
+        state: started.state,
+        code: "oauth-code",
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_STATE_INVALID")
   })
 
   it("fails on invalid authorization code and provider token errors", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
     const started = await service.startAuthorization(ACTOR, {
       workspaceId: ACTOR.workspaceId,
       projectId: PROJECT_ID,
@@ -354,14 +387,20 @@ describe("google oauth service", () => {
       return new Response("{}", { status: 404 })
     })
 
-    await expect(service.completeAuthorization({
-      state: started.state,
-      code: "bad-code",
-    })).rejects.toThrow("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
+    await expect(
+      service.completeAuthorization({
+        state: started.state,
+        code: "bad-code",
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_TOKEN_EXCHANGE_FAILED")
   })
 
   it("fails if refresh token missing or granted scopes are incomplete", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
     const startedMissingRefresh = await service.startAuthorization(ACTOR, {
       workspaceId: ACTOR.workspaceId,
@@ -376,7 +415,8 @@ describe("google oauth service", () => {
           JSON.stringify({
             access_token: "token-access-no-refresh",
             expires_in: 3600,
-            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -390,19 +430,21 @@ describe("google oauth service", () => {
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
     })
 
-    await expect(service.completeAuthorization({
-      state: startedMissingRefresh.state,
-      code: "oauth-code",
-    })).rejects.toThrow("GOOGLE_OAUTH_REFRESH_TOKEN_MISSING")
+    await expect(
+      service.completeAuthorization({
+        state: startedMissingRefresh.state,
+        code: "oauth-code",
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_REFRESH_TOKEN_MISSING")
 
     vi.restoreAllMocks()
 
@@ -434,23 +476,29 @@ describe("google oauth service", () => {
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
     })
 
-    await expect(service.completeAuthorization({
-      state: startedMissingScope.state,
-      code: "oauth-code",
-    })).rejects.toThrow("GOOGLE_OAUTH_SCOPE_VALIDATION_FAILED")
+    await expect(
+      service.completeAuthorization({
+        state: startedMissingScope.state,
+        code: "oauth-code",
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_SCOPE_VALIDATION_FAILED")
   })
 
   it("preserves encrypted tokens when restarting authorization", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.toString()
@@ -476,10 +524,10 @@ describe("google oauth service", () => {
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
@@ -554,7 +602,8 @@ describe("google oauth service", () => {
             access_token: "token-access-db-fail",
             refresh_token: "token-refresh-db-fail",
             expires_in: 3600,
-            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -568,10 +617,10 @@ describe("google oauth service", () => {
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
@@ -579,10 +628,12 @@ describe("google oauth service", () => {
 
     vi.spyOn(repository, "upsertConnection").mockRejectedValueOnce(new Error("db down"))
 
-    await expect(service.completeAuthorization({
-      state: started.state,
-      code: "oauth-code",
-    })).rejects.toThrow("db down")
+    await expect(
+      service.completeAuthorization({
+        state: started.state,
+        code: "oauth-code",
+      })
+    ).rejects.toThrow("db down")
 
     const connectionRow = await database.query<{ status: string }>(
       "select status from google_oauth_connections where id = $1",
@@ -602,14 +653,20 @@ describe("google oauth service", () => {
       googleCredentialsProvider
     )
 
-    await expect(invalidKeyService.startAuthorization(ACTOR, {
-      workspaceId: ACTOR.workspaceId,
-      projectId: PROJECT_ID,
-    })).rejects.toThrow("GOOGLE_OAUTH_CONFIGURATION_ERROR")
+    await expect(
+      invalidKeyService.startAuthorization(ACTOR, {
+        workspaceId: ACTOR.workspaceId,
+        projectId: PROJECT_ID,
+      })
+    ).rejects.toThrow("GOOGLE_OAUTH_CONFIGURATION_ERROR")
   })
 
   it("allows only one successful completion for concurrent callbacks", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.toString()
@@ -620,7 +677,8 @@ describe("google oauth service", () => {
             access_token: "token-access-concurrent",
             refresh_token: "token-refresh-concurrent",
             expires_in: 3600,
-            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -628,16 +686,20 @@ describe("google oauth service", () => {
 
       if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
         return new Response(
-          JSON.stringify({ id: "acct-concurrent", email: "concurrent@example.com", name: "Concurrent" }),
+          JSON.stringify({
+            id: "acct-concurrent",
+            email: "concurrent@example.com",
+            name: "Concurrent",
+          }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response("{}", { status: 404 })
@@ -666,7 +728,11 @@ describe("google oauth service", () => {
   })
 
   it("supports pause/resume/disconnect lifecycle transitions and reconnect start on same connection id", async () => {
-    const service = new GoogleOAuthService(new GoogleOAuthRepository(database), undefined, googleCredentialsProvider)
+    const service = new GoogleOAuthService(
+      new GoogleOAuthRepository(database),
+      undefined,
+      googleCredentialsProvider
+    )
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.toString()
@@ -677,7 +743,8 @@ describe("google oauth service", () => {
             access_token: "token-access-lifecycle",
             refresh_token: "token-refresh-lifecycle",
             expires_in: 3600,
-            scope: "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -685,16 +752,20 @@ describe("google oauth service", () => {
 
       if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
         return new Response(
-          JSON.stringify({ id: "acct-lifecycle", email: "lifecycle@example.com", name: "Lifecycle" }),
+          JSON.stringify({
+            id: "acct-lifecycle",
+            email: "lifecycle@example.com",
+            name: "Lifecycle",
+          }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
       }
 
       if (url.includes("customers:listAccessibleCustomers")) {
-        return new Response(
-          JSON.stringify({ resourceNames: ["customers/123"] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        return new Response(JSON.stringify({ resourceNames: ["customers/123"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       }
 
       return new Response(JSON.stringify({ results: [] }), {
@@ -775,13 +846,15 @@ describe("google oauth service", () => {
       globalThis.fetch as typeof fetch
     )
 
-    await expect(syncService.sync(ACTOR, {
-      connectionId: started.connectionId,
-      customerId: "123",
-      startDate: "2026-06-01",
-      endDate: "2026-06-02",
-      idempotencyKey: "sync-paused-check",
-    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_READY", status: 409 })
+    await expect(
+      syncService.sync(ACTOR, {
+        connectionId: started.connectionId,
+        customerId: "123",
+        startDate: "2026-06-01",
+        endDate: "2026-06-02",
+        idempotencyKey: "sync-paused-check",
+      })
+    ).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_READY", status: 409 })
 
     const resumed = await service.resumeConnection(ACTOR, started.connectionId)
     expect(resumed.status).toBe("connected")
@@ -813,13 +886,15 @@ describe("google oauth service", () => {
     })
     expect(disconnected.status).toBe("disconnected")
 
-    await expect(syncService.sync(ACTOR, {
-      connectionId: started.connectionId,
-      customerId: "123",
-      startDate: "2026-06-01",
-      endDate: "2026-06-02",
-      idempotencyKey: "sync-disconnected-check",
-    })).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_READY", status: 409 })
+    await expect(
+      syncService.sync(ACTOR, {
+        connectionId: started.connectionId,
+        customerId: "123",
+        startDate: "2026-06-01",
+        endDate: "2026-06-02",
+        idempotencyKey: "sync-disconnected-check",
+      })
+    ).rejects.toMatchObject({ code: "GOOGLE_ADS_CONNECTION_NOT_READY", status: 409 })
 
     const reconnect = await service.startReconnect(ACTOR, started.connectionId)
     expect(reconnect.connectionId).toBe(started.connectionId)

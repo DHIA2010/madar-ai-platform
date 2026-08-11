@@ -1,4 +1,6 @@
 export * from "./commands"
+export { Can } from "./components/can"
+export { RouteAccessGuard } from "./components/route-access-guard"
 export * from "./hooks"
 export * from "./queries"
 export * from "./services"

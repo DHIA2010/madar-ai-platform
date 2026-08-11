@@ -579,4 +579,243 @@ describe("postgres foundation", () => {
     )
     expect(memberLoginAfterReactivation.session.accessToken).toBeTruthy()
   })
+
+  it("resolves a member's module permissions from an assigned custom role, falling back to the base role's defaults once cleared", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+
+    const owner = await commands.register(
+      {
+        email: "custom-role-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Custom Role Owner",
+        organizationName: "Custom Role Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const ownerLogin = await commands.login(
+      { email: "custom-role-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const ownerActor = await commands.resolveActorFromAccessToken(ownerLogin.session.accessToken)
+
+    const customRole = await commands.createCustomRole(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        name: "Campaign Reviewer",
+        permissions: [
+          { module: "campaigns", action: "view" },
+          { module: "campaigns", action: "approve" },
+        ],
+      },
+      context
+    )
+
+    const invitation = await commands.inviteMember(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        email: "custom-role-member@test.local",
+        role: "viewer",
+      },
+      context
+    )
+    const memberRegistration = await commands.register(
+      {
+        email: "custom-role-member@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Custom Role Member",
+        invitationToken: invitation.token,
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: memberRegistration.verificationToken }, context)
+
+    await commands.assignMemberCustomRole(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        memberUserId: memberRegistration.userId,
+        customRoleId: customRole.id,
+      },
+      context
+    )
+
+    const memberLogin = await commands.login(
+      { email: "custom-role-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const memberActor = await commands.resolveActorFromAccessToken(memberLogin.session.accessToken)
+
+    expect(memberActor.modulePermissions.sort()).toEqual(["campaigns:approve", "campaigns:view"])
+    expect(memberLogin.user.modulePermissions.sort()).toEqual([
+      "campaigns:approve",
+      "campaigns:view",
+    ])
+
+    await commands.assignMemberCustomRole(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        memberUserId: memberRegistration.userId,
+        customRoleId: null,
+      },
+      context
+    )
+    const memberLoginAfterClear = await commands.login(
+      { email: "custom-role-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    // Cleared back to the base "viewer" role's own defaults -- broader than
+    // the narrow custom role, and not just the two campaigns grants above.
+    expect(memberLoginAfterClear.user.modulePermissions).toContain("dashboard:view")
+    expect(memberLoginAfterClear.user.modulePermissions).toContain("campaigns:view")
+    expect(memberLoginAfterClear.user.modulePermissions).not.toContain("campaigns:approve")
+  })
+
+  it('an explicit "None" access grant yields zero module permissions, even for an owner-tier member', async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+
+    const owner = await commands.register(
+      {
+        email: "none-access-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "None Access Owner",
+        organizationName: "None Access Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const ownerLogin = await commands.login(
+      { email: "none-access-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const ownerActor = await commands.resolveActorFromAccessToken(ownerLogin.session.accessToken)
+
+    const invitation = await commands.inviteMember(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        email: "none-access-member@test.local",
+        role: "owner",
+      },
+      context
+    )
+    const memberRegistration = await commands.register(
+      {
+        email: "none-access-member@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "None Access Member",
+        invitationToken: invitation.token,
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: memberRegistration.verificationToken }, context)
+
+    // Sanity check: an "owner" role member normally gets a large permission set.
+    const memberLoginBefore = await commands.login(
+      { email: "none-access-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    expect(memberLoginBefore.user.modulePermissions.length).toBeGreaterThan(5)
+
+    await commands.setMemberModuleAccess(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        memberUserId: memberRegistration.userId,
+        revoked: true,
+      },
+      context
+    )
+
+    const memberLoginAfterRevoke = await commands.login(
+      { email: "none-access-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    expect(memberLoginAfterRevoke.user.modulePermissions).toEqual([])
+    const memberActorAfterRevoke = await commands.resolveActorFromAccessToken(
+      memberLoginAfterRevoke.session.accessToken
+    )
+    expect(memberActorAfterRevoke.modulePermissions).toEqual([])
+
+    // Restoring access falls back to the (still-owner) base role's defaults.
+    await commands.setMemberModuleAccess(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        memberUserId: memberRegistration.userId,
+        revoked: false,
+      },
+      context
+    )
+    const memberLoginAfterRestore = await commands.login(
+      { email: "none-access-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    expect(memberLoginAfterRestore.user.modulePermissions.length).toBeGreaterThan(5)
+  })
 })

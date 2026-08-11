@@ -97,6 +97,8 @@ async function seedAndAssertContract(repositories: IdentityRepositories) {
     workspaceId,
     userId: organization.ownerUserId,
     role: "owner",
+    customRoleId: null,
+    moduleAccessRevoked: false,
     status: "active",
     profile: { title: "Owner" },
     statusReason: null,
