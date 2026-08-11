@@ -20,7 +20,6 @@ export const ROUTES = {
   administration: "/administration",
   administrationUsers: "/administration/users",
   administrationRoles: "/administration/roles",
-  administrationPermissions: "/administration/permissions",
   administrationTeams: "/administration/teams",
   administrationInvitations: "/administration/invitations",
   administrationActivityLog: "/administration/activity-log",

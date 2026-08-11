@@ -10,7 +10,6 @@ const IAM_NAV_ITEMS = [
   { href: ROUTES.administration, label: "Overview" },
   { href: ROUTES.administrationUsers, label: "Users" },
   { href: ROUTES.administrationRoles, label: "Roles" },
-  { href: ROUTES.administrationPermissions, label: "Permissions" },
   { href: ROUTES.administrationTeams, label: "Teams" },
   { href: ROUTES.administrationInvitations, label: "Invitations" },
   { href: ROUTES.administrationActivityLog, label: "Activity Log" },
