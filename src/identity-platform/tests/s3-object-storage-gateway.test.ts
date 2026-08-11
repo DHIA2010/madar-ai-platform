@@ -25,8 +25,12 @@ describe("S3ObjectStorageGateway", () => {
       emailFrom: "identity@test.local",
       objectStorageBucket: "madar-stage-avatars",
       objectStorageRegion: "eu-central-1",
-      objectStorageEndpoint: undefined,
-      objectStoragePublicEndpoint: undefined,
+      // Explicit empty string, not `undefined` -- loadIdentityPlatformConfig falls
+      // back to process.env.MINIO_ENDPOINT with `??`, which treats `undefined` as
+      // "not provided" rather than "force empty", so a MINIO_ENDPOINT set in the
+      // environment (e.g. in CI) would otherwise leak into this "real S3" case.
+      objectStorageEndpoint: "",
+      objectStoragePublicEndpoint: "",
     })
     const gateway = new S3ObjectStorageGateway(config)
 
