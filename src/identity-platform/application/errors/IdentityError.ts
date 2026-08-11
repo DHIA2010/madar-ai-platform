@@ -28,6 +28,13 @@ export const ERRORS = {
   tokenInvalid: () =>
     new IdentityError("AUTH_TOKEN_INVALID", 401, "security", "Token is invalid or expired."),
   forbidden: () => new IdentityError("AUTH_FORBIDDEN", 403, "security", "Permission denied."),
+  accountSuspended: () =>
+    new IdentityError(
+      "AUTH_ACCOUNT_SUSPENDED",
+      403,
+      "security",
+      "Your access has been suspended. Contact your administrator."
+    ),
   locked: (until: string) =>
     new IdentityError("AUTH_ACCOUNT_LOCKED", 423, "security", "Account temporarily locked.", {
       lockedUntil: until,

@@ -462,4 +462,121 @@ describe("postgres foundation", () => {
       )
     ).rejects.toThrowError(/not available/i)
   })
+
+  it("blocks a suspended member from logging in, refreshing, or continuing to use an already-issued session", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+
+    const owner = await commands.register(
+      {
+        email: "suspend-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Suspend Owner",
+        organizationName: "Suspend Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const ownerLogin = await commands.login(
+      { email: "suspend-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const ownerActor = await commands.resolveActorFromAccessToken(ownerLogin.session.accessToken)
+
+    const invitation = await commands.inviteMember(
+      ownerActor,
+      { organizationId: owner.organizationId, email: "suspend-member@test.local", role: "viewer" },
+      context
+    )
+    const memberRegistration = await commands.register(
+      {
+        email: "suspend-member@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Suspend Member",
+        invitationToken: invitation.token,
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: memberRegistration.verificationToken }, context)
+
+    // Log in once while still active, and keep that session's tokens around --
+    // this is what should stop working the moment the membership is suspended.
+    const memberLoginBeforeSuspension = await commands.login(
+      { email: "suspend-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const accessTokenIssuedBeforeSuspension = memberLoginBeforeSuspension.session.accessToken
+    const refreshTokenIssuedBeforeSuspension = memberLoginBeforeSuspension.session.refreshToken
+
+    await commands.suspendMember(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        memberUserId: memberRegistration.userId,
+        reason: "Reported policy violation",
+      },
+      context
+    )
+
+    // The core bug: a suspended member could still authenticate with a brand-new login.
+    await expect(
+      commands.login(
+        { email: "suspend-member@test.local", password: "VeryStrongPassword123!" },
+        context
+      )
+    ).rejects.toThrowError(/suspended/i)
+
+    // Just as important: a session/access token issued *before* suspension must stop
+    // working immediately, not just at its natural expiry.
+    await expect(
+      commands.resolveActorFromAccessToken(accessTokenIssuedBeforeSuspension)
+    ).rejects.toThrowError()
+
+    // And refreshing that same pre-suspension session for a new access token must fail too.
+    await expect(
+      commands.refresh({ refreshToken: refreshTokenIssuedBeforeSuspension }, context)
+    ).rejects.toThrowError()
+
+    // Reactivating restores access on a fresh login.
+    await commands.reactivateMember(
+      ownerActor,
+      { organizationId: owner.organizationId, memberUserId: memberRegistration.userId },
+      context
+    )
+    const memberLoginAfterReactivation = await commands.login(
+      { email: "suspend-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    expect(memberLoginAfterReactivation.session.accessToken).toBeTruthy()
+  })
 })

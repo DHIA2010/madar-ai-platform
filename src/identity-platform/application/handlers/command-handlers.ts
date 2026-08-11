@@ -555,8 +555,12 @@ export class IdentityCommandHandlers {
 
     user.recordSuccessfulLogin(this.now)
     await this.deps.repositories.users.save(user.toState())
-    const membership = await this.deps.repositories.memberships.findFirstByUserId(user.id)
+    const memberships = await this.deps.repositories.memberships.listByUserId(user.id)
+    const membership = memberships.find((candidate) => candidate.status === "active")
     if (!membership) {
+      if (memberships.some((candidate) => candidate.status === "suspended")) {
+        throw ERRORS.accountSuspended()
+      }
       throw ERRORS.forbidden()
     }
 
@@ -626,6 +630,13 @@ export class IdentityCommandHandlers {
     }
     const session = SessionEntity.rehydrate(sessionState)
     if (session.isRevoked() || session.isExpired(Date.now())) {
+      throw ERRORS.tokenInvalid()
+    }
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      session.userId,
+      session.organizationId
+    )
+    if (!membership || membership.status !== "active") {
       throw ERRORS.tokenInvalid()
     }
     const tokens = this.buildTokenPair({
@@ -2395,6 +2406,14 @@ export class IdentityCommandHandlers {
         organizationId = activeMembership.organizationId
         workspaceId = userState.activeWorkspaceId
       }
+    }
+
+    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      payload.sub,
+      organizationId
+    )
+    if (!membership || membership.status !== "active") {
+      throw ERRORS.tokenInvalid()
     }
 
     const roles = (await this.deps.repositories.memberships.listRolesByUserInOrganization(
