@@ -14,10 +14,16 @@ export class S3ObjectStorageGateway implements ObjectStorageGateway {
     }
 
     this.bucket = config.objectStorageBucket
-    this.publicBaseUrl = `${(config.objectStoragePublicEndpoint ?? "").replace(/\/$/, "")}/${this.bucket}`
+    const region = config.objectStorageRegion ?? "us-east-1"
+    // A custom endpoint (MinIO, or any S3-compatible host) always needs the bucket appended
+    // to build a path-style URL. Real AWS S3 has no custom endpoint, so build the standard
+    // virtual-hosted-style URL instead — it already embeds the bucket name in the host.
+    this.publicBaseUrl = config.objectStorageEndpoint
+      ? `${(config.objectStoragePublicEndpoint ?? config.objectStorageEndpoint).replace(/\/$/, "")}/${this.bucket}`
+      : `https://${this.bucket}.s3.${region}.amazonaws.com`
     this.client = new S3Client({
       endpoint: config.objectStorageEndpoint,
-      region: config.objectStorageRegion ?? "us-east-1",
+      region,
       forcePathStyle: Boolean(config.objectStorageEndpoint),
       credentials:
         config.objectStorageAccessKeyId && config.objectStorageSecretAccessKey
