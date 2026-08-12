@@ -12,12 +12,16 @@ import { GoogleOAuthRepository } from "../../google-oauth/repository"
 import { GoogleOAuthService } from "../../google-oauth/service"
 import { SnapchatOAuthConnectionDeletionService } from "../../snapchat-oauth/connection-deletion-service"
 import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
+import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-deletion-service"
+import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
   endGoogleAdsSyncRequestTrace,
 } from "../../google-ads/client"
-import { IdentityError } from "../../application/errors/IdentityError"
+import { ERRORS, IdentityError } from "../../application/errors/IdentityError"
+import { EnvironmentFirstMetaAdsCredentialsProvider } from "../../meta-ads/credentials"
+import { createMetaGraphApiClient, runMetaConnectionDiagnostics } from "../../meta-ads/diagnostics"
 import { createRequestContext, mapIdentityError } from "../middleware"
 import {
   addTeamMemberSchema,
@@ -314,6 +318,18 @@ export function createIdentityApiServer(
         new SnapchatOAuthRepository(container.infrastructure.database)
       )
     : null
+  const metaOAuthDeletionService = container.infrastructure.database
+    ? new MetaOAuthConnectionDeletionService(
+        new MetaOAuthRepository(container.infrastructure.database)
+      )
+    : null
+  const metaAdsCredentialsProvider = new EnvironmentFirstMetaAdsCredentialsProvider()
+  // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
+  // (confirmed by inspection -- only Google/Snapchat connectors exist), so this default is a
+  // new choice, not a change to an existing pinned version. Override via env if needed.
+  const metaGraphApiBaseUrl =
+    process.env.IDENTITY_PLATFORM_META_GRAPH_API_BASE_URL?.trim() ||
+    "https://graph.facebook.com/v21.0"
 
   return createServer(async (request, response) => {
     const method = request.method ?? "GET"
@@ -495,6 +511,32 @@ export function createIdentityApiServer(
             context
           )
         )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/integrations/meta-ads/diagnostics") {
+        if (!actor.modulePermissions.includes("connections:manage")) {
+          throw ERRORS.forbidden()
+        }
+
+        let accessToken: string
+        try {
+          accessToken = (await metaAdsCredentialsProvider.load()).accessToken
+        } catch {
+          // Never echo the underlying error -- it may include partial secret material from a
+          // malformed AWS Secrets Manager payload. The message here is deliberately generic.
+          return send(400, {
+            code: "META_ADS_NOT_CONFIGURED",
+            message:
+              "No Meta access token is configured. Set META_ACCESS_TOKEN or the AWS secret at " +
+              "madar/prod/connectors/meta before running diagnostics.",
+          })
+        }
+
+        const client = createMetaGraphApiClient({
+          accessToken,
+          apiBaseUrl: metaGraphApiBaseUrl,
+        })
+        return send(200, await runMetaConnectionDiagnostics(client))
       }
 
       if (method === "POST" && url.pathname === "/v1/identity/profile/avatar") {
@@ -736,7 +778,11 @@ export function createIdentityApiServer(
 
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)
       if (method === "DELETE" && deleteIntegrationMatch) {
-        if (!googleOAuthDeletionService && !snapchatOAuthDeletionService) {
+        if (
+          !googleOAuthDeletionService &&
+          !snapchatOAuthDeletionService &&
+          !metaOAuthDeletionService
+        ) {
           return send(503, {
             code: "INTEGRATION_OAUTH_UNAVAILABLE",
             message: "Integration OAuth is unavailable in memory mode.",
@@ -765,6 +811,19 @@ export function createIdentityApiServer(
           } catch (error) {
             const isNotFound =
               error instanceof IdentityError && error.code === "SNAPCHAT_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && metaOAuthDeletionService) {
+          try {
+            await metaOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError && error.code === "META_OAUTH_CONNECTION_NOT_FOUND"
             if (!isNotFound) {
               throw error
             }

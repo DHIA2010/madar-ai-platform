@@ -39,6 +39,7 @@ import { GoogleOAuthService } from "../google-oauth/service"
 import { GoogleAdsIntegrationProvider } from "../integrations/google-ads/provider"
 import { GoogleIdentityIntegrationProvider } from "../integrations/google/provider"
 import { SnapchatAdsIntegrationProvider } from "../integrations/snapchat-ads/provider"
+import { MetaAdsIntegrationProvider } from "../integrations/meta-ads/provider"
 import { IntegrationProviderRegistry } from "../integrations/provider-registry"
 
 class SystemClock implements Clock {
@@ -92,6 +93,7 @@ export function createIdentityPlatformContainer(
     const featureFlags = new EnvironmentFeatureFlagProvider(config)
     const integrations = new IntegrationProviderRegistry()
     integrations.register(new SnapchatAdsIntegrationProvider())
+    integrations.register(new MetaAdsIntegrationProvider())
     const repositories = createInMemoryRepositories(options.store)
     const commands = new IdentityCommandHandlers({
       config,
@@ -141,6 +143,7 @@ export function createIdentityPlatformContainer(
   )
   const integrations = new IntegrationProviderRegistry()
   integrations.register(new SnapchatAdsIntegrationProvider(database))
+  integrations.register(new MetaAdsIntegrationProvider(database))
   const googleOAuthController = new GoogleOAuthController(
     new GoogleOAuthService(
       new GoogleOAuthRepository(database),

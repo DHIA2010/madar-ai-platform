@@ -59,6 +59,19 @@ const OAUTH_CALLBACK_PARAMS_BY_CONNECTOR_ID: Record<string, OAuthCallbackParamPr
       "snapchat_connected_at",
     ],
   },
+  meta_ads: {
+    statusParam: "meta_oauth",
+    connectionIdParam: "meta_connection_id",
+    accountNameParam: "meta_account_name",
+    allParams: [
+      "meta_oauth",
+      "meta_connection_id",
+      "meta_project_id",
+      "meta_status",
+      "meta_account_name",
+      "meta_connected_at",
+    ],
+  },
 }
 
 const DEFAULT_FILTERS: ConnectionsFilterState = {

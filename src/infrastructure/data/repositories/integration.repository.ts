@@ -218,9 +218,41 @@ const SNAPCHAT_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
   },
 }
 
+const META_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "meta-ads",
+  connectorId: "meta_ads",
+  connectorDefinitionId: "connector_def_meta_ads",
+  displayName: "Meta Ads",
+  oauth: {
+    startPath: "/v1/integrations/meta-ads/oauth/start",
+    activeConnectionPath: "/v1/integrations/meta-ads/connection",
+    callbackStatusParam: "meta_oauth",
+    callbackConnectionIdParam: "meta_connection_id",
+    callbackAccountNameParam: "meta_account_name",
+    callbackAccountEmailParam: "meta_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/meta-ads/sync",
+    records: "/v1/integrations/meta-ads/records",
+    accounts: "/v1/integrations/meta-ads/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
+  },
+  metadata: {
+    availableAccountsKey: "availableMetaAdsCustomerAccounts",
+  },
+}
+
 const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = {
   [GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ADS_PROVIDER_PROFILE,
   [SNAPCHAT_ADS_PROVIDER_PROFILE.connectorDefinitionId]: SNAPCHAT_ADS_PROVIDER_PROFILE,
+  [META_ADS_PROVIDER_PROFILE.connectorDefinitionId]: META_ADS_PROVIDER_PROFILE,
 }
 
 const DEFAULT_WORKSPACE_ID = "ws_connections_center"
