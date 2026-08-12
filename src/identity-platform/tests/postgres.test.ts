@@ -4,6 +4,7 @@ import { newDb } from "pg-mem"
 import { describe, expect, it } from "vitest"
 
 import { IdentityCommandHandlers } from "../application/handlers/command-handlers"
+import { IdentityQueryHandlers } from "../application/handlers/query-handlers"
 import type { RequestContext } from "../application/dto/identity-dtos"
 import type { Clock, UuidGenerator } from "../application/ports"
 import { loadIdentityPlatformConfig } from "../configuration"
@@ -817,5 +818,127 @@ describe("postgres foundation", () => {
       context
     )
     expect(memberLoginAfterRestore.user.modulePermissions.length).toBeGreaterThan(5)
+  })
+
+  it("blocks a member with revoked module access from viewing the organization's member/team/role directory, even though they remain a member", async () => {
+    const { database } = createTestDatabase()
+    await runIdentityMigrations(database, process.cwd())
+
+    const config = loadIdentityPlatformConfig({
+      jwtSecret: "test-secret-test-secret",
+      tokenHashSecret: "test-token-secret-secret",
+      postgresUrl: "postgresql://unused",
+      redisUrl: "redis://unused",
+      storagePath: ".tmp-identity-tests",
+      emailFrom: "identity@test.local",
+    })
+    const tokenService = new HmacTokenService(config.jwtSecret, config.tokenHashSecret)
+    const sessions = new RedisSessionRepository(new FakeRedisClient(), config)
+    const repositories = createPostgresRepositories({ db: database, tokenService, sessions })
+    const commands = new IdentityCommandHandlers({
+      config,
+      repositories,
+      clock: new TestClock(),
+      uuid: new TestUuidGenerator(),
+      hasher: new ScryptPasswordHasher(),
+      tokenService,
+      rateLimiter: new InMemoryRateLimiter(),
+      emailGateway: new InMemoryEmailGateway(),
+      logger: new ConsoleLogger(),
+      eventPublisher: new InMemoryEventPublisher(),
+      featureFlags: new EnvironmentFeatureFlagProvider(config),
+      metrics: new InMemoryMetricsProvider(),
+    })
+    const queries = new IdentityQueryHandlers(repositories)
+
+    const owner = await commands.register(
+      {
+        email: "revoked-viewer-owner@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Revoked Viewer Owner",
+        organizationName: "Revoked Viewer Org",
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: owner.verificationToken }, context)
+    const ownerLogin = await commands.login(
+      { email: "revoked-viewer-owner@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const ownerActor = await commands.resolveActorFromAccessToken(ownerLogin.session.accessToken)
+
+    const invitation = await commands.inviteMember(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        email: "revoked-viewer-member@test.local",
+        role: "viewer",
+      },
+      context
+    )
+    const memberRegistration = await commands.register(
+      {
+        email: "revoked-viewer-member@test.local",
+        password: "VeryStrongPassword123!",
+        fullName: "Revoked Viewer Member",
+        invitationToken: invitation.token,
+        timezone: "UTC",
+        language: "en",
+      },
+      context
+    )
+    await commands.verifyEmail({ token: memberRegistration.verificationToken }, context)
+
+    const memberLoginBefore = await commands.login(
+      { email: "revoked-viewer-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const memberActorBefore = await commands.resolveActorFromAccessToken(
+      memberLoginBefore.session.accessToken
+    )
+
+    // Sanity check: a plain viewer normally can browse the org's member directory.
+    // (listTeams isn't exercised here -- pg-mem's SQL parser chokes on its
+    // manager/team_members join independent of this permission check.)
+    await expect(
+      queries.listOrganizationMembers(memberActorBefore, owner.organizationId)
+    ).resolves.toBeDefined()
+    await expect(queries.listRoles(memberActorBefore, owner.organizationId)).resolves.toBeDefined()
+
+    await commands.setMemberModuleAccess(
+      ownerActor,
+      {
+        organizationId: owner.organizationId,
+        memberUserId: memberRegistration.userId,
+        revoked: true,
+      },
+      context
+    )
+
+    const memberLoginAfterRevoke = await commands.login(
+      { email: "revoked-viewer-member@test.local", password: "VeryStrongPassword123!" },
+      context
+    )
+    const memberActorAfterRevoke = await commands.resolveActorFromAccessToken(
+      memberLoginAfterRevoke.session.accessToken
+    )
+
+    await expect(
+      queries.listOrganizationMembers(memberActorAfterRevoke, owner.organizationId)
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      queries.listTeams(memberActorAfterRevoke, owner.organizationId)
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      queries.listRoles(memberActorAfterRevoke, owner.organizationId)
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      queries.listOrganizationInvitations(memberActorAfterRevoke, owner.organizationId, {
+        page: 1,
+        pageSize: 20,
+      })
+    ).rejects.toMatchObject({ status: 403 })
   })
 })

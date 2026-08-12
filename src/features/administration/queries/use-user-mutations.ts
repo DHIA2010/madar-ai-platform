@@ -13,6 +13,7 @@ import type {
   ReactivateMemberRequestDto,
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
+  UpdateMemberProfileRequestDto,
 } from "@/application/contracts"
 
 export function useUserMutations(organizationId: string | null | undefined) {
@@ -82,5 +83,24 @@ export function useUserMutations(organizationId: string | null | undefined) {
     onSuccess: invalidate,
   })
 
-  return { suspendUser, reactivateUser, assignRole, assignCustomRole, setModuleAccess }
+  const updateProfile = useMutation({
+    mutationKey: ["administration", "users", "update-profile"],
+    mutationFn: async (request: UpdateMemberProfileRequestDto) => {
+      try {
+        return await administrationApplicationService.updateMemberProfile(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  return {
+    suspendUser,
+    reactivateUser,
+    assignRole,
+    assignCustomRole,
+    setModuleAccess,
+    updateProfile,
+  }
 }

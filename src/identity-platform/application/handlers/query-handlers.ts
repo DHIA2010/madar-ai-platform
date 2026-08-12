@@ -1,6 +1,12 @@
 import type { AuthenticatedActor } from "../dto/identity-dtos"
 import type { ListAuditLogsQuery, ListInvitationsQuery, ListOrganizationsQuery } from "../queries"
-import type { CustomRoleListItem, IdentityRepositories } from "../../domain/repositories"
+import type { MembershipState } from "../../domain/entities"
+import type {
+  CustomRoleListItem,
+  CustomRoleRepository,
+  IdentityRepositories,
+} from "../../domain/repositories"
+import { resolveMembershipModulePermissions } from "../../domain/domain-services/module-permission-service"
 import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 import { ERRORS } from "../errors/IdentityError"
 import {
@@ -8,6 +14,23 @@ import {
   ROLE_PERMISSIONS,
   resolvePermissions,
 } from "../../domain/domain-services/permission-service"
+
+// Resolved fresh per target organization -- `actor.modulePermissions` is
+// computed against the session's active org and would be wrong to reuse here
+// since these handlers take an explicit `organizationId` that can differ
+// (a member of several orgs querying one that isn't their active org).
+async function requireMembersViewAccess(
+  membership: MembershipState | null,
+  customRoles: CustomRoleRepository
+) {
+  if (!membership) {
+    throw ERRORS.forbidden()
+  }
+  const modulePermissions = await resolveMembershipModulePermissions(membership, customRoles)
+  if (!modulePermissions.includes("users:view")) {
+    throw ERRORS.forbidden()
+  }
+}
 
 function resolveRolePermissions(
   roleReference: string | null,
@@ -148,9 +171,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    if (!membership) {
-      throw ERRORS.forbidden()
-    }
+    await requireMembersViewAccess(membership, this.repositories.customRoles)
     const rows = await this.repositories.memberships.listByOrganizationId(organizationId)
     const lastLoginTimestamps =
       await this.repositories.auditLogs.getLastLoginTimestamps(organizationId)
@@ -199,9 +220,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    if (!membership) {
-      throw ERRORS.forbidden()
-    }
+    await requireMembersViewAccess(membership, this.repositories.customRoles)
 
     const rows = await this.repositories.invitations.listByOrganizationId(organizationId, {
       page: query.page,
@@ -228,9 +247,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    if (!membership) {
-      throw ERRORS.forbidden()
-    }
+    await requireMembersViewAccess(membership, this.repositories.customRoles)
     const items = await this.repositories.teams.listByOrganizationId(organizationId)
     if (items.length === 0) {
       return { organizationId, items: [] }
@@ -257,9 +274,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       teamState.organizationId
     )
-    if (!membership) {
-      throw ERRORS.forbidden()
-    }
+    await requireMembersViewAccess(membership, this.repositories.customRoles)
     const items = await this.repositories.teams.listMembers(teamId)
     return { teamId, items }
   }
@@ -269,9 +284,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    if (!membership) {
-      throw ERRORS.forbidden()
-    }
+    await requireMembersViewAccess(membership, this.repositories.customRoles)
 
     const orgMemberships = await this.repositories.memberships.listByOrganizationId(organizationId)
     const activeCountByRole = new Map<string, number>()

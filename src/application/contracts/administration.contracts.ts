@@ -221,6 +221,12 @@ export interface SetMemberModuleAccessRequestDto {
   revoked: boolean
 }
 
+export interface UpdateMemberProfileRequestDto {
+  organizationId: string
+  memberUserId: string
+  profile: Record<string, string>
+}
+
 export interface AdministrationGateway {
   getAuditLogs(request: GetAuditLogsRequestDto): Promise<AuditLogListDto>
   getUsers(request: GetUsersRequestDto): Promise<AdministrationUserDto[]>
@@ -229,6 +235,7 @@ export interface AdministrationGateway {
   assignMemberRole(request: AssignMemberRoleRequestDto): Promise<void>
   assignMemberCustomRole(request: AssignMemberCustomRoleRequestDto): Promise<void>
   setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void>
+  updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void>
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]>
   sendInvitation(request: SendInvitationRequestDto): Promise<AdministrationInvitationDto>
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>

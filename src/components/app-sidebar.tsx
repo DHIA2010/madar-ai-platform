@@ -84,7 +84,12 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <LayoutGrid />,
       permission: "connections:view",
     },
-    { title: t("administration"), url: ROUTES.administration, icon: <ShieldCheck /> },
+    {
+      title: t("administration"),
+      url: ROUTES.administration,
+      icon: <ShieldCheck />,
+      permission: "users:view",
+    },
     { title: t("settings"), url: "/settings", icon: <Settings2 /> },
   ].filter((item) => !item.permission || can(item.permission))
 

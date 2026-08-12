@@ -17,6 +17,7 @@ import type {
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
 } from "@/application/contracts/administration.contracts"
 import type { ApiClient } from "@/infrastructure/http"
@@ -371,6 +372,17 @@ export class AdministrationApiAdapter {
         `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/module-access`,
         {
           revoked: request.revoked,
+        }
+      )
+      .then(() => undefined)
+  }
+
+  updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void> {
+    return this.client
+      .post<{ profile: Record<string, string> }, unknown>(
+        `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/profile`,
+        {
+          profile: request.profile,
         }
       )
       .then(() => undefined)

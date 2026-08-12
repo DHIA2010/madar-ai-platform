@@ -29,6 +29,7 @@ import type {
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
 } from "../contracts"
 
@@ -61,6 +62,10 @@ export class AdministrationApplicationService {
 
   setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void> {
     return this.gateway.setMemberModuleAccess(request)
+  }
+
+  updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void> {
+    return this.gateway.updateMemberProfile(request)
   }
 
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]> {

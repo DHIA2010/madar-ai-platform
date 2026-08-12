@@ -34,6 +34,7 @@ export type {
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
 } from "./administration.contracts"
 export type {

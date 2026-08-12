@@ -32,6 +32,7 @@ import type {
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
 } from "@/application/contracts/administration.contracts"
 import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
@@ -148,7 +149,7 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       fullName: first.fullName ?? first.email ?? "Unknown",
       email: first.email ?? "",
       avatarUrl: first.avatarUrl,
-      department: "",
+      department: first.profile?.department ?? "",
       roleId: pickPrimaryRole(rows.map((row) => row.role)),
       customRoleId: first.customRoleId,
       moduleAccessRevoked: first.moduleAccessRevoked,
@@ -520,6 +521,14 @@ export class DataAdministrationRepository implements AdministrationRepository {
   async setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void> {
     try {
       await this.adapter.setMemberModuleAccess(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void> {
+    try {
+      await this.adapter.updateMemberProfile(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

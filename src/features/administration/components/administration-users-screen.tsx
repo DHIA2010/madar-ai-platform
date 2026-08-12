@@ -72,8 +72,14 @@ export function AdministrationUsersScreen() {
     administrationApplicationService,
     currentOrganization?.id
   )
-  const { suspendUser, reactivateUser, assignRole, assignCustomRole, setModuleAccess } =
-    useUserMutations(currentOrganization?.id)
+  const {
+    suspendUser,
+    reactivateUser,
+    assignRole,
+    assignCustomRole,
+    setModuleAccess,
+    updateProfile,
+  } = useUserMutations(currentOrganization?.id)
   const allUsers = useMemo(() => data ?? [], [data])
   const assignableRoles = useMemo(
     () => (rolesData ?? []).filter((role) => role.isDefault),
@@ -94,6 +100,8 @@ export function AdministrationUsersScreen() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [deactivatingUser, setDeactivatingUser] = useState<AdministrationUserDto | null>(null)
   const [deactivateReason, setDeactivateReason] = useState("")
+  const [editingUser, setEditingUser] = useState<AdministrationUserDto | null>(null)
+  const [editDepartment, setEditDepartment] = useState("")
 
   const availableWorkspaces = useMemo(() => {
     const names = new Set<string>()
@@ -155,6 +163,23 @@ export function AdministrationUsersScreen() {
       setDeactivateReason("")
     } catch {
       toast.error("Failed to deactivate user")
+    }
+  }
+
+  async function handleEditUser() {
+    if (!editingUser || !currentOrganization) return
+
+    try {
+      await updateProfile.mutateAsync({
+        organizationId: currentOrganization.id,
+        memberUserId: editingUser.id,
+        profile: { department: editDepartment.trim() },
+      })
+      toast.success(`${editingUser.fullName} updated`)
+      setEditingUser(null)
+      setEditDepartment("")
+    } catch {
+      toast.error("Failed to update user")
     }
   }
 
@@ -457,7 +482,14 @@ export function AdministrationUsersScreen() {
                             >
                               Profile
                             </AppButton>
-                            <AppButton size="sm" variant="outline">
+                            <AppButton
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingUser(user)
+                                setEditDepartment(user.department)
+                              }}
+                            >
                               Edit
                             </AppButton>
                             {user.id === currentUser?.id ? null : user.status === "suspended" ? (
@@ -529,6 +561,32 @@ export function AdministrationUsersScreen() {
           placeholder="Why is this user being deactivated?"
           value={deactivateReason}
           onChange={(event) => setDeactivateReason(event.target.value)}
+        />
+      </AppConfirmDialog>
+
+      <AppConfirmDialog
+        open={Boolean(editingUser)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setEditingUser(null)
+            setEditDepartment("")
+          }
+        }}
+        title="Edit user"
+        description={editingUser ? `Update details for ${editingUser.fullName}.` : undefined}
+        confirmLabel="Save"
+        loading={updateProfile.isPending}
+        onConfirm={handleEditUser}
+        onCancel={() => {
+          setEditingUser(null)
+          setEditDepartment("")
+        }}
+      >
+        <AppInput
+          label="Department"
+          placeholder="e.g. Marketing"
+          value={editDepartment}
+          onChange={(event) => setEditDepartment(event.target.value)}
         />
       </AppConfirmDialog>
     </div>
