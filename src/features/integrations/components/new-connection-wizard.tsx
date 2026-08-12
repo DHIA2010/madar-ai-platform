@@ -304,6 +304,12 @@ const OAUTH_CONNECTOR_PROFILES: Record<string, OAuthConnectorProfile> = {
     accountsMetadataKey: "availableSnapchatAdsCustomerAccounts",
     fallbackAccountLabel: "Snapchat Ads",
   },
+  meta_ads: {
+    callbackParam: "meta_oauth",
+    connectionIdParam: "meta_connection_id",
+    accountsMetadataKey: "availableMetaAdsCustomerAccounts",
+    fallbackAccountLabel: "Meta Ads",
+  },
 }
 
 function parseAccessibleProviderAccounts(
