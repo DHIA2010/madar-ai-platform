@@ -538,9 +538,12 @@ export class RestIntegrationRepository implements IntegrationRepository {
     return response.items.length
   }
 
-  private async fetchAccessibleAccounts(connectionId: string) {
+  private async fetchAccessibleAccounts(
+    connectionId: string,
+    providerProfile: RuntimeProviderProfile | null
+  ) {
     const response = await this.client.get<{ items: Array<Record<string, unknown>> }>(
-      GOOGLE_ADS_PROVIDER_PROFILE.endpoints.accounts,
+      providerProfile?.endpoints.accounts ?? GOOGLE_ADS_PROVIDER_PROFILE.endpoints.accounts,
       {
         query: {
           connectionId,
@@ -970,7 +973,10 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
       if (!customerId) {
         try {
-          const accessibleAccounts = await this.fetchAccessibleAccounts(connection.connectionId)
+          const accessibleAccounts = await this.fetchAccessibleAccounts(
+            connection.connectionId,
+            providerProfile
+          )
           const selectedAccount =
             accessibleAccounts.find((account) => account.isSelected) ?? accessibleAccounts[0]
 
@@ -1059,7 +1065,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
           trigger: "manual" | "retry"
         },
         GoogleAdsSyncApiResponse
-      >(GOOGLE_ADS_PROVIDER_PROFILE.endpoints.sync, {
+      >(providerProfile?.endpoints.sync ?? GOOGLE_ADS_PROVIDER_PROFILE.endpoints.sync, {
         connectionId: connection.connectionId,
         customerId,
         startDate: startDate.toISOString().slice(0, 10),
