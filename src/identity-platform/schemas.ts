@@ -171,6 +171,9 @@ export const googleOAuthStartSchema = z.object({
   workspaceId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   connectionName: z.string().min(1).max(200).nullable().optional(),
+  // Shop-scoped providers (Shopify) need this to build a per-store authorize URL. Ignored
+  // by every other provider's oauthStart implementation.
+  shopDomain: z.string().min(1).max(255).nullable().optional(),
 })
 
 export const integrationOAuthStartSchema = googleOAuthStartSchema

@@ -130,6 +130,26 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
       { id: "salla-store-c", label: "Store C", description: "Wholesale store" },
     ],
   },
+  Shopify: {
+    category: "Ecommerce",
+    description: "Sync products, orders, and customer records from your store.",
+    connectionType: "Commerce connector",
+    authMethod: "OAuth",
+    permissions: ["Orders", "Products", "Customers"],
+    capabilities: ["Products", "Orders", "Customers", "Catalog"],
+    accountLabel: "Store",
+    accountDescription: "Choose the Shopify store that should connect to MADAR.",
+    resourceTypeLabel: "Store",
+    syncFrequency: "Every 30 minutes",
+    estimatedDuration: "1-2 minutes",
+    recommendedObjects: ["Products", "Orders", "Customers"],
+    allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
+    accounts: [
+      { id: "shopify-store-a", label: "Store A", description: "Primary storefront" },
+      { id: "shopify-store-b", label: "Store B", description: "Regional store" },
+      { id: "shopify-store-c", label: "Store C", description: "Wholesale store" },
+    ],
+  },
   Zid: {
     category: "Ecommerce",
     description: "Bring store activity, product updates, and customer records together.",
@@ -254,6 +274,16 @@ function getCategoryForConnector(displayName: string): PlatformCategory {
   return PLATFORM_DETAILS[displayName]?.category ?? "Marketing"
 }
 
+// Shopify is the only connector whose OAuth authorize URL is store-specific
+// (https://{shop}.myshopify.com/...), so it's the only one that needs a value from the
+// user before "Continue to OAuth" can build a real redirect. Accepts either a bare handle
+// ("madar-test") or the full myshopify.com domain, matching the backend's normalization.
+const SHOP_DOMAIN_INPUT_PATTERN = /^[a-z0-9][a-z0-9-]*(\.myshopify\.com)?$/i
+
+function isShopDomainValid(value: string) {
+  return SHOP_DOMAIN_INPUT_PATTERN.test(value.trim())
+}
+
 function getConnectorIcon(label: string) {
   return label
     .split(" ")
@@ -310,6 +340,18 @@ const OAUTH_CONNECTOR_PROFILES: Record<string, OAuthConnectorProfile> = {
     accountsMetadataKey: "availableMetaAdsCustomerAccounts",
     fallbackAccountLabel: "Meta Ads",
   },
+  salla: {
+    callbackParam: "salla_oauth",
+    connectionIdParam: "salla_connection_id",
+    accountsMetadataKey: "availableSallaCustomerAccounts",
+    fallbackAccountLabel: "Salla",
+  },
+  shopify: {
+    callbackParam: "shopify_oauth",
+    connectionIdParam: "shopify_connection_id",
+    accountsMetadataKey: "availableShopifyCustomerAccounts",
+    fallbackAccountLabel: "Shopify",
+  },
 }
 
 function parseAccessibleProviderAccounts(
@@ -362,7 +404,7 @@ function SyncChip({
         "rounded-full border px-4 py-2 text-sm font-medium",
         WIZARD_INTERACTION_CLASS,
         active
-          ? "border-sky-300 bg-sky-500/15 text-sky-100 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-50"
+          ? "border-sky-300 bg-sky-500/15 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-900"
           : "border-border/70 bg-background/80 text-muted-foreground hover:border-sky-200 hover:bg-muted/60 hover:text-foreground"
       )}
       onClick={onClick}
@@ -497,6 +539,7 @@ export function NewConnectionWizard() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [discoveredProviderAccounts, setDiscoveredProviderAccounts] = useState<AccountOption[]>([])
+  const [shopDomain, setShopDomain] = useState("")
 
   const workspaceId = currentWorkspace?.id ?? null
   const workspaceLabel = currentWorkspace?.name ?? "Madar Workspace"
@@ -715,6 +758,7 @@ export function NewConnectionWizard() {
           accountName: selectedAccount.label,
           workspaceName: workspaceLabel,
           connectionName,
+          ...(selectedConnector.connectorId === "shopify" ? { shopDomain } : {}),
         },
         ...(setupMode === "manual"
           ? {
@@ -778,6 +822,7 @@ export function NewConnectionWizard() {
     selectedConnector,
     selectedConnectorDetails,
     setupMode,
+    shopDomain,
     workspaceId,
     workspaceLabel,
   ])
@@ -946,6 +991,9 @@ export function NewConnectionWizard() {
   const isContinueDisabled =
     flowStatus !== "idle" ||
     (stepIndex === 0 && !selectedConnectorDefinitionId) ||
+    (stepIndex === 1 &&
+      selectedConnector?.connectorId === "shopify" &&
+      !isShopDomainValid(shopDomain)) ||
     (stepIndex === 2 && selectedObjects.length === 0)
 
   const currentStepState = (index: WizardStep) => {
@@ -1050,7 +1098,7 @@ export function NewConnectionWizard() {
               "rounded-full border px-4 py-2 text-sm font-medium",
               WIZARD_INTERACTION_CLASS,
               selectedCategory === category
-                ? "border-sky-300 bg-sky-500/15 text-sky-100 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-50"
+                ? "border-sky-300 bg-sky-500/15 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-900"
                 : "border-border/70 bg-background/80 text-muted-foreground hover:border-sky-200 hover:bg-muted/60 hover:text-foreground"
             )}
             onClick={() => setSelectedCategory(category)}
@@ -1277,17 +1325,17 @@ export function NewConnectionWizard() {
         {flowStatus !== "idle" ? (
           <AppCard className="border-sky-200 bg-sky-500/10 p-5 shadow-sm">
             <div className="flex items-start gap-4">
-              <div className="flex size-12 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-100">
+              <div className="flex size-12 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-700">
                 <Loader2 className="size-5 animate-spin" />
               </div>
               <div className="flex-1 space-y-2">
-                <p className="text-[11px] uppercase tracking-wide text-sky-100/80">
+                <p className="text-[11px] uppercase tracking-wide text-sky-700/80">
                   OAuth callback
                 </p>
-                <h3 className="text-lg font-semibold text-slate-50">
+                <h3 className="text-lg font-semibold text-foreground">
                   {LOADING_STAGES[flowStatus as Exclude<FlowStatus, "idle" | "finalizing">]}
                 </h3>
-                <p className="text-sm text-sky-100/80">
+                <p className="text-sm text-sky-700/80">
                   MADAR is finishing the secure handoff for {selectedConnector.displayName}.
                 </p>
               </div>
@@ -1309,6 +1357,21 @@ export function NewConnectionWizard() {
                 </p>
               </div>
             </div>
+
+            {selectedConnector.connectorId === "shopify" ? (
+              <div className="space-y-2 rounded-[20px] border border-sky-200 bg-sky-500/8 p-4">
+                <AppInput
+                  label="Shop domain"
+                  placeholder="your-store.myshopify.com"
+                  value={shopDomain}
+                  onChange={(event) => setShopDomain(event.target.value)}
+                />
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Enter your Shopify store&apos;s handle or full myshopify.com domain. MADAR uses
+                  this to build the secure authorization link for your store.
+                </p>
+              </div>
+            ) : null}
 
             <div className="rounded-[20px] border bg-background/75 p-4">
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -1505,7 +1568,7 @@ export function NewConnectionWizard() {
                     "rounded-full border px-3 py-2 text-xs font-medium",
                     WIZARD_INTERACTION_CLASS,
                     setupMode === "manual"
-                      ? "border-sky-300 bg-sky-500/15 text-sky-100 hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-50"
+                      ? "border-sky-300 bg-sky-500/15 text-sky-800 hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-900"
                       : "border-border/70 bg-background text-muted-foreground hover:border-sky-200 hover:bg-muted/60 hover:text-foreground"
                   )}
                   onClick={() =>
@@ -1565,7 +1628,7 @@ export function NewConnectionWizard() {
                   "rounded-[18px] border px-4 py-3 text-left text-sm font-medium",
                   WIZARD_INTERACTION_CLASS,
                   selected
-                    ? "border-sky-400 bg-sky-500/12 text-sky-100 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-300 hover:bg-sky-500/18 hover:text-sky-50"
+                    ? "border-sky-400 bg-sky-500/12 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-300 hover:bg-sky-500/18 hover:text-sky-900"
                     : "border-border/70 bg-background/80 text-foreground/80 hover:border-sky-200 hover:bg-muted/50"
                 )}
                 onClick={() => toggleObjectSelection(object)}

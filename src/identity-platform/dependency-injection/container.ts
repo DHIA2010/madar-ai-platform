@@ -40,6 +40,9 @@ import { GoogleAdsIntegrationProvider } from "../integrations/google-ads/provide
 import { GoogleIdentityIntegrationProvider } from "../integrations/google/provider"
 import { SnapchatAdsIntegrationProvider } from "../integrations/snapchat-ads/provider"
 import { MetaAdsIntegrationProvider } from "../integrations/meta-ads/provider"
+import { SallaIntegrationProvider } from "../integrations/salla/provider"
+import { ShopifyIntegrationProvider } from "../integrations/shopify/provider"
+import { GoogleAnalyticsIntegrationProvider } from "../integrations/google-analytics/provider"
 import { IntegrationProviderRegistry } from "../integrations/provider-registry"
 
 class SystemClock implements Clock {
@@ -94,6 +97,9 @@ export function createIdentityPlatformContainer(
     const integrations = new IntegrationProviderRegistry()
     integrations.register(new SnapchatAdsIntegrationProvider())
     integrations.register(new MetaAdsIntegrationProvider())
+    integrations.register(new SallaIntegrationProvider())
+    integrations.register(new ShopifyIntegrationProvider())
+    integrations.register(new GoogleAnalyticsIntegrationProvider())
     const repositories = createInMemoryRepositories(options.store)
     const commands = new IdentityCommandHandlers({
       config,
@@ -144,6 +150,9 @@ export function createIdentityPlatformContainer(
   const integrations = new IntegrationProviderRegistry()
   integrations.register(new SnapchatAdsIntegrationProvider(database))
   integrations.register(new MetaAdsIntegrationProvider(database))
+  integrations.register(new SallaIntegrationProvider(database))
+  integrations.register(new ShopifyIntegrationProvider(database))
+  integrations.register(new GoogleAnalyticsIntegrationProvider(database))
   const googleOAuthController = new GoogleOAuthController(
     new GoogleOAuthService(
       new GoogleOAuthRepository(database),

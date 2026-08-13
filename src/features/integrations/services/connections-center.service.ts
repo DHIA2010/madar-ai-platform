@@ -28,6 +28,17 @@ export const CONNECTOR_CATALOG: ConnectorCatalogEntry[] = [
     capabilities: ["products", "orders", "customers", "catalog", "media"],
   },
   {
+    connectorDefinitionId: "connector_def_shopify",
+    connectorId: "shopify",
+    key: "commerce.shopify",
+    displayName: "Shopify",
+    logo: "SH",
+    version: "1.0.0",
+    connectedAccountLabel: "Shopify Store Account",
+    workspaceLabel: "Madar Commerce",
+    capabilities: ["products", "orders", "customers", "catalog", "media"],
+  },
+  {
     connectorDefinitionId: "connector_def_zid",
     connectorId: "zid",
     key: "commerce.zid",

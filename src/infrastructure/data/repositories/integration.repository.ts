@@ -249,10 +249,74 @@ const META_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
   },
 }
 
+const SALLA_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "salla",
+  connectorId: "salla",
+  connectorDefinitionId: "connector_def_salla",
+  displayName: "Salla",
+  oauth: {
+    startPath: "/v1/integrations/salla/oauth/start",
+    activeConnectionPath: "/v1/integrations/salla/connection",
+    callbackStatusParam: "salla_oauth",
+    callbackConnectionIdParam: "salla_connection_id",
+    callbackAccountNameParam: "salla_account_name",
+    callbackAccountEmailParam: "salla_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/salla/sync",
+    records: "/v1/integrations/salla/records",
+    accounts: "/v1/integrations/salla/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
+  },
+  metadata: {
+    availableAccountsKey: "availableSallaCustomerAccounts",
+  },
+}
+
+const SHOPIFY_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "shopify",
+  connectorId: "shopify",
+  connectorDefinitionId: "connector_def_shopify",
+  displayName: "Shopify",
+  oauth: {
+    startPath: "/v1/integrations/shopify/oauth/start",
+    activeConnectionPath: "/v1/integrations/shopify/connection",
+    callbackStatusParam: "shopify_oauth",
+    callbackConnectionIdParam: "shopify_connection_id",
+    callbackAccountNameParam: "shopify_account_name",
+    callbackAccountEmailParam: "shopify_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/shopify/sync",
+    records: "/v1/integrations/shopify/records",
+    accounts: "/v1/integrations/shopify/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
+  },
+  metadata: {
+    availableAccountsKey: "availableShopifyCustomerAccounts",
+  },
+}
+
 const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = {
   [GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ADS_PROVIDER_PROFILE,
   [SNAPCHAT_ADS_PROVIDER_PROFILE.connectorDefinitionId]: SNAPCHAT_ADS_PROVIDER_PROFILE,
+  [SALLA_PROVIDER_PROFILE.connectorDefinitionId]: SALLA_PROVIDER_PROFILE,
   [META_ADS_PROVIDER_PROFILE.connectorDefinitionId]: META_ADS_PROVIDER_PROFILE,
+  [SHOPIFY_PROVIDER_PROFILE.connectorDefinitionId]: SHOPIFY_PROVIDER_PROFILE,
 }
 
 const DEFAULT_WORKSPACE_ID = "ws_connections_center"
@@ -565,12 +629,20 @@ export class RestIntegrationRepository implements IntegrationRepository {
       }
 
       const start = await this.client.post<
-        { workspaceId?: string | null; projectId?: string | null; connectionName?: string | null },
+        {
+          workspaceId?: string | null
+          projectId?: string | null
+          connectionName?: string | null
+          shopDomain?: string | null
+        },
         GoogleOAuthStartResponse
       >(providerProfile.oauth.startPath, {
         workspaceId: input.workspaceId,
         projectId: null,
         connectionName: input.metadata?.connectionName ?? input.metadata?.accountName ?? null,
+        // Only Shopify's oauthStart reads this -- every other provider's generic route
+        // ignores unrecognized fields, so it's safe to always send it.
+        shopDomain: input.metadata?.shopDomain ?? null,
       })
 
       const connection: Connection = {

@@ -72,6 +72,32 @@ const OAUTH_CALLBACK_PARAMS_BY_CONNECTOR_ID: Record<string, OAuthCallbackParamPr
       "meta_connected_at",
     ],
   },
+  salla: {
+    statusParam: "salla_oauth",
+    connectionIdParam: "salla_connection_id",
+    accountNameParam: "salla_account_name",
+    allParams: [
+      "salla_oauth",
+      "salla_connection_id",
+      "salla_project_id",
+      "salla_status",
+      "salla_account_name",
+      "salla_connected_at",
+    ],
+  },
+  shopify: {
+    statusParam: "shopify_oauth",
+    connectionIdParam: "shopify_connection_id",
+    accountNameParam: "shopify_account_name",
+    allParams: [
+      "shopify_oauth",
+      "shopify_connection_id",
+      "shopify_project_id",
+      "shopify_status",
+      "shopify_account_name",
+      "shopify_connected_at",
+    ],
+  },
 }
 
 const DEFAULT_FILTERS: ConnectionsFilterState = {

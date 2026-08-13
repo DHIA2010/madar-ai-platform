@@ -185,7 +185,9 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
               </div>
               <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 <div className="rounded-md border bg-background px-3 py-2">
-                  <dt className="text-xs text-muted-foreground">Connected Google Account</dt>
+                  <dt className="text-xs text-muted-foreground">
+                    Connected {record.platformName} Account
+                  </dt>
                   <dd className="mt-1 font-medium">
                     {record.connection.metadata.accountEmail?.trim() ||
                       record.connectedAccount ||

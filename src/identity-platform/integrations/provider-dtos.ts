@@ -3,6 +3,9 @@ export interface ProviderOAuthStartInputDto {
   workspaceId?: string | null
   projectId?: string | null
   connectionName?: string | null
+  // Shop-scoped providers (Shopify) need this to build a per-store authorize URL. Ignored
+  // by every other provider's oauthStart implementation.
+  shopDomain?: string | null
 }
 
 export interface ProviderOAuthStartResultDto {

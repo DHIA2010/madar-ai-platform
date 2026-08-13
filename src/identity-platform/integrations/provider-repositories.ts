@@ -27,6 +27,9 @@ export interface ProviderStateRecordInput {
   requestedScopes: string[]
   redirectUri: string
   expiresAt: string
+  // Shop-scoped providers (Shopify) need the shop known at state-creation time so the
+  // callback can build the right per-store token/API URLs. Ignored by other providers.
+  shopDomain?: string
 }
 
 export interface ProviderConnectionUpsertInput {
@@ -35,6 +38,9 @@ export interface ProviderConnectionUpsertInput {
   workspaceId: string | null
   projectId: string
   dataSourceId: string | null
+  // Shop-scoped providers (Shopify) need this to build a per-store API base URL. Ignored
+  // by other providers.
+  shopDomain?: string
   providerAccountId: string | null
   providerAccountName: string | null
   providerAccountEmail: string | null
@@ -65,8 +71,15 @@ export interface ProviderConnectionLifecycleRepository {
   upsertConnection(input: ProviderConnectionUpsertInput): Promise<void>
   findConnectionById(connectionId: string): Promise<IntegrationConnectionView | null>
   findConnectionOwnershipById(connectionId: string): Promise<ProviderConnectionOwnershipView | null>
-  findConnectionByProject(organizationId: string, projectId: string): Promise<IntegrationConnectionView | null>
-  saveEvent(connectionId: string, eventType: string, metadata: Record<string, unknown>): Promise<void>
+  findConnectionByProject(
+    organizationId: string,
+    projectId: string
+  ): Promise<IntegrationConnectionView | null>
+  saveEvent(
+    connectionId: string,
+    eventType: string,
+    metadata: Record<string, unknown>
+  ): Promise<void>
   appendAuditLog(input: {
     actorUserId: string
     organizationId: string

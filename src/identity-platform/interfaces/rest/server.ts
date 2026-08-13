@@ -14,6 +14,12 @@ import { SnapchatOAuthConnectionDeletionService } from "../../snapchat-oauth/con
 import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
 import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-deletion-service"
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
+import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
+import { SallaOAuthRepository } from "../../salla-oauth/repository"
+import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
+import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
+import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
+import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -323,7 +329,22 @@ export function createIdentityApiServer(
         new MetaOAuthRepository(container.infrastructure.database)
       )
     : null
+  const sallaOAuthDeletionService = container.infrastructure.database
+    ? new SallaOAuthConnectionDeletionService(
+        new SallaOAuthRepository(container.infrastructure.database)
+      )
+    : null
+  const shopifyOAuthDeletionService = container.infrastructure.database
+    ? new ShopifyOAuthConnectionDeletionService(
+        new ShopifyOAuthRepository(container.infrastructure.database)
+      )
+    : null
   const metaAdsCredentialsProvider = new EnvironmentFirstMetaAdsCredentialsProvider()
+  const googleAnalyticsOAuthDeletionService = container.infrastructure.database
+    ? new GoogleAnalyticsOAuthConnectionDeletionService(
+        new GoogleAnalyticsOAuthRepository(container.infrastructure.database)
+      )
+    : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
   // (confirmed by inspection -- only Google/Snapchat connectors exist), so this default is a
   // new choice, not a change to an existing pinned version. Override via env if needed.
@@ -781,7 +802,10 @@ export function createIdentityApiServer(
         if (
           !googleOAuthDeletionService &&
           !snapchatOAuthDeletionService &&
-          !metaOAuthDeletionService
+          !metaOAuthDeletionService &&
+          !sallaOAuthDeletionService &&
+          !shopifyOAuthDeletionService &&
+          !googleAnalyticsOAuthDeletionService
         ) {
           return send(503, {
             code: "INTEGRATION_OAUTH_UNAVAILABLE",
@@ -824,6 +848,49 @@ export function createIdentityApiServer(
           } catch (error) {
             const isNotFound =
               error instanceof IdentityError && error.code === "META_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && sallaOAuthDeletionService) {
+          try {
+            await sallaOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError && error.code === "SALLA_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && shopifyOAuthDeletionService) {
+          try {
+            await shopifyOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError && error.code === "SHOPIFY_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && googleAnalyticsOAuthDeletionService) {
+          try {
+            await googleAnalyticsOAuthDeletionService.deleteConnection(
+              actor,
+              deleteIntegrationMatch[1]
+            )
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError &&
+              error.code === "GOOGLE_ANALYTICS_OAUTH_CONNECTION_NOT_FOUND"
             if (!isNotFound) {
               throw error
             }
