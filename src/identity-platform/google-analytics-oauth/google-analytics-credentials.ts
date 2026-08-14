@@ -101,7 +101,9 @@ export class AwsSecretsGoogleAnalyticsOAuthCredentialsProvider implements Google
     return validateCredentials({
       clientId: String(parsed.clientId ?? "").trim(),
       clientSecret: String(parsed.clientSecret ?? "").trim(),
-      redirectUri: String(parsed.redirectUri ?? "").trim() || undefined,
+      // The secret stores this key as redirectUrl -- read both spellings defensively
+      // (same fix applied to shopify-credentials.ts for the identical mismatch).
+      redirectUri: String(parsed.redirectUrl ?? parsed.redirectUri ?? "").trim() || undefined,
     })
   }
 }

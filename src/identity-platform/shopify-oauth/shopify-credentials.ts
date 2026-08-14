@@ -97,7 +97,10 @@ export class AwsSecretsShopifyOAuthCredentialsProvider implements ShopifyOAuthCr
     return validateCredentials({
       clientId: String(parsed.clientId ?? "").trim(),
       clientSecret: String(parsed.clientSecret ?? "").trim(),
-      redirectUri: String(parsed.redirectUri ?? "").trim() || undefined,
+      // The secret currently stores this key as redirectUrl -- read both spellings
+      // defensively so this keeps working if it's ever renamed back to redirectUri
+      // (the spelling every other connector's secret uses).
+      redirectUri: String(parsed.redirectUrl ?? parsed.redirectUri ?? "").trim() || undefined,
     })
   }
 }

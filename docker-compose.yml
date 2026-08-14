@@ -102,6 +102,14 @@ services:
       - .env.local
     environment:
       NODE_ENV: development
+      # Local containers have no path to the EC2 instance-metadata service that the AWS SDK's
+      # default credential chain tries when no explicit credentials are found -- without this,
+      # that lookup hangs until it times out (the ETIMEDOUT seen when a connector's CLIENT_ID/
+      # SECRET aren't set locally and it falls through to the AWS Secrets Manager fallback).
+      # Disabling it makes a genuinely-missing-credentials failure instant and clear instead.
+      # Stage/prod are unaffected: Fargate injects credentials via a separate mechanism
+      # (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI), not EC2 instance metadata.
+      AWS_EC2_METADATA_DISABLED: "true"
       IDENTITY_PLATFORM_PORT: ${BACKEND_PORT:-4000}
       IDENTITY_PLATFORM_N8N_BASE_URL: ${IDENTITY_PLATFORM_N8N_BASE_URL:-http://n8n:5678}
       IDENTITY_PLATFORM_N8N_API_BASE_URL: ${IDENTITY_PLATFORM_N8N_API_BASE_URL:-http://n8n:5678/api/v1}
