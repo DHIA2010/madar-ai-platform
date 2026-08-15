@@ -984,12 +984,20 @@ export function ConnectionsOverview() {
                   })
 
                   const handleRunSync = async () => {
+                    const connectionId = record.connection.connectionId
+                    setSyncProgress((prev) => ({ ...prev, [connectionId]: "running" }))
                     try {
-                      await runSync(record.connection.connectionId)
+                      await runSync(connectionId)
                       toast.success("Sync started successfully.")
                     } catch (error) {
                       const message = error instanceof Error ? error.message : "Failed to run sync."
                       toast.error(message)
+                    } finally {
+                      setSyncProgress((prev) => {
+                        const next = { ...prev }
+                        delete next[connectionId]
+                        return next
+                      })
                     }
                   }
 
@@ -1121,10 +1129,17 @@ export function ConnectionsOverview() {
                             size="sm"
                             className="h-8 rounded-md px-3 shadow-sm transition-all hover:shadow"
                             onClick={() => void handleRunSync()}
-                            disabled={!runSyncAction.enabled}
-                            title={runSyncAction.disabledReason}
+                            disabled={!runSyncAction.enabled || isSyncing}
+                            title={isSyncing ? "Sync in progress..." : runSyncAction.disabledReason}
                           >
-                            {runSyncAction.label}
+                            {isSyncing ? (
+                              <>
+                                <Loader2 className="mr-2 size-4 animate-spin" />
+                                Syncing...
+                              </>
+                            ) : (
+                              runSyncAction.label
+                            )}
                           </AppButton>
 
                           <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
