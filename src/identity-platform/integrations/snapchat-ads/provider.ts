@@ -4,6 +4,8 @@ import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { SnapchatOAuthController } from "../../snapchat-oauth/controller"
 import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
 import { SnapchatOAuthService } from "../../snapchat-oauth/service"
+import { SnapchatSyncRepository } from "../../snapchat-oauth/sync-repository"
+import { SnapchatSyncService } from "../../snapchat-oauth/sync-service"
 import type { SnapchatOAuthConnectionView } from "../../snapchat-oauth/types"
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 
@@ -17,27 +19,6 @@ import type {
   IntegrationProviderSyncInput,
 } from "../provider-contracts"
 
-interface SnapchatSyncResult {
-  id: string
-  connectionId: string
-  provider: "snapchat-ads"
-  status: "completed"
-  startedAt: string
-  completedAt: string
-  metrics: Record<string, number>
-  mode: "initial"
-}
-
-interface SnapchatRecordItem {
-  id: string
-  entityType: string
-  customerId: string
-  entityId: string
-  recordDate: string
-  payload: Record<string, unknown>
-  updatedAt: string
-}
-
 export class SnapchatAdsIntegrationProvider {
   readonly providerId = "snapchat-ads"
   readonly displayName = "Snapchat Ads"
@@ -45,12 +26,18 @@ export class SnapchatAdsIntegrationProvider {
   private readonly repository?: SnapchatOAuthRepository
   private readonly service?: SnapchatOAuthService
   private readonly controller?: SnapchatOAuthController
+  private readonly syncService?: SnapchatSyncService
 
   constructor(database?: PostgresDatabase) {
     if (database) {
       this.repository = new SnapchatOAuthRepository(database)
       this.service = new SnapchatOAuthService(this.repository)
       this.controller = new SnapchatOAuthController(this.service)
+      this.syncService = new SnapchatSyncService(
+        this.repository,
+        new SnapchatSyncRepository(database),
+        this.service
+      )
     }
   }
 
@@ -93,6 +80,19 @@ export class SnapchatAdsIntegrationProvider {
     return this.service
   }
 
+  private requireSyncService() {
+    if (!this.syncService) {
+      throw new IntegrationProviderError(
+        "Snapchat sync service unavailable.",
+        "SNAPCHAT_OAUTH_UNAVAILABLE",
+        false,
+        503
+      )
+    }
+
+    return this.syncService
+  }
+
   private assertConnectionOwnership(
     connection: SnapchatOAuthConnectionView | null,
     actor: AuthenticatedActor
@@ -131,54 +131,8 @@ export class SnapchatAdsIntegrationProvider {
     return this.requireController().getActiveConnection(actor)
   }
 
-  async sync(
-    actor: AuthenticatedActor,
-    input: IntegrationProviderSyncInput
-  ): Promise<SnapchatSyncResult> {
-    const repository = this.requireRepository()
-    const service = this.requireService()
-
-    const connection = await repository.findConnectionById(input.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Snapchat Ads connection is not connected.",
-        "SNAPCHAT_ADS_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const selected = await repository.findAccessibleCustomerAccount(
-      input.connectionId,
-      input.customerId
-    )
-    if (!selected) {
-      throw new IntegrationProviderError(
-        "Snapchat Ads account is not accessible for this connection.",
-        "SNAPCHAT_ADS_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    await service.resolveAccessToken(input.connectionId)
-
-    return {
-      id: input.idempotencyKey,
-      connectionId: input.connectionId,
-      provider: "snapchat-ads",
-      status: "completed",
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      mode: "initial",
-      metrics: {
-        campaigns: 0,
-        ads: 0,
-        totalRecords: 0,
-      },
-    }
+  async sync(actor: AuthenticatedActor, input: IntegrationProviderSyncInput) {
+    return this.requireSyncService().sync(actor, input)
   }
 
   async listAccounts(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
@@ -204,53 +158,8 @@ export class SnapchatAdsIntegrationProvider {
     }))
   }
 
-  async listRecords(
-    actor: AuthenticatedActor,
-    query: IntegrationProviderRecordQuery
-  ): Promise<SnapchatRecordItem[]> {
-    const repository = this.requireRepository()
-
-    const connection = await repository.findConnectionById(query.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Snapchat Ads connection is not connected.",
-        "SNAPCHAT_ADS_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const account = await repository.findAccessibleCustomerAccount(
-      query.connectionId,
-      query.customerId
-    )
-    if (!account) {
-      throw new IntegrationProviderError(
-        "Snapchat Ads account is not accessible for this connection.",
-        "SNAPCHAT_ADS_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    const recordDate = query.startDate ?? new Date().toISOString().slice(0, 10)
-
-    return [
-      {
-        id: `${query.customerId}:snapshot:0`,
-        entityType: query.entityType ?? "initial_sync_marker",
-        customerId: query.customerId,
-        entityId: account.customerId,
-        recordDate,
-        payload: {
-          stage: "initial_sync_skeleton",
-          status: "completed",
-        },
-        updatedAt: new Date().toISOString(),
-      },
-    ]
+  async listRecords(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery) {
+    return this.requireSyncService().listRecords(actor, query)
   }
 
   async getSelectedAccount(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
