@@ -35,9 +35,12 @@ const MAX_STATS_WINDOWS = 40
 // live); this lower value plus the retry-with-backoff in fetchStatsWindow keeps 429s rare.
 const STATS_WINDOW_CONCURRENCY = 4
 const STATS_WINDOW_MAX_RETRIES = 4
-// Confirmed against the live API: querying AdAccount-level stats only accepts "spend" --
-// other fields (impressions, swipes) are only available at campaign/ad/creative level.
-const STATS_FIELDS = "spend"
+// Plain AdAccount-level stats only accept "spend" (confirmed live), but that restriction is
+// lifted when using breakdown=campaign (confirmed against Snapchat's docs) -- so this fetches
+// the full field set broken out per campaign in the same request, rather than an
+// account-wide total. Snapchat has no literal "clicks"/"ctr" fields; "swipes" is the
+// swipe-up equivalent of a click, and "swipe_up_percent" is its pre-computed CTR equivalent.
+const STATS_FIELDS = "spend,impressions,swipes,swipe_up_percent"
 
 // Computes the UTC offset (in minutes, local = UTC + offset) that `timeZone` observes at
 // `date` -- needed because Snapchat's DAY-granularity Stats API requires start_time/end_time
@@ -90,6 +93,16 @@ interface SnapchatCampaignApiRow {
   [key: string]: unknown
 }
 
+interface SnapchatAdSquadApiRow {
+  id: string
+  name?: string
+  status?: string
+  campaign_id?: string
+  created_at?: string
+  updated_at?: string
+  [key: string]: unknown
+}
+
 interface SnapchatAdApiRow {
   id: string
   name?: string
@@ -100,11 +113,17 @@ interface SnapchatAdApiRow {
   [key: string]: unknown
 }
 
-interface SnapchatDailyStat {
-  start_time: string
-  end_time?: string
-  stats?: Record<string, unknown>
-  [key: string]: unknown
+// One row per entity (campaign or ad) per day, produced by flattening the account-level Stats
+// endpoint's breakdown=campaign / breakdown=ad response (see fetchStatsWindow). Ad-squad-level
+// daily stats are derived from the ad-level rows (see deriveAdSquadDailyStats) rather than
+// fetched directly, since Snapchat only supports breakdown=adsquad at the CAMPAIGN level --
+// fetching that directly would mean one call per campaign per window, which doesn't scale to
+// accounts with many campaigns without risking the same timeout this session already hit twice.
+interface SnapchatBreakdownDailyStat {
+  entityId: string
+  startTime: string
+  endTime?: string
+  stats: Record<string, unknown>
 }
 
 function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
@@ -216,10 +235,12 @@ async function fetchStatsWindow(input: {
   accountId: string
   accessToken: string
   fields: string
+  breakdown: "campaign" | "ad"
   window: { start: Date; end: Date }
-}): Promise<SnapchatDailyStat[]> {
+}): Promise<SnapchatBreakdownDailyStat[]> {
   const statsUrl = new URL(`${input.apiBaseUrl}/adaccounts/${input.accountId}/stats`)
   statsUrl.searchParams.set("granularity", "DAY")
+  statsUrl.searchParams.set("breakdown", input.breakdown)
   statsUrl.searchParams.set("start_time", input.window.start.toISOString())
   statsUrl.searchParams.set("end_time", input.window.end.toISOString())
   statsUrl.searchParams.set("fields", input.fields)
@@ -257,12 +278,37 @@ async function fetchStatsWindow(input: {
     )
   }
 
+  // NOTE: this connected ad account currently has zero campaigns, so the exact
+  // breakdown + DAY-granularity response shape below is extrapolated from Snapchat's
+  // documented TOTAL-granularity breakdown example (which nests breakdown_stats.<type>[]
+  // under total_stat) rather than confirmed against a real response -- everything else in
+  // this file was verified live. If this comes back empty once real campaigns exist, check
+  // the actual response shape before assuming the fields are wrong.
   const body = (await response.json()) as {
-    timeseries_stats?: Array<{ timeseries_stat?: { timeseries?: SnapchatDailyStat[] } }>
+    timeseries_stats?: Array<{
+      timeseries_stat?: {
+        timeseries?: Array<{
+          start_time: string
+          end_time?: string
+          breakdown_stats?: Record<string, Array<{ id?: string; stats?: Record<string, unknown> }>>
+        }>
+      }
+    }>
   }
-  const results: SnapchatDailyStat[] = []
+
+  const results: SnapchatBreakdownDailyStat[] = []
   for (const entry of body.timeseries_stats ?? []) {
-    results.push(...(entry.timeseries_stat?.timeseries ?? []))
+    for (const day of entry.timeseries_stat?.timeseries ?? []) {
+      for (const item of day.breakdown_stats?.[input.breakdown] ?? []) {
+        if (!item.id) continue
+        results.push({
+          entityId: item.id,
+          startTime: day.start_time,
+          endTime: day.end_time,
+          stats: item.stats ?? {},
+        })
+      }
+    }
   }
   return results
 }
@@ -280,9 +326,10 @@ async function fetchDailyStatsAllWindows(input: {
   accessToken: string
   timeZone: string
   fields: string
-}): Promise<SnapchatDailyStat[]> {
+  breakdown: "campaign" | "ad"
+}): Promise<SnapchatBreakdownDailyStat[]> {
   const windows = buildStatsWindows(input.timeZone)
-  const results: SnapchatDailyStat[] = []
+  const results: SnapchatBreakdownDailyStat[] = []
   let cursor = 0
 
   async function worker() {
@@ -294,6 +341,7 @@ async function fetchDailyStatsAllWindows(input: {
         accountId: input.accountId,
         accessToken: input.accessToken,
         fields: input.fields,
+        breakdown: input.breakdown,
         window: windows[index],
       })
       results.push(...chunk)
@@ -305,6 +353,44 @@ async function fetchDailyStatsAllWindows(input: {
   )
 
   return results
+}
+
+// Snapchat only supports breakdown=adsquad at the CAMPAIGN level (one call per campaign per
+// window), which doesn't scale the same way account-level breakdown=campaign/ad does. Since
+// every ad already carries its own ad_squad_id (from the ads list), ad-squad daily totals can
+// be derived by summing the already-fetched ad-level daily stats grouped by ad squad -- zero
+// extra API calls, and mathematically equivalent to what Snapchat's own adsquad breakdown
+// would return (an ad squad's daily total is exactly the sum of its ads' daily totals).
+function deriveAdSquadDailyStats(input: {
+  adDailyStats: SnapchatBreakdownDailyStat[]
+  adSquadIdByAdId: Map<string, string>
+}): SnapchatBreakdownDailyStat[] {
+  const grouped = new Map<string, SnapchatBreakdownDailyStat>()
+
+  for (const stat of input.adDailyStats) {
+    const adSquadId = input.adSquadIdByAdId.get(stat.entityId)
+    if (!adSquadId) continue
+
+    const key = `${adSquadId}:${stat.startTime}`
+    const existing = grouped.get(key)
+    if (!existing) {
+      grouped.set(key, {
+        entityId: adSquadId,
+        startTime: stat.startTime,
+        endTime: stat.endTime,
+        stats: { ...stat.stats },
+      })
+      continue
+    }
+
+    for (const [field, value] of Object.entries(stat.stats)) {
+      if (typeof value !== "number") continue
+      const current = existing.stats[field]
+      existing.stats[field] = (typeof current === "number" ? current : 0) + value
+    }
+  }
+
+  return Array.from(grouped.values())
 }
 
 export class SnapchatSyncService {
@@ -401,12 +487,18 @@ export class SnapchatSyncService {
       // Stats query whose start_time/end_time aren't exactly local midnight in that timezone.
       const timeZone = account.timeZone ?? "UTC"
 
-      const [campaigns, ads, dailyStats] = await Promise.all([
+      const [campaigns, adSquads, ads] = await Promise.all([
         fetchAllPagesByNextLink<SnapchatCampaignApiRow>({
           initialUrl: `${base}/adaccounts/${accountId}/campaigns`,
           accessToken,
           listKey: "campaigns",
           singularKey: "campaign",
+        }),
+        fetchAllPagesByNextLink<SnapchatAdSquadApiRow>({
+          initialUrl: `${base}/adaccounts/${accountId}/adsquads`,
+          accessToken,
+          listKey: "adsquads",
+          singularKey: "adsquad",
         }),
         fetchAllPagesByNextLink<SnapchatAdApiRow>({
           initialUrl: `${base}/adaccounts/${accountId}/ads`,
@@ -414,14 +506,54 @@ export class SnapchatSyncService {
           listKey: "ads",
           singularKey: "ad",
         }),
+      ])
+
+      // Campaign- and ad-level daily stats are each a single windowed series at the account
+      // level (breakdown=campaign / breakdown=ad); ad-squad-level is derived from the ad-level
+      // rows below rather than fetched directly (see deriveAdSquadDailyStats).
+      const [campaignDailyStats, adDailyStats] = await Promise.all([
         fetchDailyStatsAllWindows({
           apiBaseUrl: base,
           accountId,
           accessToken,
           timeZone,
           fields: STATS_FIELDS,
+          breakdown: "campaign",
+        }),
+        fetchDailyStatsAllWindows({
+          apiBaseUrl: base,
+          accountId,
+          accessToken,
+          timeZone,
+          fields: STATS_FIELDS,
+          breakdown: "ad",
         }),
       ])
+
+      const adSquadIdByAdId = new Map(
+        ads
+          .map((ad) => [String(ad.id), ad.ad_squad_id ? String(ad.ad_squad_id) : null] as const)
+          .filter((entry): entry is [string, string] => entry[1] !== null)
+      )
+      const adSquadDailyStats = deriveAdSquadDailyStats({ adDailyStats, adSquadIdByAdId })
+
+      function statRecords(
+        level: "campaign" | "ad_squad" | "ad",
+        stats: SnapchatBreakdownDailyStat[]
+      ) {
+        return stats.map((stat) => ({
+          entityType: "stats" as const,
+          entityId: `${stat.entityId}:${stat.startTime}`,
+          recordDate: toRecordDate([stat.startTime]),
+          payload: {
+            level,
+            entityId: stat.entityId,
+            startTime: stat.startTime,
+            endTime: stat.endTime,
+            ...stat.stats,
+          } as Record<string, unknown>,
+        }))
+      }
 
       const records: SnapchatSyncRecordInput[] = [
         ...campaigns.map((campaign) => ({
@@ -430,18 +562,21 @@ export class SnapchatSyncService {
           recordDate: toRecordDate([campaign.updated_at, campaign.created_at]),
           payload: campaign as Record<string, unknown>,
         })),
+        ...adSquads.map((adSquad) => ({
+          entityType: "ad_squads" as const,
+          entityId: String(adSquad.id),
+          recordDate: toRecordDate([adSquad.updated_at, adSquad.created_at]),
+          payload: adSquad as Record<string, unknown>,
+        })),
         ...ads.map((ad) => ({
           entityType: "ads" as const,
           entityId: String(ad.id),
           recordDate: toRecordDate([ad.updated_at, ad.created_at]),
           payload: ad as Record<string, unknown>,
         })),
-        ...dailyStats.map((stat) => ({
-          entityType: "stats" as const,
-          entityId: `${accountId}:${stat.start_time}`,
-          recordDate: toRecordDate([stat.start_time]),
-          payload: stat as Record<string, unknown>,
-        })),
+        ...statRecords("campaign", campaignDailyStats),
+        ...statRecords("ad_squad", adSquadDailyStats),
+        ...statRecords("ad", adDailyStats),
       ]
 
       const totalWritten = await this.syncRepository.upsertRecords({
@@ -452,8 +587,9 @@ export class SnapchatSyncService {
 
       const metrics = {
         campaigns: campaigns.length,
+        adSquads: adSquads.length,
         ads: ads.length,
-        stats: dailyStats.length,
+        stats: campaignDailyStats.length + adSquadDailyStats.length + adDailyStats.length,
         totalRecords: totalWritten,
       }
 

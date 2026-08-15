@@ -20,11 +20,20 @@ let server: ReturnType<typeof createIdentityApiServer>
 let baseUrl = ""
 let container: ReturnType<typeof createIdentityPlatform>
 
+interface MockBreakdownDailyStat {
+  entityId: string
+  startTime: string
+  endTime?: string
+  stats: Record<string, unknown>
+}
+
 interface MockSnapchatDataConfig {
   campaigns?: Array<Record<string, unknown>>
   campaignsPageSize?: number
+  adSquads?: Array<Record<string, unknown>>
   ads?: Array<Record<string, unknown>>
-  dailyStats?: Array<Record<string, unknown>>
+  campaignDailyStats?: MockBreakdownDailyStat[]
+  adDailyStats?: MockBreakdownDailyStat[]
   campaignsShouldFail?: boolean
 }
 
@@ -77,8 +86,10 @@ function mockSnapchatResponses(input: {
   const nativeFetch = globalThis.fetch
   const campaigns = input.data?.campaigns ?? []
   const campaignsPageSize = input.data?.campaignsPageSize ?? 250
+  const adSquads = input.data?.adSquads ?? []
   const ads = input.data?.ads ?? []
-  const dailyStats = input.data?.dailyStats ?? []
+  const campaignDailyStats = input.data?.campaignDailyStats ?? []
+  const adDailyStats = input.data?.adDailyStats ?? []
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
     const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
@@ -150,6 +161,16 @@ function mockSnapchatResponses(input: {
       })
     }
 
+    if (url.includes(`/adaccounts/${input.accountId}/adsquads`)) {
+      return paginateSnapchatStyle({
+        url,
+        items: adSquads,
+        listKey: "adsquads",
+        singularKey: "adsquad",
+        pageSize: 250,
+      })
+    }
+
     if (url.includes(`/adaccounts/${input.accountId}/ads`)) {
       return paginateSnapchatStyle({
         url,
@@ -161,17 +182,36 @@ function mockSnapchatResponses(input: {
     }
 
     if (url.includes(`/adaccounts/${input.accountId}/stats`)) {
-      // The real sync-service walks the 90-day window in <=32-day chunks (Snapchat's own
-      // limit), issuing several requests -- filter fixture entries by the requested
-      // start_time/end_time so each chunk only returns its own days, matching real behavior
-      // instead of returning every fixture entry for every chunk.
+      // The real sync-service walks the account's history in <=32-day chunks (Snapchat's own
+      // limit), issuing several requests per breakdown type -- filter fixture entries by the
+      // requested start_time/end_time so each chunk only returns its own days, and by the
+      // requested breakdown (campaign vs ad) so each series only returns its own entries,
+      // matching real behavior. Groups by day and nests under breakdown_stats.<type>[] to
+      // match the real breakdown response shape.
       const parsed = new URL(url)
       const windowStart = new Date(parsed.searchParams.get("start_time") ?? 0).getTime()
       const windowEnd = new Date(parsed.searchParams.get("end_time") ?? 0).getTime()
-      const windowStats = dailyStats.filter((stat) => {
-        const statTime = new Date(String(stat.start_time)).getTime()
+      const breakdown = parsed.searchParams.get("breakdown") ?? "campaign"
+      const source = breakdown === "ad" ? adDailyStats : campaignDailyStats
+      const windowStats = source.filter((stat) => {
+        const statTime = new Date(stat.startTime).getTime()
         return statTime >= windowStart && statTime < windowEnd
       })
+
+      const byDay = new Map<string, MockBreakdownDailyStat[]>()
+      for (const stat of windowStats) {
+        const existing = byDay.get(stat.startTime) ?? []
+        existing.push(stat)
+        byDay.set(stat.startTime, existing)
+      }
+
+      const timeseries = Array.from(byDay.entries()).map(([startTime, entries]) => ({
+        start_time: startTime,
+        end_time: entries[0]?.endTime,
+        breakdown_stats: {
+          [breakdown]: entries.map((entry) => ({ id: entry.entityId, stats: entry.stats })),
+        },
+      }))
 
       return new Response(
         JSON.stringify({
@@ -183,7 +223,7 @@ function mockSnapchatResponses(input: {
                 id: input.accountId,
                 type: "AD_ACCOUNT",
                 granularity: "DAY",
-                timeseries: windowStats,
+                timeseries,
               },
             },
           ],
@@ -370,18 +410,32 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
       status: "ACTIVE",
       updated_at: "2026-01-01T00:00:00Z",
     }))
-    const ads = [{ id: "ad-1", ad_squad_id: "sq-1", updated_at: "2026-01-02T00:00:00Z" }]
-    // The real sync-service requests a rolling 90-day window ending "today" -- fixture dates
-    // must fall inside that window regardless of when the test runs, so these are relative to
-    // now rather than fixed calendar dates.
+    const adSquads = [{ id: "sq-1", campaign_id: "camp-0", updated_at: "2026-01-02T00:00:00Z" }]
+    const ads = [
+      { id: "ad-1", ad_squad_id: "sq-1", updated_at: "2026-01-02T00:00:00Z" },
+      { id: "ad-2", ad_squad_id: "sq-1", updated_at: "2026-01-02T00:00:00Z" },
+    ]
+    // The real sync-service requests a window from 2025-01-01 to "today" -- fixture dates just
+    // need to fall inside that (any recent date relative to "now" works regardless of when the
+    // test runs).
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     const daysAgo = (n: number) => new Date(today.getTime() - n * 24 * 60 * 60 * 1000).toISOString()
     const statDayMinus2 = daysAgo(2)
     const statDayMinus1 = daysAgo(1)
-    const dailyStats = [
-      { start_time: statDayMinus2, stats: { impressions: 100, spend: 500 } },
-      { start_time: statDayMinus1, stats: { impressions: 120, spend: 600 } },
+    const campaignDailyStats: MockBreakdownDailyStat[] = [
+      { entityId: "camp-0", startTime: statDayMinus2, stats: { impressions: 100, spend: 500 } },
+      { entityId: "camp-0", startTime: statDayMinus1, stats: { impressions: 120, spend: 600 } },
+      // Second campaign on the same day, to prove breakdown=campaign actually splits by
+      // campaign rather than collapsing to one account-level row per day.
+      { entityId: "camp-1", startTime: statDayMinus1, stats: { impressions: 40, spend: 200 } },
+    ]
+    // Both ads belong to ad squad sq-1 -- their sum on statDayMinus1 (impressions: 50,
+    // spend: 250) proves ad-squad-level stats are correctly derived by aggregation rather
+    // than fetched directly.
+    const adDailyStats: MockBreakdownDailyStat[] = [
+      { entityId: "ad-1", startTime: statDayMinus1, stats: { impressions: 30, spend: 150 } },
+      { entityId: "ad-2", startTime: statDayMinus1, stats: { impressions: 20, spend: 100 } },
     ]
 
     mockSnapchatResponses({
@@ -392,7 +446,14 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
       organizationName: "Sync Org",
       accountId,
       accountName: "Sync Test Account",
-      data: { campaigns, campaignsPageSize: 15, ads, dailyStats },
+      data: {
+        campaigns,
+        campaignsPageSize: 15,
+        adSquads,
+        ads,
+        campaignDailyStats,
+        adDailyStats,
+      },
     })
 
     const started = await connectSnapchat({ login, workspaceId })
@@ -417,19 +478,38 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     }
     expect(syncResult.status).toBe("completed")
     expect(syncResult.metrics.campaigns).toBe(17)
-    expect(syncResult.metrics.ads).toBe(1)
-    expect(syncResult.metrics.stats).toBe(2)
-    expect(syncResult.metrics.totalRecords).toBe(20)
+    expect(syncResult.metrics.adSquads).toBe(1)
+    expect(syncResult.metrics.ads).toBe(2)
+    // 3 campaign-days + 1 ad-squad-day (derived) + 2 ad-days = 6.
+    expect(syncResult.metrics.stats).toBe(6)
+    expect(syncResult.metrics.totalRecords).toBe(26)
 
-    const recordRows = await database.query<{ entity_type: string; entity_id: string }>(
-      `select entity_type, entity_id from snapchat_records where connection_id = $1`,
-      [started.connectionId]
-    )
-    expect(recordRows.rows).toHaveLength(20)
+    const recordRows = await database.query<{
+      entity_type: string
+      entity_id: string
+      payload: Record<string, unknown>
+    }>(`select entity_type, entity_id, payload from snapchat_records where connection_id = $1`, [
+      started.connectionId,
+    ])
+    expect(recordRows.rows).toHaveLength(26)
     expect(recordRows.rows.filter((r) => r.entity_type === "campaigns")).toHaveLength(17)
+    expect(recordRows.rows.filter((r) => r.entity_type === "ad_squads")).toHaveLength(1)
+    expect(recordRows.rows.filter((r) => r.entity_type === "ads")).toHaveLength(2)
     // Confirms next_link cursor pagination actually walked past page 1 (15 campaigns).
     expect(recordRows.rows.some((r) => r.entity_id === "camp-16")).toBe(true)
-    expect(recordRows.rows.some((r) => r.entity_id === `${accountId}:${statDayMinus2}`)).toBe(true)
+    // Confirms breakdown=campaign actually splits stats per campaign, not one row per account.
+    expect(recordRows.rows.some((r) => r.entity_id === `camp-0:${statDayMinus2}`)).toBe(true)
+    expect(recordRows.rows.some((r) => r.entity_id === `camp-1:${statDayMinus1}`)).toBe(true)
+    // Confirms ad-level stats were fetched per-ad.
+    expect(recordRows.rows.some((r) => r.entity_id === `ad-1:${statDayMinus1}`)).toBe(true)
+    expect(recordRows.rows.some((r) => r.entity_id === `ad-2:${statDayMinus1}`)).toBe(true)
+    // Confirms ad-squad-level stats were correctly derived by summing ad-1 + ad-2's stats
+    // (impressions: 30+20=50, spend: 150+100=250), not fetched via a separate API call.
+    const squadStatRow = recordRows.rows.find((r) => r.entity_id === `sq-1:${statDayMinus1}`)
+    expect(squadStatRow).toBeTruthy()
+    expect(squadStatRow?.payload.impressions).toBe(50)
+    expect(squadStatRow?.payload.spend).toBe(250)
+    expect(squadStatRow?.payload.level).toBe("ad_squad")
 
     const recordsResponse = await fetch(
       `${baseUrl}/v1/integrations/snapchat-ads/records?connectionId=${started.connectionId}&customerId=${accountId}&entityType=ads`,
@@ -442,8 +522,8 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     )
     expect(recordsResponse.status).toBe(200)
     const recordsBody = (await recordsResponse.json()) as { items: Array<{ entityId: string }> }
-    expect(recordsBody.items).toHaveLength(1)
-    expect(recordsBody.items[0]?.entityId).toBe("ad-1")
+    expect(recordsBody.items).toHaveLength(2)
+    expect(recordsBody.items.map((item) => item.entityId).sort()).toEqual(["ad-1", "ad-2"])
   })
 
   it("is idempotent: re-running sync with the same idempotencyKey does not re-fetch from Snapchat", async () => {
@@ -472,7 +552,9 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
       data: {
         campaigns: [{ id: "camp-1", updated_at: "2026-01-01T00:00:00Z" }],
         ads: [],
-        dailyStats: [],
+        adSquads: [],
+        campaignDailyStats: [],
+        adDailyStats: [],
       },
     })
 
