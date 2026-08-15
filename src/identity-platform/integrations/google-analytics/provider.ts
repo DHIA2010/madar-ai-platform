@@ -4,6 +4,8 @@ import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { GoogleAnalyticsOAuthController } from "../../google-analytics-oauth/controller"
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import { GoogleAnalyticsOAuthService } from "../../google-analytics-oauth/service"
+import { GoogleAnalyticsSyncRepository } from "../../google-analytics-oauth/sync-repository"
+import { GoogleAnalyticsSyncService } from "../../google-analytics-oauth/sync-service"
 import type { GoogleAnalyticsOAuthConnectionView } from "../../google-analytics-oauth/types"
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 
@@ -17,27 +19,6 @@ import type {
   IntegrationProviderSyncInput,
 } from "../provider-contracts"
 
-interface GoogleAnalyticsSyncResult {
-  id: string
-  connectionId: string
-  provider: "google-analytics"
-  status: "completed"
-  startedAt: string
-  completedAt: string
-  metrics: Record<string, number>
-  mode: "initial"
-}
-
-interface GoogleAnalyticsRecordItem {
-  id: string
-  entityType: string
-  customerId: string
-  entityId: string
-  recordDate: string
-  payload: Record<string, unknown>
-  updatedAt: string
-}
-
 export class GoogleAnalyticsIntegrationProvider {
   readonly providerId = "google-analytics"
   readonly displayName = "Google Analytics"
@@ -45,12 +26,18 @@ export class GoogleAnalyticsIntegrationProvider {
   private readonly repository?: GoogleAnalyticsOAuthRepository
   private readonly service?: GoogleAnalyticsOAuthService
   private readonly controller?: GoogleAnalyticsOAuthController
+  private readonly syncService?: GoogleAnalyticsSyncService
 
   constructor(database?: PostgresDatabase) {
     if (database) {
       this.repository = new GoogleAnalyticsOAuthRepository(database)
       this.service = new GoogleAnalyticsOAuthService(this.repository)
       this.controller = new GoogleAnalyticsOAuthController(this.service)
+      this.syncService = new GoogleAnalyticsSyncService(
+        this.repository,
+        new GoogleAnalyticsSyncRepository(database),
+        this.service
+      )
     }
   }
 
@@ -93,6 +80,19 @@ export class GoogleAnalyticsIntegrationProvider {
     return this.service
   }
 
+  private requireSyncService() {
+    if (!this.syncService) {
+      throw new IntegrationProviderError(
+        "Google Analytics sync service unavailable.",
+        "GOOGLE_ANALYTICS_OAUTH_UNAVAILABLE",
+        false,
+        503
+      )
+    }
+
+    return this.syncService
+  }
+
   private assertConnectionOwnership(
     connection: GoogleAnalyticsOAuthConnectionView | null,
     actor: AuthenticatedActor
@@ -131,56 +131,8 @@ export class GoogleAnalyticsIntegrationProvider {
     return this.requireController().getActiveConnection(actor)
   }
 
-  async sync(
-    actor: AuthenticatedActor,
-    input: IntegrationProviderSyncInput
-  ): Promise<GoogleAnalyticsSyncResult> {
-    const repository = this.requireRepository()
-    const service = this.requireService()
-
-    const connection = await repository.findConnectionById(input.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Google Analytics connection is not connected.",
-        "GOOGLE_ANALYTICS_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const selected = await repository.findAccessibleCustomerAccount(
-      input.connectionId,
-      input.customerId
-    )
-    if (!selected) {
-      throw new IntegrationProviderError(
-        "Google Analytics property is not accessible for this connection.",
-        "GOOGLE_ANALYTICS_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    await service.resolveAccessToken(input.connectionId)
-
-    return {
-      id: input.idempotencyKey,
-      connectionId: input.connectionId,
-      provider: "google-analytics",
-      status: "completed",
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      mode: "initial",
-      metrics: {
-        traffic: 0,
-        acquisition: 0,
-        engagement: 0,
-        events: 0,
-        totalRecords: 0,
-      },
-    }
+  async sync(actor: AuthenticatedActor, input: IntegrationProviderSyncInput) {
+    return this.requireSyncService().sync(actor, input)
   }
 
   async listAccounts(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
@@ -206,53 +158,8 @@ export class GoogleAnalyticsIntegrationProvider {
     }))
   }
 
-  async listRecords(
-    actor: AuthenticatedActor,
-    query: IntegrationProviderRecordQuery
-  ): Promise<GoogleAnalyticsRecordItem[]> {
-    const repository = this.requireRepository()
-
-    const connection = await repository.findConnectionById(query.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Google Analytics connection is not connected.",
-        "GOOGLE_ANALYTICS_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const account = await repository.findAccessibleCustomerAccount(
-      query.connectionId,
-      query.customerId
-    )
-    if (!account) {
-      throw new IntegrationProviderError(
-        "Google Analytics property is not accessible for this connection.",
-        "GOOGLE_ANALYTICS_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    const recordDate = query.startDate ?? new Date().toISOString().slice(0, 10)
-
-    return [
-      {
-        id: `${query.customerId}:snapshot:0`,
-        entityType: query.entityType ?? "initial_sync_marker",
-        customerId: query.customerId,
-        entityId: account.customerId,
-        recordDate,
-        payload: {
-          stage: "initial_sync_skeleton",
-          status: "completed",
-        },
-        updatedAt: new Date().toISOString(),
-      },
-    ]
+  async listRecords(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery) {
+    return this.requireSyncService().listRecords(actor, query)
   }
 
   async getSelectedAccount(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
