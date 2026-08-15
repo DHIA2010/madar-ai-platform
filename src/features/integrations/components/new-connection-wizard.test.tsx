@@ -11,6 +11,7 @@ const mockCreateConnection = vi.fn()
 const mockConnect = vi.fn()
 const mockScheduleSync = vi.fn()
 const mockRunSync = vi.fn()
+const mockSelectAccount = vi.fn()
 const mockValidateConnection = vi.fn()
 const mockRouterPush = vi.fn()
 
@@ -29,6 +30,7 @@ const mockApplicationServices = {
     connect: mockConnect,
     scheduleSync: mockScheduleSync,
     runSync: mockRunSync,
+    selectAccount: mockSelectAccount,
   },
   integrationApplicationService: {
     validateConnection: mockValidateConnection,
@@ -177,6 +179,7 @@ describe("NewConnectionWizard", () => {
     mockConnect.mockResolvedValue({ connectionId: "conn_1" })
     mockScheduleSync.mockResolvedValue({ scheduleId: "sched_1" })
     mockRunSync.mockResolvedValue({ syncRunId: "sync_1" })
+    mockSelectAccount.mockResolvedValue(undefined)
     mockValidateConnection.mockResolvedValue({
       payload: {
         connectorId: "salla",
@@ -219,6 +222,13 @@ describe("NewConnectionWizard", () => {
       expect(mockScheduleSync).toHaveBeenCalled()
       expect(mockRefetch).toHaveBeenCalled()
       expect(screen.getByText("Salla Connected")).toBeTruthy()
+    })
+
+    // Confirms the discovered account is actually persisted to the backend before sync is
+    // scheduled, rather than only living in local wizard state (previously never called at all).
+    expect(mockSelectAccount).toHaveBeenCalledWith({
+      connectionId: "conn_1",
+      customerId: "998877",
     })
 
     fireEvent.click(screen.getByRole("button", { name: "Run First Sync" }))

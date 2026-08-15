@@ -18,6 +18,7 @@ import type {
   RetrySyncRequestDto,
   RunSyncRequestDto,
   ScheduleSyncRequestDto,
+  SelectAccountRequestDto,
   SyncHistoryDto,
   SyncJob,
   SyncJobStatus,
@@ -930,6 +931,35 @@ export class RestIntegrationRepository implements IntegrationRepository {
       throw new ValidationError({
         code: "oauth_callback_pending",
         message: "OAuth callback is pending for this connection.",
+      })
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async selectAccount(input: SelectAccountRequestDto): Promise<void> {
+    try {
+      const current = this.getConnectionOrThrow(input.connectionId)
+      const providerProfile = resolveProviderProfileByConnection(current)
+      if (!providerProfile) {
+        throw new ValidationError({
+          code: "connector_not_supported",
+          message: "This connector is not available in production integration runtime.",
+        })
+      }
+
+      await this.client.post<{ connectionId: string; customerId: string }, unknown>(
+        `/v1/integrations/${providerProfile.providerId}/accounts/select`,
+        { connectionId: input.connectionId, customerId: input.customerId }
+      )
+
+      this.upsertConnection({
+        ...current,
+        metadata: {
+          ...current.metadata,
+          customerId: input.customerId,
+        },
+        updatedAt: nowIso(),
       })
     } catch (error) {
       throw mapRepositoryError(error)

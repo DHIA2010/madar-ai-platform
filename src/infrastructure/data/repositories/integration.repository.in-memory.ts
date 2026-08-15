@@ -40,7 +40,10 @@ const state: InMemoryState = {
   events: {},
 }
 
-const OAUTH_ONLY_CONNECTORS: Record<string, { label: string; accessPrefix: string; refreshPrefix: string }> = {
+const OAUTH_ONLY_CONNECTORS: Record<
+  string,
+  { label: string; accessPrefix: string; refreshPrefix: string }
+> = {
   connector_def_google_ads: {
     label: "Google Ads",
     accessPrefix: "google_ads_access_",
@@ -211,6 +214,15 @@ export class InMemoryIntegrationRepository implements IntegrationRepository {
     return next
   }
 
+  async selectAccount(input: { connectionId: string; customerId: string }): Promise<void> {
+    const connection = getConnectionOrThrow(input.connectionId)
+    upsertConnection({
+      ...connection,
+      metadata: { ...connection.metadata, customerId: input.customerId },
+      updatedAt: nowIso(),
+    })
+  }
+
   async authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection> {
     const connection = getConnectionOrThrow(input.connectionId)
     const tokens = createConnectionTokenPair(connection)
@@ -234,11 +246,10 @@ export class InMemoryIntegrationRepository implements IntegrationRepository {
         value: tokenFor(profile.accessPrefix),
         expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       },
-      refreshToken:
-        connection.refreshToken ?? {
-          value: tokenFor(profile.refreshPrefix),
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        },
+      refreshToken: connection.refreshToken ?? {
+        value: tokenFor(profile.refreshPrefix),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
       updatedAt: nowIso(),
     }
     upsertConnection(next)
@@ -267,7 +278,8 @@ export class InMemoryIntegrationRepository implements IntegrationRepository {
 
   async runSync(input: RunSyncRequestDto): Promise<SyncRun> {
     const connection = getConnectionOrThrow(input.connectionId)
-    const syncJobId = state.jobs[connection.connectionId]?.syncJobId ?? `sync_job_${connection.connectionId}`
+    const syncJobId =
+      state.jobs[connection.connectionId]?.syncJobId ?? `sync_job_${connection.connectionId}`
     const previousRuns = state.runs[connection.connectionId] ?? []
     const nonRetryRuns = previousRuns.filter((run) => run.attempt === 1).length
     const attempt = input.trigger === "retry" ? (previousRuns[0]?.attempt ?? 1) + 1 : 1

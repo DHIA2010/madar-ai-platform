@@ -245,6 +245,7 @@ export type {
   SyncSchedule,
   SyncStatusReadModel,
   SyncStatusViewModel,
+  SelectAccountRequestDto,
   TokenLifecyclePort,
   ValidateConnectionRequestDto,
   Webhook,

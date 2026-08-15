@@ -8,6 +8,7 @@ import type {
   IntegrationGateway,
   RunSyncRequestDto,
   ScheduleSyncRequestDto,
+  SelectAccountRequestDto,
   SyncRun,
   ValidateConnectionRequestDto,
 } from "../contracts"
@@ -342,6 +343,15 @@ export class ConnectionManager {
 
     this.setState(validated, "connected")
     return validated
+  }
+
+  async selectAccount(input: SelectAccountRequestDto): Promise<void> {
+    await this.integrationGateway.selectAccount(input)
+    this.pushHistory(
+      input.connectionId,
+      "configuration_updated",
+      `Selected account ${input.customerId}`
+    )
   }
 
   async refreshConnection(input: { connectionId: string }) {

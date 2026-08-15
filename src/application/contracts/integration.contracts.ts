@@ -215,6 +215,11 @@ export interface ValidateConnectionRequestDto {
   connectionId: string
 }
 
+export interface SelectAccountRequestDto {
+  connectionId: string
+  customerId: string
+}
+
 export interface AuthorizeConnectorRequestDto {
   connectionId: string
   authorizationCode?: string
@@ -354,6 +359,7 @@ export interface IntegrationRepository {
   createConnection(input: CreateConnectionRequestDto): Promise<Connection>
   recoverConnections?(): Promise<Connection[]>
   validateConnection(input: ValidateConnectionRequestDto): Promise<Connection>
+  selectAccount(input: SelectAccountRequestDto): Promise<void>
   authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection>
   refreshConnection(input: RefreshConnectionRequestDto): Promise<Connection>
   disconnectConnection(input: DisconnectConnectionRequestDto): Promise<Connection>

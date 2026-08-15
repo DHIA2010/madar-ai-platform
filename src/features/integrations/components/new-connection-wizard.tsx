@@ -852,6 +852,23 @@ export function NewConnectionWizard() {
     setFlowStatus("finalizing")
 
     try {
+      // Discovered-accounts connectors (Snapchat/Meta/Google Ads etc.) let the user pick which
+      // ad account to connect in the Import step, but that choice only ever lived in local
+      // component state -- nothing persisted it to the backend, so the connection silently
+      // stayed bound to whichever account the provider happened to discover first. Persist the
+      // user's actual choice before scheduling sync.
+      if (
+        selectedConnector.connectorId in OAUTH_CONNECTOR_PROFILES &&
+        discoveredProviderAccounts.length > 0 &&
+        selectedAccountId &&
+        selectedAccountId !== ACCOUNT_FALLBACK.id
+      ) {
+        await connectionManager.selectAccount({
+          connectionId: draftConnectionId,
+          customerId: selectedAccountId,
+        })
+      }
+
       await connectionManager.scheduleSync({
         connectionId: draftConnectionId,
         cron: "*/30 * * * *",
@@ -871,7 +888,15 @@ export function NewConnectionWizard() {
       setRetryTarget("finalize")
       setFlowStatus("idle")
     }
-  }, [connectionManager, draftConnectionId, refetch, resetError, selectedConnector])
+  }, [
+    connectionManager,
+    discoveredProviderAccounts,
+    draftConnectionId,
+    refetch,
+    resetError,
+    selectedAccountId,
+    selectedConnector,
+  ])
 
   const handleContinue = useCallback(async () => {
     if (errorState) {
