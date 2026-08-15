@@ -186,8 +186,9 @@ function mockSnapchatResponses(input: {
       // limit), issuing several requests per breakdown type -- filter fixture entries by the
       // requested start_time/end_time so each chunk only returns its own days, and by the
       // requested breakdown (campaign vs ad) so each series only returns its own entries,
-      // matching real behavior. Groups by day and nests under breakdown_stats.<type>[] to
-      // match the real breakdown response shape.
+      // matching real behavior. breakdown_stats.<type>[] is an array of per-ENTITY objects,
+      // each carrying its own "timeseries" array of per-day stats -- confirmed live against a
+      // real account with real spend; it is NOT a top-level array of days.
       const parsed = new URL(url)
       const windowStart = new Date(parsed.searchParams.get("start_time") ?? 0).getTime()
       const windowEnd = new Date(parsed.searchParams.get("end_time") ?? 0).getTime()
@@ -198,19 +199,20 @@ function mockSnapchatResponses(input: {
         return statTime >= windowStart && statTime < windowEnd
       })
 
-      const byDay = new Map<string, MockBreakdownDailyStat[]>()
+      const byEntity = new Map<string, MockBreakdownDailyStat[]>()
       for (const stat of windowStats) {
-        const existing = byDay.get(stat.startTime) ?? []
+        const existing = byEntity.get(stat.entityId) ?? []
         existing.push(stat)
-        byDay.set(stat.startTime, existing)
+        byEntity.set(stat.entityId, existing)
       }
 
-      const timeseries = Array.from(byDay.entries()).map(([startTime, entries]) => ({
-        start_time: startTime,
-        end_time: entries[0]?.endTime,
-        breakdown_stats: {
-          [breakdown]: entries.map((entry) => ({ id: entry.entityId, stats: entry.stats })),
-        },
+      const breakdownEntities = Array.from(byEntity.entries()).map(([entityId, entries]) => ({
+        id: entityId,
+        timeseries: entries.map((entry) => ({
+          start_time: entry.startTime,
+          end_time: entry.endTime,
+          stats: entry.stats,
+        })),
       }))
 
       return new Response(
@@ -222,8 +224,9 @@ function mockSnapchatResponses(input: {
               timeseries_stat: {
                 id: input.accountId,
                 type: "AD_ACCOUNT",
-                granularity: "DAY",
-                timeseries,
+                breakdown_stats: {
+                  [breakdown]: breakdownEntities,
+                },
               },
             },
           ],

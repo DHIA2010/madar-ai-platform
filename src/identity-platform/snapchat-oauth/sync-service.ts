@@ -230,17 +230,28 @@ function buildStatsWindows(timeZone: string): Array<{ start: Date; end: Date }> 
   return windows
 }
 
+// Confirmed live against a real account with real spend (earlier this session, the
+// documented TOTAL-granularity example was extrapolated to DAY+breakdown and turned out to be
+// inverted): breakdown_stats sits directly on timeseries_stat, keyed by breakdown type, as an
+// array of per-ENTITY objects -- each of which carries its OWN "timeseries" array of per-day
+// stats. It is NOT a top-level array of days that each contain a breakdown of entities.
 interface SnapchatStatsResponseBody {
   request_status?: string
   debug_message?: string
   timeseries_stats?: Array<{
     sub_request_status?: string
     timeseries_stat?: {
-      timeseries?: Array<{
-        start_time: string
-        end_time?: string
-        breakdown_stats?: Record<string, Array<{ id?: string; stats?: Record<string, unknown> }>>
-      }>
+      breakdown_stats?: Record<
+        string,
+        Array<{
+          id?: string
+          timeseries?: Array<{
+            start_time: string
+            end_time?: string
+            stats?: Record<string, unknown>
+          }>
+        }>
+      >
     }
   }>
 }
@@ -251,14 +262,14 @@ function parseStatsBody(
 ): SnapchatBreakdownDailyStat[] {
   const results: SnapchatBreakdownDailyStat[] = []
   for (const entry of body.timeseries_stats ?? []) {
-    for (const day of entry.timeseries_stat?.timeseries ?? []) {
-      for (const item of day.breakdown_stats?.[breakdown] ?? []) {
-        if (!item.id) continue
+    for (const item of entry.timeseries_stat?.breakdown_stats?.[breakdown] ?? []) {
+      if (!item.id) continue
+      for (const day of item.timeseries ?? []) {
         results.push({
           entityId: item.id,
           startTime: day.start_time,
           endTime: day.end_time,
-          stats: item.stats ?? {},
+          stats: day.stats ?? {},
         })
       }
     }
