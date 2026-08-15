@@ -76,12 +76,20 @@ export class AwsSecretsGoogleIdentityCredentialsProvider implements GoogleIdenti
     private readonly secretId = GOOGLE_INTEGRATION_SECRET_ID,
     region?: string
   ) {
-    this.client = new SecretsManagerClient({ region: region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION })
+    this.client = new SecretsManagerClient({
+      region: region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION,
+    })
   }
 
   async load() {
     if (!this.cached) {
-      this.cached = this.loadOnce()
+      // A failed load (e.g. a transient IAM/network error) must not poison this
+      // singleton forever -- clear the cache on rejection so the next call retries
+      // instead of replaying the same stale error until the process restarts.
+      this.cached = this.loadOnce().catch((error: unknown) => {
+        this.cached = null
+        throw error
+      })
     }
 
     return this.cached
@@ -111,11 +119,9 @@ export class AwsSecretsGoogleIdentityCredentialsProvider implements GoogleIdenti
   }
 }
 
-export class EnvironmentFirstGoogleIdentityCredentialsProvider
-implements GoogleIdentityCredentialsProvider {
+export class EnvironmentFirstGoogleIdentityCredentialsProvider implements GoogleIdentityCredentialsProvider {
   constructor(
-    private readonly fallback: GoogleIdentityCredentialsProvider =
-      new AwsSecretsGoogleIdentityCredentialsProvider()
+    private readonly fallback: GoogleIdentityCredentialsProvider = new AwsSecretsGoogleIdentityCredentialsProvider()
   ) {}
 
   async load() {

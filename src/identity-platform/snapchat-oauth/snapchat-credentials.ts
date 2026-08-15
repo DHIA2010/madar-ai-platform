@@ -73,7 +73,13 @@ export class AwsSecretsSnapchatOAuthCredentialsProvider implements SnapchatOAuth
 
   async load() {
     if (!this.cached) {
-      this.cached = this.loadOnce()
+      // A failed load (e.g. a transient IAM/network error) must not poison this
+      // singleton forever -- clear the cache on rejection so the next call retries
+      // instead of replaying the same stale error until the process restarts.
+      this.cached = this.loadOnce().catch((error: unknown) => {
+        this.cached = null
+        throw error
+      })
     }
 
     return this.cached
