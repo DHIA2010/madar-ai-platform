@@ -1443,12 +1443,12 @@ export class RestIntegrationRepository implements IntegrationRepository {
         },
         {
           check: "records",
-          status: hasData ? "pass" : hasCustomerSelection ? "warn" : "fail",
+          status: hasCustomerSelection ? "pass" : "fail",
           message: hasData
             ? "Backend records available."
             : hasCustomerSelection
-              ? "No backend records found yet."
-              : "Select a Google Ads account to start syncing.",
+              ? "Sync completed successfully; no records found yet."
+              : "Select an account to start syncing.",
         },
         {
           check: "latest_sync",
@@ -1471,11 +1471,9 @@ export class RestIntegrationRepository implements IntegrationRepository {
         ? 25
         : primary.status !== "connected"
           ? 40
-          : hasData
+          : hasCustomerSelection
             ? 100
-            : hasCustomerSelection
-              ? 85
-              : 70
+            : 70
 
       return {
         connectorId: input.connectorId,
