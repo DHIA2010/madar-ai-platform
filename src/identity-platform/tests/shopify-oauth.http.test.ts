@@ -297,6 +297,44 @@ describe("shopify oauth http flow", () => {
     expect(storeRows.rows[0]?.account_name).toBe("Madar Test Store")
   })
 
+  it("accepts a shop domain pasted as a full URL (scheme + trailing slash), not just a bare domain", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "shopify-url-paste@madar.test",
+      "Shopify URL Paste Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000000612"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000000613",
+      label: "Shopify URL Paste",
+    })
+
+    const shopDomain = "madar-url-paste.myshopify.com"
+    mockShopifyResponses({
+      baseUrl,
+      shopDomain,
+      accessToken: "shopify-access-url-paste",
+      shop: { id: "778899", name: "URL Paste Store" },
+    })
+
+    const startResponse = await fetch(`${baseUrl}/v1/integrations/shopify/oauth/start`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${login.session.accessToken}`,
+        "x-workspace-id": workspaceId,
+      },
+      // The most natural thing a user pastes here is what's in their browser's address bar.
+      body: JSON.stringify({ workspaceId, shopDomain: `https://${shopDomain}/` }),
+    })
+    expect(startResponse.status).toBe(200)
+
+    const started = (await startResponse.json()) as { authorizationUrl: string }
+    expect(started.authorizationUrl).toContain(`${shopDomain}/admin/oauth/authorize`)
+  })
+
   it("rejects a callback with an invalid hmac (forged callback protection)", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "shopify-hmac@madar.test",

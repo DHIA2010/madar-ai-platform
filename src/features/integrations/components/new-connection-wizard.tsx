@@ -276,12 +276,21 @@ function getCategoryForConnector(displayName: string): PlatformCategory {
 
 // Shopify is the only connector whose OAuth authorize URL is store-specific
 // (https://{shop}.myshopify.com/...), so it's the only one that needs a value from the
-// user before "Continue to OAuth" can build a real redirect. Accepts either a bare handle
-// ("madar-test") or the full myshopify.com domain, matching the backend's normalization.
+// user before "Continue to OAuth" can build a real redirect. Accepts a bare handle
+// ("madar-test"), the full myshopify.com domain, or a full URL copy-pasted from the
+// browser's own address bar (the most natural thing to paste here) -- matches the
+// backend's equally lenient normalizeShopDomain().
 const SHOP_DOMAIN_INPUT_PATTERN = /^[a-z0-9][a-z0-9-]*(\.myshopify\.com)?$/i
 
+function stripShopDomainDecoration(value: string) {
+  return value
+    .trim()
+    .replace(/^[a-z]+:\/\//i, "")
+    .split(/[/?#]/)[0]
+}
+
 function isShopDomainValid(value: string) {
-  return SHOP_DOMAIN_INPUT_PATTERN.test(value.trim())
+  return SHOP_DOMAIN_INPUT_PATTERN.test(stripShopDomainDecoration(value))
 }
 
 function getConnectorIcon(label: string) {
@@ -351,6 +360,12 @@ const OAUTH_CONNECTOR_PROFILES: Record<string, OAuthConnectorProfile> = {
     connectionIdParam: "shopify_connection_id",
     accountsMetadataKey: "availableShopifyCustomerAccounts",
     fallbackAccountLabel: "Shopify",
+  },
+  "google-analytics": {
+    callbackParam: "google_analytics_oauth",
+    connectionIdParam: "google_analytics_connection_id",
+    accountsMetadataKey: "availableGoogleAnalyticsAccounts",
+    fallbackAccountLabel: "Google Analytics",
   },
 }
 
@@ -1813,16 +1828,16 @@ export function NewConnectionWizard() {
     return (
       <AppCard className="border border-rose-200 bg-rose-500/10 p-5 shadow-sm">
         <div className="flex items-start gap-4">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-200">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-600">
             <CircleAlert className="size-5" />
           </div>
           <div className="flex-1 space-y-4">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-rose-100/80">
+              <p className="text-[11px] uppercase tracking-wide text-rose-700/80">
                 Connection error
               </p>
-              <h3 className="mt-1 text-lg font-semibold text-rose-50">{errorState.title}</h3>
-              <p className="mt-1 text-sm text-rose-100/80">{errorState.description}</p>
+              <h3 className="mt-1 text-lg font-semibold text-rose-900">{errorState.title}</h3>
+              <p className="mt-1 text-sm text-rose-800">{errorState.description}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <AppButton

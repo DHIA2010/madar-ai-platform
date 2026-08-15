@@ -97,7 +97,9 @@ export class AwsSecretsSnapchatOAuthCredentialsProvider implements SnapchatOAuth
     return validateCredentials({
       clientId: String(parsed.clientId ?? "").trim(),
       clientSecret: String(parsed.clientSecret ?? "").trim(),
-      redirectUri: String(parsed.redirectUri ?? "").trim() || undefined,
+      // Read both spellings defensively -- same fix applied to shopify-credentials.ts and
+      // google-analytics-credentials.ts for the identical redirectUrl/redirectUri mismatch.
+      redirectUri: String(parsed.redirectUrl ?? parsed.redirectUri ?? "").trim() || undefined,
     })
   }
 }

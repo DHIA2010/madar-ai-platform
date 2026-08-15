@@ -50,9 +50,12 @@ export const CONNECTOR_CATALOG: ConnectorCatalogEntry[] = [
     capabilities: ["products", "orders", "customers", "catalog", "media"],
   },
   {
-    connectorDefinitionId: "connector_def_ga4",
-    connectorId: "ga4",
-    key: "analytics.ga4",
+    // Was connector_def_ga4/ga4, pointing at the old mock GA4 connector
+    // (src/infrastructure/integration/ga4/*) that never made a real Google API call.
+    // Repointed at the real production Google Analytics OAuth connector.
+    connectorDefinitionId: "connector_def_google_analytics",
+    connectorId: "google-analytics",
+    key: "analytics.google-analytics",
     displayName: "Google Analytics 4",
     logo: "GA",
     version: "1.0.0",

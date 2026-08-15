@@ -311,12 +311,44 @@ const SHOPIFY_PROVIDER_PROFILE: RuntimeProviderProfile = {
   },
 }
 
+const GOOGLE_ANALYTICS_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "google-analytics",
+  connectorId: "google-analytics",
+  connectorDefinitionId: "connector_def_google_analytics",
+  displayName: "Google Analytics 4",
+  oauth: {
+    startPath: "/v1/integrations/google-analytics/oauth/start",
+    activeConnectionPath: "/v1/integrations/google-analytics/connection",
+    callbackStatusParam: "google_analytics_oauth",
+    callbackConnectionIdParam: "google_analytics_connection_id",
+    callbackAccountNameParam: "google_analytics_account_name",
+    callbackAccountEmailParam: "google_analytics_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/google-analytics/sync",
+    records: "/v1/integrations/google-analytics/records",
+    accounts: "/v1/integrations/google-analytics/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
+  },
+  metadata: {
+    availableAccountsKey: "availableGoogleAnalyticsAccounts",
+  },
+}
+
 const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = {
   [GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ADS_PROVIDER_PROFILE,
   [SNAPCHAT_ADS_PROVIDER_PROFILE.connectorDefinitionId]: SNAPCHAT_ADS_PROVIDER_PROFILE,
   [SALLA_PROVIDER_PROFILE.connectorDefinitionId]: SALLA_PROVIDER_PROFILE,
   [META_ADS_PROVIDER_PROFILE.connectorDefinitionId]: META_ADS_PROVIDER_PROFILE,
   [SHOPIFY_PROVIDER_PROFILE.connectorDefinitionId]: SHOPIFY_PROVIDER_PROFILE,
+  [GOOGLE_ANALYTICS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ANALYTICS_PROVIDER_PROFILE,
 }
 
 const DEFAULT_WORKSPACE_ID = "ws_connections_center"
@@ -739,14 +771,18 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
   async recoverConnections(): Promise<Connection[]> {
     try {
-      const recovered: Connection[] = []
-
-      for (const providerProfile of Object.values(PROVIDER_PROFILES_BY_DEFINITION)) {
-        const connection = await this.recoverConnectionForProvider(providerProfile)
-        if (connection) {
-          recovered.push(connection)
-        }
-      }
+      // One GET per registered provider (6 today: Google Ads, Snapchat, Meta, Salla,
+      // Shopify, Google Analytics) -- each is independent and already catches its own
+      // failure internally (see recoverConnectionForProvider), so running them in
+      // parallel is safe and turns this from N sequential round trips into one.
+      const results = await Promise.all(
+        Object.values(PROVIDER_PROFILES_BY_DEFINITION).map((providerProfile) =>
+          this.recoverConnectionForProvider(providerProfile)
+        )
+      )
+      const recovered = results.filter(
+        (connection): connection is Connection => connection !== null
+      )
 
       this.pruneUnrecoveredConnections(recovered.map((connection) => connection.connectionId))
       return recovered

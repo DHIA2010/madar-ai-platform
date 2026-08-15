@@ -182,17 +182,22 @@ function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
   }
 }
 
-// Shopify shops can be entered as a bare handle ("madar-test") or a full domain
-// ("madar-test.myshopify.com") -- normalize to the full myshopify.com domain and reject
-// anything that doesn't match Shopify's own shop-handle character set, since this value
-// gets embedded directly into the authorize/token/API URLs.
+// Shopify shops can be entered as a bare handle ("madar-test"), a full domain
+// ("madar-test.myshopify.com"), or a full URL copy-pasted from the browser's address bar
+// (https://madar-test.myshopify.com/, possibly with a path/query after it) -- strip any
+// scheme and path/query before normalizing to the bare myshopify.com domain, and reject
+// anything that doesn't match Shopify's own shop-handle character set after that, since
+// this value gets embedded directly into the authorize/token/API URLs.
 function normalizeShopDomain(rawShopDomain: string | null | undefined): string {
   const trimmed = (rawShopDomain ?? "").trim().toLowerCase()
   if (trimmed.length === 0) {
     throw new Error("SHOPIFY_OAUTH_SHOP_DOMAIN_MISSING")
   }
 
-  const candidate = trimmed.includes(".") ? trimmed : `${trimmed}.myshopify.com`
+  const withoutScheme = trimmed.replace(/^[a-z]+:\/\//, "")
+  const withoutPath = withoutScheme.split(/[/?#]/)[0]
+
+  const candidate = withoutPath.includes(".") ? withoutPath : `${withoutPath}.myshopify.com`
   if (!SHOP_DOMAIN_PATTERN.test(candidate)) {
     throw new Error("SHOPIFY_OAUTH_SHOP_DOMAIN_INVALID")
   }

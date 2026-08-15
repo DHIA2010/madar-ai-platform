@@ -98,6 +98,19 @@ const OAUTH_CALLBACK_PARAMS_BY_CONNECTOR_ID: Record<string, OAuthCallbackParamPr
       "shopify_connected_at",
     ],
   },
+  "google-analytics": {
+    statusParam: "google_analytics_oauth",
+    connectionIdParam: "google_analytics_connection_id",
+    accountNameParam: "google_analytics_account_name",
+    allParams: [
+      "google_analytics_oauth",
+      "google_analytics_connection_id",
+      "google_analytics_project_id",
+      "google_analytics_status",
+      "google_analytics_account_name",
+      "google_analytics_connected_at",
+    ],
+  },
 }
 
 const DEFAULT_FILTERS: ConnectionsFilterState = {
@@ -200,10 +213,16 @@ export function useConnectionsCenter() {
         typeof connection.metadata.accountName === "string"
           ? connection.metadata.accountName
           : undefined
-      const connectedAccounts = accountsRegistry[connection.connectorDefinitionId]?.length
-        ? accountsRegistry[connection.connectorDefinitionId]
-        : metadataAccountName
-          ? [metadataAccountName]
+      // Backend metadata (the account name on the actual connection record) is ground
+      // truth and always wins when present. The local-storage registry is only a
+      // fallback for mid-flow states where metadata isn't populated yet -- it
+      // accumulates one label per "Continue to OAuth" click across the connector's
+      // lifetime (retries included), so trusting it over real backend data caused
+      // "Accounts Connected 2" for a connection with exactly one real account.
+      const connectedAccounts = metadataAccountName
+        ? [metadataAccountName]
+        : accountsRegistry[connection.connectorDefinitionId]?.length
+          ? accountsRegistry[connection.connectorDefinitionId]
           : [catalogEntry?.connectedAccountLabel ?? "Connected account"]
       const lastErrorEvent =
         history?.events.find((event) => event.eventType === "sync_failed") ??
