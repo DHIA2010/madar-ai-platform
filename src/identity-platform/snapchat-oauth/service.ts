@@ -326,31 +326,32 @@ async function fetchOrganizations(config: SnapchatOAuthServiceConfig, accessToke
     throw new Error("SNAPCHAT_OAUTH_ACCOUNT_DISCOVERY_FAILED")
   }
 
+  // Snapchat's real Marketing API response wraps each entry as
+  // { sub_request_status, organization: { id, name } } -- not a flat object.
+  // We still fall back to a flat shape defensively in case that ever varies.
   const body = (await response.json()) as {
-    organizations?: SnapchatOrganization[]
-    organization?: SnapchatOrganization[]
-    data?: Array<{ organization?: SnapchatOrganization; organizations?: SnapchatOrganization[] }>
+    organizations?: Array<{
+      organization?: { id?: string; name?: string }
+      organization_id?: string
+      organization_name?: string
+    }>
   }
 
-  const direct = Array.isArray(body.organizations)
-    ? body.organizations
-    : Array.isArray(body.organization)
-      ? body.organization
-      : []
+  const entries = Array.isArray(body.organizations) ? body.organizations : []
 
-  const nested = Array.isArray(body.data)
-    ? body.data.flatMap((entry) => {
-        if (Array.isArray(entry.organizations)) {
-          return entry.organizations
-        }
-        if (entry.organization) {
-          return [entry.organization]
-        }
-        return []
-      })
-    : []
+  const result: SnapchatOrganization[] = []
+  for (const entry of entries) {
+    const organizationId = entry.organization?.id ?? entry.organization_id
+    if (!organizationId) {
+      continue
+    }
+    result.push({
+      organization_id: organizationId,
+      organization_name: entry.organization?.name ?? entry.organization_name,
+    })
+  }
 
-  return [...direct, ...nested].filter((org) => Boolean(org.organization_id))
+  return result
 }
 
 async function fetchOrganizationAccounts(
@@ -370,38 +371,47 @@ async function fetchOrganizationAccounts(
     throw new Error("SNAPCHAT_OAUTH_ACCOUNT_DISCOVERY_FAILED")
   }
 
+  // Same wrapper convention as organizations: each entry is
+  // { sub_request_status, adaccount: { id, name, currency, timezone, organization_id, status } }.
   const body = (await response.json()) as {
-    adaccounts?: SnapchatAdAccount[]
-    ad_accounts?: SnapchatAdAccount[]
-    data?: Array<{
-      adaccount?: SnapchatAdAccount
-      adaccounts?: SnapchatAdAccount[]
-      ad_accounts?: SnapchatAdAccount[]
+    adaccounts?: Array<{
+      adaccount?: {
+        id?: string
+        name?: string
+        currency?: string
+        timezone?: string
+        status?: string
+        organization_id?: string
+      }
+      adaccount_id?: string
+      name?: string
+      currency?: string
+      timezone?: string
+      status?: string
+      organization_id?: string
     }>
   }
 
-  const direct = Array.isArray(body.adaccounts)
-    ? body.adaccounts
-    : Array.isArray(body.ad_accounts)
-      ? body.ad_accounts
-      : []
+  const entries = Array.isArray(body.adaccounts) ? body.adaccounts : []
 
-  const nested = Array.isArray(body.data)
-    ? body.data.flatMap((entry) => {
-        if (Array.isArray(entry.adaccounts)) {
-          return entry.adaccounts
-        }
-        if (Array.isArray(entry.ad_accounts)) {
-          return entry.ad_accounts
-        }
-        if (entry.adaccount) {
-          return [entry.adaccount]
-        }
-        return []
-      })
-    : []
+  const result: SnapchatAdAccount[] = []
+  for (const entry of entries) {
+    const account = entry.adaccount
+    const adaccountId = account?.id ?? entry.adaccount_id
+    if (!adaccountId) {
+      continue
+    }
+    result.push({
+      adaccount_id: adaccountId,
+      name: account?.name ?? entry.name,
+      currency: account?.currency ?? entry.currency,
+      timezone: account?.timezone ?? entry.timezone,
+      status: account?.status ?? entry.status,
+      organization_id: account?.organization_id ?? entry.organization_id,
+    })
+  }
 
-  return [...direct, ...nested].filter((account) => Boolean(account.adaccount_id))
+  return result
 }
 
 export class SnapchatOAuthService {

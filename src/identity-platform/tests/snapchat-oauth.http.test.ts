@@ -153,7 +153,12 @@ describe("snapchat oauth http flow", () => {
       if (url.endsWith("/me/organizations")) {
         return new Response(
           JSON.stringify({
-            organizations: [{ organization_id: "org_1", organization_name: "Snap Org" }],
+            organizations: [
+              {
+                sub_request_status: "success",
+                organization: { id: "org_1", name: "Snap Org" },
+              },
+            ],
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -164,12 +169,15 @@ describe("snapchat oauth http flow", () => {
           JSON.stringify({
             adaccounts: [
               {
-                adaccount_id: "acc_1",
-                name: "Snap Ad Account",
-                currency: "USD",
-                timezone: "UTC",
-                status: "ACTIVE",
-                organization_id: "org_1",
+                sub_request_status: "success",
+                adaccount: {
+                  id: "acc_1",
+                  name: "Snap Ad Account",
+                  currency: "USD",
+                  timezone: "UTC",
+                  status: "ACTIVE",
+                  organization_id: "org_1",
+                },
               },
             ],
           }),
@@ -425,7 +433,10 @@ describe("snapchat oauth http flow", () => {
         return new Response(
           JSON.stringify({
             organizations: [
-              { organization_id: "org_select", organization_name: "Snap Select Org" },
+              {
+                sub_request_status: "success",
+                organization: { id: "org_select", name: "Snap Select Org" },
+              },
             ],
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -437,20 +448,26 @@ describe("snapchat oauth http flow", () => {
           JSON.stringify({
             adaccounts: [
               {
-                adaccount_id: "acc_primary",
-                name: "Primary Account",
-                currency: "USD",
-                timezone: "UTC",
-                status: "ACTIVE",
-                organization_id: "org_select",
+                sub_request_status: "success",
+                adaccount: {
+                  id: "acc_primary",
+                  name: "Primary Account",
+                  currency: "USD",
+                  timezone: "UTC",
+                  status: "ACTIVE",
+                  organization_id: "org_select",
+                },
               },
               {
-                adaccount_id: "acc_secondary",
-                name: "Secondary Account",
-                currency: "SAR",
-                timezone: "Asia/Riyadh",
-                status: "ACTIVE",
-                organization_id: "org_select",
+                sub_request_status: "success",
+                adaccount: {
+                  id: "acc_secondary",
+                  name: "Secondary Account",
+                  currency: "SAR",
+                  timezone: "Asia/Riyadh",
+                  status: "ACTIVE",
+                  organization_id: "org_select",
+                },
               },
             ],
           }),
@@ -611,7 +628,10 @@ describe("snapchat oauth http flow", () => {
         return new Response(
           JSON.stringify({
             organizations: [
-              { organization_id: "org_lifecycle", organization_name: "Snap Lifecycle Org" },
+              {
+                sub_request_status: "success",
+                organization: { id: "org_lifecycle", name: "Snap Lifecycle Org" },
+              },
             ],
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -623,12 +643,15 @@ describe("snapchat oauth http flow", () => {
           JSON.stringify({
             adaccounts: [
               {
-                adaccount_id: "acc_lifecycle",
-                name: "Lifecycle Account",
-                currency: "USD",
-                timezone: "UTC",
-                status: "ACTIVE",
-                organization_id: "org_lifecycle",
+                sub_request_status: "success",
+                adaccount: {
+                  id: "acc_lifecycle",
+                  name: "Lifecycle Account",
+                  currency: "USD",
+                  timezone: "UTC",
+                  status: "ACTIVE",
+                  organization_id: "org_lifecycle",
+                },
               },
             ],
           }),

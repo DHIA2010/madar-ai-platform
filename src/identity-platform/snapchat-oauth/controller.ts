@@ -117,6 +117,20 @@ export class SnapchatOAuthController {
       }
     } catch (error) {
       const reason = toSafeCallbackReason(error)
+      // The failure only reaches the user as a redirect reason slug -- without this,
+      // callback failures leave zero trace in CloudWatch, which is exactly what made
+      // the account_discovery_empty incident hard to diagnose.
+      console.error(
+        JSON.stringify({
+          level: "error",
+          service: "identity-platform",
+          timestamp: new Date().toISOString(),
+          event: "snapchat_oauth.callback_error",
+          reason,
+          message: error instanceof Error ? error.message : "Unexpected error.",
+          stackTrace: error instanceof Error ? error.stack : undefined,
+        })
+      )
       return {
         status: 302,
         headers: {
