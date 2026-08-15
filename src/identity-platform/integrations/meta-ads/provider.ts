@@ -4,6 +4,8 @@ import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { MetaOAuthController } from "../../meta-oauth/controller"
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { MetaOAuthService } from "../../meta-oauth/service"
+import { MetaSyncRepository } from "../../meta-oauth/sync-repository"
+import { MetaSyncService } from "../../meta-oauth/sync-service"
 import type { MetaOAuthConnectionView } from "../../meta-oauth/types"
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 
@@ -17,27 +19,6 @@ import type {
   IntegrationProviderSyncInput,
 } from "../provider-contracts"
 
-interface MetaSyncResult {
-  id: string
-  connectionId: string
-  provider: "meta-ads"
-  status: "completed"
-  startedAt: string
-  completedAt: string
-  metrics: Record<string, number>
-  mode: "initial"
-}
-
-interface MetaRecordItem {
-  id: string
-  entityType: string
-  customerId: string
-  entityId: string
-  recordDate: string
-  payload: Record<string, unknown>
-  updatedAt: string
-}
-
 export class MetaAdsIntegrationProvider {
   readonly providerId = "meta-ads"
   readonly displayName = "Meta Ads"
@@ -46,12 +27,18 @@ export class MetaAdsIntegrationProvider {
   private readonly repository?: MetaOAuthRepository
   private readonly service?: MetaOAuthService
   private readonly controller?: MetaOAuthController
+  private readonly syncService?: MetaSyncService
 
   constructor(database?: PostgresDatabase) {
     if (database) {
       this.repository = new MetaOAuthRepository(database)
       this.service = new MetaOAuthService(this.repository)
       this.controller = new MetaOAuthController(this.service)
+      this.syncService = new MetaSyncService(
+        this.repository,
+        new MetaSyncRepository(database),
+        this.service
+      )
     }
   }
 
@@ -94,6 +81,19 @@ export class MetaAdsIntegrationProvider {
     return this.service
   }
 
+  private requireSyncService() {
+    if (!this.syncService) {
+      throw new IntegrationProviderError(
+        "Meta sync service unavailable.",
+        "META_OAUTH_UNAVAILABLE",
+        false,
+        503
+      )
+    }
+
+    return this.syncService
+  }
+
   private assertConnectionOwnership(
     connection: MetaOAuthConnectionView | null,
     actor: AuthenticatedActor
@@ -132,54 +132,8 @@ export class MetaAdsIntegrationProvider {
     return this.requireController().getActiveConnection(actor)
   }
 
-  async sync(
-    actor: AuthenticatedActor,
-    input: IntegrationProviderSyncInput
-  ): Promise<MetaSyncResult> {
-    const repository = this.requireRepository()
-    const service = this.requireService()
-
-    const connection = await repository.findConnectionById(input.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Meta Ads connection is not connected.",
-        "META_ADS_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const selected = await repository.findAccessibleCustomerAccount(
-      input.connectionId,
-      input.customerId
-    )
-    if (!selected) {
-      throw new IntegrationProviderError(
-        "Meta Ads account is not accessible for this connection.",
-        "META_ADS_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    await service.resolveAccessToken(input.connectionId)
-
-    return {
-      id: input.idempotencyKey,
-      connectionId: input.connectionId,
-      provider: "meta-ads",
-      status: "completed",
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      mode: "initial",
-      metrics: {
-        campaigns: 0,
-        ads: 0,
-        totalRecords: 0,
-      },
-    }
+  async sync(actor: AuthenticatedActor, input: IntegrationProviderSyncInput) {
+    return this.requireSyncService().sync(actor, input)
   }
 
   async listAccounts(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
@@ -205,53 +159,8 @@ export class MetaAdsIntegrationProvider {
     }))
   }
 
-  async listRecords(
-    actor: AuthenticatedActor,
-    query: IntegrationProviderRecordQuery
-  ): Promise<MetaRecordItem[]> {
-    const repository = this.requireRepository()
-
-    const connection = await repository.findConnectionById(query.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Meta Ads connection is not connected.",
-        "META_ADS_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const account = await repository.findAccessibleCustomerAccount(
-      query.connectionId,
-      query.customerId
-    )
-    if (!account) {
-      throw new IntegrationProviderError(
-        "Meta Ads account is not accessible for this connection.",
-        "META_ADS_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    const recordDate = query.startDate ?? new Date().toISOString().slice(0, 10)
-
-    return [
-      {
-        id: `${query.customerId}:snapshot:0`,
-        entityType: query.entityType ?? "initial_sync_marker",
-        customerId: query.customerId,
-        entityId: account.customerId,
-        recordDate,
-        payload: {
-          stage: "initial_sync_skeleton",
-          status: "completed",
-        },
-        updatedAt: new Date().toISOString(),
-      },
-    ]
+  async listRecords(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery) {
+    return this.requireSyncService().listRecords(actor, query)
   }
 
   async getSelectedAccount(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
