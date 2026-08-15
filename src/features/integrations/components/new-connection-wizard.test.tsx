@@ -234,4 +234,61 @@ describe("NewConnectionWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run First Sync" }))
     expect(mockRunSync).toHaveBeenCalled()
   })
+
+  it("lets the user pick a non-default account when multiple are discovered, and persists that choice", async () => {
+    mockCreateConnection.mockResolvedValue({ connectionId: "conn_2" })
+    mockConnect.mockResolvedValue({ connectionId: "conn_2" })
+    mockScheduleSync.mockResolvedValue({ scheduleId: "sched_2" })
+    mockRunSync.mockResolvedValue({ syncRunId: "sync_2" })
+    mockSelectAccount.mockResolvedValue(undefined)
+    mockValidateConnection.mockResolvedValue({
+      payload: {
+        connectorId: "salla",
+        connectorDefinitionId: "connector_def_salla",
+        metadata: {
+          availableSallaCustomerAccounts: JSON.stringify([
+            { customerId: "111", displayName: "First Store", isSelected: true },
+            { customerId: "222", displayName: "Second Store", isSelected: false },
+            { customerId: "333", displayName: "Third Store", isSelected: false },
+          ]),
+        },
+      },
+    })
+    window.history.pushState(
+      {},
+      "",
+      `${ROUTES.integrationsNew}?salla_oauth=connected&salla_connection_id=conn_2&salla_account_name=First%20Store`
+    )
+
+    const queryClient = new QueryClient()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Third Store")).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByText("Third Store"))
+
+    fireEvent.click(screen.getByRole("button", { name: /Review Configuration/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Create Connection" })).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Connection" }))
+
+    await waitFor(() => {
+      expect(mockScheduleSync).toHaveBeenCalled()
+    })
+
+    expect(mockSelectAccount).toHaveBeenCalledWith({
+      connectionId: "conn_2",
+      customerId: "333",
+    })
+  })
 })

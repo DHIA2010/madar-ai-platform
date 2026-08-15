@@ -1642,6 +1642,43 @@ export function NewConnectionWizard() {
           </p>
         </div>
 
+        {discoveredProviderAccounts.length > 1 ? (
+          <div className="rounded-[24px] border bg-card/95 p-5 shadow-sm">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Account
+            </p>
+            <h3 className="mt-1 text-lg font-semibold">Which account should MADAR connect to?</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {discoveredProviderAccounts.length} accounts were found for this connection. Pick the
+              one MADAR should sync.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {discoveredProviderAccounts.map((account) => {
+                const selected = selectedAccountId === account.id
+                return (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className={cn(
+                      "rounded-[16px] border px-4 py-3 text-left text-sm font-medium",
+                      WIZARD_INTERACTION_CLASS,
+                      selected
+                        ? "border-sky-400 bg-sky-500/12 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-300 hover:bg-sky-500/18 hover:text-sky-900"
+                        : "border-border/70 bg-background/80 text-foreground/80 hover:border-sky-200 hover:bg-muted/50"
+                    )}
+                    onClick={() => setSelectedAccountId(account.id)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span>{account.label}</span>
+                      {selected ? <Check className="size-4 text-sky-500" /> : null}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2">
           <SyncChip
             active={syncPreset === "recommended"}
