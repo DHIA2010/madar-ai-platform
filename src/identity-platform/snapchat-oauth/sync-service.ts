@@ -230,6 +230,42 @@ function buildStatsWindows(timeZone: string): Array<{ start: Date; end: Date }> 
   return windows
 }
 
+interface SnapchatStatsResponseBody {
+  request_status?: string
+  debug_message?: string
+  timeseries_stats?: Array<{
+    sub_request_status?: string
+    timeseries_stat?: {
+      timeseries?: Array<{
+        start_time: string
+        end_time?: string
+        breakdown_stats?: Record<string, Array<{ id?: string; stats?: Record<string, unknown> }>>
+      }>
+    }
+  }>
+}
+
+function parseStatsBody(
+  body: SnapchatStatsResponseBody,
+  breakdown: "campaign" | "ad"
+): SnapchatBreakdownDailyStat[] {
+  const results: SnapchatBreakdownDailyStat[] = []
+  for (const entry of body.timeseries_stats ?? []) {
+    for (const day of entry.timeseries_stat?.timeseries ?? []) {
+      for (const item of day.breakdown_stats?.[breakdown] ?? []) {
+        if (!item.id) continue
+        results.push({
+          entityId: item.id,
+          startTime: day.start_time,
+          endTime: day.end_time,
+          stats: item.stats ?? {},
+        })
+      }
+    }
+  }
+  return results
+}
+
 async function fetchStatsWindow(input: {
   apiBaseUrl: string
   accountId: string
@@ -245,72 +281,81 @@ async function fetchStatsWindow(input: {
   statsUrl.searchParams.set("end_time", input.window.end.toISOString())
   statsUrl.searchParams.set("fields", input.fields)
 
-  let response: Response | null = null
   for (let attempt = 0; attempt <= STATS_WINDOW_MAX_RETRIES; attempt += 1) {
-    response = await fetch(statsUrl.toString(), {
+    const response = await fetch(statsUrl.toString(), {
       headers: { authorization: `Bearer ${input.accessToken}`, accept: "application/json" },
     })
-    if (response.ok) {
-      break
-    }
+
     // 429s are expected under concurrent stats fetching -- Snapchat's own per-account rate
     // limit (confirmed live: 10 concurrent requests reliably triggers "Too Many Requests"
     // even though a lower steady-state concurrency does not). Back off and retry rather than
     // failing the whole sync over a transient throttle.
-    if (response.status === 429 && attempt < STATS_WINDOW_MAX_RETRIES) {
-      const retryAfterHeader = response.headers.get("retry-after")
-      const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
-      const delayMs = Number.isFinite(retryAfterMs)
-        ? retryAfterMs
-        : Math.min(500 * 2 ** attempt, 4000)
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    if (response.status === 429) {
+      if (attempt < STATS_WINDOW_MAX_RETRIES) {
+        const retryAfterHeader = response.headers.get("retry-after")
+        const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
+        const delayMs = Number.isFinite(retryAfterMs)
+          ? retryAfterMs
+          : Math.min(500 * 2 ** attempt, 4000)
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        continue
+      }
+      throw new IntegrationProviderError(
+        "Snapchat API request failed during sync.",
+        "SNAPCHAT_SYNC_API_REQUEST_FAILED",
+        true,
+        502
+      )
+    }
+
+    if (!response.ok) {
+      throw new IntegrationProviderError(
+        "Snapchat API request failed during sync.",
+        "SNAPCHAT_SYNC_API_REQUEST_FAILED",
+        true,
+        502
+      )
+    }
+
+    const body = (await response.json()) as SnapchatStatsResponseBody
+
+    // A 200 response can still carry a per-sub-request soft failure (e.g. throttling) inside
+    // the body rather than an HTTP-level 429 -- sub_request_status other than "SUCCESS" means
+    // that window's data wasn't actually returned even though the request itself succeeded.
+    // Treating that as "no data" (as this used to) silently produced empty stats under
+    // concurrent load instead of surfacing or retrying the problem.
+    const subStatuses = (body.timeseries_stats ?? []).map((entry) => entry.sub_request_status)
+    const anyNotSuccess = subStatuses.some((status) => status !== undefined && status !== "SUCCESS")
+
+    console.error(
+      JSON.stringify({
+        event: "snapchat_stats_window",
+        breakdown: input.breakdown,
+        startTime: input.window.start.toISOString(),
+        endTime: input.window.end.toISOString(),
+        attempt,
+        httpStatus: response.status,
+        requestStatus: body.request_status,
+        subStatuses,
+        debugMessage: body.debug_message,
+        parsedCount: parseStatsBody(body, input.breakdown).length,
+      })
+    )
+
+    if (anyNotSuccess && attempt < STATS_WINDOW_MAX_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(500 * 2 ** attempt, 4000)))
       continue
     }
-    break
+
+    return parseStatsBody(body, input.breakdown)
   }
 
-  if (!response || !response.ok) {
-    throw new IntegrationProviderError(
-      "Snapchat API request failed during sync.",
-      "SNAPCHAT_SYNC_API_REQUEST_FAILED",
-      true,
-      502
-    )
-  }
-
-  // NOTE: this connected ad account currently has zero campaigns, so the exact
-  // breakdown + DAY-granularity response shape below is extrapolated from Snapchat's
-  // documented TOTAL-granularity breakdown example (which nests breakdown_stats.<type>[]
-  // under total_stat) rather than confirmed against a real response -- everything else in
-  // this file was verified live. If this comes back empty once real campaigns exist, check
-  // the actual response shape before assuming the fields are wrong.
-  const body = (await response.json()) as {
-    timeseries_stats?: Array<{
-      timeseries_stat?: {
-        timeseries?: Array<{
-          start_time: string
-          end_time?: string
-          breakdown_stats?: Record<string, Array<{ id?: string; stats?: Record<string, unknown> }>>
-        }>
-      }
-    }>
-  }
-
-  const results: SnapchatBreakdownDailyStat[] = []
-  for (const entry of body.timeseries_stats ?? []) {
-    for (const day of entry.timeseries_stat?.timeseries ?? []) {
-      for (const item of day.breakdown_stats?.[input.breakdown] ?? []) {
-        if (!item.id) continue
-        results.push({
-          entityId: item.id,
-          startTime: day.start_time,
-          endTime: day.end_time,
-          stats: item.stats ?? {},
-        })
-      }
-    }
-  }
-  return results
+  throw new IntegrationProviderError(
+    "Snapchat API request failed during sync.",
+    "SNAPCHAT_SYNC_API_REQUEST_FAILED",
+    true,
+    502
+  )
 }
 
 // Walks the full-history window in <=32-day chunks (Snapchat's own limit for DAY-granularity
