@@ -205,7 +205,7 @@ function normalizeShopDomain(rawShopDomain: string | null | undefined): string {
   return candidate
 }
 
-function buildShopUrls(shopDomain: string, apiVersion: string) {
+export function buildShopUrls(shopDomain: string, apiVersion: string) {
   return {
     authorizationUrl: `https://${shopDomain}/admin/oauth/authorize`,
     tokenUrl: `https://${shopDomain}/admin/oauth/access_token`,

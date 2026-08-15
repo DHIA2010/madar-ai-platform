@@ -4,6 +4,8 @@ import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { ShopifyOAuthController } from "../../shopify-oauth/controller"
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { ShopifyOAuthService } from "../../shopify-oauth/service"
+import { ShopifySyncRepository } from "../../shopify-oauth/sync-repository"
+import { ShopifySyncService } from "../../shopify-oauth/sync-service"
 import type { ShopifyOAuthConnectionView } from "../../shopify-oauth/types"
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 
@@ -17,27 +19,6 @@ import type {
   IntegrationProviderSyncInput,
 } from "../provider-contracts"
 
-interface ShopifySyncResult {
-  id: string
-  connectionId: string
-  provider: "shopify"
-  status: "completed"
-  startedAt: string
-  completedAt: string
-  metrics: Record<string, number>
-  mode: "initial"
-}
-
-interface ShopifyRecordItem {
-  id: string
-  entityType: string
-  customerId: string
-  entityId: string
-  recordDate: string
-  payload: Record<string, unknown>
-  updatedAt: string
-}
-
 export class ShopifyIntegrationProvider {
   readonly providerId = "shopify"
   readonly displayName = "Shopify"
@@ -45,12 +26,18 @@ export class ShopifyIntegrationProvider {
   private readonly repository?: ShopifyOAuthRepository
   private readonly service?: ShopifyOAuthService
   private readonly controller?: ShopifyOAuthController
+  private readonly syncService?: ShopifySyncService
 
   constructor(database?: PostgresDatabase) {
     if (database) {
       this.repository = new ShopifyOAuthRepository(database)
       this.service = new ShopifyOAuthService(this.repository)
       this.controller = new ShopifyOAuthController(this.service)
+      this.syncService = new ShopifySyncService(
+        this.repository,
+        new ShopifySyncRepository(database),
+        this.service
+      )
     }
   }
 
@@ -93,6 +80,19 @@ export class ShopifyIntegrationProvider {
     return this.service
   }
 
+  private requireSyncService() {
+    if (!this.syncService) {
+      throw new IntegrationProviderError(
+        "Shopify sync service unavailable.",
+        "SHOPIFY_OAUTH_UNAVAILABLE",
+        false,
+        503
+      )
+    }
+
+    return this.syncService
+  }
+
   private assertConnectionOwnership(
     connection: ShopifyOAuthConnectionView | null,
     actor: AuthenticatedActor
@@ -131,55 +131,8 @@ export class ShopifyIntegrationProvider {
     return this.requireController().getActiveConnection(actor)
   }
 
-  async sync(
-    actor: AuthenticatedActor,
-    input: IntegrationProviderSyncInput
-  ): Promise<ShopifySyncResult> {
-    const repository = this.requireRepository()
-    const service = this.requireService()
-
-    const connection = await repository.findConnectionById(input.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Shopify connection is not connected.",
-        "SHOPIFY_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const selected = await repository.findAccessibleCustomerAccount(
-      input.connectionId,
-      input.customerId
-    )
-    if (!selected) {
-      throw new IntegrationProviderError(
-        "Shopify store is not accessible for this connection.",
-        "SHOPIFY_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    await service.resolveAccessToken(input.connectionId)
-
-    return {
-      id: input.idempotencyKey,
-      connectionId: input.connectionId,
-      provider: "shopify",
-      status: "completed",
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      mode: "initial",
-      metrics: {
-        products: 0,
-        orders: 0,
-        customers: 0,
-        totalRecords: 0,
-      },
-    }
+  async sync(actor: AuthenticatedActor, input: IntegrationProviderSyncInput) {
+    return this.requireSyncService().sync(actor, input)
   }
 
   async listAccounts(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
@@ -205,53 +158,8 @@ export class ShopifyIntegrationProvider {
     }))
   }
 
-  async listRecords(
-    actor: AuthenticatedActor,
-    query: IntegrationProviderRecordQuery
-  ): Promise<ShopifyRecordItem[]> {
-    const repository = this.requireRepository()
-
-    const connection = await repository.findConnectionById(query.connectionId)
-    this.assertConnectionOwnership(connection, actor)
-
-    if (connection.status !== "connected") {
-      throw new IntegrationProviderError(
-        "Shopify connection is not connected.",
-        "SHOPIFY_CONNECTION_NOT_READY",
-        false,
-        409
-      )
-    }
-
-    const account = await repository.findAccessibleCustomerAccount(
-      query.connectionId,
-      query.customerId
-    )
-    if (!account) {
-      throw new IntegrationProviderError(
-        "Shopify store is not accessible for this connection.",
-        "SHOPIFY_INVALID_ACCOUNT",
-        false,
-        400
-      )
-    }
-
-    const recordDate = query.startDate ?? new Date().toISOString().slice(0, 10)
-
-    return [
-      {
-        id: `${query.customerId}:snapshot:0`,
-        entityType: query.entityType ?? "initial_sync_marker",
-        customerId: query.customerId,
-        entityId: account.customerId,
-        recordDate,
-        payload: {
-          stage: "initial_sync_skeleton",
-          status: "completed",
-        },
-        updatedAt: new Date().toISOString(),
-      },
-    ]
+  async listRecords(actor: AuthenticatedActor, query: IntegrationProviderRecordQuery) {
+    return this.requireSyncService().listRecords(actor, query)
   }
 
   async getSelectedAccount(actor: AuthenticatedActor, query: IntegrationProviderAccountsQuery) {
