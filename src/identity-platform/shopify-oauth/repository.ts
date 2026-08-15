@@ -588,6 +588,18 @@ export class ShopifyOAuthRepository
     })
 
     await this.db.query({
+      name: "shopify-sync-delete-records",
+      text: "DELETE FROM shopify_records WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
+      name: "shopify-sync-delete-runs",
+      text: "DELETE FROM shopify_sync_runs WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
       name: "shopify-oauth-delete-events",
       text: "DELETE FROM shopify_oauth_events WHERE connection_id = $1",
       values: [connectionId],

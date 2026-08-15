@@ -600,6 +600,79 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     expect(secondBody.metrics.campaigns).toBe(1)
   })
 
+  it("deletes the connection cleanly after a sync has written records (no FK violation)", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "snapchat-sync-delete@madar.test",
+      "Snapchat Sync Delete Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001125"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000001126",
+      label: "Snapchat Sync Delete",
+    })
+
+    const accountId = "acc-445566"
+    mockSnapchatResponses({
+      baseUrl,
+      accessToken: "snap-access-delete",
+      refreshToken: "snap-refresh-delete",
+      organizationId: "org-5",
+      organizationName: "Delete Org",
+      accountId,
+      accountName: "Delete Account",
+      data: {
+        campaigns: [{ id: "camp-1", updated_at: "2026-01-01T00:00:00Z" }],
+        ads: [],
+        adSquads: [],
+        campaignDailyStats: [],
+        adDailyStats: [],
+      },
+    })
+
+    const started = await connectSnapchat({ login, workspaceId })
+
+    const syncResponse = await fetch(`${baseUrl}/v1/integrations/snapchat-ads/sync`, {
+      method: "POST",
+      headers: syncHeaders(login, workspaceId),
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: accountId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-run-delete",
+        mode: "incremental",
+        trigger: "manual",
+      }),
+    })
+    expect(syncResponse.status).toBe(200)
+
+    const runsBefore = await database.query(
+      `select id from snapchat_sync_runs where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(runsBefore.rows.length).toBeGreaterThan(0)
+
+    const deleteResponse = await fetch(`${baseUrl}/v1/integrations/${started.connectionId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${login.session.accessToken}` },
+    })
+    expect(deleteResponse.status).toBe(204)
+
+    const runsAfter = await database.query(
+      `select id from snapchat_sync_runs where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(runsAfter.rows).toHaveLength(0)
+    const recordsAfter = await database.query(
+      `select id from snapchat_records where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(recordsAfter.rows).toHaveLength(0)
+  })
+
   it("marks the sync run failed when Snapchat's API errors, without corrupting the connection", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "snapchat-sync-failure@madar.test",

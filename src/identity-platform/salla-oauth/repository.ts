@@ -573,6 +573,18 @@ export class SallaOAuthRepository
     })
 
     await this.db.query({
+      name: "salla-sync-delete-records",
+      text: "DELETE FROM salla_records WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
+      name: "salla-sync-delete-runs",
+      text: "DELETE FROM salla_sync_runs WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
       name: "salla-oauth-delete-events",
       text: "DELETE FROM salla_oauth_events WHERE connection_id = $1",
       values: [connectionId],

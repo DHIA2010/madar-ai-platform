@@ -459,6 +459,76 @@ describe("google analytics data sync: real traffic/events/conversions pipeline",
     expect(secondBody.metrics.traffic).toBe(1)
   })
 
+  it("deletes the connection cleanly after a sync has written records (no FK violation)", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "ga-sync-delete@madar.test",
+      "GA Sync Delete Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001225"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000001226",
+      label: "GA Sync Delete",
+    })
+
+    const propertyId = "113344"
+    mockGoogleAnalyticsResponses({
+      baseUrl,
+      accessToken: "ga-access-delete",
+      propertyId,
+      accountId: "acct-3",
+      accountName: "Delete Account",
+      propertyName: "Delete Property",
+      data: {
+        traffic: [{ dimensions: ["20260101"], metrics: ["1", "1", "1", "1"] }],
+        events: [],
+        conversions: [],
+      },
+    })
+
+    const started = await connectGoogleAnalytics({ login, workspaceId })
+
+    const syncResponse = await fetch(`${baseUrl}/v1/integrations/google-analytics/sync`, {
+      method: "POST",
+      headers: syncHeaders(login, workspaceId),
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: propertyId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-run-delete",
+        mode: "incremental",
+        trigger: "manual",
+      }),
+    })
+    expect(syncResponse.status).toBe(200)
+
+    const runsBefore = await database.query(
+      `select id from google_analytics_sync_runs where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(runsBefore.rows.length).toBeGreaterThan(0)
+
+    const deleteResponse = await fetch(`${baseUrl}/v1/integrations/${started.connectionId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${login.session.accessToken}` },
+    })
+    expect(deleteResponse.status).toBe(204)
+
+    const runsAfter = await database.query(
+      `select id from google_analytics_sync_runs where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(runsAfter.rows).toHaveLength(0)
+    const recordsAfter = await database.query(
+      `select id from google_analytics_records where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(recordsAfter.rows).toHaveLength(0)
+  })
+
   it("marks the sync run failed when Google Analytics' API errors, without corrupting the connection", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "ga-sync-failure@madar.test",

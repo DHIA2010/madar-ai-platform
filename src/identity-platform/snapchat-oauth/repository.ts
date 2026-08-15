@@ -573,6 +573,18 @@ export class SnapchatOAuthRepository
     })
 
     await this.db.query({
+      name: "snapchat-sync-delete-records",
+      text: "DELETE FROM snapchat_records WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
+      name: "snapchat-sync-delete-runs",
+      text: "DELETE FROM snapchat_sync_runs WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
       name: "snapchat-oauth-delete-events",
       text: "DELETE FROM snapchat_oauth_events WHERE connection_id = $1",
       values: [connectionId],

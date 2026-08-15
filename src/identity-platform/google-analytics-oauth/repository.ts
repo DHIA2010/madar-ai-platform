@@ -573,6 +573,18 @@ export class GoogleAnalyticsOAuthRepository
     })
 
     await this.db.query({
+      name: "google-analytics-sync-delete-records",
+      text: "DELETE FROM google_analytics_records WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
+      name: "google-analytics-sync-delete-runs",
+      text: "DELETE FROM google_analytics_sync_runs WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
       name: "google-analytics-oauth-delete-events",
       text: "DELETE FROM google_analytics_oauth_events WHERE connection_id = $1",
       values: [connectionId],

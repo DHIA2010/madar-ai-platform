@@ -434,6 +434,74 @@ describe("meta ads data sync: real campaigns/ads/insights pipeline", () => {
     expect(secondBody.metrics.campaigns).toBe(1)
   })
 
+  it("deletes the connection cleanly after a sync has written records (no FK violation)", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "meta-sync-delete@madar.test",
+      "Meta Sync Delete Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001025"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000001026",
+      label: "Meta Sync Delete",
+    })
+
+    const accountId = "act_113344"
+    mockMetaResponses({
+      baseUrl,
+      accessToken: "meta-access-delete",
+      longLivedToken: "meta-long-lived-delete",
+      adAccounts: [{ id: accountId, name: "Delete Account", account_status: 1 }],
+      data: {
+        campaigns: [{ id: "1", updated_time: "2026-01-01T00:00:00Z" }],
+        ads: [],
+        insights: [],
+      },
+    })
+
+    const started = await connectMeta({ login, workspaceId })
+
+    const syncResponse = await fetch(`${baseUrl}/v1/integrations/meta-ads/sync`, {
+      method: "POST",
+      headers: syncHeaders(login, workspaceId),
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: accountId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-run-delete",
+        mode: "incremental",
+        trigger: "manual",
+      }),
+    })
+    expect(syncResponse.status).toBe(200)
+
+    const runsBefore = await database.query(
+      `select id from meta_sync_runs where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(runsBefore.rows.length).toBeGreaterThan(0)
+
+    const deleteResponse = await fetch(`${baseUrl}/v1/integrations/${started.connectionId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${login.session.accessToken}` },
+    })
+    expect(deleteResponse.status).toBe(204)
+
+    const runsAfter = await database.query(
+      `select id from meta_sync_runs where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(runsAfter.rows).toHaveLength(0)
+    const recordsAfter = await database.query(
+      `select id from meta_records where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(recordsAfter.rows).toHaveLength(0)
+  })
+
   it("marks the sync run failed when Meta's API errors, without corrupting the connection", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "meta-sync-failure@madar.test",

@@ -573,6 +573,18 @@ export class MetaOAuthRepository
     })
 
     await this.db.query({
+      name: "meta-sync-delete-records",
+      text: "DELETE FROM meta_records WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
+      name: "meta-sync-delete-runs",
+      text: "DELETE FROM meta_sync_runs WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
       name: "meta-oauth-delete-events",
       text: "DELETE FROM meta_oauth_events WHERE connection_id = $1",
       values: [connectionId],
