@@ -3,6 +3,14 @@ import { randomUUID } from "node:crypto"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { IntegrationRecordView, IntegrationSyncRunView } from "../integrations/provider-models"
 
+// Real ad accounts can have hundreds of stats-days in one sync -- one INSERT per row meant
+// one network round-trip per row, which is what made a large sync slow/prone to timing out in
+// production (confirmed: 590 stats rows already noticeably slow one-at-a-time). Batching
+// multiple rows into a single multi-row INSERT cuts that to one round-trip per batch. 500
+// keeps each statement's parameter count (7 per row) and size well clear of Postgres's own
+// limits while still being a large improvement over one-at-a-time.
+const UPSERT_BATCH_SIZE = 500
+
 function toJsonDate(value: unknown): string | null {
   if (!value) {
     return null
@@ -45,7 +53,7 @@ function mapRecord(row: Record<string, unknown>): IntegrationRecordView {
 }
 
 export interface SnapchatSyncRecordInput {
-  entityType: "campaigns" | "ads" | "stats"
+  entityType: "campaigns" | "ad_squads" | "ads" | "stats"
   entityId: string
   recordDate: string
   payload: Record<string, unknown>
@@ -157,31 +165,41 @@ export class SnapchatSyncRepository {
     records: SnapchatSyncRecordInput[]
   }): Promise<number> {
     let written = 0
-    for (const record of input.records) {
-      await this.db.query(
-        `
-        insert into snapchat_records (
-          id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at
-        ) values (
-          $1,$2,$3,$4,$5,$6::date,$7::jsonb,now(),now()
+    for (let offset = 0; offset < input.records.length; offset += UPSERT_BATCH_SIZE) {
+      const batch = input.records.slice(offset, offset + UPSERT_BATCH_SIZE)
+
+      const values: unknown[] = []
+      const rows: string[] = []
+      batch.forEach((record, index) => {
+        const p = index * 7
+        rows.push(
+          `($${p + 1},$${p + 2},$${p + 3},$${p + 4},$${p + 5},$${p + 6}::date,$${p + 7}::jsonb,now(),now())`
         )
-        on conflict (connection_id, entity_type, entity_id)
-        do update set
-          record_date = excluded.record_date,
-          payload = excluded.payload,
-          updated_at = now()
-        `,
-        [
+        values.push(
           randomUUID(),
           input.connectionId,
           input.customerId,
           record.entityType,
           record.entityId,
           record.recordDate,
-          JSON.stringify(record.payload),
-        ]
+          JSON.stringify(record.payload)
+        )
+      })
+
+      await this.db.query(
+        `
+        insert into snapchat_records (
+          id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at
+        ) values ${rows.join(",")}
+        on conflict (connection_id, entity_type, entity_id)
+        do update set
+          record_date = excluded.record_date,
+          payload = excluded.payload,
+          updated_at = now()
+        `,
+        values
       )
-      written += 1
+      written += batch.length
     }
     return written
   }
