@@ -161,6 +161,18 @@ function mockSnapchatResponses(input: {
     }
 
     if (url.includes(`/adaccounts/${input.accountId}/stats`)) {
+      // The real sync-service walks the 90-day window in <=32-day chunks (Snapchat's own
+      // limit), issuing several requests -- filter fixture entries by the requested
+      // start_time/end_time so each chunk only returns its own days, matching real behavior
+      // instead of returning every fixture entry for every chunk.
+      const parsed = new URL(url)
+      const windowStart = new Date(parsed.searchParams.get("start_time") ?? 0).getTime()
+      const windowEnd = new Date(parsed.searchParams.get("end_time") ?? 0).getTime()
+      const windowStats = dailyStats.filter((stat) => {
+        const statTime = new Date(String(stat.start_time)).getTime()
+        return statTime >= windowStart && statTime < windowEnd
+      })
+
       return new Response(
         JSON.stringify({
           request_status: "SUCCESS",
@@ -171,7 +183,7 @@ function mockSnapchatResponses(input: {
                 id: input.accountId,
                 type: "AD_ACCOUNT",
                 granularity: "DAY",
-                timeseries: dailyStats,
+                timeseries: windowStats,
               },
             },
           ],
@@ -359,9 +371,17 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
       updated_at: "2026-01-01T00:00:00Z",
     }))
     const ads = [{ id: "ad-1", ad_squad_id: "sq-1", updated_at: "2026-01-02T00:00:00Z" }]
+    // The real sync-service requests a rolling 90-day window ending "today" -- fixture dates
+    // must fall inside that window regardless of when the test runs, so these are relative to
+    // now rather than fixed calendar dates.
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    const daysAgo = (n: number) => new Date(today.getTime() - n * 24 * 60 * 60 * 1000).toISOString()
+    const statDayMinus2 = daysAgo(2)
+    const statDayMinus1 = daysAgo(1)
     const dailyStats = [
-      { start_time: "2026-01-01T00:00:00Z", stats: { impressions: 100, spend: 500 } },
-      { start_time: "2026-01-02T00:00:00Z", stats: { impressions: 120, spend: 600 } },
+      { start_time: statDayMinus2, stats: { impressions: 100, spend: 500 } },
+      { start_time: statDayMinus1, stats: { impressions: 120, spend: 600 } },
     ]
 
     mockSnapchatResponses({
@@ -409,9 +429,7 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     expect(recordRows.rows.filter((r) => r.entity_type === "campaigns")).toHaveLength(17)
     // Confirms next_link cursor pagination actually walked past page 1 (15 campaigns).
     expect(recordRows.rows.some((r) => r.entity_id === "camp-16")).toBe(true)
-    expect(recordRows.rows.some((r) => r.entity_id === `${accountId}:2026-01-01T00:00:00Z`)).toBe(
-      true
-    )
+    expect(recordRows.rows.some((r) => r.entity_id === `${accountId}:${statDayMinus2}`)).toBe(true)
 
     const recordsResponse = await fetch(
       `${baseUrl}/v1/integrations/snapchat-ads/records?connectionId=${started.connectionId}&customerId=${accountId}&entityType=ads`,

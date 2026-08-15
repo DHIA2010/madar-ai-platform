@@ -13,10 +13,71 @@ const DEFAULT_SNAPCHAT_API_BASE_URL = "https://adsapi.snapchat.com/v1"
 // Snapchat ad accounts can have thousands of campaigns/ads/stats-days -- this bounds a single
 // sync run so a misbehaving API (e.g. a next_link that never stops appearing) can't loop forever.
 const MAX_PAGES_PER_ENTITY = 200
-// Full-history stats window, anchored well before Snapchat's ad platform existed -- matches
-// this session's explicit "sync everything for now, incremental comes later" scope decision.
-const STATS_START_TIME = "2015-01-01T00:00:00Z"
-const STATS_FIELDS = "impressions,spend,swipes"
+// Campaigns/ads sync full history (no API limit there). Daily stats are deliberately bounded
+// to a fixed start date instead of true full history back to Snapchat's launch: a full
+// 2015-to-now backfill needs ~130 rate-limited 32-day-chunked API calls (confirmed live --
+// this reliably exceeds a synchronous request/response timeout even with retries/backoff),
+// which doesn't fit this connector's synchronous sync() model the way products/orders/
+// campaigns do. 2025-01-01 (~19 chunks) is a deliberate scope decision (confirmed with the
+// user), not a technical limit -- widen it once sync moves to an incremental/background model.
+const STATS_HISTORY_START_YEAR = 2025
+const STATS_HISTORY_START_MONTH = 1
+const STATS_HISTORY_START_DAY = 1
+// DAY-granularity Stats queries reject intervals over 32 days (confirmed against the live
+// API: "Timeseries queries with DAY granularity cannot query time intervals of more than 32
+// days") -- even the bounded window above has to be walked in chunks.
+const STATS_WINDOW_DAYS = 32
+const STATS_WINDOW_MS = STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
+// Safety bound on the number of 32-day windows walked per sync -- 2025-01-01 to now is ~19
+// windows; this leaves headroom for that to grow before hitting the cap.
+const MAX_STATS_WINDOWS = 40
+// 10 concurrent requests reliably triggered Snapchat's per-account rate limit (confirmed
+// live); this lower value plus the retry-with-backoff in fetchStatsWindow keeps 429s rare.
+const STATS_WINDOW_CONCURRENCY = 4
+const STATS_WINDOW_MAX_RETRIES = 4
+// Confirmed against the live API: querying AdAccount-level stats only accepts "spend" --
+// other fields (impressions, swipes) are only available at campaign/ad/creative level.
+const STATS_FIELDS = "spend"
+
+// Computes the UTC offset (in minutes, local = UTC + offset) that `timeZone` observes at
+// `date` -- needed because Snapchat's DAY-granularity Stats API requires start_time/end_time
+// to fall exactly on local-midnight boundaries in the ad account's own timezone, not UTC
+// (confirmed against the live API: "must have a start time that is the start of day (00:00:00)
+// for the account's timezone").
+function getUtcOffsetMinutes(timeZone: string, date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date)
+  const map: Record<string, string> = {}
+  for (const part of parts) map[part.type] = part.value
+  const asUtc = Date.UTC(+map.year, +map.month - 1, +map.day, +map.hour, +map.minute, +map.second)
+  return (asUtc - date.getTime()) / 60000
+}
+
+function localMidnightUtc(timeZone: string, year: number, month: number, day: number): Date {
+  const guess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0))
+  const offsetMinutes = getUtcOffsetMinutes(timeZone, guess)
+  return new Date(guess.getTime() - offsetMinutes * 60000)
+}
+
+function currentLocalDateParts(timeZone: string, date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date)
+  const map: Record<string, string> = {}
+  for (const part of parts) map[part.type] = part.value
+  return { year: +map.year, month: +map.month, day: +map.day }
+}
 
 interface SnapchatCampaignApiRow {
   id: string
@@ -113,6 +174,139 @@ async function fetchAllPagesByNextLink<T>(input: {
   return results
 }
 
+function buildStatsWindows(timeZone: string): Array<{ start: Date; end: Date }> {
+  const todayParts = currentLocalDateParts(timeZone, new Date())
+  const rangeEnd = localMidnightUtc(timeZone, todayParts.year, todayParts.month, todayParts.day)
+  const rangeStart = localMidnightUtc(
+    timeZone,
+    STATS_HISTORY_START_YEAR,
+    STATS_HISTORY_START_MONTH,
+    STATS_HISTORY_START_DAY
+  )
+
+  const windows: Array<{ start: Date; end: Date }> = []
+  let windowStart = rangeStart
+
+  while (windowStart < rangeEnd && windows.length < MAX_STATS_WINDOWS) {
+    const naiveWindowEnd = new Date(
+      Math.min(windowStart.getTime() + STATS_WINDOW_MS, rangeEnd.getTime())
+    )
+    // Re-align the chunk's end to local midnight -- adding a fixed millisecond offset can
+    // drift off the day boundary across a DST transition in the account's timezone.
+    const naiveEndParts = currentLocalDateParts(timeZone, naiveWindowEnd)
+    const windowEnd = localMidnightUtc(
+      timeZone,
+      naiveEndParts.year,
+      naiveEndParts.month,
+      naiveEndParts.day
+    )
+
+    if (windowEnd <= windowStart) {
+      break
+    }
+    windows.push({ start: windowStart, end: windowEnd })
+    windowStart = windowEnd
+  }
+
+  return windows
+}
+
+async function fetchStatsWindow(input: {
+  apiBaseUrl: string
+  accountId: string
+  accessToken: string
+  fields: string
+  window: { start: Date; end: Date }
+}): Promise<SnapchatDailyStat[]> {
+  const statsUrl = new URL(`${input.apiBaseUrl}/adaccounts/${input.accountId}/stats`)
+  statsUrl.searchParams.set("granularity", "DAY")
+  statsUrl.searchParams.set("start_time", input.window.start.toISOString())
+  statsUrl.searchParams.set("end_time", input.window.end.toISOString())
+  statsUrl.searchParams.set("fields", input.fields)
+
+  let response: Response | null = null
+  for (let attempt = 0; attempt <= STATS_WINDOW_MAX_RETRIES; attempt += 1) {
+    response = await fetch(statsUrl.toString(), {
+      headers: { authorization: `Bearer ${input.accessToken}`, accept: "application/json" },
+    })
+    if (response.ok) {
+      break
+    }
+    // 429s are expected under concurrent stats fetching -- Snapchat's own per-account rate
+    // limit (confirmed live: 10 concurrent requests reliably triggers "Too Many Requests"
+    // even though a lower steady-state concurrency does not). Back off and retry rather than
+    // failing the whole sync over a transient throttle.
+    if (response.status === 429 && attempt < STATS_WINDOW_MAX_RETRIES) {
+      const retryAfterHeader = response.headers.get("retry-after")
+      const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
+      const delayMs = Number.isFinite(retryAfterMs)
+        ? retryAfterMs
+        : Math.min(500 * 2 ** attempt, 4000)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      continue
+    }
+    break
+  }
+
+  if (!response || !response.ok) {
+    throw new IntegrationProviderError(
+      "Snapchat API request failed during sync.",
+      "SNAPCHAT_SYNC_API_REQUEST_FAILED",
+      true,
+      502
+    )
+  }
+
+  const body = (await response.json()) as {
+    timeseries_stats?: Array<{ timeseries_stat?: { timeseries?: SnapchatDailyStat[] } }>
+  }
+  const results: SnapchatDailyStat[] = []
+  for (const entry of body.timeseries_stats ?? []) {
+    results.push(...(entry.timeseries_stat?.timeseries ?? []))
+  }
+  return results
+}
+
+// Walks the full-history window in <=32-day chunks (Snapchat's own limit for DAY-granularity
+// Stats queries), aligning every chunk boundary to local midnight in the ad account's own
+// timezone (also a hard requirement confirmed against the live API). A decade of history is
+// ~130 chunks -- fetching them one at a time made a single sync take minutes (confirmed by a
+// live run that timed out), so this fetches a bounded number concurrently instead of
+// sequentially, matching how e.g. a browser caps concurrent requests per host rather than
+// either fully serializing or fully parallelizing them.
+async function fetchDailyStatsAllWindows(input: {
+  apiBaseUrl: string
+  accountId: string
+  accessToken: string
+  timeZone: string
+  fields: string
+}): Promise<SnapchatDailyStat[]> {
+  const windows = buildStatsWindows(input.timeZone)
+  const results: SnapchatDailyStat[] = []
+  let cursor = 0
+
+  async function worker() {
+    while (cursor < windows.length) {
+      const index = cursor
+      cursor += 1
+      const chunk = await fetchStatsWindow({
+        apiBaseUrl: input.apiBaseUrl,
+        accountId: input.accountId,
+        accessToken: input.accessToken,
+        fields: input.fields,
+        window: windows[index],
+      })
+      results.push(...chunk)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(STATS_WINDOW_CONCURRENCY, windows.length) }, () => worker())
+  )
+
+  return results
+}
+
 export class SnapchatSyncService {
   private readonly apiBaseUrl: string
 
@@ -177,7 +371,7 @@ export class SnapchatSyncService {
     assertActorCanManageIntegrations(actor)
 
     const connection = await this.findOwnedConnectedConnection(actor, input.connectionId)
-    await this.requireAccessibleAdAccount(connection.id, input.customerId)
+    const account = await this.requireAccessibleAdAccount(connection.id, input.customerId)
 
     const syncRun = await this.syncRepository.createOrLoadSyncRun({
       connectionId: connection.id,
@@ -203,9 +397,11 @@ export class SnapchatSyncService {
       const accessToken = await this.oauthService.resolveAccessToken(connection.id)
       const accountId = input.customerId
       const base = this.apiBaseUrl.replace(/\/$/, "")
-      const nowIso = new Date().toISOString()
+      // Ad accounts have their own reporting timezone -- Snapchat rejects any DAY-granularity
+      // Stats query whose start_time/end_time aren't exactly local midnight in that timezone.
+      const timeZone = account.timeZone ?? "UTC"
 
-      const [campaigns, ads] = await Promise.all([
+      const [campaigns, ads, dailyStats] = await Promise.all([
         fetchAllPagesByNextLink<SnapchatCampaignApiRow>({
           initialUrl: `${base}/adaccounts/${accountId}/campaigns`,
           accessToken,
@@ -218,31 +414,14 @@ export class SnapchatSyncService {
           listKey: "ads",
           singularKey: "ad",
         }),
+        fetchDailyStatsAllWindows({
+          apiBaseUrl: base,
+          accountId,
+          accessToken,
+          timeZone,
+          fields: STATS_FIELDS,
+        }),
       ])
-
-      const statsUrl = new URL(`${base}/adaccounts/${accountId}/stats`)
-      statsUrl.searchParams.set("granularity", "DAY")
-      statsUrl.searchParams.set("start_time", STATS_START_TIME)
-      statsUrl.searchParams.set("end_time", nowIso)
-      statsUrl.searchParams.set("fields", STATS_FIELDS)
-
-      const statsResponse = await fetch(statsUrl.toString(), {
-        headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
-      })
-      if (!statsResponse.ok) {
-        throw new IntegrationProviderError(
-          "Snapchat API request failed during sync.",
-          "SNAPCHAT_SYNC_API_REQUEST_FAILED",
-          true,
-          502
-        )
-      }
-      const statsBody = (await statsResponse.json()) as {
-        timeseries_stats?: Array<{ timeseries_stat?: { timeseries?: SnapchatDailyStat[] } }>
-      }
-      const dailyStats = (statsBody.timeseries_stats ?? []).flatMap(
-        (entry) => entry.timeseries_stat?.timeseries ?? []
-      )
 
       const records: SnapchatSyncRecordInput[] = [
         ...campaigns.map((campaign) => ({

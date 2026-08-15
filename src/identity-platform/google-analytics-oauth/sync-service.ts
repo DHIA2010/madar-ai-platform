@@ -13,9 +13,12 @@ import {
 } from "./sync-repository"
 
 const DEFAULT_GA4_DATA_API_BASE_URL = "https://analyticsdata.googleapis.com/v1beta"
-// Full-history report window, anchored well before GA4 existed -- matches this session's
-// explicit "sync everything for now, incremental comes later" scope decision.
-const REPORT_START_DATE = "2015-01-01"
+// Full-history report window, anchored just past the Data API's own hard floor (confirmed
+// against the live API: "start_date = 2015-01-01 must be greater than 2015-08-13") -- matches
+// this session's explicit "sync everything for now, incremental comes later" scope decision.
+// Unlike Snapchat's Stats API, runReport has no interval-length limit, so this is a single
+// query covering the full range rather than something that needs chunking.
+const REPORT_START_DATE = "2015-08-14"
 const REPORT_LIMIT = 10000
 // GA4 properties can have years of daily rows -- this bounds a single report's pagination so
 // a misbehaving API (rowCount that never drops below the requested limit) can't loop forever.
