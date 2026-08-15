@@ -514,6 +514,28 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     expect(squadStatRow?.payload.spend).toBe(250)
     expect(squadStatRow?.payload.level).toBe("ad_squad")
 
+    // Snapchat's Stats API returns spend in micro-currency units -- confirms the raw stored
+    // value (250) is converted to real currency (0.00025) when read back through the records
+    // API, without the ingested/stored row itself being mutated (checked above via a direct DB
+    // read, which still sees the raw 250).
+    const statsRecordsResponse = await fetch(
+      `${baseUrl}/v1/integrations/snapchat-ads/records?connectionId=${started.connectionId}&customerId=${accountId}&entityType=stats`,
+      {
+        headers: {
+          authorization: `Bearer ${login.session.accessToken}`,
+          "x-workspace-id": workspaceId,
+        },
+      }
+    )
+    expect(statsRecordsResponse.status).toBe(200)
+    const statsRecordsBody = (await statsRecordsResponse.json()) as {
+      items: Array<{ entityId: string; payload: { spend?: number } }>
+    }
+    const squadStatFromApi = statsRecordsBody.items.find(
+      (item) => item.entityId === `sq-1:${statDayMinus1}`
+    )
+    expect(squadStatFromApi?.payload.spend).toBe(250 / 1_000_000)
+
     const recordsResponse = await fetch(
       `${baseUrl}/v1/integrations/snapchat-ads/records?connectionId=${started.connectionId}&customerId=${accountId}&entityType=ads`,
       {

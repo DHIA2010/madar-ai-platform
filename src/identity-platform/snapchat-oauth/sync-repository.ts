@@ -40,14 +40,30 @@ function mapRun(row: Record<string, unknown>): IntegrationSyncRunView {
   }
 }
 
+// Snapchat's Stats API returns spend in micro-currency units (30000000 = $30.00). Ingestion
+// stores that raw API value as-is in the payload (no business-logic transform at write time,
+// matching every other connector's ingestion), so the conversion to real currency happens here
+// at read time instead -- the one place all Snapchat records flow through on their way out.
+const MICRO_CURRENCY_DIVISOR = 1_000_000
+
+function normalizeStatsPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  if (typeof payload.spend !== "number") {
+    return payload
+  }
+  return { ...payload, spend: payload.spend / MICRO_CURRENCY_DIVISOR }
+}
+
 function mapRecord(row: Record<string, unknown>): IntegrationRecordView {
+  const entityType = String(row.entity_type)
+  const payload = (row.payload as Record<string, unknown>) ?? {}
+
   return {
     id: String(row.id),
-    entityType: String(row.entity_type),
+    entityType,
     customerId: String(row.customer_id),
     entityId: String(row.entity_id),
     recordDate: String(row.record_date),
-    payload: (row.payload as Record<string, unknown>) ?? {},
+    payload: entityType === "stats" ? normalizeStatsPayload(payload) : payload,
     updatedAt: toJsonDate(row.updated_at) ?? new Date().toISOString(),
   }
 }
