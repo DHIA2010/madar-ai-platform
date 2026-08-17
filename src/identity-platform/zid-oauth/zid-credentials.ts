@@ -103,7 +103,7 @@ export class AwsSecretsZidOAuthCredentialsProvider implements ZidOAuthCredential
     return validateCredentials({
       clientId: String(parsed.clientId ?? parsed.client_id ?? "").trim(),
       clientSecret: String(parsed.clientSecret ?? parsed.client_secret ?? "").trim(),
-      redirectUri: String(parsed.redirectUri ?? parsed.redirect_uri ?? "").trim() || undefined,
+      redirectUri: String(parsed.redirectUrl ?? parsed.redirect_url ?? "").trim() || undefined,
     })
   }
 }
