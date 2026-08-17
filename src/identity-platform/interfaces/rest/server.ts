@@ -20,6 +20,8 @@ import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/conne
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
+import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-deletion-service"
+import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -343,6 +345,11 @@ export function createIdentityApiServer(
   const googleAnalyticsOAuthDeletionService = container.infrastructure.database
     ? new GoogleAnalyticsOAuthConnectionDeletionService(
         new GoogleAnalyticsOAuthRepository(container.infrastructure.database)
+      )
+    : null
+  const zidOAuthDeletionService = container.infrastructure.database
+    ? new ZidOAuthConnectionDeletionService(
+        new ZidOAuthRepository(container.infrastructure.database)
       )
     : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
@@ -805,7 +812,8 @@ export function createIdentityApiServer(
           !metaOAuthDeletionService &&
           !sallaOAuthDeletionService &&
           !shopifyOAuthDeletionService &&
-          !googleAnalyticsOAuthDeletionService
+          !googleAnalyticsOAuthDeletionService &&
+          !zidOAuthDeletionService
         ) {
           return send(503, {
             code: "INTEGRATION_OAUTH_UNAVAILABLE",
@@ -891,6 +899,19 @@ export function createIdentityApiServer(
             const isNotFound =
               error instanceof IdentityError &&
               error.code === "GOOGLE_ANALYTICS_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && zidOAuthDeletionService) {
+          try {
+            await zidOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError && error.code === "ZID_OAUTH_CONNECTION_NOT_FOUND"
             if (!isNotFound) {
               throw error
             }

@@ -343,6 +343,37 @@ const GOOGLE_ANALYTICS_PROVIDER_PROFILE: RuntimeProviderProfile = {
   },
 }
 
+const ZID_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "zid",
+  connectorId: "zid",
+  connectorDefinitionId: "connector_def_zid",
+  displayName: "Zid",
+  oauth: {
+    startPath: "/v1/integrations/zid/oauth/start",
+    activeConnectionPath: "/v1/integrations/zid/connection",
+    callbackStatusParam: "zid_oauth",
+    callbackConnectionIdParam: "zid_connection_id",
+    callbackAccountNameParam: "zid_account_name",
+    callbackAccountEmailParam: "zid_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/zid/sync",
+    records: "/v1/integrations/zid/records",
+    accounts: "/v1/integrations/zid/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
+  },
+  metadata: {
+    availableAccountsKey: "availableZidCustomerAccounts",
+  },
+}
+
 const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = {
   [GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ADS_PROVIDER_PROFILE,
   [SNAPCHAT_ADS_PROVIDER_PROFILE.connectorDefinitionId]: SNAPCHAT_ADS_PROVIDER_PROFILE,
@@ -350,6 +381,7 @@ const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = 
   [META_ADS_PROVIDER_PROFILE.connectorDefinitionId]: META_ADS_PROVIDER_PROFILE,
   [SHOPIFY_PROVIDER_PROFILE.connectorDefinitionId]: SHOPIFY_PROVIDER_PROFILE,
   [GOOGLE_ANALYTICS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ANALYTICS_PROVIDER_PROFILE,
+  [ZID_PROVIDER_PROFILE.connectorDefinitionId]: ZID_PROVIDER_PROFILE,
 }
 
 const DEFAULT_WORKSPACE_ID = "ws_connections_center"

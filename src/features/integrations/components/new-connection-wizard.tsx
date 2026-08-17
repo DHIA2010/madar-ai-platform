@@ -367,6 +367,12 @@ const OAUTH_CONNECTOR_PROFILES: Record<string, OAuthConnectorProfile> = {
     accountsMetadataKey: "availableGoogleAnalyticsAccounts",
     fallbackAccountLabel: "Google Analytics",
   },
+  zid: {
+    callbackParam: "zid_oauth",
+    connectionIdParam: "zid_connection_id",
+    accountsMetadataKey: "availableZidCustomerAccounts",
+    fallbackAccountLabel: "Zid",
+  },
 }
 
 function parseAccessibleProviderAccounts(

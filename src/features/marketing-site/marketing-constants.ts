@@ -70,7 +70,7 @@ export const MARKETING_INTEGRATIONS: IntegrationEntry[] = [
   },
   {
     name: "Zid",
-    status: "Coming Soon",
+    status: "Available",
     description: "Store, product, order, and customer data.",
   },
 ]
