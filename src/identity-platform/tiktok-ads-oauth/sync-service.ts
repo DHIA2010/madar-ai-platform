@@ -17,9 +17,18 @@ const MAX_PAGES_PER_ENTITY = 200
 const LIST_PAGE_SIZE = 100
 const INSIGHTS_PAGE_SIZE = 100
 // "Full history" for the reporting entity -- there's no natural start date for ad performance
-// (campaigns/ad groups/ads aren't date-bounded at all), so this anchors well before TikTok
-// Ads existed, matching the same full-history convention used for Meta/Snapchat/GA4.
-const INSIGHTS_START_DATE = "2015-01-01"
+// (campaigns/ad groups/ads aren't date-bounded at all). TikTok Ads Manager itself only
+// launched around 2019, so anchoring there (rather than the 2015 placeholder other
+// connectors use) keeps the number of mostly-empty date windows walked below reasonable.
+const INSIGHTS_START_DATE = "2019-01-01"
+// Confirmed live against TikTok's API (error code 40002): "max time span is 30 days when use
+// stat_time_day" -- report/integrated/get hard-rejects any single request spanning more than
+// 30 days when the stat_time_day dimension is present, unlike every other connector's report
+// endpoint (Meta's date_preset=maximum, Snapchat/GA4's single wide start/end) which handle
+// large ranges server-side. So "full history" here has to be walked as successive 30-day
+// windows, not requested in one shot.
+const INSIGHTS_WINDOW_DAYS = 30
+const MAX_INSIGHTS_WINDOWS = 100
 
 interface TikTokAdsApiEnvelope<T> {
   code: number
@@ -163,17 +172,21 @@ async function fetchAllListPages<T>(input: {
   return results
 }
 
-// Confirmed against TikTok's report/integrated/get docs: dimensions/metrics are passed as
-// JSON-encoded array query params, and each response row nests its values under
-// {dimensions: {...}, metrics: {...}} instead of the flat shape campaign/adgroup/ad use.
-async function fetchAllInsights(input: {
+function toDateStamp(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+// Fetches one 30-day (or narrower, for the final trailing window) slice of daily campaign
+// performance, paginating within that slice the same way campaign/adgroup/ad do.
+async function fetchInsightsWindow(input: {
   apiBaseUrl: string
   advertiserId: string
   accessToken: string
+  startDate: string
+  endDate: string
 }): Promise<TikTokAdsInsightRow[]> {
   const results: TikTokAdsInsightRow[] = []
   let page = 1
-  const endDate = new Date().toISOString().slice(0, 10)
 
   while (page <= MAX_PAGES_PER_ENTITY) {
     const url = new URL(`${input.apiBaseUrl.replace(/\/$/, "")}/report/integrated/get/`)
@@ -185,8 +198,8 @@ async function fetchAllInsights(input: {
       "metrics",
       JSON.stringify(["spend", "impressions", "clicks", "ctr", "conversion"])
     )
-    url.searchParams.set("start_date", INSIGHTS_START_DATE)
-    url.searchParams.set("end_date", endDate)
+    url.searchParams.set("start_date", input.startDate)
+    url.searchParams.set("end_date", input.endDate)
     url.searchParams.set("page", String(page))
     url.searchParams.set("page_size", String(INSIGHTS_PAGE_SIZE))
 
@@ -199,7 +212,7 @@ async function fetchAllInsights(input: {
 
     if (!response.ok) {
       throw new IntegrationProviderError(
-        `TikTok Ads API request failed during sync (report/integrated/get): ${await describeTikTokFailure(response)}`,
+        `TikTok Ads API request failed during sync (report/integrated/get, ${input.startDate}..${input.endDate}): ${await describeTikTokFailure(response)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -209,7 +222,7 @@ async function fetchAllInsights(input: {
     const body = (await response.json()) as TikTokAdsApiEnvelope<TikTokAdsInsightRow>
     if (body.code !== 0) {
       throw new IntegrationProviderError(
-        `TikTok Ads API request failed during sync (report/integrated/get): ${await describeTikTokFailure(response, body)}`,
+        `TikTok Ads API request failed during sync (report/integrated/get, ${input.startDate}..${input.endDate}): ${await describeTikTokFailure(response, body)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -228,6 +241,42 @@ async function fetchAllInsights(input: {
     }
 
     page += 1
+  }
+
+  return results
+}
+
+// Walks "full history" as successive INSIGHTS_WINDOW_DAYS-day slices from INSIGHTS_START_DATE
+// through today -- see the MAX_INSIGHTS_WINDOWS comment for why a single request can't cover
+// the whole range.
+async function fetchAllInsights(input: {
+  apiBaseUrl: string
+  advertiserId: string
+  accessToken: string
+}): Promise<TikTokAdsInsightRow[]> {
+  const results: TikTokAdsInsightRow[] = []
+  const today = new Date()
+  let windowStart = new Date(`${INSIGHTS_START_DATE}T00:00:00Z`)
+  let windowIndex = 0
+
+  while (windowStart <= today && windowIndex < MAX_INSIGHTS_WINDOWS) {
+    const windowEndMs = Math.min(
+      windowStart.getTime() + (INSIGHTS_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000,
+      today.getTime()
+    )
+    const windowEnd = new Date(windowEndMs)
+
+    const windowResults = await fetchInsightsWindow({
+      apiBaseUrl: input.apiBaseUrl,
+      advertiserId: input.advertiserId,
+      accessToken: input.accessToken,
+      startDate: toDateStamp(windowStart),
+      endDate: toDateStamp(windowEnd),
+    })
+    results.push(...windowResults)
+
+    windowStart = new Date(windowEnd.getTime() + 24 * 60 * 60 * 1000)
+    windowIndex += 1
   }
 
   return results

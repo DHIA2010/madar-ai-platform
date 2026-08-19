@@ -130,13 +130,30 @@ function mockTikTokAdsResponses(input: {
     }
 
     if (url.includes("/report/integrated/get/")) {
+      // Real TikTok rejects any single request spanning more than 30 days when
+      // stat_time_day is a dimension (confirmed live: code 40002) -- the sync service walks
+      // 30-day windows, so this mock must only return rows whose stat_time_day actually falls
+      // inside the requested [start_date, end_date], matching the real API's per-window
+      // filtering, otherwise every window would echo back the full fixture and inflate counts.
+      const parsed = new URL(url)
+      const windowStart = parsed.searchParams.get("start_date") ?? ""
+      const windowEnd = parsed.searchParams.get("end_date") ?? ""
+      const windowItems = insights.filter((item) => {
+        const day = String(item.dimensions.stat_time_day ?? "").slice(0, 10)
+        return day >= windowStart && day <= windowEnd
+      })
       return new Response(
         JSON.stringify({
           code: 0,
           message: "OK",
           data: {
-            list: insights,
-            page_info: { page: 1, page_size: 100, total_number: insights.length, total_page: 1 },
+            list: windowItems,
+            page_info: {
+              page: 1,
+              page_size: 100,
+              total_number: windowItems.length,
+              total_page: 1,
+            },
           },
         }),
         { status: 200, headers: { "content-type": "application/json" } }
