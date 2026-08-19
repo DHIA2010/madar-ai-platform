@@ -29,6 +29,17 @@ const INSIGHTS_START_DATE = "2019-01-01"
 // windows, not requested in one shot.
 const INSIGHTS_WINDOW_DAYS = 30
 const MAX_INSIGHTS_WINDOWS = 100
+// Walking up to 100 windows one-at-a-time (await in a loop) made a real sync exceed the
+// frontend's request timeout in production -- each window is an independent request (its own
+// date range, no shared pagination cursor), so there's no ordering requirement forcing them to
+// run sequentially. 5 is conservative against TikTok's "Basic" rate-limiting tier (confirmed
+// via the app's own Partner Dashboard -- no published fixed-number limit that would call for a
+// higher or lower value), the same caution used for Meta's own client rate limiter elsewhere
+// in this codebase.
+const INSIGHTS_WINDOW_CONCURRENCY = 5
+// Same reasoning as INSIGHTS_WINDOW_CONCURRENCY, applied to walking campaign/adgroup/ad list
+// pages once page 1 reveals how many pages there actually are.
+const LIST_PAGE_CONCURRENCY = 5
 
 interface TikTokAdsApiEnvelope<T> {
   code: number
@@ -112,64 +123,90 @@ function toRecordDate(candidates: Array<string | undefined>): string {
 
 // Confirmed against TikTok's Business API SDK docs (CampaignCreationApi/AdgroupApi/AdApi):
 // campaign/get, adgroup/get, and ad/get all share the same page/page_size pagination and
-// {data: {list, page_info: {total_page}}} envelope -- one generic walker covers all three
+// {data: {list, page_info: {total_page}}} envelope -- one generic fetcher covers all three
 // levels of the account hierarchy.
+async function fetchListPage<T>(input: {
+  apiBaseUrl: string
+  path: string
+  advertiserId: string
+  accessToken: string
+  page: number
+}): Promise<{ items: T[]; totalPage: number | undefined }> {
+  const url = new URL(`${input.apiBaseUrl.replace(/\/$/, "")}${input.path}`)
+  url.searchParams.set("advertiser_id", input.advertiserId)
+  url.searchParams.set("page", String(input.page))
+  url.searchParams.set("page_size", String(LIST_PAGE_SIZE))
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      "access-token": input.accessToken,
+      accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    throw new IntegrationProviderError(
+      `TikTok Ads API request failed during sync (${input.path}): ${await describeTikTokFailure(response)}`,
+      "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
+      true,
+      502
+    )
+  }
+
+  const body = (await response.json()) as TikTokAdsApiEnvelope<T>
+  if (body.code !== 0) {
+    throw new IntegrationProviderError(
+      `TikTok Ads API request failed during sync (${input.path}): ${await describeTikTokFailure(response, body)}`,
+      "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
+      true,
+      502
+    )
+  }
+
+  return { items: body.data?.list ?? [], totalPage: body.data?.page_info?.total_page }
+}
+
+// Fetches page 1 first to learn total_page from the response, then fetches every remaining
+// page concurrently instead of walking them one at a time -- an account with thousands of
+// campaigns/ad groups/ads (real scale once MADAR has real clients, not just this dev store)
+// would otherwise take one full network round-trip per page in sequence.
 async function fetchAllListPages<T>(input: {
   apiBaseUrl: string
   path: string
   advertiserId: string
   accessToken: string
 }): Promise<T[]> {
-  const results: T[] = []
-  let page = 1
+  const first = await fetchListPage<T>({ ...input, page: 1 })
 
-  while (page <= MAX_PAGES_PER_ENTITY) {
-    const url = new URL(`${input.apiBaseUrl.replace(/\/$/, "")}${input.path}`)
-    url.searchParams.set("advertiser_id", input.advertiserId)
-    url.searchParams.set("page", String(page))
-    url.searchParams.set("page_size", String(LIST_PAGE_SIZE))
+  const totalPage = first.totalPage
+  const cappedTotalPage =
+    typeof totalPage === "number"
+      ? Math.min(totalPage, MAX_PAGES_PER_ENTITY)
+      : first.items.length < LIST_PAGE_SIZE
+        ? 1
+        : MAX_PAGES_PER_ENTITY
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        "access-token": input.accessToken,
-        accept: "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      throw new IntegrationProviderError(
-        `TikTok Ads API request failed during sync (${input.path}): ${await describeTikTokFailure(response)}`,
-        "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
-        true,
-        502
-      )
-    }
-
-    const body = (await response.json()) as TikTokAdsApiEnvelope<T>
-    if (body.code !== 0) {
-      throw new IntegrationProviderError(
-        `TikTok Ads API request failed during sync (${input.path}): ${await describeTikTokFailure(response, body)}`,
-        "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
-        true,
-        502
-      )
-    }
-
-    const items = body.data?.list ?? []
-    results.push(...items)
-
-    const totalPage = body.data?.page_info?.total_page
-    const doneByTotalPage = typeof totalPage === "number" && page >= totalPage
-    const doneByShortPage = items.length === 0 || items.length < LIST_PAGE_SIZE
-
-    if (doneByTotalPage || doneByShortPage) {
-      break
-    }
-
-    page += 1
+  if (cappedTotalPage <= 1) {
+    return first.items
   }
 
-  return results
+  const remainingPages = Array.from({ length: cappedTotalPage - 1 }, (_, i) => i + 2)
+  const remainingResults = await mapWithConcurrency(remainingPages, LIST_PAGE_CONCURRENCY, (page) =>
+    fetchListPage<T>({ ...input, page })
+  )
+
+  const items = [first.items]
+  for (const result of remainingResults) {
+    items.push(result.items)
+    // A page_info-less API (or one whose total_page undercounts) could otherwise keep this
+    // walking forever -- stop as soon as a page comes back short, same guard the original
+    // sequential version relied on.
+    if (result.items.length < LIST_PAGE_SIZE) {
+      break
+    }
+  }
+
+  return items.flat()
 }
 
 function toDateStamp(date: Date): string {
@@ -246,6 +283,51 @@ async function fetchInsightsWindow(input: {
   return results
 }
 
+function buildInsightsWindows(): Array<{ startDate: string; endDate: string }> {
+  const windows: Array<{ startDate: string; endDate: string }> = []
+  const today = new Date()
+  let windowStart = new Date(`${INSIGHTS_START_DATE}T00:00:00Z`)
+
+  while (windowStart <= today && windows.length < MAX_INSIGHTS_WINDOWS) {
+    const windowEndMs = Math.min(
+      windowStart.getTime() + (INSIGHTS_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000,
+      today.getTime()
+    )
+    const windowEnd = new Date(windowEndMs)
+    windows.push({ startDate: toDateStamp(windowStart), endDate: toDateStamp(windowEnd) })
+    windowStart = new Date(windowEnd.getTime() + 24 * 60 * 60 * 1000)
+  }
+
+  return windows
+}
+
+// Each window is an independent request (its own date range, no shared pagination cursor
+// carried between them), so there's no ordering requirement forcing them to run one-at-a-time
+// -- running them with bounded concurrency instead of a sequential await-in-loop is what keeps
+// a full-history sync (up to MAX_INSIGHTS_WINDOWS windows) inside the frontend's request
+// timeout, and keeps scaling to accounts with years of history as MADAR gets real clients.
+async function mapWithConcurrency<TItem, TResult>(
+  items: TItem[],
+  concurrency: number,
+  worker: (item: TItem) => Promise<TResult>
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length)
+  let nextIndex = 0
+
+  async function runNext(): Promise<void> {
+    const index = nextIndex
+    nextIndex += 1
+    if (index >= items.length) {
+      return
+    }
+    results[index] = await worker(items[index])
+    return runNext()
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runNext()))
+  return results
+}
+
 // Walks "full history" as successive INSIGHTS_WINDOW_DAYS-day slices from INSIGHTS_START_DATE
 // through today -- see the MAX_INSIGHTS_WINDOWS comment for why a single request can't cover
 // the whole range.
@@ -254,32 +336,19 @@ async function fetchAllInsights(input: {
   advertiserId: string
   accessToken: string
 }): Promise<TikTokAdsInsightRow[]> {
-  const results: TikTokAdsInsightRow[] = []
-  const today = new Date()
-  let windowStart = new Date(`${INSIGHTS_START_DATE}T00:00:00Z`)
-  let windowIndex = 0
+  const windows = buildInsightsWindows()
 
-  while (windowStart <= today && windowIndex < MAX_INSIGHTS_WINDOWS) {
-    const windowEndMs = Math.min(
-      windowStart.getTime() + (INSIGHTS_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000,
-      today.getTime()
-    )
-    const windowEnd = new Date(windowEndMs)
-
-    const windowResults = await fetchInsightsWindow({
+  const windowResults = await mapWithConcurrency(windows, INSIGHTS_WINDOW_CONCURRENCY, (window) =>
+    fetchInsightsWindow({
       apiBaseUrl: input.apiBaseUrl,
       advertiserId: input.advertiserId,
       accessToken: input.accessToken,
-      startDate: toDateStamp(windowStart),
-      endDate: toDateStamp(windowEnd),
+      startDate: window.startDate,
+      endDate: window.endDate,
     })
-    results.push(...windowResults)
+  )
 
-    windowStart = new Date(windowEnd.getTime() + 24 * 60 * 60 * 1000)
-    windowIndex += 1
-  }
-
-  return results
+  return windowResults.flat()
 }
 
 export class TikTokAdsSyncService {
