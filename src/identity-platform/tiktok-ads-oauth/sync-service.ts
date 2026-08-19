@@ -271,7 +271,7 @@ async function fetchInsightsWindow(input: {
     url.searchParams.set("dimensions", JSON.stringify(["campaign_id", "stat_time_day"]))
     url.searchParams.set(
       "metrics",
-      JSON.stringify(["spend", "impressions", "clicks", "ctr", "conversion"])
+      JSON.stringify(["spend", "impressions", "clicks", "ctr", "cpm", "cpc", "conversion"])
     )
     url.searchParams.set("start_date", input.startDate)
     url.searchParams.set("end_date", input.endDate)
