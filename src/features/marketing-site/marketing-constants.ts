@@ -65,7 +65,7 @@ export const MARKETING_INTEGRATIONS: IntegrationEntry[] = [
   },
   {
     name: "TikTok Ads",
-    status: "In Development",
+    status: "Available",
     description: "TikTok advertising campaign analytics and reporting.",
   },
   {

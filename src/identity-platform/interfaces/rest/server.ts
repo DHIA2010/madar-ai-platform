@@ -22,6 +22,8 @@ import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-anal
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-deletion-service"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
+import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
+import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -350,6 +352,11 @@ export function createIdentityApiServer(
   const zidOAuthDeletionService = container.infrastructure.database
     ? new ZidOAuthConnectionDeletionService(
         new ZidOAuthRepository(container.infrastructure.database)
+      )
+    : null
+  const tiktokAdsOAuthDeletionService = container.infrastructure.database
+    ? new TikTokAdsOAuthConnectionDeletionService(
+        new TikTokAdsOAuthRepository(container.infrastructure.database)
       )
     : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
@@ -813,7 +820,8 @@ export function createIdentityApiServer(
           !sallaOAuthDeletionService &&
           !shopifyOAuthDeletionService &&
           !googleAnalyticsOAuthDeletionService &&
-          !zidOAuthDeletionService
+          !zidOAuthDeletionService &&
+          !tiktokAdsOAuthDeletionService
         ) {
           return send(503, {
             code: "INTEGRATION_OAUTH_UNAVAILABLE",
@@ -912,6 +920,20 @@ export function createIdentityApiServer(
           } catch (error) {
             const isNotFound =
               error instanceof IdentityError && error.code === "ZID_OAUTH_CONNECTION_NOT_FOUND"
+            if (!isNotFound) {
+              throw error
+            }
+          }
+        }
+
+        if (!deleted && tiktokAdsOAuthDeletionService) {
+          try {
+            await tiktokAdsOAuthDeletionService.deleteConnection(actor, deleteIntegrationMatch[1])
+            deleted = true
+          } catch (error) {
+            const isNotFound =
+              error instanceof IdentityError &&
+              error.code === "TIKTOK_ADS_OAUTH_CONNECTION_NOT_FOUND"
             if (!isNotFound) {
               throw error
             }

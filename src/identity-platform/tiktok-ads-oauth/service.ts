@@ -1,0 +1,878 @@
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto"
+
+import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+
+import type { TikTokAdsOAuthDomainEvent } from "./events"
+import { TikTokAdsOAuthRepository } from "./repository"
+import type {
+  TikTokAdsOAuthCallbackResult,
+  TikTokAdsOAuthStartInput,
+  TikTokAdsOAuthStartResult,
+  TikTokAdsOAuthTimelineEvent,
+  TikTokAdsOAuthTimelineResult,
+} from "./types"
+import {
+  EnvironmentFirstTikTokAdsOAuthCredentialsProvider,
+  type TikTokAdsOAuthCredentialsProvider,
+} from "./tiktok-ads-credentials"
+
+interface TikTokAdsOAuthServiceConfig {
+  clientId: string
+  clientSecret: string
+  redirectUri: string
+  successRedirectUri: string
+  tokenEncryptionKey: string
+  authorizationUrl: string
+  tokenUrl: string
+  apiBaseUrl: string
+}
+
+interface TikTokAdsTokenResponseData {
+  access_token?: string
+  advertiser_ids?: string[]
+  scope?: unknown
+}
+
+interface TikTokAdsTokenResponse {
+  code: number
+  message?: string
+  data?: TikTokAdsTokenResponseData
+}
+
+interface TikTokAdsAdvertiserInfoRow {
+  advertiser_id: string
+  name?: string
+  currency?: string
+  timezone?: string
+  status?: string
+}
+
+interface TikTokAdsAdvertiserInfoResponse {
+  code: number
+  message?: string
+  data?: { list?: TikTokAdsAdvertiserInfoRow[] }
+}
+
+const TIKTOK_ADS_AUTHORIZATION_URL = "https://business-api.tiktok.com/portal/auth"
+const TIKTOK_ADS_TOKEN_URL = "https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/"
+const TIKTOK_ADS_API_BASE_URL = "https://business-api.tiktok.com/open_api/v1.3"
+
+function buildDefaultConfig(): TikTokAdsOAuthServiceConfig {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+
+  return {
+    clientId: process.env.TIKTOK_ADS_CLIENT_ID ?? "",
+    clientSecret: process.env.TIKTOK_ADS_CLIENT_SECRET ?? "",
+    redirectUri:
+      process.env.TIKTOK_ADS_REDIRECT_URI ??
+      "http://localhost:4000/v1/integrations/tiktok-ads/oauth/callback",
+    successRedirectUri:
+      process.env.TIKTOK_ADS_OAUTH_SUCCESS_REDIRECT_URI ??
+      `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    tokenEncryptionKey:
+      process.env.IDENTITY_PLATFORM_TIKTOK_ADS_OAUTH_TOKEN_ENCRYPTION_KEY ??
+      process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
+      "",
+    authorizationUrl: process.env.TIKTOK_ADS_AUTHORIZATION_URL ?? TIKTOK_ADS_AUTHORIZATION_URL,
+    tokenUrl: process.env.TIKTOK_ADS_TOKEN_URL ?? TIKTOK_ADS_TOKEN_URL,
+    apiBaseUrl: process.env.TIKTOK_ADS_API_BASE_URL ?? TIKTOK_ADS_API_BASE_URL,
+  }
+}
+
+function normalizeEncryptionKey(input: string) {
+  const trimmed = input.trim()
+  if (trimmed.length === 0) {
+    throw new Error("TIKTOK_ADS_OAUTH_CONFIGURATION_ERROR")
+  }
+
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return Buffer.from(trimmed, "hex")
+  }
+
+  try {
+    const decoded = Buffer.from(trimmed, "base64")
+    if (decoded.length === 32) {
+      return decoded
+    }
+  } catch {
+    // Ignore and fallback.
+  }
+
+  if (trimmed.length === 32) {
+    return Buffer.from(trimmed, "utf8")
+  }
+
+  throw new Error("TIKTOK_ADS_OAUTH_CONFIGURATION_ERROR")
+}
+
+function isLocalhostHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+}
+
+function validateConfiguredUrl(raw: string, opts: { allowHttpLocalhostOnly: boolean }) {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    throw new Error("TIKTOK_ADS_OAUTH_CONFIGURATION_ERROR")
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error("TIKTOK_ADS_OAUTH_CONFIGURATION_ERROR")
+  }
+
+  if (parsed.protocol === "https:") {
+    return parsed
+  }
+
+  if (
+    parsed.protocol === "http:" &&
+    opts.allowHttpLocalhostOnly &&
+    isLocalhostHost(parsed.hostname)
+  ) {
+    return parsed
+  }
+
+  throw new Error("TIKTOK_ADS_OAUTH_CONFIGURATION_ERROR")
+}
+
+function toOnboardingRedirectUrl(rawUrl: string) {
+  const redirectUrl = new URL(rawUrl)
+  if (redirectUrl.pathname === "/integrations" || redirectUrl.pathname === "/integrations/") {
+    redirectUrl.pathname = "/integrations/new"
+  }
+  return redirectUrl
+}
+
+function encryptSecret(plainText: string, rawKey: string) {
+  const key = normalizeEncryptionKey(rawKey)
+  const iv = randomBytes(12)
+  const cipher = createCipheriv("aes-256-gcm", key, iv)
+  const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return `v1:${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`
+}
+
+function decryptSecret(value: string, rawKey: string) {
+  const [version, ivBase64, tagBase64, encryptedBase64] = value.split(":")
+  if (version !== "v1" || !ivBase64 || !tagBase64 || !encryptedBase64) {
+    throw new Error("TIKTOK_ADS_OAUTH_DECRYPTION_ERROR")
+  }
+
+  const key = normalizeEncryptionKey(rawKey)
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivBase64, "base64"))
+  decipher.setAuthTag(Buffer.from(tagBase64, "base64"))
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(encryptedBase64, "base64")),
+    decipher.final(),
+  ])
+  return decrypted.toString("utf8")
+}
+
+function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
+  if (!actor.roles.includes("owner") && !actor.roles.includes("admin")) {
+    throw new Error("TIKTOK_ADS_OAUTH_FORBIDDEN")
+  }
+}
+
+function toTimelineAction(eventType: string, payload: Record<string, unknown>) {
+  switch (eventType) {
+    case "tiktok_ads.oauth.authorization.completed":
+      return payload.reconnected === true ? "connection.reconnected" : "connection.connected"
+    case "tiktok_ads.oauth.connection.reconnect.started":
+      return "connection.reconnected"
+    case "tiktok_ads.oauth.connection.paused":
+      return "connection.paused"
+    case "tiktok_ads.oauth.connection.resumed":
+      return "connection.resumed"
+    case "tiktok_ads.oauth.connection.disconnected":
+      return "connection.disconnected"
+    case "tiktok_ads.oauth.connection.deleted":
+      return "connection.deleted"
+    default:
+      return eventType
+  }
+}
+
+function toTimelineMessage(action: string, payload: Record<string, unknown>) {
+  if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+    return payload.message
+  }
+
+  switch (action) {
+    case "connection.connected":
+      return "Connection established."
+    case "connection.reconnected":
+      return "Connection re-established."
+    case "connection.paused":
+      return "Connection paused."
+    case "connection.resumed":
+      return "Connection resumed."
+    case "connection.disconnected":
+      return "Connection disconnected."
+    case "connection.deleted":
+      return "Connection deleted."
+    default:
+      return action
+  }
+}
+
+function createStateToken() {
+  return `tt_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
+}
+
+function ensureConfigured(config: TikTokAdsOAuthServiceConfig) {
+  if (
+    !config.clientId ||
+    !config.clientSecret ||
+    !config.redirectUri ||
+    !config.successRedirectUri
+  ) {
+    throw new Error("TIKTOK_ADS_OAUTH_CONFIGURATION_ERROR")
+  }
+
+  validateConfiguredUrl(config.redirectUri, { allowHttpLocalhostOnly: true })
+  validateConfiguredUrl(config.successRedirectUri, { allowHttpLocalhostOnly: true })
+  validateConfiguredUrl(config.authorizationUrl, { allowHttpLocalhostOnly: false })
+  validateConfiguredUrl(config.tokenUrl, { allowHttpLocalhostOnly: false })
+  validateConfiguredUrl(config.apiBaseUrl, { allowHttpLocalhostOnly: false })
+
+  normalizeEncryptionKey(config.tokenEncryptionKey)
+}
+
+// Confirmed against TikTok's Business API SDK docs (Oauth2AccessTokenBody): unlike
+// Zid/Salla/Google, the token endpoint takes a JSON body (app_id/secret/auth_code), not
+// form-urlencoded. There is no grant_type field and no refresh_token in the response --
+// TikTok's Marketing API access tokens don't expire, so there's no refresh flow to run
+// later (matching Meta's "no refresh_token grant" shape, just without even a renewal path).
+async function exchangeAuthorizationCode(input: {
+  code: string
+  config: TikTokAdsOAuthServiceConfig
+}): Promise<TikTokAdsTokenResponseData> {
+  const response = await fetch(input.config.tokenUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      app_id: input.config.clientId,
+      secret: input.config.clientSecret,
+      auth_code: input.code,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error("TIKTOK_ADS_OAUTH_TOKEN_EXCHANGE_FAILED")
+  }
+
+  const body = (await response.json()) as TikTokAdsTokenResponse
+  if (body.code !== 0 || !body.data?.access_token) {
+    throw new Error("TIKTOK_ADS_OAUTH_TOKEN_EXCHANGE_FAILED")
+  }
+
+  return body.data
+}
+
+// Confirmed against TikTok's Business API docs (AccountManagementApi -- advertiser/info):
+// the token exchange only returns advertiser ids, not names/currency/timezone, so a
+// follow-up call is needed to make the accounts usable in the account-picker UI.
+async function fetchAdvertiserInfo(input: {
+  config: TikTokAdsOAuthServiceConfig
+  accessToken: string
+  advertiserIds: string[]
+}): Promise<TikTokAdsAdvertiserInfoRow[]> {
+  const url = new URL(`${input.config.apiBaseUrl.replace(/\/$/, "")}/advertiser/info/`)
+  url.searchParams.set("advertiser_ids", JSON.stringify(input.advertiserIds))
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      "access-token": input.accessToken,
+      accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error("TIKTOK_ADS_OAUTH_ACCOUNT_DISCOVERY_FAILED")
+  }
+
+  const body = (await response.json()) as TikTokAdsAdvertiserInfoResponse
+  if (body.code !== 0) {
+    throw new Error("TIKTOK_ADS_OAUTH_ACCOUNT_DISCOVERY_FAILED")
+  }
+
+  return body.data?.list ?? []
+}
+
+export class TikTokAdsOAuthService {
+  private readonly config: TikTokAdsOAuthServiceConfig
+  private readonly credentialsProvider: TikTokAdsOAuthCredentialsProvider
+
+  constructor(
+    private readonly repository: TikTokAdsOAuthRepository,
+    config?: Partial<TikTokAdsOAuthServiceConfig>,
+    credentialsProvider: TikTokAdsOAuthCredentialsProvider = new EnvironmentFirstTikTokAdsOAuthCredentialsProvider()
+  ) {
+    this.config = { ...buildDefaultConfig(), ...(config ?? {}) }
+    this.credentialsProvider = credentialsProvider
+  }
+
+  private async loadResolvedConfig() {
+    const credentials = await this.credentialsProvider.load()
+    // An explicit TIKTOK_ADS_REDIRECT_URI always wins, even when client credentials come
+    // from AWS Secrets Manager -- this lets local/dev environments redirect back to
+    // themselves instead of the production callback baked into the shared secret.
+    const explicitRedirectUri = process.env.TIKTOK_ADS_REDIRECT_URI?.trim()
+    const resolved = {
+      ...this.config,
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
+      redirectUri: explicitRedirectUri || credentials.redirectUri || this.config.redirectUri,
+    }
+    ensureConfigured(resolved)
+    return resolved
+  }
+
+  async startAuthorization(
+    actor: AuthenticatedActor,
+    input: TikTokAdsOAuthStartInput = {}
+  ): Promise<TikTokAdsOAuthStartResult> {
+    assertActorCanManageIntegrations(actor)
+    const config = await this.loadResolvedConfig()
+
+    const resolvedProject = await this.repository.resolveProject({
+      organizationId: actor.organizationId,
+      workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
+      projectId: input.projectId ?? null,
+    })
+
+    const existingConnection = await this.repository.findConnectionByProject(
+      actor.organizationId,
+      resolvedProject.projectId
+    )
+    const connectionId = existingConnection?.id ?? randomUUID()
+    const state = createStateToken()
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
+
+    await this.repository.upsertConnection({
+      id: connectionId,
+      organizationId: actor.organizationId,
+      workspaceId: resolvedProject.workspaceId,
+      projectId: resolvedProject.projectId,
+      dataSourceId: null,
+      providerAccountId: null,
+      providerAccountName: null,
+      providerAccountEmail: null,
+      encryptedRefreshToken: existingConnection ? null : null,
+      encryptedAccessToken: existingConnection ? null : null,
+      scopes: [],
+      tokenExpiresAt: null,
+      status: "pending",
+      connectionReference: input.connectionName ?? null,
+      lastConnectedAt: null,
+      lastDisconnectedAt: null,
+      actorUserId: actor.userId,
+      nowIso: now.toISOString(),
+    })
+
+    await this.repository.savePendingState({
+      id: randomUUID(),
+      state,
+      organizationId: actor.organizationId,
+      workspaceId: resolvedProject.workspaceId,
+      projectId: resolvedProject.projectId,
+      userId: actor.userId,
+      connectionId,
+      requestedScopes: [],
+      redirectUri: config.redirectUri,
+      expiresAt,
+    })
+
+    // Confirmed against the approved TikTok "Advertiser authorization URL" format: app_id,
+    // state, redirect_uri only -- no response_type and no scope param (TikTok scopes are
+    // configured on the app itself in the Partner Dashboard, not passed in this URL).
+    const authorizationUrl = new URL(config.authorizationUrl)
+    authorizationUrl.searchParams.set("app_id", config.clientId)
+    authorizationUrl.searchParams.set("state", state)
+    authorizationUrl.searchParams.set("redirect_uri", config.redirectUri)
+
+    const startedAt = now.toISOString()
+    await this.recordLifecycle(
+      {
+        eventType: "tiktok_ads.oauth.authorization.started",
+        aggregateId: connectionId,
+        actorUserId: actor.userId,
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        occurredAt: startedAt,
+        payload: {
+          authorizationEndpoint: config.authorizationUrl,
+        },
+      },
+      "integration.tiktok_ads_oauth.started"
+    )
+
+    return {
+      authorizationUrl: authorizationUrl.toString(),
+      connectionId,
+      state,
+      projectId: resolvedProject.projectId,
+      workspaceId: resolvedProject.workspaceId,
+    }
+  }
+
+  async completeAuthorization(input: {
+    state: string
+    code: string
+  }): Promise<TikTokAdsOAuthCallbackResult> {
+    const config = await this.loadResolvedConfig()
+
+    const state = await this.repository.findPendingStateByValue(input.state)
+    if (!state) {
+      throw new Error("TIKTOK_ADS_OAUTH_STATE_INVALID")
+    }
+
+    if (String(state.status) !== "pending") {
+      throw new Error("TIKTOK_ADS_OAUTH_STATE_INVALID")
+    }
+
+    const expiresAt = new Date(String(state.expires_at)).getTime()
+    if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+      throw new Error("TIKTOK_ADS_OAUTH_STATE_EXPIRED")
+    }
+
+    const token = await exchangeAuthorizationCode({
+      code: input.code,
+      config,
+    })
+
+    const connectionId = String(state.connection_id)
+    const actorUserId = String(state.user_id)
+    const organizationId = String(state.organization_id)
+    const workspaceId = (state.workspace_id as string | null) ?? null
+    const projectId = String(state.project_id)
+    const now = new Date().toISOString()
+
+    const advertiserIds = (token.advertiser_ids ?? []).map((id) => String(id)).filter(Boolean)
+    if (advertiserIds.length === 0) {
+      throw new Error("TIKTOK_ADS_OAUTH_ACCOUNT_DISCOVERY_EMPTY")
+    }
+
+    const advertiserInfo = await fetchAdvertiserInfo({
+      config,
+      accessToken: token.access_token as string,
+      advertiserIds,
+    })
+    const infoById = new Map(advertiserInfo.map((row) => [String(row.advertiser_id), row]))
+
+    const discoveredAccounts = advertiserIds.map((advertiserId) => {
+      const info = infoById.get(advertiserId)
+      return {
+        customerId: advertiserId,
+        displayName: info?.name ?? null,
+        currencyCode: info?.currency ?? null,
+        timeZone: info?.timezone ?? null,
+        organizationId: null,
+        organizationName: null,
+        status: (info?.status === "STATUS_DISABLE" ? "inactive" : "active") as
+          | "active"
+          | "inactive",
+      }
+    })
+
+    const primaryAccount = discoveredAccounts[0]
+
+    await this.repository.withTransaction(async () => {
+      const consumed = await this.repository.consumeStateOnce(String(state.id), now)
+      if (!consumed) {
+        throw new Error("TIKTOK_ADS_OAUTH_STATE_ALREADY_CONSUMED")
+      }
+
+      await this.repository.upsertConnection({
+        id: connectionId,
+        organizationId,
+        workspaceId,
+        projectId,
+        dataSourceId: null,
+        providerAccountId: primaryAccount?.customerId ?? null,
+        providerAccountName: primaryAccount?.displayName ?? "TikTok Ads Account",
+        providerAccountEmail: null,
+        encryptedRefreshToken: null,
+        encryptedAccessToken: encryptSecret(
+          token.access_token as string,
+          config.tokenEncryptionKey
+        ),
+        scopes: [],
+        tokenExpiresAt: null,
+        status: "connected",
+        connectionReference: primaryAccount?.displayName ?? null,
+        lastConnectedAt: now,
+        lastDisconnectedAt: null,
+        actorUserId,
+        nowIso: now,
+      })
+
+      await this.repository.replaceAccessibleCustomerAccounts({
+        connectionId,
+        actorUserId,
+        selectedCustomerId: primaryAccount.customerId,
+        accounts: discoveredAccounts,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "tiktok_ads.oauth.authorization.completed",
+          aggregateId: connectionId,
+          actorUserId,
+          organizationId,
+          workspaceId,
+          projectId,
+          occurredAt: now,
+          payload: {
+            accountId: primaryAccount.customerId,
+            accountName: primaryAccount.displayName,
+            discoveredAccountCount: discoveredAccounts.length,
+            tokenEndpoint: config.tokenUrl,
+            discoveryEndpoint: `${config.apiBaseUrl.replace(/\/$/, "")}/advertiser/info/`,
+          },
+        },
+        "integration.tiktok_ads_oauth.connected"
+      )
+    })
+
+    return {
+      connectionId,
+      projectId,
+      workspaceId,
+      organizationId,
+      accountName: primaryAccount.displayName ?? "TikTok Ads Account",
+      accountEmail: null,
+      connectedAt: now,
+      status: "connected",
+    }
+  }
+
+  async getActiveConnection(actor: AuthenticatedActor) {
+    await this.loadResolvedConfig()
+
+    const resolvedProject = await this.repository.resolveProject({
+      organizationId: actor.organizationId,
+      workspaceId: actor.workspaceId ?? null,
+      projectId: null,
+    })
+
+    const connection = await this.repository.findConnectionByProject(
+      actor.organizationId,
+      resolvedProject.projectId
+    )
+
+    if (!connection) {
+      return { connection: null }
+    }
+
+    const customerAccounts =
+      connection.status === "connected"
+        ? await this.repository.listAccessibleCustomerAccounts(connection.id)
+        : []
+
+    return {
+      connection: {
+        id: connection.id,
+        status: connection.status,
+        providerAccountId: connection.providerAccountId,
+        providerAccountName: connection.providerAccountName,
+        providerAccountEmail: connection.providerAccountEmail,
+        connectedAt: connection.lastConnectedAt,
+        customerAccounts: customerAccounts.map((acc) => ({
+          customerId: acc.customerId,
+          displayName: acc.displayName,
+          isSelected: acc.isSelected,
+        })),
+      },
+    }
+  }
+
+  // TikTok's Marketing API access tokens don't expire (confirmed: no refresh_token is ever
+  // issued), so there's no renewal branch here at all -- just decrypt and return, unlike
+  // every other connector's resolveAccessToken.
+  async resolveAccessToken(connectionId: string) {
+    const config = await this.loadResolvedConfig()
+
+    const tokenMaterial = await this.repository.getRawTokenMaterial(connectionId)
+    if (!tokenMaterial || !tokenMaterial.encryptedAccessToken) {
+      throw new Error("TIKTOK_ADS_OAUTH_CONNECTION_NOT_READY")
+    }
+
+    return decryptSecret(tokenMaterial.encryptedAccessToken, config.tokenEncryptionKey)
+  }
+
+  private async findOwnedConnectionOrThrow(actor: AuthenticatedActor, connectionId: string) {
+    const connection = await this.repository.findConnectionById(connectionId)
+    if (!connection || connection.organizationId !== actor.organizationId) {
+      throw new Error("TIKTOK_ADS_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    if (actor.workspaceId && connection.workspaceId !== actor.workspaceId) {
+      throw new Error("TIKTOK_ADS_OAUTH_CONNECTION_NOT_FOUND")
+    }
+
+    return connection
+  }
+
+  async pauseConnection(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, connectionId)
+    const now = new Date().toISOString()
+    const nextStatus = "paused" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "tiktok_ads.oauth.connection.paused",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+          },
+        },
+        "integration.tiktok_ads_oauth.paused"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async resumeConnection(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, connectionId)
+    const now = new Date().toISOString()
+    const nextStatus = "connected" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "tiktok_ads.oauth.connection.resumed",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+          },
+        },
+        "integration.tiktok_ads_oauth.resumed"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async pauseConnectionsForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const connectionIds = await this.repository.listConnectionIdsByWorkspace(
+      workspaceId,
+      "connected"
+    )
+    const results = []
+    for (const connectionId of connectionIds) {
+      results.push(await this.pauseConnection(actor, connectionId))
+    }
+    return results
+  }
+
+  async resumeConnectionsForWorkspace(actor: AuthenticatedActor, workspaceId: string) {
+    const connectionIds = await this.repository.listConnectionIdsByWorkspace(workspaceId, "paused")
+    const results = []
+    for (const connectionId of connectionIds) {
+      results.push(await this.resumeConnection(actor, connectionId))
+    }
+    return results
+  }
+
+  async disconnectConnection(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; reason?: string }
+  ) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, input.connectionId)
+    const now = new Date().toISOString()
+    const nextStatus = "disconnected" as const
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.setConnectionLifecycleStatus({
+        connectionId: connection.id,
+        status: nextStatus,
+        actorUserId: actor.userId,
+        occurredAt: now,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "tiktok_ads.oauth.connection.disconnected",
+          aggregateId: connection.id,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: connection.workspaceId,
+          projectId: connection.projectId,
+          occurredAt: now,
+          payload: {
+            previousStatus: connection.status,
+            nextStatus,
+            reason: input.reason ?? "Disconnected from connections center",
+          },
+        },
+        "integration.tiktok_ads_oauth.disconnected"
+      )
+    })
+
+    return {
+      connectionId: connection.id,
+      status: nextStatus,
+      updatedAt: now,
+    }
+  }
+
+  async startReconnect(actor: AuthenticatedActor, connectionId: string) {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, connectionId)
+    const now = new Date().toISOString()
+
+    await this.recordLifecycle(
+      {
+        eventType: "tiktok_ads.oauth.connection.reconnect.started",
+        aggregateId: connection.id,
+        actorUserId: actor.userId,
+        organizationId: actor.organizationId,
+        workspaceId: connection.workspaceId,
+        projectId: connection.projectId,
+        occurredAt: now,
+        payload: {
+          previousStatus: connection.status,
+        },
+      },
+      "integration.tiktok_ads_oauth.reconnect.started"
+    )
+
+    return this.startAuthorization(actor, {
+      workspaceId: connection.workspaceId,
+      projectId: connection.projectId,
+      connectionName: connection.connectionReference,
+    })
+  }
+
+  async getRecentEvents(
+    actor: AuthenticatedActor,
+    input: { connectionId: string; limit: number }
+  ): Promise<TikTokAdsOAuthTimelineResult> {
+    assertActorCanManageIntegrations(actor)
+
+    const connection = await this.findOwnedConnectionOrThrow(actor, input.connectionId)
+    const events = await this.repository.listRecentOutboxEvents(connection.id, input.limit)
+
+    const items: TikTokAdsOAuthTimelineEvent[] = events.map((event) => {
+      const payload = event.payload ?? {}
+      const action = toTimelineAction(event.eventType, payload)
+      const actorUserId = String((event.metadata ?? {}).actorUserId ?? "")
+      return {
+        id: event.id,
+        action,
+        occurredAt: event.occurredAt,
+        actor: actorUserId.length > 0 ? "user" : "system",
+        message: toTimelineMessage(action, payload),
+      }
+    })
+
+    return {
+      connectionId: connection.id,
+      items,
+    }
+  }
+
+  buildSuccessRedirect(result: TikTokAdsOAuthCallbackResult) {
+    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    redirectUrl.searchParams.set("tiktok_ads_oauth", "connected")
+    redirectUrl.searchParams.set("tiktok_ads_connection_id", result.connectionId)
+    redirectUrl.searchParams.set("tiktok_ads_project_id", result.projectId)
+    redirectUrl.searchParams.set("tiktok_ads_status", result.status)
+    redirectUrl.searchParams.set("tiktok_ads_account_name", result.accountName)
+    redirectUrl.searchParams.set("tiktok_ads_connected_at", result.connectedAt)
+    return redirectUrl.toString()
+  }
+
+  buildErrorRedirect(reason: string) {
+    const redirectUrl = new URL(this.config.successRedirectUri)
+    redirectUrl.searchParams.set("tiktok_ads_oauth", "error")
+    redirectUrl.searchParams.set("reason", reason)
+    return redirectUrl.toString()
+  }
+
+  async decryptAccessTokenForTesting(cipherText: string) {
+    return decryptSecret(cipherText, this.config.tokenEncryptionKey)
+  }
+
+  getOAuthEndpointsForTesting() {
+    return {
+      authorizationUrl: this.config.authorizationUrl,
+      tokenUrl: this.config.tokenUrl,
+      apiBaseUrl: this.config.apiBaseUrl,
+    }
+  }
+
+  private async recordLifecycle(event: TikTokAdsOAuthDomainEvent, auditAction: string) {
+    await this.repository.saveEvent(event.aggregateId, event.eventType, event.payload)
+    await this.repository.appendAuditLog({
+      actorUserId: event.actorUserId,
+      organizationId: event.organizationId,
+      workspaceId: event.workspaceId,
+      action: auditAction,
+      entityId: event.aggregateId,
+      metadata: event.payload,
+      createdAt: event.occurredAt,
+    })
+
+    await this.repository.appendOutboxEvent({
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      occurredAt: event.occurredAt,
+      metadata: {
+        actorUserId: event.actorUserId,
+        organizationId: event.organizationId,
+        workspaceId: event.workspaceId,
+        projectId: event.projectId,
+      },
+      payload: event.payload,
+    })
+  }
+}

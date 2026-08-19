@@ -373,6 +373,12 @@ const OAUTH_CONNECTOR_PROFILES: Record<string, OAuthConnectorProfile> = {
     accountsMetadataKey: "availableZidCustomerAccounts",
     fallbackAccountLabel: "Zid",
   },
+  tiktok_ads: {
+    callbackParam: "tiktok_ads_oauth",
+    connectionIdParam: "tiktok_ads_connection_id",
+    accountsMetadataKey: "availableTikTokAdsCustomerAccounts",
+    fallbackAccountLabel: "TikTok Ads",
+  },
 }
 
 function parseAccessibleProviderAccounts(

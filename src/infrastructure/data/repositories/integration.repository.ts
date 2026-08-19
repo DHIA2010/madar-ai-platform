@@ -374,6 +374,37 @@ const ZID_PROVIDER_PROFILE: RuntimeProviderProfile = {
   },
 }
 
+const TIKTOK_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
+  providerId: "tiktok-ads",
+  connectorId: "tiktok_ads",
+  connectorDefinitionId: "connector_def_tiktok_ads",
+  displayName: "TikTok Ads",
+  oauth: {
+    startPath: "/v1/integrations/tiktok-ads/oauth/start",
+    activeConnectionPath: "/v1/integrations/tiktok-ads/connection",
+    callbackStatusParam: "tiktok_ads_oauth",
+    callbackConnectionIdParam: "tiktok_ads_connection_id",
+    callbackAccountNameParam: "tiktok_ads_account_name",
+    callbackAccountEmailParam: "tiktok_ads_account_email",
+    callbackReasonParam: "reason",
+  },
+  endpoints: {
+    sync: "/v1/integrations/tiktok-ads/sync",
+    records: "/v1/integrations/tiktok-ads/records",
+    accounts: "/v1/integrations/tiktok-ads/accounts",
+    events: (connectionId: string) => `/v1/integrations/${connectionId}/events`,
+    retry: (connectionId: string) => `/v1/integrations/${connectionId}/retry`,
+    retryStatus: (connectionId: string) => `/v1/integrations/${connectionId}/retry-status`,
+    pause: (connectionId: string) => `/v1/integrations/${connectionId}/pause`,
+    resume: (connectionId: string) => `/v1/integrations/${connectionId}/resume`,
+    disconnect: (connectionId: string) => `/v1/integrations/${connectionId}/disconnect`,
+    reconnect: (connectionId: string) => `/v1/integrations/${connectionId}/reconnect`,
+  },
+  metadata: {
+    availableAccountsKey: "availableTikTokAdsCustomerAccounts",
+  },
+}
+
 const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = {
   [GOOGLE_ADS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ADS_PROVIDER_PROFILE,
   [SNAPCHAT_ADS_PROVIDER_PROFILE.connectorDefinitionId]: SNAPCHAT_ADS_PROVIDER_PROFILE,
@@ -382,6 +413,7 @@ const PROVIDER_PROFILES_BY_DEFINITION: Record<string, RuntimeProviderProfile> = 
   [SHOPIFY_PROVIDER_PROFILE.connectorDefinitionId]: SHOPIFY_PROVIDER_PROFILE,
   [GOOGLE_ANALYTICS_PROVIDER_PROFILE.connectorDefinitionId]: GOOGLE_ANALYTICS_PROVIDER_PROFILE,
   [ZID_PROVIDER_PROFILE.connectorDefinitionId]: ZID_PROVIDER_PROFILE,
+  [TIKTOK_ADS_PROVIDER_PROFILE.connectorDefinitionId]: TIKTOK_ADS_PROVIDER_PROFILE,
 }
 
 const DEFAULT_WORKSPACE_ID = "ws_connections_center"

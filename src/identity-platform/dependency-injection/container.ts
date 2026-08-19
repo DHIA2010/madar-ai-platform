@@ -44,6 +44,7 @@ import { SallaIntegrationProvider } from "../integrations/salla/provider"
 import { ShopifyIntegrationProvider } from "../integrations/shopify/provider"
 import { GoogleAnalyticsIntegrationProvider } from "../integrations/google-analytics/provider"
 import { ZidIntegrationProvider } from "../integrations/zid/provider"
+import { TikTokAdsIntegrationProvider } from "../integrations/tiktok-ads/provider"
 import { IntegrationProviderRegistry } from "../integrations/provider-registry"
 
 class SystemClock implements Clock {
@@ -102,6 +103,7 @@ export function createIdentityPlatformContainer(
     integrations.register(new ShopifyIntegrationProvider())
     integrations.register(new GoogleAnalyticsIntegrationProvider())
     integrations.register(new ZidIntegrationProvider())
+    integrations.register(new TikTokAdsIntegrationProvider())
     const repositories = createInMemoryRepositories(options.store)
     const commands = new IdentityCommandHandlers({
       config,
@@ -156,6 +158,7 @@ export function createIdentityPlatformContainer(
   integrations.register(new ShopifyIntegrationProvider(database))
   integrations.register(new GoogleAnalyticsIntegrationProvider(database))
   integrations.register(new ZidIntegrationProvider(database))
+  integrations.register(new TikTokAdsIntegrationProvider(database))
   const googleOAuthController = new GoogleOAuthController(
     new GoogleOAuthService(
       new GoogleOAuthRepository(database),
