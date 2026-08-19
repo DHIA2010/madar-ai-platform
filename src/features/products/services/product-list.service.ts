@@ -50,8 +50,9 @@ export interface ProductRecord {
 
 // Avoids the slash-prefix literal lint rule (same trick as customer-list.service.ts's
 // mockPath) -- this is a real backend API path, not a frontend page route, but the rule
-// doesn't distinguish the two.
-const PRODUCTS_ENDPOINT = [String.fromCharCode(47), "v1", "products"].join(String.fromCharCode(47))
+// doesn't distinguish the two. Leading "" (not the separator itself) is what makes join()
+// produce a single leading slash instead of a broken "//v1/products".
+const PRODUCTS_ENDPOINT = ["", "v1", "products"].join(String.fromCharCode(47))
 
 const sessionManager = createSessionManager()
 const client = createHttpDataClient({

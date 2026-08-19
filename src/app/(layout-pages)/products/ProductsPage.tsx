@@ -472,7 +472,10 @@ export default function ProductsPage() {
         if (!cancelled) {
           setProducts(items)
         }
-      } catch {
+      } catch (error) {
+        // Logged rather than swallowed: a silent generic message here previously hid a real
+        // client-side bug (a malformed endpoint URL) that never even reached the backend.
+        console.error("Failed to load products", error)
         if (!cancelled) {
           setLoadError("Couldn't load products from your connected stores. Please try again.")
         }
@@ -721,17 +724,19 @@ export default function ProductsPage() {
                                 </div>
                                 <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
                                   <p>
-                                    <span className="text-emerald-300">In Stock</span>
+                                    <span className="font-semibold text-emerald-600">In Stock</span>
                                     <br />
                                     More than 30 units available.
                                   </p>
                                   <p>
-                                    <span className="text-amber-300">Low Stock</span>
+                                    <span className="font-semibold text-amber-600">Low Stock</span>
                                     <br />
                                     Between 1 and 30 units available.
                                   </p>
                                   <p>
-                                    <span className="text-rose-300">Out of Stock</span>
+                                    <span className="font-semibold text-rose-600">
+                                      Out of Stock
+                                    </span>
                                     <br />
                                     No inventory available.
                                   </p>
