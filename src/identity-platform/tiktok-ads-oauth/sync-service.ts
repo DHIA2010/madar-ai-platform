@@ -29,17 +29,49 @@ const INSIGHTS_START_DATE = "2019-01-01"
 // windows, not requested in one shot.
 const INSIGHTS_WINDOW_DAYS = 30
 const MAX_INSIGHTS_WINDOWS = 100
-// Walking up to 100 windows one-at-a-time (await in a loop) made a real sync exceed the
-// frontend's request timeout in production -- each window is an independent request (its own
-// date range, no shared pagination cursor), so there's no ordering requirement forcing them to
-// run sequentially. 5 is conservative against TikTok's "Basic" rate-limiting tier (confirmed
-// via the app's own Partner Dashboard -- no published fixed-number limit that would call for a
-// higher or lower value), the same caution used for Meta's own client rate limiter elsewhere
-// in this codebase.
-const INSIGHTS_WINDOW_CONCURRENCY = 5
-// Same reasoning as INSIGHTS_WINDOW_CONCURRENCY, applied to walking campaign/adgroup/ad list
-// pages once page 1 reveals how many pages there actually are.
-const LIST_PAGE_CONCURRENCY = 5
+// Confirmed live against TikTok's API (error code 40100 on this exact app): "reaches the QPS
+// limit 10, current QPS is 11" -- a per-entity concurrency cap isn't enough on its own, since
+// campaigns/adgroups/ads/insights all fire concurrently via the outer Promise.all in sync()
+// and their combined request rate is what TikTok is actually counting. 8 leaves headroom under
+// the confirmed limit of 10. This is scoped per sync() call, not truly global across concurrent
+// syncs for different MADAR customers on the same TikTok app -- acceptable for now since
+// concurrent syncs are rare, but the first thing to revisit if this app's real request volume
+// grows enough to make that collision likely. Overridable via env for tests, which would
+// otherwise take 90+ real setTimeout delays to walk a full-history fixture -- read inside the
+// constructor (not as a module-level constant) so a test setting this in beforeEach actually
+// takes effect, since this module is only ever imported/evaluated once per process.
+function getTikTokAdsMinRequestIntervalMs(): number {
+  const targetQps = Number(process.env.TIKTOK_ADS_TARGET_QPS ?? "") || 8
+  return Math.ceil(1000 / targetQps)
+}
+
+// Spaces every TikTok API call this sync makes at least minIntervalMs apart by start time (not
+// by completion), so multiple requests can still be in flight at once -- this throttles actual
+// request rate the way TikTok measures it, unlike a plain concurrency cap which only bounds how
+// many are in flight simultaneously.
+class TikTokAdsRateLimiter {
+  private readonly minIntervalMs = getTikTokAdsMinRequestIntervalMs()
+  private lastStart = 0
+  private queueTail: Promise<void> = Promise.resolve()
+
+  async schedule<T>(work: () => Promise<T>): Promise<T> {
+    const myTurn = this.queueTail
+    let releaseNext: () => void = () => {}
+    this.queueTail = new Promise<void>((resolve) => {
+      releaseNext = resolve
+    })
+    await myTurn
+
+    const wait = Math.max(0, this.lastStart + this.minIntervalMs - Date.now())
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait))
+    }
+    this.lastStart = Date.now()
+    releaseNext()
+
+    return work()
+  }
+}
 
 interface TikTokAdsApiEnvelope<T> {
   code: number
@@ -131,18 +163,21 @@ async function fetchListPage<T>(input: {
   advertiserId: string
   accessToken: string
   page: number
+  rateLimiter: TikTokAdsRateLimiter
 }): Promise<{ items: T[]; totalPage: number | undefined }> {
   const url = new URL(`${input.apiBaseUrl.replace(/\/$/, "")}${input.path}`)
   url.searchParams.set("advertiser_id", input.advertiserId)
   url.searchParams.set("page", String(input.page))
   url.searchParams.set("page_size", String(LIST_PAGE_SIZE))
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "access-token": input.accessToken,
-      accept: "application/json",
-    },
-  })
+  const response = await input.rateLimiter.schedule(() =>
+    fetch(url.toString(), {
+      headers: {
+        "access-token": input.accessToken,
+        accept: "application/json",
+      },
+    })
+  )
 
   if (!response.ok) {
     throw new IntegrationProviderError(
@@ -167,14 +202,16 @@ async function fetchListPage<T>(input: {
 }
 
 // Fetches page 1 first to learn total_page from the response, then fetches every remaining
-// page concurrently instead of walking them one at a time -- an account with thousands of
-// campaigns/ad groups/ads (real scale once MADAR has real clients, not just this dev store)
-// would otherwise take one full network round-trip per page in sequence.
+// page concurrently (throttled through the shared rate limiter) instead of walking them one at
+// a time -- an account with thousands of campaigns/ad groups/ads (real scale once MADAR has
+// real clients, not just this dev store) would otherwise take one full network round-trip per
+// page in sequence.
 async function fetchAllListPages<T>(input: {
   apiBaseUrl: string
   path: string
   advertiserId: string
   accessToken: string
+  rateLimiter: TikTokAdsRateLimiter
 }): Promise<T[]> {
   const first = await fetchListPage<T>({ ...input, page: 1 })
 
@@ -191,8 +228,8 @@ async function fetchAllListPages<T>(input: {
   }
 
   const remainingPages = Array.from({ length: cappedTotalPage - 1 }, (_, i) => i + 2)
-  const remainingResults = await mapWithConcurrency(remainingPages, LIST_PAGE_CONCURRENCY, (page) =>
-    fetchListPage<T>({ ...input, page })
+  const remainingResults = await Promise.all(
+    remainingPages.map((page) => fetchListPage<T>({ ...input, page }))
   )
 
   const items = [first.items]
@@ -221,6 +258,7 @@ async function fetchInsightsWindow(input: {
   accessToken: string
   startDate: string
   endDate: string
+  rateLimiter: TikTokAdsRateLimiter
 }): Promise<TikTokAdsInsightRow[]> {
   const results: TikTokAdsInsightRow[] = []
   let page = 1
@@ -240,12 +278,14 @@ async function fetchInsightsWindow(input: {
     url.searchParams.set("page", String(page))
     url.searchParams.set("page_size", String(INSIGHTS_PAGE_SIZE))
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        "access-token": input.accessToken,
-        accept: "application/json",
-      },
-    })
+    const response = await input.rateLimiter.schedule(() =>
+      fetch(url.toString(), {
+        headers: {
+          "access-token": input.accessToken,
+          accept: "application/json",
+        },
+      })
+    )
 
     if (!response.ok) {
       throw new IntegrationProviderError(
@@ -301,51 +341,30 @@ function buildInsightsWindows(): Array<{ startDate: string; endDate: string }> {
   return windows
 }
 
-// Each window is an independent request (its own date range, no shared pagination cursor
-// carried between them), so there's no ordering requirement forcing them to run one-at-a-time
-// -- running them with bounded concurrency instead of a sequential await-in-loop is what keeps
-// a full-history sync (up to MAX_INSIGHTS_WINDOWS windows) inside the frontend's request
-// timeout, and keeps scaling to accounts with years of history as MADAR gets real clients.
-async function mapWithConcurrency<TItem, TResult>(
-  items: TItem[],
-  concurrency: number,
-  worker: (item: TItem) => Promise<TResult>
-): Promise<TResult[]> {
-  const results = new Array<TResult>(items.length)
-  let nextIndex = 0
-
-  async function runNext(): Promise<void> {
-    const index = nextIndex
-    nextIndex += 1
-    if (index >= items.length) {
-      return
-    }
-    results[index] = await worker(items[index])
-    return runNext()
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runNext()))
-  return results
-}
-
 // Walks "full history" as successive INSIGHTS_WINDOW_DAYS-day slices from INSIGHTS_START_DATE
 // through today -- see the MAX_INSIGHTS_WINDOWS comment for why a single request can't cover
-// the whole range.
+// the whole range. Windows are independent (their own date range, no shared pagination cursor),
+// so they're all fired at once and the shared rate limiter -- not a concurrency cap -- is what
+// keeps the actual request rate under TikTok's limit.
 async function fetchAllInsights(input: {
   apiBaseUrl: string
   advertiserId: string
   accessToken: string
+  rateLimiter: TikTokAdsRateLimiter
 }): Promise<TikTokAdsInsightRow[]> {
   const windows = buildInsightsWindows()
 
-  const windowResults = await mapWithConcurrency(windows, INSIGHTS_WINDOW_CONCURRENCY, (window) =>
-    fetchInsightsWindow({
-      apiBaseUrl: input.apiBaseUrl,
-      advertiserId: input.advertiserId,
-      accessToken: input.accessToken,
-      startDate: window.startDate,
-      endDate: window.endDate,
-    })
+  const windowResults = await Promise.all(
+    windows.map((window) =>
+      fetchInsightsWindow({
+        apiBaseUrl: input.apiBaseUrl,
+        advertiserId: input.advertiserId,
+        accessToken: input.accessToken,
+        startDate: window.startDate,
+        endDate: window.endDate,
+        rateLimiter: input.rateLimiter,
+      })
+    )
   )
 
   return windowResults.flat()
@@ -439,6 +458,9 @@ export class TikTokAdsSyncService {
     try {
       const accessToken = await this.oauthService.resolveAccessToken(connection.id)
       const advertiserId = input.customerId
+      // Shared across all four fetches below since they run concurrently -- TikTok's QPS limit
+      // is counted per app across the whole request burst, not per entity type.
+      const rateLimiter = new TikTokAdsRateLimiter()
 
       const [campaigns, adgroups, ads, insights] = await Promise.all([
         fetchAllListPages<TikTokAdsCampaignRow>({
@@ -446,23 +468,27 @@ export class TikTokAdsSyncService {
           path: "/campaign/get/",
           advertiserId,
           accessToken,
+          rateLimiter,
         }),
         fetchAllListPages<TikTokAdsAdgroupRow>({
           apiBaseUrl: this.apiBaseUrl,
           path: "/adgroup/get/",
           advertiserId,
           accessToken,
+          rateLimiter,
         }),
         fetchAllListPages<TikTokAdsAdRow>({
           apiBaseUrl: this.apiBaseUrl,
           path: "/ad/get/",
           advertiserId,
           accessToken,
+          rateLimiter,
         }),
         fetchAllInsights({
           apiBaseUrl: this.apiBaseUrl,
           advertiserId,
           accessToken,
+          rateLimiter,
         }),
       ])
 

@@ -172,6 +172,9 @@ beforeEach(async () => {
   process.env.TIKTOK_ADS_CLIENT_SECRET = "tiktok-ads-client-secret"
   process.env.TIKTOK_ADS_REDIRECT_URI =
     "http://localhost:4000/v1/integrations/tiktok-ads/oauth/callback"
+  // Production throttles to 8 req/s (see sync-service.ts) -- fine for a real sync but would
+  // make walking 90+ mocked insight windows take 10+ real seconds here for no reason.
+  process.env.TIKTOK_ADS_TARGET_QPS = "1000"
   process.env.TIKTOK_ADS_OAUTH_SUCCESS_REDIRECT_URI = "http://localhost:3000/integrations/new"
 
   const mem = newDb({ autoCreateForeignKeyIndices: true })
