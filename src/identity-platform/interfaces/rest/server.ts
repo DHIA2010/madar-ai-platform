@@ -24,6 +24,7 @@ import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-de
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
+import { ProductsAggregationService } from "../../products/service"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -358,6 +359,9 @@ export function createIdentityApiServer(
     ? new TikTokAdsOAuthConnectionDeletionService(
         new TikTokAdsOAuthRepository(container.infrastructure.database)
       )
+    : null
+  const productsAggregationService = container.infrastructure.database
+    ? new ProductsAggregationService(container.infrastructure.database)
     : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
   // (confirmed by inspection -- only Google/Snapchat connectors exist), so this default is a
@@ -1569,6 +1573,17 @@ export function createIdentityApiServer(
             context
           )
         )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/products") {
+        if (!productsAggregationService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product aggregation is unavailable in memory mode.",
+          })
+        }
+
+        return send(200, { items: await productsAggregationService.listProducts(actor) })
       }
 
       if (method === "GET" && url.pathname === "/v1/audit-logs") {

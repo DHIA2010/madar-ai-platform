@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   addMonths,
   endOfMonth,
@@ -23,6 +23,7 @@ import {
   CircleAlert,
   Download,
   Globe,
+  Loader2,
   Package,
   Search,
   ShoppingBag,
@@ -33,6 +34,10 @@ import {
 import type { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
+import {
+  productListService,
+  type ProductRecord,
+} from "@/features/products/services/product-list.service"
 
 import { AppCard } from "@/components/app"
 import { Button } from "@/components/ui/button"
@@ -58,140 +63,11 @@ import {
 } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-type ProductStatus = "Active" | "Draft" | "Archived"
+type ProductStatus = ProductRecord["status"]
+type ProductRow = ProductRecord
 
-type ProductRow = {
-  id: number
-  name: string
-  sku: string
-  category: string
-  status: ProductStatus
-  availableStock: number
-  costPrice: number
-  sellingPrice: number
-  platform: string
-  image: string
-  activityDate: string
-}
-
-const products: ProductRow[] = [
-  {
-    id: 1,
-    name: "AirPods Pro",
-    sku: "APL-APRO-241",
-    category: "Electronics",
-    status: "Active",
-    availableStock: 245,
-    costPrice: 168,
-    sellingPrice: 249,
-    platform: "Shopify",
-    image: "/products/01.png",
-    activityDate: "2026-06-04",
-  },
-  {
-    id: 2,
-    name: "Coffee Maker",
-    sku: "HOM-CFMK-118",
-    category: "Home & Living",
-    status: "Draft",
-    availableStock: 38,
-    costPrice: 72,
-    sellingPrice: 119,
-    platform: "Salla",
-    image: "/products/02.png",
-    activityDate: "2026-06-07",
-  },
-  {
-    id: 3,
-    name: "Leather Wallet",
-    sku: "ACC-LWLT-502",
-    category: "Accessories",
-    status: "Active",
-    availableStock: 126,
-    costPrice: 24,
-    sellingPrice: 49,
-    platform: "Zid",
-    image: "/products/03.png",
-    activityDate: "2026-06-11",
-  },
-  {
-    id: 4,
-    name: "Gaming Mouse",
-    sku: "ELE-GMSE-330",
-    category: "Electronics",
-    status: "Archived",
-    availableStock: 0,
-    costPrice: 31,
-    sellingPrice: 59,
-    platform: "Shopify",
-    image: "/products/04.png",
-    activityDate: "2026-06-13",
-  },
-  {
-    id: 5,
-    name: "Running Shoes",
-    sku: "FSH-RSHO-150",
-    category: "Fashion",
-    status: "Active",
-    availableStock: 84,
-    costPrice: 58,
-    sellingPrice: 110,
-    platform: "WooCommerce",
-    image: "/products/05.png",
-    activityDate: "2026-06-16",
-  },
-  {
-    id: 6,
-    name: "Smart Watch",
-    sku: "ELE-SWCH-907",
-    category: "Electronics",
-    status: "Active",
-    availableStock: 57,
-    costPrice: 129,
-    sellingPrice: 199,
-    platform: "Salla",
-    image: "/products/06.png",
-    activityDate: "2026-06-18",
-  },
-  {
-    id: 7,
-    name: "Protein Powder",
-    sku: "SPT-PPWD-440",
-    category: "Sports",
-    status: "Draft",
-    availableStock: 163,
-    costPrice: 19,
-    sellingPrice: 34,
-    platform: "Zid",
-    image: "/products/07.png",
-    activityDate: "2026-06-19",
-  },
-  {
-    id: 8,
-    name: "Office Chair",
-    sku: "HOM-OCHR-612",
-    category: "Home & Living",
-    status: "Active",
-    availableStock: 29,
-    costPrice: 94,
-    sellingPrice: 179,
-    platform: "WooCommerce",
-    image: "/products/08.png",
-    activityDate: "2026-06-20",
-  },
-]
-
-const categoryOptions = [
-  "All Categories",
-  "Accessories",
-  "Beauty",
-  "Electronics",
-  "Fashion",
-  "Food & Beverage",
-  "Home & Living",
-  "Sports",
-]
-const platformOptions = ["All Platforms", "Shopify", "Salla", "WooCommerce", "Zid"]
+const FALLBACK_PRODUCT_IMAGE = "/products/01.png"
+const platformOptions = ["All Platforms", "Shopify", "Salla", "Zid"]
 const monthOptions = [
   "Jan",
   "Feb",
@@ -222,11 +98,14 @@ function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
   ]
 }
 
-function formatCurrency(value: number) {
+// Defaults to SAR since every commerce connector MADAR supports today (Salla, Shopify stores
+// configured for KSA, Zid) is Saudi-market -- uses the product's own currency when the sync
+// captured one (currently only Salla's payload carries an explicit currency code).
+function formatCurrency(value: number, currency: string | null = "SAR") {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
+    currency: currency ?? "SAR",
+    maximumFractionDigits: 2,
   }).format(value)
 }
 
@@ -572,11 +451,51 @@ function DateRangeFilter({
 }
 
 export default function ProductsPage() {
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const [category, setCategory] = useState("All Categories")
   const [platform, setPlatform] = useState("All Platforms")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadProducts() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const items = await productListService.listProducts()
+        if (!cancelled) {
+          setProducts(items)
+        }
+      } catch {
+        if (!cancelled) {
+          setLoadError("Couldn't load products from your connected stores. Please try again.")
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadProducts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const dynamicCategoryOptions = useMemo(() => {
+    const realCategories = Array.from(
+      new Set(products.map((product) => product.category).filter((value) => value.length > 0))
+    ).sort((a, b) => a.localeCompare(b))
+    return ["All Categories", ...realCategories]
+  }, [products])
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -594,7 +513,7 @@ export default function ProductsPage() {
 
       return matchesSearch && matchesCategory && matchesPlatform && matchesDateRange
     })
-  }, [category, dateRange, platform, search])
+  }, [category, dateRange, platform, products, search])
 
   const productKpiCards = useMemo<ProductKpiCardData[]>(() => {
     const activeCount = filteredProducts.filter((product) => product.status === "Active").length
@@ -602,7 +521,7 @@ export default function ProductsPage() {
       (product) => getInventoryStatus(product.availableStock) !== "In Stock"
     ).length
     const inventoryValue = filteredProducts.reduce(
-      (sum, product) => sum + product.costPrice * product.availableStock,
+      (sum, product) => sum + (product.costPrice ?? 0) * product.availableStock,
       0
     )
 
@@ -738,7 +657,7 @@ export default function ProductsPage() {
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categoryOptions.map((option) => (
+                  {dynamicCategoryOptions.map((option) => (
                     <SelectItem key={option} value={option}>
                       {option}
                     </SelectItem>
@@ -757,160 +676,175 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          <div className="relative w-full overflow-x-auto">
-            <Table className="min-w-[1080px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[22%] text-center">Product</TableHead>
-                  <TableHead className="w-[10%] text-center">SKU</TableHead>
-                  <TableHead className="w-[14%] text-center">Category</TableHead>
-                  <TableHead className="w-[10%] text-center">Status</TableHead>
-                  <TableHead className="w-[12%] text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span>Inventory Status</span>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                              aria-label="Inventory status classification"
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 rounded-[20px] border border-border bg-card py-16 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Loading products from your connected stores...
+            </div>
+          ) : loadError ? (
+            <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-8 text-center text-sm text-rose-700">
+              {loadError}
+            </div>
+          ) : (
+            <div className="relative w-full overflow-x-auto">
+              <Table className="min-w-[1080px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[22%] text-center">Product</TableHead>
+                    <TableHead className="w-[10%] text-center">SKU</TableHead>
+                    <TableHead className="w-[14%] text-center">Category</TableHead>
+                    <TableHead className="w-[10%] text-center">Status</TableHead>
+                    <TableHead className="w-[12%] text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span>Inventory Status</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label="Inventory status classification"
+                              >
+                                <CircleAlert className="size-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              sideOffset={8}
+                              className="max-w-[260px] rounded-2xl border border-sky-400/15 bg-card px-4 py-3 text-left text-foreground shadow-[0_16px_36px_-20px_rgba(2,6,23,0.9)] ring-1 ring-sky-400/10"
                             >
-                              <CircleAlert className="size-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            sideOffset={8}
-                            className="max-w-[260px] rounded-2xl border border-sky-400/15 bg-card px-4 py-3 text-left text-foreground shadow-[0_16px_36px_-20px_rgba(2,6,23,0.9)] ring-1 ring-sky-400/10"
-                          >
-                            <div className="space-y-2">
-                              <div>
-                                <p className="text-xs font-semibold text-foreground">
-                                  Inventory Status Classification
-                                </p>
+                              <div className="space-y-2">
+                                <div>
+                                  <p className="text-xs font-semibold text-foreground">
+                                    Inventory Status Classification
+                                  </p>
+                                </div>
+                                <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
+                                  <p>
+                                    <span className="text-emerald-300">In Stock</span>
+                                    <br />
+                                    More than 30 units available.
+                                  </p>
+                                  <p>
+                                    <span className="text-amber-300">Low Stock</span>
+                                    <br />
+                                    Between 1 and 30 units available.
+                                  </p>
+                                  <p>
+                                    <span className="text-rose-300">Out of Stock</span>
+                                    <br />
+                                    No inventory available.
+                                  </p>
+                                </div>
                               </div>
-                              <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
-                                <p>
-                                  <span className="text-emerald-300">In Stock</span>
-                                  <br />
-                                  More than 30 units available.
-                                </p>
-                                <p>
-                                  <span className="text-amber-300">Low Stock</span>
-                                  <br />
-                                  Between 1 and 30 units available.
-                                </p>
-                                <p>
-                                  <span className="text-rose-300">Out of Stock</span>
-                                  <br />
-                                  No inventory available.
-                                </p>
-                              </div>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableHead>
-                  <TableHead className="w-[10%] text-center">Available Stock</TableHead>
-                  <TableHead className="w-[8%] text-center">Cost Price</TableHead>
-                  <TableHead className="w-[10%] text-center">Selling Price</TableHead>
-                  <TableHead className="w-[10%] text-center">Platform</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="w-[22%] text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {/* Static export mode cannot use the default next/image loader here. */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          width={40}
-                          height={40}
-                          className="h-10 w-10 rounded-full border bg-muted/50 object-cover p-1"
-                        />
-                        <div className="min-w-0 leading-tight text-center">
-                          <p className="font-semibold">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">{product.platform}</p>
-                        </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
-                    </TableCell>
-                    <TableCell className="w-[10%] text-center">{product.sku}</TableCell>
-                    <TableCell className="w-[14%] text-center">{product.category}</TableCell>
-                    <TableCell className="w-[10%] text-center">
-                      <div className="flex items-center justify-center">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(product.status)}`}
-                        >
-                          {product.status}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="w-[12%] text-center">
-                      <div className="flex items-center justify-center">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getInventoryStatusClasses(product.availableStock)}`}
-                        >
-                          {getInventoryStatus(product.availableStock)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="w-[10%] text-center tabular-nums">
-                      {product.availableStock.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="w-[8%] text-center tabular-nums">
-                      {formatCurrency(product.costPrice)}
-                    </TableCell>
-                    <TableCell className="w-[10%] text-center tabular-nums">
-                      {formatCurrency(product.sellingPrice)}
-                    </TableCell>
-                    <TableCell className="w-[10%] text-center">
-                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                        <PlatformIcon platform={product.platform} />
-                        <span>{product.platform}</span>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead className="w-[10%] text-center">Available Stock</TableHead>
+                    <TableHead className="w-[8%] text-center">Cost Price</TableHead>
+                    <TableHead className="w-[10%] text-center">Selling Price</TableHead>
+                    <TableHead className="w-[10%] text-center">Platform</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              {filteredProducts.length === 0
-                ? "Showing 0 of 0"
-                : `Showing ${(currentPage - 1) * PAGE_SIZE + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredProducts.length)} of ${filteredProducts.length}`}
+                </TableHeader>
+                <TableBody>
+                  {paginatedProducts.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="w-[22%] text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {/* Static export mode cannot use the default next/image loader here. */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={product.image ?? FALLBACK_PRODUCT_IMAGE}
+                            alt={product.name}
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-full border bg-muted/50 object-cover p-1"
+                          />
+                          <div className="min-w-0 leading-tight text-center">
+                            <p className="font-semibold">{product.name}</p>
+                            <p className="text-xs text-muted-foreground">{product.platform}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="w-[10%] text-center">{product.sku}</TableCell>
+                      <TableCell className="w-[14%] text-center">{product.category}</TableCell>
+                      <TableCell className="w-[10%] text-center">
+                        <div className="flex items-center justify-center">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(product.status)}`}
+                          >
+                            {product.status}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="w-[12%] text-center">
+                        <div className="flex items-center justify-center">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getInventoryStatusClasses(product.availableStock)}`}
+                          >
+                            {getInventoryStatus(product.availableStock)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="w-[10%] text-center tabular-nums">
+                        {product.availableStock.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="w-[8%] text-center tabular-nums">
+                        {product.costPrice === null
+                          ? "—"
+                          : formatCurrency(product.costPrice, product.currency)}
+                      </TableCell>
+                      <TableCell className="w-[10%] text-center tabular-nums">
+                        {formatCurrency(product.sellingPrice, product.currency)}
+                      </TableCell>
+                      <TableCell className="w-[10%] text-center">
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <PlatformIcon platform={product.platform} />
+                          <span>{product.platform}</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
+          )}
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </Button>
-              <span className="min-w-24 text-center text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
+          {!isLoading && !loadError && (
+            <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                {filteredProducts.length === 0
+                  ? "Showing 0 of 0"
+                  : `Showing ${(currentPage - 1) * PAGE_SIZE + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredProducts.length)} of ${filteredProducts.length}`}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Prev
+                </Button>
+                <span className="min-w-24 text-center text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
