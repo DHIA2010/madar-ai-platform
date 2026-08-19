@@ -74,6 +74,22 @@ function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
   }
 }
 
+// Diagnostic messages must never leak the access token, only status/response shape --
+// TikTok's error responses put the human-readable reason in `message` (and sometimes
+// `data.description`), which the previous version of this file discarded entirely, leaving
+// only a generic "API request failed" in logs with no way to tell a bad parameter from a
+// scope issue from a rate limit.
+async function describeTikTokFailure(
+  response: Response,
+  parsedBody?: TikTokAdsApiEnvelope<unknown>
+): Promise<string> {
+  if (parsedBody) {
+    return `status=${response.status} code=${parsedBody.code} message=${parsedBody.message ?? "(none)"}`
+  }
+  const text = await response.text().catch(() => "(unreadable body)")
+  return `status=${response.status} body=${text.slice(0, 500)}`
+}
+
 function toRecordDate(candidates: Array<string | undefined>): string {
   for (const candidate of candidates) {
     if (!candidate) continue
@@ -113,7 +129,7 @@ async function fetchAllListPages<T>(input: {
 
     if (!response.ok) {
       throw new IntegrationProviderError(
-        "TikTok Ads API request failed during sync.",
+        `TikTok Ads API request failed during sync (${input.path}): ${await describeTikTokFailure(response)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -123,7 +139,7 @@ async function fetchAllListPages<T>(input: {
     const body = (await response.json()) as TikTokAdsApiEnvelope<T>
     if (body.code !== 0) {
       throw new IntegrationProviderError(
-        "TikTok Ads API request failed during sync.",
+        `TikTok Ads API request failed during sync (${input.path}): ${await describeTikTokFailure(response, body)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -183,7 +199,7 @@ async function fetchAllInsights(input: {
 
     if (!response.ok) {
       throw new IntegrationProviderError(
-        "TikTok Ads API request failed during sync.",
+        `TikTok Ads API request failed during sync (report/integrated/get): ${await describeTikTokFailure(response)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -193,7 +209,7 @@ async function fetchAllInsights(input: {
     const body = (await response.json()) as TikTokAdsApiEnvelope<TikTokAdsInsightRow>
     if (body.code !== 0) {
       throw new IntegrationProviderError(
-        "TikTok Ads API request failed during sync.",
+        `TikTok Ads API request failed during sync (report/integrated/get): ${await describeTikTokFailure(response, body)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
