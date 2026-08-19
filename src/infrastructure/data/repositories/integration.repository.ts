@@ -1267,15 +1267,24 @@ export class RestIntegrationRepository implements IntegrationRepository {
           trigger: "manual" | "retry"
         },
         GoogleAdsSyncApiResponse
-      >(providerProfile?.endpoints.sync ?? GOOGLE_ADS_PROVIDER_PROFILE.endpoints.sync, {
-        connectionId: connection.connectionId,
-        customerId,
-        startDate: startDate.toISOString().slice(0, 10),
-        endDate: endDate.toISOString().slice(0, 10),
-        idempotencyKey: generateUuid(),
-        mode: "incremental",
-        trigger: input.trigger === "retry" ? "retry" : "manual",
-      })
+      >(
+        providerProfile?.endpoints.sync ?? GOOGLE_ADS_PROVIDER_PROFILE.endpoints.sync,
+        {
+          connectionId: connection.connectionId,
+          customerId,
+          startDate: startDate.toISOString().slice(0, 10),
+          endDate: endDate.toISOString().slice(0, 10),
+          idempotencyKey: generateUuid(),
+          mode: "incremental",
+          trigger: input.trigger === "retry" ? "retry" : "manual",
+        },
+        // Full-history syncs (walking years of paginated/report data, e.g. TikTok Ads'
+        // 30-day-windowed insights) can legitimately take longer than the client's default
+        // 15s timeout -- confirmed live: a real sync completing successfully server-side in
+        // 12-16s still raced the default and sometimes lost. This only relaxes the wait for
+        // this endpoint, not the default for every other request.
+        { timeoutMs: 60_000 }
+      )
 
       const run = this.mapSyncRun(connection.connectionId, response)
       const syncJob: SyncJob = {
