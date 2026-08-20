@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   addMonths,
+  endOfDay,
   endOfMonth,
   format,
   getMonth,
@@ -10,6 +11,7 @@ import {
   isWithinInterval,
   setMonth,
   setYear,
+  startOfDay,
   startOfMonth,
   subDays,
   subMonths,
@@ -68,6 +70,8 @@ type ProductRow = ProductRecord
 
 const FALLBACK_PRODUCT_IMAGE = "/products/01.png"
 const platformOptions = ["All Platforms", "Shopify", "Salla", "Zid"]
+const inventoryStatusOptions = ["All Inventory Status", "In Stock", "Low Stock", "Out of Stock"]
+const statusOptions = ["All Status", "Active", "Draft", "Archived"]
 const monthOptions = [
   "Jan",
   "Feb",
@@ -458,6 +462,8 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1)
   const [category, setCategory] = useState("All Categories")
   const [platform, setPlatform] = useState("All Platforms")
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState("All Inventory Status")
+  const [statusFilter, setStatusFilter] = useState("All Status")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
 
   useEffect(() => {
@@ -507,16 +513,31 @@ export default function ProductsPage() {
         .includes(search.toLowerCase())
       const matchesCategory = category === "All Categories" || product.category === category
       const matchesPlatform = platform === "All Platforms" || product.platform === platform
+      const matchesInventoryStatus =
+        inventoryStatusFilter === "All Inventory Status" ||
+        getInventoryStatus(product.availableStock) === inventoryStatusFilter
+      const matchesStatus = statusFilter === "All Status" || product.status === statusFilter
+      // Presets and single-day calendar picks land on a specific instant (e.g. "now" for the
+      // Today preset, midnight for a plain day click), not a full-day span -- widening to
+      // startOfDay/endOfDay here is what makes a same-day product actually match instead of
+      // only matching a product updated at that exact millisecond.
       const matchesDateRange =
         !dateRange?.from ||
         isWithinInterval(new Date(product.activityDate), {
-          start: dateRange.from,
-          end: dateRange.to ?? dateRange.from,
+          start: startOfDay(dateRange.from),
+          end: endOfDay(dateRange.to ?? dateRange.from),
         })
 
-      return matchesSearch && matchesCategory && matchesPlatform && matchesDateRange
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesPlatform &&
+        matchesInventoryStatus &&
+        matchesStatus &&
+        matchesDateRange
+      )
     })
-  }, [category, dateRange, platform, products, search])
+  }, [category, dateRange, inventoryStatusFilter, platform, products, search, statusFilter])
 
   const productKpiCards = useMemo<ProductKpiCardData[]>(() => {
     const activeCount = filteredProducts.filter((product) => product.status === "Active").length
@@ -661,6 +682,35 @@ export default function ProductsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {dynamicCategoryOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={inventoryStatusFilter}
+                onValueChange={(next) => setInventoryStatusFilter(next)}
+              >
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Inventory Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {inventoryStatusOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={statusFilter} onValueChange={(next) => setStatusFilter(next)}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
                     <SelectItem key={option} value={option}>
                       {option}
                     </SelectItem>
