@@ -1,62 +1,45 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
-
-import { useWorkspace } from "@/features/workspace"
+import { useEffect, useState } from "react"
 
 import { customerListService } from "../services"
-import type { CustomerFilterState, CustomerListViewModel } from "../types"
-
-const DEFAULT_FILTERS: Omit<CustomerFilterState, "workspaceId"> = {
-  search: "",
-  status: "all",
-  segment: "",
-  source: "",
-  channel: "",
-  sortBy: "lastActivity",
-  sortDir: "desc",
-  page: 1,
-  pageSize: 10,
-}
+import type { CustomerRecord } from "../types"
 
 export function useCustomers() {
-  const { currentWorkspace } = useWorkspace()
-  const [filters, setFilters] = useState<Omit<CustomerFilterState, "workspaceId">>(DEFAULT_FILTERS)
+  const [records, setRecords] = useState<CustomerRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const scopedFilters = useMemo<CustomerFilterState>(
-    () => ({ ...filters, workspaceId: currentWorkspace?.id }),
-    [filters, currentWorkspace?.id]
-  )
+  useEffect(() => {
+    let cancelled = false
 
-  const listResult: CustomerListViewModel = useMemo(
-    () => customerListService.listCustomers(scopedFilters),
-    [scopedFilters]
-  )
+    async function load() {
+      setIsLoading(true)
+      setError(null)
 
-  const availableFilters = useMemo(() => customerListService.getAvailableFilters(), [])
+      try {
+        const items = await customerListService.listCustomers()
+        if (!cancelled) {
+          setRecords(items)
+        }
+      } catch (loadError) {
+        console.error("Failed to load customers", loadError)
+        if (!cancelled) {
+          setError("Couldn't load customers from your connected stores. Please try again.")
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
 
-  const updateFilters = useCallback((partial: Partial<CustomerFilterState>) => {
-    setFilters((prev) => ({
-      ...prev,
-      ...partial,
-      page: partial.page !== undefined ? partial.page : 1,
-    }))
+    void load()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const resetFilters = useCallback(() => {
-    setFilters(DEFAULT_FILTERS)
-  }, [])
-
-  return {
-    records: listResult.records,
-    total: listResult.total,
-    page: listResult.page,
-    pageSize: listResult.pageSize,
-    hasNextPage: listResult.hasNextPage,
-    hasPrevPage: listResult.hasPrevPage,
-    filters,
-    availableFilters,
-    updateFilters,
-    resetFilters,
-  }
+  return { records, isLoading, error }
 }

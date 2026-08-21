@@ -1,141 +1,38 @@
-export type CustomerStatus = "active" | "inactive" | "at_risk" | "churned" | "new"
+// Engagement recency, computed server-side from real order dates -- not a field any commerce
+// platform syncs directly.
+export type CustomerStatus = "new" | "active" | "at_risk" | "churned" | "inactive"
 
-export type CustomerSegmentLabel =
-  | "VIP"
-  | "Loyal"
-  | "At Risk"
-  | "Churned"
-  | "New Customer"
-  | "One Time"
-  | string
+// Value tier, computed server-side from real lifetime value/order count.
+export type CustomerSegment = "VIP" | "Loyal" | "One Time" | "New"
+
+export type CustomerPlatform = "Salla" | "Shopify" | "Zid"
 
 export interface CustomerRecord {
-  customerId: string
-  workspaceId?: string
+  id: string
   name: string
   email: string
-  phone?: string
-  status: CustomerStatus
-  segment: CustomerSegmentLabel
-  source: string
-  acquisitionChannel: string
-  lifetimeValue: number
+  phone: string | null
+  platform: CustomerPlatform
+  createdAt: string
   totalOrders: number
   totalRevenue: number
-  lastPurchaseAt?: string
-  lastActivityAt?: string
-  createdAt: string
-  tags: string[]
-  customFields: Record<string, string | number | boolean>
-  notes: CustomerNote[]
-}
-
-export interface CustomerNote {
-  noteId: string
-  content: string
-  createdAt: string
-  createdBy: string
+  lifetimeValue: number
+  lastPurchaseAt: string | null
+  status: CustomerStatus
+  segment: CustomerSegment
 }
 
 export interface CustomerOrder {
   orderId: string
-  status: "completed" | "pending" | "refunded" | "cancelled"
+  status: string
   revenue: number
   currency: string
   itemCount: number
   createdAt: string
 }
 
-export interface CustomerSession {
-  sessionId: string
-  startedAt: string
-  endedAt?: string
-  entryPage: string
-  exitPage: string
-  pageViews: number
-  source: string
-  medium: string
-  device: string
-  browser: string
-  country: string
-}
-
-export interface CustomerJourneyEvent {
-  eventId: string
-  timestamp: string
-  eventName: string
-  label: string
-  page?: string
-  metadata?: Record<string, string | number | boolean | null>
-}
-
-export interface CustomerAttribution {
-  firstTouchSource: string
-  firstTouchMedium: string
-  firstTouchCampaign: string
-  lastTouchSource: string
-  lastTouchMedium: string
-  lastTouchCampaign: string
-  multiTouchModel: string
-  acquisitionCampaign: string
-  acquisitionSource: string
-  acquisitionMedium: string
-  acquisitionChannel: string
-}
-
-export interface CustomerWebsiteActivity {
-  totalSessions: number
-  totalPageViews: number
-  topLandingPages: Array<{ page: string; visits: number }>
-  topExitPages: Array<{ page: string; visits: number }>
-  devices: Array<{ device: string; count: number }>
-  browsers: Array<{ browser: string; count: number }>
-}
-
-export interface CustomerCommerceStats {
-  totalOrders: number
-  totalRevenue: number
-  averageOrderValue: number
-  lifetimeValue: number
+export interface CustomerDetail extends CustomerRecord {
+  orders: CustomerOrder[]
   productsPurchased: string[]
-  categoriesPurchased: string[]
-}
-
-export interface CustomerMarketingActivity {
-  campaignsSeen: number
-  adsClicked: number
-  emailOpened: number
-  emailClicked: number
-  smsReceived: number
-  pushReceived: number
-}
-
-export interface CustomerSegmentHistory {
-  segmentId: string
-  segmentName: string
-  joinedAt: string
-  leftAt?: string
-  isCurrent: boolean
-}
-
-export interface CustomerFilterState {
-  workspaceId?: string
-  search: string
-  status: CustomerStatus | "all"
-  segment: string
-  source: string
-  channel: string
-  sortBy: "name" | "ltv" | "orders" | "lastActivity" | "createdAt"
-  sortDir: "asc" | "desc"
-  page: number
-  pageSize: number
-}
-
-export interface CustomerListViewModel {
-  records: CustomerRecord[]
-  total: number
-  page: number
-  pageSize: number
-  hasNextPage: boolean
-  hasPrevPage: boolean
+  averageOrderValue: number
 }

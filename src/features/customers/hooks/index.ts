@@ -1,14 +1,2 @@
-export {
-  useCustomer,
-  useCustomerAttribution,
-  useCustomerCommerceStats,
-  useCustomerJourney,
-  useCustomerMarketingActivity,
-  useCustomerOrders,
-  useCustomerSegments,
-  useCustomerSessions,
-  useCustomerTimeline,
-  useCustomerWebsiteActivity,
-} from "./use-customer"
-export { useCustomerActions } from "./use-customer-actions"
+export { useCustomer } from "./use-customer"
 export { useCustomers } from "./use-customers"

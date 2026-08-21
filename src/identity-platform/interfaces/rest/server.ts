@@ -25,6 +25,7 @@ import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { ProductsAggregationService } from "../../products/service"
+import { CustomersAggregationService } from "../../customers/service"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -362,6 +363,9 @@ export function createIdentityApiServer(
     : null
   const productsAggregationService = container.infrastructure.database
     ? new ProductsAggregationService(container.infrastructure.database)
+    : null
+  const customersAggregationService = container.infrastructure.database
+    ? new CustomersAggregationService(container.infrastructure.database)
     : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
   // (confirmed by inspection -- only Google/Snapchat connectors exist), so this default is a
@@ -1584,6 +1588,37 @@ export function createIdentityApiServer(
         }
 
         return send(200, { items: await productsAggregationService.listProducts(actor) })
+      }
+
+      if (method === "GET" && url.pathname === "/v1/customers") {
+        if (!customersAggregationService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer aggregation is unavailable in memory mode.",
+          })
+        }
+
+        return send(200, { items: await customersAggregationService.listCustomers(actor) })
+      }
+
+      const customerDetailMatch = url.pathname.match(/^\/v1\/customers\/([^/]+)$/)
+      if (method === "GET" && customerDetailMatch) {
+        if (!customersAggregationService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer aggregation is unavailable in memory mode.",
+          })
+        }
+
+        const customer = await customersAggregationService.getCustomer(
+          actor,
+          decodeURIComponent(customerDetailMatch[1])
+        )
+        if (!customer) {
+          return send(404, { code: "CUSTOMER_NOT_FOUND", message: "Customer not found." })
+        }
+
+        return send(200, customer)
       }
 
       if (method === "GET" && url.pathname === "/v1/audit-logs") {
