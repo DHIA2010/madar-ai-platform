@@ -9,7 +9,6 @@ export type ActiveStoreContext = {
   name: string
   platform: string
   url: string
-  country: string
   currency: string
 }
 

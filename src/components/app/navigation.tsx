@@ -103,8 +103,12 @@ export function AppPageHeader({
       <span className="font-medium text-slate-100">{activeStore.name}</span>
       <span className="text-slate-400">•</span>
       <span className="text-slate-300">{activeStore.platform}</span>
-      <span className="text-slate-400">•</span>
-      <span className="text-slate-300">{activeStore.country}</span>
+      {activeStore.currency ? (
+        <>
+          <span className="text-slate-400">•</span>
+          <span className="text-slate-300">{activeStore.currency}</span>
+        </>
+      ) : null}
     </div>
   ) : null
 

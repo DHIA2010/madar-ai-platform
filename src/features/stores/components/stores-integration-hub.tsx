@@ -1,14 +1,17 @@
 "use client"
 
-import { type ReactNode, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   addMonths,
+  endOfDay,
   endOfMonth,
   format,
+  formatDistanceToNow,
   getMonth,
   getYear,
   setMonth,
   setYear,
+  startOfDay,
   startOfMonth,
   subDays,
   subMonths,
@@ -16,13 +19,14 @@ import {
 import {
   Activity,
   CalendarIcon,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ChevronRight as ChevronRightSmall,
   Globe,
+  Loader2,
   type LucideIcon,
   Package,
-  Plug,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -58,163 +62,22 @@ import {
   AppTableRow,
 } from "@/components/app"
 
-type StorePlatform = "Shopify" | "Salla" | "Zid" | "WooCommerce" | "Magento" | "Custom API"
-type ConnectionStatus = "Connected" | "Disconnected" | "Needs Reconnect" | "Sync Error"
-type SyncHealth = "Healthy" | "Warning" | "Critical"
+import {
+  type StoreConnectionStatus,
+  storeListService,
+  type StorePlatform,
+  type StoreRecord,
+  type StoreSyncHealth,
+} from "../services"
 
-type StoreRow = {
-  id: string
-  name: string
-  logoText: string
-  url: string
-  platform: StorePlatform
-  country: string
-  currency: string
-  products: number
-  orders: number
-  customers: number
-  connectionStatus: ConnectionStatus
-  lastSyncLabel: string
-  lastSyncAt: string
-  syncHealth: SyncHealth
-  syncHealthScore: number
-  dataCoveragePercent: number
-  dataCoverageLevel: "Complete" | "Partial" | "Limited"
-}
-
-const storesData: StoreRow[] = [
-  {
-    id: "st-001",
-    name: "Fashion Store",
-    logoText: "FS",
-    url: "fashionstore.sa",
-    platform: "Shopify",
-    country: "Saudi Arabia",
-    currency: "SAR",
-    products: 3840,
-    orders: 178200,
-    customers: 96400,
-    connectionStatus: "Connected",
-    lastSyncLabel: "2 minutes ago",
-    lastSyncAt: "2026-06-20T12:58:00.000Z",
-    syncHealth: "Healthy",
-    syncHealthScore: 99.2,
-    dataCoveragePercent: 98.6,
-    dataCoverageLevel: "Complete",
-  },
-  {
-    id: "st-002",
-    name: "Beauty Market",
-    logoText: "BM",
-    url: "beautymarket.sa",
-    platform: "Salla",
-    country: "Saudi Arabia",
-    currency: "SAR",
-    products: 2250,
-    orders: 121400,
-    customers: 70300,
-    connectionStatus: "Connected",
-    lastSyncLabel: "15 minutes ago",
-    lastSyncAt: "2026-06-20T12:45:00.000Z",
-    syncHealth: "Healthy",
-    syncHealthScore: 98.4,
-    dataCoveragePercent: 96.1,
-    dataCoverageLevel: "Complete",
-  },
-  {
-    id: "st-003",
-    name: "Home Essentials",
-    logoText: "HE",
-    url: "homeessentials.ae",
-    platform: "Zid",
-    country: "UAE",
-    currency: "AED",
-    products: 1980,
-    orders: 84200,
-    customers: 52900,
-    connectionStatus: "Needs Reconnect",
-    lastSyncLabel: "Yesterday",
-    lastSyncAt: "2026-06-19T09:00:00.000Z",
-    syncHealth: "Warning",
-    syncHealthScore: 84.1,
-    dataCoveragePercent: 81,
-    dataCoverageLevel: "Partial",
-  },
-  {
-    id: "st-004",
-    name: "Gadget Hub",
-    logoText: "GH",
-    url: "gadgethub.com",
-    platform: "WooCommerce",
-    country: "USA",
-    currency: "USD",
-    products: 4610,
-    orders: 243500,
-    customers: 128700,
-    connectionStatus: "Connected",
-    lastSyncLabel: "5 minutes ago",
-    lastSyncAt: "2026-06-20T12:55:00.000Z",
-    syncHealth: "Healthy",
-    syncHealthScore: 99.5,
-    dataCoveragePercent: 97.4,
-    dataCoverageLevel: "Complete",
-  },
-  {
-    id: "st-005",
-    name: "Sportify KSA",
-    logoText: "SK",
-    url: "sportifyksa.sa",
-    platform: "Magento",
-    country: "Saudi Arabia",
-    currency: "SAR",
-    products: 2870,
-    orders: 146300,
-    customers: 82100,
-    connectionStatus: "Sync Error",
-    lastSyncLabel: "2 days ago",
-    lastSyncAt: "2026-06-18T10:10:00.000Z",
-    syncHealth: "Critical",
-    syncHealthScore: 61.3,
-    dataCoveragePercent: 56,
-    dataCoverageLevel: "Limited",
-  },
-  {
-    id: "st-006",
-    name: "D2C Nutrition",
-    logoText: "DN",
-    url: "d2cnutrition.sa",
-    platform: "Custom API",
-    country: "Saudi Arabia",
-    currency: "SAR",
-    products: 2870,
-    orders: 68500,
-    customers: 41300,
-    connectionStatus: "Disconnected",
-    lastSyncLabel: "2 days ago",
-    lastSyncAt: "2026-06-18T12:10:00.000Z",
-    syncHealth: "Critical",
-    syncHealthScore: 48.2,
-    dataCoveragePercent: 62.4,
-    dataCoverageLevel: "Limited",
-  },
-]
-
-const platformOptions = [
-  "All Platforms",
-  "Shopify",
-  "Salla",
-  "Zid",
-  "WooCommerce",
-  "Magento",
-  "Custom API",
-]
-const countryOptions = ["All Countries", "Saudi Arabia", "UAE", "USA"]
+const platformOptions = ["All Platforms", "Salla", "Shopify", "Zid"]
 const connectionStatusOptions = [
   "All Statuses",
   "Connected",
+  "Paused",
   "Disconnected",
-  "Needs Reconnect",
-  "Sync Error",
+  "Error",
+  "Pending",
 ]
 const monthOptions = [
   "Jan",
@@ -246,19 +109,7 @@ function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
 }
 
 const PAGE_SIZE = 6
-const STORE_TABLE_COLUMN_WIDTHS = [
-  "22%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-  "7.8%",
-]
+const STORE_TABLE_COLUMN_WIDTHS = ["24%", "10%", "9%", "9%", "9%", "13%", "13%", "13%"]
 const TABLE_ALIGN_START = "text-start rtl:text-start"
 const TABLE_ALIGN_CENTER = "!text-center rtl:!text-center"
 
@@ -266,10 +117,25 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value)
 }
 
+function connectionStatusLabel(status: StoreConnectionStatus): string {
+  if (status === "connected") return "Connected"
+  if (status === "paused") return "Paused"
+  if (status === "disconnected") return "Disconnected"
+  if (status === "error") return "Error"
+  return "Pending"
+}
+
+function syncHealthLabel(health: StoreSyncHealth): string {
+  if (health === "healthy") return "Healthy"
+  if (health === "stale") return "Stale"
+  if (health === "failed") return "Failed"
+  return "Never Synced"
+}
+
 interface StoreKpiCardData {
   label: string
   value: string
-  footnote: ReactNode
+  footnote: string
   icon: LucideIcon
   tone: "blue" | "violet" | "green" | "orange"
 }
@@ -296,7 +162,7 @@ function StoreKpiCard({ kpi }: { kpi: StoreKpiCardData }) {
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{kpi.label}</p>
       <p className="mt-1 text-2xl font-bold text-foreground">{kpi.value}</p>
-      <div className="mt-2 text-xs text-muted-foreground">{kpi.footnote}</div>
+      <p className="mt-2 text-xs text-muted-foreground">{kpi.footnote}</p>
     </AppCard>
   )
 }
@@ -307,37 +173,25 @@ function formatDateRangeLabel(range: DateRange | undefined) {
   return `${format(range.from, "MMM d, yyyy")} - ${format(range.to, "MMM d, yyyy")}`
 }
 
-function getConnectionStatusClasses(status: ConnectionStatus) {
-  if (status === "Connected") return "border-emerald-200 bg-emerald-50 text-emerald-700"
-  if (status === "Needs Reconnect") return "border-amber-200 bg-amber-50 text-amber-700"
-  if (status === "Sync Error") return "border-rose-200 bg-rose-50 text-rose-700"
+function getConnectionStatusClasses(status: StoreConnectionStatus) {
+  if (status === "connected") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  if (status === "paused") return "border-amber-200 bg-amber-50 text-amber-700"
+  if (status === "error") return "border-rose-200 bg-rose-50 text-rose-700"
   return "border-border bg-muted text-muted-foreground"
 }
 
-function getSyncHealthClasses(health: SyncHealth) {
-  if (health === "Healthy") return "text-emerald-600"
-  if (health === "Warning") return "text-amber-600"
-  return "text-rose-600"
+function getSyncHealthClasses(health: StoreSyncHealth) {
+  if (health === "healthy") return "text-emerald-600"
+  if (health === "stale") return "text-amber-600"
+  if (health === "failed") return "text-rose-600"
+  return "text-muted-foreground"
 }
 
-function getSyncHealthTooltip(health: SyncHealth) {
-  if (health === "Healthy") return "Last successful synchronization completed 2 minutes ago."
-  if (health === "Warning") return "Synchronization delayed. Some recent data may be missing."
-  return "Synchronization failed. Immediate attention required."
-}
-
-function getConnectionStatusTooltip(status: ConnectionStatus) {
-  if (status === "Connected") return "Store is connected and actively sending data."
-  if (status === "Needs Reconnect") return "Authentication expired. Reconnect required."
-  if (status === "Disconnected")
-    return "Store is currently disconnected. No new data is being received."
-  return "Synchronization failed because of an API or permission issue."
-}
-
-function getDataCoverageTooltip(level: StoreRow["dataCoverageLevel"]) {
-  if (level === "Complete") return "Historical data is fully synchronized."
-  if (level === "Partial") return "Some historical records are still synchronizing."
-  return "Only partial historical data is available."
+function getSyncHealthTooltip(health: StoreSyncHealth, lastSyncError: string | null) {
+  if (health === "healthy") return "Last successful synchronization completed recently."
+  if (health === "stale") return "No successful synchronization in the last 7 days."
+  if (health === "failed") return lastSyncError ?? "The most recent synchronization failed."
+  return "This store has not synced yet."
 }
 
 function getLogoColor(logoText: string) {
@@ -354,10 +208,7 @@ function getLogoColor(logoText: string) {
 function PlatformIcon({ platform }: { platform: StorePlatform }) {
   if (platform === "Shopify") return <StoreIcon className="size-4" />
   if (platform === "Salla") return <Store className="size-4" />
-  if (platform === "Zid") return <Globe className="size-4" />
-  if (platform === "WooCommerce") return <Store className="size-4" />
-  if (platform === "Magento") return <StoreIcon className="size-4" />
-  return <Plug className="size-4" />
+  return <Globe className="size-4" />
 }
 
 function DateRangeFilter({
@@ -591,9 +442,11 @@ function DateRangeFilter({
 }
 
 export function StoresIntegrationHub() {
+  const [stores, setStores] = useState<StoreRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [platform, setPlatform] = useState("All Platforms")
-  const [country, setCountry] = useState("All Countries")
   const [connectionStatus, setConnectionStatus] = useState("All Statuses")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [page, setPage] = useState(1)
@@ -608,32 +461,65 @@ export function StoresIntegrationHub() {
     loadActiveStore()
   }, [loadActiveStore])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadStores() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const items = await storeListService.listStores()
+        if (!cancelled) {
+          setStores(items)
+        }
+      } catch (error) {
+        console.error("Failed to load stores", error)
+        if (!cancelled) {
+          setLoadError("Couldn't load your connected stores. Please try again.")
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadStores()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const selectedStoreId = selectedStoreIdOverride ?? activeStore?.id ?? null
 
   const filteredStores = useMemo(() => {
-    return storesData.filter((store) => {
+    return stores.filter((store) => {
       const matchesPlatform = platform === "All Platforms" || store.platform === platform
-      const matchesCountry = country === "All Countries" || store.country === country
       const matchesStatus =
-        connectionStatus === "All Statuses" || store.connectionStatus === connectionStatus
+        connectionStatus === "All Statuses" ||
+        connectionStatusLabel(store.connectionStatus) === connectionStatus
       const matchesSearch =
         !search.trim() ||
-        `${store.name} ${store.url} ${store.platform}`
+        `${store.name} ${store.url ?? ""} ${store.platform}`
           .toLowerCase()
           .includes(search.trim().toLowerCase())
 
       const matchesDateRange =
         !dateRange?.from ||
         (() => {
+          if (!store.lastSyncAt) return false
           const value = new Date(store.lastSyncAt)
-          const from = dateRange.from
-          const to = dateRange.to ?? dateRange.from
-          return value >= from && value <= to
+          return (
+            value >= startOfDay(dateRange.from!) &&
+            value <= endOfDay(dateRange.to ?? dateRange.from!)
+          )
         })()
 
-      return matchesPlatform && matchesCountry && matchesStatus && matchesSearch && matchesDateRange
+      return matchesPlatform && matchesStatus && matchesSearch && matchesDateRange
     })
-  }, [connectionStatus, country, dateRange, platform, search])
+  }, [connectionStatus, dateRange, platform, search, stores])
 
   const scopedStores = useMemo(() => {
     if (!selectedStoreId) return filteredStores
@@ -642,44 +528,34 @@ export function StoresIntegrationHub() {
 
   const selectedStore = useMemo(() => {
     if (!selectedStoreId) return null
-    return storesData.find((store) => store.id === selectedStoreId) ?? null
-  }, [selectedStoreId])
+    return stores.find((store) => store.id === selectedStoreId) ?? null
+  }, [selectedStoreId, stores])
 
   const kpiMetrics = useMemo(() => {
     const connectedStores = scopedStores.filter(
-      (store) => store.connectionStatus === "Connected"
+      (store) => store.connectionStatus === "connected"
     ).length
     const connectedProducts = scopedStores
-      .filter((store) => store.connectionStatus === "Connected")
-      .reduce((sum, store) => sum + store.products, 0)
-    const ordersSynced = scopedStores.reduce((sum, store) => sum + store.orders, 0)
-    const avgSyncHealth = scopedStores.length
-      ? scopedStores.reduce((sum, store) => sum + store.syncHealthScore, 0) / scopedStores.length
-      : 0
+      .filter((store) => store.connectionStatus === "connected")
+      .reduce((sum, store) => sum + store.productCount, 0)
+    const ordersSynced = scopedStores.reduce((sum, store) => sum + store.orderCount, 0)
+    const customersSynced = scopedStores.reduce((sum, store) => sum + store.customerCount, 0)
 
-    return {
-      connectedStores,
-      connectedProducts,
-      ordersSynced,
-      syncHealth: avgSyncHealth,
-      syncHealthState:
-        avgSyncHealth >= 95 ? "Healthy" : avgSyncHealth >= 80 ? "Warning" : "Critical",
-    }
+    return { connectedStores, connectedProducts, ordersSynced, customersSynced }
   }, [scopedStores])
 
   const totalPages = Math.max(1, Math.ceil(scopedStores.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
   const paginatedRows = scopedStores.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
-  const openStoreDetails = (store: StoreRow) => {
+  const openStoreDetails = (store: StoreRecord) => {
     setSelectedStoreIdOverride(store.id)
     setActiveStore({
       id: store.id,
       name: store.name,
       platform: store.platform,
-      url: store.url,
-      country: store.country,
-      currency: store.currency,
+      url: store.url ?? "",
+      currency: store.currency ?? "",
     })
     setPage(1)
   }
@@ -690,7 +566,7 @@ export function StoresIntegrationHub() {
     setPage(1)
   }
 
-  const noStoresExist = storesData.length === 0
+  const noStoresExist = !isLoading && !loadError && stores.length === 0
 
   return (
     <div className="space-y-4">
@@ -705,7 +581,7 @@ export function StoresIntegrationHub() {
             {
               label: "Connected Stores",
               value: formatNumber(kpiMetrics.connectedStores),
-              footnote: "Across 3 commerce platforms",
+              footnote: `Across ${platformOptions.length - 1} commerce platforms`,
               icon: Store,
               tone: "blue",
             },
@@ -724,18 +600,9 @@ export function StoresIntegrationHub() {
               tone: "green",
             },
             {
-              label: "Sync Health",
-              value: `${kpiMetrics.syncHealth.toFixed(1)}%`,
-              footnote: (
-                <span
-                  className={cn(
-                    "font-medium",
-                    getSyncHealthClasses(kpiMetrics.syncHealthState as SyncHealth)
-                  )}
-                >
-                  {kpiMetrics.syncHealthState}
-                </span>
-              ),
+              label: "Customers Synced",
+              value: formatNumber(kpiMetrics.customersSynced),
+              footnote: "Across all connected stores",
               icon: Activity,
               tone: "orange",
             },
@@ -792,25 +659,6 @@ export function StoresIntegrationHub() {
             </AppSelect>
 
             <AppSelect
-              value={country}
-              onValueChange={(next) => {
-                setCountry(next)
-                setPage(1)
-              }}
-            >
-              <AppSelectTrigger className="w-[170px]">
-                <AppSelectValue placeholder="Country" />
-              </AppSelectTrigger>
-              <AppSelectContent>
-                {countryOptions.map((option) => (
-                  <AppSelectItem key={option} value={option}>
-                    {option}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
-
-            <AppSelect
               value={connectionStatus}
               onValueChange={(next) => {
                 setConnectionStatus(next)
@@ -853,7 +701,16 @@ export function StoresIntegrationHub() {
           ) : null}
         </div>
 
-        {noStoresExist ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-16 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading your connected stores...
+          </div>
+        ) : loadError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-8 text-center text-sm text-rose-700">
+            {loadError}
+          </div>
+        ) : noStoresExist ? (
           <div className="rounded-2xl border border-border bg-card p-10 text-center">
             <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-border bg-muted/60 text-muted-foreground">
               <Store className="size-7" />
@@ -862,13 +719,10 @@ export function StoresIntegrationHub() {
             <p className="mt-2 text-sm text-muted-foreground">
               Bring your commerce platform data into MADAR to unlock intelligence.
             </p>
-            <div className="mt-5">
-              <AppButton>Connect Store</AppButton>
-            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <AppTable className="min-w-[1400px]">
+            <AppTable className="min-w-[1200px]">
               <colgroup>
                 {STORE_TABLE_COLUMN_WIDTHS.map((width, index) => (
                   <col key={index} style={{ width }} />
@@ -883,12 +737,6 @@ export function StoresIntegrationHub() {
                     Platform
                   </AppTableHead>
                   <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
-                    Country
-                  </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
-                    Currency
-                  </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Products
                   </AppTableHead>
                   <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
@@ -901,9 +749,6 @@ export function StoresIntegrationHub() {
                     Connection Status
                   </AppTableHead>
                   <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
-                    Data Coverage
-                  </AppTableHead>
-                  <AppTableHead className={`${TABLE_ALIGN_CENTER} text-muted-foreground`}>
                     Last Sync
                   </AppTableHead>
                   <AppTableHead className={`${TABLE_ALIGN_START} text-muted-foreground`}>
@@ -914,116 +759,106 @@ export function StoresIntegrationHub() {
               <AppTableBody>
                 {paginatedRows.length === 0 ? (
                   <AppTableRow className="border-border">
-                    <AppTableCell colSpan={11} className="py-10 text-center">
+                    <AppTableCell colSpan={8} className="py-10 text-center">
                       <p className="text-base font-semibold text-foreground">
                         No stores match the current filters
                       </p>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        Try adjusting platform, country, status, date, or search.
+                        Try adjusting platform, status, date, or search.
                       </p>
                     </AppTableCell>
                   </AppTableRow>
                 ) : (
-                  paginatedRows.map((store) => (
-                    <AppTableRow
-                      key={store.id}
-                      className="border-border transition-colors hover:bg-muted"
-                    >
-                      <AppTableCell className={TABLE_ALIGN_START}>
-                        <button
-                          type="button"
-                          className={`group flex w-full items-center gap-3 rounded-md py-1 ${TABLE_ALIGN_START} transition-colors hover:bg-muted`}
-                          onClick={() => openStoreDetails(store)}
-                        >
-                          <div
-                            className={`flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${getLogoColor(store.logoText)}`}
+                  paginatedRows.map((store) => {
+                    const logoText = store.platform.slice(0, 2).toUpperCase()
+                    return (
+                      <AppTableRow
+                        key={store.id}
+                        className="border-border transition-colors hover:bg-muted"
+                      >
+                        <AppTableCell className={TABLE_ALIGN_START}>
+                          <button
+                            type="button"
+                            className={`group flex w-full items-center gap-3 rounded-md py-1 ${TABLE_ALIGN_START} transition-colors hover:bg-muted`}
+                            onClick={() => openStoreDetails(store)}
                           >
-                            {store.logoText}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-foreground">{store.name}</p>
-                            <p className="text-xs text-muted-foreground">{store.url}</p>
-                          </div>
-                          <ChevronRightSmall className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                        </button>
-                      </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_START} text-foreground/90`}>
-                        <span className="inline-flex items-center gap-2">
-                          <PlatformIcon platform={store.platform} />
-                          {store.platform}
-                        </span>
-                      </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
-                        {store.country}
-                      </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
-                        {store.currency}
-                      </AppTableCell>
-                      <AppTableCell
-                        className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
-                      >
-                        {formatNumber(store.products)}
-                      </AppTableCell>
-                      <AppTableCell
-                        className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
-                      >
-                        {formatNumber(store.orders)}
-                      </AppTableCell>
-                      <AppTableCell
-                        className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
-                      >
-                        {formatNumber(store.customers)}
-                      </AppTableCell>
-                      <AppTableCell className={TABLE_ALIGN_CENTER}>
-                        <span
-                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getConnectionStatusClasses(store.connectionStatus)}`}
-                          title={getConnectionStatusTooltip(store.connectionStatus)}
-                        >
-                          {store.connectionStatus}
-                        </span>
-                      </AppTableCell>
-                      <AppTableCell className={TABLE_ALIGN_CENTER}>
-                        <span
-                          className="inline-flex flex-col items-center text-xs text-foreground/90"
-                          title={getDataCoverageTooltip(store.dataCoverageLevel)}
-                        >
-                          <span className="text-sm font-medium text-foreground">
-                            {store.dataCoveragePercent}%
+                            <div
+                              className={`flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${getLogoColor(logoText)}`}
+                            >
+                              {logoText}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-foreground">{store.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {store.url ?? store.currency ?? "—"}
+                              </p>
+                            </div>
+                            <ChevronRightSmall className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                          </button>
+                        </AppTableCell>
+                        <AppTableCell className={`${TABLE_ALIGN_START} text-foreground/90`}>
+                          <span className="inline-flex items-center gap-2">
+                            <PlatformIcon platform={store.platform} />
+                            {store.platform}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {store.dataCoverageLevel}
-                          </span>
-                        </span>
-                      </AppTableCell>
-                      <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
-                        {store.lastSyncLabel}
-                      </AppTableCell>
-                      <AppTableCell className={TABLE_ALIGN_START}>
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-sm font-medium ${getSyncHealthClasses(store.syncHealth)}`}
-                          title={getSyncHealthTooltip(store.syncHealth)}
+                        </AppTableCell>
+                        <AppTableCell
+                          className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
                         >
-                          {store.syncHealth === "Healthy" ? (
-                            <ShieldCheck className="size-4" />
-                          ) : null}
-                          {store.syncHealth === "Warning" ? (
-                            <TriangleAlert className="size-4" />
-                          ) : null}
-                          {store.syncHealth === "Critical" ? (
-                            <ShieldAlert className="size-4" />
-                          ) : null}
-                          {store.syncHealth}
-                        </span>
-                      </AppTableCell>
-                    </AppTableRow>
-                  ))
+                          {formatNumber(store.productCount)}
+                        </AppTableCell>
+                        <AppTableCell
+                          className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
+                        >
+                          {formatNumber(store.orderCount)}
+                        </AppTableCell>
+                        <AppTableCell
+                          className={`${TABLE_ALIGN_CENTER} tabular-nums text-foreground/90`}
+                        >
+                          {formatNumber(store.customerCount)}
+                        </AppTableCell>
+                        <AppTableCell className={TABLE_ALIGN_CENTER}>
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getConnectionStatusClasses(store.connectionStatus)}`}
+                          >
+                            {connectionStatusLabel(store.connectionStatus)}
+                          </span>
+                        </AppTableCell>
+                        <AppTableCell className={`${TABLE_ALIGN_CENTER} text-foreground/90`}>
+                          {store.lastSyncAt
+                            ? formatDistanceToNow(new Date(store.lastSyncAt), { addSuffix: true })
+                            : "Never"}
+                        </AppTableCell>
+                        <AppTableCell className={TABLE_ALIGN_START}>
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-sm font-medium ${getSyncHealthClasses(store.syncHealth)}`}
+                            title={getSyncHealthTooltip(store.syncHealth, store.lastSyncError)}
+                          >
+                            {store.syncHealth === "healthy" ? (
+                              <ShieldCheck className="size-4" />
+                            ) : null}
+                            {store.syncHealth === "stale" ? (
+                              <TriangleAlert className="size-4" />
+                            ) : null}
+                            {store.syncHealth === "failed" ? (
+                              <ShieldAlert className="size-4" />
+                            ) : null}
+                            {store.syncHealth === "never_synced" ? (
+                              <CheckCircle2 className="size-4 opacity-50" />
+                            ) : null}
+                            {syncHealthLabel(store.syncHealth)}
+                          </span>
+                        </AppTableCell>
+                      </AppTableRow>
+                    )
+                  })
                 )}
               </AppTableBody>
             </AppTable>
           </div>
         )}
 
-        {!noStoresExist ? (
+        {!isLoading && !loadError && !noStoresExist ? (
           <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <div>
               {scopedStores.length === 0

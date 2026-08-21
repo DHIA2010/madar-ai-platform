@@ -19,5 +19,10 @@ export function generateStaticParams() {
 
 export default async function Page({ params }: Props) {
   const { customerId } = await params
-  return <CustomerProfile customerId={customerId} />
+  // Next hands this dynamic segment back still percent-encoded (confirmed live: a customer id
+  // containing ":" arrived here as "salla%3A..."), so without this decode it gets encoded a
+  // second time downstream in customerDetailEndpoint(), producing "salla%253A..." and a 400
+  // from the backend. Decoding here is safe even if a future Next version already decodes it --
+  // decodeURIComponent on an already-plain string is a no-op.
+  return <CustomerProfile customerId={decodeURIComponent(customerId)} />
 }
