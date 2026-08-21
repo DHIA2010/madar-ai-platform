@@ -10,6 +10,7 @@ export const ROUTES = {
   stores: "/stores",
   products: "/products",
   productsAdd: "/eCommerce/add-product",
+  orders: "/orders",
   customers: "/customers",
   customersDetails: (customerId: string) => `/customers/${customerId}`,
   reports: "/reports",

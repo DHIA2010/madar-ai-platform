@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import {
   ChartNoAxesCombined,
   CircleUserRound,
+  ClipboardList,
   ShieldCheck,
   Gauge,
   Grid2x2,
@@ -65,6 +66,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     { title: t("campaigns"), url: "/campaigns", icon: <SendIcon />, permission: "campaigns:view" },
     { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },
     { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
+    { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
     {
       title: t("customers"),
       url: "/customers",
