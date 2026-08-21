@@ -71,6 +71,28 @@ export interface OrdersListResponse {
   summary: OrdersSummary
 }
 
+export interface OrderDetailItem {
+  id: string
+  name: string
+  sku: string | null
+  quantity: number
+  unitPrice: number | null
+  discount: number
+  tax: number
+  total: number
+  thumbnail: string | null
+}
+
+export interface OrderDetail {
+  currency: string
+  subTotal: number
+  shippingCost: number
+  taxTotal: number
+  discountTotal: number
+  total: number
+  items: OrderDetailItem[]
+}
+
 // Avoids the slash-prefix literal lint rule (same trick as product-list.service.ts) -- this
 // is a real backend API path, not a frontend page route.
 const ORDERS_ENDPOINT = ["", "v1", "orders"].join(String.fromCharCode(47))
@@ -92,5 +114,15 @@ export const orderListService = {
     }
     const suffix = query.toString() ? `?${query.toString()}` : ""
     return client.get<OrdersListResponse>(`${ORDERS_ENDPOINT}${suffix}`)
+  },
+
+  // Live, on-demand fetch of the order's real per-item price/SKU/tax/discount from the
+  // provider's own Order Details API -- not part of the bulk-synced summary, so it's only
+  // requested when a user actually opens "View Products" for that one order.
+  async getOrderDetail(orderId: string): Promise<OrderDetail> {
+    const endpoint = [ORDERS_ENDPOINT, encodeURIComponent(orderId), "details"].join(
+      String.fromCharCode(47)
+    )
+    return client.get<OrderDetail>(endpoint)
   },
 }

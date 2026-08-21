@@ -16,6 +16,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  X,
   XCircle,
   type LucideIcon,
 } from "lucide-react"
@@ -23,6 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import {
   orderListService,
+  type OrderDetail,
   type OrderItemRecord,
   type OrderRecord,
   type OrdersSummary,
@@ -32,7 +34,13 @@ import { AppCard } from "@/components/app"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -192,6 +200,218 @@ function PlatformIcon({ platform }: { platform: OrderRecord["platform"] }) {
     return <Globe className="size-4" />
   }
   return <Store className="size-4" />
+}
+
+const SUMMARY_STAT_TONE_CLASSNAMES = {
+  blue: "bg-blue-50 text-blue-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+  violet: "bg-violet-50 text-violet-600",
+  amber: "bg-amber-50 text-amber-600",
+} as const
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone: keyof typeof SUMMARY_STAT_TONE_CLASSNAMES
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-3">
+      <div
+        className={cn(
+          "mb-2 flex size-7 items-center justify-center rounded-lg",
+          SUMMARY_STAT_TONE_CLASSNAMES[tone]
+        )}
+      >
+        <Wallet className="size-3.5" />
+      </div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold tabular-nums text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function OrderProductsDialog({
+  order,
+  onClose,
+}: {
+  order: OrderRecord | null
+  onClose: () => void
+}) {
+  const [detail, setDetail] = useState<OrderDetail | null>(null)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+  const [detailLoadFailed, setDetailLoadFailed] = useState(false)
+
+  useEffect(() => {
+    if (!order) {
+      return
+    }
+
+    let cancelled = false
+
+    async function loadOrderDetail(orderId: string) {
+      setIsLoadingDetail(true)
+      setDetailLoadFailed(false)
+      setDetail(null)
+
+      try {
+        const result = await orderListService.getOrderDetail(orderId)
+        if (!cancelled) {
+          setDetail(result)
+        }
+      } catch (error) {
+        // Falls back to the already-synced name+quantity list below rather than showing
+        // nothing -- expected for platforms without a live order-detail integration yet.
+        console.error("Failed to load order line items", error)
+        if (!cancelled) {
+          setDetailLoadFailed(true)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDetail(false)
+        }
+      }
+    }
+
+    void loadOrderDetail(order.id)
+
+    return () => {
+      cancelled = true
+    }
+  }, [order])
+
+  return (
+    <Dialog open={order !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <Package className="size-4" />
+            </div>
+            <DialogTitle className="pr-8">
+              Products in order #{order?.orderNumber ?? ""}
+            </DialogTitle>
+          </div>
+        </DialogHeader>
+        <DialogClose asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-2 right-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+          >
+            <X />
+            <span className="sr-only">Close</span>
+          </Button>
+        </DialogClose>
+
+        {isLoadingDetail ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading product details...
+          </div>
+        ) : detail ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <SummaryStat
+                label="Total"
+                value={formatCurrency(detail.total, detail.currency)}
+                tone="blue"
+              />
+              <SummaryStat
+                label="Discount"
+                value={formatCurrency(detail.discountTotal, detail.currency)}
+                tone="emerald"
+              />
+              <SummaryStat
+                label="Tax"
+                value={formatCurrency(detail.taxTotal, detail.currency)}
+                tone="violet"
+              />
+              <SummaryStat label="Products" value={String(detail.items.length)} tone="amber" />
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-center">Total</TableHead>
+                    <TableHead className="text-center">Qty</TableHead>
+                    <TableHead className="text-center">Unit Price</TableHead>
+                    <TableHead className="text-center">SKU</TableHead>
+                    <TableHead>Product</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detail.items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="text-center tabular-nums">
+                        {formatCurrency(item.total, detail.currency)}
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums">{item.quantity}</TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {item.unitPrice === null
+                          ? "—"
+                          : formatCurrency(item.unitPrice, detail.currency)}
+                      </TableCell>
+                      <TableCell className="text-center text-muted-foreground">
+                        {item.sku ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {item.thumbnail ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.thumbnail}
+                              alt={item.name}
+                              className="size-8 rounded-md border object-cover"
+                            />
+                          ) : (
+                            <div className="flex size-8 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+                              <Package className="size-4" />
+                            </div>
+                          )}
+                          <span className="text-sm font-medium">{item.name}</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2">
+            {order?.items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No product details are available for this order.
+              </p>
+            ) : (
+              order?.items.map((item: OrderItemRecord, index: number) => (
+                <div
+                  key={`${item.name}-${index}`}
+                  className="flex items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <Package className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">{item.name}</span>
+                  </div>
+                  <Badge variant="secondary">x{item.quantity}</Badge>
+                </div>
+              ))
+            )}
+            {detailLoadFailed && (
+              <p className="text-xs text-muted-foreground">
+                Detailed pricing wasn&apos;t available for this order.
+              </p>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export default function OrdersPage() {
@@ -499,7 +719,17 @@ export default function OrdersPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={() => setViewedOrder(order)}>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  // Opening the Dialog synchronously from a DropdownMenu
+                                  // onSelect races both components' Radix pointer-events
+                                  // cleanup on <body>, leaving the page unclickable after the
+                                  // dialog closes. Deferring to the next tick (without
+                                  // preventing the dropdown's own default close behavior)
+                                  // lets the dropdown finish closing first.
+                                  setTimeout(() => setViewedOrder(order), 0)
+                                }}
+                              >
                                 <Eye className="mr-2 size-4" />
                                 View Products
                               </DropdownMenuItem>
@@ -550,33 +780,7 @@ export default function OrdersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={viewedOrder !== null} onOpenChange={(open) => !open && setViewedOrder(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Products in order #{viewedOrder?.orderNumber ?? ""}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            {viewedOrder?.items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No product details are available for this order.
-              </p>
-            ) : (
-              viewedOrder?.items.map((item: OrderItemRecord, index: number) => (
-                <div
-                  key={`${item.name}-${index}`}
-                  className="flex items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Package className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">{item.name}</span>
-                  </div>
-                  <Badge variant="secondary">x{item.quantity}</Badge>
-                </div>
-              ))
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <OrderProductsDialog order={viewedOrder} onClose={() => setViewedOrder(null)} />
     </div>
   )
 }

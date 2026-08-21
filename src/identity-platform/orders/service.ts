@@ -264,8 +264,52 @@ export interface OrdersListResult {
   summary: OrdersSummaryStats
 }
 
+export interface OrderConnectionRef {
+  platform: ProviderKey
+  connectionId: string
+  entityId: string
+}
+
 export class OrdersAggregationService {
   constructor(private readonly db: PostgresDatabase) {}
+
+  // Resolves the owning connection for a single order id ("salla:1155952133") so a caller
+  // (the live order-detail endpoint) can look up the right OAuth connection/access token --
+  // scoped by org/workspace the same way every other lookup in this service is.
+  async resolveOrderConnection(
+    actor: AuthenticatedActor,
+    orderId: string
+  ): Promise<OrderConnectionRef | null> {
+    const [provider, entityId] = orderId.split(":", 2)
+    if (!provider || !entityId || !(provider in PROVIDER_CONFIG)) {
+      return null
+    }
+
+    const config = PROVIDER_CONFIG[provider as ProviderKey]
+    const result = await this.db.query<{ connection_id: string }>({
+      name: `orders-resolve-connection-${provider}`,
+      text: `
+        SELECT o.connection_id
+        FROM ${config.recordsTable} o
+        JOIN ${config.connectionsTable} c ON c.id = o.connection_id
+        WHERE o.entity_type = 'orders'
+          AND o.entity_id = $1
+          AND c.organization_id = $2
+          AND c.deleted_at IS NULL
+          AND c.status = 'connected'
+          AND ($3::uuid IS NULL OR c.workspace_id = $3::uuid)
+        LIMIT 1
+      `,
+      values: [entityId, actor.organizationId, actor.workspaceId ?? null],
+    })
+
+    const row = result.rows[0]
+    if (!row) {
+      return null
+    }
+
+    return { platform: provider as ProviderKey, connectionId: row.connection_id, entityId }
+  }
 
   async listOrders(actor: AuthenticatedActor, query: OrdersQuery): Promise<OrdersListResult> {
     const endDate = query.endDate ? new Date(query.endDate) : new Date()

@@ -115,6 +115,33 @@ export interface IntegrationProviderTimelineResult {
   items: IntegrationProviderTimelineEvent[]
 }
 
+export interface IntegrationProviderOrderDetailQuery {
+  connectionId: string
+  orderId: string
+}
+
+export interface IntegrationProviderOrderDetailItem {
+  id: string
+  name: string
+  sku: string | null
+  quantity: number
+  unitPrice: number | null
+  discount: number
+  tax: number
+  total: number
+  thumbnail: string | null
+}
+
+export interface IntegrationProviderOrderDetail {
+  currency: string
+  subTotal: number
+  shippingCost: number
+  taxTotal: number
+  discountTotal: number
+  total: number
+  items: IntegrationProviderOrderDetailItem[]
+}
+
 export interface IntegrationProvider {
   providerId: string
   displayName: string
@@ -164,4 +191,8 @@ export interface IntegrationProvider {
     actor: AuthenticatedActor,
     query: IntegrationProviderEventsQuery
   ): Promise<IntegrationProviderTimelineResult>
+  getOrderDetail?(
+    actor: AuthenticatedActor,
+    query: IntegrationProviderOrderDetailQuery
+  ): Promise<IntegrationProviderOrderDetail>
 }

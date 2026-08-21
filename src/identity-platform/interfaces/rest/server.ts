@@ -1644,6 +1644,36 @@ export function createIdentityApiServer(
         return send(200, result)
       }
 
+      const orderDetailMatch = url.pathname.match(/^\/v1\/orders\/([^/]+)\/details$/)
+      if (method === "GET" && orderDetailMatch) {
+        if (!ordersAggregationService) {
+          return send(503, {
+            code: "ORDERS_UNAVAILABLE",
+            message: "Order aggregation is unavailable in memory mode.",
+          })
+        }
+
+        const orderId = decodeURIComponent(orderDetailMatch[1])
+        const connectionRef = await ordersAggregationService.resolveOrderConnection(actor, orderId)
+        if (!connectionRef) {
+          return send(404, { code: "ORDER_NOT_FOUND", message: "Order not found." })
+        }
+
+        const provider = container.infrastructure.integrations?.find(connectionRef.platform)
+        if (!provider || !provider.getOrderDetail) {
+          return send(501, {
+            code: "ORDER_DETAILS_UNSUPPORTED",
+            message: "Detailed order line items aren't available for this platform yet.",
+          })
+        }
+
+        const detail = await provider.getOrderDetail(actor, {
+          connectionId: connectionRef.connectionId,
+          orderId: connectionRef.entityId,
+        })
+        return send(200, detail)
+      }
+
       if (method === "GET" && url.pathname === "/v1/stores") {
         if (!storesAggregationService) {
           return send(503, {

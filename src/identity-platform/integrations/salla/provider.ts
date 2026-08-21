@@ -15,9 +15,78 @@ import type {
   IntegrationProviderAccountsQuery,
   IntegrationProviderOAuthControllerResult,
   IntegrationProviderOAuthStartInput,
+  IntegrationProviderOrderDetail,
+  IntegrationProviderOrderDetailQuery,
   IntegrationProviderRecordQuery,
   IntegrationProviderSyncInput,
 } from "../provider-contracts"
+
+const DEFAULT_SALLA_API_BASE_URL = "https://api.salla.dev/admin/v2"
+
+// Confirmed against Salla's real "Order Details" OpenAPI schema (docs.salla.dev) -- distinct
+// from the lighter /orders list shape our sync already stores, which has no per-item price,
+// SKU, or tax/discount breakdown. This is fetched live and on-demand (only when a user opens
+// "View Products"), not synced in bulk, since it's a separate API call per order.
+interface SallaOrderDetailApiPrice {
+  amount?: number
+  currency?: string
+}
+
+interface SallaOrderDetailApiItem {
+  id?: number | string
+  name?: string
+  sku?: string | null
+  quantity?: number
+  product_thumbnail?: string | null
+  amounts?: {
+    price_without_tax?: SallaOrderDetailApiPrice
+    total_discount?: SallaOrderDetailApiPrice
+    tax?: { percent?: string; amount?: SallaOrderDetailApiPrice }
+    total?: SallaOrderDetailApiPrice
+  }
+  product?: {
+    sku?: string | null
+    thumbnail?: string | null
+  }
+}
+
+interface SallaOrderDetailApiResponse {
+  amounts?: {
+    sub_total?: SallaOrderDetailApiPrice
+    shipping_cost?: SallaOrderDetailApiPrice
+    tax?: { amount?: SallaOrderDetailApiPrice }
+    total?: SallaOrderDetailApiPrice
+  }
+  items?: SallaOrderDetailApiItem[]
+}
+
+function mapSallaOrderDetail(data: SallaOrderDetailApiResponse): IntegrationProviderOrderDetail {
+  const currency = data.amounts?.total?.currency ?? "SAR"
+  const items = (data.items ?? []).map((item) => ({
+    id: String(item.id ?? ""),
+    name: item.name ?? "",
+    sku: item.sku ?? item.product?.sku ?? null,
+    quantity: Number(item.quantity) || 0,
+    unitPrice: item.amounts?.price_without_tax?.amount ?? null,
+    discount: item.amounts?.total_discount?.amount ?? 0,
+    tax: item.amounts?.tax?.amount?.amount ?? 0,
+    total: item.amounts?.total?.amount ?? 0,
+    thumbnail: item.product?.thumbnail ?? item.product_thumbnail ?? null,
+  }))
+
+  return {
+    currency,
+    subTotal: data.amounts?.sub_total?.amount ?? 0,
+    shippingCost: data.amounts?.shipping_cost?.amount ?? 0,
+    taxTotal: data.amounts?.tax?.amount?.amount ?? 0,
+    // Summed from each item's own total_discount (a well-typed {amount,currency} value) rather
+    // than the order-level "discounts" array, whose "discount" field is a loosely-specified
+    // string (promo code metadata, not a clean numeric total) per Salla's own schema.
+    discountTotal: items.reduce((sum, item) => sum + item.discount, 0),
+    total: data.amounts?.total?.amount ?? 0,
+    items,
+  }
+}
 
 export class SallaIntegrationProvider {
   readonly providerId = "salla"
@@ -27,8 +96,10 @@ export class SallaIntegrationProvider {
   private readonly service?: SallaOAuthService
   private readonly controller?: SallaOAuthController
   private readonly syncService?: SallaSyncService
+  private readonly apiBaseUrl: string
 
   constructor(database?: PostgresDatabase) {
+    this.apiBaseUrl = process.env.SALLA_API_BASE_URL ?? DEFAULT_SALLA_API_BASE_URL
     if (database) {
       this.repository = new SallaOAuthRepository(database)
       this.service = new SallaOAuthService(this.repository)
@@ -255,5 +326,52 @@ export class SallaIntegrationProvider {
 
   async listEvents(actor: AuthenticatedActor, query: { connectionId: string; limit: number }) {
     return this.requireController().listRecentEvents(actor, query)
+  }
+
+  async getOrderDetail(
+    actor: AuthenticatedActor,
+    input: IntegrationProviderOrderDetailQuery
+  ): Promise<IntegrationProviderOrderDetail> {
+    const repository = this.requireRepository()
+    const service = this.requireService()
+
+    const connection = await repository.findConnectionById(input.connectionId)
+    this.assertConnectionOwnership(connection, actor)
+
+    if (connection.status !== "connected") {
+      throw new IntegrationProviderError(
+        "Salla connection is not connected.",
+        "SALLA_CONNECTION_NOT_READY",
+        false,
+        409
+      )
+    }
+
+    const accessToken = await service.resolveAccessToken(connection.id)
+
+    const response = await fetch(
+      `${this.apiBaseUrl.replace(/\/$/, "")}/orders/${encodeURIComponent(input.orderId)}`,
+      {
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          accept: "application/json",
+        },
+      }
+    )
+
+    if (response.status === 404) {
+      throw new IntegrationProviderError("Order not found.", "SALLA_ORDER_NOT_FOUND", false, 404)
+    }
+    if (!response.ok) {
+      throw new IntegrationProviderError(
+        "Salla API request failed while loading order details.",
+        "SALLA_ORDER_DETAIL_REQUEST_FAILED",
+        true,
+        502
+      )
+    }
+
+    const body = (await response.json()) as { data?: SallaOrderDetailApiResponse }
+    return mapSallaOrderDetail(body.data ?? {})
   }
 }
