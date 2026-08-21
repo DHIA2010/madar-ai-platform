@@ -372,6 +372,22 @@ export class SallaIntegrationProvider {
     }
 
     const body = (await response.json()) as { data?: SallaOrderDetailApiResponse }
+    // Temporary: confirms whether a real order's detail response genuinely omits per-item
+    // amounts (sparse source data, e.g. an unconfigured demo-store order) versus this mapper
+    // reading the wrong field path. Remove once verified against a real non-empty response.
+    console.info(
+      JSON.stringify({
+        level: "info",
+        service: "identity-platform",
+        event: "salla.order_detail_raw",
+        orderId: input.orderId,
+        hasData: Boolean(body.data),
+        itemsIsArray: Array.isArray(body.data?.items),
+        itemCount: body.data?.items?.length ?? null,
+        hasAmounts: Boolean(body.data?.amounts),
+        firstItemKeys: body.data?.items?.[0] ? Object.keys(body.data.items[0]) : null,
+      })
+    )
     return mapSallaOrderDetail(body.data ?? {})
   }
 }

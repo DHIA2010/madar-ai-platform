@@ -287,14 +287,7 @@ function OrderProductsDialog({
     <Dialog open={order !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-              <Package className="size-4" />
-            </div>
-            <DialogTitle className="pr-8">
-              Products in order #{order?.orderNumber ?? ""}
-            </DialogTitle>
-          </div>
+          <DialogTitle className="pr-8">Products in order #{order?.orderNumber ?? ""}</DialogTitle>
         </DialogHeader>
         <DialogClose asChild>
           <Button
