@@ -256,3 +256,32 @@ export const integrationDisconnectSchema = z.object({
 export const integrationEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 })
+
+export const posLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+})
+
+export const posCreateRoleSchema = z.object({
+  name: z.string().min(2).max(100),
+  permissions: z.array(z.string().min(1).max(100)).default([]),
+})
+
+export const posUpdateRoleSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  permissions: z.array(z.string().min(1).max(100)).optional(),
+})
+
+export const posCreateEmployeeSchema = z.object({
+  fullName: z.string().min(2).max(150),
+  email: z.string().email(),
+  password: z.string().min(8).max(200),
+  posRoleId: z.string().uuid().nullable().optional(),
+})
+
+export const posUpdateEmployeeSchema = z.object({
+  fullName: z.string().min(2).max(150).optional(),
+  posRoleId: z.string().uuid().nullable().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  password: z.string().min(8).max(200).optional(),
+})

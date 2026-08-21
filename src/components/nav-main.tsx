@@ -45,18 +45,44 @@ function hasChildren(item: NavItem): item is NavWithChildren {
 function ParentMenuItem({ item, pathname }: { item: NavWithChildren; pathname: string }) {
   const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/")
 
-  const parentActive = item.items.some((sub) => pathname.startsWith(sub.url))
+  // isActive (not a raw `pathname === item.url` check) so this tolerates the trailing slash
+  // next.config's trailingSlash:true adds to every real pathname -- a strict comparison against
+  // ROUTES.pos ("/pos", no trailing slash) never matched usePathname()'s actual "/pos/".
+  const parentActive = isActive(item.url) || item.items.some((sub) => pathname.startsWith(sub.url))
 
+  // Uncontrolled (defaultOpen), so the chevron's click handling is 100% Radix's own -- no custom
+  // state syncing that could ever fight with it. The `key` forces a remount (re-reading
+  // defaultOpen) only when parentActive actually flips, i.e. when entering or leaving this section
+  // -- so clicking the label onto this item's url expands it, but manual toggles while already
+  // inside the section (navigating between its own sub-pages) are left alone.
   return (
-    <Collapsible key={`${item.title}:${pathname}`} defaultOpen={parentActive} className="group">
+    <Collapsible
+      key={parentActive ? "active" : "inactive"}
+      defaultOpen={parentActive}
+      className="group"
+    >
       <SidebarMenuItem>
-        <CollapsibleTrigger asChild>
-          <SidebarMenuButton className={cn(NAV_ITEM_CLASSNAME, "group")} isActive={parentActive}>
-            {item.icon}
-            <span>{item.title}</span>
-            <ChevronRight className="ms-auto h-4 w-4 transition-transform duration-200 rtl:rotate-180 group-data-[state=open]:rotate-90" />
-          </SidebarMenuButton>
-        </CollapsibleTrigger>
+        <SidebarMenuButton
+          asChild
+          isActive={parentActive}
+          className={cn(NAV_ITEM_CLASSNAME, "group cursor-pointer gap-0 p-0")}
+        >
+          <div className="flex w-full items-center">
+            <Link href={item.url} className="flex flex-1 items-center gap-3 px-3 py-2.5">
+              {item.icon}
+              <span>{item.title}</span>
+            </Link>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                aria-label={item.title}
+                className="flex h-full cursor-pointer items-center px-3 py-2.5"
+              >
+                <ChevronRight className="h-4 w-4 transition-transform duration-200 rtl:rotate-180 group-data-[state=open]:rotate-90" />
+              </button>
+            </CollapsibleTrigger>
+          </div>
+        </SidebarMenuButton>
 
         <CollapsibleContent>
           <SidebarMenuSub>

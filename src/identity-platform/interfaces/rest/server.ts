@@ -28,6 +28,9 @@ import { ProductsAggregationService } from "../../products/service"
 import { CustomersAggregationService } from "../../customers/service"
 import { OrdersAggregationService } from "../../orders/service"
 import { StoresAggregationService } from "../../stores/service"
+import { PosRepository } from "../../pos/repository"
+import { PosService } from "../../pos/service"
+import { HmacTokenService, ScryptPasswordHasher } from "../../infrastructure/jwt/token-service"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -55,6 +58,11 @@ import {
   integrationSyncSchema,
   inviteOrganizationMemberSchema,
   loginSchema,
+  posCreateEmployeeSchema,
+  posCreateRoleSchema,
+  posLoginSchema,
+  posUpdateEmployeeSchema,
+  posUpdateRoleSchema,
   removeMemberSchema,
   refreshSchema,
   registerSchema,
@@ -375,6 +383,13 @@ export function createIdentityApiServer(
   const storesAggregationService = container.infrastructure.database
     ? new StoresAggregationService(container.infrastructure.database)
     : null
+  const posService = container.infrastructure.database
+    ? new PosService(
+        new PosRepository(container.infrastructure.database),
+        new HmacTokenService(container.config.jwtSecret, container.config.tokenHashSecret),
+        new ScryptPasswordHasher()
+      )
+    : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
   // (confirmed by inspection -- only Google/Snapchat connectors exist), so this default is a
   // new choice, not a change to an existing pinned version. Override via env if needed.
@@ -493,6 +508,52 @@ export function createIdentityApiServer(
           context
         )
         return send(200, { reset: true })
+      }
+
+      // POS employees aren't `users` rows -- their tokens are verified against a separate
+      // session store (see PosService.resolveActor), so these can never be authenticated via
+      // the regular resolveActorFromAccessToken() gate below and must be handled up here.
+      if (method === "POST" && url.pathname === "/v1/pos/auth/login") {
+        if (!posService) {
+          return send(503, {
+            code: "POS_UNAVAILABLE",
+            message: "POS is unavailable in memory mode.",
+          })
+        }
+        return send(200, await posService.login(posLoginSchema.parse(await readJsonBody(request))))
+      }
+
+      if (url.pathname === "/v1/pos/auth/session" || url.pathname === "/v1/pos/auth/logout") {
+        if (!posService) {
+          return send(503, {
+            code: "POS_UNAVAILABLE",
+            message: "POS is unavailable in memory mode.",
+          })
+        }
+        const posToken = getBearerToken(request)
+        if (!posToken) {
+          return send(401, { code: "POS_AUTH_TOKEN_MISSING", message: "Authentication required." })
+        }
+        const posActor = await posService.resolveActor(posToken)
+
+        if (method === "GET" && url.pathname === "/v1/pos/auth/session") {
+          const employee = await posService.getEmployee(
+            posActor.organizationId,
+            posActor.employeeId
+          )
+          if (!employee) {
+            return send(401, {
+              code: "POS_AUTH_TOKEN_INVALID",
+              message: "Session is invalid or expired.",
+            })
+          }
+          return send(200, { employee })
+        }
+
+        if (method === "POST" && url.pathname === "/v1/pos/auth/logout") {
+          await posService.logout(posActor.sessionId)
+          return send(200, { loggedOut: true })
+        }
       }
 
       if (method === "GET" && url.pathname === "/v1/integrations/google/oauth/callback") {
@@ -1683,6 +1744,100 @@ export function createIdentityApiServer(
         }
 
         return send(200, { items: await storesAggregationService.listStores(actor) })
+      }
+
+      if (url.pathname === "/v1/pos/roles") {
+        if (!posService) {
+          return send(503, {
+            code: "POS_UNAVAILABLE",
+            message: "POS is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) {
+          throw ERRORS.forbidden()
+        }
+
+        if (method === "GET") {
+          return send(200, { items: await posService.listRoles(actor.organizationId) })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) {
+            throw ERRORS.forbidden()
+          }
+          const payload = posCreateRoleSchema.parse(await readJsonBody(request))
+          return send(201, await posService.createRole(actor.organizationId, payload))
+        }
+      }
+
+      const posRoleMatch = url.pathname.match(/^\/v1\/pos\/roles\/([^/]+)$/)
+      if (posRoleMatch && (method === "PATCH" || method === "DELETE")) {
+        if (!posService) {
+          return send(503, {
+            code: "POS_UNAVAILABLE",
+            message: "POS is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const roleId = decodeURIComponent(posRoleMatch[1])
+
+        if (method === "PATCH") {
+          const payload = posUpdateRoleSchema.parse(await readJsonBody(request))
+          return send(200, await posService.updateRole(actor.organizationId, roleId, payload))
+        }
+
+        await posService.deleteRole(actor.organizationId, roleId)
+        return send(200, { deleted: true })
+      }
+
+      if (url.pathname === "/v1/pos/employees") {
+        if (!posService) {
+          return send(503, {
+            code: "POS_UNAVAILABLE",
+            message: "POS is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) {
+          throw ERRORS.forbidden()
+        }
+
+        if (method === "GET") {
+          return send(200, { items: await posService.listEmployees(actor.organizationId) })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) {
+            throw ERRORS.forbidden()
+          }
+          const payload = posCreateEmployeeSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await posService.createEmployee(actor.organizationId, {
+              fullName: payload.fullName,
+              email: payload.email,
+              password: payload.password,
+              posRoleId: payload.posRoleId ?? null,
+            })
+          )
+        }
+      }
+
+      const posEmployeeMatch = url.pathname.match(/^\/v1\/pos\/employees\/([^/]+)$/)
+      if (method === "PATCH" && posEmployeeMatch) {
+        if (!posService) {
+          return send(503, {
+            code: "POS_UNAVAILABLE",
+            message: "POS is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const employeeId = decodeURIComponent(posEmployeeMatch[1])
+        const payload = posUpdateEmployeeSchema.parse(await readJsonBody(request))
+        return send(200, await posService.updateEmployee(actor.organizationId, employeeId, payload))
       }
 
       if (method === "GET" && url.pathname === "/v1/audit-logs") {

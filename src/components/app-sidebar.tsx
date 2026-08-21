@@ -27,6 +27,7 @@ import {
   ChartNoAxesCombined,
   CircleUserRound,
   ClipboardList,
+  CreditCard,
   ShieldCheck,
   Gauge,
   Grid2x2,
@@ -67,6 +68,16 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },
     { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
     { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
+    {
+      title: t("pos"),
+      url: ROUTES.pos,
+      icon: <CreditCard />,
+      permission: "pos:view",
+      items: [
+        { title: t("posRoles"), url: ROUTES.posRoles },
+        { title: t("posEmployees"), url: ROUTES.posEmployees },
+      ],
+    },
     {
       title: t("customers"),
       url: "/customers",
