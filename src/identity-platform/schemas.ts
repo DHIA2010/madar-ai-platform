@@ -285,3 +285,62 @@ export const posUpdateEmployeeSchema = z.object({
   status: z.enum(["active", "inactive"]).optional(),
   password: z.string().min(8).max(200).optional(),
 })
+
+const CAMPAIGN_PLATFORM_VALUES = ["google_ads", "meta_ads", "snapchat_ads", "tiktok_ads"] as const
+const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
+
+export const createNativeCampaignSchema = z.object({
+  displayName: z.string().min(2).max(200),
+  objective: z.string().max(200).nullable().optional(),
+  budgetCurrency: z.string().length(3).nullable().optional(),
+  budgetAmount: z.number().nonnegative().nullable().optional(),
+  startDate: dateOnlySchema.nullable().optional(),
+  endDate: dateOnlySchema.nullable().optional(),
+})
+
+export const importCampaignsSchema = z.object({
+  platform: z.enum(CAMPAIGN_PLATFORM_VALUES),
+  connectionId: z.string().uuid().optional(),
+})
+
+const trackingTypeSchema = z.enum(["FULL_URL", "SHORT_LINK"])
+
+const utmFieldsSchema = z.object({
+  utmSource: z.string().min(1).max(200),
+  utmMedium: z.string().min(1).max(200),
+  utmCampaign: z.string().min(1).max(200),
+  utmContent: z.string().max(200).nullable().optional(),
+  utmTerm: z.string().max(200).nullable().optional(),
+})
+
+const customParamsSchema = z.record(z.string(), z.string().max(200)).optional()
+
+export const createCampaignLinkSchema = z
+  .object({
+    campaignId: z.string().uuid(),
+    name: z.string().min(2).max(200),
+    trackingType: trackingTypeSchema,
+    destinationBaseUrl: z.string().url().startsWith("https://"),
+    adGroupName: z.string().max(200).nullable().optional(),
+    adName: z.string().max(200).nullable().optional(),
+    customParams: customParamsSchema,
+  })
+  .merge(utmFieldsSchema)
+
+export const previewCampaignLinkSchema = createCampaignLinkSchema
+
+// adGroupName/adName are deliberately absent -- like UTM fields, they're tracking identifiers
+// fixed at creation, not display metadata.
+export const updateCampaignLinkSchema = z.object({
+  name: z.string().min(2).max(200).optional(),
+  customParams: customParamsSchema,
+})
+
+export const matchOrdersSchema = z.object({
+  provider: z.enum(["salla", "shopify", "zid"]).optional(),
+  connectionId: z.string().uuid().optional(),
+})
+
+export const aggregateCampaignLinksSchema = z.object({
+  metricDate: dateOnlySchema.optional(),
+})

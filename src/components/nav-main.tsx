@@ -107,10 +107,15 @@ function ParentMenuItem({ item, pathname }: { item: NavWithChildren; pathname: s
 export function NavMain({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
 
-  // Active Route Check
-  const isActive = (url: string) => {
-    return pathname === url || pathname.startsWith(url + "/")
-  }
+  // Longest-prefix-match across the top-level items: when one item's url is itself a path
+  // prefix of another's (e.g. "/campaigns" and "/campaigns/links"), only the most specific
+  // match should light up -- a plain prefix check would highlight both.
+  const bestMatchUrl = items
+    .map((item) => item.url)
+    .filter((url) => pathname === url || pathname.startsWith(url + "/"))
+    .sort((a, b) => b.length - a.length)[0]
+
+  const isActive = (url: string) => url === bestMatchUrl
 
   return (
     <SidebarMenu className="gap-1 px-3 py-2" dir="rtl">

@@ -19,7 +19,7 @@ export const SYSTEM_ROLE_DEFINITIONS: Array<{
     description: "Full control across security, billing, and workspace governance.",
     permissions: {
       dashboard: ["view", "export"],
-      campaigns: ["view", "create", "edit", "delete", "approve", "publish"],
+      campaigns: ["view", "create", "edit", "delete", "approve", "publish", "manage"],
       customers: ["view", "create", "edit", "delete", "export", "import"],
       products: ["view", "create", "edit", "delete", "export", "import"],
       orders: ["view", "export"],
@@ -42,7 +42,7 @@ export const SYSTEM_ROLE_DEFINITIONS: Array<{
     description: "Manages users, roles, and operational settings.",
     permissions: {
       dashboard: ["view"],
-      campaigns: ["view", "create", "edit", "delete", "approve", "publish"],
+      campaigns: ["view", "create", "edit", "delete", "approve", "publish", "manage"],
       customers: ["view"],
       products: ["view"],
       orders: ["view"],

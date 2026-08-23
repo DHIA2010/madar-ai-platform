@@ -24,6 +24,7 @@ export interface IdentityPlatformConfig {
   resendFromName?: string
   resendReplyTo?: string
   appUrl: string
+  shortLinkBaseUrl: string
   featureFlags: Record<string, boolean>
   objectStorageEndpoint?: string
   objectStoragePublicEndpoint?: string
@@ -57,6 +58,7 @@ const configSchema = z.object({
   resendFromName: z.string().optional(),
   resendReplyTo: z.string().optional(),
   appUrl: z.string().min(1),
+  shortLinkBaseUrl: z.string().min(1),
   featureFlags: z.record(z.string(), z.boolean()),
   objectStorageEndpoint: z.string().optional(),
   objectStoragePublicEndpoint: z.string().optional(),
@@ -134,6 +136,12 @@ export function loadIdentityPlatformConfig(
       process.env.NEXT_PUBLIC_APP_URL ??
       process.env.APP_URL ??
       "http://localhost:3000",
+    // Deliberately does NOT fall back through appUrl -- short_url is stored under a DB
+    // check constraint requiring https://, and appUrl defaults to plain http:// in dev.
+    shortLinkBaseUrl:
+      overrides.shortLinkBaseUrl ??
+      process.env.IDENTITY_PLATFORM_SHORT_LINK_BASE_URL ??
+      "https://localhost:3000",
     featureFlags: featureFlagsRaw,
     objectStorageEndpoint: overrides.objectStorageEndpoint ?? process.env.MINIO_ENDPOINT,
     objectStoragePublicEndpoint:

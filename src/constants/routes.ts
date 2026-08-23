@@ -7,6 +7,7 @@ export const ROUTES = {
   campaignsCreate: "/campaigns/new",
   campaignsDetails: (campaignId: string) => `/campaigns/${campaignId}`,
   campaignsEdit: (campaignId: string) => `/campaigns/${campaignId}/edit`,
+  campaignLinks: "/campaigns/links",
   stores: "/stores",
   products: "/products",
   productsAdd: "/eCommerce/add-product",

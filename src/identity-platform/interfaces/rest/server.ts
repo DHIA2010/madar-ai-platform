@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { URL } from "node:url"
 import { z } from "zod"
@@ -30,6 +31,17 @@ import { OrdersAggregationService } from "../../orders/service"
 import { StoresAggregationService } from "../../stores/service"
 import { PosRepository } from "../../pos/repository"
 import { PosService } from "../../pos/service"
+import { CampaignRepository } from "../../campaigns/repository"
+import { CampaignService } from "../../campaigns/service"
+import { CampaignLinkRepository } from "../../campaign-links/repository"
+import { CampaignLinkService } from "../../campaign-links/service"
+import { TrackingRepository } from "../../tracking/repository"
+import { TrackingService } from "../../tracking/service"
+import { AttributionRepository } from "../../attribution/repository"
+import { OrderAttributionService } from "../../attribution/service"
+import { ORDER_PROVIDERS, type OrderProvider } from "../../attribution/types"
+import { AggregationRepository } from "../../aggregation/repository"
+import { AggregationService } from "../../aggregation/service"
 import { HmacTokenService, ScryptPasswordHasher } from "../../infrastructure/jwt/token-service"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
@@ -48,6 +60,13 @@ import {
   createOrganizationSchema,
   createTeamSchema,
   createWorkspaceSchema,
+  createNativeCampaignSchema,
+  createCampaignLinkSchema,
+  previewCampaignLinkSchema,
+  updateCampaignLinkSchema,
+  importCampaignsSchema,
+  matchOrdersSchema,
+  aggregateCampaignLinksSchema,
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
   integrationAccountsQuerySchema,
@@ -227,6 +246,26 @@ function getBearerToken(request: IncomingMessage): string | null {
   return token
 }
 
+function parseCookies(header: string | undefined): Record<string, string> {
+  if (!header) return {}
+  const cookies: Record<string, string> = {}
+  for (const part of header.split(";")) {
+    const separatorIndex = part.indexOf("=")
+    if (separatorIndex === -1) continue
+    const name = part.slice(0, separatorIndex).trim()
+    const value = part.slice(separatorIndex + 1).trim()
+    if (name) cookies[name] = decodeURIComponent(value)
+  }
+  return cookies
+}
+
+function classifyDeviceType(userAgent: string | undefined): string | null {
+  if (!userAgent) return null
+  if (/mobile/i.test(userAgent)) return "mobile"
+  if (/tablet|ipad/i.test(userAgent)) return "tablet"
+  return "desktop"
+}
+
 function parsePage(value: string | null, fallback: number) {
   const parsed = Number(value ?? fallback)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
@@ -389,6 +428,41 @@ export function createIdentityApiServer(
         new HmacTokenService(container.config.jwtSecret, container.config.tokenHashSecret),
         new ScryptPasswordHasher()
       )
+    : null
+  const campaignRepositoryForLinks = container.infrastructure.database
+    ? new CampaignRepository(container.infrastructure.database)
+    : null
+  const campaignService = campaignRepositoryForLinks
+    ? new CampaignService(campaignRepositoryForLinks)
+    : null
+  const campaignLinkService =
+    container.infrastructure.database && campaignRepositoryForLinks
+      ? new CampaignLinkService(
+          new CampaignLinkRepository(container.infrastructure.database),
+          campaignRepositoryForLinks,
+          container.infrastructure.database,
+          container.config.shortLinkBaseUrl,
+          async (displayId: string) => {
+            await container.infrastructure.cache?.delete(`campaign-link:redirect:${displayId}`)
+          }
+        )
+      : null
+  const trackingService =
+    container.infrastructure.database && campaignLinkService
+      ? new TrackingService(
+          new CampaignLinkRepository(container.infrastructure.database),
+          new TrackingRepository(container.infrastructure.database),
+          container.infrastructure.cache
+        )
+      : null
+  const orderAttributionService = container.infrastructure.database
+    ? new OrderAttributionService(
+        new AttributionRepository(container.infrastructure.database),
+        new CampaignLinkRepository(container.infrastructure.database)
+      )
+    : null
+  const aggregationService = container.infrastructure.database
+    ? new AggregationService(new AggregationRepository(container.infrastructure.database))
     : null
   // No Meta Graph API version was in use anywhere in this codebase prior to this endpoint
   // (confirmed by inspection -- only Google/Snapchat connectors exist), so this default is a
@@ -582,6 +656,76 @@ export function createIdentityApiServer(
         const callbackResult = await provider.oauthCallback(request, url.searchParams)
         response.writeHead(callbackResult.status, callbackResult.headers)
         response.end()
+        return
+      }
+
+      const shortLinkRedirectMatch = url.pathname.match(/^\/m\/([^/]+)$/)
+      if (method === "GET" && shortLinkRedirectMatch) {
+        const displayId = decodeURIComponent(shortLinkRedirectMatch[1])
+        const link = trackingService ? await trackingService.resolveLink(displayId) : null
+        if (!link) {
+          return send(404, { code: "CAMPAIGN_LINK_NOT_FOUND", message: "Link not found." })
+        }
+        if (!link.enabled) {
+          return send(410, {
+            code: "CAMPAIGN_LINK_DISABLED",
+            message: "This link is no longer active.",
+          })
+        }
+
+        const cookies = parseCookies(request.headers.cookie)
+        const visitorId = cookies.madar_visitor_id ?? randomUUID()
+        const sessionId = cookies.madar_session_id ?? randomUUID()
+        const cookieBaseAttributes = "Path=/; HttpOnly; Secure; SameSite=Lax"
+        const setCookieHeaders: string[] = []
+        if (!cookies.madar_visitor_id) {
+          setCookieHeaders.push(
+            `madar_visitor_id=${visitorId}; Max-Age=31536000; ${cookieBaseAttributes}`
+          )
+        }
+        if (!cookies.madar_session_id) {
+          setCookieHeaders.push(
+            `madar_session_id=${sessionId}; Max-Age=1800; ${cookieBaseAttributes}`
+          )
+        }
+
+        // The redirect fires before anything else -- event/attribution recording below must
+        // never delay or be able to fail it.
+        response.writeHead(302, {
+          location: link.finalUrl,
+          ...(setCookieHeaders.length ? { "set-cookie": setCookieHeaders } : {}),
+        })
+        response.end()
+
+        if (trackingService) {
+          const referrerHeader = request.headers.referer
+          trackingService
+            .recordClick({
+              organizationId: link.organizationId,
+              campaignId: link.campaignId,
+              campaignLinkId: link.campaignLinkId,
+              visitorId,
+              sessionId,
+              utmSource: link.utmSource,
+              utmMedium: link.utmMedium,
+              utmCampaign: link.utmCampaign,
+              utmContent: link.utmContent,
+              utmTerm: link.utmTerm,
+              landingUrl: link.finalUrl,
+              referrerUrl: Array.isArray(referrerHeader)
+                ? (referrerHeader[0] ?? null)
+                : (referrerHeader ?? null),
+              deviceType: classifyDeviceType(request.headers["user-agent"]),
+            })
+            .catch((error: unknown) => {
+              container.infrastructure.metrics?.incrementCounter(
+                "campaign_link_click_record_failed",
+                1
+              )
+              console.error("campaign_link.click_record_failed", error)
+            })
+        }
+
         return
       }
 
@@ -1100,7 +1244,28 @@ export function createIdentityApiServer(
           })
 
           try {
-            return send(200, await provider.sync(actor, payload))
+            const syncResult = await provider.sync(actor, payload)
+
+            // Fire-and-forget: an attribution failure must never surface as a sync failure, and
+            // must never delay the sync response either.
+            if (
+              orderAttributionService &&
+              (ORDER_PROVIDERS as readonly string[]).includes(providerId)
+            ) {
+              orderAttributionService
+                .matchOrders(actor.organizationId, actor.workspaceId, {
+                  provider: providerId as OrderProvider,
+                })
+                .catch((error: unknown) => {
+                  container.infrastructure.metrics?.incrementCounter(
+                    "order_attribution_match_failed",
+                    1
+                  )
+                  console.error("order_attribution.match_failed", error)
+                })
+            }
+
+            return send(200, syncResult)
           } finally {
             endGoogleAdsSyncRequestTrace()
           }
@@ -1744,6 +1909,339 @@ export function createIdentityApiServer(
         }
 
         return send(200, { items: await storesAggregationService.listStores(actor) })
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns") {
+        if (!campaignService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, {
+          items: await campaignService.list(actor.organizationId, actor.workspaceId),
+        })
+      }
+
+      if (method === "POST" && url.pathname === "/v1/campaigns") {
+        if (!campaignService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:create")) {
+          throw ERRORS.forbidden()
+        }
+        const payload = createNativeCampaignSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await campaignService.createNative(actor.organizationId, actor.workspaceId, {
+            displayName: payload.displayName,
+            objective: payload.objective ?? null,
+            budgetCurrency: payload.budgetCurrency ?? null,
+            budgetAmount: payload.budgetAmount ?? null,
+            startDate: payload.startDate ?? null,
+            endDate: payload.endDate ?? null,
+          })
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/imported") {
+        if (!campaignService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        const platform = url.searchParams.get("platform")
+        return send(200, {
+          items: await campaignService.listImported(
+            actor.organizationId,
+            (platform as Parameters<typeof campaignService.listImported>[1]) ?? undefined
+          ),
+        })
+      }
+
+      if (method === "POST" && url.pathname === "/v1/campaigns/sync") {
+        if (!campaignService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const payload = importCampaignsSchema.parse(await readJsonBody(request))
+        return send(200, await campaignService.importFromPlatform(actor.organizationId, payload))
+      }
+
+      if (method === "POST" && url.pathname === "/v1/campaigns/attribution/match-orders") {
+        if (!orderAttributionService) {
+          return send(503, {
+            code: "CAMPAIGNS_UNAVAILABLE",
+            message: "Campaigns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const payload = matchOrdersSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await orderAttributionService.matchOrders(actor.organizationId, actor.workspaceId, {
+            provider: payload.provider,
+          })
+        )
+      }
+
+      if (url.pathname === "/v1/campaign-links") {
+        if (!campaignLinkService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("campaigns:view")) {
+            throw ERRORS.forbidden()
+          }
+          return send(200, {
+            items: await campaignLinkService.list(actor.organizationId, actor.workspaceId),
+          })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("campaigns:create")) {
+            throw ERRORS.forbidden()
+          }
+          const payload = createCampaignLinkSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await campaignLinkService.create(
+              actor.organizationId,
+              actor.workspaceId,
+              actor.userId,
+              {
+                campaignId: payload.campaignId,
+                name: payload.name,
+                trackingType: payload.trackingType,
+                destinationBaseUrl: payload.destinationBaseUrl,
+                utmSource: payload.utmSource,
+                utmMedium: payload.utmMedium,
+                utmCampaign: payload.utmCampaign,
+                utmContent: payload.utmContent ?? null,
+                utmTerm: payload.utmTerm ?? null,
+                adGroupName: payload.adGroupName ?? null,
+                adName: payload.adName ?? null,
+                customParams: payload.customParams,
+              }
+            )
+          )
+        }
+      }
+
+      if (method === "POST" && url.pathname === "/v1/campaign-links/preview") {
+        if (!campaignLinkService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:create")) {
+          throw ERRORS.forbidden()
+        }
+        const payload = previewCampaignLinkSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          campaignLinkService.preview({
+            campaignId: payload.campaignId,
+            name: payload.name,
+            trackingType: payload.trackingType,
+            destinationBaseUrl: payload.destinationBaseUrl,
+            utmSource: payload.utmSource,
+            utmMedium: payload.utmMedium,
+            utmCampaign: payload.utmCampaign,
+            utmContent: payload.utmContent ?? null,
+            utmTerm: payload.utmTerm ?? null,
+            adGroupName: payload.adGroupName ?? null,
+            adName: payload.adName ?? null,
+            customParams: payload.customParams,
+          })
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaign-links/summary") {
+        if (!aggregationService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, {
+          items: await aggregationService.getCampaignLinksSummary(
+            actor.organizationId,
+            actor.workspaceId,
+            {
+              startDate: url.searchParams.get("startDate") ?? undefined,
+              endDate: url.searchParams.get("endDate") ?? undefined,
+            }
+          ),
+        })
+      }
+
+      if (method === "POST" && url.pathname === "/v1/campaign-links/aggregate") {
+        if (!aggregationService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const body = aggregateCampaignLinksSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await aggregationService.rollupDaily(actor.organizationId, body.metricDate)
+        )
+      }
+
+      const campaignLinkAttributionMatch = url.pathname.match(
+        /^\/v1\/campaign-links\/([^/]+)\/attribution$/
+      )
+      if (method === "GET" && campaignLinkAttributionMatch) {
+        if (!aggregationService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        const linkId = decodeURIComponent(campaignLinkAttributionMatch[1])
+        return send(
+          200,
+          await aggregationService.getLinkAttributionDetail(actor.organizationId, linkId)
+        )
+      }
+
+      const campaignLinkMatch = url.pathname.match(/^\/v1\/campaign-links\/([^/]+)$/)
+      if (campaignLinkMatch && (method === "GET" || method === "PATCH")) {
+        if (!campaignLinkService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        const linkId = decodeURIComponent(campaignLinkMatch[1])
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("campaigns:view")) {
+            throw ERRORS.forbidden()
+          }
+          return send(200, await campaignLinkService.getById(actor.organizationId, linkId))
+        }
+
+        if (!actor.modulePermissions.includes("campaigns:edit")) {
+          throw ERRORS.forbidden()
+        }
+        const payload = updateCampaignLinkSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await campaignLinkService.update(
+            actor.organizationId,
+            actor.workspaceId,
+            actor.userId,
+            linkId,
+            payload
+          )
+        )
+      }
+
+      const campaignLinkEnableMatch = url.pathname.match(/^\/v1\/campaign-links\/([^/]+)\/enable$/)
+      if (method === "POST" && campaignLinkEnableMatch) {
+        if (!campaignLinkService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const linkId = decodeURIComponent(campaignLinkEnableMatch[1])
+        return send(
+          200,
+          await campaignLinkService.setEnabled(
+            actor.organizationId,
+            actor.workspaceId,
+            actor.userId,
+            linkId,
+            true
+          )
+        )
+      }
+
+      const campaignLinkDisableMatch = url.pathname.match(
+        /^\/v1\/campaign-links\/([^/]+)\/disable$/
+      )
+      if (method === "POST" && campaignLinkDisableMatch) {
+        if (!campaignLinkService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:manage")) {
+          throw ERRORS.forbidden()
+        }
+        const linkId = decodeURIComponent(campaignLinkDisableMatch[1])
+        return send(
+          200,
+          await campaignLinkService.setEnabled(
+            actor.organizationId,
+            actor.workspaceId,
+            actor.userId,
+            linkId,
+            false
+          )
+        )
+      }
+
+      const campaignLinkArchiveMatch = url.pathname.match(
+        /^\/v1\/campaign-links\/([^/]+)\/archive$/
+      )
+      if (method === "POST" && campaignLinkArchiveMatch) {
+        if (!campaignLinkService) {
+          return send(503, {
+            code: "CAMPAIGN_LINKS_UNAVAILABLE",
+            message: "Campaign links are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:delete")) {
+          throw ERRORS.forbidden()
+        }
+        const linkId = decodeURIComponent(campaignLinkArchiveMatch[1])
+        await campaignLinkService.archive(
+          actor.organizationId,
+          actor.workspaceId,
+          actor.userId,
+          linkId
+        )
+        return send(200, { archived: true })
       }
 
       if (url.pathname === "/v1/pos/roles") {

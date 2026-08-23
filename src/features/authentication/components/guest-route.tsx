@@ -24,8 +24,12 @@ export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRou
     }
   }, [authStatus, redirectTo, router])
 
-  // Pre-compute conditional states
-  const isLoading = useMemo(() => authStatus === "idle" || authStatus === "loading", [authStatus])
+  // "loading" also covers an in-flight login()/register() call from this same page, not just
+  // the initial session check (AuthProvider already blocks rendering until that first check
+  // resolves, so authStatus can never actually be "idle" here) -- treating it as page-loading
+  // would unmount the login/register form (and whatever error it just set) the moment a submit
+  // starts, so only "idle" gates this loading screen.
+  const isLoading = useMemo(() => authStatus === "idle", [authStatus])
 
   const isAuthenticated = useMemo(() => authStatus === "authenticated", [authStatus])
 

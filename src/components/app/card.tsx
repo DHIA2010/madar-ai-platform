@@ -123,7 +123,9 @@ export function AppStatCard({
     >
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
-          {value ? <div className="text-2xl font-semibold tracking-tight">{value}</div> : null}
+          {value !== undefined && value !== null && value !== "" ? (
+            <div className="text-2xl font-semibold tracking-tight">{value}</div>
+          ) : null}
           {change || changeLabel ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {changeLabel ? (
@@ -177,7 +179,9 @@ export function AppMetricCard({
       <div className="space-y-3">
         <div className="flex items-end justify-between gap-4">
           <div className="min-w-0">
-            {metric ? <div className="text-3xl font-semibold tracking-tight">{metric}</div> : null}
+            {metric !== undefined && metric !== null && metric !== "" ? (
+              <div className="text-3xl font-semibold tracking-tight">{metric}</div>
+            ) : null}
             {note ? <div className="mt-2 text-sm text-muted-foreground">{note}</div> : null}
           </div>
           {accent ? <div className="shrink-0">{accent}</div> : null}

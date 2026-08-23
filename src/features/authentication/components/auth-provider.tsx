@@ -42,6 +42,13 @@ function getConfigurationErrorMessage(error: unknown): string | null {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { authenticationApplicationService } = useApplicationServices()
   const [configurationError, setConfigurationError] = useState<string | null>(null)
+  // Tracks only the one-time initial session check on app boot -- distinct from authStatus,
+  // which also flips to "loading" on every later login()/register() call. Gating the
+  // full-page loading screen on authStatus alone (as this used to) meant every login/register
+  // attempt unmounted the entire app (including the form's own local error state) while the
+  // request was in flight, silently discarding whatever error message a failed attempt set
+  // right before the remount. hasRestoredOnce keeps that full-page gate scoped to app boot only.
+  const [hasRestoredOnce, setHasRestoredOnce] = useState(false)
 
   const user = useAuthStore((state) => state.user)
   const session = useAuthStore((state) => state.session)
@@ -83,6 +90,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           clear()
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHasRestoredOnce(true)
         }
       })
 
@@ -198,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [authStatus, login, register, logout, updateProfile, uploadAvatar, removeAvatar, user]
   )
 
-  if (authStatus === "idle" || authStatus === "loading") {
+  if (!hasRestoredOnce) {
     return <AppLoading variant="page" />
   }
 
