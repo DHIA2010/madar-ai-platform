@@ -126,6 +126,10 @@ export class ZidOAuthController {
         }
       } catch (error) {
         const reason = toSafeCallbackReason(error)
+        console.error("zid_oauth.marketplace_install_callback_failed", {
+          reason,
+          message: error instanceof Error ? error.message : String(error),
+        })
         return {
           status: 302,
           headers: {
@@ -145,6 +149,10 @@ export class ZidOAuthController {
       }
     } catch (error) {
       const reason = toSafeCallbackReason(error)
+      console.error("zid_oauth.callback_failed", {
+        reason,
+        message: error instanceof Error ? error.message : String(error),
+      })
       return {
         status: 302,
         headers: {

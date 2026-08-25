@@ -295,6 +295,12 @@ async function exchangeAuthorizationCode(input: {
   })
 
   if (!response.ok) {
+    const bodyText = await response.text().catch(() => "")
+    console.error("zid_oauth.token_exchange_failed", {
+      status: response.status,
+      statusText: response.statusText,
+      body: bodyText.slice(0, 1000),
+    })
     throw new Error("ZID_OAUTH_TOKEN_EXCHANGE_FAILED")
   }
 
@@ -349,6 +355,15 @@ async function fetchStoreInfo(config: ZidOAuthServiceConfig, accessToken: string
   })
 
   if (!response.ok) {
+    // The oauth callback controller swallows this into a generic redirect reason with no
+    // detail -- log the actual status/body here, since this is the only place that ever sees it.
+    const bodyText = await response.text().catch(() => "")
+    console.error("zid_oauth.account_discovery_failed", {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      body: bodyText.slice(0, 1000),
+    })
     throw new Error("ZID_OAUTH_ACCOUNT_DISCOVERY_FAILED")
   }
 
