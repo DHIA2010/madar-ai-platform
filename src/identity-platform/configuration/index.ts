@@ -85,6 +85,12 @@ export function loadIdentityPlatformConfig(
       }
     })()
 
+  const resolvedAppUrl =
+    overrides.appUrl ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    "http://localhost:3000"
+
   return configSchema.parse({
     jwtSecret:
       overrides.jwtSecret ??
@@ -131,17 +137,15 @@ export function loadIdentityPlatformConfig(
     resendFromEmail: overrides.resendFromEmail ?? process.env.IDENTITY_PLATFORM_RESEND_FROM_EMAIL,
     resendFromName: overrides.resendFromName ?? process.env.IDENTITY_PLATFORM_RESEND_FROM_NAME,
     resendReplyTo: overrides.resendReplyTo ?? process.env.IDENTITY_PLATFORM_RESEND_REPLY_TO,
-    appUrl:
-      overrides.appUrl ??
-      process.env.NEXT_PUBLIC_APP_URL ??
-      process.env.APP_URL ??
-      "http://localhost:3000",
-    // Deliberately does NOT fall back through appUrl -- short_url is stored under a DB
-    // check constraint requiring https://, and appUrl defaults to plain http:// in dev.
+    appUrl: resolvedAppUrl,
+    // Falls back to appUrl only when it's already https:// (a real deployed domain, e.g.
+    // https://app.madar.my) -- local dev's appUrl defaults to plain http://, which would
+    // violate short_url's DB check constraint requiring https://, so that case keeps the
+    // hardcoded localhost fallback instead of silently producing an invalid short_url.
     shortLinkBaseUrl:
       overrides.shortLinkBaseUrl ??
       process.env.IDENTITY_PLATFORM_SHORT_LINK_BASE_URL ??
-      "https://localhost:3000",
+      (resolvedAppUrl.startsWith("https://") ? resolvedAppUrl : "https://localhost:3000"),
     featureFlags: featureFlagsRaw,
     objectStorageEndpoint: overrides.objectStorageEndpoint ?? process.env.MINIO_ENDPOINT,
     objectStoragePublicEndpoint:
