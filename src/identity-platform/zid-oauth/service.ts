@@ -34,6 +34,22 @@ interface ZidTokenResponse {
   expires_in?: number
   scope?: string
   token_type?: string
+  // Zid's own docs (docs.zid.sa/authorization) list this as a distinct field on the token
+  // response, separate from access_token -- unconfirmed whether it's actually present/what
+  // format it's in (the docs are inconsistent on this), so buildAuthorizationHeader() below
+  // prefers it when present but falls back to the standard `Bearer ${access_token}` otherwise.
+  authorization?: string
+}
+
+// Per docs.zid.sa/authorization: "pass the content of access_token under the name
+// X-Manager-Token, and Authorization for every request" -- X-Manager-Token is always the raw
+// access_token value; the Authorization header is `Bearer ${access_token}` unless Zid's
+// response supplied its own pre-formatted `authorization` field, which takes precedence.
+function buildAuthorizationHeader(token: ZidTokenResponse): string {
+  if (token.authorization && token.authorization.trim().length > 0) {
+    return token.authorization
+  }
+  return `Bearer ${token.access_token}`
 }
 
 // Confirmed against Zid's official docs (docs.zid.sa/get-manager-profile): the manager
@@ -309,6 +325,20 @@ async function exchangeAuthorizationCode(input: {
     throw new Error("ZID_OAUTH_TOKEN_EXCHANGE_FAILED")
   }
 
+  // Safe diagnostic: field names + short, non-secret previews only -- account_discovery_failed
+  // (401 Unauthenticated) on the very next call suggests the Authorization header we build from
+  // access_token may not be what Zid actually expects; this confirms exactly what fields/shapes
+  // the token response really has without leaking full token values into logs.
+  console.error(
+    "zid_oauth.token_exchange_succeeded",
+    Object.fromEntries(
+      Object.entries(body as unknown as Record<string, unknown>).map(([key, value]) => [
+        key,
+        typeof value === "string" ? `${value.slice(0, 6)}...(${value.length} chars)` : value,
+      ])
+    )
+  )
+
   return body
 }
 
@@ -341,15 +371,15 @@ async function refreshAccessToken(input: {
 }
 
 // Zid's OAuth authorizes exactly one merchant store per connection (same as Salla) -- so
-// discovery here is a single GET, not a list-then-page walk. Both Authorization and
-// X-Manager-Token headers carry the same access_token (confirmed against Zid's docs: "used
-// interchangeably").
-async function fetchStoreInfo(config: ZidOAuthServiceConfig, accessToken: string) {
+// discovery here is a single GET, not a list-then-page walk. Per docs.zid.sa/authorization,
+// X-Manager-Token is always the raw access_token; Authorization is `Bearer ${access_token}`
+// unless the token response supplied its own pre-formatted value (see buildAuthorizationHeader).
+async function fetchStoreInfo(config: ZidOAuthServiceConfig, token: ZidTokenResponse) {
   const url = `${config.apiBaseUrl.replace(/\/$/, "")}/managers/account/profile`
   const response = await fetch(url, {
     headers: {
-      authorization: `Bearer ${accessToken}`,
-      "x-manager-token": accessToken,
+      authorization: buildAuthorizationHeader(token),
+      "x-manager-token": token.access_token,
       accept: "application/json",
     },
   })
@@ -358,11 +388,14 @@ async function fetchStoreInfo(config: ZidOAuthServiceConfig, accessToken: string
     // The oauth callback controller swallows this into a generic redirect reason with no
     // detail -- log the actual status/body here, since this is the only place that ever sees it.
     const bodyText = await response.text().catch(() => "")
+    const authHeaderSent = buildAuthorizationHeader(token)
     console.error("zid_oauth.account_discovery_failed", {
       url,
       status: response.status,
       statusText: response.statusText,
       body: bodyText.slice(0, 1000),
+      authorizationHeaderPrefix: authHeaderSent.slice(0, 10),
+      usedTokenAuthorizationField: Boolean(token.authorization),
     })
     throw new Error("ZID_OAUTH_ACCOUNT_DISCOVERY_FAILED")
   }
@@ -543,7 +576,7 @@ export class ZidOAuthService {
     }
     const refreshToken = token.refresh_token
 
-    const store = await fetchStoreInfo(config, token.access_token)
+    const store = await fetchStoreInfo(config, token)
     const discoveredAccounts = [
       {
         customerId: String(store.id),
@@ -644,7 +677,7 @@ export class ZidOAuthService {
       throw new Error("ZID_OAUTH_REFRESH_TOKEN_MISSING")
     }
 
-    const store = await fetchStoreInfo(config, token.access_token)
+    const store = await fetchStoreInfo(config, token)
     const scopes = parseScopes(token.scope)
     const effectiveScopes = scopes.length > 0 ? scopes : config.scopes
     const storeName = store.name ?? "Zid Store"
