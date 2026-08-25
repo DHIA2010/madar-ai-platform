@@ -25,6 +25,7 @@ import type { CampaignRecord } from "../services/campaign-picker.service"
 import {
   type CampaignLinkFormInput,
   type CampaignLinkRecord,
+  type CampaignPlatform,
   linkListService,
   type TrackingType,
 } from "../services/link-list.service"
@@ -48,6 +49,17 @@ interface CampaignLinkFormProps {
 const PREVIEW_DEBOUNCE_MS = 400
 const COPY_RESET_MS = 1500
 
+// Radix Select items can't take an empty-string value, so "none" is a sentinel mapped back to
+// null when building the submitted/previewed input.
+const PLATFORM_NONE_VALUE = "none"
+const PLATFORM_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: PLATFORM_NONE_VALUE, label: "بدون منصة إعلانية" },
+  { value: "google_ads", label: "Google Ads" },
+  { value: "meta_ads", label: "Meta Ads" },
+  { value: "tiktok_ads", label: "TikTok Ads" },
+  { value: "snapchat_ads", label: "Snapchat Ads" },
+]
+
 function isHttpsUrl(value: string): boolean {
   try {
     return new URL(value).protocol === "https:"
@@ -60,6 +72,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "")
   const [name, setName] = useState("")
   const [trackingType, setTrackingType] = useState<TrackingType>("SHORT_LINK")
+  const [platform, setPlatform] = useState<string>(PLATFORM_NONE_VALUE)
   const [destinationBaseUrl, setDestinationBaseUrl] = useState("")
   const [utmSource, setUtmSource] = useState("")
   const [utmMedium, setUtmMedium] = useState("")
@@ -104,6 +117,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
       utmCampaign,
       adGroupName,
       adName,
+      platform: platform === PLATFORM_NONE_VALUE ? null : (platform as CampaignPlatform),
       utmContent: utmContent || undefined,
       utmTerm: utmTerm || undefined,
       customParams: Object.keys(customParams).length > 0 ? customParams : undefined,
@@ -112,6 +126,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
     campaignId,
     name,
     trackingType,
+    platform,
     destinationBaseUrl,
     utmSource,
     utmMedium,
@@ -241,6 +256,15 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
                 ]}
               />
             </AppFormField>
+
+            <DialogSelect
+              id="campaign-link-platform"
+              label="المنصة الإعلانية"
+              placeholder="اختر منصة (اختياري)"
+              value={platform}
+              onValueChange={setPlatform}
+              options={PLATFORM_OPTIONS}
+            />
           </AppFormSection>
 
           <AppFormSection

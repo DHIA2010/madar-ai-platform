@@ -58,9 +58,18 @@ export class TrackingService {
 
   // Called after the redirect response has already been sent. Must never throw back into the
   // caller in a way that could be mistaken for a redirect failure -- callers should fire this
-  // and swallow/log any rejection themselves.
+  // and swallow/log any rejection themselves. Also used for the storefront snippet's PAGE_VIEW
+  // captures -- RecordClickInput/the underlying inserts already handle both event types.
   async recordClick(input: RecordClickInput): Promise<void> {
     await this.repository.insertClickEvent(input)
     await this.repository.insertAttribution(input)
+  }
+
+  async resolveOrganizationBySiteKey(siteKey: string): Promise<string | null> {
+    return this.repository.findOrganizationIdBySiteKey(siteKey)
+  }
+
+  async ensureSiteKey(organizationId: string): Promise<string> {
+    return this.repository.ensureSiteKey(organizationId)
   }
 }

@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Briefcase, Building2, Check, Lock, Mail, User, Users } from "lucide-react"
 import { Controller, type Resolver, useForm, useWatch } from "react-hook-form"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
@@ -28,6 +29,8 @@ import {
 
 import { useAuth } from "../hooks"
 import { type SignupFormValues, signupInvitationSchema, signupSchema } from "../validators"
+
+import { useApplicationServices } from "@/application"
 
 const STEP_1_FIELDS = [
   "fullName",
@@ -135,10 +138,15 @@ function SummaryRow({ label, value }: { label: string; value?: string }) {
 
 export function SignupForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const { register } = useAuth()
+  const { authenticationApplicationService } = useApplicationServices()
   const searchParams = useSearchParams()
   const invitationToken = searchParams.get("invitation")
   const invitationEmail = searchParams.get("email") ?? ""
   const isInvitationMode = Boolean(invitationToken)
+  // Deliberately independent of isInvitationMode -- a marketplace-install visitor isn't
+  // joining an existing org, they need one created for them same as any normal signup
+  // (organizationName field, full 3-step form), just with a claim call appended on success.
+  const zidInstallToken = searchParams.get("zidInstall")
   // The email only arrives pre-filled when the invite link itself carried it (the normal
   // case). If someone reaches this page via a token-only link (e.g. from the login
   // page's "create account" link), there's no known email to lock in — let them type it;
@@ -234,6 +242,16 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         return
       }
       setFormError(error instanceof Error ? error.message : t("genericError"))
+      return
+    }
+
+    if (zidInstallToken) {
+      try {
+        await authenticationApplicationService.claimZidMarketplaceInstall(zidInstallToken)
+        toast.success(t("zidInstallClaimed"))
+      } catch {
+        toast.error(t("zidInstallClaimError"))
+      }
     }
   })
 
@@ -257,6 +275,12 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
       {isInvitationMode ? (
         <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
           {t("invitationBanner")}
+        </div>
+      ) : null}
+
+      {zidInstallToken ? (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+          {t("zidInstallBanner")}
         </div>
       ) : null}
 
@@ -534,7 +558,9 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
             href={
               invitationToken
                 ? `${ROUTES.login}?invitation=${encodeURIComponent(invitationToken)}`
-                : ROUTES.login
+                : zidInstallToken
+                  ? `${ROUTES.login}?zidInstall=${encodeURIComponent(zidInstallToken)}`
+                  : ROUTES.login
             }
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
           >

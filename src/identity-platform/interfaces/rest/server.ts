@@ -23,6 +23,7 @@ import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-anal
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-deletion-service"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
+import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { ProductsAggregationService } from "../../products/service"
@@ -35,8 +36,11 @@ import { CampaignRepository } from "../../campaigns/repository"
 import { CampaignService } from "../../campaigns/service"
 import { CampaignLinkRepository } from "../../campaign-links/repository"
 import { CampaignLinkService } from "../../campaign-links/service"
+import { extractPlatformSignals } from "../../tracking/platform-macros"
 import { TrackingRepository } from "../../tracking/repository"
+import { TRACKING_SNIPPET_JS } from "../../tracking/snippet"
 import { TrackingService } from "../../tracking/service"
+import { hashCustomerEmail } from "../../tracking/customer-ref"
 import { AttributionRepository } from "../../attribution/repository"
 import { OrderAttributionService } from "../../attribution/service"
 import { ORDER_PROVIDERS, type OrderProvider } from "../../attribution/types"
@@ -67,6 +71,7 @@ import {
   importCampaignsSchema,
   matchOrdersSchema,
   aggregateCampaignLinksSchema,
+  captureTrackingEventSchema,
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
   integrationAccountsQuerySchema,
@@ -318,6 +323,17 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
   return {}
 }
 
+// The storefront capture snippet (tracking/snippet.ts) calls this from an arbitrary merchant
+// origin, which getCorsHeaders()'s allowlist can never contain by design (it's scoped to
+// MADAR's own dashboard origins). A wildcard is safe specifically here: the route is write-only,
+// returns nothing sensitive, and never reads MADAR-domain cookies, so no
+// access-control-allow-credentials is needed (which is what makes "*" unsafe elsewhere).
+const PUBLIC_CAPTURE_CORS_HEADERS: Record<string, string> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "content-type",
+  "access-control-allow-methods": "POST,OPTIONS",
+}
+
 // Providers signal that a connectionId isn't theirs by throwing an Error whose
 // message ends in "_CONNECTION_NOT_FOUND" (e.g. GOOGLE_OAUTH_CONNECTION_NOT_FOUND,
 // SNAPCHAT_OAUTH_CONNECTION_NOT_FOUND) -- this lets connection-lifecycle routes try
@@ -404,6 +420,12 @@ export function createIdentityApiServer(
     ? new ZidOAuthConnectionDeletionService(
         new ZidOAuthRepository(container.infrastructure.database)
       )
+    : null
+  // Standalone instance for the marketplace-install routes below (getPendingInstallSummary/
+  // claimInstall) -- these are Zid-only, not part of the generic IntegrationProvider interface
+  // every other :provider/oauth/* route dispatches through via container.infrastructure.integrations.
+  const zidOAuthMarketplaceService = container.infrastructure.database
+    ? new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
     : null
   const tiktokAdsOAuthDeletionService = container.infrastructure.database
     ? new TikTokAdsOAuthConnectionDeletionService(
@@ -494,6 +516,10 @@ export function createIdentityApiServer(
     }
 
     try {
+      if (method === "OPTIONS" && url.pathname === "/v1/tracking/capture") {
+        return send(204, null, PUBLIC_CAPTURE_CORS_HEADERS)
+      }
+
       if (method === "OPTIONS") {
         return send(204, null)
       }
@@ -659,6 +685,42 @@ export function createIdentityApiServer(
         return
       }
 
+      const zidInstallSummaryMatch = url.pathname.match(
+        /^\/v1\/integrations\/zid\/install\/([^/]+)$/
+      )
+      if (method === "GET" && zidInstallSummaryMatch) {
+        if (!zidOAuthMarketplaceService) {
+          return send(503, {
+            code: "ZID_MARKETPLACE_INSTALL_UNAVAILABLE",
+            message: "Zid marketplace install is unavailable in memory mode.",
+          })
+        }
+
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `zid_install_lookup:${context.ipAddress}`,
+          30,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, {
+            code: "ZID_MARKETPLACE_INSTALL_RATE_LIMITED",
+            message: "Too many requests.",
+          })
+        }
+
+        try {
+          const summary = await zidOAuthMarketplaceService.getPendingInstallSummary(
+            decodeURIComponent(zidInstallSummaryMatch[1])
+          )
+          return send(200, summary)
+        } catch {
+          return send(404, {
+            code: "ZID_MARKETPLACE_INSTALL_NOT_FOUND",
+            message: "Install not found or expired.",
+          })
+        }
+      }
+
       const shortLinkRedirectMatch = url.pathname.match(/^\/m\/([^/]+)$/)
       if (method === "GET" && shortLinkRedirectMatch) {
         const displayId = decodeURIComponent(shortLinkRedirectMatch[1])
@@ -699,11 +761,13 @@ export function createIdentityApiServer(
 
         if (trackingService) {
           const referrerHeader = request.headers.referer
+          const platformSignals = extractPlatformSignals(url.searchParams)
           trackingService
             .recordClick({
               organizationId: link.organizationId,
               campaignId: link.campaignId,
               campaignLinkId: link.campaignLinkId,
+              eventType: "CLICK",
               visitorId,
               sessionId,
               utmSource: link.utmSource,
@@ -716,6 +780,8 @@ export function createIdentityApiServer(
                 ? (referrerHeader[0] ?? null)
                 : (referrerHeader ?? null),
               deviceType: classifyDeviceType(request.headers["user-agent"]),
+              customerRef: null,
+              ...platformSignals,
             })
             .catch((error: unknown) => {
               container.infrastructure.metrics?.incrementCounter(
@@ -729,12 +795,102 @@ export function createIdentityApiServer(
         return
       }
 
+      if (method === "GET" && url.pathname === "/v1/tracking/snippet.js") {
+        response.writeHead(200, {
+          "content-type": "application/javascript; charset=utf-8",
+          "cache-control": "public, max-age=300",
+        })
+        response.end(TRACKING_SNIPPET_JS)
+        return
+      }
+
+      if (method === "POST" && url.pathname === "/v1/tracking/capture") {
+        if (!trackingService) {
+          return send(
+            503,
+            {
+              code: "TRACKING_UNAVAILABLE",
+              message: "Tracking capture is unavailable in memory mode.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
+        }
+
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `tracking_capture:${context.ipAddress}`,
+          60,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(
+            429,
+            { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
+        }
+
+        const payload = captureTrackingEventSchema.parse(await readJsonBody(request))
+        const organizationId = await trackingService.resolveOrganizationBySiteKey(payload.siteKey)
+        if (!organizationId) {
+          return send(
+            404,
+            { code: "TRACKING_SITE_KEY_NOT_FOUND", message: "Unknown site key." },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
+        }
+
+        await trackingService.recordClick({
+          organizationId,
+          campaignId: null,
+          campaignLinkId: null,
+          eventType: "PAGE_VIEW",
+          visitorId: payload.visitorId,
+          sessionId: payload.sessionId,
+          utmSource: payload.utmSource ?? null,
+          utmMedium: payload.utmMedium ?? null,
+          utmCampaign: payload.utmCampaign ?? null,
+          utmContent: payload.utmContent ?? null,
+          utmTerm: payload.utmTerm ?? null,
+          landingUrl: payload.pageUrl,
+          referrerUrl: payload.referrerUrl ?? null,
+          deviceType: classifyDeviceType(request.headers["user-agent"]),
+          clickId: payload.clickId ?? null,
+          clickIdPlatform: payload.clickIdPlatform ?? null,
+          platformCampaignId: payload.platformCampaignId ?? null,
+          platformAdgroupId: payload.platformAdgroupId ?? null,
+          platformKeyword: payload.platformKeyword ?? null,
+          platformCreativeId: payload.platformCreativeId ?? null,
+          customerRef: hashCustomerEmail(payload.customerEmail ?? null),
+        })
+
+        return send(200, { ok: true }, PUBLIC_CAPTURE_CORS_HEADERS)
+      }
+
       const token = getBearerToken(request)
       if (!token) {
         return send(401, { code: "AUTH_TOKEN_MISSING", message: "Authentication required." })
       }
 
       const actor = await container.commands.resolveActorFromAccessToken(token)
+
+      const zidInstallClaimMatch = url.pathname.match(
+        /^\/v1\/integrations\/zid\/install\/([^/]+)\/claim$/
+      )
+      if (method === "POST" && zidInstallClaimMatch) {
+        if (!zidOAuthMarketplaceService) {
+          return send(503, {
+            code: "ZID_MARKETPLACE_INSTALL_UNAVAILABLE",
+            message: "Zid marketplace install is unavailable in memory mode.",
+          })
+        }
+        return send(
+          200,
+          await zidOAuthMarketplaceService.claimInstall(
+            actor,
+            decodeURIComponent(zidInstallClaimMatch[1])
+          )
+        )
+      }
 
       if (method === "GET" && url.pathname === "/v1/auth/session") {
         return send(200, await container.queries.getSession(actor))
@@ -2042,6 +2198,7 @@ export function createIdentityApiServer(
                 utmTerm: payload.utmTerm ?? null,
                 adGroupName: payload.adGroupName ?? null,
                 adName: payload.adName ?? null,
+                platform: payload.platform ?? null,
                 customParams: payload.customParams,
               }
             )
@@ -2074,9 +2231,26 @@ export function createIdentityApiServer(
             utmTerm: payload.utmTerm ?? null,
             adGroupName: payload.adGroupName ?? null,
             adName: payload.adName ?? null,
+            platform: payload.platform ?? null,
             customParams: payload.customParams,
           })
         )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/tracking/site-key") {
+        if (!trackingService) {
+          return send(503, {
+            code: "TRACKING_UNAVAILABLE",
+            message: "Tracking capture is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, {
+          siteKey: await trackingService.ensureSiteKey(actor.organizationId),
+          snippetUrl: `${container.config.shortLinkBaseUrl}/v1/tracking/snippet.js`,
+        })
       }
 
       if (method === "GET" && url.pathname === "/v1/campaign-links/summary") {

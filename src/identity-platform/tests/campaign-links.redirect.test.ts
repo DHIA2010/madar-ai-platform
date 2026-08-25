@@ -162,6 +162,51 @@ describe("campaign link redirect", () => {
     expect(attributions.rows).toHaveLength(1)
   })
 
+  it("captures a resolved click id and platform entity macros from the incoming click's query string", async () => {
+    const { accessToken } = await registerAndProvisionOrg(
+      "owner@redirect-macro.madar",
+      "Redirect Macro Org"
+    )
+    const link = await createShortLink(accessToken)
+
+    const response = await fetch(
+      `${baseUrl}/m/${link.displayId}?gclid=real-gclid-123&madar_ad_campaign_id=999&madar_ad_adgroup_id=888&madar_ad_keyword=running+shoes&madar_ad_creative_id=777`,
+      { redirect: "manual" }
+    )
+    expect(response.status).toBe(302)
+    // The redirect target is unaffected by the incoming click's query string -- it always goes
+    // to the stored finalUrl.
+    expect(response.headers.get("location")).toBe(link.finalUrl)
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const events = await database.query(
+      `SELECT click_id, click_id_platform, platform_campaign_id, platform_adgroup_id,
+              platform_keyword, platform_creative_id
+       FROM tracking_events WHERE campaign_link_id = $1`,
+      [link.id]
+    )
+    expect(events.rows[0]).toMatchObject({
+      click_id: "real-gclid-123",
+      click_id_platform: "google_ads",
+      platform_campaign_id: "999",
+      platform_adgroup_id: "888",
+      platform_keyword: "running shoes",
+      platform_creative_id: "777",
+    })
+
+    const attributions = await database.query(
+      `SELECT click_id, click_id_platform, platform_campaign_id
+       FROM attributions WHERE campaign_link_id = $1`,
+      [link.id]
+    )
+    expect(attributions.rows[0]).toMatchObject({
+      click_id: "real-gclid-123",
+      click_id_platform: "google_ads",
+      platform_campaign_id: "999",
+    })
+  })
+
   it("returns 404 for an unknown display id", async () => {
     const response = await fetch(`${baseUrl}/m/MD-2026-99999`, { redirect: "manual" })
     expect(response.status).toBe(404)

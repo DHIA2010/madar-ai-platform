@@ -62,6 +62,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const t = useTranslations("auth.login")
   const searchParams = useSearchParams()
   const invitationToken = searchParams.get("invitation")
+  const zidInstallToken = searchParams.get("zidInstall")
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -90,6 +91,15 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         toast.error(t("invitationError"))
       }
     }
+
+    if (zidInstallToken) {
+      try {
+        await authenticationApplicationService.claimZidMarketplaceInstall(zidInstallToken)
+        toast.success(t("zidInstallClaimed"))
+      } catch {
+        toast.error(t("zidInstallClaimError"))
+      }
+    }
   })
 
   return (
@@ -112,6 +122,12 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       {invitationToken ? (
         <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
           {t("invitationBanner")}
+        </div>
+      ) : null}
+
+      {zidInstallToken ? (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+          {t("zidInstallBanner")}
         </div>
       ) : null}
 
@@ -198,7 +214,9 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
             href={
               invitationToken
                 ? `${ROUTES.register}?invitation=${encodeURIComponent(invitationToken)}`
-                : ROUTES.register
+                : zidInstallToken
+                  ? `${ROUTES.register}?zidInstall=${encodeURIComponent(zidInstallToken)}`
+                  : ROUTES.register
             }
             className="font-semibold text-violet-600 underline-offset-4 hover:underline"
           >

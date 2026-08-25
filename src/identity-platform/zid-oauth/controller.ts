@@ -14,6 +14,9 @@ const CALLBACK_ERROR_REASON_MAP: Record<string, string> = {
   ZID_OAUTH_ACCOUNT_DISCOVERY_FAILED: "account_discovery_failed",
   ZID_OAUTH_ACCOUNT_DISCOVERY_EMPTY: "account_discovery_empty",
   ZID_OAUTH_CONFIGURATION_ERROR: "configuration_error",
+  ZID_MARKETPLACE_INSTALL_NOT_FOUND: "marketplace_install_not_found",
+  ZID_MARKETPLACE_INSTALL_EXPIRED: "marketplace_install_expired",
+  ZID_MARKETPLACE_INSTALL_ALREADY_CLAIMED: "marketplace_install_already_claimed",
 }
 
 function toReasonSlug(value: string) {
@@ -98,12 +101,37 @@ export class ZidOAuthController {
       }
     }
 
-    if (!code || !state) {
+    if (!code) {
       return {
         status: 302,
         headers: {
           location: this.service.buildErrorRedirect("missing_code_or_state"),
         },
+      }
+    }
+
+    // No `state` means MADAR never called startAuthorization for this request -- Zid sent the
+    // merchant here directly from its own App Market "Activate" button, not from an admin
+    // clicking "Connect Zid" inside MADAR. Distinct flow: exchange the code now, but defer
+    // organization attachment to a later claim step (see zid-oauth/service.ts's
+    // completeMarketplaceInstall/claimInstall doc comments).
+    if (!state) {
+      try {
+        const pending = await this.service.completeMarketplaceInstall({ code })
+        return {
+          status: 302,
+          headers: {
+            location: this.service.buildInstallClaimRedirect(pending.claimToken),
+          },
+        }
+      } catch (error) {
+        const reason = toSafeCallbackReason(error)
+        return {
+          status: 302,
+          headers: {
+            location: this.service.buildErrorRedirect(reason),
+          },
+        }
       }
     }
 

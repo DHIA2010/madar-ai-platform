@@ -4,6 +4,8 @@ import type {
   AuthSessionDto,
   AuthSessionViewModel,
   AuthUserDto,
+  ClaimZidMarketplaceInstallResponseDto,
+  ZidMarketplaceInstallSummaryDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
   RegisterRequestDto,
@@ -73,6 +75,14 @@ export class AuthenticationApplicationService {
 
   acceptInvitation(token: string): Promise<AcceptInvitationResponseDto> {
     return this.gateway.acceptInvitation(token)
+  }
+
+  claimZidMarketplaceInstall(claimToken: string): Promise<ClaimZidMarketplaceInstallResponseDto> {
+    return this.gateway.claimZidMarketplaceInstall(claimToken)
+  }
+
+  getZidMarketplaceInstallSummary(claimToken: string): Promise<ZidMarketplaceInstallSummaryDto> {
+    return this.gateway.getZidMarketplaceInstallSummary(claimToken)
   }
 
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {

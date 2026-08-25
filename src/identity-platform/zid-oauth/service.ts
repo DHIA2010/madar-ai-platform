@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto"
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 
@@ -240,6 +240,20 @@ function toTimelineMessage(action: string, payload: Record<string, unknown>) {
 
 function createStateToken() {
   return `zd_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
+}
+
+// Distinct prefix from createStateToken() so claim tokens are visually distinguishable from
+// OAuth state values in logs -- otherwise same shape/entropy.
+function createClaimToken() {
+  return `zdi_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
+}
+
+// Hashed at rest, unlike zid_oauth_states/invitation tokens -- this token is a bearer
+// credential for up to 7 days for a row that already holds live encrypted Zid access/refresh
+// tokens (real API access to a merchant's store), a materially higher-stakes secret than a
+// 10-minute OAuth state or an org-invite. Same normalization style as password-reset tokens.
+function hashClaimToken(token: string) {
+  return createHash("sha256").update(token).digest("hex")
 }
 
 function ensureConfigured(config: ZidOAuthServiceConfig) {
@@ -599,6 +613,200 @@ export class ZidOAuthService {
     }
   }
 
+  // Marketplace-initiated install: Zid redirected a merchant here directly from its own App
+  // Market (no `state`, since MADAR never called startAuthorization -- the merchant may not
+  // even have a MADAR account yet). Exchanges the code and stores the result unclaimed; there
+  // is no organization to attach a real connection to until the merchant logs in/registers and
+  // claims it via claimInstall.
+  async completeMarketplaceInstall(input: {
+    code: string
+  }): Promise<{ claimToken: string; storeName: string }> {
+    const config = await this.loadResolvedConfig()
+
+    const token = await exchangeAuthorizationCode({ code: input.code, config })
+
+    if (!token.refresh_token || token.refresh_token.trim().length === 0) {
+      throw new Error("ZID_OAUTH_REFRESH_TOKEN_MISSING")
+    }
+
+    const store = await fetchStoreInfo(config, token.access_token)
+    const scopes = parseScopes(token.scope)
+    const effectiveScopes = scopes.length > 0 ? scopes : config.scopes
+    const storeName = store.name ?? "Zid Store"
+
+    const claimToken = createClaimToken()
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    await this.repository.saveMarketplaceInstall({
+      id: randomUUID(),
+      claimTokenHash: hashClaimToken(claimToken),
+      zidStoreExternalId: String(store.id),
+      zidStoreName: storeName,
+      zidStoreCurrency: store.currency ?? null,
+      zidStoreTimezone: store.timezone ?? null,
+      encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
+      encryptedRefreshToken: encryptSecret(token.refresh_token, config.tokenEncryptionKey),
+      scopes: effectiveScopes,
+      tokenExpiresAt: token.expires_in
+        ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+        : null,
+      expiresAt,
+    })
+
+    return { claimToken, storeName }
+  }
+
+  // Public-safe read (no secrets) -- used by the claim page before any MADAR session exists,
+  // to show "connect store {name}" ahead of the login/register step.
+  async getPendingInstallSummary(claimToken: string) {
+    const row = await this.repository.findPendingInstallByTokenHash(hashClaimToken(claimToken))
+    if (!row) {
+      throw new Error("ZID_MARKETPLACE_INSTALL_NOT_FOUND")
+    }
+
+    const status = String(row.status)
+    if (status === "unclaimed") {
+      const expiresAt = new Date(String(row.expires_at)).getTime()
+      if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+        throw new Error("ZID_MARKETPLACE_INSTALL_EXPIRED")
+      }
+    }
+
+    return {
+      storeName: (row.zid_store_name as string | null) ?? "Zid Store",
+      currency: (row.zid_store_currency as string | null) ?? null,
+      status,
+    }
+  }
+
+  // Claims an unclaimed marketplace install into the now-authenticated actor's organization --
+  // reuses the already-exchanged tokens from completeMarketplaceInstall, no new token exchange.
+  async claimInstall(
+    actor: AuthenticatedActor,
+    claimToken: string
+  ): Promise<ZidOAuthCallbackResult> {
+    assertActorCanManageIntegrations(actor)
+
+    const row = await this.repository.findPendingInstallByTokenHash(hashClaimToken(claimToken))
+    if (!row) {
+      throw new Error("ZID_MARKETPLACE_INSTALL_NOT_FOUND")
+    }
+    if (String(row.status) !== "unclaimed") {
+      throw new Error("ZID_MARKETPLACE_INSTALL_ALREADY_CLAIMED")
+    }
+    const expiresAt = new Date(String(row.expires_at)).getTime()
+    if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+      throw new Error("ZID_MARKETPLACE_INSTALL_EXPIRED")
+    }
+
+    const resolvedProject = await this.repository.resolveOrCreateDefaultProject(
+      actor.organizationId,
+      actor.workspaceId ?? null,
+      actor.userId
+    )
+
+    const existingConnection = await this.repository.findConnectionByProject(
+      actor.organizationId,
+      resolvedProject.projectId
+    )
+    const connectionId = existingConnection?.id ?? randomUUID()
+    const now = new Date().toISOString()
+    const storeName = (row.zid_store_name as string | null) ?? "Zid Store"
+    const storeExternalId = String(row.zid_store_external_id)
+    const scopesRaw = row.scopes
+    const scopes = Array.isArray(scopesRaw) ? (scopesRaw as string[]) : []
+
+    await this.repository.withTransaction(async () => {
+      // Connection row must exist before the install row's claimed_connection_id FK can point
+      // to it -- if the CAS below fails (lost a race to a concurrent claim), the whole
+      // transaction rolls back, including this upsert, so creating it first is still safe.
+      await this.repository.upsertConnection({
+        id: connectionId,
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        dataSourceId: null,
+        providerAccountId: storeExternalId,
+        providerAccountName: storeName,
+        providerAccountEmail: null,
+        encryptedRefreshToken: row.encrypted_refresh_token as string,
+        encryptedAccessToken: row.encrypted_access_token as string,
+        scopes,
+        tokenExpiresAt: row.token_expires_at
+          ? new Date(row.token_expires_at as string | number | Date).toISOString()
+          : null,
+        status: "connected",
+        connectionReference: storeName,
+        lastConnectedAt: now,
+        lastDisconnectedAt: null,
+        actorUserId: actor.userId,
+        nowIso: now,
+      })
+
+      await this.repository.replaceAccessibleCustomerAccounts({
+        connectionId,
+        actorUserId: actor.userId,
+        selectedCustomerId: storeExternalId,
+        accounts: [
+          {
+            customerId: storeExternalId,
+            displayName: storeName,
+            currencyCode: (row.zid_store_currency as string | null) ?? null,
+            timeZone: (row.zid_store_timezone as string | null) ?? null,
+            organizationId: null,
+            organizationName: null,
+            status: "active",
+          },
+        ],
+      })
+
+      // Single-use CAS -- if this returns false, another request already claimed (or the
+      // token expired) between our earlier read and here, so the whole transaction (including
+      // the connection upsert above) must roll back rather than silently double-processing.
+      const claimed = await this.repository.claimInstallRow({
+        installId: String(row.id),
+        claimedByUserId: actor.userId,
+        claimedOrganizationId: actor.organizationId,
+        claimedWorkspaceId: resolvedProject.workspaceId,
+        claimedProjectId: resolvedProject.projectId,
+        claimedConnectionId: connectionId,
+        now,
+      })
+      if (!claimed) {
+        throw new Error("ZID_MARKETPLACE_INSTALL_ALREADY_CLAIMED")
+      }
+
+      await this.recordLifecycle(
+        {
+          eventType: "zid.oauth.authorization.completed",
+          aggregateId: connectionId,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: resolvedProject.workspaceId,
+          projectId: resolvedProject.projectId,
+          occurredAt: now,
+          payload: {
+            accountId: storeExternalId,
+            accountName: storeName,
+            source: "marketplace_install",
+          },
+        },
+        "integration.zid_oauth.connected"
+      )
+    })
+
+    return {
+      connectionId,
+      projectId: resolvedProject.projectId,
+      workspaceId: resolvedProject.workspaceId,
+      organizationId: actor.organizationId,
+      accountName: storeName,
+      accountEmail: null,
+      connectedAt: now,
+      status: "connected",
+    }
+  }
+
   async getActiveConnection(actor: AuthenticatedActor) {
     await this.loadResolvedConfig()
 
@@ -916,6 +1124,17 @@ export class ZidOAuthService {
     const redirectUrl = new URL(this.config.successRedirectUri)
     redirectUrl.searchParams.set("zid_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
+    return redirectUrl.toString()
+  }
+
+  // Same appUrl resolution buildDefaultConfig() uses for successRedirectUri's own default --
+  // deliberately not derived from successRedirectUri itself, since an operator could point
+  // ZID_SUCCESS_REDIRECT_URI somewhere off the app root.
+  buildInstallClaimRedirect(claimToken: string) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+    const redirectUrl = new URL(
+      `${appUrl.replace(/\/$/, "")}/integrations/zid/claim/${encodeURIComponent(claimToken)}`
+    )
     return redirectUrl.toString()
   }
 

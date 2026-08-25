@@ -2,6 +2,8 @@ import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
+  ClaimZidMarketplaceInstallResponseDto,
+  ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -239,6 +241,21 @@ export class AuthenticationApiAdapter {
     return this.client.post<Record<string, never>, AcceptInvitationResponseDto>(
       `/v1/organizations/invitations/${encodeURIComponent(token)}/accept`,
       {}
+    )
+  }
+
+  claimZidMarketplaceInstall(claimToken: string): Promise<ClaimZidMarketplaceInstallResponseDto> {
+    return this.client.post<Record<string, never>, ClaimZidMarketplaceInstallResponseDto>(
+      `/v1/integrations/zid/install/${encodeURIComponent(claimToken)}/claim`,
+      {}
+    )
+  }
+
+  // Public backend route -- readable before any MADAR session exists, so the claim page can
+  // show "connect store {name}" ahead of login/register.
+  getZidMarketplaceInstallSummary(claimToken: string): Promise<ZidMarketplaceInstallSummaryDto> {
+    return this.client.get<ZidMarketplaceInstallSummaryDto>(
+      `/v1/integrations/zid/install/${encodeURIComponent(claimToken)}`
     )
   }
 

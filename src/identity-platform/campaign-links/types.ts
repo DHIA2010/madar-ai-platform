@@ -1,3 +1,5 @@
+import type { CampaignPlatform } from "../campaigns/types"
+
 export type TrackingType = "FULL_URL" | "SHORT_LINK"
 
 export interface CampaignLinkView {
@@ -18,6 +20,7 @@ export interface CampaignLinkView {
   utmTerm: string | null
   adGroupName: string | null
   adName: string | null
+  platform: CampaignPlatform | null
   customParams: Record<string, string>
   enabled: boolean
   createdBy: string | null
@@ -40,6 +43,7 @@ export interface CreateCampaignLinkInput extends UtmInput {
   destinationBaseUrl: string
   adGroupName?: string | null
   adName?: string | null
+  platform?: CampaignPlatform | null
   customParams?: Record<string, string>
 }
 

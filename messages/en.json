@@ -84,7 +84,10 @@
       },
       "invitationBanner": "You've been invited to join a MADAR organization. Sign in to accept the invitation.",
       "invitationAccepted": "Invitation accepted — welcome aboard!",
-      "invitationError": "Signed in, but we couldn't accept the invitation. It may have expired or already been used."
+      "invitationError": "Signed in, but we couldn't accept the invitation. It may have expired or already been used.",
+      "zidInstallBanner": "Sign in to finish connecting your Zid store to MADAR.",
+      "zidInstallClaimed": "Your Zid store is now connected!",
+      "zidInstallClaimError": "Signed in, but we couldn't connect your Zid store. The link may have expired — try activating from Zid again."
     },
     "register": {
       "heading": "Create a new account",
@@ -179,7 +182,27 @@
       "invitationBanner": "You've been invited to join a MADAR organization. Create your account below to accept.",
       "invitationEmailLocked": "This account will be created for the invited email address.",
       "genericError": "Couldn't create your account. Please try again.",
-      "invitationAccountExists": "You already have an account with this email. Sign in instead to accept the invitation."
+      "invitationAccountExists": "You already have an account with this email. Sign in instead to accept the invitation.",
+      "zidInstallBanner": "Create your account below to finish connecting your Zid store to MADAR.",
+      "zidInstallClaimed": "Your Zid store is now connected!",
+      "zidInstallClaimError": "Account created, but we couldn't connect your Zid store. The link may have expired — try activating from Zid again."
+    },
+    "zidClaim": {
+      "loading": "Loading…",
+      "notFoundHeading": "Link not found",
+      "notFoundDescription": "This install link is invalid or has expired. Try activating MADAR from Zid's App Market again.",
+      "connectHeading": "Connect your Zid store",
+      "connectDescription": "You're about to connect {storeName} to MADAR.",
+      "alreadyClaimedHeading": "Already connected",
+      "alreadyClaimedDescription": "This store has already been connected to MADAR.",
+      "loginCta": "Sign in to continue",
+      "registerCta": "Create an account to continue",
+      "confirmCta": "Confirm connection",
+      "confirming": "Connecting…",
+      "successHeading": "Store connected",
+      "successDescription": "{storeName} is now connected to MADAR.",
+      "goToIntegrations": "Go to Integrations",
+      "errorDescription": "We couldn't connect this store. The link may have expired — try activating from Zid again."
     },
     "forgotPassword": {
       "heading": "Forgot password?",

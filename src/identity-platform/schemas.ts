@@ -323,6 +323,7 @@ export const createCampaignLinkSchema = z
     destinationBaseUrl: z.string().url().startsWith("https://"),
     adGroupName: z.string().max(200).nullable().optional(),
     adName: z.string().max(200).nullable().optional(),
+    platform: z.enum(CAMPAIGN_PLATFORM_VALUES).nullable().optional(),
     customParams: customParamsSchema,
   })
   .merge(utmFieldsSchema)
@@ -339,6 +340,29 @@ export const updateCampaignLinkSchema = z.object({
 export const matchOrdersSchema = z.object({
   provider: z.enum(["salla", "shopify", "zid"]).optional(),
   connectionId: z.string().uuid().optional(),
+})
+
+// Public, unauthenticated -- posted by the storefront capture snippet (tracking/snippet.ts),
+// not a signed-in user. siteKey (not organizationId) is the tenant identifier; see the
+// public_tracking_key column comment in migration 037.
+export const captureTrackingEventSchema = z.object({
+  siteKey: z.string().min(1).max(100),
+  visitorId: z.string().min(1).max(200),
+  sessionId: z.string().min(1).max(200),
+  pageUrl: z.string().url(),
+  referrerUrl: z.string().max(2000).nullable().optional(),
+  utmSource: z.string().max(200).nullable().optional(),
+  utmMedium: z.string().max(200).nullable().optional(),
+  utmCampaign: z.string().max(200).nullable().optional(),
+  utmContent: z.string().max(200).nullable().optional(),
+  utmTerm: z.string().max(200).nullable().optional(),
+  clickId: z.string().max(200).nullable().optional(),
+  clickIdPlatform: z.enum(CAMPAIGN_PLATFORM_VALUES).nullable().optional(),
+  platformCampaignId: z.string().max(200).nullable().optional(),
+  platformAdgroupId: z.string().max(200).nullable().optional(),
+  platformKeyword: z.string().max(200).nullable().optional(),
+  platformCreativeId: z.string().max(200).nullable().optional(),
+  customerEmail: z.string().email().nullable().optional(),
 })
 
 export const aggregateCampaignLinksSchema = z.object({

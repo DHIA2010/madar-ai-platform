@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { loadIdentityPlatformConfig, type IdentityPlatformConfig } from "../configuration"
 import { IdentityCommandHandlers } from "../application/handlers/command-handlers"
 import { IdentityQueryHandlers } from "../application/handlers/query-handlers"
-import type { Clock, UuidGenerator } from "../application/ports"
+import type { Clock, RateLimiter, UuidGenerator } from "../application/ports"
 import {
   createInMemoryRepositories,
   type InMemoryIdentityDataStore,
@@ -76,6 +76,7 @@ export interface IdentityPlatformContainer {
     integrations?: IntegrationProviderRegistry
     googleIdentityCredentialsProvider?: GoogleIdentityCredentialsProvider
     objectStorage?: S3ObjectStorageGateway
+    rateLimiter?: RateLimiter
   }
 }
 
@@ -105,6 +106,7 @@ export function createIdentityPlatformContainer(
     integrations.register(new ZidIntegrationProvider())
     integrations.register(new TikTokAdsIntegrationProvider())
     const repositories = createInMemoryRepositories(options.store)
+    const rateLimiter = new InMemoryRateLimiter()
     const commands = new IdentityCommandHandlers({
       config,
       repositories,
@@ -112,7 +114,7 @@ export function createIdentityPlatformContainer(
       uuid,
       hasher: new ScryptPasswordHasher(),
       tokenService,
-      rateLimiter: new InMemoryRateLimiter(),
+      rateLimiter,
       emailGateway: new InMemoryEmailGateway(),
       logger: new ConsoleLogger(),
       eventPublisher: new InMemoryEventPublisher(),
@@ -130,6 +132,7 @@ export function createIdentityPlatformContainer(
         featureFlags,
         integrations,
         googleIdentityCredentialsProvider: undefined,
+        rateLimiter,
       },
     }
   }
@@ -192,6 +195,7 @@ export function createIdentityPlatformContainer(
       })
     )
   )
+  const rateLimiter = new RedisRateLimiter(redis, config)
   const commands = new IdentityCommandHandlers({
     config,
     repositories,
@@ -199,7 +203,7 @@ export function createIdentityPlatformContainer(
     uuid,
     hasher: new ScryptPasswordHasher(),
     tokenService,
-    rateLimiter: new RedisRateLimiter(redis, config),
+    rateLimiter,
     emailGateway: config.resendApiKey
       ? new ResendEmailGateway(config)
       : new SmtpEmailGateway(config),
@@ -224,6 +228,7 @@ export function createIdentityPlatformContainer(
       integrations,
       googleIdentityCredentialsProvider,
       objectStorage,
+      rateLimiter,
     },
   }
 }

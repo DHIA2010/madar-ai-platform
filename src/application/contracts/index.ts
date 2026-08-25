@@ -104,6 +104,8 @@ export type {
   AuthGateway,
   AuthenticationRepository,
   AuthenticationGateway,
+  ClaimZidMarketplaceInstallResponseDto,
+  ZidMarketplaceInstallSummaryDto,
   AuthSessionDto,
   CurrentUserDto,
   AuthSessionViewModel,

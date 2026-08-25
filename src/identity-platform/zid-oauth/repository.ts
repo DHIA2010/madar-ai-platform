@@ -94,6 +94,49 @@ export class ZidOAuthRepository
     }
   }
 
+  // Used only by the marketplace-install claim flow -- the admin-initiated connect flow always
+  // requires a pre-existing project (resolveProject throws PROJECT_NOT_FOUND on none), but a
+  // brand-new merchant coming from Zid's App Market has never heard of a "project" and shouldn't
+  // be blocked on creating one manually. Falls back to inserting a minimal row (everything but
+  // id/organization_id/workspace_id/owner_user_id/name has a table default).
+  async resolveOrCreateDefaultProject(
+    organizationId: string,
+    workspaceId: string | null,
+    actorUserId: string
+  ) {
+    const existing = await this.db.query<{ id: string; workspace_id: string | null }>({
+      name: "zid-oauth-resolve-or-create-project-select",
+      text: `
+          SELECT p.id, p.workspace_id
+          FROM projects p
+          WHERE p.organization_id = $1
+            AND p.deleted_at IS NULL
+            AND p.status = 'active'
+            AND ($2::uuid IS NULL OR p.workspace_id = $2::uuid)
+          ORDER BY p.created_at DESC
+          LIMIT 1
+        `,
+      values: [organizationId, workspaceId],
+    })
+
+    const row = existing.rows[0]
+    if (row) {
+      return { projectId: String(row.id), workspaceId: (row.workspace_id as string | null) ?? null }
+    }
+
+    const projectId = randomUUID()
+    await this.db.query({
+      name: "zid-oauth-resolve-or-create-project-insert",
+      text: `
+        INSERT INTO projects (id, organization_id, workspace_id, owner_user_id, name)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      values: [projectId, organizationId, workspaceId, actorUserId, "Zid Store"],
+    })
+
+    return { projectId, workspaceId }
+  }
+
   async savePendingState(input: {
     id: string
     state: string
@@ -153,6 +196,96 @@ export class ZidOAuthRepository
           AND expires_at > $2::timestamptz
       `,
       values: [stateId, consumedAt],
+    })
+
+    return result.rowCount > 0
+  }
+
+  async saveMarketplaceInstall(input: {
+    id: string
+    claimTokenHash: string
+    zidStoreExternalId: string
+    zidStoreName: string | null
+    zidStoreCurrency: string | null
+    zidStoreTimezone: string | null
+    encryptedAccessToken: string
+    encryptedRefreshToken: string
+    scopes: string[]
+    tokenExpiresAt: string | null
+    expiresAt: string
+  }) {
+    await this.db.query({
+      name: "zid-marketplace-install-insert",
+      text: `
+        INSERT INTO zid_marketplace_installs (
+          id, claim_token_hash, status, zid_store_external_id, zid_store_name,
+          zid_store_currency, zid_store_timezone, encrypted_access_token,
+          encrypted_refresh_token, scopes, token_expires_at, expires_at
+        ) VALUES ($1,$2,'unclaimed',$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      `,
+      values: [
+        input.id,
+        input.claimTokenHash,
+        input.zidStoreExternalId,
+        input.zidStoreName,
+        input.zidStoreCurrency,
+        input.zidStoreTimezone,
+        input.encryptedAccessToken,
+        input.encryptedRefreshToken,
+        JSON.stringify(input.scopes),
+        input.tokenExpiresAt,
+        input.expiresAt,
+      ],
+    })
+  }
+
+  async findPendingInstallByTokenHash(tokenHash: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "zid-marketplace-install-find",
+      text: "SELECT * FROM zid_marketplace_installs WHERE claim_token_hash = $1 LIMIT 1",
+      values: [tokenHash],
+    })
+    return result.rows[0] ?? null
+  }
+
+  // One atomic UPDATE, not a separate consume-then-update -- unlike zid_oauth_states (which
+  // touches two different tables), here it's the same row being both consumed and filled with
+  // claim context. Caller must check the returned boolean and treat false as an error (already
+  // claimed/expired/replayed), not a silent no-op -- this is the single-use guarantee.
+  async claimInstallRow(input: {
+    installId: string
+    claimedByUserId: string
+    claimedOrganizationId: string
+    claimedWorkspaceId: string | null
+    claimedProjectId: string
+    claimedConnectionId: string
+    now: string
+  }) {
+    const result = await this.db.query({
+      name: "zid-marketplace-install-claim",
+      text: `
+        UPDATE zid_marketplace_installs
+        SET status = 'claimed',
+            claimed_at = $2,
+            claimed_by_user_id = $3,
+            claimed_organization_id = $4,
+            claimed_workspace_id = $5,
+            claimed_project_id = $6,
+            claimed_connection_id = $7,
+            updated_at = $2
+        WHERE id = $1
+          AND status = 'unclaimed'
+          AND expires_at > $2::timestamptz
+      `,
+      values: [
+        input.installId,
+        input.now,
+        input.claimedByUserId,
+        input.claimedOrganizationId,
+        input.claimedWorkspaceId,
+        input.claimedProjectId,
+        input.claimedConnectionId,
+      ],
     })
 
     return result.rowCount > 0

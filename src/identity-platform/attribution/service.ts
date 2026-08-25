@@ -1,14 +1,8 @@
-import { createHash } from "node:crypto"
-
 import type { CampaignLinkRepository } from "../campaign-links/repository"
+import { hashCustomerEmail } from "../tracking/customer-ref"
 
 import type { AttributionRepository } from "./repository"
 import type { CandidateOrder, MatchMethod, MatchOrdersResult, OrderProvider } from "./types"
-
-function hashCustomerEmail(email: string | null): string | null {
-  if (!email) return null
-  return createHash("sha256").update(email.trim().toLowerCase()).digest("hex")
-}
 
 interface MatchResult {
   matchMethod: MatchMethod

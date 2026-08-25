@@ -31,6 +31,8 @@ function getWorkspaceIdFromStorage(): string | null {
 
 export type TrackingType = "FULL_URL" | "SHORT_LINK"
 
+export type CampaignPlatform = "google_ads" | "meta_ads" | "snapchat_ads" | "tiktok_ads"
+
 export interface CampaignLinkRecord {
   id: string
   organizationId: string
@@ -49,6 +51,7 @@ export interface CampaignLinkRecord {
   utmTerm: string | null
   adGroupName: string | null
   adName: string | null
+  platform: CampaignPlatform | null
   customParams: Record<string, string>
   enabled: boolean
   createdAt: string
@@ -115,6 +118,7 @@ export interface CampaignLinkFormInput {
   utmTerm?: string
   adGroupName?: string
   adName?: string
+  platform?: CampaignPlatform | null
   customParams?: Record<string, string>
 }
 

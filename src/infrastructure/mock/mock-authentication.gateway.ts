@@ -3,6 +3,8 @@ import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
+  ClaimZidMarketplaceInstallResponseDto,
+  ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -235,6 +237,32 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
     }
 
     return { success: true }
+  }
+
+  async claimZidMarketplaceInstall(
+    claimToken: string
+  ): Promise<ClaimZidMarketplaceInstallResponseDto> {
+    if (!claimToken) {
+      throw new ValidationError({
+        code: "zid_install_claim_token_required",
+        message: "Claim token is required.",
+      })
+    }
+
+    return { connectionId: "mock_zid_connection", status: "connected" }
+  }
+
+  async getZidMarketplaceInstallSummary(
+    claimToken: string
+  ): Promise<ZidMarketplaceInstallSummaryDto> {
+    if (!claimToken) {
+      throw new ValidationError({
+        code: "zid_install_claim_token_required",
+        message: "Claim token is required.",
+      })
+    }
+
+    return { storeName: "Mock Zid Store", currency: "SAR", status: "unclaimed" }
   }
 
   async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {

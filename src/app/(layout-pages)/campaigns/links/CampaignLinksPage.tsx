@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Calendar,
   Check,
+  Code2,
   Download,
   Filter,
   Link2,
@@ -32,6 +33,7 @@ import { CampaignLinkForm } from "@/features/campaign-links/components/campaign-
 import { CampaignLinkDetailPanel } from "@/features/campaign-links/components/campaign-link-detail-panel"
 import { CampaignLinkEditDialog } from "@/features/campaign-links/components/campaign-link-edit-dialog"
 import { CampaignLinksTable } from "@/features/campaign-links/components/campaign-links-table"
+import { TrackingSnippetDialog } from "@/features/campaign-links/components/tracking-snippet-dialog"
 import {
   IconBadge,
   type IconBadgeTone,
@@ -189,6 +191,7 @@ export default function CampaignLinksPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isSnippetOpen, setIsSnippetOpen] = useState(false)
   const [detailRow, setDetailRow] = useState<CampaignLinkSummaryRecord | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [editingRow, setEditingRow] = useState<CampaignLinkSummaryRecord | null>(null)
@@ -339,15 +342,25 @@ export default function CampaignLinksPage() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsCreateOpen(true)}
-          disabled={campaigns.length === 0 && !isLoading}
-          className="flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-[#4F46E5] px-5 text-sm font-medium text-white transition-colors hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus className="size-4" />
-          إنشاء رابط جديد
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSnippetOpen(true)}
+            className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium text-[#334155] shadow-[0_1px_2px_0_rgba(15,23,42,0.05)] transition-colors hover:bg-[#F8FAFC]"
+          >
+            <Code2 className="size-4" />
+            تثبيت سنيبت التتبع
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            disabled={campaigns.length === 0 && !isLoading}
+            className="flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-[#4F46E5] px-5 text-sm font-medium text-white transition-colors hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="size-4" />
+            إنشاء رابط جديد
+          </button>
+        </div>
       </div>
 
       {selectedRow ? (
@@ -550,6 +563,8 @@ export default function CampaignLinksPage() {
           </div>
         </div>
       </AppDialog>
+
+      <TrackingSnippetDialog open={isSnippetOpen} onOpenChange={setIsSnippetOpen} />
 
       <CampaignLinkDetailPanel
         link={detailRow}

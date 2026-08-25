@@ -71,6 +71,17 @@ export interface AcceptInvitationResponseDto {
   membershipId?: string
 }
 
+export interface ClaimZidMarketplaceInstallResponseDto {
+  connectionId: string
+  status: string
+}
+
+export interface ZidMarketplaceInstallSummaryDto {
+  storeName: string
+  currency: string | null
+  status: string
+}
+
 export interface LoginResponseDto {
   user: AuthUserDto
   session: AuthSessionDto
@@ -94,6 +105,8 @@ export interface AuthenticationRepository {
   resetPassword(payload: ResetPasswordRequestDto): Promise<void>
   verifyEmail(payload: VerifyEmailRequestDto): Promise<void>
   acceptInvitation(token: string): Promise<AcceptInvitationResponseDto>
+  claimZidMarketplaceInstall(claimToken: string): Promise<ClaimZidMarketplaceInstallResponseDto>
+  getZidMarketplaceInstallSummary(claimToken: string): Promise<ZidMarketplaceInstallSummaryDto>
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto>
   uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto>
   removeAvatar(): Promise<AuthUserDto>

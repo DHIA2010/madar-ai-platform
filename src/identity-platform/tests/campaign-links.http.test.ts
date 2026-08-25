@@ -158,6 +158,83 @@ describe("campaign links", () => {
     expect(getResponse.status).toBe(200)
   })
 
+  it("appends Google Ads macros to shortUrl (not finalUrl) for a SHORT_LINK, with literal unescaped braces", async () => {
+    const { accessToken } = await registerAndProvisionOrg(
+      "owner@link-macro-short.madar",
+      "Link Macro Short Org"
+    )
+    const campaign = await createCampaign(baseUrl, accessToken, "Search Push")
+
+    const createResponse = await fetch(`${baseUrl}/v1/campaign-links`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        campaignId: campaign.id,
+        name: "Google Search Ad",
+        trackingType: "SHORT_LINK",
+        destinationBaseUrl: "https://shop.example.com/search-push",
+        utmSource: "google",
+        utmMedium: "cpc",
+        utmCampaign: "search-push",
+        platform: "google_ads",
+      }),
+    })
+    expect(createResponse.status).toBe(201)
+    const link = (await createResponse.json()) as {
+      displayId: string
+      shortUrl: string | null
+      finalUrl: string
+      platform: string | null
+    }
+
+    expect(link.platform).toBe("google_ads")
+    // finalUrl is the post-redirect landing page -- macros are meaningless there for a
+    // SHORT_LINK, so it must stay exactly what appendUtmToUrl produces, no macro fragment.
+    expect(link.finalUrl).toBe(
+      "https://shop.example.com/search-push?utm_source=google&utm_medium=cpc&utm_campaign=search-push"
+    )
+    // shortUrl is what actually gets pasted into the ad -- macros belong there, as literal
+    // unescaped tokens (not percent-encoded, which would silently break platform substitution).
+    expect(link.shortUrl).toBe(
+      `https://localhost:3000/m/${link.displayId}?gclid={gclid}&madar_ad_campaign_id={campaignid}&madar_ad_adgroup_id={adgroupid}&madar_ad_keyword={keyword}&madar_ad_creative_id={creative}`
+    )
+  })
+
+  it("appends TikTok macros to finalUrl (not shortUrl) for a FULL_URL link", async () => {
+    const { accessToken } = await registerAndProvisionOrg(
+      "owner@link-macro-full.madar",
+      "Link Macro Full Org"
+    )
+    const campaign = await createCampaign(baseUrl, accessToken, "TikTok Push")
+
+    const createResponse = await fetch(`${baseUrl}/v1/campaign-links`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        campaignId: campaign.id,
+        name: "TikTok In-Feed Ad",
+        trackingType: "FULL_URL",
+        destinationBaseUrl: "https://shop.example.com/tiktok-push",
+        utmSource: "tiktok",
+        utmMedium: "paid-social",
+        utmCampaign: "tiktok-push",
+        platform: "tiktok_ads",
+      }),
+    })
+    expect(createResponse.status).toBe(201)
+    const link = (await createResponse.json()) as {
+      shortUrl: string | null
+      finalUrl: string
+    }
+
+    expect(link.shortUrl).toBeNull()
+    // No TikTok ad-group macro exists -- madar_ad_adgroup_id/madar_ad_keyword must be absent,
+    // not filled with a placeholder.
+    expect(link.finalUrl).toBe(
+      "https://shop.example.com/tiktok-push?utm_source=tiktok&utm_medium=paid-social&utm_campaign=tiktok-push&madar_ad_campaign_id=__CAMPAIGN_ID__&madar_ad_creative_id=__CID__"
+    )
+  })
+
   it("does not persist anything from a preview call", async () => {
     const { accessToken } = await registerAndProvisionOrg(
       "owner@link-preview.madar",

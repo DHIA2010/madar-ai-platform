@@ -1,6 +1,7 @@
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { writeAuditLog } from "../infrastructure/postgres/audit-log-writer"
+import { appendRawFragment, buildPlatformMacroFragment } from "../tracking/platform-macros"
 import { appendUtmToUrl, normalizeUtmValue } from "../tracking/utm"
 
 import type { CampaignRepository } from "../campaigns/repository"
@@ -59,7 +60,16 @@ export class CampaignLinkService {
   // final destination URL) without consuming the display-id sequence or writing any row.
   preview(input: CreateCampaignLinkInput): CampaignLinkPreview {
     const utm = normalizedUtm(input)
-    const finalUrl = appendUtmToUrl(input.destinationBaseUrl, utm)
+    const macroFragment = buildPlatformMacroFragment(input.platform ?? null)
+    const baseFinalUrl = appendUtmToUrl(input.destinationBaseUrl, utm)
+    // FULL_URL links are pasted straight into the ad with no redirect through us, so platform
+    // macros append directly to finalUrl. SHORT_LINK links are pasted as the /m/:displayId URL
+    // instead -- finalUrl there is only the post-redirect landing page, so it stays macro-free
+    // (see create()'s shortUrl construction for where SHORT_LINK macros actually go).
+    const finalUrl =
+      input.trackingType === "FULL_URL"
+        ? appendRawFragment(baseFinalUrl, macroFragment)
+        : baseFinalUrl
     return {
       finalUrl,
       shortUrl: null,
@@ -83,10 +93,18 @@ export class CampaignLinkService {
     if (!campaign) throw CAMPAIGN_LINK_ERRORS.campaignNotFound()
 
     const utm = normalizedUtm(input)
-    const finalUrl = appendUtmToUrl(input.destinationBaseUrl, utm)
+    const platform = input.platform ?? null
+    const macroFragment = buildPlatformMacroFragment(platform)
+    const baseFinalUrl = appendUtmToUrl(input.destinationBaseUrl, utm)
+    const finalUrl =
+      input.trackingType === "FULL_URL"
+        ? appendRawFragment(baseFinalUrl, macroFragment)
+        : baseFinalUrl
     const displayId = await this.repository.nextDisplayId()
     const shortUrl =
-      input.trackingType === "SHORT_LINK" ? `${this.shortLinkBaseUrl}/m/${displayId}` : null
+      input.trackingType === "SHORT_LINK"
+        ? appendRawFragment(`${this.shortLinkBaseUrl}/m/${displayId}`, macroFragment)
+        : null
 
     const link = await this.repository.create({
       organizationId,
@@ -105,6 +123,7 @@ export class CampaignLinkService {
       utmTerm: utm.utm_term,
       adGroupName: input.adGroupName ?? null,
       adName: input.adName ?? null,
+      platform,
       customParams: input.customParams ?? {},
       createdBy: actorUserId,
     })

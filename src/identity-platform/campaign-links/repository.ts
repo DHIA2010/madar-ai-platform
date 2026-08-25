@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
+import type { CampaignPlatform } from "../campaigns/types"
+
 import type { CampaignLinkView, TrackingType } from "./types"
 
 function toIso(value: unknown): string | null {
@@ -28,6 +30,7 @@ interface CampaignLinkRow {
   utm_term: string | null
   ad_group_name: string | null
   ad_name: string | null
+  platform: string | null
   custom_params: unknown
   enabled: boolean
   created_by: string | null
@@ -55,6 +58,7 @@ function mapCampaignLink(row: CampaignLinkRow): CampaignLinkView {
     utmTerm: row.utm_term,
     adGroupName: row.ad_group_name,
     adName: row.ad_name,
+    platform: row.platform as CampaignPlatform | null,
     customParams:
       row.custom_params && typeof row.custom_params === "object"
         ? (row.custom_params as Record<string, string>)
@@ -69,7 +73,7 @@ function mapCampaignLink(row: CampaignLinkRow): CampaignLinkView {
 const CAMPAIGN_LINK_SELECT = `
   SELECT id, organization_id, workspace_id, campaign_id, display_id, name, tracking_type,
     destination_base_url, final_url, short_url, utm_source, utm_medium, utm_campaign,
-    utm_content, utm_term, ad_group_name, ad_name, custom_params, enabled, created_by,
+    utm_content, utm_term, ad_group_name, ad_name, platform, custom_params, enabled, created_by,
     created_at, updated_at
   FROM campaign_links
 `
@@ -90,6 +94,7 @@ export interface CreateCampaignLinkRow {
   utmTerm: string | null
   adGroupName: string | null
   adName: string | null
+  platform: CampaignPlatform | null
   customParams: Record<string, string>
   createdBy: string | null
 }
@@ -140,12 +145,12 @@ export class CampaignLinkRepository {
       `INSERT INTO campaign_links (
          id, organization_id, workspace_id, campaign_id, display_id, name, tracking_type,
          destination_base_url, final_url, short_url, utm_source, utm_medium, utm_campaign,
-         utm_content, utm_term, ad_group_name, ad_name, custom_params, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         utm_content, utm_term, ad_group_name, ad_name, platform, custom_params, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        RETURNING id, organization_id, workspace_id, campaign_id, display_id, name, tracking_type,
          destination_base_url, final_url, short_url, utm_source, utm_medium, utm_campaign,
-         utm_content, utm_term, ad_group_name, ad_name, custom_params, enabled, created_by,
-         created_at, updated_at`,
+         utm_content, utm_term, ad_group_name, ad_name, platform, custom_params, enabled,
+         created_by, created_at, updated_at`,
       [
         id,
         input.organizationId,
@@ -164,6 +169,7 @@ export class CampaignLinkRepository {
         input.utmTerm,
         input.adGroupName,
         input.adName,
+        input.platform,
         JSON.stringify(input.customParams),
         input.createdBy,
       ]
@@ -186,8 +192,8 @@ export class CampaignLinkRepository {
        WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
        RETURNING id, organization_id, workspace_id, campaign_id, display_id, name, tracking_type,
          destination_base_url, final_url, short_url, utm_source, utm_medium, utm_campaign,
-         utm_content, utm_term, ad_group_name, ad_name, custom_params, enabled, created_by,
-         created_at, updated_at`,
+         utm_content, utm_term, ad_group_name, ad_name, platform, custom_params, enabled,
+         created_by, created_at, updated_at`,
       [
         organizationId,
         id,
@@ -208,8 +214,8 @@ export class CampaignLinkRepository {
        WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
        RETURNING id, organization_id, workspace_id, campaign_id, display_id, name, tracking_type,
          destination_base_url, final_url, short_url, utm_source, utm_medium, utm_campaign,
-         utm_content, utm_term, ad_group_name, ad_name, custom_params, enabled, created_by,
-         created_at, updated_at`,
+         utm_content, utm_term, ad_group_name, ad_name, platform, custom_params, enabled,
+         created_by, created_at, updated_at`,
       [organizationId, id, enabled]
     )
     return result.rows[0] ? mapCampaignLink(result.rows[0]) : null

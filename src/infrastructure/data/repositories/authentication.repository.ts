@@ -3,6 +3,8 @@ import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
+  ClaimZidMarketplaceInstallResponseDto,
+  ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -154,6 +156,36 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
       }
 
       return await this.adapter.acceptInvitation(token)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async claimZidMarketplaceInstall(
+    claimToken: string
+  ): Promise<ClaimZidMarketplaceInstallResponseDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.claimZidMarketplaceInstall(claimToken)
+      }
+
+      return await this.adapter.claimZidMarketplaceInstall(claimToken)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async getZidMarketplaceInstallSummary(
+    claimToken: string
+  ): Promise<ZidMarketplaceInstallSummaryDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.getZidMarketplaceInstallSummary(claimToken)
+      }
+
+      return await this.adapter.getZidMarketplaceInstallSummary(claimToken)
     } catch (error) {
       throw mapAuthenticationRepositoryError(error)
     }
