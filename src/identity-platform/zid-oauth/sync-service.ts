@@ -121,6 +121,7 @@ async function fetchAllMerchantListPages<T>(input: {
   pageSize: number
   accessToken: string
   authorizationHeader: string
+  extraParams?: Record<string, string>
 }): Promise<T[]> {
   const results: T[] = []
   let page = 1
@@ -129,6 +130,9 @@ async function fetchAllMerchantListPages<T>(input: {
     const url = new URL(`${input.apiBaseUrl.replace(/\/$/, "")}${input.path}`)
     url.searchParams.set("page", String(page))
     url.searchParams.set("per_page", String(input.pageSize))
+    for (const [key, value] of Object.entries(input.extraParams ?? {})) {
+      url.searchParams.set(key, value)
+    }
 
     const response = await fetch(url.toString(), {
       headers: {
@@ -267,6 +271,10 @@ export class ZidSyncService {
           pageSize: ORDERS_PAGE_SIZE,
           accessToken,
           authorizationHeader,
+          // Zid's orders list defaults to payload_type=simple, which omits each order's
+          // `products` line items entirely (docs.zid.sa/list-of-orders) -- default is required
+          // for the Orders page's per-order product count/detail to have any data to read.
+          extraParams: { payload_type: "default" },
         }),
         fetchAllMerchantListPages<ZidCustomerApiRow>({
           apiBaseUrl: this.apiBaseUrl,
