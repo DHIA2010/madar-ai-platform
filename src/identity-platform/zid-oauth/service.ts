@@ -483,6 +483,7 @@ export class ZidOAuthService {
       providerAccountEmail: null,
       encryptedRefreshToken: existingConnection ? null : null,
       encryptedAccessToken: existingConnection ? null : null,
+      encryptedAuthorizationToken: existingConnection ? null : null,
       scopes: config.scopes,
       tokenExpiresAt: null,
       status: "pending",
@@ -614,6 +615,9 @@ export class ZidOAuthService {
         providerAccountEmail: null,
         encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
         encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
+        encryptedAuthorizationToken: token.authorization
+          ? encryptSecret(token.authorization, config.tokenEncryptionKey)
+          : null,
         scopes: effectiveScopes,
         tokenExpiresAt: token.expires_in
           ? new Date(Date.now() + token.expires_in * 1000).toISOString()
@@ -700,6 +704,9 @@ export class ZidOAuthService {
       zidStoreTimezone: store.timezone ?? null,
       encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
       encryptedRefreshToken: encryptSecret(token.refresh_token, config.tokenEncryptionKey),
+      encryptedAuthorizationToken: token.authorization
+        ? encryptSecret(token.authorization, config.tokenEncryptionKey)
+        : null,
       scopes: effectiveScopes,
       tokenExpiresAt: token.expires_in
         ? new Date(Date.now() + token.expires_in * 1000).toISOString()
@@ -785,6 +792,7 @@ export class ZidOAuthService {
         providerAccountEmail: null,
         encryptedRefreshToken: row.encrypted_refresh_token as string,
         encryptedAccessToken: row.encrypted_access_token as string,
+        encryptedAuthorizationToken: (row.encrypted_authorization_token as string | null) ?? null,
         scopes,
         tokenExpiresAt: row.token_expires_at
           ? new Date(row.token_expires_at as string | number | Date).toISOString()
@@ -916,7 +924,20 @@ export class ZidOAuthService {
     if (tokenMaterial.tokenExpiresAt) {
       const expiresAt = new Date(tokenMaterial.tokenExpiresAt).getTime()
       if (!Number.isNaN(expiresAt) && expiresAt > Date.now() + 30_000) {
-        return decryptSecret(tokenMaterial.encryptedAccessToken, config.tokenEncryptionKey)
+        const accessToken = decryptSecret(
+          tokenMaterial.encryptedAccessToken,
+          config.tokenEncryptionKey
+        )
+        const authorization = tokenMaterial.encryptedAuthorizationToken
+          ? decryptSecret(tokenMaterial.encryptedAuthorizationToken, config.tokenEncryptionKey)
+          : undefined
+        return {
+          accessToken,
+          authorizationHeader: buildAuthorizationHeader({
+            access_token: accessToken,
+            authorization,
+          }),
+        }
       }
     }
 
@@ -939,13 +960,24 @@ export class ZidOAuthService {
       connectionId,
       encryptedRefreshToken: encryptSecret(nextRefreshToken, config.tokenEncryptionKey),
       encryptedAccessToken: encryptSecret(refreshed.access_token, config.tokenEncryptionKey),
+      // Zid's refresh response may or may not include a fresh `authorization` value the same
+      // way the initial token exchange does -- persist it when present so later calls keep
+      // using the correct credential; if absent, this deliberately clears the stale one rather
+      // than keeping an authorization value paired with an access_token it was never issued
+      // alongside.
+      encryptedAuthorizationToken: refreshed.authorization
+        ? encryptSecret(refreshed.authorization, config.tokenEncryptionKey)
+        : null,
       tokenExpiresAt: refreshed.expires_in
         ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
         : null,
       scopes: refreshedScopes.length > 0 ? refreshedScopes : config.scopes,
     })
 
-    return refreshed.access_token
+    return {
+      accessToken: refreshed.access_token,
+      authorizationHeader: buildAuthorizationHeader(refreshed),
+    }
   }
 
   private async findOwnedConnectionOrThrow(actor: AuthenticatedActor, connectionId: string) {

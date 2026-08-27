@@ -210,6 +210,7 @@ export class ZidOAuthRepository
     zidStoreTimezone: string | null
     encryptedAccessToken: string
     encryptedRefreshToken: string
+    encryptedAuthorizationToken: string | null
     scopes: string[]
     tokenExpiresAt: string | null
     expiresAt: string
@@ -220,8 +221,9 @@ export class ZidOAuthRepository
         INSERT INTO zid_marketplace_installs (
           id, claim_token_hash, status, zid_store_external_id, zid_store_name,
           zid_store_currency, zid_store_timezone, encrypted_access_token,
-          encrypted_refresh_token, scopes, token_expires_at, expires_at
-        ) VALUES ($1,$2,'unclaimed',$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          encrypted_refresh_token, encrypted_authorization_token, scopes, token_expires_at,
+          expires_at
+        ) VALUES ($1,$2,'unclaimed',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       `,
       values: [
         input.id,
@@ -232,6 +234,7 @@ export class ZidOAuthRepository
         input.zidStoreTimezone,
         input.encryptedAccessToken,
         input.encryptedRefreshToken,
+        input.encryptedAuthorizationToken,
         JSON.stringify(input.scopes),
         input.tokenExpiresAt,
         input.expiresAt,
@@ -302,6 +305,7 @@ export class ZidOAuthRepository
     providerAccountEmail: string | null
     encryptedRefreshToken: string | null
     encryptedAccessToken: string | null
+    encryptedAuthorizationToken: string | null
     scopes: string[]
     tokenExpiresAt: string | null
     status: "pending" | "connected" | "disconnected" | "error"
@@ -317,11 +321,11 @@ export class ZidOAuthRepository
         INSERT INTO zid_oauth_connections (
           id, organization_id, workspace_id, project_id, data_source_id,
           provider_account_id, provider_account_name, provider_account_email,
-          encrypted_refresh_token, encrypted_access_token, scopes, token_expires_at,
-          status, connection_reference, last_connected_at, last_disconnected_at,
-          created_by_user_id, updated_by_user_id, created_at, updated_at
+          encrypted_refresh_token, encrypted_access_token, encrypted_authorization_token,
+          scopes, token_expires_at, status, connection_reference, last_connected_at,
+          last_disconnected_at, created_by_user_id, updated_by_user_id, created_at, updated_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17,$18,$18
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18,$19,$19
         )
         ON CONFLICT (id) DO UPDATE SET
           organization_id = EXCLUDED.organization_id,
@@ -333,6 +337,7 @@ export class ZidOAuthRepository
           provider_account_email = EXCLUDED.provider_account_email,
           encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
           encrypted_access_token = EXCLUDED.encrypted_access_token,
+          encrypted_authorization_token = EXCLUDED.encrypted_authorization_token,
           scopes = EXCLUDED.scopes,
           token_expires_at = EXCLUDED.token_expires_at,
           status = EXCLUDED.status,
@@ -353,6 +358,7 @@ export class ZidOAuthRepository
         input.providerAccountEmail,
         input.encryptedRefreshToken,
         input.encryptedAccessToken,
+        input.encryptedAuthorizationToken,
         JSON.stringify(input.scopes),
         input.tokenExpiresAt,
         input.status,
@@ -740,11 +746,13 @@ export class ZidOAuthRepository
     const result = await this.db.query<{
       encrypted_access_token: string | null
       encrypted_refresh_token: string | null
+      encrypted_authorization_token: string | null
       token_expires_at: Date | string | null
     }>({
       name: "zid-oauth-token-material-find",
       text: `
-        SELECT encrypted_access_token, encrypted_refresh_token, token_expires_at
+        SELECT encrypted_access_token, encrypted_refresh_token, encrypted_authorization_token,
+          token_expires_at
         FROM zid_oauth_connections
         WHERE id = $1
           AND deleted_at IS NULL
@@ -757,6 +765,7 @@ export class ZidOAuthRepository
       ? {
           encryptedAccessToken: result.rows[0].encrypted_access_token,
           encryptedRefreshToken: result.rows[0].encrypted_refresh_token,
+          encryptedAuthorizationToken: result.rows[0].encrypted_authorization_token,
           tokenExpiresAt: toIso(result.rows[0].token_expires_at),
         }
       : null
@@ -766,6 +775,7 @@ export class ZidOAuthRepository
     connectionId: string
     encryptedAccessToken: string
     encryptedRefreshToken: string
+    encryptedAuthorizationToken: string | null
     tokenExpiresAt: string | null
     scopes: string[]
   }) {
@@ -775,8 +785,9 @@ export class ZidOAuthRepository
         UPDATE zid_oauth_connections
         SET encrypted_access_token = $2,
             encrypted_refresh_token = $3,
-            token_expires_at = $4,
-            scopes = $5,
+            encrypted_authorization_token = $4,
+            token_expires_at = $5,
+            scopes = $6,
             status = 'connected',
             updated_at = now()
         WHERE id = $1
@@ -786,6 +797,7 @@ export class ZidOAuthRepository
         input.connectionId,
         input.encryptedAccessToken,
         input.encryptedRefreshToken,
+        input.encryptedAuthorizationToken,
         input.tokenExpiresAt,
         JSON.stringify(input.scopes),
       ],

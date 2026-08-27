@@ -107,16 +107,20 @@ async function fetchAllProducts(input: {
   return results
 }
 
-// Orders and Customers share the Merchant API's auth (Authorization Bearer +
-// X-Manager-Token, both carrying the same access_token -- confirmed "used interchangeably"
-// in Zid's docs) and the same page/per_page pagination shape, differing only in the
-// response's list key ("orders" vs "customers") and count field name.
+// Orders and Customers share the Merchant API's auth (Authorization + X-Manager-Token) and
+// the same page/per_page pagination shape, differing only in the response's list key ("orders"
+// vs "customers") and count field name. X-Manager-Token is always the raw access_token per
+// docs.zid.sa/authorization; the Authorization header is resolved by
+// ZidOAuthService.resolveAccessToken (Bearer-prefixed, preferring Zid's own distinct
+// `authorization` token-response field over access_token when present -- confirmed on stage
+// that using access_token alone here 401s even though it works fine for X-Manager-Token).
 async function fetchAllMerchantListPages<T>(input: {
   apiBaseUrl: string
   path: string
   listKey: "orders" | "customers"
   pageSize: number
   accessToken: string
+  authorizationHeader: string
 }): Promise<T[]> {
   const results: T[] = []
   let page = 1
@@ -128,13 +132,20 @@ async function fetchAllMerchantListPages<T>(input: {
 
     const response = await fetch(url.toString(), {
       headers: {
-        authorization: `Bearer ${input.accessToken}`,
+        authorization: input.authorizationHeader,
         "x-manager-token": input.accessToken,
         accept: "application/json",
       },
     })
 
     if (!response.ok) {
+      const bodyText = await response.text().catch(() => "")
+      console.error("zid_sync.merchant_list_request_failed", {
+        path: input.path,
+        status: response.status,
+        statusText: response.statusText,
+        body: bodyText.slice(0, 500),
+      })
       throw new IntegrationProviderError(
         "Zid API request failed during sync.",
         "ZID_SYNC_API_REQUEST_FAILED",
@@ -239,7 +250,9 @@ export class ZidSyncService {
     await this.syncRepository.markSyncRunRunning(syncRun.id, actor.userId)
 
     try {
-      const accessToken = await this.oauthService.resolveAccessToken(connection.id)
+      const { accessToken, authorizationHeader } = await this.oauthService.resolveAccessToken(
+        connection.id
+      )
 
       const [products, orders, customers] = await Promise.all([
         fetchAllProducts({
@@ -253,6 +266,7 @@ export class ZidSyncService {
           listKey: "orders",
           pageSize: ORDERS_PAGE_SIZE,
           accessToken,
+          authorizationHeader,
         }),
         fetchAllMerchantListPages<ZidCustomerApiRow>({
           apiBaseUrl: this.apiBaseUrl,
@@ -260,6 +274,7 @@ export class ZidSyncService {
           listKey: "customers",
           pageSize: CUSTOMERS_PAGE_SIZE,
           accessToken,
+          authorizationHeader,
         }),
       ])
 
