@@ -34,22 +34,28 @@ interface ZidTokenResponse {
   expires_in?: number
   scope?: string
   token_type?: string
-  // Zid's own docs (docs.zid.sa/authorization) list this as a distinct field on the token
-  // response, separate from access_token -- unconfirmed whether it's actually present/what
-  // format it's in (the docs are inconsistent on this), so buildAuthorizationHeader() below
-  // prefers it when present but falls back to the standard `Bearer ${access_token}` otherwise.
+  // Confirmed present on stage's real token response (2026-08-27): a genuinely distinct,
+  // differently-shaped credential from access_token (1759 vs 484 chars, JWT-shaped header vs
+  // not) -- Zid's docs (docs.zid.sa/authorization) list it as the value meant for the
+  // Authorization header, separate from access_token (which X-Manager-Token uses instead).
   authorization?: string
 }
 
 // Per docs.zid.sa/authorization: "pass the content of access_token under the name
-// X-Manager-Token, and Authorization for every request" -- X-Manager-Token is always the raw
-// access_token value; the Authorization header is `Bearer ${access_token}` unless Zid's
-// response supplied its own pre-formatted `authorization` field, which takes precedence.
+// X-Manager-Token, and Authorization for every request", with the docs' own sample cURL
+// showing `Authorization: Bearer <token>` -- X-Manager-Token is always the raw access_token
+// value; Authorization is always `Bearer ${...}`, using the response's own `authorization`
+// field when present (confirmed present and distinct from access_token on stage) since that's
+// the credential Zid's docs associate with this header, falling back to access_token otherwise.
+// A prior version of this function returned token.authorization bare, with no "Bearer " prefix
+// -- confirmed via a live stage attempt (2026-08-27) that this still 401s: the field is the raw
+// token value, not a pre-formatted header, and needs the same prefix as access_token would.
 function buildAuthorizationHeader(token: ZidTokenResponse): string {
-  if (token.authorization && token.authorization.trim().length > 0) {
-    return token.authorization
-  }
-  return `Bearer ${token.access_token}`
+  const value =
+    token.authorization && token.authorization.trim().length > 0
+      ? token.authorization
+      : token.access_token
+  return `Bearer ${value}`
 }
 
 // Confirmed against Zid's official docs (docs.zid.sa/get-manager-profile): the manager
