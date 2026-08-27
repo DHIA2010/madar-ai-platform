@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { EllipsisVertical, Pause, Play, RefreshCcw, RotateCcw, Trash2, Unplug } from "lucide-react"
 
 import {
@@ -48,6 +49,8 @@ export function ConnectionActionsMenu({
   menuLabel,
   onActionSelect,
 }: ConnectionActionsMenuProps) {
+  const [open, setOpen] = useState(false)
+
   if (actions.length === 0) {
     return null
   }
@@ -56,7 +59,7 @@ export function ConnectionActionsMenu({
   const destructiveActions = actions.filter((action) => action.destructive)
 
   return (
-    <AppDropdownMenu>
+    <AppDropdownMenu open={open} onOpenChange={setOpen}>
       <AppDropdownMenuTrigger asChild>
         <AppButton
           size="sm"
@@ -73,7 +76,14 @@ export function ConnectionActionsMenu({
             key={action.id}
             disabled={!action.enabled}
             onSelect={(event) => {
+              // preventDefault stops Radix from returning focus to the trigger before the
+              // confirm dialog (rendered outside this dropdown) can open; closing the menu
+              // explicitly via setOpen(false) below is what actually releases Radix's
+              // disableOutsidePointerEvents lock on <body> -- without it, preventDefault alone
+              // leaves this modal layer permanently "open" and the whole page stays unclickable
+              // until a refresh.
               event.preventDefault()
+              setOpen(false)
               if (action.enabled) {
                 onActionSelect(action)
               }
@@ -92,7 +102,14 @@ export function ConnectionActionsMenu({
             className="text-red-600 focus:text-red-700"
             disabled={!action.enabled}
             onSelect={(event) => {
+              // preventDefault stops Radix from returning focus to the trigger before the
+              // confirm dialog (rendered outside this dropdown) can open; closing the menu
+              // explicitly via setOpen(false) below is what actually releases Radix's
+              // disableOutsidePointerEvents lock on <body> -- without it, preventDefault alone
+              // leaves this modal layer permanently "open" and the whole page stays unclickable
+              // until a refresh.
               event.preventDefault()
+              setOpen(false)
               if (action.enabled) {
                 onActionSelect(action)
               }
