@@ -70,6 +70,11 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch
   onError?: (error: AppError, request: PreparedRequest) => void
   onResponse?: (context: ResponseInterceptorContext) => void
+  // Called once when a request comes back 401, before it's surfaced as a failure -- e.g. to
+  // refresh an expired access token. Resolving true retries the original request exactly once
+  // (picking up whatever getAuthHeaders() returns after the refresh); false or a rejection
+  // surfaces the original 401 as normal.
+  onUnauthorized?: () => Promise<boolean>
 }
 
 export interface ApiClient {
@@ -301,12 +306,15 @@ async function createPreparedRequest<TBody>(
   return { prepared, init: { ...init, cache: "no-store" }, timeoutId: timeout }
 }
 
-async function executeRequest<TResponse>(
-  request: ApiRequestOptions,
+type RequestOutcome<TResponse> =
+  | { ok: true; data: TResponse }
+  | { ok: false; error: AppError; status?: number }
+
+async function attemptRequest<TResponse>(
+  prepared: PreparedRequest,
+  init: RequestInit,
   options: ApiClientOptions
-): Promise<TResponse> {
-  const normalizedRequest = await normalizeRequest(request, options)
-  const { prepared, init, timeoutId } = await createPreparedRequest(normalizedRequest, options)
+): Promise<RequestOutcome<TResponse>> {
   const fetchImpl = options.fetchImpl ?? fetch
 
   try {
@@ -330,19 +338,46 @@ async function executeRequest<TResponse>(
     options.onResponse?.(responseContext)
 
     if (!response.ok) {
-      const error = mapHttpResponseError(response, body)
-      options.onError?.(error, prepared)
-      throw error
+      return { ok: false, error: mapHttpResponseError(response, body), status: response.status }
     }
 
-    return extractResponseData<TResponse>(body)
+    return { ok: true, data: extractResponseData<TResponse>(body) }
   } catch (error) {
-    const appError = toAppError(error)
-    options.onError?.(appError, prepared)
-    throw appError
+    return { ok: false, error: toAppError(error) }
+  }
+}
+
+async function executeRequest<TResponse>(
+  request: ApiRequestOptions,
+  options: ApiClientOptions,
+  attempt = 0
+): Promise<TResponse> {
+  const normalizedRequest = await normalizeRequest(request, options)
+  const { prepared, init, timeoutId } = await createPreparedRequest(normalizedRequest, options)
+
+  let outcome: RequestOutcome<TResponse>
+  try {
+    outcome = await attemptRequest<TResponse>(prepared, init, options)
   } finally {
     clearTimeout(timeoutId)
   }
+
+  if (outcome.ok) {
+    return outcome.data
+  }
+
+  // Retried at most once, and only for the original attempt -- a 401 straight after a
+  // successful refresh means the new token is no good either, so surface that failure rather
+  // than looping.
+  if (outcome.status === 401 && attempt === 0 && options.onUnauthorized) {
+    const refreshed = await options.onUnauthorized().catch(() => false)
+    if (refreshed) {
+      return executeRequest<TResponse>(request, options, attempt + 1)
+    }
+  }
+
+  options.onError?.(outcome.error, prepared)
+  throw outcome.error
 }
 
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
