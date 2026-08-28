@@ -1,11 +1,7 @@
-export type AnalysisTab =
-  | "campaigns"
-  | "adGroups"
-  | "ads"
-  | "keywords"
-  | "audiences"
-  | "placements"
-  | "creatives"
+// "audiences"/"placements"/"creatives" were dropped -- no platform sync produces real data for
+// these, so they're not offered as drill-down levels rather than showing fabricated numbers
+// (see the Campaigns dashboard plan's Phase 7 UX decision).
+export type AnalysisTab = "campaigns" | "adGroups" | "ads" | "keywords"
 
 export type ExplorerLevel = "platforms" | AnalysisTab
 
@@ -17,7 +13,6 @@ export type ExplorerPlatformFilter =
   | "Meta"
   | "TikTok"
   | "Snapchat"
-  | "LinkedIn"
 
 export type CampaignTypeFilter =
   | "All Objectives"
@@ -27,12 +22,11 @@ export type CampaignTypeFilter =
   | "Conversions"
   | "Sales"
 
-export type CampaignPlatform = Exclude<
-  ExplorerPlatformFilter,
-  "All Platforms" | "Snapchat" | "LinkedIn"
->
+// LinkedIn was dropped -- there's no LinkedIn Ads connector anywhere in this codebase (no
+// OAuth, no sync), so it was always a dead, permanently-empty filter option.
+export type CampaignPlatform = Exclude<ExplorerPlatformFilter, "All Platforms">
 
-export type PlatformNodeKey = "Google" | "Meta" | "TikTok" | "YouTube" | "Snapchat" | "LinkedIn"
+export type PlatformNodeKey = "Google" | "Meta" | "TikTok" | "YouTube" | "Snapchat"
 
 export type MetricColumnKind = "number" | "percent" | "currency" | "ratio" | "duration" | "text"
 
@@ -85,7 +79,7 @@ export type MetricColumn = {
 export type PlatformHierarchySpec = {
   path: ExplorerLevel[]
   tabs: AnalysisTab[]
-  adGroupLabel: "Ad Groups" | "Ad Sets"
+  adGroupLabel: "Ad Groups" | "Ad Sets" | "Ad Squads"
 }
 
 export const PLATFORM_NODE_CONFIG: Record<
@@ -96,8 +90,7 @@ export const PLATFORM_NODE_CONFIG: Record<
   Meta: { campaignPlatforms: ["Meta"] },
   TikTok: { campaignPlatforms: ["TikTok"] },
   YouTube: { campaignPlatforms: ["YouTube"] },
-  Snapchat: { campaignPlatforms: [] },
-  LinkedIn: { campaignPlatforms: [] },
+  Snapchat: { campaignPlatforms: ["Snapchat"] },
 }
 
 export const CAMPAIGN_PLATFORM_HIERARCHY: Record<CampaignPlatform, PlatformHierarchySpec> = {
@@ -113,18 +106,23 @@ export const CAMPAIGN_PLATFORM_HIERARCHY: Record<CampaignPlatform, PlatformHiera
   },
   YouTube: {
     path: ["platforms", "campaigns", "adGroups", "ads"],
-    tabs: ["campaigns", "adGroups", "ads", "creatives", "placements", "audiences"],
+    tabs: ["campaigns", "adGroups", "ads"],
     adGroupLabel: "Ad Groups",
   },
   Meta: {
     path: ["platforms", "campaigns", "adGroups", "ads"],
-    tabs: ["campaigns", "adGroups", "ads", "creatives", "placements", "audiences"],
+    tabs: ["campaigns", "adGroups", "ads"],
     adGroupLabel: "Ad Sets",
   },
   TikTok: {
     path: ["platforms", "campaigns", "adGroups", "ads"],
-    tabs: ["campaigns", "adGroups", "ads", "creatives"],
+    tabs: ["campaigns", "adGroups", "ads"],
     adGroupLabel: "Ad Groups",
+  },
+  Snapchat: {
+    path: ["platforms", "campaigns", "adGroups", "ads"],
+    tabs: ["campaigns", "adGroups", "ads"],
+    adGroupLabel: "Ad Squads",
   },
 }
 
@@ -133,9 +131,6 @@ export const ANALYSIS_TABS: Array<{ key: AnalysisTab; label: string }> = [
   { key: "adGroups", label: "Ad Groups" },
   { key: "ads", label: "Ads" },
   { key: "keywords", label: "Keywords" },
-  { key: "audiences", label: "Audiences" },
-  { key: "placements", label: "Placements" },
-  { key: "creatives", label: "Creatives" },
 ]
 
 const platformOverviewColumns: MetricColumn[] = [
@@ -234,17 +229,24 @@ const tiktokColumns: MetricColumn[] = [
   { key: "roas", label: "ROAS", kind: "ratio" },
 ]
 
+const snapchatColumns: MetricColumn[] = [
+  { key: "impressions", label: "Impressions", kind: "number" },
+  { key: "clicks", label: "Swipes", kind: "number" },
+  { key: "ctr", label: "Swipe Rate", kind: "percent" },
+  { key: "cpm", label: "CPM", kind: "currency" },
+  { key: "spend", label: "Spend", kind: "currency" },
+]
+
 export function getEntityLabel(level: ExplorerLevel, campaignPlatform?: CampaignPlatform) {
   if (level === "platforms") return "Platform"
   if (level === "campaigns") return "Campaign"
   if (level === "adGroups") {
-    return campaignPlatform === "Meta" ? "Ad Set" : "Ad Group"
+    if (campaignPlatform === "Meta") return "Ad Set"
+    if (campaignPlatform === "Snapchat") return "Ad Squad"
+    return "Ad Group"
   }
-  if (level === "ads") return "Ad"
   if (level === "keywords") return "Keyword"
-  if (level === "audiences") return "Audience"
-  if (level === "placements") return "Placement"
-  return "Creative"
+  return "Ad"
 }
 
 export function getNextHierarchyLevel(
@@ -315,6 +317,10 @@ export function getMetricsColumns({
       ...leadingColumns,
       ...(campaignType === "Awareness" ? metaAwarenessColumns : metaSalesColumns),
     ]
+  }
+
+  if (campaignPlatform === "Snapchat") {
+    return [...leadingColumns, ...snapchatColumns]
   }
 
   return [...leadingColumns, ...tiktokColumns]

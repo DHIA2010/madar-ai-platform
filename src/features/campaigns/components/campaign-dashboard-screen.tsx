@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   addMonths,
   endOfMonth,
@@ -58,7 +58,12 @@ import {
 } from "@/components/app"
 
 import {
-  type AnalysisTab,
+  type CampaignPerformancePlatformRow,
+  type CampaignPerformanceRow,
+  campaignPerformanceService,
+  type CampaignPerformanceSummary,
+} from "../services/campaign-performance.service"
+import {
   CAMPAIGN_PLATFORM_HIERARCHY,
   type CampaignPlatform,
   type CampaignTypeFilter,
@@ -73,65 +78,19 @@ import {
   type PlatformNodeKey,
 } from "./campaign-metrics"
 
-type CampaignStatus = "Active" | "Paused" | "Completed" | "Draft"
-type CampaignObjective = Exclude<CampaignTypeFilter, "All Objectives">
-
-type CampaignRow = {
-  id: number
-  name: string
-  platform: CampaignPlatform
-  objective: CampaignObjective
-  status: CampaignStatus
-  subtitle: string
-  activityDate: string
-  spend: number
-  revenue: number
-  roas: number
-  clicks: number
-  conversions: number
-  conversionRate: number
-  ctr: number
-  cpc: number
-  cpa: number
-  impressions: number
-  cost: number
-  qualityScore: number
-  impressionShare: number
-  searchTopImpressionRate: number
-  cpm: number
-  viewableImpressions: number
-  viewability: number
-  views: number
-  viewRate: number
-  watchTime: number
-  averageViewDuration: number
-  view25: number
-  view50: number
-  view75: number
-  view100Completion: number
-  reach: number
-  frequency: number
-  videoPlays: number
-  threeSecondViews: number
-  thruPlays: number
-  addToCart: number
-  checkoutStarted: number
-  purchases: number
-  purchaseValue: number
-}
-
-type EntityRow = CampaignRow & {
+// One row per entity level, real data from campaignPerformanceService plus the display-only
+// fields (nodeId/entityName/entityDescription) the table rendering needs.
+type EntityRow = CampaignPerformanceRow & {
   nodeId: string
-  level: AnalysisTab
-  campaignId: number
-  adGroupId?: string
   entityName: string
   entityDescription: string
 }
 
-type PlatformRow = {
+// "Google" groups Google Search + Google Display into one platform-overview row (YouTube stays
+// its own row) -- mirrors PLATFORM_NODE_CONFIG, computed client-side from the real per-platform
+// rows the backend returns (one row per CampaignPerformancePlatform, not per node).
+type GroupedPlatformRow = {
   nodeId: string
-  level: "platforms"
   platformNodeKey: PlatformNodeKey
   entityName: string
   entityDescription: string
@@ -145,268 +104,11 @@ type PlatformRow = {
   status: string
 }
 
-type ExplorerRow = EntityRow | PlatformRow
+type ExplorerRow = EntityRow | GroupedPlatformRow
 
-const campaignRows: CampaignRow[] = [
-  {
-    id: 1,
-    name: "Saudi Search - Electronics",
-    platform: "Google Search",
-    objective: "Sales",
-    status: "Active",
-    subtitle: "High-intent acquisition campaign for premium electronics.",
-    activityDate: "2026-06-04",
-    spend: 41800,
-    revenue: 184200,
-    roas: 4.41,
-    clicks: 19240,
-    conversions: 1073,
-    conversionRate: 5.58,
-    ctr: 6.32,
-    cpc: 2.17,
-    cpa: 38.96,
-    impressions: 304500,
-    cost: 41800,
-    qualityScore: 8.2,
-    impressionShare: 72.4,
-    searchTopImpressionRate: 56.7,
-    cpm: 0,
-    viewableImpressions: 0,
-    viewability: 0,
-    views: 0,
-    viewRate: 0,
-    watchTime: 0,
-    averageViewDuration: 0,
-    view25: 0,
-    view50: 0,
-    view75: 0,
-    view100Completion: 0,
-    reach: 0,
-    frequency: 0,
-    videoPlays: 0,
-    threeSecondViews: 0,
-    thruPlays: 0,
-    addToCart: 612,
-    checkoutStarted: 421,
-    purchases: 286,
-    purchaseValue: 142800,
-  },
-  {
-    id: 2,
-    name: "UAE Display Prospecting",
-    platform: "Google Display",
-    objective: "Awareness",
-    status: "Active",
-    subtitle: "Broad reach programmatic display for top-funnel growth.",
-    activityDate: "2026-06-07",
-    spend: 22100,
-    revenue: 61500,
-    roas: 2.78,
-    clicks: 5820,
-    conversions: 214,
-    conversionRate: 3.68,
-    ctr: 0.78,
-    cpc: 3.8,
-    cpa: 103.27,
-    impressions: 748900,
-    cost: 22100,
-    qualityScore: 0,
-    impressionShare: 0,
-    searchTopImpressionRate: 0,
-    cpm: 29.52,
-    viewableImpressions: 498200,
-    viewability: 66.5,
-    views: 0,
-    viewRate: 0,
-    watchTime: 0,
-    averageViewDuration: 0,
-    view25: 0,
-    view50: 0,
-    view75: 0,
-    view100Completion: 0,
-    reach: 388000,
-    frequency: 1.93,
-    videoPlays: 0,
-    threeSecondViews: 0,
-    thruPlays: 0,
-    addToCart: 0,
-    checkoutStarted: 0,
-    purchases: 0,
-    purchaseValue: 0,
-  },
-  {
-    id: 3,
-    name: "YouTube Smart Watch Stories",
-    platform: "YouTube",
-    objective: "Traffic",
-    status: "Paused",
-    subtitle: "Video storytelling to drive upper-mid funnel traffic quality.",
-    activityDate: "2026-06-11",
-    spend: 26900,
-    revenue: 90200,
-    roas: 3.35,
-    clicks: 7340,
-    conversions: 301,
-    conversionRate: 4.1,
-    ctr: 1.64,
-    cpc: 3.66,
-    cpa: 89.37,
-    impressions: 448100,
-    cost: 26900,
-    qualityScore: 0,
-    impressionShare: 0,
-    searchTopImpressionRate: 0,
-    cpm: 60.03,
-    viewableImpressions: 0,
-    viewability: 0,
-    views: 195400,
-    viewRate: 43.6,
-    watchTime: 57200,
-    averageViewDuration: 18.4,
-    view25: 71.2,
-    view50: 52.1,
-    view75: 36.7,
-    view100Completion: 22.8,
-    reach: 280400,
-    frequency: 1.6,
-    videoPlays: 184200,
-    threeSecondViews: 0,
-    thruPlays: 0,
-    addToCart: 0,
-    checkoutStarted: 0,
-    purchases: 0,
-    purchaseValue: 0,
-  },
-  {
-    id: 4,
-    name: "Meta Retargeting - Fashion",
-    platform: "Meta",
-    objective: "Sales",
-    status: "Active",
-    subtitle: "Conversion-focused retargeting for cart and checkout visitors.",
-    activityDate: "2026-06-13",
-    spend: 19300,
-    revenue: 52300,
-    roas: 2.71,
-    clicks: 6880,
-    conversions: 278,
-    conversionRate: 4.04,
-    ctr: 1.93,
-    cpc: 2.81,
-    cpa: 69.42,
-    impressions: 356900,
-    cost: 19300,
-    qualityScore: 0,
-    impressionShare: 0,
-    searchTopImpressionRate: 0,
-    cpm: 54.07,
-    viewableImpressions: 0,
-    viewability: 0,
-    views: 0,
-    viewRate: 0,
-    watchTime: 0,
-    averageViewDuration: 0,
-    view25: 0,
-    view50: 0,
-    view75: 0,
-    view100Completion: 0,
-    reach: 148500,
-    frequency: 2.4,
-    videoPlays: 68500,
-    threeSecondViews: 42100,
-    thruPlays: 16200,
-    addToCart: 512,
-    checkoutStarted: 299,
-    purchases: 186,
-    purchaseValue: 68400,
-  },
-  {
-    id: 5,
-    name: "Meta Awareness - Home Decor",
-    platform: "Meta",
-    objective: "Awareness",
-    status: "Completed",
-    subtitle: "Broad-reach video burst campaign for seasonal collections.",
-    activityDate: "2026-06-16",
-    spend: 15800,
-    revenue: 17900,
-    roas: 1.13,
-    clicks: 2110,
-    conversions: 64,
-    conversionRate: 3.03,
-    ctr: 0.84,
-    cpc: 7.49,
-    cpa: 246.88,
-    impressions: 603200,
-    cost: 15800,
-    qualityScore: 0,
-    impressionShare: 0,
-    searchTopImpressionRate: 0,
-    cpm: 26.19,
-    viewableImpressions: 0,
-    viewability: 0,
-    views: 0,
-    viewRate: 0,
-    watchTime: 0,
-    averageViewDuration: 0,
-    view25: 0,
-    view50: 0,
-    view75: 0,
-    view100Completion: 0,
-    reach: 452000,
-    frequency: 1.34,
-    videoPlays: 271500,
-    threeSecondViews: 199400,
-    thruPlays: 88200,
-    addToCart: 0,
-    checkoutStarted: 0,
-    purchases: 0,
-    purchaseValue: 0,
-  },
-  {
-    id: 6,
-    name: "TikTok Protein Bundle Push",
-    platform: "TikTok",
-    objective: "Conversions",
-    status: "Draft",
-    subtitle: "Creator-led short-form ads for high-intent nutrition buyers.",
-    activityDate: "2026-06-18",
-    spend: 24700,
-    revenue: 116900,
-    roas: 4.73,
-    clicks: 9130,
-    conversions: 422,
-    conversionRate: 4.62,
-    ctr: 2.37,
-    cpc: 2.71,
-    cpa: 58.53,
-    impressions: 385700,
-    cost: 24700,
-    qualityScore: 0,
-    impressionShare: 0,
-    searchTopImpressionRate: 0,
-    cpm: 64.04,
-    viewableImpressions: 0,
-    viewability: 0,
-    views: 312500,
-    viewRate: 58.2,
-    watchTime: 46800,
-    averageViewDuration: 11.2,
-    view25: 64.1,
-    view50: 44.2,
-    view75: 28.7,
-    view100Completion: 16.9,
-    reach: 264300,
-    frequency: 1.46,
-    videoPlays: 302400,
-    threeSecondViews: 182100,
-    thruPlays: 0,
-    addToCart: 233,
-    checkoutStarted: 141,
-    purchases: 96,
-    purchaseValue: 35600,
-  },
-]
+function isGroupedPlatformRow(row: ExplorerRow): row is GroupedPlatformRow {
+  return "platformNodeKey" in row
+}
 
 const platformOptions: ExplorerPlatformFilter[] = [
   "All Platforms",
@@ -416,16 +118,13 @@ const platformOptions: ExplorerPlatformFilter[] = [
   "Meta",
   "TikTok",
   "Snapchat",
-  "LinkedIn",
 ]
 
-const statusOptions: Array<"All Statuses" | CampaignStatus> = [
-  "All Statuses",
-  "Active",
-  "Paused",
-  "Completed",
-  "Draft",
-]
+// Ad platforms don't have a meaningful "Completed"/"Draft" campaign status the way orders do --
+// "Other" covers archived/removed/deleted and anything else real status text doesn't cleanly
+// bucket into.
+const statusOptions = ["All Statuses", "Active", "Paused", "Other"] as const
+
 const objectiveOptions: CampaignTypeFilter[] = [
   "All Objectives",
   "Awareness",
@@ -475,11 +174,16 @@ function formatSar(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)
 }
 
+function formatChangePct(value: number | null) {
+  if (value === null) return null
+  const sign = value >= 0 ? "+" : ""
+  return `${sign}${value.toFixed(1)}%`
+}
+
 interface CampaignKpiCardData {
   label: string
   value: string
-  delta: string
-  trend: "up" | "down"
+  changePct: number | null
   icon: LucideIcon
   tone: "blue" | "green" | "orange" | "rose" | "violet"
 }
@@ -494,7 +198,9 @@ const KPI_TONE_CLASSNAMES: Record<CampaignKpiCardData["tone"], string> = {
 
 function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
   const Icon = kpi.icon
-  const TrendIcon = kpi.trend === "up" ? ArrowUpRight : ArrowDownRight
+  const changeLabel = formatChangePct(kpi.changePct)
+  const trend = (kpi.changePct ?? 0) >= 0 ? "up" : "down"
+  const TrendIcon = trend === "up" ? ArrowUpRight : ArrowDownRight
 
   return (
     <AppCard className="overflow-hidden rounded-2xl border-border/60 bg-card p-4 shadow-sm">
@@ -508,18 +214,22 @@ function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{kpi.label}</p>
       <p className="mt-1 text-2xl font-bold text-foreground">{kpi.value}</p>
-      <div className="mt-2 flex items-center gap-1 text-xs">
-        <span
-          className={cn(
-            "inline-flex items-center gap-0.5 font-medium",
-            kpi.trend === "up" ? "text-emerald-600" : "text-rose-600"
-          )}
-        >
-          <TrendIcon className="size-3.5" />
-          {kpi.delta}
-        </span>
-        <span className="text-muted-foreground">عن الفترة السابقة</span>
-      </div>
+      {changeLabel ? (
+        <div className="mt-2 flex items-center gap-1 text-xs">
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 font-medium",
+              trend === "up" ? "text-emerald-600" : "text-rose-600"
+            )}
+          >
+            <TrendIcon className="size-3.5" />
+            {changeLabel}
+          </span>
+          <span className="text-muted-foreground">عن الفترة السابقة</span>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">الفترة الحالية</p>
+      )}
     </AppCard>
   )
 }
@@ -557,11 +267,8 @@ function getSearchPlaceholder(level: ExplorerLevel) {
   if (level === "platforms") return "Search platforms..."
   if (level === "campaigns") return "Search campaigns..."
   if (level === "adGroups") return "Search ad groups..."
-  if (level === "ads") return "Search ads..."
   if (level === "keywords") return "Search keywords..."
-  if (level === "audiences") return "Search audiences..."
-  if (level === "placements") return "Search placements..."
-  return "Search creatives..."
+  return "Search ads..."
 }
 
 function formatDuration(value: number) {
@@ -571,181 +278,59 @@ function formatDuration(value: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
-function scaleMetric(value: number, multiplier: number, decimals = 0) {
-  const scaled = value * multiplier
-  if (decimals === 0) return Math.max(0, Math.round(scaled))
-  return Number(scaled.toFixed(decimals))
+// Loose substring match on whatever raw status/objective text each platform actually returns --
+// same reasoning as the backend's bucketCampaignStatus/bucketCampaignObjective (see
+// identity-platform/campaigns/performance-service.ts): no platform's exact vocabulary is fully
+// confirmed against live data yet, so a shared bucket is what lets one filter work everywhere.
+function bucketStatus(rawStatus: string): "Active" | "Paused" | "Other" {
+  const text = rawStatus.toLowerCase()
+  if (text.includes("enable") || text.includes("active")) return "Active"
+  if (text.includes("pause") || text.includes("disable")) return "Paused"
+  return "Other"
 }
 
-function getAdGroupTemplates(platform: CampaignPlatform) {
-  if (platform === "Google Search") {
-    return [
-      { name: "Brand Search Ad Group", description: "High-intent branded search terms" },
-      { name: "Non-Brand Search Ad Group", description: "Category and competitor intent terms" },
-    ]
-  }
-
-  if (platform === "Meta") {
-    return [
-      { name: "Lookalike Ad Set", description: "Modeled audience from top-value purchasers" },
-      { name: "Retargeting Ad Set", description: "Visitors and engaged users remarketing set" },
-    ]
-  }
-
-  return [
-    { name: "Prospecting Ad Group", description: "New-user acquisition segment" },
-    { name: "Retargeting Ad Group", description: "Warm audience conversion segment" },
-  ]
+function bucketObjective(rawObjective: string | null): CampaignTypeFilter {
+  if (!rawObjective) return "Sales"
+  const text = rawObjective.toLowerCase()
+  if (text.includes("aware") || text.includes("reach") || text.includes("brand")) return "Awareness"
+  if (text.includes("lead")) return "Leads"
+  if (text.includes("sale") || text.includes("purchase") || text.includes("shop")) return "Sales"
+  if (text.includes("conversion")) return "Conversions"
+  if (text.includes("traffic") || text.includes("click")) return "Traffic"
+  return "Sales"
 }
 
-function buildChildMetrics(row: CampaignRow, multiplier: number) {
-  const spend = scaleMetric(row.spend, multiplier)
-  const revenue = scaleMetric(row.revenue, multiplier)
-  const clicks = scaleMetric(row.clicks, multiplier)
-  const conversions = scaleMetric(row.conversions, multiplier)
-  const cpa = conversions > 0 ? Number((spend / conversions).toFixed(2)) : 0
-  const roas = spend > 0 ? Number((revenue / spend).toFixed(2)) : 0
-  const ctr =
-    row.impressions > 0
-      ? Number(((clicks / Math.max(1, scaleMetric(row.impressions, multiplier))) * 100).toFixed(2))
-      : 0
-  const conversionRate = clicks > 0 ? Number(((conversions / clicks) * 100).toFixed(2)) : 0
-  const cpc = clicks > 0 ? Number((spend / clicks).toFixed(2)) : 0
-
+function toEntityRow(row: CampaignPerformanceRow): EntityRow {
   return {
-    spend,
-    revenue,
-    clicks,
-    conversions,
-    cpa,
-    roas,
-    ctr,
-    conversionRate,
-    cpc,
-    cost: spend,
-    impressions: scaleMetric(row.impressions, multiplier),
-    qualityScore: Number(row.qualityScore.toFixed(1)),
-    impressionShare: Number((row.impressionShare * multiplier).toFixed(1)),
-    searchTopImpressionRate: Number((row.searchTopImpressionRate * multiplier).toFixed(1)),
-    cpm: Number((row.cpm * multiplier).toFixed(2)),
-    viewableImpressions: scaleMetric(row.viewableImpressions, multiplier),
-    viewability: Number((row.viewability * multiplier).toFixed(1)),
-    views: scaleMetric(row.views, multiplier),
-    viewRate: Number((row.viewRate * multiplier).toFixed(1)),
-    watchTime: scaleMetric(row.watchTime, multiplier),
-    averageViewDuration: Number((row.averageViewDuration * multiplier).toFixed(1)),
-    view25: Number((row.view25 * multiplier).toFixed(1)),
-    view50: Number((row.view50 * multiplier).toFixed(1)),
-    view75: Number((row.view75 * multiplier).toFixed(1)),
-    view100Completion: Number((row.view100Completion * multiplier).toFixed(1)),
-    reach: scaleMetric(row.reach, multiplier),
-    frequency: Number((row.frequency * multiplier).toFixed(2)),
-    videoPlays: scaleMetric(row.videoPlays, multiplier),
-    threeSecondViews: scaleMetric(row.threeSecondViews, multiplier),
-    thruPlays: scaleMetric(row.thruPlays, multiplier),
-    addToCart: scaleMetric(row.addToCart, multiplier),
-    checkoutStarted: scaleMetric(row.checkoutStarted, multiplier),
-    purchases: scaleMetric(row.purchases, multiplier),
-    purchaseValue: scaleMetric(row.purchaseValue, multiplier),
-  }
-}
-
-function buildCampaignRows(rows: CampaignRow[]) {
-  return rows.map<EntityRow>((row) => ({
     ...row,
-    nodeId: `campaign-${row.id}`,
-    level: "campaigns",
-    campaignId: row.id,
+    nodeId: row.id,
     entityName: row.name,
-    entityDescription: row.subtitle,
-  }))
+    entityDescription: row.activityDate
+      ? `Last active ${row.activityDate} · ${row.status}`
+      : row.status,
+  }
 }
 
-function buildAdGroupRows(rows: CampaignRow[]) {
-  return rows.flatMap((row) => {
-    const templates = getAdGroupTemplates(row.platform)
-    const multipliers = [0.56, 0.44]
-
-    return templates.map<EntityRow>((template, index) => {
-      const adGroupId = `${row.id}-ag-${index + 1}`
-      return {
-        ...row,
-        ...buildChildMetrics(row, multipliers[index]),
-        nodeId: `adgroup-${adGroupId}`,
-        level: "adGroups",
-        campaignId: row.id,
-        adGroupId,
-        entityName: template.name,
-        entityDescription: template.description,
-      }
-    })
-  })
-}
-
-function buildFinalRows(
-  level: Exclude<AnalysisTab, "campaigns" | "adGroups">,
-  adGroups: EntityRow[]
-) {
-  const templatesByLevel: Record<Exclude<AnalysisTab, "campaigns" | "adGroups">, string[]> = {
-    ads: ["Variant A", "Variant B"],
-    keywords: ["running shoes", "wireless earbuds", "coffee maker"],
-    audiences: ["High Intent", "Returning Visitors"],
-    placements: ["Feed Placement", "Stories Placement"],
-    creatives: ["Video Creative", "Carousel Creative"],
-  }
-
-  const descriptionsByLevel: Record<Exclude<AnalysisTab, "campaigns" | "adGroups">, string> = {
-    ads: "Ad-level performance node",
-    keywords: "Keyword-level performance node",
-    audiences: "Audience-level performance node",
-    placements: "Placement-level performance node",
-    creatives: "Creative-level performance node",
-  }
-
-  const multipliersByLevel: Record<Exclude<AnalysisTab, "campaigns" | "adGroups">, number[]> = {
-    ads: [0.58, 0.42],
-    keywords: [0.42, 0.35, 0.23],
-    audiences: [0.62, 0.38],
-    placements: [0.55, 0.45],
-    creatives: [0.52, 0.48],
-  }
-
-  return adGroups.flatMap((adGroup) => {
-    const templates = templatesByLevel[level]
-    const multipliers = multipliersByLevel[level]
-
-    return templates.map<EntityRow>((template, index) => {
-      const multiplier = multipliers[index] ?? multipliers[multipliers.length - 1]
-      return {
-        ...adGroup,
-        ...buildChildMetrics(adGroup, multiplier),
-        nodeId: `${level}-${adGroup.adGroupId}-${index + 1}`,
-        level,
-        entityName: `${template} ${index + 1}`,
-        entityDescription: descriptionsByLevel[level],
-      }
-    })
-  })
-}
-
-function buildPlatformRows(rows: CampaignRow[]): PlatformRow[] {
+// Groups the backend's per-CampaignPerformancePlatform rows (Google Search/Display/YouTube/
+// Meta/TikTok/Snapchat, one each) into one row per PlatformNodeKey ("Google" combines Search +
+// Display) -- matches the product's original platform-overview hierarchy.
+function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatformRow[] {
   return (Object.keys(PLATFORM_NODE_CONFIG) as PlatformNodeKey[])
     .map((platformNodeKey) => {
-      const platforms = PLATFORM_NODE_CONFIG[platformNodeKey].campaignPlatforms
-      const subset = rows.filter((row) => platforms.includes(row.platform))
-      const activeCampaigns = subset.filter((row) => row.status === "Active").length
+      const allowed = PLATFORM_NODE_CONFIG[platformNodeKey].campaignPlatforms
+      const subset = rows.filter((row) => allowed.includes(row.platform))
       const spend = subset.reduce((sum, row) => sum + row.spend, 0)
       const revenue = subset.reduce((sum, row) => sum + row.revenue, 0)
       const clicks = subset.reduce((sum, row) => sum + row.clicks, 0)
       const conversions = subset.reduce((sum, row) => sum + row.conversions, 0)
       const impressions = subset.reduce((sum, row) => sum + row.impressions, 0)
+      const activeCampaigns = subset.reduce((sum, row) => sum + row.activeCampaigns, 0)
 
       return {
         nodeId: `platform-${platformNodeKey.toLowerCase()}`,
-        level: "platforms" as const,
         platformNodeKey,
         entityName: platformNodeKey,
-        entityDescription: `${subset.length} campaigns in view`,
+        entityDescription: `${activeCampaigns} active campaigns`,
         activeCampaigns,
         spend,
         revenue,
@@ -756,7 +341,7 @@ function buildPlatformRows(rows: CampaignRow[]): PlatformRow[] {
         status: activeCampaigns > 0 ? "Active" : "No Data",
       }
     })
-    .filter((row) => row.entityDescription !== "0 campaigns in view")
+    .filter((row) => row.activeCampaigns > 0 || row.spend > 0)
 }
 
 function DateRangeFilter({
@@ -992,6 +577,7 @@ function DateRangeFilter({
 export function CampaignDashboardScreen() {
   const [page, setPage] = useState(1)
   const [currentLevel, setCurrentLevel] = useState<ExplorerLevel>("platforms")
+  const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
   const [platform, setPlatform] = useState<ExplorerPlatformFilter>("All Platforms")
   const [status, setStatus] = useState<(typeof statusOptions)[number]>("All Statuses")
@@ -1000,102 +586,153 @@ export function CampaignDashboardScreen() {
   const [selectedPlatformNode, setSelectedPlatformNode] = useState<PlatformNodeKey | undefined>(
     undefined
   )
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | undefined>(undefined)
-  const [selectedAdGroupId, setSelectedAdGroupId] = useState<string | undefined>(undefined)
+  const [selectedCampaign, setSelectedCampaign] = useState<EntityRow | undefined>(undefined)
+  const [selectedAdGroup, setSelectedAdGroup] = useState<EntityRow | undefined>(undefined)
   const [highlightedRowId, setHighlightedRowId] = useState<string | undefined>(undefined)
 
-  const filteredCampaigns = useMemo(() => {
-    return campaignRows.filter((campaign) => {
-      const matchesPlatform = platform === "All Platforms" || campaign.platform === platform
-      const matchesStatus = status === "All Statuses" || campaign.status === status
-      const matchesObjective = objective === "All Objectives" || campaign.objective === objective
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<CampaignPerformanceSummary | null>(null)
+  const [platformRows, setPlatformRows] = useState<CampaignPerformancePlatformRow[]>([])
+  const [campaignRows, setCampaignRows] = useState<CampaignPerformanceRow[]>([])
+  const [adGroupRows, setAdGroupRows] = useState<CampaignPerformanceRow[]>([])
+  const [leafRows, setLeafRows] = useState<CampaignPerformanceRow[]>([])
 
-      const matchesDateRange =
-        !dateRange?.from ||
-        (() => {
-          const value = new Date(campaign.activityDate)
-          const from = dateRange.from
-          const to = dateRange.to ?? dateRange.from
-          return value >= from && value <= to
-        })()
+  // Debounced so typing in the search box doesn't refetch (or re-filter a large fetched set) on
+  // every keystroke -- platform/status/objective/date changes are discrete select interactions
+  // where an immediate refetch is fine.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
-      return matchesPlatform && matchesStatus && matchesObjective && matchesDateRange
-    })
-  }, [dateRange, objective, platform, status])
+  const startDate = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : undefined
+  const endDate = (dateRange?.to ?? dateRange?.from)?.toISOString().slice(0, 10)
 
-  const platformRows = useMemo(() => buildPlatformRows(filteredCampaigns), [filteredCampaigns])
+  // Fetches the account-wide KPI summary + platform breakdown (real period-over-period deltas)
+  // whenever the date range changes, and whichever level-specific rows the current drill-down
+  // position needs. KPI cards always reflect the account-wide summary regardless of drill level
+  // -- matches how Orders/Stores KPI strips already work in this app, and keeps the real
+  // period-over-period delta computation meaningful (ad-group/ad-level rows have no comparable
+  // "previous period" of their own).
+  useEffect(() => {
+    let cancelled = false
 
-  const platformScopedCampaigns = useMemo(() => {
-    if (!selectedPlatformNode) {
-      return filteredCampaigns
+    async function load() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const [summaryResult, platformsResult] = await Promise.all([
+          campaignPerformanceService.getSummary({ startDate, endDate }),
+          campaignPerformanceService.getPlatformBreakdown({ startDate, endDate }),
+        ])
+        if (cancelled) return
+        setSummary(summaryResult)
+        setPlatformRows(platformsResult.items)
+
+        if (currentLevel === "campaigns") {
+          const result = await campaignPerformanceService.listCampaigns({
+            startDate,
+            endDate,
+            pageSize: 200,
+          })
+          if (!cancelled) setCampaignRows(result.items)
+        } else if (currentLevel === "adGroups" && selectedCampaign) {
+          const result = await campaignPerformanceService.listAdGroups(selectedCampaign.id, {
+            startDate,
+            endDate,
+          })
+          if (!cancelled) setAdGroupRows(result.items)
+        } else if ((currentLevel === "ads" || currentLevel === "keywords") && selectedAdGroup) {
+          const result = await campaignPerformanceService.listAdsOrKeywords(
+            selectedAdGroup.id,
+            currentLevel,
+            { startDate, endDate }
+          )
+          if (!cancelled) setLeafRows(result.items)
+        }
+      } catch (error) {
+        console.error("Failed to load campaign performance", error)
+        if (!cancelled) {
+          setLoadError(
+            "Couldn't load campaign performance from your connected ad accounts. Please try again."
+          )
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
     }
 
-    const allowedPlatforms = PLATFORM_NODE_CONFIG[selectedPlatformNode].campaignPlatforms
-    return filteredCampaigns.filter((campaign) => allowedPlatforms.includes(campaign.platform))
-  }, [filteredCampaigns, selectedPlatformNode])
+    void load()
 
-  const campaignNodes = useMemo(
-    () => buildCampaignRows(platformScopedCampaigns),
-    [platformScopedCampaigns]
+    return () => {
+      cancelled = true
+    }
+  }, [currentLevel, selectedCampaign, selectedAdGroup, startDate, endDate])
+
+  const filteredPlatformRows = useMemo(
+    () => platformRows.filter((row) => platform === "All Platforms" || row.platform === platform),
+    [platformRows, platform]
+  )
+  const groupedPlatformRows = useMemo(
+    () => groupPlatformRows(filteredPlatformRows),
+    [filteredPlatformRows]
   )
 
-  const adGroupNodes = useMemo(() => {
-    const scoped = selectedCampaignId
-      ? platformScopedCampaigns.filter((row) => row.id === selectedCampaignId)
-      : platformScopedCampaigns
-    return buildAdGroupRows(scoped)
-  }, [platformScopedCampaigns, selectedCampaignId])
+  const applyCommonFilters = (rows: CampaignPerformanceRow[]) =>
+    rows.filter((row) => {
+      if (platform !== "All Platforms" && row.platform !== platform) return false
+      if (status !== "All Statuses" && bucketStatus(row.status) !== status) return false
+      if (objective !== "All Objectives" && bucketObjective(row.objective) !== objective) {
+        return false
+      }
+      if (search.trim()) {
+        const needle = search.trim().toLowerCase()
+        if (!row.name.toLowerCase().includes(needle)) return false
+      }
+      return true
+    })
 
-  const selectedCampaign = selectedCampaignId
-    ? platformScopedCampaigns.find((row) => row.id === selectedCampaignId)
-    : undefined
-  const selectedAdGroup = selectedAdGroupId
-    ? adGroupNodes.find((row) => row.adGroupId === selectedAdGroupId)
-    : undefined
+  const campaignsLevelRows = useMemo(() => {
+    const scoped = selectedPlatformNode
+      ? campaignRows.filter((row) =>
+          PLATFORM_NODE_CONFIG[selectedPlatformNode].campaignPlatforms.includes(row.platform)
+        )
+      : campaignRows
+    return applyCommonFilters(scoped).map(toEntityRow)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyCommonFilters closes over platform/status/objective/search, already deps below
+  }, [campaignRows, selectedPlatformNode, platform, status, objective, search])
 
-  const finalNodes = useMemo(() => {
-    if (
-      currentLevel === "platforms" ||
-      currentLevel === "campaigns" ||
-      currentLevel === "adGroups"
-    ) {
-      return []
-    }
+  const adGroupsLevelRows = useMemo(
+    () => applyCommonFilters(adGroupRows).map(toEntityRow),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [adGroupRows, platform, status, objective, search]
+  )
 
-    const baseAdGroups = selectedAdGroupId
-      ? adGroupNodes.filter((row) => row.adGroupId === selectedAdGroupId)
-      : adGroupNodes
+  const leafLevelRows = useMemo(
+    () => applyCommonFilters(leafRows).map(toEntityRow),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [leafRows, platform, status, objective, search]
+  )
 
-    return buildFinalRows(currentLevel, baseAdGroups)
-  }, [adGroupNodes, currentLevel, selectedAdGroupId])
-
-  const activeRows = useMemo<ExplorerRow[]>(() => {
+  const searchedRows = useMemo<ExplorerRow[]>(() => {
     if (currentLevel === "platforms") {
-      return platformRows
+      if (!search.trim()) return groupedPlatformRows
+      const needle = search.trim().toLowerCase()
+      return groupedPlatformRows.filter((row) => row.entityName.toLowerCase().includes(needle))
     }
-
-    if (currentLevel === "campaigns") {
-      return campaignNodes
-    }
-
-    if (currentLevel === "adGroups") {
-      return adGroupNodes
-    }
-
-    return finalNodes
-  }, [adGroupNodes, campaignNodes, currentLevel, finalNodes, platformRows])
-
-  const searchedRows = useMemo(() => {
-    const query = search.trim().toLowerCase()
-
-    if (!query) {
-      return activeRows
-    }
-
-    return activeRows.filter((row) =>
-      `${row.entityName} ${row.entityDescription}`.toLowerCase().includes(query)
-    )
-  }, [activeRows, search])
+    if (currentLevel === "campaigns") return campaignsLevelRows
+    if (currentLevel === "adGroups") return adGroupsLevelRows
+    return leafLevelRows
+  }, [
+    adGroupsLevelRows,
+    campaignsLevelRows,
+    currentLevel,
+    groupedPlatformRows,
+    leafLevelRows,
+    search,
+  ])
 
   const contextPlatforms = useMemo(() => {
     if (selectedCampaign) {
@@ -1126,7 +763,9 @@ export function CampaignDashboardScreen() {
     return undefined
   }, [contextPlatforms, selectedCampaign])
 
-  const contextCampaignType = selectedCampaign?.objective ?? objective
+  const contextCampaignType = selectedCampaign
+    ? bucketObjective(selectedCampaign.objective)
+    : objective
 
   const columns = useMemo(
     () =>
@@ -1138,93 +777,53 @@ export function CampaignDashboardScreen() {
     [contextCampaignPlatform, contextCampaignType, currentLevel]
   )
 
-  const kpiMetrics = useMemo(() => {
-    const getNumericMetric = (row: ExplorerRow, key: string) => {
-      const value = row as ExplorerRow & Record<string, unknown>
-      const metric = value[key]
-      return typeof metric === "number" ? metric : Number(metric ?? 0)
-    }
-
-    const spend = searchedRows.reduce((sum, row) => sum + getNumericMetric(row, "spend"), 0)
-    const revenue = searchedRows.reduce((sum, row) => sum + getNumericMetric(row, "revenue"), 0)
-    const conversions = searchedRows.reduce(
-      (sum, row) => sum + getNumericMetric(row, "conversions"),
-      0
-    )
-    const clicks = searchedRows.reduce((sum, row) => sum + getNumericMetric(row, "clicks"), 0)
-
-    const activeCampaignsCount = searchedRows.reduce((sum, row) => {
-      if (row.level === "platforms") {
-        return sum + row.activeCampaigns
-      }
-
-      return row.status === "Active" ? sum + 1 : sum
-    }, 0)
-
-    return {
-      activeCampaigns: activeCampaignsCount,
-      spend,
-      revenue,
-      conversions,
-      cpa: conversions > 0 ? spend / conversions : 0,
-      conversionRate: clicks > 0 ? (conversions / clicks) * 100 : 0,
-      roas: spend > 0 ? revenue / spend : 0,
-    }
-  }, [searchedRows])
-
-  const campaignKpiCards = useMemo<CampaignKpiCardData[]>(
-    () => [
+  const campaignKpiCards = useMemo<CampaignKpiCardData[]>(() => {
+    if (!summary) return []
+    return [
       {
         label: "ROAS (متوسط)",
-        value: `${kpiMetrics.roas.toFixed(2)}x`,
-        delta: "+12.4%",
-        trend: "up",
+        value: `${summary.roas.toFixed(2)}x`,
+        changePct: summary.roasChangePct,
         icon: TrendingUp,
         tone: "blue",
       },
       {
         label: "الإنفاق",
-        value: `${formatSar(kpiMetrics.spend)} SAR`,
-        delta: "+18.6%",
-        trend: "up",
+        value: `${formatSar(summary.spend)} SAR`,
+        changePct: summary.spendChangePct,
         icon: CreditCard,
         tone: "green",
       },
       {
         label: "الإيرادات",
-        value: `${formatSar(kpiMetrics.revenue)} SAR`,
-        delta: "+24.7%",
-        trend: "up",
+        value: `${formatSar(summary.revenue)} SAR`,
+        changePct: summary.revenueChangePct,
         icon: FileText,
         tone: "blue",
       },
       {
         label: "التحويلات",
-        value: kpiMetrics.conversions.toLocaleString(),
-        delta: "+16.3%",
-        trend: "up",
+        value: summary.conversions.toLocaleString(),
+        changePct: summary.conversionsChangePct,
         icon: Users,
         tone: "orange",
       },
       {
         label: "CPA (متوسط)",
-        value: `${kpiMetrics.cpa.toFixed(1)} SAR`,
-        delta: "-8.2%",
-        trend: "down",
+        value: `${summary.cpa.toFixed(1)} SAR`,
+        changePct: summary.cpaChangePct,
         icon: Target,
         tone: "rose",
       },
       {
         label: "معدل التحويل",
-        value: `${kpiMetrics.conversionRate.toFixed(2)}%`,
-        delta: "+8.7%",
-        trend: "up",
+        value: `${summary.conversionRate.toFixed(2)}%`,
+        changePct: summary.conversionRateChangePct,
         icon: ShoppingCart,
         tone: "violet",
       },
-    ],
-    [kpiMetrics]
-  )
+    ]
+  }, [summary])
 
   const PAGE_SIZE = 5
   const totalPages = Math.max(1, Math.ceil(searchedRows.length / PAGE_SIZE))
@@ -1233,7 +832,7 @@ export function CampaignDashboardScreen() {
 
   const renderMetricValue = (row: ExplorerRow, column: MetricColumn) => {
     if (column.key === "entity") {
-      const platformForIcon = row.level === "platforms" ? row.platformNodeKey : row.platform
+      const platformForIcon = isGroupedPlatformRow(row) ? row.platformNodeKey : row.platform
       return (
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-foreground">
@@ -1246,7 +845,7 @@ export function CampaignDashboardScreen() {
     }
 
     if (column.key === "platform") {
-      if (row.level === "platforms") {
+      if (isGroupedPlatformRow(row)) {
         return row.platformNodeKey
       }
 
@@ -1259,10 +858,12 @@ export function CampaignDashboardScreen() {
     }
 
     if (column.key === "status") {
-      return row.level === "platforms" ? row.status : row.status
+      return row.status
     }
 
-    const numericValue = Number((row as Record<string, number | string>)[column.key] ?? 0)
+    const numericValue = Number(
+      (row as unknown as Record<string, number | string>)[column.key] ?? 0
+    )
 
     if (column.kind === "currency") {
       return formatCurrency(numericValue)
@@ -1285,32 +886,32 @@ export function CampaignDashboardScreen() {
 
   const navigateToRow = (row: ExplorerRow) => {
     const drill = () => {
-      if (row.level === "platforms") {
+      if (currentLevel === "platforms" && isGroupedPlatformRow(row)) {
         setSelectedPlatformNode(row.platformNodeKey)
-        setSelectedCampaignId(undefined)
-        setSelectedAdGroupId(undefined)
+        setSelectedCampaign(undefined)
+        setSelectedAdGroup(undefined)
         setCurrentLevel("campaigns")
         return
       }
 
-      if (row.level === "campaigns") {
-        setSelectedCampaignId(row.campaignId)
-        setSelectedAdGroupId(undefined)
+      if (currentLevel === "campaigns" && !isGroupedPlatformRow(row)) {
+        setSelectedCampaign(row)
+        setSelectedAdGroup(undefined)
         setCurrentLevel("adGroups")
         return
       }
 
-      if (row.level === "adGroups") {
+      if (currentLevel === "adGroups" && !isGroupedPlatformRow(row)) {
         const next = getNextHierarchyLevel(row.platform, "adGroups")
         if (next) {
-          setSelectedAdGroupId(row.adGroupId)
+          setSelectedAdGroup(row)
           setCurrentLevel(next)
         }
       }
     }
 
     const isDrillable =
-      row.level === "platforms" || row.level === "campaigns" || row.level === "adGroups"
+      currentLevel === "platforms" || currentLevel === "campaigns" || currentLevel === "adGroups"
     if (!isDrillable) {
       return
     }
@@ -1323,18 +924,18 @@ export function CampaignDashboardScreen() {
     }, 180)
   }
 
-  const canGoBack = Boolean(selectedPlatformNode || selectedCampaignId || selectedAdGroupId)
+  const canGoBack = Boolean(selectedPlatformNode || selectedCampaign || selectedAdGroup)
 
   const handleBack = () => {
-    if (selectedAdGroupId) {
-      setSelectedAdGroupId(undefined)
+    if (selectedAdGroup) {
+      setSelectedAdGroup(undefined)
       setCurrentLevel("adGroups")
       setPage(1)
       return
     }
 
-    if (selectedCampaignId) {
-      setSelectedCampaignId(undefined)
+    if (selectedCampaign) {
+      setSelectedCampaign(undefined)
       setCurrentLevel("campaigns")
       setPage(1)
       return
@@ -1353,8 +954,8 @@ export function CampaignDashboardScreen() {
       onClick: () => {
         setCurrentLevel("platforms")
         setSelectedPlatformNode(undefined)
-        setSelectedCampaignId(undefined)
-        setSelectedAdGroupId(undefined)
+        setSelectedCampaign(undefined)
+        setSelectedAdGroup(undefined)
         setPage(1)
       },
     },
@@ -1362,8 +963,8 @@ export function CampaignDashboardScreen() {
       label: "Platforms",
       onClick: () => {
         setCurrentLevel("platforms")
-        setSelectedCampaignId(undefined)
-        setSelectedAdGroupId(undefined)
+        setSelectedCampaign(undefined)
+        setSelectedAdGroup(undefined)
         setPage(1)
       },
     },
@@ -1373,8 +974,8 @@ export function CampaignDashboardScreen() {
             label: selectedPlatformNode,
             onClick: () => {
               setCurrentLevel("campaigns")
-              setSelectedCampaignId(undefined)
-              setSelectedAdGroupId(undefined)
+              setSelectedCampaign(undefined)
+              setSelectedAdGroup(undefined)
               setPage(1)
             },
           },
@@ -1383,10 +984,10 @@ export function CampaignDashboardScreen() {
     ...(selectedCampaign
       ? [
           {
-            label: selectedCampaign.name,
+            label: selectedCampaign.entityName,
             onClick: () => {
               setCurrentLevel("adGroups")
-              setSelectedAdGroupId(undefined)
+              setSelectedAdGroup(undefined)
               setPage(1)
             },
           },
@@ -1428,9 +1029,9 @@ export function CampaignDashboardScreen() {
               startIcon={<Search className="size-4" />}
               placeholder={getSearchPlaceholder(currentLevel)}
               className="h-11"
-              value={search}
+              value={searchInput}
               onChange={(event) => {
-                setSearch(event.target.value)
+                setSearchInput(event.target.value)
                 setPage(1)
               }}
             />
@@ -1451,8 +1052,8 @@ export function CampaignDashboardScreen() {
                 setPlatform(next as ExplorerPlatformFilter)
                 setCurrentLevel("platforms")
                 setSelectedPlatformNode(undefined)
-                setSelectedCampaignId(undefined)
-                setSelectedAdGroupId(undefined)
+                setSelectedCampaign(undefined)
+                setSelectedAdGroup(undefined)
                 setPage(1)
               }}
             >
@@ -1578,8 +1179,9 @@ export function CampaignDashboardScreen() {
                   setPage(1)
                 }}
               >
-                {tab.key === "adGroups" && contextCampaignPlatform === "Meta"
-                  ? "Ad Sets"
+                {tab.key === "adGroups"
+                  ? CAMPAIGN_PLATFORM_HIERARCHY[contextCampaignPlatform ?? "Google Search"]
+                      .adGroupLabel
                   : tab.label}
               </AppButton>
             )
@@ -1605,7 +1207,19 @@ export function CampaignDashboardScreen() {
               </AppTableRow>
             </AppTableHeader>
             <AppTableBody>
-              {paginatedRows.length === 0 ? (
+              {isLoading ? (
+                <AppTableRow className="border-border">
+                  <AppTableCell colSpan={columns.length} className="py-10 text-center">
+                    <p className="text-sm text-muted-foreground">Loading campaign performance...</p>
+                  </AppTableCell>
+                </AppTableRow>
+              ) : loadError ? (
+                <AppTableRow className="border-border">
+                  <AppTableCell colSpan={columns.length} className="py-10 text-center">
+                    <p className="text-sm text-rose-600">{loadError}</p>
+                  </AppTableCell>
+                </AppTableRow>
+              ) : paginatedRows.length === 0 ? (
                 <AppTableRow className="border-border">
                   <AppTableCell colSpan={columns.length} className="py-10 text-center">
                     <p className="text-base font-semibold text-foreground">
@@ -1620,9 +1234,9 @@ export function CampaignDashboardScreen() {
               ) : (
                 paginatedRows.map((row) => {
                   const isDrillable =
-                    row.level === "platforms" ||
-                    row.level === "campaigns" ||
-                    row.level === "adGroups"
+                    currentLevel === "platforms" ||
+                    currentLevel === "campaigns" ||
+                    currentLevel === "adGroups"
                   const isHighlighted = highlightedRowId === row.nodeId
 
                   return (
@@ -1642,7 +1256,7 @@ export function CampaignDashboardScreen() {
                         >
                           {column.key === "roas" ? (
                             <span
-                              className={`font-semibold ${getRoasClasses(Number((row as ExplorerRow & Record<string, unknown>)["roas"] ?? 0))}`}
+                              className={`font-semibold ${getRoasClasses(Number((row as unknown as Record<string, unknown>)["roas"] ?? 0))}`}
                             >
                               {renderMetricValue(row, column)}
                             </span>
