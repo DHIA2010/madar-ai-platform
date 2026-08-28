@@ -39,6 +39,7 @@ import {
   type CampaignPerformancePlatform,
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
+import { ChannelsAggregationService } from "../../channels/channels-service"
 import { CampaignLinkRepository } from "../../campaign-links/repository"
 import { CampaignLinkService } from "../../campaign-links/service"
 import { extractPlatformSignals } from "../../tracking/platform-macros"
@@ -160,6 +161,13 @@ function parsePerformanceQuery(url: URL): CampaignPerformanceQuery {
     status: url.searchParams.get("status") ?? undefined,
     objective: url.searchParams.get("objective") ?? undefined,
     search: url.searchParams.get("search") ?? undefined,
+  }
+}
+
+function parseChannelsQuery(url: URL): { startDate?: string; endDate?: string } {
+  return {
+    startDate: url.searchParams.get("startDate") ?? undefined,
+    endDate: url.searchParams.get("endDate") ?? undefined,
   }
 }
 
@@ -472,6 +480,9 @@ export function createIdentityApiServer(
     : null
   const campaignsPerformanceAggregationService = container.infrastructure.database
     ? new CampaignsPerformanceAggregationService(container.infrastructure.database)
+    : null
+  const channelsAggregationService = container.infrastructure.database
+    ? new ChannelsAggregationService(container.infrastructure.database)
     : null
   const storesAggregationService = container.infrastructure.database
     ? new StoresAggregationService(container.infrastructure.database)
@@ -2304,6 +2315,67 @@ export function createIdentityApiServer(
             parsePerformanceQuery(url)
           )
         )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/channels/performance/summary") {
+        if (!channelsAggregationService) {
+          return send(503, {
+            code: "CHANNELS_PERFORMANCE_UNAVAILABLE",
+            message: "Channel performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          200,
+          await channelsAggregationService.getSummary(actor, parseChannelsQuery(url))
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/channels/performance/breakdown") {
+        if (!channelsAggregationService) {
+          return send(503, {
+            code: "CHANNELS_PERFORMANCE_UNAVAILABLE",
+            message: "Channel performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          200,
+          await channelsAggregationService.getChannelBreakdown(actor, parseChannelsQuery(url))
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/channels/performance/trend") {
+        if (!channelsAggregationService) {
+          return send(503, {
+            code: "CHANNELS_PERFORMANCE_UNAVAILABLE",
+            message: "Channel performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          200,
+          await channelsAggregationService.getPerformanceTrend(actor, parseChannelsQuery(url))
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/channels/performance/alerts") {
+        if (!channelsAggregationService) {
+          return send(503, {
+            code: "CHANNELS_PERFORMANCE_UNAVAILABLE",
+            message: "Channel performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, await channelsAggregationService.getAlerts(actor))
       }
 
       if (url.pathname === "/v1/campaign-links") {
