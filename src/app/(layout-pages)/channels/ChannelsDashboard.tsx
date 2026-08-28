@@ -20,11 +20,14 @@ import {
   ArrowUpRight,
   Bell,
   CalendarDays,
-  Eye,
+  Globe,
   Layers,
-  MoreHorizontal,
   MousePointerClick,
+  Package,
+  ShoppingCart,
   Sparkles,
+  Store,
+  StoreIcon,
   Target,
   TrendingUp,
   Users,
@@ -40,6 +43,12 @@ import {
   AppPopover,
   AppPopoverContent,
   AppPopoverTrigger,
+  AppTable,
+  AppTableBody,
+  AppTableCell,
+  AppTableHead,
+  AppTableHeader,
+  AppTableRow,
 } from "@/components/app"
 import { PLATFORM_ICON, PlatformBadge } from "@/components/platform-badge"
 import {
@@ -56,6 +65,9 @@ import {
   type ChannelRow,
   type ChannelsSummary,
   type ChannelsTrendPoint,
+  type StorePlatform,
+  type StorePlatformRow,
+  type TopProductRow,
 } from "@/features/channels/services/channels-performance.service"
 
 function formatSar(value: number) {
@@ -262,6 +274,38 @@ function ChannelSparkline({ channel }: { channel: ChannelRow }) {
   )
 }
 
+function TrendSparkline({ values, color }: { values: number[]; color: string }) {
+  const points = values.length > 0 ? values : [0]
+  const max = Math.max(...points)
+  const min = Math.min(...points)
+  const range = Math.max(max - min, 1)
+
+  return (
+    <svg viewBox="0 0 100 30" className="h-8 w-24" preserveAspectRatio="none">
+      <polyline
+        points={points
+          .map((value, index) => {
+            const x = points.length > 1 ? (index / (points.length - 1)) * 100 : 0
+            const y = 28 - ((value - min) / range) * 26
+            return `${x},${y}`
+          })
+          .join(" ")}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+const STORE_PLATFORM_ICONS: Record<StorePlatform, LucideIcon> = {
+  Salla: Store,
+  Zid: Globe,
+  Shopify: StoreIcon,
+}
+
 function ChannelCard({ channel }: { channel: ChannelRow }) {
   const health = HEALTH_META[channel.health]
 
@@ -326,21 +370,10 @@ function ChannelCard({ channel }: { channel: ChannelRow }) {
 
       <ChannelSparkline channel={channel} />
 
-      <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-3">
+      <div className="mt-2 border-t border-border/60 pt-3">
         <p className="text-xs text-muted-foreground">
           آخر مزامنة: {formatRelativeTimeAr(channel.lastSyncedAt)}
         </p>
-        <div className="flex items-center gap-1 text-muted-foreground">
-          <button type="button" className="rounded-md p-1 hover:bg-muted" aria-label="More">
-            <MoreHorizontal className="size-4" />
-          </button>
-          <button type="button" className="rounded-md p-1 hover:bg-muted" aria-label="Chart">
-            <TrendingUp className="size-4" />
-          </button>
-          <button type="button" className="rounded-md p-1 hover:bg-muted" aria-label="View">
-            <Eye className="size-4" />
-          </button>
-        </div>
       </div>
     </AppCard>
   )
@@ -368,6 +401,8 @@ export default function ChannelsDashboard() {
   const [channelRows, setChannelRows] = useState<ChannelRow[]>([])
   const [trendPoints, setTrendPoints] = useState<ChannelsTrendPoint[]>([])
   const [alerts, setAlerts] = useState<ChannelAlert[]>([])
+  const [storeRows, setStoreRows] = useState<StorePlatformRow[]>([])
+  const [topProducts, setTopProducts] = useState<TopProductRow[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -378,17 +413,28 @@ export default function ChannelsDashboard() {
 
       try {
         const params = { startDate: dateRange.startDate, endDate: dateRange.endDate }
-        const [summaryResult, breakdownResult, trendResult, alertsResult] = await Promise.all([
+        const [
+          summaryResult,
+          breakdownResult,
+          trendResult,
+          alertsResult,
+          storesResult,
+          productsResult,
+        ] = await Promise.all([
           channelsPerformanceService.getSummary(params),
           channelsPerformanceService.getChannelBreakdown(params),
           channelsPerformanceService.getPerformanceTrend(params),
           channelsPerformanceService.getAlerts(),
+          channelsPerformanceService.getStoresBreakdown(params),
+          channelsPerformanceService.getTopProducts(params),
         ])
         if (cancelled) return
         setSummary(summaryResult)
         setChannelRows(breakdownResult.items)
         setTrendPoints(trendResult.items)
         setAlerts(alertsResult.items)
+        setStoreRows(storesResult.items)
+        setTopProducts(productsResult.items)
       } catch (error) {
         console.error("Failed to load channel performance", error)
         if (!cancelled) {
@@ -531,7 +577,9 @@ export default function ChannelsDashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">القنوات</h1>
-          <p className="text-sm text-muted-foreground">نظرة عامة على أداء قنواتك التسويقية</p>
+          <p className="text-sm text-muted-foreground">
+            نظرة عامة على أداء قنواتك التسويقية ومنصات التجارة الإلكترونية
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
@@ -572,7 +620,11 @@ export default function ChannelsDashboard() {
 
           {channelRows.length > 0 ? (
             <div className="grid gap-4 xl:grid-cols-3">
-              <AppCard title="مقارنة القنوات" className="rounded-2xl border-border/60 shadow-sm">
+              <AppCard
+                title="مقارنة القنوات"
+                subtitle="عائد الإنفاق الإعلاني (ROAS)"
+                className="rounded-2xl border-border/60 shadow-sm"
+              >
                 <ChartContainer config={comparisonChartConfig} className="h-64 w-full" dir="ltr">
                   <BarChart data={channelComparison} layout="vertical" margin={{ left: 8 }}>
                     <CartesianGrid horizontal={false} strokeDasharray="3 3" />
@@ -663,7 +715,11 @@ export default function ChannelsDashboard() {
                 </div>
               </AppCard>
 
-              <AppCard title="اتجاه الأداء" className="rounded-2xl border-border/60 shadow-sm">
+              <AppCard
+                title="اتجاه الأداء"
+                subtitle="الإنفاق (SAR)"
+                className="rounded-2xl border-border/60 shadow-sm"
+              >
                 <ChartContainer config={trendChartConfig} className="h-64 w-full" dir="ltr">
                   <LineChart data={trendChartData} margin={{ left: 4, right: 4 }}>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -707,6 +763,159 @@ export default function ChannelsDashboard() {
                 </div>
               </AppCard>
             </div>
+          ) : null}
+
+          {storeRows.length > 0 ? (
+            <AppCard
+              title="منصات التجارة الإلكترونية"
+              subtitle="أداء متجرك على مختلف المنصات"
+              icon={<ShoppingCart className="size-4 text-muted-foreground" />}
+              className="rounded-2xl border-border/60 shadow-sm"
+            >
+              <div className="overflow-x-auto">
+                <AppTable>
+                  <AppTableHeader>
+                    <AppTableRow className="border-border hover:bg-transparent">
+                      <AppTableHead className="text-left text-muted-foreground">
+                        المنصة
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        عدد العملاء
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        إجمالي الطلبات
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        الإيرادات
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        متوسط قيمة الطلب
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        اتجاه الإيرادات
+                      </AppTableHead>
+                    </AppTableRow>
+                  </AppTableHeader>
+                  <AppTableBody>
+                    {storeRows.map((store) => {
+                      const Icon = STORE_PLATFORM_ICONS[store.platform]
+                      const trendColor =
+                        store.revenueChangePct === null
+                          ? "#94a3b8"
+                          : store.revenueChangePct >= 0
+                            ? "#10b981"
+                            : "#ef4444"
+                      const ordersDelta = formatChangePct(store.ordersChangePct)
+                      const revenueDelta = formatChangePct(store.revenueChangePct)
+
+                      return (
+                        <AppTableRow key={store.platform} className="border-border">
+                          <AppTableCell className="text-left">
+                            <div className="flex items-center gap-2">
+                              <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
+                                <Icon className="size-4 text-muted-foreground" />
+                              </span>
+                              <span className="font-medium text-foreground">{store.platform}</span>
+                            </div>
+                          </AppTableCell>
+                          <AppTableCell className="text-center text-foreground">
+                            {store.customers.toLocaleString()}
+                          </AppTableCell>
+                          <AppTableCell className="text-center">
+                            <div className="font-medium text-foreground">
+                              {store.orders.toLocaleString()}
+                            </div>
+                            {ordersDelta ? (
+                              <div
+                                className={cn(
+                                  "text-xs",
+                                  (store.ordersChangePct ?? 0) >= 0
+                                    ? "text-emerald-600"
+                                    : "text-rose-600"
+                                )}
+                              >
+                                {ordersDelta}
+                              </div>
+                            ) : null}
+                          </AppTableCell>
+                          <AppTableCell className="text-center">
+                            <div className="font-medium text-foreground">
+                              {formatSar(store.revenue)} SAR
+                            </div>
+                            {revenueDelta ? (
+                              <div
+                                className={cn(
+                                  "text-xs",
+                                  (store.revenueChangePct ?? 0) >= 0
+                                    ? "text-emerald-600"
+                                    : "text-rose-600"
+                                )}
+                              >
+                                {revenueDelta}
+                              </div>
+                            ) : null}
+                          </AppTableCell>
+                          <AppTableCell className="text-center text-foreground">
+                            {formatSar(store.averageOrderValue)} SAR
+                          </AppTableCell>
+                          <AppTableCell>
+                            <div className="flex justify-center">
+                              <TrendSparkline values={store.trend} color={trendColor} />
+                            </div>
+                          </AppTableCell>
+                        </AppTableRow>
+                      )
+                    })}
+                  </AppTableBody>
+                </AppTable>
+              </div>
+            </AppCard>
+          ) : null}
+
+          {topProducts.length > 0 ? (
+            <AppCard
+              title="أفضل المنتجات أداءً"
+              icon={<Package className="size-4 text-muted-foreground" />}
+              className="rounded-2xl border-border/60 shadow-sm"
+            >
+              <div className="overflow-x-auto">
+                <AppTable>
+                  <AppTableHeader>
+                    <AppTableRow className="border-border hover:bg-transparent">
+                      <AppTableHead className="text-left text-muted-foreground">
+                        المنتج
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        الطلبات
+                      </AppTableHead>
+                      <AppTableHead className="!text-center text-muted-foreground">
+                        الكمية المباعة
+                      </AppTableHead>
+                    </AppTableRow>
+                  </AppTableHeader>
+                  <AppTableBody>
+                    {topProducts.map((product) => (
+                      <AppTableRow key={product.name} className="border-border">
+                        <AppTableCell className="text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
+                              <Package className="size-4 text-muted-foreground" />
+                            </span>
+                            <span className="font-medium text-foreground">{product.name}</span>
+                          </div>
+                        </AppTableCell>
+                        <AppTableCell className="text-center text-foreground">
+                          {product.orders.toLocaleString()}
+                        </AppTableCell>
+                        <AppTableCell className="text-center text-foreground">
+                          {product.quantitySold.toLocaleString()}
+                        </AppTableCell>
+                      </AppTableRow>
+                    ))}
+                  </AppTableBody>
+                </AppTable>
+              </div>
+            </AppCard>
           ) : null}
 
           <div className="grid gap-4 lg:grid-cols-4">

@@ -82,6 +82,27 @@ export interface ChannelsQueryParams {
   endDate?: string
 }
 
+// Mirrors identity-platform/stores/service.ts's StorePlatform -- no WooCommerce connector
+// exists anywhere in this codebase, so it's never included here.
+export type StorePlatform = "Salla" | "Zid" | "Shopify"
+
+export interface StorePlatformRow {
+  platform: StorePlatform
+  customers: number
+  orders: number
+  ordersChangePct: number | null
+  revenue: number
+  revenueChangePct: number | null
+  averageOrderValue: number
+  trend: number[]
+}
+
+export interface TopProductRow {
+  name: string
+  orders: number
+  quantitySold: number
+}
+
 // Avoids the slash-prefix literal lint rule (same trick as order-list.service.ts/
 // campaign-performance.service.ts) -- this is a real backend API path, not a frontend page route.
 const PERFORMANCE_ENDPOINT = ["", "v1", "channels", "performance"].join(String.fromCharCode(47))
@@ -121,5 +142,17 @@ export const channelsPerformanceService = {
 
   async getAlerts(): Promise<{ items: ChannelAlert[] }> {
     return client.get<{ items: ChannelAlert[] }>(`${PERFORMANCE_ENDPOINT}/alerts`)
+  },
+
+  async getStoresBreakdown(params?: ChannelsQueryParams): Promise<{ items: StorePlatformRow[] }> {
+    return client.get<{ items: StorePlatformRow[] }>(
+      `${PERFORMANCE_ENDPOINT}/stores${buildQuery(params)}`
+    )
+  },
+
+  async getTopProducts(params?: ChannelsQueryParams): Promise<{ items: TopProductRow[] }> {
+    return client.get<{ items: TopProductRow[] }>(
+      `${PERFORMANCE_ENDPOINT}/products${buildQuery(params)}`
+    )
   },
 }

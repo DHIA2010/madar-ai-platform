@@ -6,6 +6,8 @@ import {
   type CampaignPerformancePlatformRow,
   type CampaignPerformanceQuery,
 } from "../campaigns/performance-service"
+import { OrdersAggregationService, type OrderSummaryView } from "../orders/service"
+import { StoresAggregationService, type StorePlatform } from "../stores/service"
 
 // The only 4 ad-spend platforms that exist anywhere in this codebase (provider registry +
 // connection wizard) -- there is no 5th. "Google Ads" here merges the 3 Google sub-platforms
@@ -65,6 +67,41 @@ export interface ChannelAlert {
   todaySpend?: number
   trailingAverageSpend?: number
   changePct?: number
+}
+
+// The only 3 e-commerce platforms that exist anywhere in this codebase (StoresAggregationService/
+// OrdersAggregationService's own PROVIDER_CONFIG) -- no WooCommerce connector exists, so it's
+// never included here even though it appears in some earlier design mockups.
+const STORE_PLATFORMS: StorePlatform[] = ["Salla", "Zid", "Shopify"]
+
+export interface StorePlatformRow {
+  platform: StorePlatform
+  // Real count of synced customer records (StoresAggregationService), all-time -- unlike
+  // orders/revenue/AOV/trend below, this is not scoped to the selected date range.
+  customers: number
+  orders: number
+  ordersChangePct: number | null
+  revenue: number
+  revenueChangePct: number | null
+  averageOrderValue: number
+  trend: number[]
+}
+
+const TOP_PRODUCTS_LIMIT = 10
+
+export interface TopProductRow {
+  name: string
+  orders: number
+  quantitySold: number
+}
+
+function groupOrderRevenueByDay(orders: OrderSummaryView[]): Map<string, number> {
+  const byDay = new Map<string, number>()
+  for (const order of orders) {
+    const day = order.createdAt.slice(0, 10)
+    byDay.set(day, (byDay.get(day) ?? 0) + order.amount)
+  }
+  return byDay
 }
 
 interface ChannelsQuery {
@@ -378,9 +415,13 @@ function findPlatformRow(
 
 export class ChannelsAggregationService {
   private readonly campaignsService: CampaignsPerformanceAggregationService
+  private readonly ordersService: OrdersAggregationService
+  private readonly storesService: StoresAggregationService
 
   constructor(private readonly db: PostgresDatabase) {
     this.campaignsService = new CampaignsPerformanceAggregationService(db)
+    this.ordersService = new OrdersAggregationService(db)
+    this.storesService = new StoresAggregationService(db)
   }
 
   private buildChannelTotals(platformRows: CampaignPerformancePlatformRow[]) {
@@ -574,5 +615,109 @@ export class ChannelsAggregationService {
     }
 
     return { items: alerts }
+  }
+
+  // Real e-commerce platform performance (orders/revenue/AOV), for the "منصات التجارة
+  // الإلكترونية" widget on the Channels page -- distinct from the ad-spend channels above, but
+  // shown on the same page. Composes OrdersAggregationService (orders/revenue per platform) and
+  // StoresAggregationService (real connection status), the same reuse pattern as the ad-spend
+  // channel breakdown reuses CampaignsPerformanceAggregationService. No conversion-rate column:
+  // GA4 sessions aren't linked to a specific store connection anywhere in this schema (no shared
+  // domain/property mapping), so a real per-store conversion rate isn't computable -- showing one
+  // would mean fabricating it.
+  async getStoresBreakdown(
+    actor: AuthenticatedActor,
+    query: ChannelsQuery
+  ): Promise<{ items: StorePlatformRow[] }> {
+    const { current, previous } = resolveDateRange(query)
+    const currentQuery = { startDate: current.startDateSql, endDate: current.endDateSql }
+    const previousQuery = { startDate: previous.startDateSql, endDate: previous.endDateSql }
+
+    const [currentResult, previousResult, stores] = await Promise.all([
+      this.ordersService.listOrders(actor, currentQuery),
+      this.ordersService.listOrders(actor, previousQuery),
+      this.storesService.listStores(actor),
+    ])
+
+    const connectedPlatforms = new Set(
+      stores
+        .filter((store) => store.connectionStatus === "connected")
+        .map((store) => store.platform)
+    )
+    // A platform can have more than one real store connection (e.g. two Salla stores) -- sum
+    // customerCount across all of the platform's connected stores, not just the first.
+    const customersByPlatform = new Map<StorePlatform, number>()
+    for (const store of stores) {
+      if (store.connectionStatus !== "connected") continue
+      customersByPlatform.set(
+        store.platform,
+        (customersByPlatform.get(store.platform) ?? 0) + store.customerCount
+      )
+    }
+    const dateList = buildDateList(current)
+
+    const items: StorePlatformRow[] = STORE_PLATFORMS.filter((platform) =>
+      connectedPlatforms.has(platform)
+    ).map((platform) => {
+      const currentOrders = currentResult.items.filter((order) => order.platform === platform)
+      const previousOrders = previousResult.items.filter((order) => order.platform === platform)
+      const revenue = currentOrders.reduce((sum, order) => sum + order.amount, 0)
+      const previousRevenue = previousOrders.reduce((sum, order) => sum + order.amount, 0)
+
+      const dailyRevenue = groupOrderRevenueByDay(currentOrders)
+      const trend = dateList.slice(-10).map((date) => dailyRevenue.get(date) ?? 0)
+
+      return {
+        platform,
+        customers: customersByPlatform.get(platform) ?? 0,
+        orders: currentOrders.length,
+        ordersChangePct: computeChangePct(currentOrders.length, previousOrders.length),
+        revenue,
+        revenueChangePct: computeChangePct(revenue, previousRevenue),
+        averageOrderValue: currentOrders.length > 0 ? revenue / currentOrders.length : 0,
+        trend,
+      }
+    })
+
+    return { items }
+  }
+
+  // Real per-product order/quantity counts for the "أفضل المنتجات أداءً" widget -- no revenue
+  // column. Verified against live Salla order data: the synced order payload's items only carry
+  // {name, quantity, thumbnail}, never a per-item price (Salla only syncs orders/products/
+  // customers, no separate line-items entity with pricing), so a real per-product revenue figure
+  // isn't computable from what's actually synced. Grouped by product name across all connected
+  // platforms since order items carry no product id, only a name.
+  async getTopProducts(
+    actor: AuthenticatedActor,
+    query: ChannelsQuery
+  ): Promise<{ items: TopProductRow[] }> {
+    const { current } = resolveDateRange(query)
+    const result = await this.ordersService.listOrders(actor, {
+      startDate: current.startDateSql,
+      endDate: current.endDateSql,
+    })
+
+    const byProduct = new Map<string, { orders: number; quantitySold: number }>()
+    for (const order of result.items) {
+      const seenInThisOrder = new Set<string>()
+      for (const item of order.items) {
+        if (!item.name) continue
+        const existing = byProduct.get(item.name) ?? { orders: 0, quantitySold: 0 }
+        existing.quantitySold += item.quantity
+        if (!seenInThisOrder.has(item.name)) {
+          existing.orders += 1
+          seenInThisOrder.add(item.name)
+        }
+        byProduct.set(item.name, existing)
+      }
+    }
+
+    const items = [...byProduct.entries()]
+      .map(([name, stats]) => ({ name, orders: stats.orders, quantitySold: stats.quantitySold }))
+      .sort((a, b) => b.quantitySold - a.quantitySold)
+      .slice(0, TOP_PRODUCTS_LIMIT)
+
+    return { items }
   }
 }

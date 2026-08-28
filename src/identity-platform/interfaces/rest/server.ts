@@ -2378,6 +2378,38 @@ export function createIdentityApiServer(
         return send(200, await channelsAggregationService.getAlerts(actor))
       }
 
+      if (method === "GET" && url.pathname === "/v1/channels/performance/stores") {
+        if (!channelsAggregationService) {
+          return send(503, {
+            code: "CHANNELS_PERFORMANCE_UNAVAILABLE",
+            message: "Channel performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          200,
+          await channelsAggregationService.getStoresBreakdown(actor, parseChannelsQuery(url))
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/channels/performance/products") {
+        if (!channelsAggregationService) {
+          return send(503, {
+            code: "CHANNELS_PERFORMANCE_UNAVAILABLE",
+            message: "Channel performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          200,
+          await channelsAggregationService.getTopProducts(actor, parseChannelsQuery(url))
+        )
+      }
+
       if (url.pathname === "/v1/campaign-links") {
         if (!campaignLinkService) {
           return send(503, {
