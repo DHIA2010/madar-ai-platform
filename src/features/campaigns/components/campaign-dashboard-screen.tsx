@@ -1,7 +1,6 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import Link from "next/link"
 import {
   addMonths,
   endOfMonth,
@@ -24,7 +23,6 @@ import {
   FileText,
   Globe,
   type LucideIcon,
-  Megaphone,
   Search,
   ShoppingBag,
   ShoppingCart,
@@ -36,7 +34,6 @@ import {
 import type { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
-import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
@@ -1413,17 +1410,6 @@ export function CampaignDashboardScreen() {
       <AppPageHeader
         title="Campaigns"
         subtitle="Manage, monitor and optimize your marketing campaigns from one place."
-        actions={
-          <>
-            <AppButton icon={<Megaphone className="size-4" />}>New Campaign</AppButton>
-            <AppButton variant="outline" icon={<TrendingUp className="size-4" />}>
-              Import Campaigns
-            </AppButton>
-            <AppButton asChild variant="outline" icon={<Store className="size-4" />}>
-              <Link href={`${ROUTES.campaigns}/creative-library`}>Creative Library</Link>
-            </AppButton>
-          </>
-        }
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" dir="rtl">
