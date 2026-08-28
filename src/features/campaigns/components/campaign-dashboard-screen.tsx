@@ -100,6 +100,7 @@ type GroupedPlatformRow = {
   roas: number
   clicks: number
   conversions: number
+  impressions: number
   ctr: number
   status: string
 }
@@ -344,8 +345,14 @@ function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatf
             roas: spend > 0 ? Number((revenue / spend).toFixed(2)) : 0,
             clicks,
             conversions,
+            impressions,
             ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
-            status: activeCampaigns > 0 ? "Active" : "No Data",
+            // Same "Active"/"Paused"/"No Data" logic as the backend's getPlatformBreakdown --
+            // this node can aggregate multiple underlying platform rows (e.g. Google Search +
+            // Display), so it's recomputed here rather than copied from a single row's status.
+            // "No Data" only when there are truly zero campaigns, not just zero *active* ones --
+            // a platform with real, paused campaigns must never look like nothing was synced.
+            status: activeCampaigns > 0 ? "Active" : subset.length > 0 ? "Paused" : "No Data",
           },
         }
       })
