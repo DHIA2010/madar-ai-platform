@@ -13,13 +13,34 @@ import { MetaSyncRepository, type MetaSyncRecordInput } from "./sync-repository"
 
 const META_GRAPH_API_VERSION = "v21.0"
 const DEFAULT_META_GRAPH_API_BASE_URL = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`
-const INSIGHTS_FIELDS = "campaign_id,campaign_name,impressions,clicks,spend,date_start,date_stop"
+// actions/action_values are arrays of {action_type, value} -- needed for conversions/revenue
+// and the addToCart/checkoutStarted/purchases/purchaseValue funnel fields (reduced at query
+// time by the Campaigns aggregation service, not here -- this layer just stores the raw
+// payload, matching every other connector's "sync stores raw, aggregation interprets"
+// convention). reach/frequency/video_thruplay_watched_actions/video_play_actions cover the
+// approved Meta vanity metrics (reach/frequency/ThruPlays). adset_id/ad_id let the same
+// field set be reused at every insights granularity below.
+const INSIGHTS_FIELDS =
+  "campaign_id,campaign_name,adset_id,ad_id,impressions,clicks,spend,date_start,date_stop," +
+  "reach,frequency,actions,action_values,video_thruplay_watched_actions,video_play_actions"
 
 interface MetaCampaignApiRow {
   id: string
   name?: string
   status?: string
   objective?: string
+  daily_budget?: string
+  lifetime_budget?: string
+  created_time?: string
+  updated_time?: string
+  [key: string]: unknown
+}
+
+interface MetaAdsetApiRow {
+  id: string
+  name?: string
+  status?: string
+  campaign_id?: string
   daily_budget?: string
   lifetime_budget?: string
   created_time?: string
@@ -41,6 +62,8 @@ interface MetaAdApiRow {
 interface MetaInsightsApiRow {
   campaign_id: string
   campaign_name?: string
+  adset_id?: string
+  ad_id?: string
   impressions?: string
   clicks?: string
   spend?: string
@@ -184,9 +207,24 @@ export class MetaSyncService {
       // discovered from /me/adaccounts -- no prefix manipulation needed.
       const accountId = input.customerId
 
-      const [campaignsResult, adsResult, insightsResult] = await Promise.all([
+      // 5 concurrent calls per sync instead of 3 (campaigns/ads/campaign-insights ->
+      // + adsets + adset-insights + ad-insights). Kept as separate `level` calls rather than
+      // combined via Meta's `breakdowns` param -- the straightforward approach, safe to
+      // optimize later if sync duration becomes an issue.
+      const [
+        campaignsResult,
+        adsetsResult,
+        adsResult,
+        insightsResult,
+        adsetInsightsResult,
+        adInsightsResult,
+      ] = await Promise.all([
         client.getAllPages<MetaCampaignApiRow>(`/${accountId}/campaigns`, {
           fields: "id,name,status,objective,daily_budget,lifetime_budget,created_time,updated_time",
+        }),
+        client.getAllPages<MetaAdsetApiRow>(`/${accountId}/adsets`, {
+          fields:
+            "id,name,status,campaign_id,daily_budget,lifetime_budget,created_time,updated_time",
         }),
         client.getAllPages<MetaAdApiRow>(`/${accountId}/ads`, {
           fields: "id,name,status,campaign_id,adset_id,created_time,updated_time",
@@ -196,15 +234,31 @@ export class MetaSyncService {
           date_preset: "maximum",
           fields: INSIGHTS_FIELDS,
         }),
+        client.getAllPages<MetaInsightsApiRow>(`/${accountId}/insights`, {
+          level: "adset",
+          date_preset: "maximum",
+          fields: INSIGHTS_FIELDS,
+        }),
+        client.getAllPages<MetaInsightsApiRow>(`/${accountId}/insights`, {
+          level: "ad",
+          date_preset: "maximum",
+          fields: INSIGHTS_FIELDS,
+        }),
       ])
 
       if (!campaignsResult.ok) throwOnMetaFailure(campaignsResult.error)
+      if (!adsetsResult.ok) throwOnMetaFailure(adsetsResult.error)
       if (!adsResult.ok) throwOnMetaFailure(adsResult.error)
       if (!insightsResult.ok) throwOnMetaFailure(insightsResult.error)
+      if (!adsetInsightsResult.ok) throwOnMetaFailure(adsetInsightsResult.error)
+      if (!adInsightsResult.ok) throwOnMetaFailure(adInsightsResult.error)
 
       const campaigns = campaignsResult.data
+      const adsets = adsetsResult.data
       const ads = adsResult.data
       const insights = insightsResult.data
+      const adsetInsights = adsetInsightsResult.data
+      const adInsights = adInsightsResult.data
 
       const records: MetaSyncRecordInput[] = [
         ...campaigns.map((campaign) => ({
@@ -212,6 +266,12 @@ export class MetaSyncService {
           entityId: String(campaign.id),
           recordDate: toRecordDate([campaign.updated_time, campaign.created_time]),
           payload: campaign as Record<string, unknown>,
+        })),
+        ...adsets.map((adset) => ({
+          entityType: "adsets" as const,
+          entityId: String(adset.id),
+          recordDate: toRecordDate([adset.updated_time, adset.created_time]),
+          payload: adset as Record<string, unknown>,
         })),
         ...ads.map((ad) => ({
           entityType: "ads" as const,
@@ -225,6 +285,18 @@ export class MetaSyncService {
           recordDate: toRecordDate([row.date_start]),
           payload: row as Record<string, unknown>,
         })),
+        ...adsetInsights.map((row) => ({
+          entityType: "adset_insights" as const,
+          entityId: `${row.adset_id}:${row.date_start}`,
+          recordDate: toRecordDate([row.date_start]),
+          payload: row as Record<string, unknown>,
+        })),
+        ...adInsights.map((row) => ({
+          entityType: "ad_insights" as const,
+          entityId: `${row.ad_id}:${row.date_start}`,
+          recordDate: toRecordDate([row.date_start]),
+          payload: row as Record<string, unknown>,
+        })),
       ]
 
       const totalWritten = await this.syncRepository.upsertRecords({
@@ -235,8 +307,11 @@ export class MetaSyncService {
 
       const metrics = {
         campaigns: campaigns.length,
+        adsets: adsets.length,
         ads: ads.length,
         insights: insights.length,
+        adsetInsights: adsetInsights.length,
+        adInsights: adInsights.length,
         totalRecords: totalWritten,
       }
 

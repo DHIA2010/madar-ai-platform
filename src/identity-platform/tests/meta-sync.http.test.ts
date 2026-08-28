@@ -23,8 +23,11 @@ let container: ReturnType<typeof createIdentityPlatform>
 interface MockMetaDataConfig {
   campaigns?: Array<Record<string, unknown>>
   campaignsPageSize?: number
+  adsets?: Array<Record<string, unknown>>
   ads?: Array<Record<string, unknown>>
   insights?: Array<Record<string, unknown>>
+  adsetInsights?: Array<Record<string, unknown>>
+  adInsights?: Array<Record<string, unknown>>
   campaignsShouldFail?: boolean
 }
 
@@ -65,8 +68,11 @@ function mockMetaResponses(input: {
   const nativeFetch = globalThis.fetch
   const campaigns = input.data?.campaigns ?? []
   const campaignsPageSize = input.data?.campaignsPageSize ?? 250
+  const adsets = input.data?.adsets ?? []
   const ads = input.data?.ads ?? []
   const insights = input.data?.insights ?? []
+  const adsetInsights = input.data?.adsetInsights ?? []
+  const adInsights = input.data?.adInsights ?? []
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
     const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
@@ -107,12 +113,20 @@ function mockMetaResponses(input: {
       return paginateGraphStyle({ url, items: campaigns, pageSize: campaignsPageSize })
     }
 
+    // Must be checked before the generic "/ads" check below -- "/adsets" contains "/ads"
+    // as a substring, so the order here matters.
+    if (url.includes("/adsets")) {
+      return paginateGraphStyle({ url, items: adsets, pageSize: 250 })
+    }
+
     if (url.includes("/ads")) {
       return paginateGraphStyle({ url, items: ads, pageSize: 250 })
     }
 
     if (url.includes("/insights")) {
-      return paginateGraphStyle({ url, items: insights, pageSize: 250 })
+      const level = new URL(url).searchParams.get("level")
+      const items = level === "adset" ? adsetInsights : level === "ad" ? adInsights : insights
+      return paginateGraphStyle({ url, items, pageSize: 250 })
     }
 
     return new Response("{}", { status: 404 })
@@ -290,6 +304,7 @@ describe("meta ads data sync: real campaigns/ads/insights pipeline", () => {
       status: "ACTIVE",
       updated_time: "2026-01-01T00:00:00Z",
     }))
+    const adsets = [{ id: "5001", campaign_id: "3000", updated_time: "2026-01-01T00:00:00Z" }]
     const ads = [{ id: "7001", campaign_id: "3000", updated_time: "2026-01-02T00:00:00Z" }]
     const insights = [
       {
@@ -305,13 +320,32 @@ describe("meta ads data sync: real campaigns/ads/insights pipeline", () => {
         date_start: "2026-01-02",
       },
     ]
+    const adsetInsights = [
+      {
+        campaign_id: "3000",
+        adset_id: "5001",
+        impressions: "60",
+        actions: [{ action_type: "omni_purchase", value: "3" }],
+        action_values: [{ action_type: "omni_purchase", value: "150" }],
+        date_start: "2026-01-01",
+      },
+    ]
+    const adInsights = [
+      {
+        campaign_id: "3000",
+        adset_id: "5001",
+        ad_id: "7001",
+        impressions: "40",
+        date_start: "2026-01-01",
+      },
+    ]
 
     mockMetaResponses({
       baseUrl,
       accessToken: "meta-access-sync",
       longLivedToken: "meta-long-lived-sync",
       adAccounts: [{ id: accountId, name: "Sync Test Account", account_status: 1 }],
-      data: { campaigns, campaignsPageSize: 15, ads, insights },
+      data: { campaigns, campaignsPageSize: 15, adsets, ads, insights, adsetInsights, adInsights },
     })
 
     const started = await connectMeta({ login, workspaceId })
@@ -336,19 +370,35 @@ describe("meta ads data sync: real campaigns/ads/insights pipeline", () => {
     }
     expect(syncResult.status).toBe("completed")
     expect(syncResult.metrics.campaigns).toBe(17)
+    expect(syncResult.metrics.adsets).toBe(1)
     expect(syncResult.metrics.ads).toBe(1)
     expect(syncResult.metrics.insights).toBe(2)
-    expect(syncResult.metrics.totalRecords).toBe(20)
+    expect(syncResult.metrics.adsetInsights).toBe(1)
+    expect(syncResult.metrics.adInsights).toBe(1)
+    expect(syncResult.metrics.totalRecords).toBe(23)
 
-    const recordRows = await database.query<{ entity_type: string; entity_id: string }>(
-      `select entity_type, entity_id from meta_records where connection_id = $1`,
-      [started.connectionId]
-    )
-    expect(recordRows.rows).toHaveLength(20)
+    const recordRows = await database.query<{
+      entity_type: string
+      entity_id: string
+      payload: Record<string, unknown>
+    }>(`select entity_type, entity_id, payload from meta_records where connection_id = $1`, [
+      started.connectionId,
+    ])
+    expect(recordRows.rows).toHaveLength(23)
     expect(recordRows.rows.filter((r) => r.entity_type === "campaigns")).toHaveLength(17)
     // Confirms Graph API cursor pagination actually followed paging.next past page 1 (15 campaigns).
     expect(recordRows.rows.some((r) => r.entity_id === "3016")).toBe(true)
     expect(recordRows.rows.some((r) => r.entity_id === "3000:2026-01-01")).toBe(true)
+
+    const adsetRow = recordRows.rows.find((r) => r.entity_type === "adsets")
+    expect(adsetRow?.entity_id).toBe("5001")
+
+    const adsetInsightRow = recordRows.rows.find((r) => r.entity_type === "adset_insights")
+    expect(adsetInsightRow?.entity_id).toBe("5001:2026-01-01")
+    expect(adsetInsightRow?.payload.actions).toEqual([{ action_type: "omni_purchase", value: "3" }])
+
+    const adInsightRow = recordRows.rows.find((r) => r.entity_type === "ad_insights")
+    expect(adInsightRow?.entity_id).toBe("7001:2026-01-01")
 
     const recordsResponse = await fetch(
       `${baseUrl}/v1/integrations/meta-ads/records?connectionId=${started.connectionId}&customerId=${accountId}&entityType=ads`,

@@ -52,7 +52,7 @@ function mapRecord(row: Record<string, unknown>): IntegrationRecordView {
 }
 
 export interface MetaSyncRecordInput {
-  entityType: "campaigns" | "ads" | "insights"
+  entityType: "campaigns" | "adsets" | "ads" | "insights" | "adset_insights" | "ad_insights"
   entityId: string
   recordDate: string
   payload: Record<string, unknown>
