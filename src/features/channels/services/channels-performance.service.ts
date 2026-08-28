@@ -101,6 +101,7 @@ export interface TopProductRow {
   name: string
   orders: number
   quantitySold: number
+  thumbnail: string | null
 }
 
 // Avoids the slash-prefix literal lint rule (same trick as order-list.service.ts/

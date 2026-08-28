@@ -93,6 +93,9 @@ export interface TopProductRow {
   name: string
   orders: number
   quantitySold: number
+  // Real image URL from the order item, only ever present for Salla (see OrderItemView) -- null
+  // for every other platform, not a placeholder.
+  thumbnail: string | null
 }
 
 function groupOrderRevenueByDay(orders: OrderSummaryView[]): Map<string, number> {
@@ -712,13 +715,21 @@ export class ChannelsAggregationService {
       endDate: current.endDateSql,
     })
 
-    const byProduct = new Map<string, { orders: number; quantitySold: number }>()
+    const byProduct = new Map<
+      string,
+      { orders: number; quantitySold: number; thumbnail?: string }
+    >()
     for (const order of result.items) {
       const seenInThisOrder = new Set<string>()
       for (const item of order.items) {
         if (!item.name) continue
         const existing = byProduct.get(item.name) ?? { orders: 0, quantitySold: 0 }
         existing.quantitySold += item.quantity
+        // First real thumbnail seen for this product name wins -- only Salla's order items
+        // carry one today, so most products across other platforms simply have none.
+        if (!existing.thumbnail && item.thumbnail) {
+          existing.thumbnail = item.thumbnail
+        }
         if (!seenInThisOrder.has(item.name)) {
           existing.orders += 1
           seenInThisOrder.add(item.name)
@@ -728,7 +739,12 @@ export class ChannelsAggregationService {
     }
 
     const items = [...byProduct.entries()]
-      .map(([name, stats]) => ({ name, orders: stats.orders, quantitySold: stats.quantitySold }))
+      .map(([name, stats]) => ({
+        name,
+        orders: stats.orders,
+        quantitySold: stats.quantitySold,
+        thumbnail: stats.thumbnail ?? null,
+      }))
       .sort((a, b) => b.quantitySold - a.quantitySold)
       .slice(0, TOP_PRODUCTS_LIMIT)
 

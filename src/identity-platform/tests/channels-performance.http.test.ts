@@ -886,7 +886,13 @@ describe("GET /v1/channels/performance/products: real per-product order/quantity
         source: "web",
         total: { amount: 100, currency: "SAR" },
         status: { name: "Completed", slug: "completed" },
-        items: [{ name: "فستان", quantity: 3 }],
+        items: [
+          {
+            name: "فستان",
+            quantity: 3,
+            thumbnail: "https://salla-dev.s3.eu-central-1.amazonaws.com/dress.jpg",
+          },
+        ],
         is_pending_payment: false,
         date: { date: `${today} 10:00:00` },
       },
@@ -915,17 +921,19 @@ describe("GET /v1/channels/performance/products: real per-product order/quantity
     })
     expect(response.status).toBe(200)
     const body = (await response.json()) as {
-      items: Array<{ name: string; orders: number; quantitySold: number }>
+      items: Array<{ name: string; orders: number; quantitySold: number; thumbnail: string | null }>
     }
 
     const dress = body.items.find((item) => item.name === "فستان")
     expect(dress).toBeDefined()
     expect(dress?.orders).toBe(2)
     expect(dress?.quantitySold).toBe(5)
+    // Real image URL from the order item, not fabricated -- only Salla's payload carries one.
+    expect(dress?.thumbnail).toBe("https://salla-dev.s3.eu-central-1.amazonaws.com/dress.jpg")
     // No revenue field on the response at all -- real order items carry no per-item price.
     expect(dress).not.toHaveProperty("revenue")
 
     const shoe = body.items.find((item) => item.name === "حذاء")
-    expect(shoe).toMatchObject({ orders: 1, quantitySold: 1 })
+    expect(shoe).toMatchObject({ orders: 1, quantitySold: 1, thumbnail: null })
   })
 })

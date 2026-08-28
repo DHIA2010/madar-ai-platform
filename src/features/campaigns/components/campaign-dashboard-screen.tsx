@@ -22,13 +22,10 @@ import {
   CreditCard,
   Eye,
   FileText,
-  Globe,
   type LucideIcon,
   MousePointerClick,
   Percent,
   Search,
-  ShoppingBag,
-  Store,
   TrendingUp,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -65,7 +62,6 @@ import {
 } from "../services/campaign-performance.service"
 import {
   CAMPAIGN_PLATFORM_HIERARCHY,
-  type CampaignPlatform,
   type CampaignTypeFilter,
   type ExplorerLevel,
   type ExplorerPlatformFilter,
@@ -77,6 +73,8 @@ import {
   PLATFORM_NODE_CONFIG,
   type PlatformNodeKey,
 } from "./campaign-metrics"
+
+import { PlatformBadge } from "@/components/platform-badge"
 
 // One row per entity level, real data from campaignPerformanceService plus the display-only
 // fields (nodeId/entityName/entityDescription) the table rendering needs.
@@ -250,22 +248,6 @@ function getRoasClasses(roas: number) {
   if (roas >= 2.5) return "text-sky-300"
   if (roas > 0) return "text-amber-300"
   return "text-muted-foreground"
-}
-
-function PlatformIcon({ platform }: { platform: CampaignPlatform | PlatformNodeKey }) {
-  if (platform === "Google" || platform === "Google Search" || platform === "Google Display") {
-    return <Globe className="size-4" />
-  }
-
-  if (platform === "YouTube") {
-    return <TrendingUp className="size-4" />
-  }
-
-  if (platform === "Meta") {
-    return <ShoppingBag className="size-4" />
-  }
-
-  return <Store className="size-4" />
 }
 
 function getSearchPlaceholder(level: ExplorerLevel) {
@@ -890,7 +872,7 @@ export function CampaignDashboardScreen() {
       return (
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-foreground">
-            <PlatformIcon platform={platformForIcon} />
+            <PlatformBadge platform={platformForIcon} className="size-6" iconClassName="size-3.5" />
             <span className="font-medium">{row.entityName}</span>
           </div>
           <p className="text-xs text-muted-foreground">{row.entityDescription}</p>
@@ -905,7 +887,7 @@ export function CampaignDashboardScreen() {
 
       return (
         <div className="flex items-center justify-center gap-2 text-muted-foreground">
-          <PlatformIcon platform={row.platform} />
+          <PlatformBadge platform={row.platform} className="size-6" iconClassName="size-3.5" />
           <span>{row.platform}</span>
         </div>
       )

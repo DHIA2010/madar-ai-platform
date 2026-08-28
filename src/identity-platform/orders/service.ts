@@ -10,6 +10,10 @@ export type PaymentStatus = "Paid" | "Refunded" | "Pending"
 export interface OrderItemView {
   name: string
   quantity: number
+  // Only Salla's real order payload carries a per-item image (verified against live data);
+  // Shopify/Zid's line-item shapes have no equivalent field confirmed, so this stays undefined
+  // for them rather than guessing a field name.
+  thumbnail?: string
 }
 
 export interface OrderSummaryView {
@@ -89,13 +93,14 @@ function normalizeSallaOrder(row: OrderRecordRow): OrderSummaryView {
     status?: { name?: string; slug?: string }
     is_pending_payment?: boolean
     payment_actions?: { refund_action?: { has_refund_amount?: boolean } }
-    items?: Array<{ name?: string; quantity?: number }>
+    items?: Array<{ name?: string; quantity?: number; thumbnail?: string }>
     date?: { date?: string }
   }
 
   const items = (payload.items ?? []).map((item) => ({
     name: item.name ?? "",
     quantity: Number(item.quantity) || 0,
+    thumbnail: item.thumbnail || undefined,
   }))
   const statusText = payload.status?.name ?? payload.status?.slug ?? ""
 

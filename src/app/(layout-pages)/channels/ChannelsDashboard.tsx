@@ -20,14 +20,11 @@ import {
   ArrowUpRight,
   Bell,
   CalendarDays,
-  Globe,
   Layers,
   MousePointerClick,
   Package,
   ShoppingCart,
   Sparkles,
-  Store,
-  StoreIcon,
   Target,
   TrendingUp,
   Users,
@@ -65,7 +62,6 @@ import {
   type ChannelRow,
   type ChannelsSummary,
   type ChannelsTrendPoint,
-  type StorePlatform,
   type StorePlatformRow,
   type TopProductRow,
 } from "@/features/channels/services/channels-performance.service"
@@ -300,10 +296,29 @@ function TrendSparkline({ values, color }: { values: number[]; color: string }) 
   )
 }
 
-const STORE_PLATFORM_ICONS: Record<StorePlatform, LucideIcon> = {
-  Salla: Store,
-  Zid: Globe,
-  Shopify: StoreIcon,
+function ProductThumbnail({ src }: { src: string | null }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
+    return (
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+        <Package className="size-4 text-muted-foreground" />
+      </span>
+    )
+  }
+
+  return (
+    // Real, unpredictable external URLs (Salla's own S3 bucket) -- not worth configuring
+    // next.config.js remote patterns for a dashboard thumbnail that already has a graceful
+    // fallback on load failure.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className="size-8 shrink-0 rounded-lg object-cover"
+      onError={() => setFailed(true)}
+    />
+  )
 }
 
 function ChannelCard({ channel }: { channel: ChannelRow }) {
@@ -798,13 +813,10 @@ export default function ChannelsDashboard() {
                   </AppTableHeader>
                   <AppTableBody>
                     {storeRows.map((store) => {
-                      const Icon = STORE_PLATFORM_ICONS[store.platform]
-                      const trendColor =
-                        store.revenueChangePct === null
-                          ? "#94a3b8"
-                          : store.revenueChangePct >= 0
-                            ? "#10b981"
-                            : "#ef4444"
+                      // Same brand color the sparkline in the ad-channel cards already uses,
+                      // rather than a generic changePct-based green/red -- makes each platform's
+                      // trend line recognizable at a glance across every widget on this page.
+                      const trendColor = PLATFORM_ICON[store.platform]?.hex ?? "#94a3b8"
                       const ordersDelta = formatChangePct(store.ordersChangePct)
                       const revenueDelta = formatChangePct(store.revenueChangePct)
 
@@ -812,9 +824,7 @@ export default function ChannelsDashboard() {
                         <AppTableRow key={store.platform} className="border-border">
                           <AppTableCell className="text-left">
                             <div className="flex items-center gap-2">
-                              <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
-                                <Icon className="size-4 text-muted-foreground" />
-                              </span>
+                              <PlatformBadge platform={store.platform} className="size-8" />
                               <span className="font-medium text-foreground">{store.platform}</span>
                             </div>
                           </AppTableCell>
@@ -898,9 +908,7 @@ export default function ChannelsDashboard() {
                       <AppTableRow key={product.name} className="border-border">
                         <AppTableCell className="text-left">
                           <div className="flex items-center gap-2">
-                            <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
-                              <Package className="size-4 text-muted-foreground" />
-                            </span>
+                            <ProductThumbnail src={product.thumbnail} />
                             <span className="font-medium text-foreground">{product.name}</span>
                           </div>
                         </AppTableCell>
