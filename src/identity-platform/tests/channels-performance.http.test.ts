@@ -534,7 +534,8 @@ describe("GET /v1/channels/performance/*: real cross-platform channel aggregatio
     expect(summary.revenue).toBe(200)
     // Google(5+1) + Meta(4) + TikTok(3) = 13
     expect(summary.conversions).toBe(13)
-    expect(summary.totalChannels).toBe(4)
+    // 4 ad channels + 3 e-commerce platforms, combined into one connectivity count.
+    expect(summary.totalChannels).toBe(7)
     expect(summary.activeChannels).toBe(4)
 
     const breakdownResponse = await fetch(`${baseUrl}/v1/channels/performance/breakdown`, {
@@ -576,7 +577,7 @@ describe("GET /v1/channels/performance/*: real cross-platform channel aggregatio
       activeChannels: number
       totalChannels: number
     }
-    expect(summary.totalChannels).toBe(4)
+    expect(summary.totalChannels).toBe(7)
     expect(summary.activeChannels).toBe(1)
 
     const breakdownResponse = await fetch(`${baseUrl}/v1/channels/performance/breakdown`, {
@@ -828,6 +829,34 @@ describe("GET /v1/channels/performance/stores: real e-commerce platform aggregat
     // has no explicit timezone, so which UTC day it lands in depends on the machine's local
     // timezone; the sum is what actually proves the trend carries the real revenue.
     expect(salla.trend.reduce((sum, value) => sum + value, 0)).toBe(469)
+  })
+
+  it("counts a connected store platform toward the summary's combined Active Channels total", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "channels-perf-combined-count@madar.test",
+      "Channels Perf Combined Count Org"
+    )
+    const workspaceId = actor.workspaceId as string
+
+    await insertConnectedMetaConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertConnectedSallaConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/channels/performance/summary`, {
+      headers: authHeaders(login),
+    })
+    const summary = (await response.json()) as { activeChannels: number; totalChannels: number }
+    expect(summary.totalChannels).toBe(7)
+    // 1 ad channel (Meta) + 1 store platform (Salla) -- proves the store connection actually
+    // moves this number, not just that the total became 7.
+    expect(summary.activeChannels).toBe(2)
   })
 })
 

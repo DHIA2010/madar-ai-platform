@@ -444,11 +444,14 @@ export class ChannelsAggregationService {
       endDate: previous.endDateSql,
     }
 
-    const [currentPlatformRows, previousPlatformRows, connectionStates] = await Promise.all([
-      this.campaignsService.getPlatformBreakdown(actor, campaignQuery),
-      this.campaignsService.getPlatformBreakdown(actor, previousQuery),
-      fetchAllConnectionStates(this.db, actor),
-    ])
+    const [currentPlatformRows, previousPlatformRows, connectionStates, stores] = await Promise.all(
+      [
+        this.campaignsService.getPlatformBreakdown(actor, campaignQuery),
+        this.campaignsService.getPlatformBreakdown(actor, previousQuery),
+        fetchAllConnectionStates(this.db, actor),
+        this.storesService.listStores(actor),
+      ]
+    )
 
     const currentTotals = this.buildChannelTotals(currentPlatformRows)
     const previousTotals = this.buildChannelTotals(previousPlatformRows)
@@ -470,7 +473,18 @@ export class ChannelsAggregationService {
     const cpa = conversions > 0 ? spend / conversions : 0
     const previousCpa = previousConversions > 0 ? previousSpend / previousConversions : 0
 
-    const activeChannels = CHANNEL_NAMES.filter((name) => connectionStates[name].connected).length
+    // "Active Channels" now counts ad-spend channels and e-commerce platforms together (7
+    // total: 4 ad channels + 3 store platforms) -- the page covers both, so one combined
+    // connectivity number is more useful here than two separate KPI cards.
+    const activeAdChannels = CHANNEL_NAMES.filter((name) => connectionStates[name].connected).length
+    const connectedStorePlatforms = new Set(
+      stores
+        .filter((store) => store.connectionStatus === "connected")
+        .map((store) => store.platform)
+    )
+    const activeStorePlatforms = STORE_PLATFORMS.filter((platform) =>
+      connectedStorePlatforms.has(platform)
+    ).length
 
     return {
       spend,
@@ -483,8 +497,8 @@ export class ChannelsAggregationService {
       conversionsChangePct: computeChangePct(conversions, previousConversions),
       cpa,
       cpaChangePct: computeChangePct(cpa, previousCpa),
-      activeChannels,
-      totalChannels: TOTAL_CHANNELS,
+      activeChannels: activeAdChannels + activeStorePlatforms,
+      totalChannels: TOTAL_CHANNELS + STORE_PLATFORMS.length,
     }
   }
 
