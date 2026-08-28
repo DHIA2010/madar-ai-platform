@@ -633,11 +633,17 @@ export function CampaignDashboardScreen() {
   const endDate = (dateRange?.to ?? dateRange?.from)?.toISOString().slice(0, 10)
 
   // Fetches the account-wide KPI summary + platform breakdown (real period-over-period deltas)
-  // whenever the date range changes, and whichever level-specific rows the current drill-down
-  // position needs. KPI cards always reflect the account-wide summary regardless of drill level
-  // -- matches how Orders/Stores KPI strips already work in this app, and keeps the real
-  // period-over-period delta computation meaningful (ad-group/ad-level rows have no comparable
-  // "previous period" of their own).
+  // whenever the date range OR any of platform/status/objective/search changes, and whichever
+  // level-specific rows the current drill-down position needs. KPI cards always reflect the
+  // account-wide summary regardless of drill level -- matches how Orders/Stores KPI strips
+  // already work in this app, and keeps the real period-over-period delta computation
+  // meaningful (ad-group/ad-level rows have no comparable "previous period" of their own).
+  //
+  // All 4 filters are sent to every call below -- previously only startDate/endDate were sent,
+  // so the summary/platform-breakdown numbers never changed when platform/status/objective/
+  // search were touched, and the backend never even saw those filters to apply them. `search`
+  // is already debounced above specifically so it's safe to include here without a refetch per
+  // keystroke.
   useEffect(() => {
     let cancelled = false
 
@@ -645,10 +651,19 @@ export function CampaignDashboardScreen() {
       setIsLoading(true)
       setLoadError(null)
 
+      const commonParams = {
+        startDate,
+        endDate,
+        platform: platform === "All Platforms" ? undefined : platform,
+        status: status === "All Statuses" ? undefined : status,
+        objective: objective === "All Objectives" ? undefined : objective,
+        search: search.trim() || undefined,
+      }
+
       try {
         const [summaryResult, platformsResult] = await Promise.all([
-          campaignPerformanceService.getSummary({ startDate, endDate }),
-          campaignPerformanceService.getPlatformBreakdown({ startDate, endDate }),
+          campaignPerformanceService.getSummary(commonParams),
+          campaignPerformanceService.getPlatformBreakdown(commonParams),
         ])
         if (cancelled) return
         setSummary(summaryResult)
@@ -656,22 +671,21 @@ export function CampaignDashboardScreen() {
 
         if (currentLevel === "campaigns") {
           const result = await campaignPerformanceService.listCampaigns({
-            startDate,
-            endDate,
+            ...commonParams,
             pageSize: 200,
           })
           if (!cancelled) setCampaignRows(result.items)
         } else if (currentLevel === "adGroups" && selectedCampaign) {
-          const result = await campaignPerformanceService.listAdGroups(selectedCampaign.id, {
-            startDate,
-            endDate,
-          })
+          const result = await campaignPerformanceService.listAdGroups(
+            selectedCampaign.id,
+            commonParams
+          )
           if (!cancelled) setAdGroupRows(result.items)
         } else if ((currentLevel === "ads" || currentLevel === "keywords") && selectedAdGroup) {
           const result = await campaignPerformanceService.listAdsOrKeywords(
             selectedAdGroup.id,
             currentLevel,
-            { startDate, endDate }
+            commonParams
           )
           if (!cancelled) setLeafRows(result.items)
         }
@@ -692,7 +706,17 @@ export function CampaignDashboardScreen() {
     return () => {
       cancelled = true
     }
-  }, [currentLevel, selectedCampaign, selectedAdGroup, startDate, endDate])
+  }, [
+    currentLevel,
+    selectedCampaign,
+    selectedAdGroup,
+    startDate,
+    endDate,
+    platform,
+    status,
+    objective,
+    search,
+  ])
 
   const filteredPlatformRows = useMemo(
     () => platformRows.filter((row) => platform === "All Platforms" || row.platform === platform),

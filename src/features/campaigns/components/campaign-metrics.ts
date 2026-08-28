@@ -136,12 +136,13 @@ export const ANALYSIS_TABS: Array<{ key: AnalysisTab; label: string }> = [
 const platformOverviewColumns: MetricColumn[] = [
   { key: "entity", label: "Platform", kind: "text" },
   { key: "activeCampaigns", label: "Active Campaigns", kind: "number" },
+  { key: "impressions", label: "Impressions", kind: "number" },
+  { key: "clicks", label: "Clicks", kind: "number" },
+  { key: "ctr", label: "CTR", kind: "percent" },
   { key: "spend", label: "Spend", kind: "currency" },
   { key: "revenue", label: "Revenue", kind: "currency" },
   { key: "roas", label: "ROAS", kind: "ratio" },
-  { key: "clicks", label: "Clicks", kind: "number" },
   { key: "conversions", label: "Conversions", kind: "number" },
-  { key: "ctr", label: "CTR", kind: "percent" },
   { key: "status", label: "Status", kind: "text" },
 ]
 
