@@ -52,7 +52,7 @@ function mapRecord(row: Record<string, unknown>): IntegrationRecordView {
 }
 
 export interface TikTokAdsSyncRecordInput {
-  entityType: "campaigns" | "adgroups" | "ads" | "insights"
+  entityType: "campaigns" | "adgroups" | "ads" | "insights" | "adgroup_insights" | "ad_insights"
   entityId: string
   recordDate: string
   payload: Record<string, unknown>

@@ -21,6 +21,8 @@ interface MockTikTokAdsDataConfig {
   adgroups?: Array<Record<string, unknown>>
   ads?: Array<Record<string, unknown>>
   insights?: Array<{ dimensions: Record<string, unknown>; metrics: Record<string, unknown> }>
+  adgroupInsights?: Array<{ dimensions: Record<string, unknown>; metrics: Record<string, unknown> }>
+  adInsights?: Array<{ dimensions: Record<string, unknown>; metrics: Record<string, unknown> }>
   campaignsShouldFail?: boolean
 }
 
@@ -57,6 +59,8 @@ function mockTikTokAdsResponses(input: {
   const adgroups = input.data?.adgroups ?? []
   const ads = input.data?.ads ?? []
   const insights = input.data?.insights ?? []
+  const adgroupInsights = input.data?.adgroupInsights ?? []
+  const adInsights = input.data?.adInsights ?? []
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
     const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
@@ -138,7 +142,14 @@ function mockTikTokAdsResponses(input: {
       const parsed = new URL(url)
       const windowStart = parsed.searchParams.get("start_date") ?? ""
       const windowEnd = parsed.searchParams.get("end_date") ?? ""
-      const windowItems = insights.filter((item) => {
+      const dataLevel = parsed.searchParams.get("data_level")
+      const source =
+        dataLevel === "AUCTION_ADGROUP"
+          ? adgroupInsights
+          : dataLevel === "AUCTION_AD"
+            ? adInsights
+            : insights
+      const windowItems = source.filter((item) => {
         const day = String(item.dimensions.stat_time_day ?? "").slice(0, 10)
         return day >= windowStart && day <= windowEnd
       })
@@ -342,12 +353,24 @@ describe("tiktok ads data sync: real campaigns/adgroups/ads/insights pipeline", 
         metrics: { spend: "5.00", impressions: "1000" },
       },
     ]
+    const adgroupInsights = [
+      {
+        dimensions: { adgroup_id: "ag-1", stat_time_day: "2026-01-01 00:00:00" },
+        metrics: { spend: "3.00", impressions: "600" },
+      },
+    ]
+    const adInsights = [
+      {
+        dimensions: { ad_id: "ad-1", stat_time_day: "2026-01-01 00:00:00" },
+        metrics: { spend: "2.00", impressions: "400" },
+      },
+    ]
 
     const fetchSpy = mockTikTokAdsResponses({
       baseUrl,
       accessToken: "tiktok-ads-access-full",
       advertiser: { id: "998877", name: "Full Advertiser" },
-      data: { campaigns, adgroups, ads, insights },
+      data: { campaigns, adgroups, ads, insights, adgroupInsights, adInsights },
     })
 
     const started = await connectTikTokAds({ login, workspaceId })
@@ -375,17 +398,29 @@ describe("tiktok ads data sync: real campaigns/adgroups/ads/insights pipeline", 
     expect(syncResult.metrics.adgroups).toBe(1)
     expect(syncResult.metrics.ads).toBe(1)
     expect(syncResult.metrics.insights).toBe(1)
-    expect(syncResult.metrics.totalRecords).toBe(123)
+    expect(syncResult.metrics.adgroupInsights).toBe(1)
+    expect(syncResult.metrics.adInsights).toBe(1)
+    expect(syncResult.metrics.totalRecords).toBe(125)
 
     const recordRows = await database.query<{ entity_type: string; entity_id: string }>(
       `select entity_type, entity_id from tiktok_ads_records where connection_id = $1`,
       [started.connectionId]
     )
-    expect(recordRows.rows).toHaveLength(123)
+    expect(recordRows.rows).toHaveLength(125)
     expect(recordRows.rows.filter((r) => r.entity_type === "campaigns")).toHaveLength(120)
     // Confirms page-based pagination actually walked past page 1 (100 campaigns/page).
     expect(recordRows.rows.some((r) => r.entity_id === "camp-119")).toBe(true)
     expect(recordRows.rows.some((r) => r.entity_id === "camp-0:2026-01-01 00:00:00")).toBe(true)
+    expect(
+      recordRows.rows.some(
+        (r) => r.entity_type === "adgroup_insights" && r.entity_id === "ag-1:2026-01-01 00:00:00"
+      )
+    ).toBe(true)
+    expect(
+      recordRows.rows.some(
+        (r) => r.entity_type === "ad_insights" && r.entity_id === "ad-1:2026-01-01 00:00:00"
+      )
+    ).toBe(true)
 
     const campaignsCall = fetchSpy.mock.calls.find(([reqInput]) =>
       String(reqInput).includes("/campaign/get/")

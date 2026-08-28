@@ -116,8 +116,33 @@ interface TikTokAdsAdRow {
 }
 
 interface TikTokAdsInsightRow {
-  dimensions: { campaign_id?: string; stat_time_day?: string; [key: string]: unknown }
+  dimensions: {
+    campaign_id?: string
+    adgroup_id?: string
+    ad_id?: string
+    stat_time_day?: string
+    [key: string]: unknown
+  }
   metrics: Record<string, unknown>
+}
+
+// Confirmed against TikTok's own report/integrated/get OpenAPI spec (ReportDataLevel enum,
+// tiktok/tiktok-business-api-sdk yml_files/report_integrated_get.yml): AUCTION_CAMPAIGN,
+// AUCTION_ADGROUP, AUCTION_AD are the exact valid data_level values. Dimension field names
+// (adgroup_id/ad_id) follow the same naming as the entity's own id field, matching
+// campaign_id's already-confirmed-live pairing with AUCTION_CAMPAIGN above and every
+// campaign/adgroup/ad list endpoint in this file. A revenue/value metric field was
+// deliberately NOT added here -- TikTok's public docs don't document one for this endpoint
+// distinctly from GMV Max/Smart+ material reports (a different, unrelated endpoint), and
+// guessing a metric name risks a silently-wrong field rather than the fail-loud rejection a
+// bad dimension/data_level would produce. Revenue for TikTok stays 0 until a real metric
+// name is confirmed against a live account or newer docs.
+type TikTokAdsInsightsDataLevel = "AUCTION_CAMPAIGN" | "AUCTION_ADGROUP" | "AUCTION_AD"
+
+const INSIGHTS_DIMENSION_BY_LEVEL: Record<TikTokAdsInsightsDataLevel, string> = {
+  AUCTION_CAMPAIGN: "campaign_id",
+  AUCTION_ADGROUP: "adgroup_id",
+  AUCTION_AD: "ad_id",
 }
 
 function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
@@ -250,14 +275,16 @@ function toDateStamp(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-// Fetches one 30-day (or narrower, for the final trailing window) slice of daily campaign
-// performance, paginating within that slice the same way campaign/adgroup/ad do.
+// Fetches one 30-day (or narrower, for the final trailing window) slice of daily
+// campaign/ad-group/ad performance (per dataLevel), paginating within that slice the same
+// way campaign/adgroup/ad list endpoints do.
 async function fetchInsightsWindow(input: {
   apiBaseUrl: string
   advertiserId: string
   accessToken: string
   startDate: string
   endDate: string
+  dataLevel: TikTokAdsInsightsDataLevel
   rateLimiter: TikTokAdsRateLimiter
 }): Promise<TikTokAdsInsightRow[]> {
   const results: TikTokAdsInsightRow[] = []
@@ -267,8 +294,11 @@ async function fetchInsightsWindow(input: {
     const url = new URL(`${input.apiBaseUrl.replace(/\/$/, "")}/report/integrated/get/`)
     url.searchParams.set("advertiser_id", input.advertiserId)
     url.searchParams.set("report_type", "BASIC")
-    url.searchParams.set("data_level", "AUCTION_CAMPAIGN")
-    url.searchParams.set("dimensions", JSON.stringify(["campaign_id", "stat_time_day"]))
+    url.searchParams.set("data_level", input.dataLevel)
+    url.searchParams.set(
+      "dimensions",
+      JSON.stringify([INSIGHTS_DIMENSION_BY_LEVEL[input.dataLevel], "stat_time_day"])
+    )
     url.searchParams.set(
       "metrics",
       JSON.stringify(["spend", "impressions", "clicks", "ctr", "cpm", "cpc", "conversion"])
@@ -289,7 +319,7 @@ async function fetchInsightsWindow(input: {
 
     if (!response.ok) {
       throw new IntegrationProviderError(
-        `TikTok Ads API request failed during sync (report/integrated/get, ${input.startDate}..${input.endDate}): ${await describeTikTokFailure(response)}`,
+        `TikTok Ads API request failed during sync (report/integrated/get, ${input.dataLevel}, ${input.startDate}..${input.endDate}): ${await describeTikTokFailure(response)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -299,7 +329,7 @@ async function fetchInsightsWindow(input: {
     const body = (await response.json()) as TikTokAdsApiEnvelope<TikTokAdsInsightRow>
     if (body.code !== 0) {
       throw new IntegrationProviderError(
-        `TikTok Ads API request failed during sync (report/integrated/get, ${input.startDate}..${input.endDate}): ${await describeTikTokFailure(response, body)}`,
+        `TikTok Ads API request failed during sync (report/integrated/get, ${input.dataLevel}, ${input.startDate}..${input.endDate}): ${await describeTikTokFailure(response, body)}`,
         "TIKTOK_ADS_SYNC_API_REQUEST_FAILED",
         true,
         502
@@ -350,6 +380,7 @@ async function fetchAllInsights(input: {
   apiBaseUrl: string
   advertiserId: string
   accessToken: string
+  dataLevel: TikTokAdsInsightsDataLevel
   rateLimiter: TikTokAdsRateLimiter
 }): Promise<TikTokAdsInsightRow[]> {
   const windows = buildInsightsWindows()
@@ -362,6 +393,7 @@ async function fetchAllInsights(input: {
         accessToken: input.accessToken,
         startDate: window.startDate,
         endDate: window.endDate,
+        dataLevel: input.dataLevel,
         rateLimiter: input.rateLimiter,
       })
     )
@@ -458,11 +490,11 @@ export class TikTokAdsSyncService {
     try {
       const accessToken = await this.oauthService.resolveAccessToken(connection.id)
       const advertiserId = input.customerId
-      // Shared across all four fetches below since they run concurrently -- TikTok's QPS limit
-      // is counted per app across the whole request burst, not per entity type.
+      // Shared across all seven fetches below since they run concurrently -- TikTok's QPS
+      // limit is counted per app across the whole request burst, not per entity type.
       const rateLimiter = new TikTokAdsRateLimiter()
 
-      const [campaigns, adgroups, ads, insights] = await Promise.all([
+      const [campaigns, adgroups, ads, insights, adgroupInsights, adInsights] = await Promise.all([
         fetchAllListPages<TikTokAdsCampaignRow>({
           apiBaseUrl: this.apiBaseUrl,
           path: "/campaign/get/",
@@ -488,6 +520,21 @@ export class TikTokAdsSyncService {
           apiBaseUrl: this.apiBaseUrl,
           advertiserId,
           accessToken,
+          dataLevel: "AUCTION_CAMPAIGN",
+          rateLimiter,
+        }),
+        fetchAllInsights({
+          apiBaseUrl: this.apiBaseUrl,
+          advertiserId,
+          accessToken,
+          dataLevel: "AUCTION_ADGROUP",
+          rateLimiter,
+        }),
+        fetchAllInsights({
+          apiBaseUrl: this.apiBaseUrl,
+          advertiserId,
+          accessToken,
+          dataLevel: "AUCTION_AD",
           rateLimiter,
         }),
       ])
@@ -517,6 +564,18 @@ export class TikTokAdsSyncService {
           recordDate: toRecordDate([row.dimensions.stat_time_day]),
           payload: row as unknown as Record<string, unknown>,
         })),
+        ...adgroupInsights.map((row) => ({
+          entityType: "adgroup_insights" as const,
+          entityId: `${row.dimensions.adgroup_id}:${row.dimensions.stat_time_day}`,
+          recordDate: toRecordDate([row.dimensions.stat_time_day]),
+          payload: row as unknown as Record<string, unknown>,
+        })),
+        ...adInsights.map((row) => ({
+          entityType: "ad_insights" as const,
+          entityId: `${row.dimensions.ad_id}:${row.dimensions.stat_time_day}`,
+          recordDate: toRecordDate([row.dimensions.stat_time_day]),
+          payload: row as unknown as Record<string, unknown>,
+        })),
       ]
 
       const totalWritten = await this.syncRepository.upsertRecords({
@@ -530,6 +589,8 @@ export class TikTokAdsSyncService {
         adgroups: adgroups.length,
         ads: ads.length,
         insights: insights.length,
+        adgroupInsights: adgroupInsights.length,
+        adInsights: adInsights.length,
         totalRecords: totalWritten,
       }
 
