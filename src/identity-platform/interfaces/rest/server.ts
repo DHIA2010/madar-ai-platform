@@ -34,6 +34,11 @@ import { PosRepository } from "../../pos/repository"
 import { PosService } from "../../pos/service"
 import { CampaignRepository } from "../../campaigns/repository"
 import { CampaignService } from "../../campaigns/service"
+import {
+  CampaignsPerformanceAggregationService,
+  type CampaignPerformancePlatform,
+  type CampaignPerformanceQuery,
+} from "../../campaigns/performance-service"
 import { CampaignLinkRepository } from "../../campaign-links/repository"
 import { CampaignLinkService } from "../../campaign-links/service"
 import { extractPlatformSignals } from "../../tracking/platform-macros"
@@ -131,6 +136,29 @@ function getLogoutCookieHeaders(): Record<string, string[]> {
   ]
   return {
     "set-cookie": names.map((name) => `${name}=; ${expiredAttributes}`),
+  }
+}
+
+const CAMPAIGN_PERFORMANCE_PLATFORMS = new Set<CampaignPerformancePlatform>([
+  "Google Search",
+  "Google Display",
+  "YouTube",
+  "Meta",
+  "TikTok",
+  "Snapchat",
+])
+
+function parsePerformanceQuery(url: URL): CampaignPerformanceQuery {
+  const platform = url.searchParams.get("platform")
+  return {
+    startDate: url.searchParams.get("startDate") ?? undefined,
+    endDate: url.searchParams.get("endDate") ?? undefined,
+    platform:
+      platform && CAMPAIGN_PERFORMANCE_PLATFORMS.has(platform as CampaignPerformancePlatform)
+        ? (platform as CampaignPerformancePlatform)
+        : undefined,
+    status: url.searchParams.get("status") ?? undefined,
+    search: url.searchParams.get("search") ?? undefined,
   }
 }
 
@@ -440,6 +468,9 @@ export function createIdentityApiServer(
     : null
   const ordersAggregationService = container.infrastructure.database
     ? new OrdersAggregationService(container.infrastructure.database)
+    : null
+  const campaignsPerformanceAggregationService = container.infrastructure.database
+    ? new CampaignsPerformanceAggregationService(container.infrastructure.database)
     : null
   const storesAggregationService = container.infrastructure.database
     ? new StoresAggregationService(container.infrastructure.database)
@@ -2155,6 +2186,122 @@ export function createIdentityApiServer(
           await orderAttributionService.matchOrders(actor.organizationId, actor.workspaceId, {
             provider: payload.provider,
           })
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/summary") {
+        if (!campaignsPerformanceAggregationService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          200,
+          await campaignsPerformanceAggregationService.getSummary(actor, parsePerformanceQuery(url))
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/platforms") {
+        if (!campaignsPerformanceAggregationService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, {
+          items: await campaignsPerformanceAggregationService.getPlatformBreakdown(
+            actor,
+            parsePerformanceQuery(url)
+          ),
+        })
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/campaigns") {
+        if (!campaignsPerformanceAggregationService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        const page = Number(url.searchParams.get("page") ?? "1")
+        const pageSize = Number(url.searchParams.get("pageSize") ?? "20")
+        return send(
+          200,
+          await campaignsPerformanceAggregationService.listCampaigns(actor, {
+            ...parsePerformanceQuery(url),
+            page: Number.isFinite(page) ? page : 1,
+            pageSize: Number.isFinite(pageSize) ? pageSize : 20,
+          })
+        )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/ad-groups") {
+        if (!campaignsPerformanceAggregationService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        const campaignId = url.searchParams.get("campaignId")
+        if (!campaignId) {
+          return send(400, {
+            code: "CAMPAIGN_ID_REQUIRED",
+            message: "campaignId is required.",
+          })
+        }
+        return send(
+          200,
+          await campaignsPerformanceAggregationService.listAdGroups(
+            actor,
+            campaignId,
+            parsePerformanceQuery(url)
+          )
+        )
+      }
+
+      if (
+        method === "GET" &&
+        (url.pathname === "/v1/campaigns/performance/ads" ||
+          url.pathname === "/v1/campaigns/performance/keywords")
+      ) {
+        if (!campaignsPerformanceAggregationService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        const adGroupId = url.searchParams.get("adGroupId")
+        if (!adGroupId) {
+          return send(400, {
+            code: "AD_GROUP_ID_REQUIRED",
+            message: "adGroupId is required.",
+          })
+        }
+        const level = url.pathname.endsWith("/keywords") ? "keywords" : "ads"
+        return send(
+          200,
+          await campaignsPerformanceAggregationService.listAdsOrKeywords(
+            actor,
+            adGroupId,
+            level,
+            parsePerformanceQuery(url)
+          )
         )
       }
 
