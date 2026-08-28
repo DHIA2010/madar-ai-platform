@@ -953,6 +953,92 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
     })
   })
 
+  it("filters campaigns by objective, bucketed from each platform's real raw objective text", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "campaigns-perf-objective@madar.test",
+      "Campaigns Perf Objective Org"
+    )
+    const workspaceId = actor.workspaceId as string
+    const today = new Date().toISOString().slice(0, 10)
+
+    const metaConnectionId = await insertConnectedMetaConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertMetaRecord({
+      connectionId: metaConnectionId,
+      customerId: "act_objective",
+      entityType: "campaigns",
+      entityId: "m-obj-sales",
+      recordDate: today,
+      payload: {
+        name: "Meta Sales Objective Campaign",
+        status: "ACTIVE",
+        objective: "OUTCOME_SALES",
+      },
+    })
+    await insertMetaRecord({
+      connectionId: metaConnectionId,
+      customerId: "act_objective",
+      entityType: "insights",
+      entityId: `m-obj-sales:${today}`,
+      recordDate: today,
+      payload: {
+        campaign_id: "m-obj-sales",
+        spend: "5",
+        impressions: "50",
+        clicks: "5",
+        date_start: today,
+      },
+    })
+    await insertMetaRecord({
+      connectionId: metaConnectionId,
+      customerId: "act_objective",
+      entityType: "campaigns",
+      entityId: "m-obj-awareness",
+      recordDate: today,
+      payload: {
+        name: "Meta Awareness Objective Campaign",
+        status: "ACTIVE",
+        objective: "OUTCOME_AWARENESS",
+      },
+    })
+    await insertMetaRecord({
+      connectionId: metaConnectionId,
+      customerId: "act_objective",
+      entityType: "insights",
+      entityId: `m-obj-awareness:${today}`,
+      recordDate: today,
+      payload: {
+        campaign_id: "m-obj-awareness",
+        spend: "3",
+        impressions: "30",
+        clicks: "3",
+        date_start: today,
+      },
+    })
+
+    const salesOnlyResponse = await fetch(
+      `${baseUrl}/v1/campaigns/performance/campaigns?objective=Sales`,
+      { headers: authHeaders(login) }
+    )
+    expect(salesOnlyResponse.status).toBe(200)
+    const salesOnlyBody = (await salesOnlyResponse.json()) as { items: Array<{ name: string }> }
+    expect(salesOnlyBody.items.map((row) => row.name)).toEqual(["Meta Sales Objective Campaign"])
+
+    const awarenessOnlyResponse = await fetch(
+      `${baseUrl}/v1/campaigns/performance/campaigns?objective=Awareness`,
+      { headers: authHeaders(login) }
+    )
+    const awarenessOnlyBody = (await awarenessOnlyResponse.json()) as {
+      items: Array<{ name: string }>
+    }
+    expect(awarenessOnlyBody.items.map((row) => row.name)).toEqual([
+      "Meta Awareness Objective Campaign",
+    ])
+  })
+
   it("rejects unauthenticated requests", async () => {
     const response = await fetch(`${baseUrl}/v1/campaigns/performance/summary`)
     expect(response.status).toBe(401)

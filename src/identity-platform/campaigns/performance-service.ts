@@ -85,6 +85,7 @@ export interface CampaignPerformanceQuery {
   endDate?: string
   platform?: CampaignPerformancePlatform
   status?: string
+  objective?: string
   search?: string
 }
 
@@ -181,8 +182,34 @@ function bucketCampaignStatus(rawStatus: string): "Active" | "Paused" | "Other" 
   return "Other"
 }
 
+// Same reasoning as bucketCampaignStatus: each platform's real objective vocabulary (Meta's
+// OUTCOME_SALES/OUTCOME_AWARENESS/etc, TikTok's objective_type like CONVERSIONS/TRAFFIC) isn't
+// fully enumerable against live data yet, so a loose substring match is what lets one shared
+// filter work across platforms without guessing exact enums. Google rows have no objective
+// field synced at all (channel_type isn't an objective), so they bucket to "Other" and simply
+// never match a specific objective filter -- an honest gap, not a wrong answer.
+function bucketCampaignObjective(
+  rawObjective: string | null
+): "Awareness" | "Traffic" | "Leads" | "Conversions" | "Sales" | "Other" {
+  if (!rawObjective) return "Other"
+  const text = rawObjective.toLowerCase()
+  if (text.includes("aware") || text.includes("reach") || text.includes("brand")) return "Awareness"
+  if (text.includes("lead")) return "Leads"
+  if (text.includes("sale") || text.includes("purchase") || text.includes("shop")) return "Sales"
+  if (text.includes("conversion")) return "Conversions"
+  if (text.includes("traffic") || text.includes("click")) return "Traffic"
+  return "Other"
+}
+
 function matchesFilters(row: CampaignPerformanceRow, query: CampaignPerformanceQuery): boolean {
   if (query.platform && row.platform !== query.platform) {
+    return false
+  }
+  if (
+    query.objective &&
+    query.objective !== "All Objectives" &&
+    bucketCampaignObjective(row.objective) !== query.objective
+  ) {
     return false
   }
   if (

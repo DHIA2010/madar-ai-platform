@@ -118,6 +118,7 @@ export interface CampaignPerformanceQueryParams {
   endDate?: string
   platform?: CampaignPerformancePlatform
   status?: string
+  objective?: string
   search?: string
 }
 
@@ -133,6 +134,7 @@ function buildQuery(
   if (params?.endDate) query.set("endDate", params.endDate)
   if (params?.platform) query.set("platform", params.platform)
   if (params?.status) query.set("status", params.status)
+  if (params?.objective) query.set("objective", params.objective)
   if (params?.search) query.set("search", params.search)
   if (params?.page) query.set("page", String(params.page))
   if (params?.pageSize) query.set("pageSize", String(params.pageSize))

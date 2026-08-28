@@ -158,6 +158,7 @@ function parsePerformanceQuery(url: URL): CampaignPerformanceQuery {
         ? (platform as CampaignPerformancePlatform)
         : undefined,
     status: url.searchParams.get("status") ?? undefined,
+    objective: url.searchParams.get("objective") ?? undefined,
     search: url.searchParams.get("search") ?? undefined,
   }
 }
