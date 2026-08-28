@@ -95,8 +95,11 @@ function mapRun(row: Record<string, unknown>): GoogleAdsSyncRunView {
   }
 }
 
-export class GoogleAdsRepository
-implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuery, GoogleAdsRecordView> {
+export class GoogleAdsRepository implements ProviderSyncRepository<
+  GoogleAdsNormalizedBundle,
+  GoogleAdsRecordQuery,
+  GoogleAdsRecordView
+> {
   constructor(private readonly db: PostgresDatabase) {}
 
   async withTransaction<T>(work: () => Promise<T>) {
@@ -187,7 +190,11 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
     )
   }
 
-  async markSyncRunCompleted(syncRunId: string, actorUserId: string, metrics: Record<string, number>) {
+  async markSyncRunCompleted(
+    syncRunId: string,
+    actorUserId: string,
+    metrics: Record<string, number>
+  ) {
     await this.db.query(
       `
       update google_ads_sync_runs
@@ -199,7 +206,12 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
     )
   }
 
-  async markSyncRunFailed(syncRunId: string, actorUserId: string, errorCode: string, errorMessage: string) {
+  async markSyncRunFailed(
+    syncRunId: string,
+    actorUserId: string,
+    errorCode: string,
+    errorMessage: string
+  ) {
     await this.db.query(
       `
       update google_ads_sync_runs
@@ -269,7 +281,9 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         projectId: String(refreshedRow.project_id),
         organizationId: String(refreshedRow.organization_id),
         lockToken: String(refreshedRow.lock_token),
-        lockedUntil: toJsonDate((refreshedRow.locked_until as string | null) ?? null) ?? new Date().toISOString(),
+        lockedUntil:
+          toJsonDate((refreshedRow.locked_until as string | null) ?? null) ??
+          new Date().toISOString(),
       }
     }
 
@@ -308,11 +322,18 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       projectId: String(row.project_id),
       organizationId: String(row.organization_id),
       lockToken: String(row.lock_token),
-      lockedUntil: toJsonDate((row.locked_until as string | null) ?? null) ?? new Date().toISOString(),
+      lockedUntil:
+        toJsonDate((row.locked_until as string | null) ?? null) ?? new Date().toISOString(),
     }
   }
 
-  async extendSyncLock(input: { providerKey: string; connectionId: string; projectId: string; lockToken: string; leaseSeconds?: number }) {
+  async extendSyncLock(input: {
+    providerKey: string
+    connectionId: string
+    projectId: string
+    lockToken: string
+    leaseSeconds?: number
+  }) {
     const leaseSeconds = input.leaseSeconds ?? 3600
     const lockedUntil = new Date(Date.now() + leaseSeconds * 1000).toISOString()
     const result = await this.db.query<Record<string, unknown>>(
@@ -332,12 +353,19 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
     return result.rows[0]
       ? {
           id: String(result.rows[0].id),
-          lockedUntil: toJsonDate((result.rows[0].locked_until as string | null) ?? null) ?? new Date().toISOString(),
+          lockedUntil:
+            toJsonDate((result.rows[0].locked_until as string | null) ?? null) ??
+            new Date().toISOString(),
         }
       : null
   }
 
-  async releaseSyncLock(input: { providerKey: string; connectionId: string; projectId: string; lockToken: string }) {
+  async releaseSyncLock(input: {
+    providerKey: string
+    connectionId: string
+    projectId: string
+    lockToken: string
+  }) {
     await this.db.query(
       `
       delete from google_ads_sync_locks
@@ -359,30 +387,45 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       [input.connectionId, input.externalCustomerId]
     )
 
-    return result.rows.map((row) => ({
-      id: String(row.id),
-      integrationConnectionId: String(row.integration_connection_id),
-      organizationId: String(row.organization_id),
-      workspaceId: (row.workspace_id as string | null) ?? null,
-      projectId: String(row.project_id),
-      providerId: String(row.provider_id),
-      providerFamily: String(row.provider_family),
-      providerAccountId: String(row.provider_account_id),
-      externalCustomerId: String(row.external_customer_id),
-      providerEntityId: String(row.provider_entity_id),
-      name: String(row.name),
-      status: String(row.status),
-      channel: (row.channel as string | null) ?? null,
-      objective: (row.objective as string | null) ?? null,
-      budgetMicros: row.budget_micros === null || row.budget_micros === undefined ? null : Number(row.budget_micros),
-      currencyCode: (row.currency_code as string | null) ?? null,
-      startDate: row.start_date instanceof Date ? row.start_date.toISOString().slice(0, 10) : (row.start_date as string | null) ?? null,
-      endDate: row.end_date instanceof Date ? row.end_date.toISOString().slice(0, 10) : (row.end_date as string | null) ?? null,
-      sourceUpdatedAt: toJsonDate((row.source_updated_at as string | null) ?? null),
-      syncedAt: toJsonDate((row.synced_at as string | null) ?? null) ?? new Date().toISOString(),
-      createdAt: toJsonDate((row.created_at as string | null) ?? null) ?? new Date().toISOString(),
-      updatedAt: toJsonDate((row.updated_at as string | null) ?? null) ?? new Date().toISOString(),
-    } satisfies MarketingCampaignRecord))
+    return result.rows.map(
+      (row) =>
+        ({
+          id: String(row.id),
+          integrationConnectionId: String(row.integration_connection_id),
+          organizationId: String(row.organization_id),
+          workspaceId: (row.workspace_id as string | null) ?? null,
+          projectId: String(row.project_id),
+          providerId: String(row.provider_id),
+          providerFamily: String(row.provider_family),
+          providerAccountId: String(row.provider_account_id),
+          externalCustomerId: String(row.external_customer_id),
+          providerEntityId: String(row.provider_entity_id),
+          name: String(row.name),
+          status: String(row.status),
+          channel: (row.channel as string | null) ?? null,
+          objective: (row.objective as string | null) ?? null,
+          budgetMicros:
+            row.budget_micros === null || row.budget_micros === undefined
+              ? null
+              : Number(row.budget_micros),
+          currencyCode: (row.currency_code as string | null) ?? null,
+          startDate:
+            row.start_date instanceof Date
+              ? row.start_date.toISOString().slice(0, 10)
+              : ((row.start_date as string | null) ?? null),
+          endDate:
+            row.end_date instanceof Date
+              ? row.end_date.toISOString().slice(0, 10)
+              : ((row.end_date as string | null) ?? null),
+          sourceUpdatedAt: toJsonDate((row.source_updated_at as string | null) ?? null),
+          syncedAt:
+            toJsonDate((row.synced_at as string | null) ?? null) ?? new Date().toISOString(),
+          createdAt:
+            toJsonDate((row.created_at as string | null) ?? null) ?? new Date().toISOString(),
+          updatedAt:
+            toJsonDate((row.updated_at as string | null) ?? null) ?? new Date().toISOString(),
+        }) satisfies MarketingCampaignRecord
+    )
   }
 
   async upsertMarketingCampaign(input: MarketingCampaignRecord) {
@@ -492,9 +535,7 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         and deleted_at is null
       limit 1
       `,
-      [
-        input.connectionId,
-      ]
+      [input.connectionId]
     )
 
     const row = found.rows[0]
@@ -539,7 +580,11 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
     }
   }
 
-  async loadSyncCheckpoint(input: { providerKey: string; connectionId: string; customerId: string }) {
+  async loadSyncCheckpoint(input: {
+    providerKey: string
+    connectionId: string
+    customerId: string
+  }) {
     const result = await this.db.query<Record<string, unknown>>(
       `
       select *
@@ -567,7 +612,7 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       lastRecordDate:
         row.last_record_date instanceof Date
           ? row.last_record_date.toISOString().slice(0, 10)
-          : (row.last_record_date as string | null) ?? null,
+          : ((row.last_record_date as string | null) ?? null),
       syncRunId: (row.sync_run_id as string | null) ?? null,
       status: String(row.status) as "in_progress" | "completed",
       updatedAt: toJsonDate((row.updated_at as string | null) ?? null) ?? new Date().toISOString(),
@@ -644,18 +689,46 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       averageCpm: number
       conversions: number
       conversionValue: number
+      searchImpressionShare: number | null
+      searchTopImpressionShare: number | null
+      searchAbsoluteTopImpressionShare: number | null
+      activeViewImpressions: number | null
+      activeViewMeasurableImpressions: number | null
+      activeViewMeasurableCostMicros: number | null
+      activeViewViewability: number | null
+      videoViews: number | null
+      videoQuartileP25Rate: number | null
+      videoQuartileP50Rate: number | null
+      videoQuartileP75Rate: number | null
+      videoQuartileP100Rate: number | null
+      averageWatchTimeSeconds: number | null
     }> = []
 
     for (const item of input.bundle.customers) {
-      entries.push({ entityType: "customer_account", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      entries.push({
+        entityType: "customer_account",
+        entityId: item.id,
+        recordDate: "1970-01-01",
+        payload: item,
+      })
       metadataEntries.push({ entityType: "customer_account", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.campaigns) {
-      entries.push({ entityType: "campaign", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      entries.push({
+        entityType: "campaign",
+        entityId: item.id,
+        recordDate: "1970-01-01",
+        payload: item,
+      })
       metadataEntries.push({ entityType: "campaign", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.campaignMetrics) {
-      entries.push({ entityType: "campaign_metric", entityId: item.campaignId, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "campaign_metric",
+        entityId: item.campaignId,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "campaign_metric",
         entityId: item.campaignId,
@@ -674,14 +747,37 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         averageCpm: item.cpmMicros,
         conversions: item.conversions,
         conversionValue: item.conversionValue,
+        searchImpressionShare: item.searchImpressionShare,
+        searchTopImpressionShare: item.searchTopImpressionShare,
+        searchAbsoluteTopImpressionShare: item.searchAbsoluteTopImpressionShare,
+        activeViewImpressions: item.activeViewImpressions,
+        activeViewMeasurableImpressions: item.activeViewMeasurableImpressions,
+        activeViewMeasurableCostMicros: item.activeViewMeasurableCostMicros,
+        activeViewViewability: item.activeViewViewability,
+        videoViews: item.videoViews,
+        videoQuartileP25Rate: item.videoQuartileP25Rate,
+        videoQuartileP50Rate: item.videoQuartileP50Rate,
+        videoQuartileP75Rate: item.videoQuartileP75Rate,
+        videoQuartileP100Rate: item.videoQuartileP100Rate,
+        averageWatchTimeSeconds: item.averageWatchTimeSeconds,
       })
     }
     for (const item of input.bundle.adGroups) {
-      entries.push({ entityType: "ad_group", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      entries.push({
+        entityType: "ad_group",
+        entityId: item.id,
+        recordDate: "1970-01-01",
+        payload: item,
+      })
       metadataEntries.push({ entityType: "ad_group", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.adGroupMetrics) {
-      entries.push({ entityType: "ad_group_metric", entityId: item.adGroupId, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "ad_group_metric",
+        entityId: item.adGroupId,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "ad_group_metric",
         entityId: item.adGroupId,
@@ -697,9 +793,23 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         costMicros: item.costMicros,
         averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
-        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        averageCpm:
+          item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
         conversions: item.conversions,
         conversionValue: 0,
+        searchImpressionShare: null,
+        searchTopImpressionShare: null,
+        searchAbsoluteTopImpressionShare: null,
+        activeViewImpressions: null,
+        activeViewMeasurableImpressions: null,
+        activeViewMeasurableCostMicros: null,
+        activeViewViewability: null,
+        videoViews: null,
+        videoQuartileP25Rate: null,
+        videoQuartileP50Rate: null,
+        videoQuartileP75Rate: null,
+        videoQuartileP100Rate: null,
+        averageWatchTimeSeconds: null,
       })
     }
     for (const item of input.bundle.ads) {
@@ -707,7 +817,12 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
       metadataEntries.push({ entityType: "ad", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.adMetrics) {
-      entries.push({ entityType: "ad_metric", entityId: item.adId, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "ad_metric",
+        entityId: item.adId,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "ad_metric",
         entityId: item.adId,
@@ -723,17 +838,41 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         costMicros: item.costMicros,
         averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
-        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        averageCpm:
+          item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
         conversions: item.conversions,
         conversionValue: 0,
+        searchImpressionShare: null,
+        searchTopImpressionShare: null,
+        searchAbsoluteTopImpressionShare: null,
+        activeViewImpressions: null,
+        activeViewMeasurableImpressions: null,
+        activeViewMeasurableCostMicros: null,
+        activeViewViewability: null,
+        videoViews: null,
+        videoQuartileP25Rate: null,
+        videoQuartileP50Rate: null,
+        videoQuartileP75Rate: null,
+        videoQuartileP100Rate: null,
+        averageWatchTimeSeconds: null,
       })
     }
     for (const item of input.bundle.keywords) {
-      entries.push({ entityType: "keyword", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      entries.push({
+        entityType: "keyword",
+        entityId: item.id,
+        recordDate: "1970-01-01",
+        payload: item,
+      })
       metadataEntries.push({ entityType: "keyword", entityId: item.id, payload: item })
     }
     for (const item of input.bundle.keywordMetrics) {
-      entries.push({ entityType: "keyword_metric", entityId: item.keywordId, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "keyword_metric",
+        entityId: item.keywordId,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "keyword_metric",
         entityId: item.keywordId,
@@ -749,13 +888,32 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         costMicros: item.costMicros,
         averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
-        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        averageCpm:
+          item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
         conversions: item.conversions,
         conversionValue: 0,
+        searchImpressionShare: null,
+        searchTopImpressionShare: null,
+        searchAbsoluteTopImpressionShare: null,
+        activeViewImpressions: null,
+        activeViewMeasurableImpressions: null,
+        activeViewMeasurableCostMicros: null,
+        activeViewViewability: null,
+        videoViews: null,
+        videoQuartileP25Rate: null,
+        videoQuartileP50Rate: null,
+        videoQuartileP75Rate: null,
+        videoQuartileP100Rate: null,
+        averageWatchTimeSeconds: null,
       })
     }
     for (const item of input.bundle.searchTerms) {
-      entries.push({ entityType: "search_term", entityId: item.id, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "search_term",
+        entityId: item.id,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "search_term",
         entityId: item.id,
@@ -771,13 +929,32 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         costMicros: item.costMicros,
         averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
-        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        averageCpm:
+          item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
         conversions: item.conversions,
         conversionValue: 0,
+        searchImpressionShare: null,
+        searchTopImpressionShare: null,
+        searchAbsoluteTopImpressionShare: null,
+        activeViewImpressions: null,
+        activeViewMeasurableImpressions: null,
+        activeViewMeasurableCostMicros: null,
+        activeViewViewability: null,
+        videoViews: null,
+        videoQuartileP25Rate: null,
+        videoQuartileP50Rate: null,
+        videoQuartileP75Rate: null,
+        videoQuartileP100Rate: null,
+        averageWatchTimeSeconds: null,
       })
     }
     for (const item of input.bundle.geoMetrics) {
-      entries.push({ entityType: "geo_metric", entityId: item.id, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "geo_metric",
+        entityId: item.id,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "geo_metric",
         entityId: item.id,
@@ -793,13 +970,32 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         costMicros: item.costMicros,
         averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
-        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        averageCpm:
+          item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
         conversions: item.conversions,
         conversionValue: 0,
+        searchImpressionShare: null,
+        searchTopImpressionShare: null,
+        searchAbsoluteTopImpressionShare: null,
+        activeViewImpressions: null,
+        activeViewMeasurableImpressions: null,
+        activeViewMeasurableCostMicros: null,
+        activeViewViewability: null,
+        videoViews: null,
+        videoQuartileP25Rate: null,
+        videoQuartileP50Rate: null,
+        videoQuartileP75Rate: null,
+        videoQuartileP100Rate: null,
+        averageWatchTimeSeconds: null,
       })
     }
     for (const item of input.bundle.deviceMetrics) {
-      entries.push({ entityType: "device_metric", entityId: item.id, recordDate: item.date, payload: item })
+      entries.push({
+        entityType: "device_metric",
+        entityId: item.id,
+        recordDate: item.date,
+        payload: item,
+      })
       metricsEntries.push({
         entityType: "device_metric",
         entityId: item.id,
@@ -815,13 +1011,32 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         costMicros: item.costMicros,
         averageCpc: item.clicks > 0 ? Math.round(item.costMicros / item.clicks) : 0,
-        averageCpm: item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
+        averageCpm:
+          item.impressions > 0 ? Math.round((item.costMicros * 1000) / item.impressions) : 0,
         conversions: item.conversions,
         conversionValue: 0,
+        searchImpressionShare: null,
+        searchTopImpressionShare: null,
+        searchAbsoluteTopImpressionShare: null,
+        activeViewImpressions: null,
+        activeViewMeasurableImpressions: null,
+        activeViewMeasurableCostMicros: null,
+        activeViewViewability: null,
+        videoViews: null,
+        videoQuartileP25Rate: null,
+        videoQuartileP50Rate: null,
+        videoQuartileP75Rate: null,
+        videoQuartileP100Rate: null,
+        averageWatchTimeSeconds: null,
       })
     }
     for (const item of input.bundle.conversionActions) {
-      entries.push({ entityType: "conversion_action", entityId: item.id, recordDate: "1970-01-01", payload: item })
+      entries.push({
+        entityType: "conversion_action",
+        entityId: item.id,
+        recordDate: "1970-01-01",
+        payload: item,
+      })
       metadataEntries.push({ entityType: "conversion_action", entityId: item.id, payload: item })
     }
 
@@ -849,14 +1064,7 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
             status = 'active',
             updated_at = now()
           `,
-          [
-            randomUUID(),
-            input.connectionId,
-            item.id,
-            item.name,
-            item.currencyCode,
-            item.timeZone,
-          ]
+          [randomUUID(), input.connectionId, item.id, item.name, item.currencyCode, item.timeZone]
         )
         continue
       }
@@ -1000,13 +1208,14 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
           text: string
           matchType: string
           status: string
+          qualityScore: number | null
         }
         await this.db.query(
           `
           insert into google_ads_keywords (
-            id, connection_id, customer_id, keyword_id, campaign_id, ad_group_id, keyword_text, match_type, status, payload, created_at, updated_at
+            id, connection_id, customer_id, keyword_id, campaign_id, ad_group_id, keyword_text, match_type, status, quality_score, payload, created_at, updated_at
           ) values (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,now(),now()
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,now(),now()
           )
           on conflict (connection_id, customer_id, keyword_id)
           do update set
@@ -1015,6 +1224,7 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
             keyword_text = excluded.keyword_text,
             match_type = excluded.match_type,
             status = excluded.status,
+            quality_score = excluded.quality_score,
             payload = excluded.payload,
             updated_at = now()
           `,
@@ -1028,6 +1238,7 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
             item.text,
             item.matchType,
             item.status,
+            item.qualityScore,
             JSON.stringify(item),
           ]
         )
@@ -1081,12 +1292,24 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
           id, connection_id, sync_run_id, customer_id, metric_scope, metric_entity_id,
           campaign_id, ad_group_id, ad_id, keyword_id, metric_date,
           impressions, clicks, ctr, cost_micros, average_cpc, average_cpm,
-          conversions, conversion_value, payload, created_at, updated_at
+          conversions, conversion_value,
+          search_impression_share, search_top_impression_share, search_absolute_top_impression_share,
+          active_view_impressions, active_view_measurable_impressions, active_view_measurable_cost_micros,
+          active_view_viewability, video_views,
+          video_quartile_p25_rate, video_quartile_p50_rate, video_quartile_p75_rate, video_quartile_p100_rate,
+          average_watch_time_seconds,
+          payload, created_at, updated_at
         ) values (
           $1,$2,$3,$4,$5,$6,
           $7,$8,$9,$10,$11::date,
           $12,$13,$14,$15,$16,$17,
-          $18,$19,$20::jsonb,now(),now()
+          $18,$19,
+          $20,$21,$22,
+          $23,$24,$25,
+          $26,$27,
+          $28,$29,$30,$31,
+          $32,
+          $33::jsonb,now(),now()
         )
         on conflict (connection_id, customer_id, metric_scope, metric_entity_id, metric_date)
         do update set
@@ -1103,6 +1326,19 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
           average_cpm = excluded.average_cpm,
           conversions = excluded.conversions,
           conversion_value = excluded.conversion_value,
+          search_impression_share = excluded.search_impression_share,
+          search_top_impression_share = excluded.search_top_impression_share,
+          search_absolute_top_impression_share = excluded.search_absolute_top_impression_share,
+          active_view_impressions = excluded.active_view_impressions,
+          active_view_measurable_impressions = excluded.active_view_measurable_impressions,
+          active_view_measurable_cost_micros = excluded.active_view_measurable_cost_micros,
+          active_view_viewability = excluded.active_view_viewability,
+          video_views = excluded.video_views,
+          video_quartile_p25_rate = excluded.video_quartile_p25_rate,
+          video_quartile_p50_rate = excluded.video_quartile_p50_rate,
+          video_quartile_p75_rate = excluded.video_quartile_p75_rate,
+          video_quartile_p100_rate = excluded.video_quartile_p100_rate,
+          average_watch_time_seconds = excluded.average_watch_time_seconds,
           payload = excluded.payload,
           updated_at = now()
         `,
@@ -1126,6 +1362,19 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
           metric.averageCpm,
           metric.conversions,
           metric.conversionValue,
+          metric.searchImpressionShare,
+          metric.searchTopImpressionShare,
+          metric.searchAbsoluteTopImpressionShare,
+          metric.activeViewImpressions,
+          metric.activeViewMeasurableImpressions,
+          metric.activeViewMeasurableCostMicros,
+          metric.activeViewViewability,
+          metric.videoViews,
+          metric.videoQuartileP25Rate,
+          metric.videoQuartileP50Rate,
+          metric.videoQuartileP75Rate,
+          metric.videoQuartileP100Rate,
+          metric.averageWatchTimeSeconds,
           JSON.stringify(metric.payload),
         ]
       )
@@ -1161,11 +1410,12 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
 
     const lastSyncedAt = new Date().toISOString()
     for (const entityType of new Set(entries.map((entry) => entry.entityType))) {
-      const maxRecordDate = entries
-        .filter((entry) => entry.entityType === entityType)
-        .map((entry) => entry.recordDate)
-        .sort()
-        .at(-1) ?? null
+      const maxRecordDate =
+        entries
+          .filter((entry) => entry.entityType === entityType)
+          .map((entry) => entry.recordDate)
+          .sort()
+          .at(-1) ?? null
 
       await this.db.query(
         `
@@ -1175,7 +1425,14 @@ implements ProviderSyncRepository<GoogleAdsNormalizedBundle, GoogleAdsRecordQuer
         on conflict (connection_id, customer_id, entity_type)
         do update set last_record_date = excluded.last_record_date, last_synced_at = excluded.last_synced_at, updated_at = now()
         `,
-        [randomUUID(), input.connectionId, input.customerId, entityType, maxRecordDate, lastSyncedAt]
+        [
+          randomUUID(),
+          input.connectionId,
+          input.customerId,
+          entityType,
+          maxRecordDate,
+          lastSyncedAt,
+        ]
       )
     }
 

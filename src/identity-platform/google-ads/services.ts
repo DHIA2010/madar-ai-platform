@@ -50,9 +50,20 @@ function rowValue(row: Record<string, unknown>, path: string) {
 }
 
 export class GoogleAdsCustomerService {
-  constructor(private readonly client: { queryAllRows(input: { connectionId: string; customerId: string; query: string }): Promise<Record<string, unknown>[]> }) {}
+  constructor(
+    private readonly client: {
+      queryAllRows(input: {
+        connectionId: string
+        customerId: string
+        query: string
+      }): Promise<Record<string, unknown>[]>
+    }
+  ) {}
 
-  async listCustomerAccounts(input: { connectionId: string; customerId: string }): Promise<CustomerAccount[]> {
+  async listCustomerAccounts(input: {
+    connectionId: string
+    customerId: string
+  }): Promise<CustomerAccount[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -82,7 +93,15 @@ export class GoogleAdsCustomerService {
 }
 
 export class GoogleAdsCampaignService {
-  constructor(private readonly client: { queryAllRows(input: { connectionId: string; customerId: string; query: string }): Promise<Record<string, unknown>[]> }) {}
+  constructor(
+    private readonly client: {
+      queryAllRows(input: {
+        connectionId: string
+        customerId: string
+        query: string
+      }): Promise<Record<string, unknown>[]>
+    }
+  ) {}
 
   async listCampaigns(input: { connectionId: string; customerId: string }): Promise<Campaign[]> {
     const rows = await this.client.queryAllRows({
@@ -115,7 +134,12 @@ export class GoogleAdsCampaignService {
     }))
   }
 
-  async listCampaignMetrics(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<CampaignMetric[]> {
+  async listCampaignMetrics(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<CampaignMetric[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -130,7 +154,20 @@ export class GoogleAdsCampaignService {
           metrics.average_cpc,
           metrics.average_cpm,
           metrics.conversions,
-          metrics.conversions_value
+          metrics.conversions_value,
+          metrics.search_impression_share,
+          metrics.search_top_impression_share,
+          metrics.search_absolute_top_impression_share,
+          metrics.active_view_impressions,
+          metrics.active_view_measurable_impressions,
+          metrics.active_view_measurable_cost_micros,
+          metrics.active_view_viewability,
+          metrics.video_trueview_views,
+          metrics.video_quartile_p25_rate,
+          metrics.video_quartile_p50_rate,
+          metrics.video_quartile_p75_rate,
+          metrics.video_quartile_p100_rate,
+          metrics.average_video_watch_time_duration_millis
         FROM campaign
         WHERE segments.date BETWEEN '${input.startDate}' AND '${input.endDate}'
       `,
@@ -152,13 +189,41 @@ export class GoogleAdsCampaignService {
         conversions: asNumber(rowValue(row, "metrics.conversions")),
         conversionValue,
         roas: costMicros > 0 ? conversionValue / (costMicros / 1_000_000) : 0,
+        searchImpressionShare: asNumber(rowValue(row, "metrics.searchImpressionShare")),
+        searchTopImpressionShare: asNumber(rowValue(row, "metrics.searchTopImpressionShare")),
+        searchAbsoluteTopImpressionShare: asNumber(
+          rowValue(row, "metrics.searchAbsoluteTopImpressionShare")
+        ),
+        activeViewImpressions: asNumber(rowValue(row, "metrics.activeViewImpressions")),
+        activeViewMeasurableImpressions: asNumber(
+          rowValue(row, "metrics.activeViewMeasurableImpressions")
+        ),
+        activeViewMeasurableCostMicros: asNumber(
+          rowValue(row, "metrics.activeViewMeasurableCostMicros")
+        ),
+        activeViewViewability: asNumber(rowValue(row, "metrics.activeViewViewability")),
+        videoViews: asNumber(rowValue(row, "metrics.videoTrueviewViews")),
+        videoQuartileP25Rate: asNumber(rowValue(row, "metrics.videoQuartileP25Rate")),
+        videoQuartileP50Rate: asNumber(rowValue(row, "metrics.videoQuartileP50Rate")),
+        videoQuartileP75Rate: asNumber(rowValue(row, "metrics.videoQuartileP75Rate")),
+        videoQuartileP100Rate: asNumber(rowValue(row, "metrics.videoQuartileP100Rate")),
+        averageWatchTimeSeconds:
+          asNumber(rowValue(row, "metrics.averageVideoWatchTimeDurationMillis")) / 1000,
       }
     })
   }
 }
 
 export class GoogleAdsAdGroupService {
-  constructor(private readonly client: { queryAllRows(input: { connectionId: string; customerId: string; query: string }): Promise<Record<string, unknown>[]> }) {}
+  constructor(
+    private readonly client: {
+      queryAllRows(input: {
+        connectionId: string
+        customerId: string
+        query: string
+      }): Promise<Record<string, unknown>[]>
+    }
+  ) {}
 
   async listAdGroups(input: { connectionId: string; customerId: string }): Promise<AdGroup[]> {
     const rows = await this.client.queryAllRows({
@@ -176,7 +241,12 @@ export class GoogleAdsAdGroupService {
     }))
   }
 
-  async listAdGroupMetrics(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<AdGroupMetric[]> {
+  async listAdGroupMetrics(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<AdGroupMetric[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -201,13 +271,22 @@ export class GoogleAdsAdGroupService {
 }
 
 export class GoogleAdsAdService {
-  constructor(private readonly client: { queryAllRows(input: { connectionId: string; customerId: string; query: string }): Promise<Record<string, unknown>[]> }) {}
+  constructor(
+    private readonly client: {
+      queryAllRows(input: {
+        connectionId: string
+        customerId: string
+        query: string
+      }): Promise<Record<string, unknown>[]>
+    }
+  ) {}
 
   async listAds(input: { connectionId: string; customerId: string }): Promise<Ad[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
-      query: "SELECT ad_group_ad.ad.id, ad_group.id, campaign.id, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.responsive_search_ad.headlines FROM ad_group_ad",
+      query:
+        "SELECT ad_group_ad.ad.id, ad_group.id, campaign.id, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.responsive_search_ad.headlines FROM ad_group_ad",
     })
 
     return rows.map((row) => {
@@ -224,7 +303,12 @@ export class GoogleAdsAdService {
     })
   }
 
-  async listAdMetrics(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<AdMetric[]> {
+  async listAdMetrics(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<AdMetric[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -250,27 +334,45 @@ export class GoogleAdsAdService {
 }
 
 export class GoogleAdsKeywordService {
-  constructor(private readonly client: { queryAllRows(input: { connectionId: string; customerId: string; query: string }): Promise<Record<string, unknown>[]> }) {}
+  constructor(
+    private readonly client: {
+      queryAllRows(input: {
+        connectionId: string
+        customerId: string
+        query: string
+      }): Promise<Record<string, unknown>[]>
+    }
+  ) {}
 
   async listKeywords(input: { connectionId: string; customerId: string }): Promise<Keyword[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
-      query: "SELECT ad_group_criterion.criterion_id, ad_group.id, campaign.id, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status FROM keyword_view",
+      query:
+        "SELECT ad_group_criterion.criterion_id, ad_group.id, campaign.id, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status, ad_group_criterion.quality_info.quality_score FROM keyword_view",
     })
 
-    return rows.map((row) => ({
-      id: asString(rowValue(row, "adGroupCriterion.criterionId")),
-      adGroupId: asString(rowValue(row, "adGroup.id")),
-      campaignId: asString(rowValue(row, "campaign.id")),
-      customerId: input.customerId,
-      text: asString(rowValue(row, "adGroupCriterion.keyword.text"), ""),
-      matchType: asString(rowValue(row, "adGroupCriterion.keyword.matchType"), "UNSPECIFIED"),
-      status: asString(rowValue(row, "adGroupCriterion.status"), "UNKNOWN"),
-    }))
+    return rows.map((row) => {
+      const qualityScore = rowValue(row, "adGroupCriterion.qualityInfo.qualityScore")
+      return {
+        id: asString(rowValue(row, "adGroupCriterion.criterionId")),
+        adGroupId: asString(rowValue(row, "adGroup.id")),
+        campaignId: asString(rowValue(row, "campaign.id")),
+        customerId: input.customerId,
+        text: asString(rowValue(row, "adGroupCriterion.keyword.text"), ""),
+        matchType: asString(rowValue(row, "adGroupCriterion.keyword.matchType"), "UNSPECIFIED"),
+        status: asString(rowValue(row, "adGroupCriterion.status"), "UNKNOWN"),
+        qualityScore: typeof qualityScore === "number" ? qualityScore : null,
+      }
+    })
   }
 
-  async listKeywordMetrics(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<KeywordMetric[]> {
+  async listKeywordMetrics(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<KeywordMetric[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -294,9 +396,22 @@ export class GoogleAdsKeywordService {
 }
 
 export class GoogleAdsInsightsService {
-  constructor(private readonly client: { queryAllRows(input: { connectionId: string; customerId: string; query: string }): Promise<Record<string, unknown>[]> }) {}
+  constructor(
+    private readonly client: {
+      queryAllRows(input: {
+        connectionId: string
+        customerId: string
+        query: string
+      }): Promise<Record<string, unknown>[]>
+    }
+  ) {}
 
-  async listSearchTerms(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<SearchTerm[]> {
+  async listSearchTerms(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<SearchTerm[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -320,7 +435,12 @@ export class GoogleAdsInsightsService {
     }))
   }
 
-  async listGeoMetrics(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<GeoMetric[]> {
+  async listGeoMetrics(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<GeoMetric[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -343,7 +463,12 @@ export class GoogleAdsInsightsService {
     }))
   }
 
-  async listDeviceMetrics(input: { connectionId: string; customerId: string; startDate: string; endDate: string }): Promise<DeviceMetric[]> {
+  async listDeviceMetrics(input: {
+    connectionId: string
+    customerId: string
+    startDate: string
+    endDate: string
+  }): Promise<DeviceMetric[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
@@ -377,11 +502,15 @@ export class GoogleAdsInsightsService {
     })
   }
 
-  async listConversionActions(input: { connectionId: string; customerId: string }): Promise<ConversionAction[]> {
+  async listConversionActions(input: {
+    connectionId: string
+    customerId: string
+  }): Promise<ConversionAction[]> {
     const rows = await this.client.queryAllRows({
       connectionId: input.connectionId,
       customerId: input.customerId,
-      query: "SELECT conversion_action.id, conversion_action.name, conversion_action.category, conversion_action.status, conversion_action.type FROM conversion_action",
+      query:
+        "SELECT conversion_action.id, conversion_action.name, conversion_action.category, conversion_action.status, conversion_action.type FROM conversion_action",
     })
 
     return rows.map((row) => ({

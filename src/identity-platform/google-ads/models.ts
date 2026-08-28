@@ -48,6 +48,22 @@ export interface CampaignMetric {
   conversions: number
   conversionValue: number
   roas: number
+  // Search vanity metrics -- 0 for Display/Video campaigns, which don't have impression share.
+  searchImpressionShare: number
+  searchTopImpressionShare: number
+  searchAbsoluteTopImpressionShare: number
+  // Display vanity metrics -- 0 for Search/Video campaigns.
+  activeViewImpressions: number
+  activeViewMeasurableImpressions: number
+  activeViewMeasurableCostMicros: number
+  activeViewViewability: number
+  // Video (YouTube) vanity metrics -- 0 for Search/Display campaigns.
+  videoViews: number
+  videoQuartileP25Rate: number
+  videoQuartileP50Rate: number
+  videoQuartileP75Rate: number
+  videoQuartileP100Rate: number
+  averageWatchTimeSeconds: number
 }
 
 export interface AdGroup {
@@ -99,6 +115,10 @@ export interface Keyword {
   text: string
   matchType: string
   status: string
+  // Quality Score is a static/current-value attribute (ad_group_criterion.quality_info),
+  // not date-segmented like metrics.* fields -- lives on the keyword metadata row, not
+  // KeywordMetric.
+  qualityScore: number | null
 }
 
 export interface KeywordMetric {
