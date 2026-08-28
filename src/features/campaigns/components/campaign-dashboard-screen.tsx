@@ -20,16 +20,16 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Eye,
   FileText,
   Globe,
   type LucideIcon,
+  MousePointerClick,
+  Percent,
   Search,
   ShoppingBag,
-  ShoppingCart,
   Store,
-  Target,
   TrendingUp,
-  Users,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
@@ -159,6 +159,10 @@ function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
     { label: "Last 30 Days", range: { from: subDays(today, 29), to: today } },
     { label: "This Month", range: { from: startOfMonth(today), to: endOfMonth(today) } },
     { label: "Last Month", range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) } },
+    // Matches the earliest selectable year in the calendar's year dropdown (see yearOptions
+    // above) -- there's no unbounded "no start date" query on the backend, so "all time" is
+    // expressed as the widest real range the picker allows rather than an empty filter.
+    { label: "All Time", range: { from: new Date(yearOptions[0], 0, 1), to: today } },
   ]
 }
 
@@ -315,33 +319,44 @@ function toEntityRow(row: CampaignPerformanceRow): EntityRow {
 // Meta/TikTok/Snapchat, one each) into one row per PlatformNodeKey ("Google" combines Search +
 // Display) -- matches the product's original platform-overview hierarchy.
 function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatformRow[] {
-  return (Object.keys(PLATFORM_NODE_CONFIG) as PlatformNodeKey[])
-    .map((platformNodeKey) => {
-      const allowed = PLATFORM_NODE_CONFIG[platformNodeKey].campaignPlatforms
-      const subset = rows.filter((row) => allowed.includes(row.platform))
-      const spend = subset.reduce((sum, row) => sum + row.spend, 0)
-      const revenue = subset.reduce((sum, row) => sum + row.revenue, 0)
-      const clicks = subset.reduce((sum, row) => sum + row.clicks, 0)
-      const conversions = subset.reduce((sum, row) => sum + row.conversions, 0)
-      const impressions = subset.reduce((sum, row) => sum + row.impressions, 0)
-      const activeCampaigns = subset.reduce((sum, row) => sum + row.activeCampaigns, 0)
+  return (
+    (Object.keys(PLATFORM_NODE_CONFIG) as PlatformNodeKey[])
+      .map((platformNodeKey) => {
+        const allowed = PLATFORM_NODE_CONFIG[platformNodeKey].campaignPlatforms
+        const subset = rows.filter((row) => allowed.includes(row.platform))
+        const spend = subset.reduce((sum, row) => sum + row.spend, 0)
+        const revenue = subset.reduce((sum, row) => sum + row.revenue, 0)
+        const clicks = subset.reduce((sum, row) => sum + row.clicks, 0)
+        const conversions = subset.reduce((sum, row) => sum + row.conversions, 0)
+        const impressions = subset.reduce((sum, row) => sum + row.impressions, 0)
+        const activeCampaigns = subset.reduce((sum, row) => sum + row.activeCampaigns, 0)
 
-      return {
-        nodeId: `platform-${platformNodeKey.toLowerCase()}`,
-        platformNodeKey,
-        entityName: platformNodeKey,
-        entityDescription: `${activeCampaigns} active campaigns`,
-        activeCampaigns,
-        spend,
-        revenue,
-        roas: spend > 0 ? Number((revenue / spend).toFixed(2)) : 0,
-        clicks,
-        conversions,
-        ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
-        status: activeCampaigns > 0 ? "Active" : "No Data",
-      }
-    })
-    .filter((row) => row.activeCampaigns > 0 || row.spend > 0)
+        return {
+          hasCampaigns: subset.length > 0,
+          row: {
+            nodeId: `platform-${platformNodeKey.toLowerCase()}`,
+            platformNodeKey,
+            entityName: platformNodeKey,
+            entityDescription: `${activeCampaigns} active campaigns`,
+            activeCampaigns,
+            spend,
+            revenue,
+            roas: spend > 0 ? Number((revenue / spend).toFixed(2)) : 0,
+            clicks,
+            conversions,
+            ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
+            status: activeCampaigns > 0 ? "Active" : "No Data",
+          },
+        }
+      })
+      // hasCampaigns, not "activeCampaigns > 0 || spend > 0" -- a real, connected platform with
+      // real (paused, or currently zero-spend) campaigns must still show up here, or it becomes
+      // unreachable through the drill-down UI entirely. The backend already only returns
+      // platforms with real campaign rows, so this is a defense-in-depth check, not the primary
+      // filter.
+      .filter((entry) => entry.hasCampaigns)
+      .map((entry) => entry.row)
+  )
 }
 
 function DateRangeFilter({
@@ -582,7 +597,15 @@ export function CampaignDashboardScreen() {
   const [platform, setPlatform] = useState<ExplorerPlatformFilter>("All Platforms")
   const [status, setStatus] = useState<(typeof statusOptions)[number]>("All Statuses")
   const [objective, setObjective] = useState<CampaignTypeFilter>("All Objectives")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  // Pre-selected, not left empty -- the backend always scopes to a real date window (defaults
+  // to the last 30 days when none is sent), so the picker must show that honestly instead of
+  // implying "all data" while secretly filtering to 30 days behind the scenes. Matches the
+  // "Last 30 Days" preset exactly (see getDateRangePresets) so clicking that preset explicitly
+  // is a no-op against this initial state.
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date()
+    return { from: subDays(today, 29), to: today }
+  })
   const [selectedPlatformNode, setSelectedPlatformNode] = useState<PlatformNodeKey | undefined>(
     undefined
   )
@@ -781,11 +804,25 @@ export function CampaignDashboardScreen() {
     if (!summary) return []
     return [
       {
-        label: "ROAS (متوسط)",
-        value: `${summary.roas.toFixed(2)}x`,
-        changePct: summary.roasChangePct,
-        icon: TrendingUp,
-        tone: "blue",
+        label: "مرات الظهور",
+        value: summary.impressions.toLocaleString(),
+        changePct: summary.impressionsChangePct,
+        icon: Eye,
+        tone: "violet",
+      },
+      {
+        label: "النقرات",
+        value: summary.clicks.toLocaleString(),
+        changePct: summary.clicksChangePct,
+        icon: MousePointerClick,
+        tone: "orange",
+      },
+      {
+        label: "نسبة النقر إلى الظهور",
+        value: `${summary.ctr.toFixed(2)}%`,
+        changePct: summary.ctrChangePct,
+        icon: Percent,
+        tone: "rose",
       },
       {
         label: "الإنفاق",
@@ -802,25 +839,11 @@ export function CampaignDashboardScreen() {
         tone: "blue",
       },
       {
-        label: "التحويلات",
-        value: summary.conversions.toLocaleString(),
-        changePct: summary.conversionsChangePct,
-        icon: Users,
-        tone: "orange",
-      },
-      {
-        label: "CPA (متوسط)",
-        value: `${summary.cpa.toFixed(1)} SAR`,
-        changePct: summary.cpaChangePct,
-        icon: Target,
-        tone: "rose",
-      },
-      {
-        label: "معدل التحويل",
-        value: `${summary.conversionRate.toFixed(2)}%`,
-        changePct: summary.conversionRateChangePct,
-        icon: ShoppingCart,
-        tone: "violet",
+        label: "ROAS (متوسط)",
+        value: `${summary.roas.toFixed(2)}x`,
+        changePct: summary.roasChangePct,
+        icon: TrendingUp,
+        tone: "blue",
       },
     ]
   }, [summary])

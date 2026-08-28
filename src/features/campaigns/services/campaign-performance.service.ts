@@ -92,6 +92,12 @@ export interface CampaignPerformancePlatformRow extends CampaignPerformanceRow {
 }
 
 export interface CampaignPerformanceSummary {
+  impressions: number
+  impressionsChangePct: number | null
+  clicks: number
+  clicksChangePct: number | null
+  ctr: number
+  ctrChangePct: number | null
   spend: number
   spendChangePct: number | null
   revenue: number

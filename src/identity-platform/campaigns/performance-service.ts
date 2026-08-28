@@ -64,6 +64,12 @@ export interface CampaignPerformancePlatformRow extends CampaignPerformanceRow {
 }
 
 export interface CampaignPerformanceSummary {
+  impressions: number
+  impressionsChangePct: number | null
+  clicks: number
+  clicksChangePct: number | null
+  ctr: number
+  ctrChangePct: number | null
   spend: number
   spendChangePct: number | null
   revenue: number
@@ -360,11 +366,12 @@ async function fetchGoogleCampaignRows(
   const result = await db.query<GoogleMetricRow>(
     `
     SELECT
-      m.campaign_id as entity_id, m.connection_id, m.customer_id,
+      c.campaign_id as entity_id, c.connection_id, c.customer_id,
       c.name, c.status, c.channel_type, null as campaign_id, null as ad_group_id,
       null as objective, null as quality_score,
-      SUM(m.impressions) as impressions, SUM(m.clicks) as clicks, SUM(m.cost_micros) as cost_micros,
-      SUM(m.conversions) as conversions, SUM(m.conversion_value) as conversion_value,
+      COALESCE(SUM(m.impressions), 0) as impressions, COALESCE(SUM(m.clicks), 0) as clicks,
+      COALESCE(SUM(m.cost_micros), 0) as cost_micros,
+      COALESCE(SUM(m.conversions), 0) as conversions, COALESCE(SUM(m.conversion_value), 0) as conversion_value,
       AVG(m.search_impression_share) as search_impression_share,
       AVG(m.search_top_impression_share) as search_top_impression_share,
       SUM(m.active_view_impressions) as active_view_impressions,
@@ -377,15 +384,18 @@ async function fetchGoogleCampaignRows(
       AVG(m.video_quartile_p100_rate) as video_quartile_p100_rate,
       AVG(m.average_watch_time_seconds) as average_watch_time_seconds,
       MAX(m.metric_date) as activity_date
-    FROM google_ads_daily_metrics m
-    JOIN google_ads_campaigns c
-      ON c.connection_id = m.connection_id AND c.customer_id = m.customer_id AND c.campaign_id = m.campaign_id
-    JOIN integration_connections conn ON conn.id = m.connection_id
-    WHERE m.metric_scope = 'campaign'
-      AND conn.provider_id = 'google-ads' AND conn.organization_id = $1
+    FROM google_ads_campaigns c
+    JOIN integration_connections conn ON conn.id = c.connection_id
+    -- LEFT JOIN (not INNER), with the date range in the ON clause rather than WHERE: a real
+    -- campaign with zero metric rows in the selected window (paused, or simply quiet that
+    -- period) must still appear with real zeros, not vanish from the list entirely -- the
+    -- platforms/campaigns table is the only way to drill into it.
+    LEFT JOIN google_ads_daily_metrics m
+      ON m.connection_id = c.connection_id AND m.customer_id = c.customer_id AND m.campaign_id = c.campaign_id
+      AND m.metric_scope = 'campaign' AND m.metric_date BETWEEN $3::date AND $4::date
+    WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
-      AND m.metric_date BETWEEN $3::date AND $4::date
-    GROUP BY m.campaign_id, m.connection_id, m.customer_id, c.name, c.status, c.channel_type
+    GROUP BY c.campaign_id, c.connection_id, c.customer_id, c.name, c.status, c.channel_type
     LIMIT $5
     `,
     [
@@ -409,11 +419,12 @@ async function fetchGoogleAdGroupRows(
   const result = await db.query<GoogleMetricRow>(
     `
     SELECT
-      m.ad_group_id as entity_id, m.connection_id, m.customer_id,
+      ag.ad_group_id as entity_id, ag.connection_id, ag.customer_id,
       ag.name, ag.status, c.channel_type, ag.campaign_id, null as ad_group_id,
       null as objective, null as quality_score,
-      SUM(m.impressions) as impressions, SUM(m.clicks) as clicks, SUM(m.cost_micros) as cost_micros,
-      SUM(m.conversions) as conversions, SUM(m.conversion_value) as conversion_value,
+      COALESCE(SUM(m.impressions), 0) as impressions, COALESCE(SUM(m.clicks), 0) as clicks,
+      COALESCE(SUM(m.cost_micros), 0) as cost_micros,
+      COALESCE(SUM(m.conversions), 0) as conversions, COALESCE(SUM(m.conversion_value), 0) as conversion_value,
       null as search_impression_share, null as search_top_impression_share,
       SUM(m.active_view_impressions) as active_view_impressions,
       SUM(m.active_view_measurable_impressions) as active_view_measurable_impressions,
@@ -425,18 +436,17 @@ async function fetchGoogleAdGroupRows(
       AVG(m.video_quartile_p100_rate) as video_quartile_p100_rate,
       AVG(m.average_watch_time_seconds) as average_watch_time_seconds,
       MAX(m.metric_date) as activity_date
-    FROM google_ads_daily_metrics m
-    JOIN google_ads_ad_groups ag
-      ON ag.connection_id = m.connection_id AND ag.customer_id = m.customer_id AND ag.ad_group_id = m.ad_group_id
+    FROM google_ads_ad_groups ag
     JOIN google_ads_campaigns c
       ON c.connection_id = ag.connection_id AND c.customer_id = ag.customer_id AND c.campaign_id = ag.campaign_id
-    JOIN integration_connections conn ON conn.id = m.connection_id
-    WHERE m.metric_scope = 'ad_group'
-      AND conn.provider_id = 'google-ads' AND conn.organization_id = $1
+    JOIN integration_connections conn ON conn.id = ag.connection_id
+    LEFT JOIN google_ads_daily_metrics m
+      ON m.connection_id = ag.connection_id AND m.customer_id = ag.customer_id AND m.ad_group_id = ag.ad_group_id
+      AND m.metric_scope = 'ad_group' AND m.metric_date BETWEEN $6::date AND $7::date
+    WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
-      AND m.connection_id = $3 AND m.customer_id = $4 AND ag.campaign_id = $5
-      AND m.metric_date BETWEEN $6::date AND $7::date
-    GROUP BY m.ad_group_id, m.connection_id, m.customer_id, ag.name, ag.status, c.channel_type, ag.campaign_id
+      AND ag.connection_id = $3 AND ag.customer_id = $4 AND ag.campaign_id = $5
+    GROUP BY ag.ad_group_id, ag.connection_id, ag.customer_id, ag.name, ag.status, c.channel_type, ag.campaign_id
     LIMIT $8
     `,
     [
@@ -466,11 +476,12 @@ async function fetchGoogleLeafRows(
     const result = await db.query<GoogleMetricRow>(
       `
       SELECT
-        m.keyword_id as entity_id, m.connection_id, m.customer_id,
+        k.keyword_id as entity_id, k.connection_id, k.customer_id,
         k.keyword_text as name, k.status, c.channel_type, k.campaign_id, k.ad_group_id,
         null as objective, k.quality_score,
-        SUM(m.impressions) as impressions, SUM(m.clicks) as clicks, SUM(m.cost_micros) as cost_micros,
-        SUM(m.conversions) as conversions, SUM(m.conversion_value) as conversion_value,
+        COALESCE(SUM(m.impressions), 0) as impressions, COALESCE(SUM(m.clicks), 0) as clicks,
+        COALESCE(SUM(m.cost_micros), 0) as cost_micros,
+        COALESCE(SUM(m.conversions), 0) as conversions, COALESCE(SUM(m.conversion_value), 0) as conversion_value,
         null as search_impression_share, null as search_top_impression_share,
         null as active_view_impressions, null as active_view_measurable_impressions,
         null as active_view_viewability, null as video_views,
@@ -478,18 +489,17 @@ async function fetchGoogleLeafRows(
         null as video_quartile_p75_rate, null as video_quartile_p100_rate,
         null as average_watch_time_seconds,
         MAX(m.metric_date) as activity_date
-      FROM google_ads_daily_metrics m
-      JOIN google_ads_keywords k
-        ON k.connection_id = m.connection_id AND k.customer_id = m.customer_id AND k.keyword_id = m.keyword_id
+      FROM google_ads_keywords k
       JOIN google_ads_campaigns c
         ON c.connection_id = k.connection_id AND c.customer_id = k.customer_id AND c.campaign_id = k.campaign_id
-      JOIN integration_connections conn ON conn.id = m.connection_id
-      WHERE m.metric_scope = 'keyword'
-        AND conn.provider_id = 'google-ads' AND conn.organization_id = $1
+      JOIN integration_connections conn ON conn.id = k.connection_id
+      LEFT JOIN google_ads_daily_metrics m
+        ON m.connection_id = k.connection_id AND m.customer_id = k.customer_id AND m.keyword_id = k.keyword_id
+        AND m.metric_scope = 'keyword' AND m.metric_date BETWEEN $6::date AND $7::date
+      WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
         AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
-        AND m.connection_id = $3 AND m.customer_id = $4 AND k.ad_group_id = $5
-        AND m.metric_date BETWEEN $6::date AND $7::date
-      GROUP BY m.keyword_id, m.connection_id, m.customer_id, k.keyword_text, k.status, c.channel_type,
+        AND k.connection_id = $3 AND k.customer_id = $4 AND k.ad_group_id = $5
+      GROUP BY k.keyword_id, k.connection_id, k.customer_id, k.keyword_text, k.status, c.channel_type,
                k.campaign_id, k.ad_group_id, k.quality_score
       LIMIT $8
       `,
@@ -510,11 +520,12 @@ async function fetchGoogleLeafRows(
   const result = await db.query<GoogleMetricRow>(
     `
     SELECT
-      m.ad_id as entity_id, m.connection_id, m.customer_id,
+      a.ad_id as entity_id, a.connection_id, a.customer_id,
       coalesce(a.headline, a.ad_id) as name, a.status, c.channel_type, a.campaign_id, a.ad_group_id,
       null as objective, null as quality_score,
-      SUM(m.impressions) as impressions, SUM(m.clicks) as clicks, SUM(m.cost_micros) as cost_micros,
-      SUM(m.conversions) as conversions, SUM(m.conversion_value) as conversion_value,
+      COALESCE(SUM(m.impressions), 0) as impressions, COALESCE(SUM(m.clicks), 0) as clicks,
+      COALESCE(SUM(m.cost_micros), 0) as cost_micros,
+      COALESCE(SUM(m.conversions), 0) as conversions, COALESCE(SUM(m.conversion_value), 0) as conversion_value,
       null as search_impression_share, null as search_top_impression_share,
       SUM(m.active_view_impressions) as active_view_impressions,
       SUM(m.active_view_measurable_impressions) as active_view_measurable_impressions,
@@ -526,18 +537,17 @@ async function fetchGoogleLeafRows(
       AVG(m.video_quartile_p100_rate) as video_quartile_p100_rate,
       AVG(m.average_watch_time_seconds) as average_watch_time_seconds,
       MAX(m.metric_date) as activity_date
-    FROM google_ads_daily_metrics m
-    JOIN google_ads_ads a
-      ON a.connection_id = m.connection_id AND a.customer_id = m.customer_id AND a.ad_id = m.ad_id
+    FROM google_ads_ads a
     JOIN google_ads_campaigns c
       ON c.connection_id = a.connection_id AND c.customer_id = a.customer_id AND c.campaign_id = a.campaign_id
-    JOIN integration_connections conn ON conn.id = m.connection_id
-    WHERE m.metric_scope = 'ad'
-      AND conn.provider_id = 'google-ads' AND conn.organization_id = $1
+    JOIN integration_connections conn ON conn.id = a.connection_id
+    LEFT JOIN google_ads_daily_metrics m
+      ON m.connection_id = a.connection_id AND m.customer_id = a.customer_id AND m.ad_id = a.ad_id
+      AND m.metric_scope = 'ad' AND m.metric_date BETWEEN $6::date AND $7::date
+    WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
-      AND m.connection_id = $3 AND m.customer_id = $4 AND a.ad_group_id = $5
-      AND m.metric_date BETWEEN $6::date AND $7::date
-    GROUP BY m.ad_id, m.connection_id, m.customer_id, a.headline, a.ad_id, a.status, c.channel_type,
+      AND a.connection_id = $3 AND a.customer_id = $4 AND a.ad_group_id = $5
+    GROUP BY a.ad_id, a.connection_id, a.customer_id, a.headline, a.status, c.channel_type,
              a.campaign_id, a.ad_group_id
     LIMIT $8
     `,
@@ -697,50 +707,36 @@ async function fetchMetaCampaignRows(
 ): Promise<CampaignPerformanceRow[]> {
   const [insightRows, campaignRows] = await Promise.all([
     fetchMetaRawRecords(db, actor, ["insights"], range),
+    // No date filter -- campaign metadata isn't date-scoped, and a real, connected campaign
+    // with zero insight rows in the selected window (paused, or just quiet that period) must
+    // still appear with real zeros rather than vanish entirely. This is the canonical set;
+    // insights are LEFT-matched onto it, not the other way around.
     fetchMetaRawRecords(db, actor, ["campaigns"], null),
   ])
 
-  const campaignByKey = new Map<string, MetaRawRecordRow>()
-  for (const row of campaignRows) {
-    campaignByKey.set(`${row.connection_id}:${row.entity_id}`, row)
-  }
-
-  const grouped = new Map<
-    string,
-    {
-      connectionId: string
-      customerId: string
-      campaignId: string
-      payloads: Record<string, unknown>[]
-    }
-  >()
+  const insightsByKey = new Map<string, Record<string, unknown>[]>()
   for (const row of insightRows) {
     const campaignId = String(row.payload.campaign_id ?? "")
     if (!campaignId) continue
     const key = `${row.connection_id}:${campaignId}`
-    const existing = grouped.get(key)
+    const existing = insightsByKey.get(key)
     if (existing) {
-      existing.payloads.push(row.payload)
+      existing.push(row.payload)
     } else {
-      grouped.set(key, {
-        connectionId: row.connection_id,
-        customerId: row.customer_id,
-        campaignId,
-        payloads: [row.payload],
-      })
+      insightsByKey.set(key, [row.payload])
     }
   }
 
-  return Array.from(grouped.values()).map((group) => {
-    const meta = campaignByKey.get(`${group.connectionId}:${group.campaignId}`)
-    const name = String(meta?.payload.name ?? group.campaignId)
-    const status = String(meta?.payload.status ?? "UNKNOWN")
-    const objective = (meta?.payload.objective as string | undefined) ?? null
-    const reduced = reduceMetaInsights(group.payloads)
+  return campaignRows.map((meta) => {
+    const key = `${meta.connection_id}:${meta.entity_id}`
+    const name = String(meta.payload.name ?? meta.entity_id)
+    const status = String(meta.payload.status ?? "UNKNOWN")
+    const objective = (meta.payload.objective as string | undefined) ?? null
+    const reduced = reduceMetaInsights(insightsByKey.get(key) ?? [])
 
     return finalizeRow({
       ...zeroRow({
-        id: `meta_ads:${group.connectionId}:${group.customerId}:${group.campaignId}`,
+        id: `meta_ads:${meta.connection_id}:${meta.customer_id}:${meta.entity_id}`,
         parentId: null,
         platform: "Meta",
         level: "campaign",
@@ -778,58 +774,57 @@ async function fetchMetaAdGroupRows(
   const [, connectionId, customerId, externalCampaignId] = campaignId.split(":")
   const [insightRows, adsetRows] = await Promise.all([
     fetchMetaRawRecords(db, actor, ["adset_insights"], range, connectionId),
+    // No date filter -- see fetchMetaCampaignRows' comment: a real ad set with zero insight
+    // rows in the selected window must still appear with real zeros, not vanish.
     fetchMetaRawRecords(db, actor, ["adsets"], null, connectionId),
   ])
 
-  const adsetByKey = new Map<string, MetaRawRecordRow>()
-  for (const row of adsetRows) {
-    adsetByKey.set(row.entity_id, row)
-  }
-
-  const grouped = new Map<string, Record<string, unknown>[]>()
+  const insightsByAdsetId = new Map<string, Record<string, unknown>[]>()
   for (const row of insightRows) {
     const adsetId = String(row.payload.adset_id ?? "")
     const rowCampaignId = String(row.payload.campaign_id ?? "")
     if (!adsetId || rowCampaignId !== externalCampaignId) continue
-    const existing = grouped.get(adsetId)
+    const existing = insightsByAdsetId.get(adsetId)
     if (existing) {
       existing.push(row.payload)
     } else {
-      grouped.set(adsetId, [row.payload])
+      insightsByAdsetId.set(adsetId, [row.payload])
     }
   }
 
-  return Array.from(grouped.entries()).map(([adsetId, payloads]) => {
-    const meta = adsetByKey.get(adsetId)
-    const name = String(meta?.payload.name ?? adsetId)
-    const status = String(meta?.payload.status ?? "UNKNOWN")
-    const reduced = reduceMetaInsights(payloads)
+  return adsetRows
+    .filter((row) => String(row.payload.campaign_id ?? "") === externalCampaignId)
+    .map((meta) => {
+      const adsetId = meta.entity_id
+      const name = String(meta.payload.name ?? adsetId)
+      const status = String(meta.payload.status ?? "UNKNOWN")
+      const reduced = reduceMetaInsights(insightsByAdsetId.get(adsetId) ?? [])
 
-    return finalizeRow({
-      ...zeroRow({
-        id: `meta_ads:${connectionId}:${customerId}:${adsetId}`,
-        parentId: campaignId,
-        platform: "Meta",
-        level: "adGroup",
-        name,
-        status,
-        objective: null,
-        activityDate: reduced.latestDate,
-      }),
-      spend: reduced.spend,
-      revenue: reduced.purchaseValue,
-      clicks: reduced.clicks,
-      conversions: reduced.purchases,
-      impressions: reduced.impressions,
-      reach: reduced.reach,
-      videoPlays: reduced.videoPlays,
-      thruPlays: reduced.thruPlays,
-      addToCart: reduced.addToCart,
-      checkoutStarted: reduced.checkoutStarted,
-      purchases: reduced.purchases,
-      purchaseValue: reduced.purchaseValue,
+      return finalizeRow({
+        ...zeroRow({
+          id: `meta_ads:${connectionId}:${customerId}:${adsetId}`,
+          parentId: campaignId,
+          platform: "Meta",
+          level: "adGroup",
+          name,
+          status,
+          objective: null,
+          activityDate: reduced.latestDate,
+        }),
+        spend: reduced.spend,
+        revenue: reduced.purchaseValue,
+        clicks: reduced.clicks,
+        conversions: reduced.purchases,
+        impressions: reduced.impressions,
+        reach: reduced.reach,
+        videoPlays: reduced.videoPlays,
+        thruPlays: reduced.thruPlays,
+        addToCart: reduced.addToCart,
+        checkoutStarted: reduced.checkoutStarted,
+        purchases: reduced.purchases,
+        purchaseValue: reduced.purchaseValue,
+      })
     })
-  })
 }
 
 async function fetchMetaAdRows(
@@ -841,55 +836,54 @@ async function fetchMetaAdRows(
   const [, connectionId, customerId, externalAdsetId] = adGroupId.split(":")
   const [insightRows, adRows] = await Promise.all([
     fetchMetaRawRecords(db, actor, ["ad_insights"], range, connectionId),
+    // No date filter -- see fetchMetaCampaignRows' comment: a real ad with zero insight rows
+    // in the selected window must still appear with real zeros, not vanish.
     fetchMetaRawRecords(db, actor, ["ads"], null, connectionId),
   ])
 
-  const adByKey = new Map<string, MetaRawRecordRow>()
-  for (const row of adRows) {
-    adByKey.set(row.entity_id, row)
-  }
-
-  const grouped = new Map<string, Record<string, unknown>[]>()
+  const insightsByAdId = new Map<string, Record<string, unknown>[]>()
   for (const row of insightRows) {
     const adId = String(row.payload.ad_id ?? "")
     const rowAdsetId = String(row.payload.adset_id ?? "")
     if (!adId || rowAdsetId !== externalAdsetId) continue
-    const existing = grouped.get(adId)
+    const existing = insightsByAdId.get(adId)
     if (existing) {
       existing.push(row.payload)
     } else {
-      grouped.set(adId, [row.payload])
+      insightsByAdId.set(adId, [row.payload])
     }
   }
 
-  return Array.from(grouped.entries()).map(([adId, payloads]) => {
-    const meta = adByKey.get(adId)
-    const name = String(meta?.payload.name ?? adId)
-    const status = String(meta?.payload.status ?? "UNKNOWN")
-    const reduced = reduceMetaInsights(payloads)
+  return adRows
+    .filter((row) => String(row.payload.adset_id ?? "") === externalAdsetId)
+    .map((meta) => {
+      const adId = meta.entity_id
+      const name = String(meta.payload.name ?? adId)
+      const status = String(meta.payload.status ?? "UNKNOWN")
+      const reduced = reduceMetaInsights(insightsByAdId.get(adId) ?? [])
 
-    return finalizeRow({
-      ...zeroRow({
-        id: `meta_ads:${connectionId}:${customerId}:${adId}`,
-        parentId: adGroupId,
-        platform: "Meta",
-        level: "ad",
-        name,
-        status,
-        objective: null,
-        activityDate: reduced.latestDate,
-      }),
-      spend: reduced.spend,
-      revenue: reduced.purchaseValue,
-      clicks: reduced.clicks,
-      conversions: reduced.purchases,
-      impressions: reduced.impressions,
-      purchases: reduced.purchases,
-      purchaseValue: reduced.purchaseValue,
-      addToCart: reduced.addToCart,
-      checkoutStarted: reduced.checkoutStarted,
+      return finalizeRow({
+        ...zeroRow({
+          id: `meta_ads:${connectionId}:${customerId}:${adId}`,
+          parentId: adGroupId,
+          platform: "Meta",
+          level: "ad",
+          name,
+          status,
+          objective: null,
+          activityDate: reduced.latestDate,
+        }),
+        spend: reduced.spend,
+        revenue: reduced.purchaseValue,
+        clicks: reduced.clicks,
+        conversions: reduced.purchases,
+        impressions: reduced.impressions,
+        purchases: reduced.purchases,
+        purchaseValue: reduced.purchaseValue,
+        addToCart: reduced.addToCart,
+        checkoutStarted: reduced.checkoutStarted,
+      })
     })
-  })
 }
 
 // -- TikTok Ads ----------------------------------------------------------------------------
@@ -980,36 +974,35 @@ async function fetchTikTokCampaignRows(
 ): Promise<CampaignPerformanceRow[]> {
   const [insightRows, campaignRows] = await Promise.all([
     fetchTikTokRawRecords(db, actor, ["insights"], range),
+    // No date filter -- a real, connected campaign with zero insight rows in the selected
+    // window (paused, or just quiet that period) must still appear with real zeros, not
+    // vanish entirely. This is the canonical set; insights are LEFT-matched onto it.
     fetchTikTokRawRecords(db, actor, ["campaigns"], null),
   ])
 
-  const campaignByKey = new Map<string, TikTokRawRecordRow>()
-  for (const row of campaignRows) {
-    campaignByKey.set(`${row.connection_id}:${row.entity_id}`, row)
-  }
-
-  const grouped = new Map<string, TikTokRawRecordRow[]>()
+  const insightsByKey = new Map<string, TikTokRawRecordRow[]>()
   for (const row of insightRows) {
     const dimensions = (row.payload.dimensions ?? {}) as Record<string, unknown>
     const campaignId = String(dimensions.campaign_id ?? "")
     if (!campaignId) continue
     const key = `${row.connection_id}:${campaignId}`
-    const existing = grouped.get(key)
+    const existing = insightsByKey.get(key)
     if (existing) {
       existing.push(row)
     } else {
-      grouped.set(key, [row])
+      insightsByKey.set(key, [row])
     }
   }
 
-  return Array.from(grouped.entries()).map(([key, rows]) => {
-    const [connectionId, campaignId] = key.split(":")
-    const meta = campaignByKey.get(key)
-    const name = String(meta?.payload.campaign_name ?? campaignId)
-    const status = String(meta?.payload.operation_status ?? "UNKNOWN")
-    const objective = (meta?.payload.objective_type as string | undefined) ?? null
-    const reduced = reduceTikTokInsights(rows)
-    const customerId = rows[0]?.customer_id ?? ""
+  return campaignRows.map((meta) => {
+    const connectionId = meta.connection_id
+    const campaignId = meta.entity_id
+    const key = `${connectionId}:${campaignId}`
+    const name = String(meta.payload.campaign_name ?? campaignId)
+    const status = String(meta.payload.operation_status ?? "UNKNOWN")
+    const objective = (meta.payload.objective_type as string | undefined) ?? null
+    const reduced = reduceTikTokInsights(insightsByKey.get(key) ?? [])
+    const customerId = meta.customer_id
 
     return finalizeRow({
       ...zeroRow({
@@ -1043,52 +1036,48 @@ async function fetchTikTokAdGroupRows(
   const [, connectionId, customerId, externalCampaignId] = campaignId.split(":")
   const [insightRows, adgroupRows] = await Promise.all([
     fetchTikTokRawRecords(db, actor, ["adgroup_insights"], range, connectionId),
+    // No date filter -- see fetchTikTokCampaignRows' comment.
     fetchTikTokRawRecords(db, actor, ["adgroups"], null, connectionId),
   ])
 
-  const adgroupByKey = new Map<string, TikTokRawRecordRow>()
-  for (const row of adgroupRows) {
-    if (String(row.payload.campaign_id ?? "") === externalCampaignId) {
-      adgroupByKey.set(row.entity_id, row)
-    }
-  }
-
-  const grouped = new Map<string, TikTokRawRecordRow[]>()
+  const insightsByAdgroupId = new Map<string, TikTokRawRecordRow[]>()
   for (const row of insightRows) {
     const dimensions = (row.payload.dimensions ?? {}) as Record<string, unknown>
     const adgroupId = String(dimensions.adgroup_id ?? "")
-    if (!adgroupId || !adgroupByKey.has(adgroupId)) continue
-    const existing = grouped.get(adgroupId)
+    if (!adgroupId) continue
+    const existing = insightsByAdgroupId.get(adgroupId)
     if (existing) {
       existing.push(row)
     } else {
-      grouped.set(adgroupId, [row])
+      insightsByAdgroupId.set(adgroupId, [row])
     }
   }
 
-  return Array.from(grouped.entries()).map(([adgroupId, rows]) => {
-    const meta = adgroupByKey.get(adgroupId)
-    const name = String(meta?.payload.adgroup_name ?? adgroupId)
-    const status = String(meta?.payload.operation_status ?? "UNKNOWN")
-    const reduced = reduceTikTokInsights(rows)
+  return adgroupRows
+    .filter((row) => String(row.payload.campaign_id ?? "") === externalCampaignId)
+    .map((meta) => {
+      const adgroupId = meta.entity_id
+      const name = String(meta.payload.adgroup_name ?? adgroupId)
+      const status = String(meta.payload.operation_status ?? "UNKNOWN")
+      const reduced = reduceTikTokInsights(insightsByAdgroupId.get(adgroupId) ?? [])
 
-    return finalizeRow({
-      ...zeroRow({
-        id: `tiktok_ads:${connectionId}:${customerId}:${adgroupId}`,
-        parentId: campaignId,
-        platform: "TikTok",
-        level: "adGroup",
-        name,
-        status,
-        objective: null,
-        activityDate: reduced.latestDate,
-      }),
-      spend: reduced.spend,
-      clicks: reduced.clicks,
-      conversions: reduced.conversions,
-      impressions: reduced.impressions,
+      return finalizeRow({
+        ...zeroRow({
+          id: `tiktok_ads:${connectionId}:${customerId}:${adgroupId}`,
+          parentId: campaignId,
+          platform: "TikTok",
+          level: "adGroup",
+          name,
+          status,
+          objective: null,
+          activityDate: reduced.latestDate,
+        }),
+        spend: reduced.spend,
+        clicks: reduced.clicks,
+        conversions: reduced.conversions,
+        impressions: reduced.impressions,
+      })
     })
-  })
 }
 
 async function fetchTikTokAdRows(
@@ -1100,52 +1089,48 @@ async function fetchTikTokAdRows(
   const [, connectionId, customerId, externalAdgroupId] = adGroupId.split(":")
   const [insightRows, adRows] = await Promise.all([
     fetchTikTokRawRecords(db, actor, ["ad_insights"], range, connectionId),
+    // No date filter -- see fetchTikTokCampaignRows' comment.
     fetchTikTokRawRecords(db, actor, ["ads"], null, connectionId),
   ])
 
-  const adByKey = new Map<string, TikTokRawRecordRow>()
-  for (const row of adRows) {
-    if (String(row.payload.adgroup_id ?? "") === externalAdgroupId) {
-      adByKey.set(row.entity_id, row)
-    }
-  }
-
-  const grouped = new Map<string, TikTokRawRecordRow[]>()
+  const insightsByAdId = new Map<string, TikTokRawRecordRow[]>()
   for (const row of insightRows) {
     const dimensions = (row.payload.dimensions ?? {}) as Record<string, unknown>
     const adId = String(dimensions.ad_id ?? "")
-    if (!adId || !adByKey.has(adId)) continue
-    const existing = grouped.get(adId)
+    if (!adId) continue
+    const existing = insightsByAdId.get(adId)
     if (existing) {
       existing.push(row)
     } else {
-      grouped.set(adId, [row])
+      insightsByAdId.set(adId, [row])
     }
   }
 
-  return Array.from(grouped.entries()).map(([adId, rows]) => {
-    const meta = adByKey.get(adId)
-    const name = String(meta?.payload.ad_name ?? adId)
-    const status = String(meta?.payload.operation_status ?? "UNKNOWN")
-    const reduced = reduceTikTokInsights(rows)
+  return adRows
+    .filter((row) => String(row.payload.adgroup_id ?? "") === externalAdgroupId)
+    .map((meta) => {
+      const adId = meta.entity_id
+      const name = String(meta.payload.ad_name ?? adId)
+      const status = String(meta.payload.operation_status ?? "UNKNOWN")
+      const reduced = reduceTikTokInsights(insightsByAdId.get(adId) ?? [])
 
-    return finalizeRow({
-      ...zeroRow({
-        id: `tiktok_ads:${connectionId}:${customerId}:${adId}`,
-        parentId: adGroupId,
-        platform: "TikTok",
-        level: "ad",
-        name,
-        status,
-        objective: null,
-        activityDate: reduced.latestDate,
-      }),
-      spend: reduced.spend,
-      clicks: reduced.clicks,
-      conversions: reduced.conversions,
-      impressions: reduced.impressions,
+      return finalizeRow({
+        ...zeroRow({
+          id: `tiktok_ads:${connectionId}:${customerId}:${adId}`,
+          parentId: adGroupId,
+          platform: "TikTok",
+          level: "ad",
+          name,
+          status,
+          objective: null,
+          activityDate: reduced.latestDate,
+        }),
+        spend: reduced.spend,
+        clicks: reduced.clicks,
+        conversions: reduced.conversions,
+        impressions: reduced.impressions,
+      })
     })
-  })
 }
 
 // -- Snapchat Ads ----------------------------------------------------------------------------
@@ -1220,7 +1205,10 @@ function reduceSnapchatStats(rows: SnapchatRawRecordRow[]) {
   let latestDate: string | null = null
 
   for (const row of rows) {
-    spend += Number(row.payload.spend) || 0
+    // Snap's Marketing API reports all monetary values in micro-currency:
+    // 1,000,000 micro = 1.00 in the ad account's currency (same convention as
+    // Google Ads' cost_micros). impressions/swipes are already real counts.
+    spend += (Number(row.payload.spend) || 0) / 1_000_000
     impressions += Number(row.payload.impressions) || 0
     swipes += Number(row.payload.swipes) || 0
     const startTime =
@@ -1240,36 +1228,35 @@ async function fetchSnapchatCampaignRows(
 ): Promise<CampaignPerformanceRow[]> {
   const [statRows, campaignRows] = await Promise.all([
     fetchSnapchatRawRecords(db, actor, ["stats"], range),
+    // No date filter -- a real, connected campaign with zero stat rows in the selected window
+    // (paused, or just quiet that period) must still appear with real zeros, not vanish
+    // entirely. This is the canonical set; stats are LEFT-matched onto it.
     fetchSnapchatRawRecords(db, actor, ["campaigns"], null),
   ])
 
-  const campaignByKey = new Map<string, SnapchatRawRecordRow>()
-  for (const row of campaignRows) {
-    campaignByKey.set(`${row.connection_id}:${row.entity_id}`, row)
-  }
-
-  const grouped = new Map<string, SnapchatRawRecordRow[]>()
+  const statsByKey = new Map<string, SnapchatRawRecordRow[]>()
   for (const row of statRows) {
     if (row.payload.level !== "campaign") continue
     const campaignId = String(row.payload.entityId ?? "")
     if (!campaignId) continue
     const key = `${row.connection_id}:${campaignId}`
-    const existing = grouped.get(key)
+    const existing = statsByKey.get(key)
     if (existing) {
       existing.push(row)
     } else {
-      grouped.set(key, [row])
+      statsByKey.set(key, [row])
     }
   }
 
-  return Array.from(grouped.entries()).map(([key, rows]) => {
-    const [connectionId, campaignId] = key.split(":")
-    const meta = campaignByKey.get(key)
-    const name = String(meta?.payload.name ?? campaignId)
-    const status = String(meta?.payload.status ?? "UNKNOWN")
-    const objective = (meta?.payload.objective as string | undefined) ?? null
-    const reduced = reduceSnapchatStats(rows)
-    const customerId = rows[0]?.customer_id ?? ""
+  return campaignRows.map((meta) => {
+    const connectionId = meta.connection_id
+    const campaignId = meta.entity_id
+    const key = `${connectionId}:${campaignId}`
+    const name = String(meta.payload.name ?? campaignId)
+    const status = String(meta.payload.status ?? "UNKNOWN")
+    const objective = (meta.payload.objective as string | undefined) ?? null
+    const reduced = reduceSnapchatStats(statsByKey.get(key) ?? [])
+    const customerId = meta.customer_id
 
     return finalizeRow({
       ...zeroRow({
@@ -1302,51 +1289,47 @@ async function fetchSnapchatAdGroupRows(
   const [, connectionId, customerId, externalCampaignId] = campaignId.split(":")
   const [statRows, adSquadRows] = await Promise.all([
     fetchSnapchatRawRecords(db, actor, ["stats"], range, connectionId),
+    // No date filter -- see fetchSnapchatCampaignRows' comment.
     fetchSnapchatRawRecords(db, actor, ["ad_squads"], null, connectionId),
   ])
 
-  const adSquadByKey = new Map<string, SnapchatRawRecordRow>()
-  for (const row of adSquadRows) {
-    if (String(row.payload.campaign_id ?? "") === externalCampaignId) {
-      adSquadByKey.set(row.entity_id, row)
-    }
-  }
-
-  const grouped = new Map<string, SnapchatRawRecordRow[]>()
+  const statsByAdSquadId = new Map<string, SnapchatRawRecordRow[]>()
   for (const row of statRows) {
     if (row.payload.level !== "ad_squad") continue
     const adSquadId = String(row.payload.entityId ?? "")
-    if (!adSquadId || !adSquadByKey.has(adSquadId)) continue
-    const existing = grouped.get(adSquadId)
+    if (!adSquadId) continue
+    const existing = statsByAdSquadId.get(adSquadId)
     if (existing) {
       existing.push(row)
     } else {
-      grouped.set(adSquadId, [row])
+      statsByAdSquadId.set(adSquadId, [row])
     }
   }
 
-  return Array.from(grouped.entries()).map(([adSquadId, rows]) => {
-    const meta = adSquadByKey.get(adSquadId)
-    const name = String(meta?.payload.name ?? adSquadId)
-    const status = String(meta?.payload.status ?? "UNKNOWN")
-    const reduced = reduceSnapchatStats(rows)
+  return adSquadRows
+    .filter((row) => String(row.payload.campaign_id ?? "") === externalCampaignId)
+    .map((meta) => {
+      const adSquadId = meta.entity_id
+      const name = String(meta.payload.name ?? adSquadId)
+      const status = String(meta.payload.status ?? "UNKNOWN")
+      const reduced = reduceSnapchatStats(statsByAdSquadId.get(adSquadId) ?? [])
 
-    return finalizeRow({
-      ...zeroRow({
-        id: `snapchat_ads:${connectionId}:${customerId}:${adSquadId}`,
-        parentId: campaignId,
-        platform: "Snapchat",
-        level: "adGroup",
-        name,
-        status,
-        objective: null,
-        activityDate: reduced.latestDate,
-      }),
-      spend: reduced.spend,
-      clicks: reduced.swipes,
-      impressions: reduced.impressions,
+      return finalizeRow({
+        ...zeroRow({
+          id: `snapchat_ads:${connectionId}:${customerId}:${adSquadId}`,
+          parentId: campaignId,
+          platform: "Snapchat",
+          level: "adGroup",
+          name,
+          status,
+          objective: null,
+          activityDate: reduced.latestDate,
+        }),
+        spend: reduced.spend,
+        clicks: reduced.swipes,
+        impressions: reduced.impressions,
+      })
     })
-  })
 }
 
 async function fetchSnapchatAdRows(
@@ -1358,51 +1341,47 @@ async function fetchSnapchatAdRows(
   const [, connectionId, customerId, externalAdSquadId] = adGroupId.split(":")
   const [statRows, adRows] = await Promise.all([
     fetchSnapchatRawRecords(db, actor, ["stats"], range, connectionId),
+    // No date filter -- see fetchSnapchatCampaignRows' comment.
     fetchSnapchatRawRecords(db, actor, ["ads"], null, connectionId),
   ])
 
-  const adByKey = new Map<string, SnapchatRawRecordRow>()
-  for (const row of adRows) {
-    if (String(row.payload.ad_squad_id ?? "") === externalAdSquadId) {
-      adByKey.set(row.entity_id, row)
-    }
-  }
-
-  const grouped = new Map<string, SnapchatRawRecordRow[]>()
+  const statsByAdId = new Map<string, SnapchatRawRecordRow[]>()
   for (const row of statRows) {
     if (row.payload.level !== "ad") continue
     const adId = String(row.payload.entityId ?? "")
-    if (!adId || !adByKey.has(adId)) continue
-    const existing = grouped.get(adId)
+    if (!adId) continue
+    const existing = statsByAdId.get(adId)
     if (existing) {
       existing.push(row)
     } else {
-      grouped.set(adId, [row])
+      statsByAdId.set(adId, [row])
     }
   }
 
-  return Array.from(grouped.entries()).map(([adId, rows]) => {
-    const meta = adByKey.get(adId)
-    const name = String(meta?.payload.name ?? adId)
-    const status = String(meta?.payload.status ?? "UNKNOWN")
-    const reduced = reduceSnapchatStats(rows)
+  return adRows
+    .filter((row) => String(row.payload.ad_squad_id ?? "") === externalAdSquadId)
+    .map((meta) => {
+      const adId = meta.entity_id
+      const name = String(meta.payload.name ?? adId)
+      const status = String(meta.payload.status ?? "UNKNOWN")
+      const reduced = reduceSnapchatStats(statsByAdId.get(adId) ?? [])
 
-    return finalizeRow({
-      ...zeroRow({
-        id: `snapchat_ads:${connectionId}:${customerId}:${adId}`,
-        parentId: adGroupId,
-        platform: "Snapchat",
-        level: "ad",
-        name,
-        status,
-        objective: null,
-        activityDate: reduced.latestDate,
-      }),
-      spend: reduced.spend,
-      clicks: reduced.swipes,
-      impressions: reduced.impressions,
+      return finalizeRow({
+        ...zeroRow({
+          id: `snapchat_ads:${connectionId}:${customerId}:${adId}`,
+          parentId: adGroupId,
+          platform: "Snapchat",
+          level: "ad",
+          name,
+          status,
+          objective: null,
+          activityDate: reduced.latestDate,
+        }),
+        spend: reduced.spend,
+        clicks: reduced.swipes,
+        impressions: reduced.impressions,
+      })
     })
-  })
 }
 
 // -- Aggregation service ---------------------------------------------------------------------
@@ -1414,10 +1393,11 @@ function sumRows(rows: CampaignPerformanceRow[]) {
       revenue: acc.revenue + row.revenue,
       conversions: acc.conversions + row.conversions,
       clicks: acc.clicks + row.clicks,
+      impressions: acc.impressions + row.impressions,
       activeCampaigns:
         acc.activeCampaigns + (bucketCampaignStatus(row.status) === "Active" ? 1 : 0),
     }),
-    { spend: 0, revenue: 0, conversions: 0, clicks: 0, activeCampaigns: 0 }
+    { spend: 0, revenue: 0, conversions: 0, clicks: 0, impressions: 0, activeCampaigns: 0 }
   )
 }
 
@@ -1461,8 +1441,20 @@ export class CampaignsPerformanceAggregationService {
     const roas = currentTotals.spend > 0 ? currentTotals.revenue / currentTotals.spend : 0
     const previousRoas =
       previousTotals.spend > 0 ? previousTotals.revenue / previousTotals.spend : 0
+    const ctr =
+      currentTotals.impressions > 0 ? (currentTotals.clicks / currentTotals.impressions) * 100 : 0
+    const previousCtr =
+      previousTotals.impressions > 0
+        ? (previousTotals.clicks / previousTotals.impressions) * 100
+        : 0
 
     return {
+      impressions: currentTotals.impressions,
+      impressionsChangePct: computeChangePct(currentTotals.impressions, previousTotals.impressions),
+      clicks: currentTotals.clicks,
+      clicksChangePct: computeChangePct(currentTotals.clicks, previousTotals.clicks),
+      ctr,
+      ctrChangePct: computeChangePct(ctr, previousCtr),
       spend: currentTotals.spend,
       spendChangePct: computeChangePct(currentTotals.spend, previousTotals.spend),
       revenue: currentTotals.revenue,
@@ -1501,34 +1493,58 @@ export class CampaignsPerformanceAggregationService {
       "Snapchat",
     ]
 
-    return platforms
-      .map((platform) => {
-        const subset = rows.filter((row) => row.platform === platform)
-        const totals = sumRows(subset)
-        const roas = totals.spend > 0 ? totals.revenue / totals.spend : 0
+    return (
+      platforms
+        .map((platform) => {
+          const subset = rows.filter((row) => row.platform === platform)
+          const totals = sumRows(subset)
+          const roas = totals.spend > 0 ? totals.revenue / totals.spend : 0
 
-        return {
-          ...finalizeRow({
-            ...zeroRow({
-              id: `platform:${platform}`,
-              parentId: null,
-              platform,
-              level: "campaign",
-              name: platform,
-              status: totals.activeCampaigns > 0 ? "Active" : "No Data",
-              objective: null,
-              activityDate: null,
-            }),
-            spend: totals.spend,
-            revenue: totals.revenue,
-            clicks: totals.clicks,
-            conversions: totals.conversions,
-          }),
-          roas,
-          activeCampaigns: totals.activeCampaigns,
-        }
-      })
-      .filter((row) => row.activeCampaigns > 0 || row.spend > 0)
+          return {
+            hasCampaigns: subset.length > 0,
+            row: {
+              ...finalizeRow({
+                ...zeroRow({
+                  id: `platform:${platform}`,
+                  parentId: null,
+                  platform,
+                  level: "campaign",
+                  name: platform,
+                  // "No Data" previously fired whenever none of the platform's campaigns were
+                  // currently active, which wrongly labeled a platform with real, connected
+                  // campaigns that just happen to be paused as if nothing was synced at all. Only
+                  // a platform with genuinely zero campaign rows in range should read "No Data" --
+                  // which by construction can't reach here anyway (see the hasCampaigns filter
+                  // below), so this is a defensive fallback, not the common case.
+                  status:
+                    totals.activeCampaigns > 0
+                      ? "Active"
+                      : subset.length > 0
+                        ? "Paused"
+                        : "No Data",
+                  objective: null,
+                  activityDate: null,
+                }),
+                spend: totals.spend,
+                revenue: totals.revenue,
+                clicks: totals.clicks,
+                conversions: totals.conversions,
+                impressions: totals.impressions,
+              }),
+              roas,
+              activeCampaigns: totals.activeCampaigns,
+            },
+          }
+        })
+        // hasCampaigns, not "activeCampaigns > 0 || spend > 0" -- a real, connected platform
+        // with real campaigns that are simply paused (or had zero spend in the selected window)
+        // must still show up here, or its campaigns become unreachable through the drill-down UI
+        // entirely (this is the platforms table's only entry point into them). Only a platform
+        // with genuinely zero campaign rows in range (not connected, or nothing synced yet)
+        // should be hidden.
+        .filter((entry) => entry.hasCampaigns)
+        .map((entry) => entry.row)
+    )
   }
 
   async listCampaigns(

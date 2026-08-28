@@ -154,6 +154,7 @@ const commonComparableColumns: MetricColumn[] = [
   { key: "ctr", label: "CTR", kind: "percent" },
   { key: "cpc", label: "CPC", kind: "currency" },
   { key: "cpa", label: "CPA", kind: "currency" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const googleSearchColumns: MetricColumn[] = [
@@ -168,6 +169,7 @@ const googleSearchColumns: MetricColumn[] = [
   { key: "qualityScore", label: "Quality Score", kind: "number" },
   { key: "impressionShare", label: "Impression Share", kind: "percent" },
   { key: "searchTopImpressionRate", label: "Top Impression Rate", kind: "percent" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const googleDisplayColumns: MetricColumn[] = [
@@ -177,8 +179,10 @@ const googleDisplayColumns: MetricColumn[] = [
   { key: "cpm", label: "CPM", kind: "currency" },
   { key: "viewableImpressions", label: "Viewable Impressions", kind: "number" },
   { key: "viewability", label: "Viewability", kind: "percent" },
+  { key: "spend", label: "Spend", kind: "currency" },
   { key: "revenue", label: "Revenue", kind: "currency" },
   { key: "roas", label: "ROAS", kind: "ratio" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const youtubeColumns: MetricColumn[] = [
@@ -191,8 +195,10 @@ const youtubeColumns: MetricColumn[] = [
   { key: "view75", label: "75% View", kind: "percent" },
   { key: "view100Completion", label: "100% Completion", kind: "percent" },
   { key: "clicks", label: "Clicks", kind: "number" },
+  { key: "spend", label: "Spend", kind: "currency" },
   { key: "revenue", label: "Revenue", kind: "currency" },
   { key: "roas", label: "ROAS", kind: "ratio" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const metaAwarenessColumns: MetricColumn[] = [
@@ -203,6 +209,8 @@ const metaAwarenessColumns: MetricColumn[] = [
   { key: "videoPlays", label: "Video Plays", kind: "number" },
   { key: "threeSecondViews", label: "3-second Views", kind: "number" },
   { key: "thruPlays", label: "ThruPlays", kind: "number" },
+  { key: "spend", label: "Spend", kind: "currency" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const metaSalesColumns: MetricColumn[] = [
@@ -214,8 +222,10 @@ const metaSalesColumns: MetricColumn[] = [
   { key: "checkoutStarted", label: "Checkout Started", kind: "number" },
   { key: "purchases", label: "Purchases", kind: "number" },
   { key: "purchaseValue", label: "Purchase Value", kind: "currency" },
+  { key: "spend", label: "Spend", kind: "currency" },
   { key: "revenue", label: "Revenue", kind: "currency" },
   { key: "roas", label: "ROAS", kind: "ratio" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const tiktokColumns: MetricColumn[] = [
@@ -224,9 +234,11 @@ const tiktokColumns: MetricColumn[] = [
   { key: "ctr", label: "CTR", kind: "percent" },
   { key: "clicks", label: "Clicks", kind: "number" },
   { key: "cpc", label: "CPC", kind: "currency" },
+  { key: "spend", label: "Spend", kind: "currency" },
   { key: "conversions", label: "Conversions", kind: "number" },
   { key: "revenue", label: "Revenue", kind: "currency" },
   { key: "roas", label: "ROAS", kind: "ratio" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 const snapchatColumns: MetricColumn[] = [
@@ -235,6 +247,7 @@ const snapchatColumns: MetricColumn[] = [
   { key: "ctr", label: "Swipe Rate", kind: "percent" },
   { key: "cpm", label: "CPM", kind: "currency" },
   { key: "spend", label: "Spend", kind: "currency" },
+  { key: "status", label: "Status", kind: "text" },
 ]
 
 export function getEntityLabel(level: ExplorerLevel, campaignPlatform?: CampaignPlatform) {

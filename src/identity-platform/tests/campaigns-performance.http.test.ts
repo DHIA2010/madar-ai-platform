@@ -581,6 +581,9 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
     })
     expect(response.status).toBe(200)
     const summary = (await response.json()) as {
+      impressions: number
+      clicks: number
+      ctr: number
       spend: number
       spendChangePct: number | null
       revenue: number
@@ -588,6 +591,12 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
       activeCampaigns: number
     }
 
+    // Google (1000) + Meta (600) + TikTok (400) = 2000.
+    expect(summary.impressions).toBe(2000)
+    // Google (100) + Meta (60) + TikTok (40) = 200.
+    expect(summary.clicks).toBe(200)
+    // 200 clicks / 2000 impressions * 100 = 10%.
+    expect(summary.ctr).toBe(10)
     // Google (50) + Meta (30) + TikTok (20) = 100.
     expect(summary.spend).toBe(100)
     // Google's conversion_value (200) + Meta's purchase action_values (80); TikTok has no
@@ -887,7 +896,8 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
         level: "campaign",
         entityId: "s-drill-camp",
         startTime: today,
-        spend: "15",
+        // Snap's Marketing API reports spend in micro-currency (1,000,000 = 1.00).
+        spend: "15000000",
         impressions: "300",
         swipes: "12",
       },
@@ -910,7 +920,7 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
         level: "ad_squad",
         entityId: "s-drill-squad",
         startTime: today,
-        spend: "9",
+        spend: "9000000",
         impressions: "180",
         swipes: "7",
       },
@@ -920,10 +930,13 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
       headers: authHeaders(login),
     })
     const platformsBody = (await platformsResponse.json()) as {
-      items: Array<{ platform: string; spend: number }>
+      items: Array<{ platform: string; spend: number; ctr: number }>
     }
     const snapchatPlatformRow = platformsBody.items.find((row) => row.platform === "Snapchat")
     expect(snapchatPlatformRow?.spend).toBe(15)
+    // 12 clicks / 300 impressions -- the platform row must carry real impressions through to
+    // finalizeRow, or ctr silently computes against a hardcoded 0 and always reads 0.00%.
+    expect(snapchatPlatformRow?.ctr).toBe(4)
 
     const campaignsResponse = await fetch(`${baseUrl}/v1/campaigns/performance/campaigns`, {
       headers: authHeaders(login),
@@ -1037,6 +1050,76 @@ describe("GET /v1/campaigns/performance/*: real cross-platform aggregation", () 
     expect(awarenessOnlyBody.items.map((row) => row.name)).toEqual([
       "Meta Awareness Objective Campaign",
     ])
+  })
+
+  it("still shows a paused campaign with zero stats in the selected window, with real zeros (not hidden)", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "campaigns-perf-paused-no-activity@madar.test",
+      "Campaigns Perf Paused No Activity Org"
+    )
+    const workspaceId = actor.workspaceId as string
+    const today = new Date().toISOString().slice(0, 10)
+    // Far outside the default 30-day lookback window -- this campaign's only real activity is
+    // old history, exactly the scenario that previously made it vanish entirely (the bug: a
+    // campaign was only discoverable by grouping over insight/stat rows that exist *within* the
+    // selected range, so a paused campaign with no current-window activity had no row to
+    // produce at all, making it unreachable through the platforms/campaigns table).
+    const longAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    const connectionId = await insertConnectedSnapchatConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertSnapchatRecord({
+      connectionId,
+      customerId: "snap-paused-account",
+      entityType: "campaigns",
+      entityId: "s-paused-camp",
+      recordDate: today,
+      payload: { name: "Paused Old Campaign", status: "PAUSED", objective: "SALES" },
+    })
+    // Stats exist, but only from 90 days ago -- entirely outside the default lookback window.
+    await insertSnapchatRecord({
+      connectionId,
+      customerId: "snap-paused-account",
+      entityType: "stats",
+      entityId: `s-paused-camp:${longAgo}`,
+      recordDate: longAgo,
+      payload: {
+        level: "campaign",
+        entityId: "s-paused-camp",
+        startTime: longAgo,
+        spend: "500",
+        impressions: "9000",
+      },
+    })
+
+    const platformsResponse = await fetch(`${baseUrl}/v1/campaigns/performance/platforms`, {
+      headers: authHeaders(login),
+    })
+    const platformsBody = (await platformsResponse.json()) as {
+      items: Array<{ platform: string; status: string }>
+    }
+    const snapchatPlatformRow = platformsBody.items.find((row) => row.platform === "Snapchat")
+    expect(snapchatPlatformRow).toBeDefined()
+    // Not "No Data" -- this platform has a real, connected campaign, it's just paused. "No
+    // Data" wrongly implies nothing was ever synced.
+    expect(snapchatPlatformRow?.status).toBe("Paused")
+
+    const campaignsResponse = await fetch(`${baseUrl}/v1/campaigns/performance/campaigns`, {
+      headers: authHeaders(login),
+    })
+    const campaignsBody = (await campaignsResponse.json()) as {
+      items: Array<{ name: string; status: string; spend: number; impressions: number }>
+    }
+    const pausedRow = campaignsBody.items.find((row) => row.name === "Paused Old Campaign")
+    expect(pausedRow).toBeDefined()
+    expect(pausedRow?.status).toBe("PAUSED")
+    // Real zeros for the current window, not the 90-day-old spend -- the fix surfaces the
+    // campaign, it doesn't backdate its numbers.
+    expect(pausedRow?.spend).toBe(0)
+    expect(pausedRow?.impressions).toBe(0)
   })
 
   it("rejects unauthenticated requests", async () => {
