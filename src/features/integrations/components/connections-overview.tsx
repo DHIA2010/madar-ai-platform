@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -15,6 +16,7 @@ import {
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 
 import {
@@ -350,17 +352,8 @@ function ConnectorLogo({ platformName }: { platformName: string }) {
 
   if (platformName === "Meta Ads") {
     return (
-      <div className={commonClassName} aria-label="Meta Ads logo">
-        <svg viewBox="0 0 36 36" className="size-full" role="img" aria-hidden="true">
-          <path
-            d="M5 24c2.3-9.3 5.8-13.9 10.5-13.9C20.1 10.1 22.6 24 27 24c2.2 0 3.3-2 4-6"
-            fill="none"
-            stroke="#0A66FF"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+      <div className={cn(commonClassName, "relative")} aria-label="Meta Ads logo">
+        <Image src={ASSETS.platforms.meta} alt="Meta Ads" fill className="object-contain p-0.5" />
       </div>
     )
   }
@@ -395,29 +388,24 @@ function ConnectorLogo({ platformName }: { platformName: string }) {
 
   if (platformName === "Salla") {
     return (
-      <div className={commonClassName} aria-label="Salla logo">
-        <svg viewBox="0 0 36 36" className="size-full" role="img" aria-hidden="true">
-          <rect x="6" y="10" width="24" height="20" rx="4" fill="#10B981" />
-          <path d="M12 14a6 6 0 0 1 12 0" fill="none" stroke="#ECFDF5" strokeWidth="2.4" />
-          <path d="M18 18c2.2 0 4 1.8 4 4v2h-8v-2c0-2.2 1.8-4 4-4Z" fill="#ECFDF5" />
-        </svg>
+      <div className={cn(commonClassName, "relative")} aria-label="Salla logo">
+        <Image src={ASSETS.platforms.salla} alt="Salla" fill className="object-contain p-0.5" />
+      </div>
+    )
+  }
+
+  if (platformName === "Shopify") {
+    return (
+      <div className={cn(commonClassName, "relative")} aria-label="Shopify logo">
+        <Image src={ASSETS.platforms.shopify} alt="Shopify" fill className="object-contain p-0.5" />
       </div>
     )
   }
 
   if (platformName === "Zid") {
     return (
-      <div className={commonClassName} aria-label="Zid logo">
-        <svg viewBox="0 0 36 36" className="size-full" role="img" aria-hidden="true">
-          <rect x="4" y="4" width="28" height="28" rx="8" fill="#7C3AED" />
-          <path
-            d="M11 12h14l-11 12h11"
-            fill="none"
-            stroke="#F5F3FF"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-        </svg>
+      <div className={cn(commonClassName, "relative")} aria-label="Zid logo">
+        <Image src={ASSETS.platforms.zid} alt="Zid" fill className="object-contain p-0.5" />
       </div>
     )
   }
