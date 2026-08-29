@@ -4,7 +4,7 @@ export const ASSETS = {
     googleAds: "/images/platforms/google-ads.png",
     googleAnalytics: "/images/platforms/google-analytics.png",
     meta: "/images/platforms/meta.png",
-    salla: "/images/platforms/salla.webp",
+    salla: "/images/platforms/salla.png",
     shopify: "/images/platforms/shopify.png",
     snapchat: "/images/platforms/snapchat.jpg",
     tiktok: "/images/platforms/tiktok.png",
