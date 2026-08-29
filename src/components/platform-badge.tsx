@@ -27,19 +27,19 @@ const SNAPCHAT: PlatformLogoEntry = {
   alt: "Snapchat",
   hex: "#FFFC00",
 }
-const META: PlatformLogoEntry = { src: "/images/platforms/meta.webp", alt: "Meta", hex: "#0467DF" }
+const META: PlatformLogoEntry = { src: "/images/platforms/meta.png", alt: "Meta", hex: "#0467DF" }
 const TIKTOK: PlatformLogoEntry = {
   src: "/images/platforms/tiktok.png",
   alt: "TikTok",
   hex: "#000000",
 }
 const SALLA: PlatformLogoEntry = {
-  src: "/images/platforms/salla.webp",
+  src: "/images/platforms/salla.png",
   alt: "Salla",
   hex: "#0d9488",
 }
 const SHOPIFY: PlatformLogoEntry = {
-  src: "/images/platforms/shopify.webp",
+  src: "/images/platforms/shopify.png",
   alt: "Shopify",
   hex: "#7AB55C",
 }
