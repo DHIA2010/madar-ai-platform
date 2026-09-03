@@ -45,8 +45,11 @@ import { CampaignLinkService } from "../../campaign-links/service"
 import { extractPlatformSignals } from "../../tracking/platform-macros"
 import { TrackingRepository } from "../../tracking/repository"
 import { TRACKING_SNIPPET_JS } from "../../tracking/snippet"
-import { TrackingService } from "../../tracking/service"
+import { TRACKING_SDK_JS_BY_VERSION } from "../../tracking/sdk"
+import { TrackingService, toTrackingEventType } from "../../tracking/service"
 import { hashCustomerEmail } from "../../tracking/customer-ref"
+import { classifyReferrer } from "../../tracking/config"
+import { GeoIpService } from "../../geo/service"
 import { AttributionRepository } from "../../attribution/repository"
 import { OrderAttributionService } from "../../attribution/service"
 import { ORDER_PROVIDERS, type OrderProvider } from "../../attribution/types"
@@ -512,6 +515,9 @@ export function createIdentityApiServer(
           }
         )
       : null
+  // GEOIP_DB_PATH is unset by default -- GeoIpService fails open (null geo) until a real
+  // GeoLite2-City.mmdb file is provisioned; see src/identity-platform/geo/service.ts.
+  const geoIpService = new GeoIpService(process.env.GEOIP_DB_PATH?.trim() || undefined)
   const trackingService =
     container.infrastructure.database && campaignLinkService
       ? new TrackingService(
@@ -806,7 +812,7 @@ export function createIdentityApiServer(
           const referrerHeader = request.headers.referer
           const platformSignals = extractPlatformSignals(url.searchParams)
           trackingService
-            .recordClick({
+            .recordEvent({
               organizationId: link.organizationId,
               campaignId: link.campaignId,
               campaignLinkId: link.campaignLinkId,
@@ -847,6 +853,41 @@ export function createIdentityApiServer(
         return
       }
 
+      const sdkVersionMatch = url.pathname.match(/^\/v1\/tracking\/sdk-v([\w.]+)\.js$/)
+      if (method === "GET" && sdkVersionMatch) {
+        const sdkJs = TRACKING_SDK_JS_BY_VERSION[sdkVersionMatch[1]]
+        if (!sdkJs) {
+          return send(404, {
+            code: "TRACKING_SDK_VERSION_NOT_FOUND",
+            message: "Unknown SDK version.",
+          })
+        }
+        response.writeHead(200, {
+          "content-type": "application/javascript; charset=utf-8",
+          // Versioned filename -- once published, a version's content never changes, so this is
+          // safe to cache far longer than the loader itself.
+          "cache-control": "public, max-age=86400, immutable",
+        })
+        response.end(sdkJs)
+        return
+      }
+
+      const trackingConfigMatch = url.pathname.match(/^\/v1\/tracking\/config\/([^/]+)$/)
+      if (method === "GET" && trackingConfigMatch) {
+        if (!trackingService) {
+          return send(503, {
+            code: "TRACKING_UNAVAILABLE",
+            message: "Tracking capture is unavailable in memory mode.",
+          })
+        }
+        const siteKey = decodeURIComponent(trackingConfigMatch[1])
+        const organizationId = await trackingService.resolveOrganizationBySiteKey(siteKey)
+        if (!organizationId) {
+          return send(404, { code: "TRACKING_SITE_KEY_NOT_FOUND", message: "Unknown site key." })
+        }
+        return send(200, await trackingService.getTrackingConfig(organizationId))
+      }
+
       if (method === "POST" && url.pathname === "/v1/tracking/capture") {
         if (!trackingService) {
           return send(
@@ -882,29 +923,67 @@ export function createIdentityApiServer(
           )
         }
 
-        await trackingService.recordClick({
-          organizationId,
-          campaignId: null,
-          campaignLinkId: null,
-          eventType: "PAGE_VIEW",
-          visitorId: payload.visitorId,
-          sessionId: payload.sessionId,
-          utmSource: payload.utmSource ?? null,
-          utmMedium: payload.utmMedium ?? null,
-          utmCampaign: payload.utmCampaign ?? null,
-          utmContent: payload.utmContent ?? null,
-          utmTerm: payload.utmTerm ?? null,
-          landingUrl: payload.pageUrl,
-          referrerUrl: payload.referrerUrl ?? null,
-          deviceType: classifyDeviceType(request.headers["user-agent"]),
-          clickId: payload.clickId ?? null,
-          clickIdPlatform: payload.clickIdPlatform ?? null,
-          platformCampaignId: payload.platformCampaignId ?? null,
-          platformAdgroupId: payload.platformAdgroupId ?? null,
-          platformKeyword: payload.platformKeyword ?? null,
-          platformCreativeId: payload.platformCreativeId ?? null,
-          customerRef: hashCustomerEmail(payload.customerEmail ?? null),
-        })
+        const geo = await geoIpService.lookup(context.ipAddress)
+        const { referrerDomain, trafficSource } = classifyReferrer(payload.referrerUrl ?? null)
+
+        try {
+          await trackingService.recordEvent({
+            organizationId,
+            campaignId: null,
+            campaignLinkId: null,
+            eventType: toTrackingEventType(payload.event),
+            eventId: payload.eventId ?? null,
+            visitorId: payload.visitorId,
+            sessionId: payload.sessionId,
+            utmSource: payload.utmSource ?? null,
+            utmMedium: payload.utmMedium ?? null,
+            utmCampaign: payload.utmCampaign ?? null,
+            utmContent: payload.utmContent ?? null,
+            utmTerm: payload.utmTerm ?? null,
+            landingUrl: payload.pageUrl,
+            referrerUrl: payload.referrerUrl ?? null,
+            deviceType: payload.device?.type ?? classifyDeviceType(request.headers["user-agent"]),
+            clickId: payload.clickId ?? null,
+            clickIdPlatform: payload.clickIdPlatform ?? null,
+            platformCampaignId: payload.platformCampaignId ?? null,
+            platformAdgroupId: payload.platformAdgroupId ?? null,
+            platformKeyword: payload.platformKeyword ?? null,
+            platformCreativeId: payload.platformCreativeId ?? null,
+            customerRef: hashCustomerEmail(payload.customerEmail ?? null),
+            customerId: payload.customerId ?? null,
+            properties: (payload.properties as Record<string, unknown> | null | undefined) ?? null,
+            page: {
+              // pageUrl is already zod-validated as a well-formed URL, so this can't throw.
+              url: payload.pageUrl,
+              path: new URL(payload.pageUrl).pathname,
+              title: payload.pageTitle ?? null,
+              referrer: payload.referrerUrl ?? null,
+            },
+            device: payload.device
+              ? {
+                  type: payload.device.type ?? null,
+                  browser: payload.device.browser ?? null,
+                  browserVersion: payload.device.browserVersion ?? null,
+                  os: payload.device.os ?? null,
+                  screenWidth: payload.device.screenWidth ?? null,
+                  screenHeight: payload.device.screenHeight ?? null,
+                  language: payload.device.language ?? null,
+                  timezone: payload.device.timezone ?? null,
+                }
+              : null,
+            geo,
+            trafficSource,
+            referrerDomain,
+          })
+        } catch (error) {
+          // A retried request with the same client-generated eventId (network blip after the
+          // server already persisted it) hits the unique (organization_id, event_id) index --
+          // that's a successful idempotent replay, not a real failure, so it still returns 200
+          // rather than surfacing a 500 to a client that did nothing wrong.
+          if (!isPostgresLikeError(error) || (error as { code: string }).code !== "23505") {
+            throw error
+          }
+        }
 
         return send(200, { ok: true }, PUBLIC_CAPTURE_CORS_HEADERS)
       }
@@ -2503,6 +2582,24 @@ export function createIdentityApiServer(
           siteKey: await trackingService.ensureSiteKey(actor.organizationId),
           snippetUrl: `${container.config.shortLinkBaseUrl}/v1/tracking/snippet.js`,
         })
+      }
+
+      if (method === "GET" && url.pathname === "/v1/tracking/live-visitors") {
+        if (!trackingService) {
+          return send(503, {
+            code: "TRACKING_UNAVAILABLE",
+            message: "Tracking capture is unavailable in memory mode.",
+          })
+        }
+        // Reuses campaigns:view rather than a dedicated tracking permission -- matches
+        // /v1/tracking/site-key immediately above; this codebase has no separate "tracking"
+        // module in its permission registry (src/identity-platform/domain/domain-services/
+        // system-roles.ts), and adding one is a larger, separate change to that matrix.
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        const visitors = await trackingService.getLiveVisitors(actor.organizationId)
+        return send(200, { totalLiveVisitors: visitors.length, visitors })
       }
 
       if (method === "GET" && url.pathname === "/v1/campaign-links/summary") {

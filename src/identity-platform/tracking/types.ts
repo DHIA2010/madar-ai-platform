@@ -13,15 +13,60 @@ export interface ResolvedCampaignLink {
   utmTerm: string | null
 }
 
-// Shared by both the /m/:displayId redirect (CLICK, campaignId/campaignLinkId always known)
-// and the storefront capture snippet's /v1/tracking/capture (PAGE_VIEW, campaignId/
+// The full Madar Tracking SDK vocabulary (spec section 6) plus HEARTBEAT/IDENTIFY, matching
+// migration 043's tracking_events_event_type_check. Kept as DB-shaped SCREAMING_SNAKE_CASE,
+// distinct from the wire-level lowercase names in schemas.ts's TRACKING_EVENT_NAMES -- see
+// EVENT_NAME_TO_TYPE in ./service.ts for the mapping.
+export type TrackingEventType =
+  | "CLICK"
+  | "PAGE_VIEW"
+  | "PRODUCT_VIEW"
+  | "PRODUCT_LIST_VIEW"
+  | "SEARCH"
+  | "ADD_TO_CART"
+  | "REMOVE_FROM_CART"
+  | "CART_VIEW"
+  | "CHECKOUT_STARTED"
+  | "CHECKOUT_COMPLETED"
+  | "PURCHASE"
+  | "IDENTIFY"
+  | "HEARTBEAT"
+
+export interface TrackingPageContext {
+  url: string | null
+  path: string | null
+  title: string | null
+  referrer: string | null
+}
+
+export interface TrackingDeviceContext {
+  type: string | null
+  browser: string | null
+  browserVersion: string | null
+  os: string | null
+  screenWidth: number | null
+  screenHeight: number | null
+  language: string | null
+  timezone: string | null
+}
+
+export interface TrackingGeoContext {
+  country: string | null
+  countryCode: string | null
+  region: string | null
+  city: string | null
+}
+
+// Shared by the /m/:displayId redirect (CLICK, campaignId/campaignLinkId always known) and the
+// storefront capture snippet's /v1/tracking/capture (every other event type, campaignId/
 // campaignLinkId null until order-time UTM matching resolves them) -- one shape, one pair of
-// repository insert methods, rather than forking parallel click/page-view copies.
+// repository insert methods, rather than forking parallel copies per event type.
 export interface RecordClickInput {
   organizationId: string
   campaignId: string | null
   campaignLinkId: string | null
-  eventType: "CLICK" | "PAGE_VIEW"
+  eventType: TrackingEventType
+  eventId?: string | null
   visitorId: string
   sessionId: string
   utmSource: string | null
@@ -39,4 +84,11 @@ export interface RecordClickInput {
   platformKeyword: string | null
   platformCreativeId: string | null
   customerRef: string | null
+  customerId?: string | null
+  properties?: Record<string, unknown> | null
+  page?: TrackingPageContext | null
+  device?: TrackingDeviceContext | null
+  geo?: TrackingGeoContext | null
+  trafficSource?: string | null
+  referrerDomain?: string | null
 }

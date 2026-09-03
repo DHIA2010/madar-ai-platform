@@ -127,7 +127,11 @@ resource "aws_lb_listener_rule" "backend_api" {
 
   condition {
     path_pattern {
-      values = ["/api/*", "/webhooks/*"]
+      # /v1/* covers every identity-platform backend route (including /v1/tracking/*, the
+      # Madar Tracking Snippet's snippet.js/sdk-v*.js/capture/config endpoints) -- previously
+      # unrouted here, so app.<domain>/v1/tracking/* fell through to the frontend's default
+      # target group and never reached the backend at all.
+      values = ["/api/*", "/webhooks/*", "/v1/*"]
     }
   }
 }

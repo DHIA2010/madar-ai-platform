@@ -1,9 +1,11 @@
-// Hand-written, unbundled, unminified vanilla JS -- this deployable runs via `tsx` directly with
-// no build step, and the file is served as-is at GET /v1/tracking/snippet.js. Keep it plain
-// ES5-safe JS a merchant's theme can execute unmodified in any browser.
+// Hand-written, unbundled, unminified ES5-safe vanilla JS -- this deployable runs via `tsx`
+// directly with no build step, and the file is served as-is at GET /v1/tracking/snippet.js.
 //
-// Mirrors src/identity-platform/tracking/platform-macros.ts's param names -- if that file's
-// CLICK_ID_PARAM_BY_PLATFORM/ENTITY_ID_PARAMS ever change, update the two lists below to match.
+// This is the ONLY file a merchant ever installs (<script data-madar-site="mtk_...">). It stays
+// deliberately thin and rarely changes: fetch remote config, then load the actual versioned SDK
+// (tracking/sdk.ts) it names. New tracking capabilities ship by adding a new SDK version and/or
+// changing an organization's tracking_config -- never by asking the merchant to touch this tag
+// again.
 export const TRACKING_SNIPPET_JS = `(function () {
   "use strict";
   var scriptEl = document.currentScript;
@@ -18,107 +20,36 @@ export const TRACKING_SNIPPET_JS = `(function () {
     return;
   }
 
-  function randomId() {
-    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
-    return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-  }
+  var DEFAULT_SDK_VERSION = "1.0.0";
 
-  function getCookie(name) {
-    var match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
-    return match ? decodeURIComponent(match[1]) : null;
-  }
-
-  function setCookie(name, value, maxAgeSeconds) {
-    var secure = location.protocol === "https:" ? "; Secure" : "";
-    document.cookie =
-      name + "=" + encodeURIComponent(value) +
-      "; Max-Age=" + maxAgeSeconds +
-      "; Path=/; SameSite=Lax" + secure;
-  }
-
-  var visitorId = getCookie("madar_snip_visitor") || randomId();
-  setCookie("madar_snip_visitor", visitorId, 31536000);
-
-  var sessionId = getCookie("madar_snip_session") || randomId();
-  setCookie("madar_snip_session", sessionId, 1800);
-
-  var CLICK_ID_PARAMS = [
-    { param: "gclid", platform: "google_ads" },
-    { param: "fbclid", platform: "meta_ads" },
-    { param: "ttclid", platform: "tiktok_ads" },
-    { param: "ScCid", platform: "snapchat_ads" }
-  ];
-  var ENTITY_ID_PARAMS = {
-    campaignId: "madar_ad_campaign_id",
-    adgroupId: "madar_ad_adgroup_id",
-    keyword: "madar_ad_keyword",
-    creativeId: "madar_ad_creative_id"
-  };
-
-  var params = new URLSearchParams(location.search);
-
-  var clickId = null;
-  var clickIdPlatform = null;
-  for (var i = 0; i < CLICK_ID_PARAMS.length; i++) {
-    var value = params.get(CLICK_ID_PARAMS[i].param);
-    if (value) {
-      clickId = value;
-      clickIdPlatform = CLICK_ID_PARAMS[i].platform;
-      break;
-    }
-  }
-
-  function bestEffortEmail() {
+  function loadSdk(config) {
     try {
-      if (window.Shopify && window.Shopify.checkout && window.Shopify.checkout.email) {
-        return window.Shopify.checkout.email;
-      }
-      if (
-        window.ShopifyAnalytics &&
-        window.ShopifyAnalytics.meta &&
-        window.ShopifyAnalytics.meta.page &&
-        window.ShopifyAnalytics.meta.page.customerEmail
-      ) {
-        return window.ShopifyAnalytics.meta.page.customerEmail;
-      }
+      window.__madarConfig = config || null;
     } catch (e) {}
-    return null;
+
+    var sdkVersion = (config && config.sdk_version) || DEFAULT_SDK_VERSION;
+    var sdkScript = document.createElement("script");
+    sdkScript.src = apiOrigin + "/v1/tracking/sdk-v" + sdkVersion + ".js";
+    sdkScript.setAttribute("data-madar-site", siteKey);
+    sdkScript.async = true;
+    (document.head || document.documentElement).appendChild(sdkScript);
   }
 
-  var payload = {
-    siteKey: siteKey,
-    visitorId: visitorId,
-    sessionId: sessionId,
-    pageUrl: location.href,
-    referrerUrl: document.referrer || null,
-    utmSource: params.get("utm_source") || null,
-    utmMedium: params.get("utm_medium") || null,
-    utmCampaign: params.get("utm_campaign") || null,
-    utmContent: params.get("utm_content") || null,
-    utmTerm: params.get("utm_term") || null,
-    clickId: clickId,
-    clickIdPlatform: clickIdPlatform,
-    platformCampaignId: params.get(ENTITY_ID_PARAMS.campaignId) || null,
-    platformAdgroupId: params.get(ENTITY_ID_PARAMS.adgroupId) || null,
-    platformKeyword: params.get(ENTITY_ID_PARAMS.keyword) || null,
-    platformCreativeId: params.get(ENTITY_ID_PARAMS.creativeId) || null,
-    customerEmail: bestEffortEmail()
-  };
-
-  fetch(apiOrigin + "/v1/tracking/capture", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-    keepalive: true
-  }).catch(function () {});
-
+  // Tracking must never block page rendering or break the merchant's site: a failed/slow config
+  // fetch still falls through to loading the default SDK version with no remote overrides,
+  // rather than tracking silently never starting at all.
   try {
-    fetch("/cart/update.js", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ attributes: { madar_session_id: sessionId } }),
-      keepalive: true
-    }).catch(function () {});
-  } catch (e) {}
+    fetch(apiOrigin + "/v1/tracking/config/" + encodeURIComponent(siteKey))
+      .then(function (response) {
+        if (!response.ok) throw new Error("config_fetch_failed");
+        return response.json();
+      })
+      .then(loadSdk)
+      .catch(function () {
+        loadSdk(null);
+      });
+  } catch (e) {
+    loadSdk(null);
+  }
 })();
 `

@@ -106,13 +106,16 @@ function authHeaders(accessToken: string) {
 }
 
 describe("tracking snippet + capture", () => {
-  it("serves the snippet as public, cacheable JavaScript", async () => {
+  it("serves the snippet as a thin, public, cacheable loader that fetches remote config", async () => {
     const response = await fetch(`${baseUrl}/v1/tracking/snippet.js`)
     expect(response.status).toBe(200)
     expect(response.headers.get("content-type")).toContain("application/javascript")
     const body = await response.text()
     expect(body).toContain("data-madar-site")
-    expect(body).toContain("/v1/tracking/capture")
+    // The snippet itself only fetches config and loads the versioned SDK -- it deliberately
+    // never calls /capture directly (that's the SDK's job, see tracking-sdk.http.test.ts).
+    expect(body).toContain("/v1/tracking/config/")
+    expect(body).toContain("/v1/tracking/sdk-v")
   })
 
   it("lazily mints and then reuses a stable site key for an organization", async () => {

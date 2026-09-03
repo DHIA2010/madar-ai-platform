@@ -97,6 +97,10 @@ export function appendRawFragment(baseUrl: string, fragment: string): string {
 
 const CLICK_ID_PARAM_BY_PLATFORM: Array<{ param: string; platform: CampaignPlatform }> = [
   { param: "gclid", platform: "google_ads" },
+  // gbraid (app-to-web) / wbraid (web-to-app) are Google's iOS-ATT-era click identifiers,
+  // mutually exclusive with gclid and each other on any real click -- never combined.
+  { param: "gbraid", platform: "google_ads" },
+  { param: "wbraid", platform: "google_ads" },
   { param: "fbclid", platform: "meta_ads" },
   { param: "ttclid", platform: "tiktok_ads" },
   { param: "ScCid", platform: "snapchat_ads" },

@@ -342,14 +342,48 @@ export const matchOrdersSchema = z.object({
   connectionId: z.string().uuid().optional(),
 })
 
-// Public, unauthenticated -- posted by the storefront capture snippet (tracking/snippet.ts),
-// not a signed-in user. siteKey (not organizationId) is the tenant identifier; see the
-// public_tracking_key column comment in migration 037.
+// The full Madar Tracking SDK event vocabulary (spec section 6) plus two internal-only event
+// names the wire payload also uses: "identify" (Madar.identify(customerId)) and "heartbeat"
+// (the live-visitor presence ping) -- both flow through the same /v1/tracking/capture endpoint
+// rather than needing dedicated routes.
+export const TRACKING_EVENT_NAMES = [
+  "page_view",
+  "product_view",
+  "product_list_view",
+  "search",
+  "add_to_cart",
+  "remove_from_cart",
+  "cart_view",
+  "checkout_started",
+  "checkout_completed",
+  "purchase",
+  "identify",
+  "heartbeat",
+] as const
+
+const trackingDeviceSchema = z.object({
+  type: z.string().max(20).nullable().optional(),
+  browser: z.string().max(50).nullable().optional(),
+  browserVersion: z.string().max(20).nullable().optional(),
+  os: z.string().max(50).nullable().optional(),
+  screenWidth: z.number().int().nonnegative().nullable().optional(),
+  screenHeight: z.number().int().nonnegative().nullable().optional(),
+  language: z.string().max(20).nullable().optional(),
+  timezone: z.string().max(100).nullable().optional(),
+})
+
+// Public, unauthenticated -- posted by the storefront capture snippet/SDK (tracking/snippet.ts,
+// tracking/sdk.ts), not a signed-in user. siteKey (not organizationId) is the tenant identifier;
+// see the public_tracking_key column comment in migration 037. `event` defaults to "page_view"
+// so an older cached snippet that never sends it keeps behaving exactly as before.
 export const captureTrackingEventSchema = z.object({
   siteKey: z.string().min(1).max(100),
   visitorId: z.string().min(1).max(200),
   sessionId: z.string().min(1).max(200),
+  event: z.enum(TRACKING_EVENT_NAMES).default("page_view"),
+  eventId: z.string().max(200).nullable().optional(),
   pageUrl: z.string().url(),
+  pageTitle: z.string().max(500).nullable().optional(),
   referrerUrl: z.string().max(2000).nullable().optional(),
   utmSource: z.string().max(200).nullable().optional(),
   utmMedium: z.string().max(200).nullable().optional(),
@@ -363,6 +397,11 @@ export const captureTrackingEventSchema = z.object({
   platformKeyword: z.string().max(200).nullable().optional(),
   platformCreativeId: z.string().max(200).nullable().optional(),
   customerEmail: z.string().email().nullable().optional(),
+  // Set by Madar.identify(customerId) -- distinct from customerEmail (best-effort, scraped from
+  // the storefront's own checkout globals); this is an explicit, platform-provided identifier.
+  customerId: z.string().max(200).nullable().optional(),
+  properties: z.record(z.string(), z.unknown()).nullable().optional(),
+  device: trackingDeviceSchema.nullable().optional(),
 })
 
 export const aggregateCampaignLinksSchema = z.object({
