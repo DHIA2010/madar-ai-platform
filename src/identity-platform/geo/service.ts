@@ -11,24 +11,32 @@ const NULL_GEO: GeoLocation = { country: null, countryCode: null, region: null, 
 
 // Self-hosted MaxMind GeoLite2-City lookup. Deliberately fails open (returns NULL_GEO), never
 // throws: a merchant's checkout must never break because a geo database is missing/stale/
-// corrupt (spec section 14 -- tracking must fail silently). GEOIP_DB_PATH is unset by default;
-// provisioning the real .mmdb file (requires a free MaxMind account + license key, which this
-// service cannot generate on its own) is an operational setup step, not something faked here.
+// corrupt (spec section 14 -- tracking must fail silently).
+//
+// dbPath is resolved lazily via a function rather than a plain string because resolving it can
+// mean a real network round trip (credentials from Secrets Manager, then downloading the
+// GeoLite2-City tarball from MaxMind -- see geo/maxmind-credentials.ts and
+// geo/download-database.ts) that must never block server startup. warmUp() kicks that
+// resolution off immediately at construction time (fire-and-forget) so the first real tracking
+// request doesn't pay for it; getReader() still resolves lazily/correctly even if warmUp() was
+// never called (e.g. in tests).
 export class GeoIpService {
   private readerPromise: Promise<Reader<CityResponse> | null> | null = null
 
-  constructor(private readonly dbPath: string | undefined) {}
+  constructor(private readonly resolveDbPath: () => Promise<string | null>) {}
+
+  warmUp(): void {
+    void this.getReader()
+  }
 
   private getReader(): Promise<Reader<CityResponse> | null> {
-    if (!this.dbPath) {
-      return Promise.resolve(null)
-    }
-
     if (!this.readerPromise) {
-      this.readerPromise = open<CityResponse>(this.dbPath).catch((error: unknown) => {
-        console.error("geoip.db_open_failed", error)
-        return null
-      })
+      this.readerPromise = this.resolveDbPath()
+        .then((dbPath) => (dbPath ? open<CityResponse>(dbPath) : null))
+        .catch((error: unknown) => {
+          console.error("geoip.db_open_failed", error)
+          return null
+        })
     }
 
     return this.readerPromise

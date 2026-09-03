@@ -57,3 +57,8 @@ override.tf.json
 
 # local Claude Code state
 .claude/
+
+# local-dev-only GeoIP database override (GEOIP_DB_PATH) -- MaxMind's license doesn't allow
+# redistributing the .mmdb file, and stage/production download it at container startup instead
+# (see src/identity-platform/geo/download-database.ts).
+identity-platform/geoip/

@@ -50,6 +50,7 @@ import { TrackingService, toTrackingEventType } from "../../tracking/service"
 import { hashCustomerEmail } from "../../tracking/customer-ref"
 import { classifyReferrer } from "../../tracking/config"
 import { GeoIpService } from "../../geo/service"
+import { resolveGeoIpDbPath } from "../../geo/resolve-db-path"
 import { AttributionRepository } from "../../attribution/repository"
 import { OrderAttributionService } from "../../attribution/service"
 import { ORDER_PROVIDERS, type OrderProvider } from "../../attribution/types"
@@ -515,9 +516,12 @@ export function createIdentityApiServer(
           }
         )
       : null
-  // GEOIP_DB_PATH is unset by default -- GeoIpService fails open (null geo) until a real
-  // GeoLite2-City.mmdb file is provisioned; see src/identity-platform/geo/service.ts.
-  const geoIpService = new GeoIpService(process.env.GEOIP_DB_PATH?.trim() || undefined)
+  // GEOIP_DB_PATH (local dev override) or a MaxMind license key (env var / Secrets Manager,
+  // see geo/maxmind-credentials.ts) must resolve before geo lookups mean anything; both fail
+  // open to null geo. warmUp() starts that resolution now rather than on the first real
+  // tracking request -- see src/identity-platform/geo/service.ts.
+  const geoIpService = new GeoIpService(resolveGeoIpDbPath)
+  geoIpService.warmUp()
   const trackingService =
     container.infrastructure.database && campaignLinkService
       ? new TrackingService(
