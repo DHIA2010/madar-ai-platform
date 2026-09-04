@@ -411,8 +411,8 @@ export default function SettingsDashboard() {
         <p className="mt-1 text-sm text-[#667085]">إدارة حسابك وتفضيلاتك والفوترة والدعم</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+      <div className="grid gap-5 lg:grid-cols-4">
+        <div className="space-y-5 lg:col-span-3">
           {/* معلومات المؤسسة */}
           <AppCard
             title="معلومات المؤسسة"
