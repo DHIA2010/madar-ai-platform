@@ -267,6 +267,27 @@ export class SallaOAuthRepository
     }
   }
 
+  // Resolves the storefront-injected Salla App Snippet's salla.config.get('store.id') back to a
+  // tenant -- provider_account_id already holds Salla's own store ID (set from fetchStoreInfo()
+  // during OAuth connect, see salla-oauth/service.ts), so no new column/migration is needed.
+  // "connected" only: a disconnected store's old ID must never resolve to a still-live site key.
+  async findOrganizationIdByStoreId(storeId: string): Promise<string | null> {
+    const result = await this.db.query<{ organization_id: string }>({
+      name: "salla-oauth-connection-find-by-store-id",
+      text: `
+        SELECT organization_id
+        FROM salla_oauth_connections
+        WHERE provider_account_id = $1
+          AND status = 'connected'
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [storeId],
+    })
+
+    return result.rows[0] ? String(result.rows[0].organization_id) : null
+  }
+
   async findConnectionByProject(organizationId: string, projectId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "salla-oauth-connection-find-project",

@@ -469,3 +469,86 @@ describe("POST /v1/tracking/capture: referrer classification + geo fail-open", (
     expect(events.rows[0].country_code).toBeNull()
   })
 })
+
+async function insertSallaConnection(input: {
+  organizationId: string
+  workspaceId: string
+  userId: string
+  providerAccountId: string | null
+  status?: "connected" | "disconnected"
+}) {
+  await database.query(
+    `insert into salla_oauth_connections (
+       id, organization_id, workspace_id, project_id, status, provider_account_id,
+       created_by_user_id, updated_by_user_id, created_at, updated_at
+     ) values ($1, $2, $3, $4, $5, $6, $7, $7, now(), now())`,
+    [
+      randomUUID(),
+      input.organizationId,
+      input.workspaceId,
+      randomUUID(),
+      input.status ?? "connected",
+      input.providerAccountId,
+      input.userId,
+    ]
+  )
+}
+
+describe("GET /v1/tracking/salla-app-snippet.js", () => {
+  it("serves the app-wide Salla loader, distinct from the merchant-installed snippet", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/salla-app-snippet.js`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("application/javascript")
+    const body = await response.text()
+    expect(body).toContain("salla.config.get")
+    expect(body).toContain("/v1/tracking/resolve/salla/")
+    // Reuses the same shared loader fragment as the merchant snippet, not a copy that could drift.
+    expect(body).toContain("madarFetchConfigAndLoadSdk")
+  })
+})
+
+describe("GET /v1/tracking/resolve/salla/:storeId", () => {
+  it("resolves a connected Salla store's own ID to the org's real site key", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@salla-resolve.madar",
+      "Salla Resolve Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertSallaConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      providerAccountId: "778899",
+    })
+
+    const expectedSiteKey = await getSiteKey(accessToken)
+
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/salla/778899`)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { siteKey: string }
+    expect(body.siteKey).toBe(expectedSiteKey)
+  })
+
+  it("returns 404 for a store ID with no connection at all", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/salla/does-not-exist`)
+    expect(response.status).toBe(404)
+  })
+
+  it("returns 404 for a disconnected store's old ID -- a stale connection must never resolve", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@salla-resolve-disconnected.madar",
+      "Salla Resolve Disconnected Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertSallaConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      providerAccountId: "556677",
+      status: "disconnected",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/salla/556677`)
+    expect(response.status).toBe(404)
+  })
+})

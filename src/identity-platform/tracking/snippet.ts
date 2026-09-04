@@ -1,3 +1,5 @@
+import { LOAD_SDK_FRAGMENT_JS } from "./loader-fragment"
+
 // Hand-written, unbundled, unminified ES5-safe vanilla JS -- this deployable runs via `tsx`
 // directly with no build step, and the file is served as-is at GET /v1/tracking/snippet.js.
 //
@@ -20,36 +22,8 @@ export const TRACKING_SNIPPET_JS = `(function () {
     return;
   }
 
-  var DEFAULT_SDK_VERSION = "1.0.0";
+  ${LOAD_SDK_FRAGMENT_JS}
 
-  function loadSdk(config) {
-    try {
-      window.__madarConfig = config || null;
-    } catch (e) {}
-
-    var sdkVersion = (config && config.sdk_version) || DEFAULT_SDK_VERSION;
-    var sdkScript = document.createElement("script");
-    sdkScript.src = apiOrigin + "/v1/tracking/sdk-v" + sdkVersion + ".js";
-    sdkScript.setAttribute("data-madar-site", siteKey);
-    sdkScript.async = true;
-    (document.head || document.documentElement).appendChild(sdkScript);
-  }
-
-  // Tracking must never block page rendering or break the merchant's site: a failed/slow config
-  // fetch still falls through to loading the default SDK version with no remote overrides,
-  // rather than tracking silently never starting at all.
-  try {
-    fetch(apiOrigin + "/v1/tracking/config/" + encodeURIComponent(siteKey))
-      .then(function (response) {
-        if (!response.ok) throw new Error("config_fetch_failed");
-        return response.json();
-      })
-      .then(loadSdk)
-      .catch(function () {
-        loadSdk(null);
-      });
-  } catch (e) {
-    loadSdk(null);
-  }
+  madarFetchConfigAndLoadSdk(apiOrigin, siteKey);
 })();
 `

@@ -45,6 +45,7 @@ import { CampaignLinkService } from "../../campaign-links/service"
 import { extractPlatformSignals } from "../../tracking/platform-macros"
 import { TrackingRepository } from "../../tracking/repository"
 import { TRACKING_SNIPPET_JS } from "../../tracking/snippet"
+import { SALLA_APP_SNIPPET_JS } from "../../tracking/salla-app-snippet"
 import { TRACKING_SDK_JS_BY_VERSION } from "../../tracking/sdk"
 import { TrackingService, toTrackingEventType } from "../../tracking/service"
 import { hashCustomerEmail } from "../../tracking/customer-ref"
@@ -530,6 +531,11 @@ export function createIdentityApiServer(
           container.infrastructure.cache
         )
       : null
+  // Standalone instance for the Salla App Snippet's store-id resolution route below -- every
+  // other SallaOAuthRepository use in this file is scoped inline to a single service.
+  const sallaOAuthRepositoryForTracking = container.infrastructure.database
+    ? new SallaOAuthRepository(container.infrastructure.database)
+    : null
   const orderAttributionService = container.infrastructure.database
     ? new OrderAttributionService(
         new AttributionRepository(container.infrastructure.database),
@@ -857,6 +863,18 @@ export function createIdentityApiServer(
         return
       }
 
+      if (method === "GET" && url.pathname === "/v1/tracking/salla-app-snippet.js") {
+        // The literal URL registered once in the Salla Partners Portal (App -> Snippet) -- Salla
+        // injects it app-wide into every merchant storefront where the app is installed, no
+        // merchant action needed. See tracking/salla-app-snippet.ts.
+        response.writeHead(200, {
+          "content-type": "application/javascript; charset=utf-8",
+          "cache-control": "public, max-age=300",
+        })
+        response.end(SALLA_APP_SNIPPET_JS)
+        return
+      }
+
       const sdkVersionMatch = url.pathname.match(/^\/v1\/tracking\/sdk-v([\w.]+)\.js$/)
       if (method === "GET" && sdkVersionMatch) {
         const sdkJs = TRACKING_SDK_JS_BY_VERSION[sdkVersionMatch[1]]
@@ -890,6 +908,41 @@ export function createIdentityApiServer(
           return send(404, { code: "TRACKING_SITE_KEY_NOT_FOUND", message: "Unknown site key." })
         }
         return send(200, await trackingService.getTrackingConfig(organizationId))
+      }
+
+      const sallaStoreResolveMatch = url.pathname.match(/^\/v1\/tracking\/resolve\/salla\/([^/]+)$/)
+      if (method === "GET" && sallaStoreResolveMatch) {
+        if (!trackingService || !sallaOAuthRepositoryForTracking) {
+          return send(503, {
+            code: "TRACKING_UNAVAILABLE",
+            message: "Tracking capture is unavailable in memory mode.",
+          })
+        }
+
+        // Called by the Salla-injected app snippet on every storefront page load -- same
+        // public/unauthenticated/IP-rate-limited trust model as /v1/tracking/capture, since a
+        // Salla store ID identifies a tenant no more sensitively than the mtk_ site key this
+        // returns (already documented as "public, revocable" in migration 037).
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `salla_store_resolve:${context.ipAddress}`,
+          60,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." })
+        }
+
+        const storeId = decodeURIComponent(sallaStoreResolveMatch[1])
+        const organizationId =
+          await sallaOAuthRepositoryForTracking.findOrganizationIdByStoreId(storeId)
+        if (!organizationId) {
+          return send(404, {
+            code: "SALLA_STORE_NOT_CONNECTED",
+            message: "No connected Salla store with this ID.",
+          })
+        }
+
+        return send(200, { siteKey: await trackingService.ensureSiteKey(organizationId) })
       }
 
       if (method === "POST" && url.pathname === "/v1/tracking/capture") {
