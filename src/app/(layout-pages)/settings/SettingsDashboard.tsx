@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import {
   Building2,
+  Calendar,
   Camera,
+  Clock,
   CreditCard,
   FileText,
   Globe2,
@@ -11,7 +14,7 @@ import {
   Layers,
   Lock,
   Trash2,
-  Users,
+  Wallet,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -28,11 +31,85 @@ import {
 import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import { MADAR_CONTACT_EMAIL } from "@/features/marketing-site/marketing-constants"
+import { ROUTES } from "@/constants/routes"
+
+// Scoped to this page only -- the app's global design tokens (--primary, etc.) are a
+// different blue and are shared across every page, so reskinning them isn't in scope here.
+const NAVY = "#102A5C"
+const MINT = "#18B89A"
+const MINT_LIGHT = "#E8F8F4"
+const PURPLE = "#7357D8"
+const PURPLE_LIGHT = "#F1EEFF"
+const DANGER = "#E5484D"
+const DANGER_LIGHT = "#FFF0F0"
+
+// Deterministic display labels for codes the org itself stores -- not fabricated data, just
+// formatting of the real stored country/currency code (falls back to the raw code otherwise).
+const COUNTRY_LABELS: Record<string, string> = {
+  SA: "المملكة العربية السعودية",
+  AE: "الإمارات العربية المتحدة",
+  KW: "الكويت",
+  QA: "قطر",
+  BH: "البحرين",
+  OM: "عُمان",
+  EG: "مصر",
+  JO: "الأردن",
+  IQ: "العراق",
+  MA: "المغرب",
+}
+
+const CURRENCY_LABELS: Record<string, string> = {
+  SAR: "الريال السعودي",
+  USD: "الدولار الأمريكي",
+  AED: "الدرهم الإماراتي",
+  KWD: "الدينار الكويتي",
+  QAR: "الريال القطري",
+  BHD: "الدينار البحريني",
+  OMR: "الريال العماني",
+  EGP: "الجنيه المصري",
+  JOD: "الدينار الأردني",
+  EUR: "اليورو",
+  GBP: "الجنيه الإسترليني",
+}
+
+function formatCountry(code: string | undefined) {
+  if (!code) return ""
+  return COUNTRY_LABELS[code.toUpperCase()] ?? code
+}
+
+function formatCurrency(code: string | undefined) {
+  if (!code) return ""
+  const label = CURRENCY_LABELS[code.toUpperCase()]
+  return label ? `${label} (${code.toUpperCase()})` : code
+}
 
 function ComingSoonPill() {
   return (
     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
       قريباً
+    </span>
+  )
+}
+
+function SectionIcon({
+  icon,
+  tint,
+}: {
+  icon: React.ReactNode
+  tint: "mint" | "purple" | "danger"
+}) {
+  const styles =
+    tint === "mint"
+      ? { background: MINT_LIGHT, color: MINT }
+      : tint === "purple"
+        ? { background: PURPLE_LIGHT, color: PURPLE }
+        : { background: DANGER_LIGHT, color: DANGER }
+  return (
+    <span
+      className="flex size-[52px] shrink-0 items-center justify-center rounded-2xl"
+      style={styles}
+    >
+      {icon}
     </span>
   )
 }
@@ -50,11 +127,12 @@ function getInitials(name: string | undefined) {
 interface EditableFieldProps {
   label: string
   value: string
+  displayValue?: string
   placeholder?: string
   onSave: (value: string) => Promise<void>
 }
 
-function EditableField({ label, value, placeholder, onSave }: EditableFieldProps) {
+function EditableField({ label, value, displayValue, placeholder, onSave }: EditableFieldProps) {
   const [draft, setDraft] = useState(value)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -85,22 +163,28 @@ function EditableField({ label, value, placeholder, onSave }: EditableFieldProps
 
   if (!isEditing) {
     return (
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 py-2.5 last:border-b-0">
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="truncate text-sm font-semibold text-foreground">
-            {value || <span className="text-muted-foreground">—</span>}
-          </p>
-        </div>
-        <AppButton type="button" variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+      <div className="flex min-h-[55px] items-center justify-between gap-3 border-b border-[#F0F1F4] py-3 last:border-b-0">
+        <AppButton
+          type="button"
+          size="sm"
+          onClick={() => setIsEditing(true)}
+          className="h-9 w-[82px] shrink-0 border border-[#DDD6FE] bg-white text-[13px] font-semibold shadow-none hover:bg-[#F1EEFF]"
+          style={{ color: PURPLE }}
+        >
           تعديل
         </AppButton>
+        <div className="min-w-0 flex-1 text-end">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {(displayValue ?? value) || <span className="text-muted-foreground">—</span>}
+          </p>
+        </div>
+        <p className="w-[110px] shrink-0 text-xs text-[#667085]">{label}</p>
       </div>
     )
   }
 
   return (
-    <div className="flex items-end gap-2 border-b border-border/60 py-2.5 last:border-b-0">
+    <div className="flex items-end gap-2 border-b border-[#F0F1F4] py-3 last:border-b-0">
       <AppInput
         label={label}
         value={draft}
@@ -125,6 +209,35 @@ function EditableField({ label, value, placeholder, onSave }: EditableFieldProps
           إلغاء
         </AppButton>
       </div>
+    </div>
+  )
+}
+
+function StatColumn({
+  label,
+  value,
+  comingSoon,
+}: {
+  label: string
+  value: React.ReactNode
+  comingSoon?: boolean
+}) {
+  return (
+    <div className="border-e border-[#F0F1F4] px-4 py-4 text-center last:border-e-0">
+      {comingSoon ? (
+        <>
+          <p className="text-sm font-bold text-muted-foreground">—</p>
+          <p className="mt-2 text-[12px] text-[#667085]">{label}</p>
+          <div className="mt-1.5 flex justify-center">
+            <ComingSoonPill />
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-[15px] font-bold text-foreground">{value}</p>
+          <p className="mt-2 text-[12px] text-[#667085]">{label}</p>
+        </>
+      )}
     </div>
   )
 }
@@ -172,19 +285,20 @@ function ChangePasswordForm() {
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex w-full items-center justify-between rounded-xl border border-border/60 px-4 py-3 text-start transition-colors hover:bg-muted/50"
+        className="flex min-h-[52px] w-full items-center justify-between gap-2 rounded-xl border border-[#E8EBF0] px-3.5 text-start transition-colors hover:bg-[#FAFBFC]"
       >
-        <div>
-          <p className="text-sm font-semibold text-foreground">تغيير كلمة المرور</p>
-          <p className="text-xs text-muted-foreground">تحديث كلمة المرور الخاصة بحسابك</p>
-        </div>
         <span className="text-muted-foreground">‹</span>
+        <div className="flex-1 text-end">
+          <p className="text-sm font-semibold text-foreground">تغيير كلمة المرور</p>
+          <p className="text-xs text-[#667085]">تحديث كلمة المرور الخاصة بحسابك</p>
+        </div>
+        <Lock className="size-4 shrink-0" style={{ color: PURPLE }} />
       </button>
     )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-border/60 p-4">
+    <form className="space-y-3 rounded-xl border border-[#E8EBF0] p-4" onSubmit={handleSubmit}>
       <AppPasswordInput
         label="كلمة المرور الحالية"
         value={currentPassword}
@@ -291,20 +405,20 @@ export default function SettingsDashboard() {
   const shortOrgId = currentOrganization ? `org_${currentOrganization.id.slice(0, 10)}` : ""
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-5" dir="rtl">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">الإعدادات</h1>
-        <p className="text-sm text-muted-foreground">إدارة حسابك وتفضيلاتك والفوترة والدعم</p>
+        <h1 className="text-[26px] font-bold text-foreground">الإعدادات</h1>
+        <p className="mt-1 text-sm text-[#667085]">إدارة حسابك وتفضيلاتك والفوترة والدعم</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-5 lg:col-span-2">
           {/* معلومات المؤسسة */}
           <AppCard
             title="معلومات المؤسسة"
             subtitle="بيانات مؤسستك وحسابك على منصة مدار"
-            icon={<Building2 className="size-4 text-muted-foreground" />}
-            className="rounded-2xl border-border/60 shadow-sm"
+            icon={<SectionIcon tint="mint" icon={<Building2 className="size-6" />} />}
+            className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]"
           >
             <div className="flex flex-wrap items-center gap-4">
               <div className="relative shrink-0">
@@ -321,7 +435,8 @@ export default function SettingsDashboard() {
                   aria-label="تغيير الشعار"
                   onClick={() => logoInputRef.current?.click()}
                   disabled={isUploadingLogo}
-                  className="absolute -bottom-1 -end-1 flex size-6 items-center justify-center rounded-full border-2 border-card bg-emerald-500 text-white transition-colors hover:bg-emerald-600 disabled:opacity-60"
+                  className="absolute -bottom-1 -end-1 flex size-6 items-center justify-center rounded-full border-2 border-card text-white transition-colors disabled:opacity-60"
+                  style={{ background: MINT }}
                 >
                   <Camera className="size-3" />
                 </button>
@@ -333,12 +448,24 @@ export default function SettingsDashboard() {
                   onChange={handleLogoChange}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                PNG أو JPEG أو WEBP أو GIF، بحد أقصى 3 ميجابايت.
-              </p>
+              <div>
+                <AppButton
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={isUploadingLogo}
+                  className="h-9 text-xs"
+                >
+                  {isUploadingLogo ? "جارٍ الرفع…" : "تغيير الشعار"}
+                </AppButton>
+                <p className="mt-1.5 text-xs text-[#98A2B3]">
+                  PNG أو JPEG أو WEBP أو GIF، بحد أقصى 3 ميجابايت.
+                </p>
+              </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-5">
               <EditableField
                 label="اسم المؤسسة"
                 value={currentOrganization?.name ?? ""}
@@ -353,166 +480,215 @@ export default function SettingsDashboard() {
               <EditableField
                 label="الدولة"
                 value={currentOrganization?.settings.country ?? ""}
+                displayValue={formatCountry(currentOrganization?.settings.country) || undefined}
                 placeholder="مثال: SA"
                 onSave={(value) => saveField("country", value)}
               />
               <EditableField
                 label="العملة (عملة التقارير)"
                 value={currentOrganization?.currency ?? ""}
+                displayValue={formatCurrency(currentOrganization?.currency) || undefined}
+                placeholder="مثال: SAR"
                 onSave={(value) => saveField("currency", value)}
               />
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-border/60 p-3 text-center">
-                <p className="text-lg font-bold text-foreground">
-                  {stats ? `${stats.connected}` : "—"}
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  عدد المنصات المتصلة
-                  {stats ? ` (من أصل ${stats.total})` : ""}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border/60 p-3 text-center">
-                <p className="text-lg font-bold text-foreground">{stats ? stats.userCount : "—"}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">عدد المستخدمين</p>
-              </div>
-              <div className="rounded-xl border border-border/60 p-3 text-center">
-                <p className="text-sm font-bold text-muted-foreground">—</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">تاريخ بداية الاشتراك</p>
-                <ComingSoonPill />
-              </div>
-              <div className="rounded-xl border border-border/60 p-3 text-center">
-                <p className="text-sm font-bold text-muted-foreground">—</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">الباقة الحالية / المتبقي</p>
-                <ComingSoonPill />
-              </div>
+            <div className="mt-5 grid grid-cols-2 rounded-xl border border-[#F0F1F4] sm:grid-cols-4">
+              <StatColumn label="الباقة الحالية" value={null} comingSoon />
+              <StatColumn label="تاريخ بداية الاشتراك" value={null} comingSoon />
+              <StatColumn label="عدد المستخدمين" value={stats ? stats.userCount : "—"} />
+              <StatColumn
+                label={`عدد المنصات المتصلة${stats ? ` (من أصل ${stats.total})` : ""}`}
+                value={stats ? stats.connected : "—"}
+              />
             </div>
           </AppCard>
 
           {/* الاشتراك والفوترة -- ملخص */}
-          <AppCard
-            title="الاشتراك والفوترة"
-            subtitle="تفاصيل اشتراك الحساب الحالي ودورة الفوترة"
-            icon={<Layers className="size-4 text-muted-foreground" />}
-            className="rounded-2xl border-border/60 shadow-sm"
-          >
-            <div className="flex items-start gap-2.5">
-              <div>
-                <p className="text-xs leading-6 text-muted-foreground">
-                  تفاصيل الاشتراك والفوترة قيد التطوير حالياً.
-                </p>
-                <ComingSoonPill />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <AppCard
+              title="الاشتراك والفوترة"
+              subtitle="تفاصيل اشتراكك الحالي ودورة الفوترة"
+              icon={<SectionIcon tint="purple" icon={<Calendar className="size-6" />} />}
+              className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]"
+            >
+              <div className="flex items-center justify-between text-xs text-[#667085]">
+                <span>تاريخ بداية الاشتراك</span>
+                <span className="font-semibold text-foreground">—</span>
               </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-[#667085]">
+                <span>تاريخ انتهاء الاشتراك</span>
+                <span className="font-semibold text-foreground">—</span>
+              </div>
+
+              <div className="mt-5">
+                <div className="relative h-1.5 rounded-full bg-[#F0F1F4]">
+                  <span className="absolute -start-0.5 -top-1 size-3.5 rounded-full border-2 border-white bg-[#D0D5DD]" />
+                  <span className="absolute -end-0.5 -top-1 size-3.5 rounded-full border-2 border-white bg-[#D0D5DD]" />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[11px] text-[#98A2B3]">
+                  <span>—</span>
+                  <ComingSoonPill />
+                  <span>—</span>
+                </div>
+              </div>
+            </AppCard>
+
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: MINT_LIGHT, border: "1px solid #E8F3EF" }}
+            >
+              <p className="text-sm font-semibold text-foreground">المتبقي على الاشتراك</p>
+              <p className="mt-3 text-2xl font-bold text-muted-foreground">قريباً</p>
+              <p className="mt-1 text-xs text-[#667085]">
+                تفاصيل الاشتراك والفوترة قيد التطوير حالياً.
+              </p>
+              <AppButton
+                type="button"
+                variant="outline"
+                size="sm"
+                fullWidth
+                disabled
+                className="mt-4 bg-white"
+              >
+                إدارة الاشتراك والفوترة
+              </AppButton>
             </div>
-          </AppCard>
+          </div>
 
-          {/* الأمان وكلمة المرور */}
-          <AppCard
-            title="الأمان وكلمة المرور"
-            subtitle="إدارة أمان حسابك وتغيير كلمة المرور"
-            icon={<Lock className="size-4 text-muted-foreground" />}
-            className="rounded-2xl border-border/60 shadow-sm"
-          >
-            <ChangePasswordForm />
-          </AppCard>
-
-          {/* الاشتراك والفوترة -- تفاصيل */}
-          <AppCard
-            title="الاشتراك والفوترة"
-            subtitle="إدارة طرق الدفع والفواتير"
-            icon={<CreditCard className="size-4 text-muted-foreground" />}
-            className="rounded-2xl border-border/60 shadow-sm"
-          >
-            <div className="space-y-2">
-              {[
-                {
-                  icon: Layers,
-                  title: "تفاصيل الباقة",
-                  subtitle: "عرض تفاصيل الباقة الحالية والحدود",
-                },
-                {
-                  icon: CreditCard,
-                  title: "طرق الدفع",
-                  subtitle: "إدارة بطاقات الدفع وطرق السداد",
-                },
-                {
-                  icon: FileText,
-                  title: "الفواتير والسجلات",
-                  subtitle: "عرض الفواتير وتاريخ المعاملات",
-                },
-              ].map((row) => (
-                <div
-                  key={row.title}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-border/60 px-4 py-3 opacity-60"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      <row.icon className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{row.title}</p>
-                      <p className="text-xs text-muted-foreground">{row.subtitle}</p>
+          {/* Lower settings grid: الاشتراك والفوترة + الأمان وكلمة المرور */}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <AppCard
+              title="الاشتراك والفوترة"
+              subtitle="إدارة طرق الدفع والفواتير"
+              icon={<SectionIcon tint="mint" icon={<Wallet className="size-6" />} />}
+              className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]"
+            >
+              <div className="space-y-2">
+                {[
+                  {
+                    icon: Layers,
+                    title: "تفاصيل الباقة",
+                    subtitle: "عرض تفاصيل الباقة الحالية والحدود",
+                  },
+                  {
+                    icon: CreditCard,
+                    title: "طرق الدفع",
+                    subtitle: "إدارة بطاقات الدفع وطرق السداد",
+                  },
+                  {
+                    icon: FileText,
+                    title: "الفواتير والسجلات",
+                    subtitle: "عرض الفواتير وتاريخ المعاملات",
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.title}
+                    className="flex min-h-[52px] items-center justify-between gap-2 rounded-xl border border-[#E8EBF0] px-3.5 opacity-60"
+                  >
+                    <ComingSoonPill />
+                    <div className="flex flex-1 items-center justify-end gap-2.5 text-end">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{row.title}</p>
+                        <p className="text-xs text-[#667085]">{row.subtitle}</p>
+                      </div>
+                      <span
+                        className="flex size-8 shrink-0 items-center justify-center rounded-lg"
+                        style={{ background: MINT_LIGHT, color: MINT }}
+                      >
+                        <row.icon className="size-4" />
+                      </span>
                     </div>
                   </div>
-                  <ComingSoonPill />
-                </div>
-              ))}
-            </div>
-          </AppCard>
+                ))}
+              </div>
+            </AppCard>
+
+            <AppCard
+              title="الأمان وكلمة المرور"
+              subtitle="إدارة أمان حسابك وتغيير كلمة المرور"
+              icon={<SectionIcon tint="purple" icon={<Lock className="size-6" />} />}
+              className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]"
+            >
+              <ChangePasswordForm />
+            </AppCard>
+          </div>
 
           {/* حذف الحساب */}
-          <AppCard className="rounded-2xl border-rose-200/60 shadow-sm">
-            <div className="flex items-center justify-between gap-2 opacity-60">
-              <div className="flex items-center gap-2.5">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-                  <Trash2 className="size-4" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-rose-600">حذف الحساب</p>
-                  <p className="text-xs text-muted-foreground">
-                    حذف حسابك وجميع بياناتك بشكل نهائي
-                  </p>
-                </div>
+          <div
+            className="flex min-h-[84px] flex-col items-stretch justify-between gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center"
+            style={{ borderColor: "#F5DADB" }}
+          >
+            <ComingSoonPill />
+            <div className="flex flex-1 items-center justify-end gap-3.5 text-end">
+              <div>
+                <p className="text-[15px] font-bold" style={{ color: DANGER }}>
+                  حذف الحساب
+                </p>
+                <p className="mt-0.5 text-xs text-[#667085]">حذف حسابك وجميع بياناتك بشكل نهائي</p>
               </div>
-              <ComingSoonPill />
+              <span
+                className="flex size-12 shrink-0 items-center justify-center rounded-2xl"
+                style={{ background: DANGER_LIGHT, color: DANGER }}
+              >
+                <Trash2 className="size-5" />
+              </span>
             </div>
-          </AppCard>
+          </div>
+
+          <footer className="flex flex-col items-center justify-between gap-3 border-t border-[#EEF0F4] pt-5 text-xs text-[#98A2B3] sm:flex-row">
+            <p>© {new Date().getFullYear()} مدار. جميع الحقوق محفوظة</p>
+            <div className="flex items-center gap-4">
+              <Link href={ROUTES.terms} className="hover:text-[#667085]">
+                الشروط والأحكام
+              </Link>
+              <Link href={ROUTES.privacy} className="hover:text-[#667085]">
+                سياسة الخصوصية
+              </Link>
+            </div>
+          </footer>
         </div>
 
         {/* الشريط الجانبي */}
-        <div className="space-y-4">
-          <AppCard className="rounded-2xl border-border/60 shadow-sm">
+        <div className="space-y-5">
+          <AppCard className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]">
             <div className="flex items-center gap-2.5">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <span
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: "#EEF2FF", color: NAVY }}
+              >
                 <Globe2 className="size-4" />
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">
                   {currentOrganization?.name ?? "—"}
                 </p>
-                <p className="truncate text-xs text-muted-foreground" dir="ltr">
+                <p className="truncate text-xs text-[#98A2B3]" dir="ltr">
                   {shortOrgId}
                 </p>
               </div>
             </div>
           </AppCard>
 
-          <AppCard className="rounded-2xl border-border/60 shadow-sm">
+          <AppCard className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]">
             <div className="flex items-center gap-2.5">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <span
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: PURPLE_LIGHT, color: PURPLE }}
+              >
                 <Headphones className="size-4" />
               </span>
               <div>
                 <p className="text-sm font-semibold text-foreground">تحتاج مساعدة؟</p>
-                <p className="text-xs text-muted-foreground">فريق الدعم في مدار لمساعدتك</p>
+                <p className="text-xs text-[#667085]">فريق الدعم في مدار لمساعدتك</p>
               </div>
             </div>
             <AppButton
               variant="outline"
               size="sm"
               fullWidth
-              className="mt-3"
+              className="mt-3 border-[#DDD6FE] bg-white hover:bg-[#F1EEFF]"
+              style={{ color: PURPLE }}
               onClick={() => {
                 window.location.href = `mailto:${MADAR_CONTACT_EMAIL}`
               }}
@@ -521,16 +697,19 @@ export default function SettingsDashboard() {
             </AppButton>
           </AppCard>
 
-          <AppCard className="rounded-2xl border-border/60 shadow-sm">
+          <AppCard className="rounded-[18px] border-[#E8EBF0] shadow-[0_2px_8px_rgba(16,42,92,0.03)]">
             <div className="flex items-center gap-2.5">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                <Users className="size-4" />
+              <span
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: MINT_LIGHT, color: MINT }}
+              >
+                <Clock className="size-4" />
               </span>
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   {stats ? stats.userCount : "—"} مستخدمين
                 </p>
-                <p className="text-xs text-muted-foreground">في هذه المؤسسة</p>
+                <p className="text-xs text-[#667085]">في هذه المؤسسة</p>
               </div>
             </div>
           </AppCard>
