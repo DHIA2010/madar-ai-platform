@@ -303,6 +303,7 @@ export class ZidOAuthRepository
     providerAccountId: string | null
     providerAccountName: string | null
     providerAccountEmail: string | null
+    storeDomain: string | null
     encryptedRefreshToken: string | null
     encryptedAccessToken: string | null
     encryptedAuthorizationToken: string | null
@@ -320,12 +321,12 @@ export class ZidOAuthRepository
       text: `
         INSERT INTO zid_oauth_connections (
           id, organization_id, workspace_id, project_id, data_source_id,
-          provider_account_id, provider_account_name, provider_account_email,
+          provider_account_id, provider_account_name, provider_account_email, store_domain,
           encrypted_refresh_token, encrypted_access_token, encrypted_authorization_token,
           scopes, token_expires_at, status, connection_reference, last_connected_at,
           last_disconnected_at, created_by_user_id, updated_by_user_id, created_at, updated_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18,$19,$19
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$20,$20
         )
         ON CONFLICT (id) DO UPDATE SET
           organization_id = EXCLUDED.organization_id,
@@ -335,6 +336,7 @@ export class ZidOAuthRepository
           provider_account_id = EXCLUDED.provider_account_id,
           provider_account_name = EXCLUDED.provider_account_name,
           provider_account_email = EXCLUDED.provider_account_email,
+          store_domain = EXCLUDED.store_domain,
           encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
           encrypted_access_token = EXCLUDED.encrypted_access_token,
           encrypted_authorization_token = EXCLUDED.encrypted_authorization_token,
@@ -356,6 +358,7 @@ export class ZidOAuthRepository
         input.providerAccountId,
         input.providerAccountName,
         input.providerAccountEmail,
+        input.storeDomain,
         input.encryptedRefreshToken,
         input.encryptedAccessToken,
         input.encryptedAuthorizationToken,
@@ -369,6 +372,27 @@ export class ZidOAuthRepository
         input.nowIso,
       ],
     })
+  }
+
+  // Resolves the storefront-injected Zid App Snippet's own window.location.hostname back to a
+  // tenant -- store_domain is populated from Zid's real /managers/account/profile `url` field
+  // during OAuth connect (see zid-oauth/service.ts's fetchStoreInfo/normalizeDomain). "connected"
+  // only, matching the same guard used everywhere else in this domain.
+  async findOrganizationIdByDomain(domain: string): Promise<string | null> {
+    const result = await this.db.query<{ organization_id: string }>({
+      name: "zid-oauth-connection-find-by-domain",
+      text: `
+        SELECT organization_id
+        FROM zid_oauth_connections
+        WHERE store_domain = $1
+          AND status = 'connected'
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [domain],
+    })
+
+    return result.rows[0] ? String(result.rows[0].organization_id) : null
   }
 
   async findConnectionById(connectionId: string) {

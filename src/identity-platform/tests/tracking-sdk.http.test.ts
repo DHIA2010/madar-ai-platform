@@ -552,3 +552,98 @@ describe("GET /v1/tracking/resolve/salla/:storeId", () => {
     expect(response.status).toBe(404)
   })
 })
+
+async function insertZidConnection(input: {
+  organizationId: string
+  workspaceId: string
+  userId: string
+  storeDomain: string | null
+  status?: "connected" | "disconnected"
+}) {
+  await database.query(
+    `insert into zid_oauth_connections (
+       id, organization_id, workspace_id, project_id, status, store_domain,
+       created_by_user_id, updated_by_user_id, created_at, updated_at
+     ) values ($1, $2, $3, $4, $5, $6, $7, $7, now(), now())`,
+    [
+      randomUUID(),
+      input.organizationId,
+      input.workspaceId,
+      randomUUID(),
+      input.status ?? "connected",
+      input.storeDomain,
+      input.userId,
+    ]
+  )
+}
+
+describe("GET /v1/tracking/zid-app-snippet.js", () => {
+  it("serves the app-wide Zid loader, distinct from the merchant-installed snippet", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/zid-app-snippet.js`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("application/javascript")
+    const body = await response.text()
+    expect(body).toContain("window.location.hostname")
+    expect(body).toContain("/v1/tracking/resolve/zid/")
+    // Reuses the same shared loader fragment as the merchant snippet, not a copy that could drift.
+    expect(body).toContain("madarFetchConfigAndLoadSdk")
+  })
+})
+
+describe("GET /v1/tracking/resolve/zid/:domain", () => {
+  it("resolves a connected Zid store's own domain to the org's real site key", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@zid-resolve.madar",
+      "Zid Resolve Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      storeDomain: "my-zid-store.com",
+    })
+
+    const expectedSiteKey = await getSiteKey(accessToken)
+
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/my-zid-store.com`)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { siteKey: string }
+    expect(body.siteKey).toBe(expectedSiteKey)
+  })
+
+  it("returns 404 for a domain with no connection at all", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/does-not-exist.com`)
+    expect(response.status).toBe(404)
+  })
+
+  it("returns 404 for a disconnected store's stale domain -- a stale connection must never resolve", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@zid-resolve-disconnected.madar",
+      "Zid Resolve Disconnected Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      storeDomain: "disconnected-zid-store.com",
+      status: "disconnected",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/disconnected-zid-store.com`)
+    expect(response.status).toBe(404)
+  })
+})
+
+describe("GET /v1/tracking/sdk-v1.0.0.js: Salla cart events use the real, confirmed API", () => {
+  it('wires salla.cart.event.onItemAdded/onItemDeleted, not the earlier unverified event.on("cart::added") form', async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/sdk-v1.0.0.js`)
+    const body = await response.text()
+    expect(body).toContain("salla.cart.event.onItemAdded")
+    expect(body).toContain("salla.cart.event.onItemDeleted")
+    // The old, unverified call form (as actually invoked, not as mentioned in an explanatory
+    // comment) must be gone -- window.salla.event.on( was the real broken code, never fired.
+    expect(body).not.toContain("window.salla.event.on(")
+  })
+})

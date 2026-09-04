@@ -46,6 +46,7 @@ import { extractPlatformSignals } from "../../tracking/platform-macros"
 import { TrackingRepository } from "../../tracking/repository"
 import { TRACKING_SNIPPET_JS } from "../../tracking/snippet"
 import { SALLA_APP_SNIPPET_JS } from "../../tracking/salla-app-snippet"
+import { ZID_APP_SNIPPET_JS } from "../../tracking/zid-app-snippet"
 import { TRACKING_SDK_JS_BY_VERSION } from "../../tracking/sdk"
 import { TrackingService, toTrackingEventType } from "../../tracking/service"
 import { hashCustomerEmail } from "../../tracking/customer-ref"
@@ -531,10 +532,13 @@ export function createIdentityApiServer(
           container.infrastructure.cache
         )
       : null
-  // Standalone instance for the Salla App Snippet's store-id resolution route below -- every
-  // other SallaOAuthRepository use in this file is scoped inline to a single service.
+  // Standalone instances for the Salla/Zid App Snippets' resolution routes below -- every other
+  // SallaOAuthRepository/ZidOAuthRepository use in this file is scoped inline to a single service.
   const sallaOAuthRepositoryForTracking = container.infrastructure.database
     ? new SallaOAuthRepository(container.infrastructure.database)
+    : null
+  const zidOAuthRepositoryForTracking = container.infrastructure.database
+    ? new ZidOAuthRepository(container.infrastructure.database)
     : null
   const orderAttributionService = container.infrastructure.database
     ? new OrderAttributionService(
@@ -875,6 +879,18 @@ export function createIdentityApiServer(
         return
       }
 
+      if (method === "GET" && url.pathname === "/v1/tracking/zid-app-snippet.js") {
+        // The literal URL registered once in the Zid Partner Dashboard (App Scripts / Custom
+        // Snippets) -- Zid injects it app-wide into every merchant storefront where the app is
+        // installed, no merchant action needed. See tracking/zid-app-snippet.ts.
+        response.writeHead(200, {
+          "content-type": "application/javascript; charset=utf-8",
+          "cache-control": "public, max-age=300",
+        })
+        response.end(ZID_APP_SNIPPET_JS)
+        return
+      }
+
       const sdkVersionMatch = url.pathname.match(/^\/v1\/tracking\/sdk-v([\w.]+)\.js$/)
       if (method === "GET" && sdkVersionMatch) {
         const sdkJs = TRACKING_SDK_JS_BY_VERSION[sdkVersionMatch[1]]
@@ -939,6 +955,40 @@ export function createIdentityApiServer(
           return send(404, {
             code: "SALLA_STORE_NOT_CONNECTED",
             message: "No connected Salla store with this ID.",
+          })
+        }
+
+        return send(200, { siteKey: await trackingService.ensureSiteKey(organizationId) })
+      }
+
+      const zidStoreResolveMatch = url.pathname.match(/^\/v1\/tracking\/resolve\/zid\/([^/]+)$/)
+      if (method === "GET" && zidStoreResolveMatch) {
+        if (!trackingService || !zidOAuthRepositoryForTracking) {
+          return send(503, {
+            code: "TRACKING_UNAVAILABLE",
+            message: "Tracking capture is unavailable in memory mode.",
+          })
+        }
+
+        // Called by the Zid-injected app snippet on every storefront page load, same trust
+        // model as the Salla resolve route above -- a storefront hostname identifies a tenant
+        // no more sensitively than the mtk_ site key this returns.
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `zid_store_resolve:${context.ipAddress}`,
+          60,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." })
+        }
+
+        const domain = decodeURIComponent(zidStoreResolveMatch[1]).toLowerCase()
+        const organizationId =
+          await zidOAuthRepositoryForTracking.findOrganizationIdByDomain(domain)
+        if (!organizationId) {
+          return send(404, {
+            code: "ZID_STORE_NOT_CONNECTED",
+            message: "No connected Zid store with this domain.",
           })
         }
 

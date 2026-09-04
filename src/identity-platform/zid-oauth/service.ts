@@ -70,6 +70,10 @@ interface ZidManagerProfileResponse {
       title?: string
       currency?: { code?: string } | string
       timezone?: string
+      // Confirmed real field on this same response (Zid's OpenAPI spec for this endpoint) --
+      // the store's public storefront URL. Used only for the tracking domain-matching fallback
+      // (see normalizeDomain below); no other part of this connector needed it before.
+      url?: string
     }
   }
 }
@@ -418,6 +422,27 @@ async function fetchStoreInfo(config: ZidOAuthServiceConfig, token: ZidTokenResp
     name: store.title,
     currency: typeof store.currency === "string" ? store.currency : store.currency?.code,
     timezone: store.timezone,
+    url: store.url,
+  }
+}
+
+// Normalizes a store's public URL down to a bare, comparable hostname (scheme/path/query
+// stripped, lowercased, no leading www.) -- the exact same value shape a storefront-injected
+// script can read from its own window.location.hostname, so the two sides of the tracking
+// domain-matching lookup (GET /v1/tracking/resolve/zid/:domain) always compare equal for the
+// same real store. Returns null on anything unparseable rather than throwing -- a malformed
+// store URL must never fail the OAuth connect flow, it just means auto-injection won't resolve
+// for that store until it's fixed.
+function normalizeDomain(rawUrl: string | null | undefined): string | null {
+  if (!rawUrl) return null
+  const trimmed = rawUrl.trim()
+  if (trimmed.length === 0) return null
+
+  try {
+    const withScheme = trimmed.includes("://") ? trimmed : `https://${trimmed}`
+    return new URL(withScheme).hostname.toLowerCase().replace(/^www\./, "")
+  } catch {
+    return null
   }
 }
 
@@ -481,6 +506,7 @@ export class ZidOAuthService {
       providerAccountId: null,
       providerAccountName: null,
       providerAccountEmail: null,
+      storeDomain: null,
       encryptedRefreshToken: existingConnection ? null : null,
       encryptedAccessToken: existingConnection ? null : null,
       encryptedAuthorizationToken: existingConnection ? null : null,
@@ -613,6 +639,7 @@ export class ZidOAuthService {
         providerAccountId: primaryAccount?.customerId ?? null,
         providerAccountName: primaryAccount?.displayName ?? "Zid Store",
         providerAccountEmail: null,
+        storeDomain: normalizeDomain(store.url),
         encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
         encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
         encryptedAuthorizationToken: token.authorization
@@ -790,6 +817,12 @@ export class ZidOAuthService {
         providerAccountId: storeExternalId,
         providerAccountName: storeName,
         providerAccountEmail: null,
+        // Marketplace-install claims don't carry the store URL through the pending-install row
+        // today (zid_marketplace_installs only persists name/currency/timezone) -- a merchant
+        // who installed via Zid's App Market rather than connecting directly through MADAR will
+        // need one reconnect through the direct flow for tracking domain-matching to activate,
+        // same as any pre-existing connection from before this column existed.
+        storeDomain: null,
         encryptedRefreshToken: row.encrypted_refresh_token as string,
         encryptedAccessToken: row.encrypted_access_token as string,
         encryptedAuthorizationToken: (row.encrypted_authorization_token as string | null) ?? null,

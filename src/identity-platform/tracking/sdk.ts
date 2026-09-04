@@ -410,19 +410,31 @@ export const TRACKING_SDK_JS_V1 = `(function () {
     } catch (e) {}
   })();
 
-  // Salla: the \`salla\` global is Salla's own published Twilight theme JS SDK
-  // (docs.salla.dev) -- salla.event.on(...) is a real, documented event bus custom themes are
-  // built against, not a guessed API.
+  // Salla: the \`salla\` global is Salla's own published Twilight theme JS SDK (docs.salla.dev).
+  // salla.cart.event.onItemAdded/onItemDeleted are the real, confirmed methods (exact code
+  // samples in Salla's own docs and npm package listing) -- deliberately NOT the generic
+  // salla.event.on("cart::added", ...) form an earlier version of this file used, which was
+  // never verified against real docs and turned out to be wrong (so it silently never fired).
+  // Product-view/checkout/purchase Salla-native events are intentionally NOT wired here: no real
+  // event name for those was found despite searching, and guessing one would repeat the exact
+  // mistake being fixed.
   (function sallaAdapter() {
-    if (!window.salla || !window.salla.event || typeof window.salla.event.on !== "function") return;
+    if (!window.salla || !window.salla.cart || !window.salla.cart.event) return;
     try {
-      window.salla.event.on("cart::added", function (data) {
-        if (trackingFlags.add_to_cart === false) return;
-        window.Madar.track("add_to_cart", {
-          product_id: data && data.id ? String(data.id) : null,
-          quantity: data && data.quantity ? data.quantity : null
+      if (typeof window.salla.cart.event.onItemAdded === "function") {
+        window.salla.cart.event.onItemAdded(function (response, productId) {
+          if (trackingFlags.add_to_cart === false) return;
+          window.Madar.track("add_to_cart", {
+            product_id: productId !== undefined && productId !== null ? String(productId) : null
+          });
         });
-      });
+      }
+      if (typeof window.salla.cart.event.onItemDeleted === "function") {
+        window.salla.cart.event.onItemDeleted(function () {
+          if (trackingFlags.add_to_cart === false) return;
+          window.Madar.track("remove_from_cart", {});
+        });
+      }
     } catch (e) {}
   })();
 
