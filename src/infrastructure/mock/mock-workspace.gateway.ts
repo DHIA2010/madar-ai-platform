@@ -1,5 +1,7 @@
 import type {
+  ConnectedPlatformsCountDto,
   OrganizationDto,
+  OrganizationSettingsDto,
   WorkspaceDto,
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
@@ -63,6 +65,9 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       id: crypto.randomUUID(),
       name: payload.name,
       slug: payload.name.trim().toLowerCase().replace(/\s+/g, "-"),
+      logoUrl: null,
+      currency: "SAR",
+      settings: {},
       subscription: {
         id: crypto.randomUUID(),
         status: "active",
@@ -103,14 +108,42 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
 
   async updateOrganization(
     organizationId: string,
-    payload: { name?: string }
+    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
   ): Promise<OrganizationDto> {
     await waitForMock()
     const organization = mockOrganizations.find((entry) => entry.id === organizationId)
     if (!organization) {
       throw new Error("Organization not found")
     }
-    return { ...organization, ...(payload.name !== undefined ? { name: payload.name } : {}) }
+    return {
+      ...organization,
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
+      ...(payload.settings !== undefined
+        ? { settings: { ...organization.settings, ...payload.settings } }
+        : {}),
+    }
+  }
+
+  async uploadOrganizationLogo(
+    organizationId: string,
+    payload: { contentType: string; dataBase64: string }
+  ): Promise<OrganizationDto> {
+    await waitForMock()
+    const organization = mockOrganizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      throw new Error("Organization not found")
+    }
+    return { ...organization, logoUrl: `data:${payload.contentType};base64,${payload.dataBase64}` }
+  }
+
+  async getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto> {
+    await waitForMock()
+    const organization = mockOrganizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      throw new Error("Organization not found")
+    }
+    return { connected: 0, total: 8, userCount: 1 }
   }
 
   async archiveOrganization(organizationId: string): Promise<OrganizationDto> {

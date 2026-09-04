@@ -7,6 +7,9 @@ const mockOrganization: Organization = {
   id: "org_test",
   name: "Test Organization",
   slug: "test-organization",
+  logoUrl: null,
+  currency: "SAR",
+  settings: {},
   subscription: {
     id: "sub_test",
     status: "active",

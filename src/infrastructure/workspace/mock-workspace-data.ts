@@ -47,12 +47,18 @@ export const mockOrganizations: OrganizationDto[] = [
     id: "org_northstar",
     name: "Northstar Group",
     slug: "northstar-group",
+    logoUrl: null,
+    currency: "SAR",
+    settings: {},
     subscription: subscriptions.northstar,
   },
   {
     id: "org_atlas",
     name: "Atlas Commerce",
     slug: "atlas-commerce",
+    logoUrl: null,
+    currency: "SAR",
+    settings: {},
     subscription: subscriptions.atlas,
   },
 ]

@@ -14,6 +14,9 @@ const mockOrganizations: Organization[] = [
     id: "org_madar",
     name: "MADAR",
     slug: "madar",
+    logoUrl: null,
+    currency: "SAR",
+    settings: {},
     subscription: {
       id: "sub_madar",
       plan: {

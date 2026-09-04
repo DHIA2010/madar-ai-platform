@@ -37,6 +37,7 @@ const authValue: AuthContextValue = {
   updateProfile: vi.fn(),
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
+  changePassword: vi.fn(),
 }
 
 function TestPermissionProvider({ children }: { children: React.ReactNode }) {

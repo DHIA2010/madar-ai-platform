@@ -20,6 +20,9 @@ const organizations: Organization[] = [
     id: "org-northstar",
     name: "Northstar Group",
     slug: "northstar-group",
+    logoUrl: null,
+    currency: "SAR",
+    settings: {},
     subscription: {
       id: "sub-1",
       status: "active",
@@ -39,6 +42,9 @@ const organizations: Organization[] = [
     id: "org-orbit",
     name: "Orbit Holdings",
     slug: "orbit-holdings",
+    logoUrl: null,
+    currency: "SAR",
+    settings: {},
     subscription: {
       id: "sub-2",
       status: "active",

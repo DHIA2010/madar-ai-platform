@@ -298,7 +298,8 @@ export class OrganizationEntity {
     if (payload.currency !== undefined) this.state.currency = payload.currency
     if (payload.subscriptionReference !== undefined)
       this.state.subscriptionReference = payload.subscriptionReference
-    if (payload.settings !== undefined) this.state.settings = payload.settings
+    if (payload.settings !== undefined)
+      this.state.settings = { ...this.state.settings, ...payload.settings }
     this.state.updatedAt = now
   }
 

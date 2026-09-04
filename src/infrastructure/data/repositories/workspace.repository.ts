@@ -1,7 +1,9 @@
 import type { WorkspaceRepository } from "@/application/contracts/infrastructure.contracts"
 import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
 import type {
+  ConnectedPlatformsCountDto,
   OrganizationDto,
+  OrganizationSettingsDto,
   WorkspaceDto,
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
@@ -168,7 +170,7 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
 
   async updateOrganization(
     organizationId: string,
-    payload: { name?: string }
+    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
   ): Promise<OrganizationDto> {
     try {
       if (this.resolveBackend() === "mock") {
@@ -181,6 +183,39 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
       const dto = await this.adapter.updateOrganization(organizationId, payload)
       this.cache.clear()
       return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async uploadOrganizationLogo(
+    organizationId: string,
+    payload: { contentType: string; dataBase64: string }
+  ): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.uploadOrganizationLogo(organizationId, payload)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.uploadOrganizationLogo(organizationId, payload)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        return await mockGateway.getConnectedPlatformsCount(organizationId)
+      }
+
+      return await this.adapter.getConnectedPlatformsCount(organizationId)
     } catch (error) {
       throw mapRepositoryError(error)
     }

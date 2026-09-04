@@ -70,7 +70,8 @@ services:
       mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin123} &&
       mc mb --ignore-existing local/${MINIO_BUCKET:-madar-local} &&
       mc anonymous set private local/${MINIO_BUCKET:-madar-local} &&
-      mc anonymous set download local/${MINIO_BUCKET:-madar-local}/avatars
+      mc anonymous set download local/${MINIO_BUCKET:-madar-local}/avatars &&
+      mc anonymous set download local/${MINIO_BUCKET:-madar-local}/org-logos
       "
     restart: "no"
     networks:

@@ -1,5 +1,7 @@
 import type {
+  ConnectedPlatformsCountDto,
   OrganizationDto,
+  OrganizationSettingsDto,
   WorkspaceDto,
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
@@ -9,8 +11,21 @@ import type { ApiClient } from "@/infrastructure/http"
 interface RawOrganization {
   id: string
   name: string
+  logoUrl?: string | null
+  currency?: string
+  settings?: Record<string, unknown>
   subscriptionReference?: string | null
   status?: "active" | "archived" | "deleted"
+}
+
+function toOrganizationSettingsDto(
+  raw: Record<string, unknown> | undefined
+): OrganizationSettingsDto {
+  const settings = raw ?? {}
+  return {
+    storeName: typeof settings.storeName === "string" ? settings.storeName : undefined,
+    country: typeof settings.country === "string" ? settings.country : undefined,
+  }
 }
 
 interface RawWorkspace {
@@ -31,12 +46,17 @@ function slugify(name: string): string {
 
 // The backend's organization/workspace records don't carry slug or
 // subscription data -- those are frontend-only display concepts, so they're
-// synthesized here rather than sent to or expected from the API.
+// synthesized here rather than sent to or expected from the API. logoUrl/currency/settings ARE
+// real backend fields (organizations.logo_url/currency/settings, migration 002) -- they're
+// mapped through as-is, not synthesized.
 function toOrganizationDto(raw: RawOrganization): OrganizationDto {
   return {
     id: raw.id,
     name: raw.name,
     slug: slugify(raw.name) || raw.id,
+    logoUrl: raw.logoUrl ?? null,
+    currency: raw.currency ?? "SAR",
+    settings: toOrganizationSettingsDto(raw.settings),
     subscription: {
       id: raw.subscriptionReference ?? raw.id,
       status: "active",
@@ -143,10 +163,28 @@ export class WorkspaceApiAdapter {
       .then(toOrganizationDto)
   }
 
-  updateOrganization(organizationId: string, payload: { name?: string }): Promise<OrganizationDto> {
+  updateOrganization(
+    organizationId: string,
+    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+  ): Promise<OrganizationDto> {
     return this.client
-      .patch<{ name?: string }, RawOrganization>(`/v1/organizations/${organizationId}`, payload)
+      .patch<typeof payload, RawOrganization>(`/v1/organizations/${organizationId}`, payload)
       .then(toOrganizationDto)
+  }
+
+  uploadOrganizationLogo(
+    organizationId: string,
+    payload: { contentType: string; dataBase64: string }
+  ): Promise<OrganizationDto> {
+    return this.client
+      .post<typeof payload, RawOrganization>(`/v1/organizations/${organizationId}/logo`, payload)
+      .then(toOrganizationDto)
+  }
+
+  getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto> {
+    return this.client.get<ConnectedPlatformsCountDto>(
+      `/v1/organizations/${organizationId}/connected-platforms`
+    )
   }
 
   archiveOrganization(organizationId: string): Promise<OrganizationDto> {

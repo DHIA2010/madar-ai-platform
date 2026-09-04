@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { AppError } from "@/lib/app-errors"
+import { fileToBase64 } from "@/lib/file-to-base64"
 
 import { AppEmpty, AppLoading } from "@/components/app"
 
@@ -18,6 +19,7 @@ import type {
 } from "../types"
 
 import { useApplicationServices } from "@/application"
+import type { OrganizationSettingsDto } from "@/application/contracts"
 
 function getConfigurationErrorMessage(error: unknown): string | null {
   if (!(error instanceof AppError)) {
@@ -243,7 +245,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   )
 
   const updateOrganization = useCallback(
-    async (organizationId: string, payload: { name?: string }) => {
+    async (
+      organizationId: string,
+      payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+    ) => {
       const organization = await workspaceApplicationService.updateOrganization(
         organizationId,
         payload
@@ -279,6 +284,34 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       return organization
     },
     [availableOrganizations, setAvailableOrganizations, workspaceApplicationService]
+  )
+
+  const uploadOrganizationLogo = useCallback(
+    async (organizationId: string, file: File) => {
+      const dataBase64 = await fileToBase64(file)
+      const organization = await workspaceApplicationService.uploadOrganizationLogo(
+        organizationId,
+        { contentType: file.type, dataBase64 }
+      )
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      if (currentOrganization?.id === organizationId) {
+        setCurrentOrganization(organization)
+      }
+      return organization
+    },
+    [
+      availableOrganizations,
+      currentOrganization?.id,
+      setAvailableOrganizations,
+      setCurrentOrganization,
+      workspaceApplicationService,
+    ]
+  )
+
+  const getConnectedPlatformsCount = useCallback(
+    (organizationId: string) =>
+      workspaceApplicationService.getConnectedPlatformsCount(organizationId),
+    [workspaceApplicationService]
   )
 
   const updateWorkspace = useCallback(
@@ -334,6 +367,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       createOrganization,
       createWorkspace,
       updateOrganization,
+      uploadOrganizationLogo,
+      getConnectedPlatformsCount,
       archiveOrganization,
       restoreOrganization,
       updateWorkspace,
@@ -347,6 +382,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       availableWorkspaces,
       createOrganization,
       createWorkspace,
+      uploadOrganizationLogo,
+      getConnectedPlatformsCount,
       currentOrganization,
       currentWorkspace,
       restoreOrganization,

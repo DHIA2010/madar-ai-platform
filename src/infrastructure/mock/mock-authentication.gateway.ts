@@ -3,6 +3,7 @@ import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
+  ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
   ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
@@ -278,6 +279,11 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
   async removeAvatar(): Promise<AuthUserDto> {
     const user = createMockUser("mock.user@madar.local")
     return { ...user, avatarUrl: null }
+  }
+
+  async changePassword(payload: ChangePasswordRequestDto): Promise<void> {
+    // No real credential state to mutate in mock mode.
+    void payload
   }
 }
 

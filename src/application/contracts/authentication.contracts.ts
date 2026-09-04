@@ -22,6 +22,11 @@ export interface UploadAvatarRequestDto {
   dataBase64: string
 }
 
+export interface ChangePasswordRequestDto {
+  currentPassword: string
+  newPassword: string
+}
+
 export interface AuthSessionDto {
   accessToken: {
     token: string
@@ -110,6 +115,7 @@ export interface AuthenticationRepository {
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto>
   uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto>
   removeAvatar(): Promise<AuthUserDto>
+  changePassword(payload: ChangePasswordRequestDto): Promise<void>
 }
 
 export type AuthGateway = AuthenticationRepository

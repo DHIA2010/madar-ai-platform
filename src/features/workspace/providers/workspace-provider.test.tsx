@@ -32,12 +32,16 @@ const authValue: AuthContextValue = {
   updateProfile: vi.fn(),
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
+  changePassword: vi.fn(),
 }
 
 const persistedOrganization: Organization = {
   id: "org_northstar",
   name: "Northstar Group",
   slug: "northstar-group",
+  logoUrl: null,
+  currency: "SAR",
+  settings: {},
   subscription: {
     id: "sub_northstar",
     status: "active",

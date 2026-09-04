@@ -2,6 +2,7 @@ import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
+  ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
   ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
@@ -280,5 +281,12 @@ export class AuthenticationApiAdapter {
       "/v1/identity/profile/avatar"
     )
     return mapProfileResponse(response)
+  }
+
+  async changePassword(payload: ChangePasswordRequestDto): Promise<void> {
+    await this.client.post<ChangePasswordRequestDto, { success: boolean }>(
+      "/v1/identity/profile/password",
+      payload
+    )
   }
 }

@@ -110,6 +110,7 @@ export type {
   CurrentUserDto,
   AuthSessionViewModel,
   AuthUserDto,
+  ChangePasswordRequestDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
   LoginResponseDto,
@@ -312,7 +313,9 @@ export type {
 } from "./infrastructure.contracts"
 export type { ReadModel, ReadModelFreshness, ReadModelViewModel } from "./read-model.contracts"
 export type {
+  ConnectedPlatformsCountDto,
   OrganizationDto,
+  OrganizationSettingsDto,
   WorkspaceContextViewModel,
   WorkspaceRepository,
   WorkspaceDto,

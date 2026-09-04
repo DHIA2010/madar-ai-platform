@@ -40,6 +40,7 @@ import {
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
 import { ChannelsAggregationService } from "../../channels/channels-service"
+import { countConnectedPlatforms } from "../../organizations/connected-platforms"
 import { CampaignLinkRepository } from "../../campaign-links/repository"
 import { CampaignLinkService } from "../../campaign-links/service"
 import { extractPlatformSignals } from "../../tracking/platform-macros"
@@ -114,6 +115,8 @@ import {
   updateTeamSchema,
   updateWorkspaceSchema,
   uploadAvatarSchema,
+  uploadOrganizationLogoSchema,
+  changePasswordSchema,
   verifyEmailSchema,
 } from "../../schemas"
 
@@ -1198,6 +1201,17 @@ export function createIdentityApiServer(
         )
       }
 
+      if (method === "POST" && url.pathname === "/v1/identity/profile/password") {
+        return send(
+          200,
+          await container.commands.changePassword(
+            actor,
+            changePasswordSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
+      }
+
       if (method === "POST" && url.pathname === "/v1/integrations/google/oauth/start") {
         if (!googleOAuthController) {
           return send(503, {
@@ -1981,6 +1995,72 @@ export function createIdentityApiServer(
             updateOrganizationSchema.parse(await readJsonBody(request)),
             context
           )
+        )
+      }
+
+      const organizationConnectedPlatformsMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/connected-platforms$/
+      )
+      if (organizationConnectedPlatformsMatch && method === "GET") {
+        if (!container.infrastructure.database) {
+          return send(503, {
+            code: "ORGANIZATION_CONNECTED_PLATFORMS_UNAVAILABLE",
+            message: "Unavailable in memory mode.",
+          })
+        }
+        // Verifies actor membership in the requested org (throws forbidden/not-found), same
+        // check GET /v1/organizations/:id itself already relies on.
+        await container.queries.getOrganization(actor, organizationConnectedPlatformsMatch[1])
+        const [platforms, members] = await Promise.all([
+          countConnectedPlatforms(
+            container.infrastructure.database,
+            organizationConnectedPlatformsMatch[1],
+            actor.workspaceId ?? null
+          ),
+          container.queries.listOrganizationMembers(actor, organizationConnectedPlatformsMatch[1]),
+        ])
+        // userCount rides along on this same response rather than needing a separate frontend
+        // call/service chain -- the Settings page needs both numbers together and nothing else
+        // in this codebase currently exposes a lighter-weight member *count* than the full
+        // member list this already fetches.
+        return send(200, { ...platforms, userCount: members.members.length })
+      }
+
+      const organizationLogoMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/logo$/)
+      if (organizationLogoMatch && method === "POST") {
+        if (!container.infrastructure.objectStorage) {
+          return send(503, {
+            code: "ORGANIZATION_LOGO_UPLOAD_UNAVAILABLE",
+            message: "Logo uploads are not available right now.",
+          })
+        }
+
+        const organizationId = organizationLogoMatch[1]
+        const payload = uploadOrganizationLogoSchema.parse(await readJsonBody(request))
+        const buffer = Buffer.from(payload.dataBase64, "base64")
+        const MAX_LOGO_BYTES = 3 * 1024 * 1024
+        if (buffer.length === 0 || buffer.length > MAX_LOGO_BYTES) {
+          throw ERRORS.validation({ logo: "Image must be between 1 byte and 3MB." })
+        }
+
+        // requireOrganizationWriteAccess (write-access check + audit log) already lives inside
+        // updateOrganization below -- this route deliberately doesn't duplicate that check, it
+        // just uploads the file and then delegates the actual organization mutation to the
+        // existing, already-tested command, exactly like uploadAvatar does for user avatars but
+        // reusing updateOrganization instead of introducing a second organization-mutating
+        // command.
+        const extension =
+          payload.contentType.split("/")[1] === "jpeg" ? "jpg" : payload.contentType.split("/")[1]
+        const key = `org-logos/${organizationId}/${randomUUID()}.${extension}`
+        const logoUrl = await container.infrastructure.objectStorage.uploadPublicObject({
+          key,
+          body: buffer,
+          contentType: payload.contentType,
+        })
+
+        return send(
+          200,
+          await container.commands.updateOrganization(actor, organizationId, { logoUrl }, context)
         )
       }
 

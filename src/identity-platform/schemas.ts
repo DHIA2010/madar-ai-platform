@@ -162,6 +162,20 @@ export const uploadAvatarSchema = z.object({
   dataBase64: z.string().min(1),
 })
 
+// Same shape as uploadAvatarSchema (contentType/dataBase64) -- a separate schema rather than
+// reusing uploadAvatarSchema by name, since the two uploads are semantically distinct (org logo
+// vs. a specific user's avatar) even though the wire shape happens to match today.
+export const uploadOrganizationLogoSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+  dataBase64: z.string().min(1),
+})
+
+// 12-char minimum matches registerSchema's own password rule, for consistency across the app.
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(12),
+})
+
 export const revokeSessionSchema = z.object({
   sessionId: z.string().uuid(),
 })

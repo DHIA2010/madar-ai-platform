@@ -3,6 +3,7 @@ import type {
   AcceptInvitationResponseDto,
   AuthSessionDto,
   AuthUserDto,
+  ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
   ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
@@ -225,6 +226,19 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
       }
 
       return await this.adapter.removeAvatar()
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async changePassword(payload: ChangePasswordRequestDto): Promise<void> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.changePassword(payload)
+      }
+
+      return await this.adapter.changePassword(payload)
     } catch (error) {
       throw mapAuthenticationRepositoryError(error)
     }

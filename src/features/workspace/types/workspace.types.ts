@@ -24,12 +24,29 @@ export interface WorkspaceSettings {
   dateFormat: string
 }
 
+// storeName/country are purely-display fields with no dedicated backend column (stored in
+// organizations.settings jsonb) -- see OrganizationSettingsDto in
+// @/application/contracts/workspace.contracts for the backend-facing equivalent.
+export interface OrganizationSettings {
+  storeName?: string
+  country?: string
+}
+
 export interface Organization {
   id: string
   name: string
   slug: string
+  logoUrl: string | null
+  currency: string
+  settings: OrganizationSettings
   subscription: Subscription
   status?: "active" | "archived" | "deleted"
+}
+
+export interface ConnectedPlatformsCount {
+  connected: number
+  total: number
+  userCount: number
 }
 
 export interface Workspace {

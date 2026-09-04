@@ -13,12 +13,29 @@ export interface SubscriptionDto {
   }
 }
 
+// Purely-display org settings with no dedicated column (store name, country) live in the
+// backend's free-form organizations.settings jsonb -- never queried/joined elsewhere, so a
+// migration wasn't needed to add them.
+export interface OrganizationSettingsDto {
+  storeName?: string
+  country?: string
+}
+
 export interface OrganizationDto {
   id: string
   name: string
   slug: string
+  logoUrl: string | null
+  currency: string
+  settings: OrganizationSettingsDto
   subscription: SubscriptionDto
   status?: "active" | "archived" | "deleted"
+}
+
+export interface ConnectedPlatformsCountDto {
+  connected: number
+  total: number
+  userCount: number
 }
 
 export interface WorkspaceDto {
@@ -54,7 +71,19 @@ export interface WorkspaceRepository {
     name: string
     metadata?: Record<string, string>
   }): Promise<OrganizationDto>
-  updateOrganization(organizationId: string, payload: { name?: string }): Promise<OrganizationDto>
+  updateOrganization(
+    organizationId: string,
+    payload: {
+      name?: string
+      currency?: string
+      settings?: OrganizationSettingsDto
+    }
+  ): Promise<OrganizationDto>
+  uploadOrganizationLogo(
+    organizationId: string,
+    payload: { contentType: string; dataBase64: string }
+  ): Promise<OrganizationDto>
+  getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto>
   archiveOrganization(organizationId: string): Promise<OrganizationDto>
   restoreOrganization(organizationId: string): Promise<OrganizationDto>
   createWorkspace(payload: {

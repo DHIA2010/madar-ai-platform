@@ -39,6 +39,7 @@ export interface AuthContextValue {
   updateProfile: (payload: UpdateProfileRequest) => Promise<void>
   uploadAvatar: (file: File) => Promise<void>
   removeAvatar: () => Promise<void>
+  changePassword: (payload: { currentPassword: string; newPassword: string }) => Promise<void>
 }
 
 export interface AuthCommandResult<T> {

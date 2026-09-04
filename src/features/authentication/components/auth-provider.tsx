@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { AppError, ValidationError } from "@/lib/app-errors"
+import { fileToBase64 } from "@/lib/file-to-base64"
 
 import { AppEmpty, AppLoading } from "@/components/app"
 
@@ -14,18 +15,6 @@ import { useApplicationServices } from "@/application"
 
 const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result.slice(result.indexOf(",") + 1))
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
 
 function getConfigurationErrorMessage(error: unknown): string | null {
   if (!(error instanceof AppError)) {
@@ -196,6 +185,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authenticationApplicationService, setUser, user])
 
+  // The backend revokes every other active session on a successful change (see
+  // identity-platform's changePassword command handler) and there's no exclusion of the
+  // current one -- callers should treat a successful call as "the current session may now be
+  // stale" and redirect to login themselves, this just performs the change.
+  const changePassword = useCallback(
+    async (payload: { currentPassword: string; newPassword: string }) => {
+      await authenticationApplicationService.changePassword(payload)
+    },
+    [authenticationApplicationService]
+  )
+
   const value = useMemo(
     () => ({
       currentUser: user,
@@ -206,8 +206,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateProfile,
       uploadAvatar,
       removeAvatar,
+      changePassword,
     }),
-    [authStatus, login, register, logout, updateProfile, uploadAvatar, removeAvatar, user]
+    [
+      authStatus,
+      login,
+      register,
+      logout,
+      updateProfile,
+      uploadAvatar,
+      removeAvatar,
+      changePassword,
+      user,
+    ]
   )
 
   if (!hasRestoredOnce) {

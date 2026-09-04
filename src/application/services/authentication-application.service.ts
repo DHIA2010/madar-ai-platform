@@ -4,6 +4,7 @@ import type {
   AuthSessionDto,
   AuthSessionViewModel,
   AuthUserDto,
+  ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
   ZidMarketplaceInstallSummaryDto,
   ForgotPasswordRequestDto,
@@ -95,5 +96,9 @@ export class AuthenticationApplicationService {
 
   removeAvatar(): Promise<AuthUserDto> {
     return this.gateway.removeAvatar()
+  }
+
+  changePassword(payload: ChangePasswordRequestDto): Promise<void> {
+    return this.gateway.changePassword(payload)
   }
 }

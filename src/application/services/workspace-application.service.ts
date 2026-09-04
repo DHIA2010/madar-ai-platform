@@ -1,5 +1,7 @@
 import type {
+  ConnectedPlatformsCountDto,
   OrganizationDto,
+  OrganizationSettingsDto,
   WorkspaceContextViewModel,
   WorkspaceDto,
   WorkspaceGateway,
@@ -52,8 +54,22 @@ export class WorkspaceApplicationService {
     return this.gateway.createOrganization(payload)
   }
 
-  updateOrganization(organizationId: string, payload: { name?: string }): Promise<OrganizationDto> {
+  updateOrganization(
+    organizationId: string,
+    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+  ): Promise<OrganizationDto> {
     return this.gateway.updateOrganization(organizationId, payload)
+  }
+
+  uploadOrganizationLogo(
+    organizationId: string,
+    payload: { contentType: string; dataBase64: string }
+  ): Promise<OrganizationDto> {
+    return this.gateway.uploadOrganizationLogo(organizationId, payload)
+  }
+
+  getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto> {
+    return this.gateway.getConnectedPlatformsCount(organizationId)
   }
 
   archiveOrganization(organizationId: string): Promise<OrganizationDto> {

@@ -1,8 +1,10 @@
 export type { WorkspaceService } from "./workspace.contracts"
 export type {
+  ConnectedPlatformsCount,
   Membership,
   Organization,
   OrganizationCreatePayload,
+  OrganizationSettings,
   Plan,
   Subscription,
   TenantContext,
