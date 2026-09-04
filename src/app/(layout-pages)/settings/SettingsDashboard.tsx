@@ -14,7 +14,16 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { AppButton, AppInput, AppPasswordInput } from "@/components/app"
+import {
+  AppButton,
+  AppInput,
+  AppPasswordInput,
+  AppSelect,
+  AppSelectContent,
+  AppSelectItem,
+  AppSelectTrigger,
+  AppSelectValue,
+} from "@/components/app"
 
 import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
@@ -22,43 +31,32 @@ import { ROUTES } from "@/constants/routes"
 
 // Deterministic display labels for codes the org itself stores -- not fabricated data, just
 // formatting of the real stored country/currency code (falls back to the raw code otherwise).
-const COUNTRY_LABELS: Record<string, string> = {
-  SA: "المملكة العربية السعودية",
-  AE: "الإمارات العربية المتحدة",
-  KW: "الكويت",
-  QA: "قطر",
-  BH: "البحرين",
-  OM: "عُمان",
-  EG: "مصر",
-  JO: "الأردن",
-  IQ: "العراق",
-  MA: "المغرب",
-}
+const COUNTRY_OPTIONS = [
+  { code: "SA", label: "المملكة العربية السعودية" },
+  { code: "AE", label: "الإمارات العربية المتحدة" },
+  { code: "KW", label: "الكويت" },
+  { code: "QA", label: "قطر" },
+  { code: "BH", label: "البحرين" },
+  { code: "OM", label: "عُمان" },
+  { code: "EG", label: "مصر" },
+  { code: "JO", label: "الأردن" },
+  { code: "IQ", label: "العراق" },
+  { code: "MA", label: "المغرب" },
+]
 
-const CURRENCY_LABELS: Record<string, string> = {
-  SAR: "الريال السعودي",
-  USD: "الدولار الأمريكي",
-  AED: "الدرهم الإماراتي",
-  KWD: "الدينار الكويتي",
-  QAR: "الريال القطري",
-  BHD: "الدينار البحريني",
-  OMR: "الريال العماني",
-  EGP: "الجنيه المصري",
-  JOD: "الدينار الأردني",
-  EUR: "اليورو",
-  GBP: "الجنيه الإسترليني",
-}
-
-function formatCountry(code: string | undefined) {
-  if (!code) return ""
-  return COUNTRY_LABELS[code.toUpperCase()] ?? code
-}
-
-function formatCurrency(code: string | undefined) {
-  if (!code) return ""
-  const label = CURRENCY_LABELS[code.toUpperCase()]
-  return label ? `${label} (${code.toUpperCase()})` : code
-}
+const CURRENCY_OPTIONS = [
+  { code: "SAR", label: "الريال السعودي (SAR)" },
+  { code: "USD", label: "الدولار الأمريكي (USD)" },
+  { code: "AED", label: "الدرهم الإماراتي (AED)" },
+  { code: "KWD", label: "الدينار الكويتي (KWD)" },
+  { code: "QAR", label: "الريال القطري (QAR)" },
+  { code: "BHD", label: "الدينار البحريني (BHD)" },
+  { code: "OMR", label: "الريال العماني (OMR)" },
+  { code: "EGP", label: "الجنيه المصري (EGP)" },
+  { code: "JOD", label: "الدينار الأردني (JOD)" },
+  { code: "EUR", label: "اليورو (EUR)" },
+  { code: "GBP", label: "الجنيه الإسترليني (GBP)" },
+]
 
 function ComingSoonPill() {
   return (
@@ -175,6 +173,102 @@ function EditableField({ label, value, displayValue, placeholder, onSave }: Edit
         onChange={(event) => setDraft(event.target.value)}
         wrapperClassName="flex-1"
       />
+      <div className="flex shrink-0 gap-1.5 pb-0.5">
+        <AppButton type="button" size="sm" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "جارٍ الحفظ…" : "حفظ"}
+        </AppButton>
+        <AppButton
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setDraft(value)
+            setIsEditing(false)
+          }}
+          disabled={isSaving}
+        >
+          إلغاء
+        </AppButton>
+      </div>
+    </div>
+  )
+}
+
+interface EditableSelectFieldProps {
+  label: string
+  value: string
+  options: Array<{ code: string; label: string }>
+  onSave: (value: string) => Promise<void>
+}
+
+function EditableSelectField({ label, value, options, onSave }: EditableSelectFieldProps) {
+  const [draft, setDraft] = useState(value)
+  const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(value)
+    }
+  }, [value, isEditing])
+
+  async function handleSave() {
+    if (draft === value || !draft) {
+      setIsEditing(false)
+      return
+    }
+    setIsSaving(true)
+    try {
+      await onSave(draft)
+      setIsEditing(false)
+      toast.success("تم الحفظ")
+    } catch {
+      toast.error("تعذّر الحفظ. حاول مرة أخرى.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const displayLabel = options.find((option) => option.code === value)?.label ?? value
+
+  if (!isEditing) {
+    return (
+      <div className="flex items-center justify-between border-b border-[#EEF0F4] py-3 last:border-b-0">
+        <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="flex items-center gap-1.5 rounded-xl border border-[#DDD6FE] bg-white px-4 py-1.5 text-xs font-bold text-[#7357D8] transition-opacity hover:opacity-80"
+        >
+          تعديل
+          <Pencil className="size-3" />
+        </button>
+        <div className="flex min-w-0 items-center gap-6">
+          <span className="truncate text-xs font-bold text-[#18233A]">
+            {displayLabel || <span className="text-[#98A2B3]">—</span>}
+          </span>
+          <span className="shrink-0 text-xs text-[#52607A]">{label}</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-end gap-2 border-b border-[#EEF0F4] py-3 last:border-b-0">
+      <div className="flex-1 space-y-1.5">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <AppSelect value={draft} onValueChange={setDraft}>
+          <AppSelectTrigger className="h-10 w-full">
+            <AppSelectValue />
+          </AppSelectTrigger>
+          <AppSelectContent>
+            {options.map((option) => (
+              <AppSelectItem key={option.code} value={option.code}>
+                {option.label}
+              </AppSelectItem>
+            ))}
+          </AppSelectContent>
+        </AppSelect>
+      </div>
       <div className="flex shrink-0 gap-1.5 pb-0.5">
         <AppButton type="button" size="sm" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "جارٍ الحفظ…" : "حفظ"}
@@ -378,7 +472,7 @@ export default function SettingsDashboard() {
     }
   }
 
-  async function saveField(field: "name" | "storeName" | "country" | "currency", value: string) {
+  async function saveField(field: "name" | "country" | "currency", value: string) {
     if (!currentOrganization) return
     if (field === "name") {
       await updateOrganization(currentOrganization.id, { name: value })
@@ -452,24 +546,16 @@ export default function SettingsDashboard() {
               value={currentOrganization?.name ?? ""}
               onSave={(value) => saveField("name", value)}
             />
-            <EditableField
-              label="اسم المتجر"
-              value={currentOrganization?.settings.storeName ?? ""}
-              placeholder="أضف اسم المتجر"
-              onSave={(value) => saveField("storeName", value)}
-            />
-            <EditableField
+            <EditableSelectField
               label="الدولة"
               value={currentOrganization?.settings.country ?? ""}
-              displayValue={formatCountry(currentOrganization?.settings.country) || undefined}
-              placeholder="مثال: SA"
+              options={COUNTRY_OPTIONS}
               onSave={(value) => saveField("country", value)}
             />
-            <EditableField
+            <EditableSelectField
               label="العملة (عملة التقارير)"
               value={currentOrganization?.currency ?? ""}
-              displayValue={formatCurrency(currentOrganization?.currency) || undefined}
-              placeholder="مثال: SAR"
+              options={CURRENCY_OPTIONS}
               onSave={(value) => saveField("currency", value)}
             />
           </div>
