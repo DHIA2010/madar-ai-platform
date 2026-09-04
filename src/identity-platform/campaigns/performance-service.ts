@@ -1,5 +1,6 @@
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { convertToOrgCurrency, type SupportedOrgCurrency } from "../shared/currency"
 
 // One shared row shape every platform/level normalizes into -- see the Campaigns dashboard
 // plan's "Phase 0: Contract freeze". Every metric field is always present, 0 (not null) when
@@ -23,6 +24,9 @@ export interface CampaignPerformanceRow {
   status: string
   objective: string | null
   activityDate: string | null
+  // Native currency of this row's ad account, from the platform's own *_accounts table -- null
+  // when not yet captured. Only real per-row currency data ever lands here, never a guess.
+  currency: string | null
   spend: number
   revenue: number
   roas: number
@@ -59,8 +63,17 @@ export interface CampaignPerformanceRow {
   purchaseValue: number
 }
 
+export interface OtherCurrencyTotal {
+  currency: string
+  spend: number
+  revenue: number
+}
+
 export interface CampaignPerformancePlatformRow extends CampaignPerformanceRow {
   activeCampaigns: number
+  // Amounts from rows in a currency other than the target org currency and other than USD/SAR
+  // (the only real fixed rate available) -- shown separately, unconverted, never fabricated.
+  otherCurrencies: OtherCurrencyTotal[]
 }
 
 export interface CampaignPerformanceSummary {
@@ -118,8 +131,10 @@ function zeroRow(input: {
   status: string
   objective: string | null
   activityDate: string | null
+  currency?: string | null
 }): CampaignPerformanceRow {
   return {
+    currency: null,
     ...input,
     spend: 0,
     revenue: 0,
@@ -299,6 +314,7 @@ interface GoogleMetricRow {
   video_quartile_p100_rate: string | null
   average_watch_time_seconds: string | null
   activity_date: string | Date | null
+  currency_code?: string | null
   [key: string]: unknown
 }
 
@@ -323,6 +339,7 @@ function mapGoogleRow(
     status: row.status,
     objective: row.objective,
     activityDate: toActivityDateString(row.activity_date),
+    currency: row.currency_code ?? null,
   })
 
   const spend = Number(row.cost_micros) / 1_000_000
@@ -383,7 +400,8 @@ async function fetchGoogleCampaignRows(
       AVG(m.video_quartile_p75_rate) as video_quartile_p75_rate,
       AVG(m.video_quartile_p100_rate) as video_quartile_p100_rate,
       AVG(m.average_watch_time_seconds) as average_watch_time_seconds,
-      MAX(m.metric_date) as activity_date
+      MAX(m.metric_date) as activity_date,
+      gaca.currency_code
     FROM google_ads_campaigns c
     JOIN integration_connections conn ON conn.id = c.connection_id
     -- LEFT JOIN (not INNER), with the date range in the ON clause rather than WHERE: a real
@@ -393,9 +411,13 @@ async function fetchGoogleCampaignRows(
     LEFT JOIN google_ads_daily_metrics m
       ON m.connection_id = c.connection_id AND m.customer_id = c.customer_id AND m.campaign_id = c.campaign_id
       AND m.metric_scope = 'campaign' AND m.metric_date BETWEEN $3::date AND $4::date
+    -- Real per-account currency, captured from Google's own API (see google-ads/services.ts)
+    -- but never joined into this aggregation before -- see shared/currency.ts.
+    LEFT JOIN google_ads_customer_accounts gaca
+      ON gaca.connection_id = c.connection_id AND gaca.customer_id = c.customer_id
     WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
-    GROUP BY c.campaign_id, c.connection_id, c.customer_id, c.name, c.status, c.channel_type
+    GROUP BY c.campaign_id, c.connection_id, c.customer_id, c.name, c.status, c.channel_type, gaca.currency_code
     LIMIT $5
     `,
     [
@@ -579,6 +601,7 @@ interface MetaRawRecordRow {
   entity_id: string
   record_date: string
   payload: Record<string, unknown>
+  currency_code?: string | null
   [key: string]: unknown
 }
 
@@ -619,9 +642,13 @@ async function fetchMetaRawRecords(
   const result = await db.query<MetaRawRecordRow>(
     `
     SELECT r.connection_id, conn.workspace_id, r.customer_id, r.entity_type, r.entity_id,
-           r.record_date, r.payload
+           r.record_date, r.payload, ma.currency_code
     FROM meta_records r
     JOIN meta_oauth_connections conn ON conn.id = r.connection_id
+    -- Real per-account currency, captured from Meta's Graph API (see meta-oauth/service.ts) but
+    -- never joined into this aggregation before -- see shared/currency.ts.
+    LEFT JOIN meta_ads_accounts ma
+      ON ma.connection_id = r.connection_id AND ma.account_id = r.customer_id
     WHERE ${conditions.join(" AND ")}
     LIMIT $${values.length}
     `,
@@ -744,6 +771,7 @@ async function fetchMetaCampaignRows(
         status,
         objective,
         activityDate: reduced.latestDate,
+        currency: meta.currency_code ?? null,
       }),
       spend: reduced.spend,
       revenue: reduced.purchaseValue,
@@ -895,6 +923,7 @@ interface TikTokRawRecordRow {
   entity_id: string
   record_date: string
   payload: Record<string, unknown>
+  currency_code?: string | null
   [key: string]: unknown
 }
 
@@ -932,9 +961,14 @@ async function fetchTikTokRawRecords(
 
   const result = await db.query<TikTokRawRecordRow>(
     `
-    SELECT r.connection_id, r.customer_id, r.entity_type, r.entity_id, r.record_date, r.payload
+    SELECT r.connection_id, r.customer_id, r.entity_type, r.entity_id, r.record_date, r.payload,
+           ta.currency_code
     FROM tiktok_ads_records r
     JOIN tiktok_ads_oauth_connections conn ON conn.id = r.connection_id
+    -- Real per-account currency, captured from TikTok's advertiser-info API (see
+    -- tiktok-ads-oauth/service.ts) but never joined into this aggregation before.
+    LEFT JOIN tiktok_ads_accounts ta
+      ON ta.connection_id = r.connection_id AND ta.account_id = r.customer_id
     WHERE ${conditions.join(" AND ")}
     LIMIT $${values.length}
     `,
@@ -1014,6 +1048,7 @@ async function fetchTikTokCampaignRows(
         status,
         objective,
         activityDate: reduced.latestDate,
+        currency: meta.currency_code ?? null,
       }),
       spend: reduced.spend,
       clicks: reduced.clicks,
@@ -1150,6 +1185,7 @@ interface SnapchatRawRecordRow {
   entity_id: string
   record_date: string
   payload: Record<string, unknown>
+  currency_code?: string | null
   [key: string]: unknown
 }
 
@@ -1187,9 +1223,14 @@ async function fetchSnapchatRawRecords(
 
   const result = await db.query<SnapchatRawRecordRow>(
     `
-    SELECT r.connection_id, r.customer_id, r.entity_type, r.entity_id, r.record_date, r.payload
+    SELECT r.connection_id, r.customer_id, r.entity_type, r.entity_id, r.record_date, r.payload,
+           sa.currency_code
     FROM snapchat_records r
     JOIN snapchat_oauth_connections conn ON conn.id = r.connection_id
+    -- Real per-account currency, captured from Snapchat's ad account API (see
+    -- snapchat-oauth/service.ts) but never joined into this aggregation before.
+    LEFT JOIN snapchat_ads_accounts sa
+      ON sa.connection_id = r.connection_id AND sa.account_id = r.customer_id
     WHERE ${conditions.join(" AND ")}
     LIMIT $${values.length}
     `,
@@ -1268,6 +1309,7 @@ async function fetchSnapchatCampaignRows(
         status,
         objective,
         activityDate: reduced.latestDate,
+        currency: meta.currency_code ?? null,
       }),
       spend: reduced.spend,
       clicks: reduced.swipes,
@@ -1401,6 +1443,56 @@ function sumRows(rows: CampaignPerformanceRow[]) {
   )
 }
 
+// Currency-aware sibling of sumRows -- when a target currency is supplied, each row's spend/
+// revenue is converted via convertToOrgCurrency (same-currency no-op, real USD<->SAR peg, or
+// null for any other real currency we have no rate for). Rows that can't be converted are kept
+// out of the main total and instead accumulated into otherCurrencies, grouped by their real
+// currency, so nothing is ever silently mis-converted or dropped. With no target currency,
+// delegates straight to sumRows -- byte-identical behavior for callers that don't need this.
+function sumRowsWithCurrency(
+  rows: CampaignPerformanceRow[],
+  targetCurrency: SupportedOrgCurrency | undefined
+): ReturnType<typeof sumRows> & { otherCurrencies: OtherCurrencyTotal[] } {
+  if (!targetCurrency) {
+    return { ...sumRows(rows), otherCurrencies: [] }
+  }
+
+  const otherCurrencies = new Map<string, OtherCurrencyTotal>()
+  const totals = {
+    spend: 0,
+    revenue: 0,
+    conversions: 0,
+    clicks: 0,
+    impressions: 0,
+    activeCampaigns: 0,
+  }
+
+  for (const row of rows) {
+    const spendResult = convertToOrgCurrency(row.spend, row.currency, targetCurrency)
+    const revenueResult = convertToOrgCurrency(row.revenue, row.currency, targetCurrency)
+
+    if (spendResult && revenueResult) {
+      totals.spend += spendResult.amount
+      totals.revenue += revenueResult.amount
+    } else {
+      const key = (row.currency ?? "UNKNOWN").toUpperCase()
+      const bucket = otherCurrencies.get(key) ?? { currency: key, spend: 0, revenue: 0 }
+      bucket.spend += row.spend
+      bucket.revenue += row.revenue
+      otherCurrencies.set(key, bucket)
+    }
+
+    totals.conversions += row.conversions
+    totals.clicks += row.clicks
+    totals.impressions += row.impressions
+    if (bucketCampaignStatus(row.status) === "Active") {
+      totals.activeCampaigns += 1
+    }
+  }
+
+  return { ...totals, otherCurrencies: [...otherCurrencies.values()] }
+}
+
 export class CampaignsPerformanceAggregationService {
   constructor(private readonly db: PostgresDatabase) {}
 
@@ -1477,7 +1569,8 @@ export class CampaignsPerformanceAggregationService {
 
   async getPlatformBreakdown(
     actor: AuthenticatedActor,
-    query: CampaignPerformanceQuery
+    query: CampaignPerformanceQuery,
+    targetCurrency?: SupportedOrgCurrency
   ): Promise<CampaignPerformancePlatformRow[]> {
     const { current } = resolveDateRange(query)
     const rows = (await this.fetchAllCampaignRows(actor, current)).filter((row) =>
@@ -1497,7 +1590,7 @@ export class CampaignsPerformanceAggregationService {
       platforms
         .map((platform) => {
           const subset = rows.filter((row) => row.platform === platform)
-          const totals = sumRows(subset)
+          const totals = sumRowsWithCurrency(subset, targetCurrency)
           const roas = totals.spend > 0 ? totals.revenue / totals.spend : 0
 
           return {
@@ -1533,6 +1626,7 @@ export class CampaignsPerformanceAggregationService {
               }),
               roas,
               activeCampaigns: totals.activeCampaigns,
+              otherCurrencies: totals.otherCurrencies,
             },
           }
         })

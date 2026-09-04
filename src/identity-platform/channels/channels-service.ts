@@ -5,9 +5,15 @@ import {
   type CampaignPerformancePlatform,
   type CampaignPerformancePlatformRow,
   type CampaignPerformanceQuery,
+  type OtherCurrencyTotal,
 } from "../campaigns/performance-service"
 import { OrdersAggregationService, type OrderSummaryView } from "../orders/service"
 import { StoresAggregationService, type StorePlatform } from "../stores/service"
+import {
+  convertToOrgCurrency,
+  isSupportedOrgCurrency,
+  type SupportedOrgCurrency,
+} from "../shared/currency"
 
 // The only 4 ad-spend platforms that exist anywhere in this codebase (provider registry +
 // connection wizard) -- there is no 5th. "Google Ads" here merges the 3 Google sub-platforms
@@ -37,9 +43,15 @@ export interface ChannelRow {
   health: ChannelHealth
   lastSyncedAt: string | null
   sparkline: number[]
+  // Amounts from ad accounts in a currency other than the org's chosen currency and other than
+  // USD/SAR (the only real fixed rate available) -- unconverted, shown separately, never
+  // fabricated. [] in the common case.
+  otherCurrencies: OtherCurrencyTotal[]
 }
 
 export interface ChannelsSummary {
+  currency: SupportedOrgCurrency
+  otherCurrencies: OtherCurrencyTotal[]
   spend: number
   spendChangePct: number | null
   revenue: number
@@ -250,9 +262,24 @@ async function fetchAllConnectionStates(
   return { "Google Ads": google, "Meta Ads": meta, "TikTok Ads": tiktok, Snapchat: snapchat }
 }
 
+// organizations.currency is not-null, default 'USD' (see migration 002) -- isSupportedOrgCurrency
+// is a defensive fallback for a legacy/unexpected value, not the common path.
+async function fetchOrganizationCurrency(
+  db: PostgresDatabase,
+  organizationId: string
+): Promise<SupportedOrgCurrency> {
+  const result = await db.query<{ currency: string | null }>(
+    `SELECT currency FROM organizations WHERE id = $1`,
+    [organizationId]
+  )
+  const raw = result.rows[0]?.currency
+  return raw && isSupportedOrgCurrency(raw) ? raw : "USD"
+}
+
 interface DailySpendRow {
   date: string | Date
   spend: string | number | null
+  currency: string | null
   [key: string]: unknown
 }
 
@@ -261,16 +288,22 @@ async function fetchGoogleDailySpend(
   actor: AuthenticatedActor,
   range: DateRange
 ): Promise<DailySpendRow[]> {
-  const result = await db.query<{ date: string | Date; cost_micros: string | number | null }>(
+  const result = await db.query<{
+    date: string | Date
+    cost_micros: string | number | null
+    currency_code: string | null
+  }>(
     `
-    SELECT m.metric_date as date, SUM(m.cost_micros) as cost_micros
+    SELECT m.metric_date as date, SUM(m.cost_micros) as cost_micros, gaca.currency_code
     FROM google_ads_daily_metrics m
     JOIN integration_connections conn ON conn.id = m.connection_id
+    LEFT JOIN google_ads_customer_accounts gaca
+      ON gaca.connection_id = m.connection_id AND gaca.customer_id = m.customer_id
     WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
       AND m.metric_scope = 'campaign'
       AND m.metric_date BETWEEN $3::date AND $4::date
-    GROUP BY m.metric_date
+    GROUP BY m.metric_date, gaca.currency_code
     ORDER BY m.metric_date
     `,
     [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
@@ -278,6 +311,7 @@ async function fetchGoogleDailySpend(
   return result.rows.map((row) => ({
     date: row.date,
     spend: (Number(row.cost_micros) || 0) / 1_000_000,
+    currency: row.currency_code ?? null,
   }))
 }
 
@@ -288,14 +322,17 @@ async function fetchMetaDailySpend(
 ): Promise<DailySpendRow[]> {
   const result = await db.query<DailySpendRow>(
     `
-    SELECT r.record_date as date, SUM(COALESCE((r.payload->>'spend')::numeric, 0)) as spend
+    SELECT r.record_date as date, SUM(COALESCE((r.payload->>'spend')::numeric, 0)) as spend,
+      ma.currency_code as currency
     FROM meta_records r
     JOIN meta_oauth_connections conn ON conn.id = r.connection_id
+    LEFT JOIN meta_ads_accounts ma
+      ON ma.connection_id = r.connection_id AND ma.account_id = r.customer_id
     WHERE r.entity_type = 'insights' AND conn.organization_id = $1
       AND conn.deleted_at IS NULL AND conn.status = 'connected'
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
       AND r.record_date BETWEEN $3::date AND $4::date
-    GROUP BY r.record_date
+    GROUP BY r.record_date, ma.currency_code
     ORDER BY r.record_date
     `,
     [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
@@ -311,14 +348,17 @@ async function fetchTikTokDailySpend(
   const result = await db.query<DailySpendRow>(
     `
     SELECT r.record_date as date,
-      SUM(COALESCE((r.payload->'metrics'->>'spend')::numeric, 0)) as spend
+      SUM(COALESCE((r.payload->'metrics'->>'spend')::numeric, 0)) as spend,
+      ta.currency_code as currency
     FROM tiktok_ads_records r
     JOIN tiktok_ads_oauth_connections conn ON conn.id = r.connection_id
+    LEFT JOIN tiktok_ads_accounts ta
+      ON ta.connection_id = r.connection_id AND ta.account_id = r.customer_id
     WHERE r.entity_type = 'insights' AND conn.organization_id = $1
       AND conn.deleted_at IS NULL AND conn.status = 'connected'
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
       AND r.record_date BETWEEN $3::date AND $4::date
-    GROUP BY r.record_date
+    GROUP BY r.record_date, ta.currency_code
     ORDER BY r.record_date
     `,
     [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
@@ -338,15 +378,18 @@ async function fetchSnapchatDailySpend(
   const result = await db.query<DailySpendRow>(
     `
     SELECT r.record_date as date,
-      SUM(COALESCE((r.payload->>'spend')::numeric, 0)) / 1000000 as spend
+      SUM(COALESCE((r.payload->>'spend')::numeric, 0)) / 1000000 as spend,
+      sa.currency_code as currency
     FROM snapchat_records r
     JOIN snapchat_oauth_connections conn ON conn.id = r.connection_id
+    LEFT JOIN snapchat_ads_accounts sa
+      ON sa.connection_id = r.connection_id AND sa.account_id = r.customer_id
     WHERE r.entity_type = 'stats' AND r.payload->>'level' = 'campaign'
       AND conn.organization_id = $1
       AND conn.deleted_at IS NULL AND conn.status = 'connected'
       AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
       AND r.record_date BETWEEN $3::date AND $4::date
-    GROUP BY r.record_date
+    GROUP BY r.record_date, sa.currency_code
     ORDER BY r.record_date
     `,
     [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
@@ -357,7 +400,8 @@ async function fetchSnapchatDailySpend(
 async function fetchAllDailySpend(
   db: PostgresDatabase,
   actor: AuthenticatedActor,
-  range: DateRange
+  range: DateRange,
+  targetCurrency: SupportedOrgCurrency
 ): Promise<Record<ChannelName, Map<string, number>>> {
   const [google, meta, tiktok, snapchat] = await Promise.all([
     fetchGoogleDailySpend(db, actor, range),
@@ -366,8 +410,19 @@ async function fetchAllDailySpend(
     fetchSnapchatDailySpend(db, actor, range),
   ])
 
-  const toMap = (rows: DailySpendRow[]) =>
-    new Map(rows.map((row) => [toDateOnlyString(row.date), Number(row.spend) || 0]))
+  // Rows in a currency we have no real rate for are omitted from this chart total -- a
+  // disclosed tradeoff (see the trend/donut chart's UI note): the authoritative unconverted
+  // figure for that channel still surfaces via ChannelRow.otherCurrencies on the same page.
+  const toMap = (rows: DailySpendRow[]) => {
+    const map = new Map<string, number>()
+    for (const row of rows) {
+      const converted = convertToOrgCurrency(Number(row.spend) || 0, row.currency, targetCurrency)
+      if (!converted) continue
+      const key = toDateOnlyString(row.date)
+      map.set(key, (map.get(key) ?? 0) + converted.amount)
+    }
+    return map
+  }
 
   return {
     "Google Ads": toMap(google),
@@ -388,6 +443,24 @@ function buildDateList(range: DateRange): string[] {
   return dates
 }
 
+// Combines otherCurrencies lists from multiple platform rows into one, summing entries that
+// share a currency rather than listing the same currency twice.
+function mergeOtherCurrencies(lists: OtherCurrencyTotal[][]): OtherCurrencyTotal[] {
+  const merged = new Map<string, OtherCurrencyTotal>()
+  for (const list of lists) {
+    for (const entry of list) {
+      const existing = merged.get(entry.currency)
+      if (existing) {
+        existing.spend += entry.spend
+        existing.revenue += entry.revenue
+      } else {
+        merged.set(entry.currency, { ...entry })
+      }
+    }
+  }
+  return [...merged.values()]
+}
+
 function mergeGoogleRow(rows: CampaignPerformancePlatformRow[]) {
   const googlePlatforms: CampaignPerformancePlatform[] = [
     "Google Search",
@@ -399,7 +472,15 @@ function mergeGoogleRow(rows: CampaignPerformancePlatformRow[]) {
   const revenue = subset.reduce((sum, row) => sum + row.revenue, 0)
   const conversions = subset.reduce((sum, row) => sum + row.conversions, 0)
   const campaigns = subset.reduce((sum, row) => sum + row.activeCampaigns, 0)
-  return { spend, revenue, conversions, campaigns, roas: spend > 0 ? revenue / spend : 0 }
+  const otherCurrencies = mergeOtherCurrencies(subset.map((row) => row.otherCurrencies))
+  return {
+    spend,
+    revenue,
+    conversions,
+    campaigns,
+    roas: spend > 0 ? revenue / spend : 0,
+    otherCurrencies,
+  }
 }
 
 function findPlatformRow(
@@ -413,6 +494,7 @@ function findPlatformRow(
     conversions: row?.conversions ?? 0,
     campaigns: row?.activeCampaigns ?? 0,
     roas: row?.roas ?? 0,
+    otherCurrencies: row?.otherCurrencies ?? [],
   }
 }
 
@@ -438,6 +520,7 @@ export class ChannelsAggregationService {
 
   async getSummary(actor: AuthenticatedActor, query: ChannelsQuery): Promise<ChannelsSummary> {
     const { current, previous } = resolveDateRange(query)
+    const currency = await fetchOrganizationCurrency(this.db, actor.organizationId)
     const campaignQuery: CampaignPerformanceQuery = {
       startDate: current.startDateSql,
       endDate: current.endDateSql,
@@ -449,8 +532,8 @@ export class ChannelsAggregationService {
 
     const [currentPlatformRows, previousPlatformRows, connectionStates, stores] = await Promise.all(
       [
-        this.campaignsService.getPlatformBreakdown(actor, campaignQuery),
-        this.campaignsService.getPlatformBreakdown(actor, previousQuery),
+        this.campaignsService.getPlatformBreakdown(actor, campaignQuery, currency),
+        this.campaignsService.getPlatformBreakdown(actor, previousQuery, currency),
         fetchAllConnectionStates(this.db, actor),
         this.storesService.listStores(actor),
       ]
@@ -490,6 +573,10 @@ export class ChannelsAggregationService {
     ).length
 
     return {
+      currency,
+      otherCurrencies: mergeOtherCurrencies(
+        CHANNEL_NAMES.map((name) => currentTotals[name].otherCurrencies)
+      ),
       spend,
       spendChangePct: computeChangePct(spend, previousSpend),
       revenue,
@@ -508,17 +595,18 @@ export class ChannelsAggregationService {
   async getChannelBreakdown(
     actor: AuthenticatedActor,
     query: ChannelsQuery
-  ): Promise<{ items: ChannelRow[] }> {
+  ): Promise<{ items: ChannelRow[]; currency: SupportedOrgCurrency }> {
     const { current } = resolveDateRange(query)
+    const currency = await fetchOrganizationCurrency(this.db, actor.organizationId)
     const campaignQuery: CampaignPerformanceQuery = {
       startDate: current.startDateSql,
       endDate: current.endDateSql,
     }
 
     const [platformRows, connectionStates, dailySpend] = await Promise.all([
-      this.campaignsService.getPlatformBreakdown(actor, campaignQuery),
+      this.campaignsService.getPlatformBreakdown(actor, campaignQuery, currency),
       fetchAllConnectionStates(this.db, actor),
-      fetchAllDailySpend(this.db, actor, current),
+      fetchAllDailySpend(this.db, actor, current, currency),
     ])
 
     const totals = this.buildChannelTotals(platformRows)
@@ -546,10 +634,11 @@ export class ChannelsAggregationService {
           health: computeChannelHealth(state),
           lastSyncedAt: state.lastSyncedAt,
           sparkline,
+          otherCurrencies: total.otherCurrencies,
         }
       })
 
-    return { items }
+    return { items, currency }
   }
 
   async getPerformanceTrend(
@@ -557,7 +646,8 @@ export class ChannelsAggregationService {
     query: ChannelsQuery
   ): Promise<{ items: ChannelsTrendPoint[] }> {
     const { current } = resolveDateRange(query)
-    const dailySpend = await fetchAllDailySpend(this.db, actor, current)
+    const currency = await fetchOrganizationCurrency(this.db, actor.organizationId)
+    const dailySpend = await fetchAllDailySpend(this.db, actor, current, currency)
     const dateList = buildDateList(current)
 
     // Daily buckets read fine up to ~2 weeks; beyond that the trend chart groups into weekly
@@ -586,9 +676,10 @@ export class ChannelsAggregationService {
       endDateSql: today.toISOString().slice(0, 10),
     }
 
+    const currency = await fetchOrganizationCurrency(this.db, actor.organizationId)
     const [connectionStates, dailySpend] = await Promise.all([
       fetchAllConnectionStates(this.db, actor),
-      fetchAllDailySpend(this.db, actor, range),
+      fetchAllDailySpend(this.db, actor, range, currency),
     ])
 
     const alerts: ChannelAlert[] = []

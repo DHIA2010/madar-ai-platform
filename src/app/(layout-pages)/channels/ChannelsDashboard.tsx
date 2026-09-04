@@ -33,6 +33,9 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { formatMoney } from "@/lib/currency"
+
+import { useWorkspace } from "@/features/workspace"
 
 import {
   AppButton,
@@ -66,7 +69,7 @@ import {
   type TopProductRow,
 } from "@/features/channels/services/channels-performance.service"
 
-function formatSar(value: number) {
+function formatPlainNumber(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)
 }
 
@@ -323,6 +326,8 @@ function ProductThumbnail({ src }: { src: string | null }) {
 
 function ChannelCard({ channel }: { channel: ChannelRow }) {
   const health = HEALTH_META[channel.health]
+  const { currentOrganization } = useWorkspace()
+  const currency = currentOrganization?.currency ?? "USD"
 
   return (
     <AppCard className="rounded-2xl border-border/60 p-4 shadow-sm">
@@ -347,16 +352,25 @@ function ChannelCard({ channel }: { channel: ChannelRow }) {
         <div>
           <p className="text-xs text-muted-foreground">الإيرادات</p>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {formatSar(channel.revenue)} SAR
+            {formatMoney(channel.revenue, currency)}
           </p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground">الإنفاق</p>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {formatSar(channel.spend)} SAR
+            {formatMoney(channel.spend, currency)}
           </p>
         </div>
       </div>
+
+      {channel.otherCurrencies.length > 0 ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {channel.otherCurrencies
+            .map((entry) => `+ ${formatMoney(entry.spend, entry.currency)}`)
+            .join("، ")}{" "}
+          (غير محول — لا يوجد سعر صرف حقيقي)
+        </p>
+      ) : null}
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div>
@@ -466,6 +480,15 @@ export default function ChannelsDashboard() {
     }
   }, [dateRange])
 
+  const otherCurrenciesFootnote = useMemo(() => {
+    if (!summary || summary.otherCurrencies.length === 0) return undefined
+    return (
+      summary.otherCurrencies
+        .map((entry) => `+ ${formatMoney(entry.spend, entry.currency)}`)
+        .join("، ") + " غير محول"
+    )
+  }, [summary])
+
   const kpiCards = useMemo<KpiCardData[]>(() => {
     if (!summary) return []
     return [
@@ -478,8 +501,8 @@ export default function ChannelsDashboard() {
       },
       {
         label: "متوسط CPA",
-        value: formatSar(summary.cpa),
-        unit: "SAR",
+        value: formatPlainNumber(summary.cpa),
+        unit: summary.currency,
         changePct: summary.cpaChangePct,
         invertTrend: true,
         icon: MousePointerClick,
@@ -501,22 +524,24 @@ export default function ChannelsDashboard() {
       },
       {
         label: "إجمالي الإيرادات",
-        value: formatSar(summary.revenue),
-        unit: "SAR",
+        value: formatPlainNumber(summary.revenue),
+        unit: summary.currency,
+        footnote: otherCurrenciesFootnote,
         changePct: summary.revenueChangePct,
         icon: TrendingUp,
         tone: "green",
       },
       {
         label: "إجمالي الإنفاق",
-        value: formatSar(summary.spend),
-        unit: "SAR",
+        value: formatPlainNumber(summary.spend),
+        unit: summary.currency,
+        footnote: otherCurrenciesFootnote,
         changePct: summary.spendChangePct,
         icon: Wallet,
         tone: "blue",
       },
     ]
-  }, [summary])
+  }, [summary, otherCurrenciesFootnote])
 
   const channelComparison = useMemo(
     () =>
@@ -697,14 +722,14 @@ export default function ChannelsDashboard() {
                                   y={(viewBox.cy ?? 0) - 6}
                                   className="fill-foreground text-lg font-bold"
                                 >
-                                  {formatSar(totalSpendForChart)}
+                                  {formatPlainNumber(totalSpendForChart)}
                                 </tspan>
                                 <tspan
                                   x={viewBox.cx}
                                   y={(viewBox.cy ?? 0) + 14}
                                   className="fill-muted-foreground text-[10px]"
                                 >
-                                  SAR
+                                  {summary?.currency ?? "USD"}
                                 </tspan>
                               </text>
                             )
@@ -732,7 +757,7 @@ export default function ChannelsDashboard() {
 
               <AppCard
                 title="اتجاه الأداء"
-                subtitle="الإنفاق (SAR)"
+                subtitle={`الإنفاق (${summary?.currency ?? "USD"})`}
                 className="rounded-2xl border-border/60 shadow-sm"
               >
                 <ChartContainer config={trendChartConfig} className="h-64 w-full" dir="ltr">
@@ -850,7 +875,7 @@ export default function ChannelsDashboard() {
                           </AppTableCell>
                           <AppTableCell className="text-center">
                             <div className="font-medium text-foreground">
-                              {formatSar(store.revenue)} SAR
+                              {formatPlainNumber(store.revenue)} SAR
                             </div>
                             {revenueDelta ? (
                               <div
@@ -866,7 +891,7 @@ export default function ChannelsDashboard() {
                             ) : null}
                           </AppTableCell>
                           <AppTableCell className="text-center text-foreground">
-                            {formatSar(store.averageOrderValue)} SAR
+                            {formatPlainNumber(store.averageOrderValue)} SAR
                           </AppTableCell>
                           <AppTableCell>
                             <div className="flex justify-center">
@@ -958,7 +983,7 @@ export default function ChannelsDashboard() {
                   <p className="mt-3 text-xs text-muted-foreground">CPA مرتفع</p>
                   <div className="mt-1 flex items-end justify-between">
                     <p className="text-xl font-bold text-foreground">
-                      {formatSar(attentionChannel.cpa)} SAR
+                      {formatPlainNumber(attentionChannel.cpa)} {summary?.currency ?? "USD"}
                     </p>
                     {attentionCpaDeltaPct !== null && attentionCpaDeltaPct > 0 ? (
                       <span className="inline-flex items-center gap-0.5 text-xs font-medium text-rose-600">

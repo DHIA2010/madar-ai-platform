@@ -937,3 +937,258 @@ describe("GET /v1/channels/performance/products: real per-product order/quantity
     expect(shoe).toMatchObject({ orders: 1, quantitySold: 1, thumbnail: null })
   })
 })
+
+async function insertGoogleAdsCustomerAccount(input: {
+  connectionId: string
+  customerId: string
+  currencyCode: string | null
+}) {
+  await database.query(
+    `insert into google_ads_customer_accounts (
+       id, connection_id, customer_id, display_name, currency_code, time_zone, status, is_selected
+     ) values ($1, $2, $3, $4, $5, 'UTC', 'active', true)`,
+    [
+      randomUUID(),
+      input.connectionId,
+      input.customerId,
+      `Account ${input.customerId}`,
+      input.currencyCode,
+    ]
+  )
+}
+
+async function insertMetaAdsAccount(input: {
+  connectionId: string
+  accountId: string
+  currencyCode: string | null
+}) {
+  await database.query(
+    `insert into meta_ads_accounts (
+       id, connection_id, account_id, account_name, currency_code, status, is_selected
+     ) values ($1, $2, $3, $4, $5, 'active', true)`,
+    [
+      randomUUID(),
+      input.connectionId,
+      input.accountId,
+      `Account ${input.accountId}`,
+      input.currencyCode,
+    ]
+  )
+}
+
+async function setOrganizationCurrency(organizationId: string, currency: "SAR" | "USD") {
+  await database.query(`update organizations set currency = $2 where id = $1`, [
+    organizationId,
+    currency,
+  ])
+}
+
+describe("GET /v1/channels/performance/breakdown: real currency conversion", () => {
+  it("converts spend using the real USD<->SAR peg (3.75) per ad account's real currency, and surfaces unsupported currencies unconverted", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "channels-currency-convert@madar.test",
+      "Channels Currency Convert Org"
+    )
+    const workspaceId = actor.workspaceId as string
+    const today = new Date().toISOString().slice(0, 10)
+    await setOrganizationCurrency(actor.organizationId, "SAR")
+
+    // Google Ads: 3 accounts under one connection -- one already SAR (no-op), one USD (converts
+    // at x3.75), one AED (no real rate available -- must surface unconverted, not guessed).
+    const { connectionId: googleConnectionId, syncRunId } =
+      await insertConnectedGoogleAdsConnection({
+        organizationId: actor.organizationId,
+        workspaceId,
+        userId: actor.userId,
+        customerId: "sar-account",
+      })
+    await insertGoogleAdsCustomerAccount({
+      connectionId: googleConnectionId,
+      customerId: "sar-account",
+      currencyCode: "SAR",
+    })
+    await insertGoogleAdsCustomerAccount({
+      connectionId: googleConnectionId,
+      customerId: "usd-account",
+      currencyCode: "USD",
+    })
+    await insertGoogleAdsCustomerAccount({
+      connectionId: googleConnectionId,
+      customerId: "aed-account",
+      currencyCode: "AED",
+    })
+
+    await insertGoogleCampaign({
+      connectionId: googleConnectionId,
+      customerId: "sar-account",
+      campaignId: "g-sar-1",
+      name: "SAR Campaign",
+      status: "ENABLED",
+      channelType: "SEARCH",
+    })
+    await insertGoogleCampaignMetric({
+      connectionId: googleConnectionId,
+      syncRunId,
+      customerId: "sar-account",
+      campaignId: "g-sar-1",
+      metricDate: today,
+      impressions: 100,
+      clicks: 10,
+      costMicros: 100_000_000, // 100.00 SAR, no-op
+      conversions: 1,
+      conversionValue: 0,
+    })
+    await insertGoogleCampaign({
+      connectionId: googleConnectionId,
+      customerId: "usd-account",
+      campaignId: "g-usd-1",
+      name: "USD Campaign",
+      status: "ENABLED",
+      channelType: "SEARCH",
+    })
+    await insertGoogleCampaignMetric({
+      connectionId: googleConnectionId,
+      syncRunId,
+      customerId: "usd-account",
+      campaignId: "g-usd-1",
+      metricDate: today,
+      impressions: 100,
+      clicks: 10,
+      costMicros: 10_000_000, // 10.00 USD -> 37.50 SAR
+      conversions: 1,
+      conversionValue: 0,
+    })
+    await insertGoogleCampaign({
+      connectionId: googleConnectionId,
+      customerId: "aed-account",
+      campaignId: "g-aed-1",
+      name: "AED Campaign",
+      status: "ENABLED",
+      channelType: "SEARCH",
+    })
+    await insertGoogleCampaignMetric({
+      connectionId: googleConnectionId,
+      syncRunId,
+      customerId: "aed-account",
+      campaignId: "g-aed-1",
+      metricDate: today,
+      impressions: 100,
+      clicks: 10,
+      costMicros: 8_000_000, // 8.00 AED -- no real rate, must surface unconverted
+      conversions: 1,
+      conversionValue: 0,
+    })
+
+    // Meta: one USD account -> converts at x3.75 too.
+    const metaConnectionId = await insertConnectedMetaConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertMetaAdsAccount({
+      connectionId: metaConnectionId,
+      accountId: "act_usd",
+      currencyCode: "USD",
+    })
+    await insertMetaRecord({
+      connectionId: metaConnectionId,
+      customerId: "act_usd",
+      entityType: "campaigns",
+      entityId: "m-camp-1",
+      recordDate: today,
+      payload: { name: "Meta USD Campaign", status: "ACTIVE", objective: "SALES" },
+    })
+    await insertMetaRecord({
+      connectionId: metaConnectionId,
+      customerId: "act_usd",
+      entityType: "insights",
+      entityId: `m-camp-1:${today}`,
+      recordDate: today,
+      payload: {
+        campaign_id: "m-camp-1",
+        spend: "4", // 4.00 USD -> 15.00 SAR
+        impressions: "100",
+        clicks: "10",
+        date_start: today,
+      },
+    })
+
+    const breakdownResponse = await fetch(`${baseUrl}/v1/channels/performance/breakdown`, {
+      headers: authHeaders(login),
+    })
+    expect(breakdownResponse.status).toBe(200)
+    const breakdownBody = (await breakdownResponse.json()) as {
+      currency: string
+      items: Array<{
+        name: string
+        spend: number
+        otherCurrencies: Array<{ currency: string; spend: number; revenue: number }>
+      }>
+    }
+    expect(breakdownBody.currency).toBe("SAR")
+
+    const googleAdsRow = breakdownBody.items.find((row) => row.name === "Google Ads")
+    expect(googleAdsRow).toBeDefined()
+    // SAR(100, no-op) + USD(10 x 3.75 = 37.5) = 137.5 -- AED excluded from this total.
+    expect(googleAdsRow?.spend).toBe(137.5)
+    expect(googleAdsRow?.otherCurrencies).toHaveLength(1)
+    expect(googleAdsRow?.otherCurrencies[0]).toMatchObject({ currency: "AED", spend: 8 })
+
+    const metaRow = breakdownBody.items.find((row) => row.name === "Meta Ads")
+    expect(metaRow?.spend).toBe(15) // 4 x 3.75
+    expect(metaRow?.otherCurrencies).toHaveLength(0)
+  })
+
+  it("converts the same data the other direction when the org's currency is USD", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "channels-currency-usd@madar.test",
+      "Channels Currency USD Org"
+    )
+    const workspaceId = actor.workspaceId as string
+    const today = new Date().toISOString().slice(0, 10)
+    await setOrganizationCurrency(actor.organizationId, "USD")
+
+    const { connectionId, syncRunId } = await insertConnectedGoogleAdsConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+      customerId: "sar-account",
+    })
+    await insertGoogleAdsCustomerAccount({
+      connectionId,
+      customerId: "sar-account",
+      currencyCode: "SAR",
+    })
+    await insertGoogleCampaign({
+      connectionId,
+      customerId: "sar-account",
+      campaignId: "g-sar-usd-1",
+      name: "SAR Campaign",
+      status: "ENABLED",
+      channelType: "SEARCH",
+    })
+    await insertGoogleCampaignMetric({
+      connectionId,
+      syncRunId,
+      customerId: "sar-account",
+      campaignId: "g-sar-usd-1",
+      metricDate: today,
+      impressions: 100,
+      clicks: 10,
+      costMicros: 37_500_000, // 37.50 SAR -> 10.00 USD
+      conversions: 1,
+      conversionValue: 0,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/channels/performance/breakdown`, {
+      headers: authHeaders(login),
+    })
+    const body = (await response.json()) as {
+      currency: string
+      items: Array<{ name: string; spend: number }>
+    }
+    expect(body.currency).toBe("USD")
+    const googleAdsRow = body.items.find((row) => row.name === "Google Ads")
+    expect(googleAdsRow?.spend).toBe(10)
+  })
+})

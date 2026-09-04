@@ -39,6 +39,7 @@ interface MetaAdAccountApiRow {
   id: string
   name?: string
   account_status?: number
+  currency?: string
 }
 
 // ads_read is the floor for any read-only reporting connection. ads_management is only
@@ -312,7 +313,7 @@ async function fetchAdAccounts(config: MetaOAuthServiceConfig, accessToken: stri
   })
 
   const result = await client.getAllPages<MetaAdAccountApiRow>("/me/adaccounts", {
-    fields: "id,name,account_status",
+    fields: "id,name,account_status,currency",
   })
 
   if (!result.ok) {
@@ -484,7 +485,7 @@ export class MetaOAuthService {
     const discoveredAccounts = adAccounts.map((account) => ({
       customerId: account.id,
       displayName: account.name ?? null,
-      currencyCode: null,
+      currencyCode: account.currency ?? null,
       timeZone: null,
       organizationId: null,
       organizationName: null,

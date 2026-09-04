@@ -34,6 +34,15 @@ function getWorkspaceIdFromStorage(): string | null {
 export type ChannelName = "Google Ads" | "Meta Ads" | "TikTok Ads" | "Snapchat"
 export type ChannelHealth = "healthy" | "stale" | "failed" | "never_synced"
 
+// Amounts from ad accounts in a currency other than the org's chosen currency and other than
+// USD/SAR (the only real fixed rate available) -- unconverted, shown separately, never
+// fabricated. Mirrors identity-platform/shared/currency.ts.
+export interface ChannelOtherCurrencyAmount {
+  currency: string
+  spend: number
+  revenue: number
+}
+
 export interface ChannelRow {
   name: ChannelName
   connected: boolean
@@ -45,9 +54,12 @@ export interface ChannelRow {
   health: ChannelHealth
   lastSyncedAt: string | null
   sparkline: number[]
+  otherCurrencies: ChannelOtherCurrencyAmount[]
 }
 
 export interface ChannelsSummary {
+  currency: string
+  otherCurrencies: ChannelOtherCurrencyAmount[]
   spend: number
   spendChangePct: number | null
   revenue: number
@@ -127,8 +139,10 @@ export const channelsPerformanceService = {
     return client.get<ChannelsSummary>(`${PERFORMANCE_ENDPOINT}/summary${buildQuery(params)}`)
   },
 
-  async getChannelBreakdown(params?: ChannelsQueryParams): Promise<{ items: ChannelRow[] }> {
-    return client.get<{ items: ChannelRow[] }>(
+  async getChannelBreakdown(
+    params?: ChannelsQueryParams
+  ): Promise<{ items: ChannelRow[]; currency: string }> {
+    return client.get<{ items: ChannelRow[]; currency: string }>(
       `${PERFORMANCE_ENDPOINT}/breakdown${buildQuery(params)}`
     )
   },

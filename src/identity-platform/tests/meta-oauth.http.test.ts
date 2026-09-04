@@ -23,7 +23,7 @@ function mockMetaGraphResponses(input: {
   baseUrl: string
   accessToken: string
   longLivedToken: string
-  adAccounts: Array<{ id: string; name: string; account_status?: number }>
+  adAccounts: Array<{ id: string; name: string; account_status?: number; currency?: string }>
 }) {
   const nativeFetch = globalThis.fetch
 
@@ -198,7 +198,9 @@ describe("meta oauth http flow", () => {
       baseUrl,
       accessToken: "meta-short-lived-token",
       longLivedToken: "meta-long-lived-token",
-      adAccounts: [{ id: "act_1046499258099100", name: "Diaa Hagar", account_status: 1 }],
+      adAccounts: [
+        { id: "act_1046499258099100", name: "Diaa Hagar", account_status: 1, currency: "SAR" },
+      ],
     })
 
     const startResponse = await fetch(`${baseUrl}/v1/integrations/meta-ads/oauth/start`, {
@@ -253,13 +255,20 @@ describe("meta oauth http flow", () => {
     // Confirms the stored token is the *long-lived* exchange result, not the short-lived one.
     expect(decrypted).toBe("meta-long-lived-token")
 
-    const accountRows = await database.query<{ account_id: string; account_name: string | null }>(
-      `select account_id, account_name from meta_ads_accounts where connection_id = $1`,
+    const accountRows = await database.query<{
+      account_id: string
+      account_name: string | null
+      currency_code: string | null
+    }>(
+      `select account_id, account_name, currency_code from meta_ads_accounts where connection_id = $1`,
       [started.connectionId]
     )
     expect(accountRows.rows).toHaveLength(1)
     expect(accountRows.rows[0]?.account_id).toBe("act_1046499258099100")
     expect(accountRows.rows[0]?.account_name).toBe("Diaa Hagar")
+    // Real currency requested from the Graph API and persisted -- previously hardcoded to null
+    // regardless of what Meta returned, which silently broke currency-aware spend conversion.
+    expect(accountRows.rows[0]?.currency_code).toBe("SAR")
   })
 
   it("workspace isolation: a connection created in one workspace is not accessible from a different workspace in the same organization", async () => {

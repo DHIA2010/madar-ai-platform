@@ -47,15 +47,6 @@ const COUNTRY_OPTIONS = [
 const CURRENCY_OPTIONS = [
   { code: "SAR", label: "الريال السعودي (SAR)" },
   { code: "USD", label: "الدولار الأمريكي (USD)" },
-  { code: "AED", label: "الدرهم الإماراتي (AED)" },
-  { code: "KWD", label: "الدينار الكويتي (KWD)" },
-  { code: "QAR", label: "الريال القطري (QAR)" },
-  { code: "BHD", label: "الدينار البحريني (BHD)" },
-  { code: "OMR", label: "الريال العماني (OMR)" },
-  { code: "EGP", label: "الجنيه المصري (EGP)" },
-  { code: "JOD", label: "الدينار الأردني (JOD)" },
-  { code: "EUR", label: "اليورو (EUR)" },
-  { code: "GBP", label: "الجنيه الإسترليني (GBP)" },
 ]
 
 function ComingSoonPill() {
