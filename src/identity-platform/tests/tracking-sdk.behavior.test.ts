@@ -77,6 +77,7 @@ beforeEach(() => {
   delete (window as { customerAuthState?: unknown }).customerAuthState
   delete (window as { customerAsync?: unknown }).customerAsync
   delete (window as { Madar?: unknown }).Madar
+  delete (window as { madarq?: unknown }).madarq
 })
 
 afterEach(() => {
@@ -237,6 +238,70 @@ describe("customer identity", () => {
 
     expect(window.localStorage.getItem("madar_customer_id")).toBe("kept-customer")
     expect(capturedEvents()[0].customerId).toBe("kept-customer")
+  })
+})
+
+describe("command queue", () => {
+  it("replays events queued before the SDK finished loading, in order", () => {
+    // A storefront event snippet firing while the async SDK is still in flight.
+    ;(window as unknown as { madarq: unknown[] }).madarq = [
+      ["track", "product_view", { product_id: "p-1" }],
+      ["track", "add_to_cart", { product_id: "p-1", quantity: 2 }],
+    ]
+
+    runSdk()
+    flush()
+
+    const events = capturedEvents().map((event) => event.event)
+    expect(events).toContain("product_view")
+    expect(events).toContain("add_to_cart")
+    expect(events.indexOf("product_view")).toBeLessThan(events.indexOf("add_to_cart"))
+  })
+
+  it("keeps working for pushes made after the SDK has loaded", () => {
+    runSdk()
+    flush()
+
+    // The identical two lines a snippet uses either side of load.
+    const win = window as unknown as { madarq: { push: (entry: unknown[]) => void } }
+    win.madarq = win.madarq || ([] as never)
+    win.madarq.push(["track", "purchase", { order_id: "9001" }])
+    flush()
+
+    expect(capturedEvents().some((event) => event.event === "purchase")).toBe(true)
+  })
+
+  it("carries queued event properties through to the payload", () => {
+    ;(window as unknown as { madarq: unknown[] }).madarq = [
+      ["track", "purchase", { order_id: "A-1", revenue: 250, currency: "SAR" }],
+    ]
+
+    runSdk()
+    flush()
+
+    const purchase = fetchMock.mock.calls
+      .filter((call) => String(call[0]).endsWith("/v1/tracking/capture"))
+      .map((call) => JSON.parse((call[1] as { body: string }).body))
+      .find((payload) => payload.event === "purchase")
+    expect(purchase.properties).toMatchObject({ order_id: "A-1", revenue: 250, currency: "SAR" })
+  })
+
+  it("ignores queued entries naming anything outside the public surface", () => {
+    ;(window as unknown as { madarq: unknown[] }).madarq = [
+      ["constructor"],
+      ["toString"],
+      ["nope", "whatever"],
+      [],
+      null,
+    ]
+
+    expect(() => {
+      runSdk()
+      flush()
+    }).not.toThrow()
+
+    // Only the SDK's own opening page view -- nothing the malformed entries produced.
+    expect(capturedEvents().map((event) => event.event)).toEqual(["page_view"])
   })
 })
 

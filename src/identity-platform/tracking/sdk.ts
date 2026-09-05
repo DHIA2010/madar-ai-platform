@@ -377,6 +377,43 @@ export const TRACKING_SDK_JS_V1 = `(function () {
   };
 
   // -------------------------------------------------------------------------------------------
+  // Command queue. The loader injects this file async, so a storefront event that fires early --
+  // a Zid per-event Custom Snippet on a purchase confirmation page, say -- can run while the SDK
+  // is still in flight, when window.Madar does not exist yet. Rather than every such snippet
+  // carrying its own polling loop and giving up after a timeout, they push [method, ...args] onto
+  // window.madarq, and this replays them in order the moment the surface exists:
+  //
+  //   window.madarq = window.madarq || [];
+  //   window.madarq.push(["track", "purchase", { order_id: "123" }]);
+  //
+  // window.madarq is then replaced by an object whose push() applies immediately, so the exact
+  // same two lines keep working after load -- a snippet never needs to know which it hit.
+  // -------------------------------------------------------------------------------------------
+  var QUEUEABLE_METHODS = { track: true, identify: true, page: true, reset: true };
+
+  function applyQueuedCall(entry) {
+    try {
+      if (!entry || typeof entry.length !== "number" || entry.length === 0) return;
+      var method = entry[0];
+      // Explicit allowlist rather than a typeof check on window.Madar[method]: inherited members
+      // like "constructor" are functions too, and nothing outside the public surface should be
+      // reachable by name from a storefront.
+      if (!QUEUEABLE_METHODS[method]) return;
+      window.Madar[method].apply(window.Madar, Array.prototype.slice.call(entry, 1));
+    } catch (e) {}
+  }
+
+  (function drainCommandQueue() {
+    try {
+      var pending = window.madarq;
+      window.madarq = { push: applyQueuedCall };
+      if (pending && typeof pending.length === "number") {
+        for (var i = 0; i < pending.length; i++) applyQueuedCall(pending[i]);
+      }
+    } catch (e) {}
+  })();
+
+  // -------------------------------------------------------------------------------------------
   // Storefront customer identity. window.customer / window.customerAuthState / window.customerAsync
   // are Zid's own documented storefront globals (docs.zid.sa, "Global and Customer Object
   // Scripting"): customer holds id/name/firstname/lastname/mobile/email for a logged-in customer
