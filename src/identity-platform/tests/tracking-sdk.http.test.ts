@@ -130,6 +130,10 @@ describe("GET /v1/tracking/config/:siteKey", () => {
 
     const response = await fetch(`${baseUrl}/v1/tracking/config/${siteKey}`)
     expect(response.status).toBe(200)
+    // Fetched cross-origin from an arbitrary merchant storefront (see loader-fragment.ts) --
+    // must carry a wildcard CORS header or the browser blocks the storefront JS from reading it,
+    // even though the request itself succeeds server-side (a bug this test guards against).
+    expect(response.headers.get("access-control-allow-origin")).toBe("*")
     const config = (await response.json()) as Record<string, unknown>
 
     expect(config.sdk_version).toBe("1.0.0")
@@ -525,6 +529,8 @@ describe("GET /v1/tracking/resolve/salla/:storeId", () => {
 
     const response = await fetch(`${baseUrl}/v1/tracking/resolve/salla/778899`)
     expect(response.status).toBe(200)
+    // Fetched cross-origin from the merchant's storefront -- must carry a wildcard CORS header.
+    expect(response.headers.get("access-control-allow-origin")).toBe("*")
     const body = (await response.json()) as { siteKey: string }
     expect(body.siteKey).toBe(expectedSiteKey)
   })
@@ -608,6 +614,8 @@ describe("GET /v1/tracking/resolve/zid/:domain", () => {
 
     const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/my-zid-store.com`)
     expect(response.status).toBe(200)
+    // Fetched cross-origin from the merchant's storefront -- must carry a wildcard CORS header.
+    expect(response.headers.get("access-control-allow-origin")).toBe("*")
     const body = (await response.json()) as { siteKey: string }
     expect(body.siteKey).toBe(expectedSiteKey)
   })

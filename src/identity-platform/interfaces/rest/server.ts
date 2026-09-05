@@ -369,15 +369,16 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
   return {}
 }
 
-// The storefront capture snippet (tracking/snippet.ts) calls this from an arbitrary merchant
-// origin, which getCorsHeaders()'s allowlist can never contain by design (it's scoped to
-// MADAR's own dashboard origins). A wildcard is safe specifically here: the route is write-only,
-// returns nothing sensitive, and never reads MADAR-domain cookies, so no
-// access-control-allow-credentials is needed (which is what makes "*" unsafe elsewhere).
+// The storefront capture/resolve/config routes (tracking/snippet.ts and the Salla/Zid app
+// snippets) call these from an arbitrary merchant origin, which getCorsHeaders()'s allowlist can
+// never contain by design (it's scoped to MADAR's own dashboard origins). A wildcard is safe
+// specifically here: every route it's applied to is either write-only or returns nothing more
+// sensitive than a revocable site key (see migration 037), and never reads MADAR-domain cookies,
+// so no access-control-allow-credentials is needed (which is what makes "*" unsafe elsewhere).
 const PUBLIC_CAPTURE_CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "content-type",
-  "access-control-allow-methods": "POST,OPTIONS",
+  "access-control-allow-methods": "GET,POST,OPTIONS",
 }
 
 // Providers signal that a connectionId isn't theirs by throwing an Error whose
@@ -916,86 +917,131 @@ export function createIdentityApiServer(
       const trackingConfigMatch = url.pathname.match(/^\/v1\/tracking\/config\/([^/]+)$/)
       if (method === "GET" && trackingConfigMatch) {
         if (!trackingService) {
-          return send(503, {
-            code: "TRACKING_UNAVAILABLE",
-            message: "Tracking capture is unavailable in memory mode.",
-          })
+          return send(
+            503,
+            {
+              code: "TRACKING_UNAVAILABLE",
+              message: "Tracking capture is unavailable in memory mode.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
         const siteKey = decodeURIComponent(trackingConfigMatch[1])
         const organizationId = await trackingService.resolveOrganizationBySiteKey(siteKey)
         if (!organizationId) {
-          return send(404, { code: "TRACKING_SITE_KEY_NOT_FOUND", message: "Unknown site key." })
+          return send(
+            404,
+            { code: "TRACKING_SITE_KEY_NOT_FOUND", message: "Unknown site key." },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
-        return send(200, await trackingService.getTrackingConfig(organizationId))
+        return send(
+          200,
+          await trackingService.getTrackingConfig(organizationId),
+          PUBLIC_CAPTURE_CORS_HEADERS
+        )
       }
 
       const sallaStoreResolveMatch = url.pathname.match(/^\/v1\/tracking\/resolve\/salla\/([^/]+)$/)
       if (method === "GET" && sallaStoreResolveMatch) {
         if (!trackingService || !sallaOAuthRepositoryForTracking) {
-          return send(503, {
-            code: "TRACKING_UNAVAILABLE",
-            message: "Tracking capture is unavailable in memory mode.",
-          })
+          return send(
+            503,
+            {
+              code: "TRACKING_UNAVAILABLE",
+              message: "Tracking capture is unavailable in memory mode.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
 
         // Called by the Salla-injected app snippet on every storefront page load -- same
         // public/unauthenticated/IP-rate-limited trust model as /v1/tracking/capture, since a
         // Salla store ID identifies a tenant no more sensitively than the mtk_ site key this
-        // returns (already documented as "public, revocable" in migration 037).
+        // returns (already documented as "public, revocable" in migration 037). Same CORS
+        // headers as /v1/tracking/capture -- this route is fetched cross-origin from the
+        // merchant's own storefront, which can never be in the dashboard-origin allowlist.
         const decision = await container.infrastructure.rateLimiter?.check(
           `salla_store_resolve:${context.ipAddress}`,
           60,
           60_000
         )
         if (decision && !decision.allowed) {
-          return send(429, { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." })
+          return send(
+            429,
+            { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
 
         const storeId = decodeURIComponent(sallaStoreResolveMatch[1])
         const organizationId =
           await sallaOAuthRepositoryForTracking.findOrganizationIdByStoreId(storeId)
         if (!organizationId) {
-          return send(404, {
-            code: "SALLA_STORE_NOT_CONNECTED",
-            message: "No connected Salla store with this ID.",
-          })
+          return send(
+            404,
+            {
+              code: "SALLA_STORE_NOT_CONNECTED",
+              message: "No connected Salla store with this ID.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
 
-        return send(200, { siteKey: await trackingService.ensureSiteKey(organizationId) })
+        return send(
+          200,
+          { siteKey: await trackingService.ensureSiteKey(organizationId) },
+          PUBLIC_CAPTURE_CORS_HEADERS
+        )
       }
 
       const zidStoreResolveMatch = url.pathname.match(/^\/v1\/tracking\/resolve\/zid\/([^/]+)$/)
       if (method === "GET" && zidStoreResolveMatch) {
         if (!trackingService || !zidOAuthRepositoryForTracking) {
-          return send(503, {
-            code: "TRACKING_UNAVAILABLE",
-            message: "Tracking capture is unavailable in memory mode.",
-          })
+          return send(
+            503,
+            {
+              code: "TRACKING_UNAVAILABLE",
+              message: "Tracking capture is unavailable in memory mode.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
 
         // Called by the Zid-injected app snippet on every storefront page load, same trust
-        // model as the Salla resolve route above -- a storefront hostname identifies a tenant
-        // no more sensitively than the mtk_ site key this returns.
+        // model and same cross-origin CORS reasoning as the Salla resolve route above.
         const decision = await container.infrastructure.rateLimiter?.check(
           `zid_store_resolve:${context.ipAddress}`,
           60,
           60_000
         )
         if (decision && !decision.allowed) {
-          return send(429, { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." })
+          return send(
+            429,
+            { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
 
         const domain = decodeURIComponent(zidStoreResolveMatch[1]).toLowerCase()
         const organizationId =
           await zidOAuthRepositoryForTracking.findOrganizationIdByDomain(domain)
         if (!organizationId) {
-          return send(404, {
-            code: "ZID_STORE_NOT_CONNECTED",
-            message: "No connected Zid store with this domain.",
-          })
+          return send(
+            404,
+            {
+              code: "ZID_STORE_NOT_CONNECTED",
+              message: "No connected Zid store with this domain.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
         }
 
-        return send(200, { siteKey: await trackingService.ensureSiteKey(organizationId) })
+        return send(
+          200,
+          { siteKey: await trackingService.ensureSiteKey(organizationId) },
+          PUBLIC_CAPTURE_CORS_HEADERS
+        )
       }
 
       if (method === "POST" && url.pathname === "/v1/tracking/capture") {
