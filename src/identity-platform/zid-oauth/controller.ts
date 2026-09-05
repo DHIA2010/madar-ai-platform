@@ -92,6 +92,20 @@ export class ZidOAuthController {
     const code = query.get("code")
     const state = query.get("state")
 
+    // A failed Zid install previously left almost nothing to diagnose: a real attempt reached
+    // here with no `state` at all despite MADAR having created one moments earlier, and the only
+    // other record was a generic 400 from the token endpoint. Recording the shape of what Zid
+    // actually sent makes one attempt conclusive instead of a guess. Parameter names, presence
+    // and lengths only -- never the code itself, which is a live bearer credential.
+    console.error("zid_oauth.callback_received", {
+      params: Array.from(query.keys()),
+      hasCode: Boolean(code),
+      codeLength: code?.length ?? 0,
+      hasState: Boolean(state),
+      error: error ?? null,
+      errorDescription: query.get("error_description"),
+    })
+
     if (error) {
       return {
         status: 302,

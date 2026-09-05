@@ -326,6 +326,15 @@ async function exchangeAuthorizationCode(input: {
       status: response.status,
       statusText: response.statusText,
       body: bodyText.slice(0, 1000),
+      // Zid returns a generic OAuth invalid_request for every malformed-exchange cause, so the
+      // body alone can't distinguish a redirect_uri mismatch from a bad client credential or a
+      // code issued against different app settings. These are the inputs that decide it. clientId
+      // is not a secret (it's the app's public identifier); the secret is reported by length only.
+      tokenUrl: input.config.tokenUrl,
+      redirectUri: input.config.redirectUri,
+      clientId: input.config.clientId,
+      clientSecretLength: input.config.clientSecret.length,
+      codeLength: input.code.length,
     })
     throw new Error("ZID_OAUTH_TOKEN_EXCHANGE_FAILED")
   }
