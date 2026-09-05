@@ -205,6 +205,8 @@ export class ZidOAuthRepository
     id: string
     claimTokenHash: string
     zidStoreExternalId: string
+    zidStoreUuid: string | null
+    zidStoreDomain: string | null
     zidStoreName: string | null
     zidStoreCurrency: string | null
     zidStoreTimezone: string | null
@@ -219,11 +221,12 @@ export class ZidOAuthRepository
       name: "zid-marketplace-install-insert",
       text: `
         INSERT INTO zid_marketplace_installs (
-          id, claim_token_hash, status, zid_store_external_id, zid_store_name,
+          id, claim_token_hash, status, zid_store_external_id, zid_store_uuid, zid_store_domain,
+          zid_store_name,
           zid_store_currency, zid_store_timezone, encrypted_access_token,
           encrypted_refresh_token, encrypted_authorization_token, scopes, token_expires_at,
           expires_at
-        ) VALUES ($1,$2,'unclaimed',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ) VALUES ($1,$2,'unclaimed',$3,$13,$14,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       `,
       values: [
         input.id,
@@ -238,6 +241,8 @@ export class ZidOAuthRepository
         JSON.stringify(input.scopes),
         input.tokenExpiresAt,
         input.expiresAt,
+        input.zidStoreUuid,
+        input.zidStoreDomain,
       ],
     })
   }
@@ -304,6 +309,7 @@ export class ZidOAuthRepository
     providerAccountName: string | null
     providerAccountEmail: string | null
     storeDomain: string | null
+    storeUuid: string | null
     encryptedRefreshToken: string | null
     encryptedAccessToken: string | null
     encryptedAuthorizationToken: string | null
@@ -322,11 +328,12 @@ export class ZidOAuthRepository
         INSERT INTO zid_oauth_connections (
           id, organization_id, workspace_id, project_id, data_source_id,
           provider_account_id, provider_account_name, provider_account_email, store_domain,
+          store_uuid,
           encrypted_refresh_token, encrypted_access_token, encrypted_authorization_token,
           scopes, token_expires_at, status, connection_reference, last_connected_at,
           last_disconnected_at, created_by_user_id, updated_by_user_id, created_at, updated_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$20,$20
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$21,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$20,$20
         )
         ON CONFLICT (id) DO UPDATE SET
           organization_id = EXCLUDED.organization_id,
@@ -336,7 +343,12 @@ export class ZidOAuthRepository
           provider_account_id = EXCLUDED.provider_account_id,
           provider_account_name = EXCLUDED.provider_account_name,
           provider_account_email = EXCLUDED.provider_account_email,
-          store_domain = EXCLUDED.store_domain,
+          -- COALESCE, not a plain overwrite: the marketplace-claim path legitimately upserts the
+          -- same connection with no store identifiers to hand, and letting that null out a good
+          -- value already captured by a direct connect would silently break tracking resolution
+          -- for that merchant. A real new value still wins.
+          store_domain = COALESCE(EXCLUDED.store_domain, zid_oauth_connections.store_domain),
+          store_uuid = COALESCE(EXCLUDED.store_uuid, zid_oauth_connections.store_uuid),
           encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
           encrypted_access_token = EXCLUDED.encrypted_access_token,
           encrypted_authorization_token = EXCLUDED.encrypted_authorization_token,
@@ -370,6 +382,7 @@ export class ZidOAuthRepository
         input.lastDisconnectedAt,
         input.actorUserId,
         input.nowIso,
+        input.storeUuid,
       ],
     })
   }
@@ -395,19 +408,22 @@ export class ZidOAuthRepository
     return result.rows[0] ? String(result.rows[0].organization_id) : null
   }
 
-  // Resolves the Zid store ID the storefront-injected snippet reads from Zid's own {{store.id}}
-  // Custom Snippet parameter. Preferred over findOrganizationIdByDomain above: provider_account_id
-  // is set for every connection at connect time (from the real /managers/account/profile
-  // `user.store.id`), while store_domain only arrived in migration 044 and is null on every older
-  // connection. Mirrors SallaOAuthRepository.findOrganizationIdByStoreId, which already resolves
-  // its own platform this way.
+  // Resolves the store identifier the storefront-injected snippet reads from Zid's own
+  // {{store.id}} Custom Snippet parameter.
+  //
+  // Matches store_uuid OR provider_account_id because Zid's profile response carries two distinct
+  // identifiers for the same store -- user.store.uuid and the numeric user.store.id -- and
+  // {{store.id}} expands to the UUID, not the numeric one (verified against a real storefront
+  // sending a2701fa2-7128-423c-857c-9cc7f3781144 for store 3223383). Accepting either means the
+  // route keeps working whichever Zid sends, and needs no change if that ever varies by snippet
+  // location. The two columns hold different value shapes, so a cross-match can't collide.
   async findOrganizationIdByStoreId(storeId: string): Promise<string | null> {
     const result = await this.db.query<{ organization_id: string }>({
       name: "zid-oauth-connection-find-by-store-id",
       text: `
         SELECT organization_id
         FROM zid_oauth_connections
-        WHERE provider_account_id = $1
+        WHERE (store_uuid = $1 OR provider_account_id = $1)
           AND status = 'connected'
           AND deleted_at IS NULL
         LIMIT 1

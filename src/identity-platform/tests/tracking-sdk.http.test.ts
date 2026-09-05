@@ -592,13 +592,14 @@ async function insertZidConnection(input: {
   userId: string
   storeDomain: string | null
   providerAccountId?: string | null
+  storeUuid?: string | null
   status?: "connected" | "disconnected"
 }) {
   await database.query(
     `insert into zid_oauth_connections (
        id, organization_id, workspace_id, project_id, status, store_domain, provider_account_id,
-       created_by_user_id, updated_by_user_id, created_at, updated_at
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8, now(), now())`,
+       store_uuid, created_by_user_id, updated_by_user_id, created_at, updated_at
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, now(), now())`,
     [
       randomUUID(),
       input.organizationId,
@@ -607,6 +608,7 @@ async function insertZidConnection(input: {
       input.status ?? "connected",
       input.storeDomain,
       input.providerAccountId ?? null,
+      input.storeUuid ?? null,
       input.userId,
     ]
   )
@@ -662,6 +664,35 @@ describe("GET /v1/tracking/resolve/zid/store/:storeId", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("*")
     const body = (await response.json()) as { siteKey: string }
     expect(body.siteKey).toBe(expectedSiteKey)
+  })
+
+  it("resolves the store UUID that Zid's {{store.id}} snippet parameter actually sends", async () => {
+    // Verified against a real storefront: {{store.id}} expanded to this UUID while the connected
+    // store's numeric provider_account_id was 3223383, so matching only the numeric id returned
+    // ZID_STORE_NOT_CONNECTED on every page load of a correctly-installed snippet.
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@zid-store-uuid.madar",
+      "Zid Store Uuid Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      storeDomain: null,
+      providerAccountId: "3223383",
+      storeUuid: "a2701fa2-7128-423c-857c-9cc7f3781144",
+    })
+
+    const expectedSiteKey = await getSiteKey(accessToken)
+
+    // Both identifiers name the same store and must both resolve -- which Zid sends is a property
+    // of the snippet location, not something this route should depend on.
+    for (const identifier of ["a2701fa2-7128-423c-857c-9cc7f3781144", "3223383"]) {
+      const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/store/${identifier}`)
+      expect(response.status).toBe(200)
+      expect(((await response.json()) as { siteKey: string }).siteKey).toBe(expectedSiteKey)
+    }
   })
 
   it("returns 404 for a store ID with no connection at all", async () => {

@@ -21,7 +21,14 @@ let container: ReturnType<typeof createIdentityPlatform>
 function mockZidTokenAndProfile(input: {
   accessToken: string
   refreshToken: string
-  store: { id: string; title: string; currencyCode?: string; timezone?: string }
+  store: {
+    id: string
+    title: string
+    currencyCode?: string
+    timezone?: string
+    uuid?: string
+    url?: string
+  }
 }) {
   const nativeFetch = globalThis.fetch
 
@@ -52,6 +59,11 @@ function mockZidTokenAndProfile(input: {
           user: {
             store: {
               id: input.store.id,
+              // Both real fields of Zid's profile response. The storefront snippet parameter
+              // {{store.id}} expands to the uuid, not the numeric id, so tracking resolution
+              // depends on this one being persisted.
+              uuid: input.store.uuid,
+              url: input.store.url,
               title: input.store.title,
               currency: { code: input.store.currencyCode ?? "SAR" },
               timezone: input.store.timezone ?? "Asia/Riyadh",
@@ -254,6 +266,54 @@ describe("Zid marketplace-initiated install (Activate from Zid's App Market)", (
       { method: "POST", headers: authHeaders(login.session.accessToken) }
     )
     expect(replayResponse.status).not.toBe(200)
+  })
+
+  it("carries the store UUID and domain through the claim so tracking resolves immediately", async () => {
+    // Before this, zid_marketplace_installs persisted only name/currency/timezone, so a merchant
+    // arriving through Zid's App Market got a connection with no store_uuid and no store_domain
+    // -- and the storefront snippet could never resolve them to a site key until they reconnected
+    // through the direct flow.
+    mockZidTokenAndProfile({
+      accessToken: "mkt-access-token",
+      refreshToken: "mkt-refresh-token",
+      store: {
+        id: "3223383",
+        uuid: "a2701fa2-7128-423c-857c-9cc7f3781144",
+        url: "https://6am6no.zid.store/",
+        title: "Marketplace Tracking Store",
+      },
+    })
+
+    const claimToken = await completeMarketplaceCallback()
+    const { login } = await registerAndProvisionOrg(
+      "zid-marketplace-tracking@madar.test",
+      "Zid Marketplace Tracking Org"
+    )
+
+    const claimResponse = await fetch(
+      `${baseUrl}/v1/integrations/zid/install/${claimToken}/claim`,
+      { method: "POST", headers: authHeaders(login.session.accessToken) }
+    )
+    expect(claimResponse.status).toBe(200)
+    const claimed = (await claimResponse.json()) as { connectionId: string }
+
+    const rows = await database.query(
+      `SELECT provider_account_id, store_uuid, store_domain FROM zid_oauth_connections WHERE id = $1`,
+      [claimed.connectionId]
+    )
+    expect(rows.rows[0]).toMatchObject({
+      provider_account_id: "3223383",
+      store_uuid: "a2701fa2-7128-423c-857c-9cc7f3781144",
+      // Normalized to a bare hostname, matching what a storefront reads from location.hostname.
+      store_domain: "6am6no.zid.store",
+    })
+
+    // The identifier Zid's {{store.id}} actually sends now resolves end to end.
+    const resolveResponse = await fetch(
+      `${baseUrl}/v1/tracking/resolve/zid/store/a2701fa2-7128-423c-857c-9cc7f3781144`
+    )
+    expect(resolveResponse.status).toBe(200)
+    expect(((await resolveResponse.json()) as { siteKey: string }).siteKey).toMatch(/^mtk_/)
   })
 
   it("returns 404 for an unknown or garbage claim token", async () => {

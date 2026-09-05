@@ -419,6 +419,11 @@ async function fetchStoreInfo(config: ZidOAuthServiceConfig, token: ZidTokenResp
 
   return {
     id: store.id,
+    // Zid's storefront snippet parameter {{store.id}} expands to this UUID rather than the
+    // numeric id above -- verified against a real storefront, which sent
+    // a2701fa2-7128-423c-857c-9cc7f3781144 for a store whose numeric id is 3223383. Both are
+    // persisted so tracking can resolve on whichever identifier the storefront sends.
+    uuid: store.uuid,
     name: store.title,
     currency: typeof store.currency === "string" ? store.currency : store.currency?.code,
     timezone: store.timezone,
@@ -506,7 +511,11 @@ export class ZidOAuthService {
       providerAccountId: null,
       providerAccountName: null,
       providerAccountEmail: null,
+      // Unknown at authorize time -- the store isn't identified until the callback exchanges the
+      // code. On a reconnect this row already exists with real values, which upsertConnection's
+      // COALESCE preserves rather than nulling out mid-flow.
       storeDomain: null,
+      storeUuid: null,
       encryptedRefreshToken: existingConnection ? null : null,
       encryptedAccessToken: existingConnection ? null : null,
       encryptedAuthorizationToken: existingConnection ? null : null,
@@ -640,6 +649,7 @@ export class ZidOAuthService {
         providerAccountName: primaryAccount?.displayName ?? "Zid Store",
         providerAccountEmail: null,
         storeDomain: normalizeDomain(store.url),
+        storeUuid: store.uuid ?? null,
         encryptedRefreshToken: encryptSecret(refreshToken, config.tokenEncryptionKey),
         encryptedAccessToken: encryptSecret(token.access_token, config.tokenEncryptionKey),
         encryptedAuthorizationToken: token.authorization
@@ -726,6 +736,8 @@ export class ZidOAuthService {
       id: randomUUID(),
       claimTokenHash: hashClaimToken(claimToken),
       zidStoreExternalId: String(store.id),
+      zidStoreUuid: store.uuid ?? null,
+      zidStoreDomain: normalizeDomain(store.url),
       zidStoreName: storeName,
       zidStoreCurrency: store.currency ?? null,
       zidStoreTimezone: store.timezone ?? null,
@@ -817,12 +829,13 @@ export class ZidOAuthService {
         providerAccountId: storeExternalId,
         providerAccountName: storeName,
         providerAccountEmail: null,
-        // Marketplace-install claims don't carry the store URL through the pending-install row
-        // today (zid_marketplace_installs only persists name/currency/timezone) -- a merchant
-        // who installed via Zid's App Market rather than connecting directly through MADAR will
-        // need one reconnect through the direct flow for tracking domain-matching to activate,
-        // same as any pre-existing connection from before this column existed.
-        storeDomain: null,
+        // Carried through the pending-install row (migration 046), so a merchant who arrived via
+        // Zid's App Market gets working tracking resolution immediately rather than having to
+        // reconnect through the direct flow first. Null on installs created before that column
+        // existed, which the COALESCE in upsertConnection keeps from clobbering anything a later
+        // direct connect captures.
+        storeDomain: (row.zid_store_domain as string | null) ?? null,
+        storeUuid: (row.zid_store_uuid as string | null) ?? null,
         encryptedRefreshToken: row.encrypted_refresh_token as string,
         encryptedAccessToken: row.encrypted_access_token as string,
         encryptedAuthorizationToken: (row.encrypted_authorization_token as string | null) ?? null,
