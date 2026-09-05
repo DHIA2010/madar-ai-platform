@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner"
 
 import {
+  AppButton,
   AppDialog,
   AppDropdownMenu,
   AppDropdownMenuContent,
@@ -28,6 +29,7 @@ import {
   AppDropdownMenuTrigger,
   AppEmpty,
 } from "@/components/app"
+import { PlatformBadge } from "@/components/platform-badge"
 
 import { CampaignLinkForm } from "@/features/campaign-links/components/campaign-link-form"
 import { CampaignLinkDetailPanel } from "@/features/campaign-links/components/campaign-link-detail-panel"
@@ -41,6 +43,7 @@ import {
 import { tajawal } from "@/features/campaign-links/components/design/fonts"
 import {
   campaignPickerService,
+  type CampaignPlatform,
   type CampaignRecord,
 } from "@/features/campaign-links/services/campaign-picker.service"
 import {
@@ -61,6 +64,22 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "كل الحالات" },
   { value: "enabled", label: "نشط" },
   { value: "disabled", label: "معطل" },
+]
+
+// The 4 ad platforms campaigns can be imported from (CAMPAIGN_PLATFORMS in
+// identity-platform/campaigns/types.ts). Badge keys match PLATFORM_ICON's own keys.
+const CAMPAIGN_PLATFORM_LABELS: Record<CampaignPlatform, string> = {
+  google_ads: "Google Ads",
+  meta_ads: "Meta Ads",
+  snapchat_ads: "Snapchat",
+  tiktok_ads: "TikTok Ads",
+}
+
+const CAMPAIGN_PLATFORM_OPTIONS: CampaignPlatform[] = [
+  "google_ads",
+  "meta_ads",
+  "snapchat_ads",
+  "tiktok_ads",
 ]
 
 function periodToRange(period: PeriodOption) {
@@ -185,6 +204,7 @@ export default function CampaignLinksPage() {
   const [rows, setRows] = useState<CampaignLinkSummaryRecord[]>([])
   const [previousTotals, setPreviousTotals] = useState<ReturnType<typeof sumTotals> | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignRecord[]>([])
+  const [importingPlatform, setImportingPlatform] = useState<CampaignPlatform | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [period, setPeriod] = useState<PeriodOption>("30")
@@ -255,6 +275,30 @@ export default function CampaignLinksPage() {
   function handleCreated() {
     setIsCreateOpen(false)
     void loadData()
+  }
+
+  // Campaigns synced from an ad platform live in that platform's own tables -- they only become
+  // linkable once imported into the campaigns table this picker reads (GET /v1/campaigns).
+  // Importing is idempotent (upsert per external campaign id), so re-running is safe.
+  async function handleImportCampaigns(platform: CampaignPlatform) {
+    setImportingPlatform(platform)
+    try {
+      const result = await campaignPickerService.importCampaignsFromPlatform(platform)
+      if (result.imported === 0) {
+        toast.info(
+          `لا توجد حملات لاستيرادها من ${CAMPAIGN_PLATFORM_LABELS[platform]}. تأكد من ربط المنصة ومزامنة حملاتها أولاً.`
+        )
+        return
+      }
+      toast.success(`تم استيراد ${result.imported} حملة من ${CAMPAIGN_PLATFORM_LABELS[platform]}.`)
+      const campaignList = await campaignPickerService.listCampaigns()
+      setCampaigns(campaignList)
+    } catch (error) {
+      console.error("Failed to import campaigns", error)
+      toast.error("تعذّر استيراد الحملات. حاول مرة أخرى.")
+    } finally {
+      setImportingPlatform(null)
+    }
   }
 
   function handleOpenDetail(row: CampaignLinkSummaryRecord) {
@@ -354,7 +398,10 @@ export default function CampaignLinksPage() {
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            disabled={campaigns.length === 0 && !isLoading}
+            // Deliberately enabled with zero campaigns: the dialog is where campaigns get
+            // imported from a connected ad platform, so disabling it here used to block the only
+            // route out of the "no campaigns yet" state.
+            disabled={isLoading}
             className="flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-[#4F46E5] px-5 text-sm font-medium text-white transition-colors hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="size-4" />
@@ -549,10 +596,36 @@ export default function CampaignLinksPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
             {campaigns.length === 0 ? (
-              <AppEmpty
-                title="لا توجد حملات بعد"
-                description="أنشئ حملة أولاً، ثم عد لبناء رابط تتبع لها."
-              />
+              <div className="rounded-2xl border border-dashed border-[#E2E8F0] p-6 text-center">
+                <h3 className="text-[15px] font-bold text-[#172033]">لا توجد حملات بعد</h3>
+                <p className="mx-auto mt-2 max-w-[520px] text-[13px] leading-6 text-[#64748B]">
+                  حملاتك الإعلانية المتصلة لا تصبح قابلة للربط إلا بعد استيرادها. اختر منصة لاستيراد
+                  حملاتها الآن.
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {CAMPAIGN_PLATFORM_OPTIONS.map((platform) => (
+                    <AppButton
+                      key={platform}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={importingPlatform !== null}
+                      loading={importingPlatform === platform}
+                      onClick={() => void handleImportCampaigns(platform)}
+                      icon={
+                        <PlatformBadge
+                          platform={CAMPAIGN_PLATFORM_LABELS[platform]}
+                          className="size-5"
+                          iconClassName="size-3"
+                        />
+                      }
+                    >
+                      {CAMPAIGN_PLATFORM_LABELS[platform]}
+                    </AppButton>
+                  ))}
+                </div>
+              </div>
             ) : (
               <CampaignLinkForm
                 campaigns={campaigns}
