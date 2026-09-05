@@ -595,44 +595,67 @@ export default function CampaignLinksPage() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
-            {campaigns.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#E2E8F0] p-6 text-center">
-                <h3 className="text-[15px] font-bold text-[#172033]">لا توجد حملات بعد</h3>
-                <p className="mx-auto mt-2 max-w-[520px] text-[13px] leading-6 text-[#64748B]">
-                  حملاتك الإعلانية المتصلة لا تصبح قابلة للربط إلا بعد استيرادها. اختر منصة لاستيراد
-                  حملاتها الآن.
-                </p>
+            {/* Importing is always reachable, not only while the campaign list is empty. A
+                merchant who imports one platform still needs the other three, and hiding these
+                once the first import succeeds left no route to them at all. */}
+            <div
+              className={
+                campaigns.length === 0
+                  ? "rounded-2xl border border-dashed border-[#E2E8F0] p-6 text-center"
+                  : "rounded-2xl border border-dashed border-[#E2E8F0] px-4 py-3"
+              }
+            >
+              {campaigns.length === 0 ? (
+                <>
+                  <h3 className="text-[15px] font-bold text-[#172033]">لا توجد حملات بعد</h3>
+                  <p className="mx-auto mt-2 max-w-[520px] text-[13px] leading-6 text-[#64748B]">
+                    حملاتك الإعلانية المتصلة لا تصبح قابلة للربط إلا بعد استيرادها. اختر منصة
+                    لاستيراد حملاتها الآن.
+                  </p>
+                </>
+              ) : (
+                <p className="text-[13px] font-medium text-[#64748B]">استيراد حملات من منصة أخرى</p>
+              )}
 
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  {CAMPAIGN_PLATFORM_OPTIONS.map((platform) => (
-                    <AppButton
-                      key={platform}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={importingPlatform !== null}
-                      loading={importingPlatform === platform}
-                      onClick={() => void handleImportCampaigns(platform)}
-                      icon={
-                        <PlatformBadge
-                          platform={CAMPAIGN_PLATFORM_LABELS[platform]}
-                          className="size-5"
-                          iconClassName="size-3"
-                        />
-                      }
-                    >
-                      {CAMPAIGN_PLATFORM_LABELS[platform]}
-                    </AppButton>
-                  ))}
-                </div>
+              <div
+                className={
+                  campaigns.length === 0
+                    ? "mt-5 flex flex-wrap items-center justify-center gap-2"
+                    : "mt-3 flex flex-wrap items-center gap-2"
+                }
+              >
+                {CAMPAIGN_PLATFORM_OPTIONS.map((platform) => (
+                  <AppButton
+                    key={platform}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={importingPlatform !== null}
+                    loading={importingPlatform === platform}
+                    onClick={() => void handleImportCampaigns(platform)}
+                    icon={
+                      <PlatformBadge
+                        platform={CAMPAIGN_PLATFORM_LABELS[platform]}
+                        className="size-5"
+                        iconClassName="size-3"
+                      />
+                    }
+                  >
+                    {CAMPAIGN_PLATFORM_LABELS[platform]}
+                  </AppButton>
+                ))}
               </div>
-            ) : (
-              <CampaignLinkForm
-                campaigns={campaigns}
-                onCreated={handleCreated}
-                onCancel={() => setIsCreateOpen(false)}
-              />
-            )}
+            </div>
+
+            {campaigns.length > 0 ? (
+              <div className="mt-6">
+                <CampaignLinkForm
+                  campaigns={campaigns}
+                  onCreated={handleCreated}
+                  onCancel={() => setIsCreateOpen(false)}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       </AppDialog>
