@@ -375,6 +375,22 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
 // specifically here: every route it's applied to is either write-only or returns nothing more
 // sensitive than a revocable site key (see migration 037), and never reads MADAR-domain cookies,
 // so no access-control-allow-credentials is needed (which is what makes "*" unsafe elsewhere).
+// The public origin this API was actually reached on, for building URLs that point back at
+// endpoints this same server serves. Behind the ALB/CloudFront the connection itself is plain
+// HTTP, so the scheme has to come from x-forwarded-proto rather than the socket -- a URL built
+// as http:// would be blocked as mixed content on an https storefront. Falls back to https,
+// since every deployed environment terminates TLS upstream; only a bare local http host, which
+// never has the header, is treated as http.
+function publicRequestOrigin(request: IncomingMessage): string {
+  const forwardedProto = request.headers["x-forwarded-proto"]
+  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)
+    ?.split(",")[0]
+    ?.trim()
+  const host = request.headers.host ?? "localhost"
+  const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host)
+  return `${proto || (isLocalHost ? "http" : "https")}://${host}`
+}
+
 const PUBLIC_CAPTURE_CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "content-type",
@@ -2869,7 +2885,15 @@ export function createIdentityApiServer(
         }
         return send(200, {
           siteKey: await trackingService.ensureSiteKey(actor.organizationId),
-          snippetUrl: `${container.config.shortLinkBaseUrl}/v1/tracking/snippet.js`,
+          // Derived from this request's own origin, because snippet.js is served by THIS server
+          // and nothing else can be assumed about where that is. This previously used
+          // shortLinkBaseUrl, which falls back to appUrl when unset -- and it is unset in
+          // production, so every merchant was handed https://app.madar.my/v1/tracking/snippet.js:
+          // the dashboard frontend, which 404s. shortLinkBaseUrl exists for /m/:displayId short
+          // links and is a different concept that only coincidentally looked like a base URL.
+          // Deriving it here also means the value is correct in every environment with no new
+          // configuration to keep in sync.
+          snippetUrl: `${publicRequestOrigin(request)}/v1/tracking/snippet.js`,
         })
       }
 

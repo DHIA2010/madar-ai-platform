@@ -183,6 +183,33 @@ describe("GET /v1/tracking/config/:siteKey", () => {
   })
 })
 
+describe("GET /v1/tracking/site-key", () => {
+  it("returns a snippetUrl that actually serves the snippet", async () => {
+    const { accessToken } = await registerAndProvisionOrg(
+      "owner@snippet-url.madar",
+      "Snippet Url Org"
+    )
+
+    const response = await fetch(`${baseUrl}/v1/tracking/site-key`, {
+      headers: authHeaders(accessToken),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { siteKey: string; snippetUrl: string }
+    expect(body.siteKey).toMatch(/^mtk_/)
+
+    // Built from this API's own origin. It previously came from shortLinkBaseUrl, which falls
+    // back to appUrl -- the dashboard frontend -- so production handed every merchant a URL that
+    // 404s. Fetching it here is the point of the test: a URL that doesn't serve JavaScript is
+    // worse than no URL at all, and only a real request proves it.
+    expect(body.snippetUrl).toBe(`${baseUrl}/v1/tracking/snippet.js`)
+
+    const snippetResponse = await fetch(body.snippetUrl)
+    expect(snippetResponse.status).toBe(200)
+    expect(snippetResponse.headers.get("content-type")).toContain("application/javascript")
+    expect(await snippetResponse.text()).toContain("data-madar-site")
+  })
+})
+
 describe("GET /v1/tracking/sdk-v:version.js", () => {
   it("serves the current SDK version with the public Madar.* surface and long-lived caching", async () => {
     const response = await fetch(`${baseUrl}/v1/tracking/sdk-v1.0.0.js`)
