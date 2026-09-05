@@ -12,6 +12,12 @@ RUN npm install
 
 COPY src/identity-platform /app/src/identity-platform
 
+# Migration SQL lives outside src/, so it needs copying explicitly -- without it the deploy-time
+# migration task (src/identity-platform/migrate.ts) has nothing to apply. Paths match what
+# runIdentityMigrations/runSqlFile resolve relative to the container's /app root.
+COPY identity-platform/migrations /app/identity-platform/migrations
+COPY src/project-platform/migrations /app/src/project-platform/migrations
+
 RUN addgroup -g 1001 -S appuser && \
     adduser -S appuser -u 1001
 

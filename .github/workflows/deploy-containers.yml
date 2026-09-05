@@ -151,11 +151,6 @@ jobs:
           NEW_TD_ARN=$(aws ecs register-task-definition --cli-input-json file://frontend-taskdef-updated.json --query 'taskDefinition.taskDefinitionArn' --output text)
           echo "NEW_FRONTEND_TD_ARN=$NEW_TD_ARN" >> "$GITHUB_ENV"
 
-          aws ecs update-service \
-            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
-            --service "${{ vars.ECS_FRONTEND_SERVICE_NAME }}" \
-            --task-definition "$NEW_TD_ARN"
-
       - name: Register backend task definition revision
         run: |
           set -euo pipefail
@@ -175,10 +170,82 @@ jobs:
           NEW_TD_ARN=$(aws ecs register-task-definition --cli-input-json file://backend-taskdef-updated.json --query 'taskDefinition.taskDefinitionArn' --output text)
           echo "NEW_BACKEND_TD_ARN=$NEW_TD_ARN" >> "$GITHUB_ENV"
 
+          CONTAINER_NAME=$(jq -r '.containerDefinitions[0].name' backend-taskdef.json)
+          echo "BACKEND_CONTAINER_NAME=$CONTAINER_NAME" >> "$GITHUB_ENV"
+
+      # Runs before the services switch to the new task definition, so a failed migration aborts
+      # the deploy with the old code still serving. Without this step migrations never ran at all
+      # on deploy -- a shipped migration silently never reached the database (migration 044's
+      # zid_oauth_connections.store_domain landed as code while the column didn't exist, and the
+      # Zid tracking route 500'd in production until it was applied by hand).
+      #
+      # Runs as a one-off task on the new backend task definition, so it executes inside the VPC
+      # with the same secrets/env as the service -- the database isn't publicly reachable, so a
+      # runner-side migration would need a tunnel/bastion.
+      - name: Run database migrations
+        run: |
+          set -euo pipefail
+
+          NETWORK_CONFIG=$(aws ecs describe-services \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --services "${{ vars.ECS_BACKEND_SERVICE_NAME }}" \
+            --query 'services[0].networkConfiguration' --output json)
+
+          OVERRIDES=$(jq -n --arg NAME "$BACKEND_CONTAINER_NAME" '
+            {containerOverrides: [{name: $NAME, command: ["node","--import","tsx","src/identity-platform/migrate.ts"]}]}
+          ')
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --task-definition "$NEW_BACKEND_TD_ARN" \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --overrides "$OVERRIDES" \
+            --started-by "deploy-migrations" \
+            --query 'tasks[0].taskArn' --output text)
+
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+            echo "::error::Failed to start the migration task."
+            exit 1
+          fi
+
+          echo "Migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[?name=='${BACKEND_CONTAINER_NAME}'].exitCode | [0]" --output text)
+          STOPPED_REASON=$(aws ecs describe-tasks \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].stoppedReason' --output text)
+
+          echo "Migration task exit code: $EXIT_CODE (stoppedReason: $STOPPED_REASON)"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Database migrations failed -- aborting before services switch to the new task definition."
+            exit 1
+          fi
+
+          echo "Database migrations applied."
+
+      # Both services switch only after migrations succeed, so a failed migration leaves the
+      # currently-running code untouched.
+      - name: Point services at the new task definitions
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --service "${{ vars.ECS_FRONTEND_SERVICE_NAME }}" \
+            --task-definition "$NEW_FRONTEND_TD_ARN"
+
           aws ecs update-service \
             --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
             --service "${{ vars.ECS_BACKEND_SERVICE_NAME }}" \
-            --task-definition "$NEW_TD_ARN"
+            --task-definition "$NEW_BACKEND_TD_ARN"
 
       - name: Wait for stable services
         id: wait_stable
