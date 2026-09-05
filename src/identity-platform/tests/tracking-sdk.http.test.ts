@@ -564,13 +564,14 @@ async function insertZidConnection(input: {
   workspaceId: string
   userId: string
   storeDomain: string | null
+  providerAccountId?: string | null
   status?: "connected" | "disconnected"
 }) {
   await database.query(
     `insert into zid_oauth_connections (
-       id, organization_id, workspace_id, project_id, status, store_domain,
+       id, organization_id, workspace_id, project_id, status, store_domain, provider_account_id,
        created_by_user_id, updated_by_user_id, created_at, updated_at
-     ) values ($1, $2, $3, $4, $5, $6, $7, $7, now(), now())`,
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8, now(), now())`,
     [
       randomUUID(),
       input.organizationId,
@@ -578,6 +579,7 @@ async function insertZidConnection(input: {
       randomUUID(),
       input.status ?? "connected",
       input.storeDomain,
+      input.providerAccountId ?? null,
       input.userId,
     ]
   )
@@ -593,6 +595,100 @@ describe("GET /v1/tracking/zid-app-snippet.js", () => {
     expect(body).toContain("/v1/tracking/resolve/zid/")
     // Reuses the same shared loader fragment as the merchant snippet, not a copy that could drift.
     expect(body).toContain("madarFetchConfigAndLoadSdk")
+  })
+
+  it("prefers the Zid store ID over hostname matching, accepting it by attribute or global", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/zid-app-snippet.js`)
+    const body = await response.text()
+    // Both pass-through forms the Partner Dashboard snippet may use for {{store.id}}.
+    expect(body).toContain("data-madar-zid-store")
+    expect(body).toContain("window.__madarZid")
+    expect(body).toContain("/v1/tracking/resolve/zid/store/")
+    // An unexpanded template parameter must never be sent to the resolve route as a literal.
+    expect(body).toContain('value.indexOf("{{")')
+  })
+})
+
+describe("GET /v1/tracking/resolve/zid/store/:storeId", () => {
+  it("resolves a connected Zid store's own ID to the org's real site key", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@zid-store-resolve.madar",
+      "Zid Store Resolve Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      // Deliberately null: the real production connection this route exists for has no
+      // store_domain (migration 044 added the column nullable, so every older row is null),
+      // which is exactly why domain matching could never resolve it.
+      storeDomain: null,
+      providerAccountId: "3223383",
+    })
+
+    const expectedSiteKey = await getSiteKey(accessToken)
+
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/store/3223383`)
+    expect(response.status).toBe(200)
+    // Fetched cross-origin from the merchant's storefront -- must carry a wildcard CORS header.
+    expect(response.headers.get("access-control-allow-origin")).toBe("*")
+    const body = (await response.json()) as { siteKey: string }
+    expect(body.siteKey).toBe(expectedSiteKey)
+  })
+
+  it("returns 404 for a store ID with no connection at all", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/store/999999999`)
+    expect(response.status).toBe(404)
+    expect(response.headers.get("access-control-allow-origin")).toBe("*")
+  })
+
+  it("returns 404 for a disconnected store's old ID -- a stale connection must never resolve", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@zid-store-resolve-disconnected.madar",
+      "Zid Store Resolve Disconnected Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      storeDomain: null,
+      providerAccountId: "4455667",
+      status: "disconnected",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/tracking/resolve/zid/store/4455667`)
+    expect(response.status).toBe(404)
+  })
+
+  it("does not collide with the single-segment domain route", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@zid-route-collision.madar",
+      "Zid Route Collision Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      storeDomain: "collision-store.com",
+      providerAccountId: "7788990",
+    })
+
+    const expectedSiteKey = await getSiteKey(accessToken)
+
+    // Both paths reach the same tenant by independent means.
+    const byStoreId = await fetch(`${baseUrl}/v1/tracking/resolve/zid/store/7788990`)
+    const byDomain = await fetch(`${baseUrl}/v1/tracking/resolve/zid/collision-store.com`)
+    expect(byStoreId.status).toBe(200)
+    expect(byDomain.status).toBe(200)
+    expect(((await byStoreId.json()) as { siteKey: string }).siteKey).toBe(expectedSiteKey)
+    expect(((await byDomain.json()) as { siteKey: string }).siteKey).toBe(expectedSiteKey)
+
+    // The literal path segment "store" must not be treated as a domain by the older route.
+    const bareStoreSegment = await fetch(`${baseUrl}/v1/tracking/resolve/zid/store`)
+    expect(bareStoreSegment.status).toBe(404)
   })
 })
 

@@ -395,6 +395,29 @@ export class ZidOAuthRepository
     return result.rows[0] ? String(result.rows[0].organization_id) : null
   }
 
+  // Resolves the Zid store ID the storefront-injected snippet reads from Zid's own {{store.id}}
+  // Custom Snippet parameter. Preferred over findOrganizationIdByDomain above: provider_account_id
+  // is set for every connection at connect time (from the real /managers/account/profile
+  // `user.store.id`), while store_domain only arrived in migration 044 and is null on every older
+  // connection. Mirrors SallaOAuthRepository.findOrganizationIdByStoreId, which already resolves
+  // its own platform this way.
+  async findOrganizationIdByStoreId(storeId: string): Promise<string | null> {
+    const result = await this.db.query<{ organization_id: string }>({
+      name: "zid-oauth-connection-find-by-store-id",
+      text: `
+        SELECT organization_id
+        FROM zid_oauth_connections
+        WHERE provider_account_id = $1
+          AND status = 'connected'
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [storeId],
+    })
+
+    return result.rows[0] ? String(result.rows[0].organization_id) : null
+  }
+
   async findConnectionById(connectionId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "zid-oauth-connection-find",

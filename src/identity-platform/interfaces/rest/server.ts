@@ -995,6 +995,62 @@ export function createIdentityApiServer(
         )
       }
 
+      // Matched before the domain route below. The two are unambiguous (this one has an extra
+      // "store" path segment, and the domain route's ([^/]+)$ can't span a slash), but ordering
+      // them this way keeps that independent of the domain regex staying single-segment.
+      const zidStoreIdResolveMatch = url.pathname.match(
+        /^\/v1\/tracking\/resolve\/zid\/store\/([^/]+)$/
+      )
+      if (method === "GET" && zidStoreIdResolveMatch) {
+        if (!trackingService || !zidOAuthRepositoryForTracking) {
+          return send(
+            503,
+            {
+              code: "TRACKING_UNAVAILABLE",
+              message: "Tracking capture is unavailable in memory mode.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
+        }
+
+        // The Zid Custom Snippet passes the storefront's own {{store.id}}, so unlike the domain
+        // route this resolves on a value Zid itself supplies rather than one we captured at
+        // connect time and hoped still matches. Same public/unauthenticated/IP-rate-limited trust
+        // model and same cross-origin CORS reasoning as every other resolve route here.
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `zid_store_resolve:${context.ipAddress}`,
+          60,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(
+            429,
+            { code: "TRACKING_CAPTURE_RATE_LIMITED", message: "Too many requests." },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
+        }
+
+        const storeId = decodeURIComponent(zidStoreIdResolveMatch[1])
+        const organizationId =
+          await zidOAuthRepositoryForTracking.findOrganizationIdByStoreId(storeId)
+        if (!organizationId) {
+          return send(
+            404,
+            {
+              code: "ZID_STORE_NOT_CONNECTED",
+              message: "No connected Zid store with this ID.",
+            },
+            PUBLIC_CAPTURE_CORS_HEADERS
+          )
+        }
+
+        return send(
+          200,
+          { siteKey: await trackingService.ensureSiteKey(organizationId) },
+          PUBLIC_CAPTURE_CORS_HEADERS
+        )
+      }
+
       const zidStoreResolveMatch = url.pathname.match(/^\/v1\/tracking\/resolve\/zid\/([^/]+)$/)
       if (method === "GET" && zidStoreResolveMatch) {
         if (!trackingService || !zidOAuthRepositoryForTracking) {
