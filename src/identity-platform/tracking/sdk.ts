@@ -156,20 +156,27 @@ export const TRACKING_SDK_JS_V1 = `(function () {
 
   function readAttribution() {
     var params = new URLSearchParams(location.search);
-    var hasNewSource = params.get("utm_source") || params.get("utm_campaign");
+
+    // Click IDs are read BEFORE deciding whether this page load is a new acquisition source,
+    // not inside that branch. Auto-tagged ad clicks routinely carry no utm_* params at all --
+    // Google Ads auto-tagging sends a bare ?gclid=..., and Meta/TikTok/Snapchat behave the same
+    // way -- so gating on utm_source/utm_campaign alone silently discarded the click ID on the
+    // single most common paid-click shape there is, leaving those visits indistinguishable from
+    // direct traffic.
+    var clickId = null;
+    var clickIdPlatform = null;
+    for (var i = 0; i < CLICK_ID_PARAMS.length; i++) {
+      var value = params.get(CLICK_ID_PARAMS[i].param);
+      if (value) {
+        clickId = value;
+        clickIdPlatform = CLICK_ID_PARAMS[i].platform;
+        break;
+      }
+    }
+
+    var hasNewSource = params.get("utm_source") || params.get("utm_campaign") || clickId;
 
     if (hasNewSource) {
-      var clickId = null;
-      var clickIdPlatform = null;
-      for (var i = 0; i < CLICK_ID_PARAMS.length; i++) {
-        var value = params.get(CLICK_ID_PARAMS[i].param);
-        if (value) {
-          clickId = value;
-          clickIdPlatform = CLICK_ID_PARAMS[i].platform;
-          break;
-        }
-      }
-
       var attribution = {
         utmSource: params.get("utm_source") || null,
         utmMedium: params.get("utm_medium") || null,
@@ -213,6 +220,13 @@ export const TRACKING_SDK_JS_V1 = `(function () {
         window.ShopifyAnalytics.meta.page.customerEmail
       ) {
         return window.ShopifyAnalytics.meta.page.customerEmail;
+      }
+      // window.customer is Zid's own documented storefront global (docs.zid.sa, "Global and
+      // Customer Object Scripting") -- populated for a logged-in customer, empty otherwise.
+      // Without this, every non-Shopify storefront reported a null email, so order-time
+      // customer matching only ever worked on Shopify.
+      if (window.customer && window.customer.email) {
+        return window.customer.email;
       }
     } catch (e) {}
     return null;
@@ -330,11 +344,26 @@ export const TRACKING_SDK_JS_V1 = `(function () {
     },
     identify: function (customerId) {
       if (!customerId) return;
-      identity.customerId = String(customerId);
+      var next = String(customerId);
+      // Re-identifying the same customer on every page load would emit a duplicate identify
+      // event per view; only a genuine change is worth recording.
+      if (identity.customerId === next) return;
+      identity.customerId = next;
       try {
         window.localStorage.setItem("madar_customer_id", identity.customerId);
       } catch (e) {}
       enqueue("identify", {});
+    },
+    // Clears the association made by identify() without touching visitorId -- the browser is
+    // still the same browser, it just isn't that customer any more. Needed on logout: the
+    // customer id lives in localStorage (it outlives the session cookie by design), so without
+    // this a logged-out visitor -- or the next person on a shared device -- kept reporting the
+    // previous customer's id on every event.
+    reset: function () {
+      identity.customerId = null;
+      try {
+        window.localStorage.removeItem("madar_customer_id");
+      } catch (e) {}
     },
     page: function () {
       enqueue("page_view", {});
@@ -346,6 +375,53 @@ export const TRACKING_SDK_JS_V1 = `(function () {
       return sessionId;
     }
   };
+
+  // -------------------------------------------------------------------------------------------
+  // Storefront customer identity. window.customer / window.customerAuthState / window.customerAsync
+  // are Zid's own documented storefront globals (docs.zid.sa, "Global and Customer Object
+  // Scripting"): customer holds id/name/firstname/lastname/mobile/email for a logged-in customer
+  // and is empty otherwise, customerAuthState carries isAuthenticated/isGuest immediately on page
+  // load, and customerAsync is a Promise for when customer isn't populated yet.
+  //
+  // Deliberately resolved BEFORE the first page view below, not with the other platform adapters
+  // further down: every payload is built at enqueue time, so an identity settled afterwards would
+  // leave the opening page_view of each visit carrying the previous customer's id -- exactly the
+  // stale-identity bug the reset path exists to prevent.
+  //
+  // Only the opaque customer id is ever sent from here -- name/mobile are deliberately never read
+  // (email is handled separately by bestEffortEmail, and hashed server-side). Feature-detected, so
+  // this is inert on a storefront that defines none of these.
+  // -------------------------------------------------------------------------------------------
+  (function storefrontIdentityAdapter() {
+    function applyCustomer(customer) {
+      try {
+        if (customer && customer.id) {
+          window.Madar.identify(String(customer.id));
+          return;
+        }
+        // An explicitly unauthenticated storefront clears any stale association rather than
+        // leaving the previous customer attached to this browser.
+        if (window.customerAuthState && window.customerAuthState.isAuthenticated === false) {
+          window.Madar.reset();
+        }
+      } catch (e) {}
+    }
+
+    try {
+      if (window.customer && window.customer.id) {
+        applyCustomer(window.customer);
+        return;
+      }
+      // The async path can only settle after the opening page view has already been queued --
+      // unavoidable, since the storefront itself hasn't resolved the customer yet. Every
+      // subsequent event in the visit carries the identity.
+      if (window.customerAsync && typeof window.customerAsync.then === "function") {
+        window.customerAsync.then(applyCustomer)["catch"](function () {});
+        return;
+      }
+      applyCustomer(null);
+    } catch (e) {}
+  })();
 
   // -------------------------------------------------------------------------------------------
   // Auto page-view tracking, including SPA-style pushState/replaceState navigation.
