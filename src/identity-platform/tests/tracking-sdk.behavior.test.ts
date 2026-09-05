@@ -305,6 +305,97 @@ describe("command queue", () => {
   })
 })
 
+describe("Zid product-view fallback", () => {
+  // Copied from a live Zid storefront's product page: one bare Product document plus an
+  // @graph-wrapped one, and no productID anywhere -- only sku.
+  function addZidProductMarkup(options: { graphWrapped?: boolean } = {}) {
+    const product = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: "خاتم عقيق يماني لبني طبيعي بتصميم ملكي من الفضة",
+      sku: "Z.17878735358457232",
+      offers: { "@type": "Offer", priceCurrency: "SAR", price: "1000.00" },
+    }
+    const script = document.createElement("script")
+    script.type = "application/ld+json"
+    script.textContent = JSON.stringify(
+      options.graphWrapped
+        ? { "@context": "https://schema.org", "@graph": [{ "@type": "WebSite" }, product] }
+        : product
+    )
+    document.head.appendChild(script)
+    ;(window as { zid?: unknown }).zid = {}
+  }
+
+  afterEach(() => {
+    delete (window as { zid?: unknown }).zid
+    document.head.querySelectorAll('script[type="application/ld+json"]').forEach((el) => {
+      el.remove()
+    })
+  })
+
+  it("emits sku alongside product_id so a view can be joined to an add_to_cart", () => {
+    addZidProductMarkup()
+    runSdk()
+    flush()
+
+    const view = fetchMock.mock.calls
+      .map((call) => JSON.parse((call[1] as { body: string }).body))
+      .find((payload) => payload.event === "product_view")
+
+    expect(view).toBeDefined()
+    // Zid's cart object identifies the product by a UUID that never appears in the SEO markup,
+    // so sku is the only value both sides can agree on.
+    expect(view.properties).toMatchObject({
+      product_id: "Z.17878735358457232",
+      sku: "Z.17878735358457232",
+      price: 1000,
+      currency: "SAR",
+    })
+  })
+
+  it("finds a Product nested inside an @graph document", () => {
+    addZidProductMarkup({ graphWrapped: true })
+    runSdk()
+    flush()
+
+    const view = fetchMock.mock.calls
+      .map((call) => JSON.parse((call[1] as { body: string }).body))
+      .find((payload) => payload.event === "product_view")
+    expect(view?.properties).toMatchObject({ sku: "Z.17878735358457232" })
+  })
+
+  it("stays quiet when the merchant's own product-view snippet already reported the view", () => {
+    addZidProductMarkup()
+    // What a Zid product_details_event snippet pushes before the SDK has loaded.
+    ;(window as unknown as { madarq: unknown[] }).madarq = [
+      ["track", "product_view", { product_id: "e715eec4-ceeb-4a8b-a54f-22575fdf63ea" }],
+    ]
+
+    runSdk()
+    flush()
+
+    const views = fetchMock.mock.calls
+      .map((call) => JSON.parse((call[1] as { body: string }).body))
+      .filter((payload) => payload.event === "product_view")
+
+    // Exactly one, and it's the merchant's -- carrying the platform's real product id, not the
+    // SEO sku the fallback would have guessed at.
+    expect(views).toHaveLength(1)
+    expect(views[0].properties.product_id).toBe("e715eec4-ceeb-4a8b-a54f-22575fdf63ea")
+  })
+
+  it("does nothing on a storefront that is not Zid", () => {
+    addZidProductMarkup()
+    delete (window as { zid?: unknown }).zid
+
+    runSdk()
+    flush()
+
+    expect(capturedEvents().some((event) => event.event === "product_view")).toBe(false)
+  })
+})
+
 describe("fail-open behaviour", () => {
   it("never throws when the capture endpoint rejects", () => {
     fetchMock.mockImplementation(() => Promise.reject(new Error("network down")))

@@ -329,8 +329,14 @@ export const TRACKING_SDK_JS_V1 = `(function () {
     };
   }
 
+  // Which event names have already been sent on this page load. Read by the fallback platform
+  // adapters below, which must not re-report something a merchant's own storefront snippet
+  // already reported more precisely.
+  var seenEvents = {};
+
   function enqueue(eventName, properties) {
     touchSession();
+    seenEvents[eventName] = true;
     queue.push(buildPayload(eventName, properties));
     if (queue.length >= BATCH_SIZE) flush(false);
   }
@@ -573,6 +579,27 @@ export const TRACKING_SDK_JS_V1 = `(function () {
   (function zidStructuredDataAdapter() {
     if (!window.zid) return;
     if (trackingFlags.product_view === false) return;
+    // A merchant-installed product-details snippet reports the platform's own product object,
+    // which is strictly better than anything derivable from SEO markup -- if one already fired
+    // (it is drained from window.madarq above, before this runs), this fallback stays quiet
+    // rather than recording the same view twice under a different identifier.
+    if (seenEvents.product_view) return;
+
+    // Real Zid product pages carry several ld+json blocks and only one is the Product; some
+    // themes publish a bare Product document while others nest it in an @graph array, so both
+    // shapes are searched. Verified against a live Zid storefront, which emits one of each.
+    function findProduct(data) {
+      if (!data || typeof data !== "object") return null;
+      if (data["@type"] === "Product") return data;
+      var graph = data["@graph"];
+      if (Object.prototype.toString.call(graph) === "[object Array]") {
+        for (var g = 0; g < graph.length; g++) {
+          if (graph[g] && graph[g]["@type"] === "Product") return graph[g];
+        }
+      }
+      return null;
+    }
+
     try {
       var scripts = document.querySelectorAll('script[type="application/ld+json"]');
       for (var i = 0; i < scripts.length; i++) {
@@ -582,13 +609,23 @@ export const TRACKING_SDK_JS_V1 = `(function () {
         } catch (e) {
           continue;
         }
-        if (data && data["@type"] === "Product") {
+        var product = findProduct(data);
+        if (product) {
           window.Madar.track("product_view", {
-            product_id: data.sku || data.productID || null,
-            product_name: data.name || null,
+            // productID is schema.org's canonical product identifier and sku is the stock code;
+            // preferring the former means product_id lines up with the platform's own id wherever
+            // a theme publishes it. Zid's markup carries only sku, so sku is also emitted in its
+            // own field -- the merchant cart snippets send the same value, which is the only key
+            // that can join a view to an add-to-cart when the platform's cart object identifies
+            // the product by a UUID the SEO markup never mentions.
+            product_id: product.productID || product.sku || null,
+            product_name: product.name || null,
+            sku: product.sku || null,
             price:
-              data.offers && data.offers.price !== undefined ? Number(data.offers.price) : null,
-            currency: data.offers ? data.offers.priceCurrency || null : null
+              product.offers && product.offers.price !== undefined
+                ? Number(product.offers.price)
+                : null,
+            currency: product.offers ? product.offers.priceCurrency || null : null
           });
           break;
         }
