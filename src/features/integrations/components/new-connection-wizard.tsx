@@ -1757,12 +1757,12 @@ export function NewConnectionWizard() {
 
     return (
       <div className="space-y-4">
-        <div className="rounded-[24px] border bg-card/95 p-5 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Review
-          </p>
-          <h3 className="mt-1 text-2xl font-semibold">Review your connection before creating it</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
+          <p className="text-[11px] font-semibold text-[#8098b4]">Review</p>
+          <h3 className="mt-1 text-lg font-bold text-[#0d1b3e]">
+            Review your connection before creating it
+          </h3>
+          <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
             Everything here stays within the existing connection manager and OAuth lifecycle.
           </p>
         </div>
@@ -1778,20 +1778,20 @@ export function NewConnectionWizard() {
             { label: "Health monitoring", value: healthMonitoringEnabled ? "Enabled" : "Disabled" },
             { label: "Automatic sync", value: autoSyncEnabled ? "Enabled" : "Disabled" },
           ].map((item) => (
-            <div key={item.label} className="rounded-2xl border bg-background/70 p-4">
+            <div key={item.label} className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
               <p className="text-xs font-medium text-[#8098b4]">{item.label}</p>
-              <p className="mt-1 text-sm font-medium">{item.value}</p>
+              <p className="mt-1.5 text-sm font-bold text-[#0d1b3e]">{item.value}</p>
             </div>
           ))}
         </div>
 
-        <div className="rounded-[24px] border bg-background/70 p-5">
+        <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
           <p className="text-xs font-medium text-[#8098b4]">Objects</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {selectedObjects.map((object) => (
               <AppBadge
                 key={object}
-                className="rounded-full bg-indigo-100 px-3 py-1 text-[11px] text-indigo-800"
+                className="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 py-1 text-[11px] font-semibold text-[#2563eb]"
               >
                 {object}
               </AppBadge>
@@ -1809,32 +1809,36 @@ export function NewConnectionWizard() {
 
     return (
       <div className={cn(SURFACE_CARD_CLASS, "space-y-5 p-6 text-center md:p-8")}>
-        <div className="mx-auto flex size-24 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400 shadow-[0_0_0_10px_rgba(16,185,129,0.08)]">
-          <CircleCheckBig className="size-12 animate-pulse" />
+        <div className="mx-auto flex size-24 items-center justify-center rounded-full bg-[#ecfdf5] text-[#10b981] shadow-[0_0_0_10px_rgba(16,185,129,0.08)]">
+          <CircleCheckBig className="size-12" />
         </div>
         <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Success</p>
-          <h3 className="text-3xl font-semibold">{selectedConnector.displayName} Connected</h3>
-          <p className="mx-auto max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#10b981]">
+            Success
+          </p>
+          <h3 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
+            {selectedConnector.displayName} Connected
+          </h3>
+          <p className="mx-auto max-w-2xl text-[12.5px] leading-6 text-[#8098b4]">
             Health monitoring {healthMonitoringEnabled ? "enabled" : "disabled"}. Automatic sync{" "}
             {autoSyncEnabled ? "enabled" : "disabled"}.
           </p>
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4 text-left">
+          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] px-[18px] py-4 text-left">
             <p className="text-xs font-medium text-[#8098b4]">Health Monitoring</p>
             <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {healthMonitoringEnabled ? "Enabled" : "Disabled"}
             </p>
           </div>
-          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4 text-left">
+          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] px-[18px] py-4 text-left">
             <p className="text-xs font-medium text-[#8098b4]">Automatic Sync</p>
             <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {autoSyncEnabled ? "Enabled" : "Disabled"}
             </p>
           </div>
-          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4 text-left">
+          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] px-[18px] py-4 text-left">
             <p className="text-xs font-medium text-[#8098b4]">Estimated First Sync</p>
             <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               1-2 minutes
@@ -1846,14 +1850,14 @@ export function NewConnectionWizard() {
           <Link href={ROUTES.integrations}>
             <AppButton
               variant="outline"
-              className={cn("h-11 w-full rounded-2xl px-5", WIZARD_INTERACTION_CLASS)}
+              className={cn("h-11 w-full rounded-xl px-5", WIZARD_INTERACTION_CLASS)}
             >
               Go to Connections
             </AppButton>
           </Link>
           <AppButton
             className={cn(
-              "h-11 rounded-2xl px-5",
+              "h-11 rounded-xl px-5",
               WIZARD_INTERACTION_CLASS,
               "hover:border-primary/40 hover:bg-primary/90 hover:shadow-lg"
             )}
@@ -1869,7 +1873,7 @@ export function NewConnectionWizard() {
           </AppButton>
           <AppButton
             variant="outline"
-            className={cn("h-11 rounded-2xl px-5", WIZARD_INTERACTION_CLASS)}
+            className={cn("h-11 rounded-xl px-5", WIZARD_INTERACTION_CLASS)}
             onClick={goToConnections}
           >
             Finish

@@ -223,6 +223,74 @@ describe("NewConnectionWizard", () => {
     expect(screen.getByRole("button", { name: /Review Configuration/i })).toBeTruthy()
   })
 
+  // Step 4 is as unreachable in local dev as step 3, for the same reason, and it has two faces:
+  // the review summary and the success panel the same step swaps to once the connection is
+  // created. Both are covered here.
+  it("renders the review step's summary, then the success panel after creating", async () => {
+    mockCreateConnection.mockResolvedValue({ connectionId: "conn_1" })
+    mockConnect.mockResolvedValue({ connectionId: "conn_1" })
+    mockScheduleSync.mockResolvedValue({ scheduleId: "sched_1" })
+    mockSelectAccount.mockResolvedValue(undefined)
+    mockValidateConnection.mockResolvedValue({
+      payload: {
+        connectorId: "salla",
+        connectorDefinitionId: "connector_def_salla",
+        metadata: {
+          availableSallaCustomerAccounts: JSON.stringify([
+            { customerId: "998877", displayName: "Madar Test Store", isSelected: true },
+          ]),
+        },
+      },
+    })
+    window.history.pushState(
+      {},
+      "",
+      `${ROUTES.integrationsNew}?salla_oauth=connected&salla_connection_id=conn_1`
+    )
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Review Configuration/i })).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole("button", { name: /Review Configuration/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText("Review your connection before creating it")).toBeTruthy()
+    })
+
+    // The summary tiles carry the real choices made earlier in the wizard, not placeholders.
+    for (const label of [
+      "Platform",
+      "Workspace",
+      "Account",
+      "Connection name",
+      "Authentication",
+      "Sync frequency",
+      "Health monitoring",
+      "Automatic sync",
+      "Objects",
+    ]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0)
+    }
+    expect(screen.getAllByText("Madar Test Store").length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Connection" }))
+
+    await waitFor(() => {
+      expect(screen.getByText("Salla Connected")).toBeTruthy()
+    })
+    expect(screen.getByText("Success")).toBeTruthy()
+    for (const tile of ["Health Monitoring", "Automatic Sync", "Estimated First Sync"]) {
+      expect(screen.getByText(tile)).toBeTruthy()
+    }
+    expect(screen.getByRole("button", { name: "Run First Sync" })).toBeTruthy()
+  })
+
   it("moves through the full OAuth-first wizard flow and finalizes, once resumed post-callback", async () => {
     mockCreateConnection.mockResolvedValue({ connectionId: "conn_1" })
     mockConnect.mockResolvedValue({ connectionId: "conn_1" })
