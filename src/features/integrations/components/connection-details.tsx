@@ -29,6 +29,8 @@ import {
 } from "../services"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
 
+import { SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
+
 const EVENTS_PREVIEW_COUNT = 5
 
 export function ConnectionDetails({ connectionId }: { connectionId: string }) {
@@ -130,8 +132,10 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
     <AppPage>
       <AppContainer>
         <AppSection>
-          <h1 className="text-2xl font-semibold tracking-tight">Connection Details</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
+            Connection Details
+          </h1>
+          <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
             General Information, Authentication, Health, Capabilities, Sync Stats, Errors, Rate
             Limit, Configuration, and Metadata.
           </p>
@@ -139,6 +143,7 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
 
         <AppSection className="grid gap-6 lg:grid-cols-2">
           <AppCard
+            className={SURFACE_CARD_CLASS}
             title={record.platformName}
             subtitle="Connection details"
             actions={
@@ -162,45 +167,47 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
             }
           >
             <dl className="grid grid-cols-2 gap-2 text-sm">
-              <dt className="text-muted-foreground">Connection ID</dt>
+              <dt className="text-[#8098b4]">Connection ID</dt>
               <dd>{record.connection.connectionId}</dd>
-              <dt className="text-muted-foreground">Connector ID</dt>
+              <dt className="text-[#8098b4]">Connector ID</dt>
               <dd>{record.connectorId}</dd>
-              <dt className="text-muted-foreground">Workspace</dt>
+              <dt className="text-[#8098b4]">Workspace</dt>
               <dd>{record.workspaceName}</dd>
-              <dt className="text-muted-foreground">Version</dt>
+              <dt className="text-[#8098b4]">Version</dt>
               <dd>{record.version}</dd>
-              <dt className="text-muted-foreground">Authentication Status</dt>
+              <dt className="text-[#8098b4]">Authentication Status</dt>
               <dd>{record.connection.status}</dd>
-              <dt className="text-muted-foreground">Token Expiration</dt>
+              <dt className="text-[#8098b4]">Token Expiration</dt>
               <dd>{record.tokenExpiresAt ?? "-"}</dd>
             </dl>
 
-            <div className="mt-5 space-y-3 rounded-lg border bg-muted/20 p-4">
+            <div className="mt-5 space-y-3 rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4">
               <div>
-                <p className="text-sm font-medium">Connected Accounts</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm font-bold text-[#0d1b3e]">Connected Accounts</p>
+                <p className="text-xs text-[#8098b4]">
                   Current account and customer selection used by this connection.
                 </p>
               </div>
               <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                <div className="rounded-md border bg-background px-3 py-2">
-                  <dt className="text-xs text-muted-foreground">
+                <div className="rounded-lg border border-[#e8edf3] bg-white px-3 py-2">
+                  <dt className="text-xs text-[#8098b4]">
                     Connected {record.platformName} Account
                   </dt>
-                  <dd className="mt-1 font-medium">
+                  <dd className="mt-1 font-bold text-[#0d1b3e]">
                     {record.connection.metadata.accountEmail?.trim() ||
                       record.connectedAccount ||
                       "-"}
                   </dd>
                 </div>
-                <div className="rounded-md border bg-background px-3 py-2">
-                  <dt className="text-xs text-muted-foreground">Selected Customer</dt>
-                  <dd className="mt-1 font-medium">{record.connectedAccount || "-"}</dd>
+                <div className="rounded-lg border border-[#e8edf3] bg-white px-3 py-2">
+                  <dt className="text-xs text-[#8098b4]">Selected Customer</dt>
+                  <dd className="mt-1 font-bold text-[#0d1b3e]">
+                    {record.connectedAccount || "-"}
+                  </dd>
                 </div>
-                <div className="rounded-md border bg-background px-3 py-2 sm:col-span-2">
-                  <dt className="text-xs text-muted-foreground">Customer ID</dt>
-                  <dd className="mt-1 font-medium">
+                <div className="rounded-lg border border-[#e8edf3] bg-white px-3 py-2 sm:col-span-2">
+                  <dt className="text-xs text-[#8098b4]">Customer ID</dt>
+                  <dd className="mt-1 font-bold text-[#0d1b3e]">
                     {record.connection.metadata.customerId?.trim() || "-"}
                   </dd>
                 </div>
@@ -208,53 +215,56 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
             </div>
           </AppCard>
 
-          <AppCard title="Synchronization and Reliability">
+          <AppCard className={SURFACE_CARD_CLASS} title="Synchronization and Reliability">
             <dl className="grid grid-cols-2 gap-2 text-sm">
-              <dt className="text-muted-foreground">Last Sync</dt>
+              <dt className="text-[#8098b4]">Last Sync</dt>
               <dd>
                 <RelativeTime value={record.lastSyncAt} fallback="-" />
               </dd>
-              <dt className="text-muted-foreground">Next Sync</dt>
+              <dt className="text-[#8098b4]">Next Sync</dt>
               <dd>
                 <RelativeTime value={record.nextSyncAt} fallback="-" />
               </dd>
-              <dt className="text-muted-foreground">Sync Status</dt>
+              <dt className="text-[#8098b4]">Sync Status</dt>
               <dd>{record.latestSyncStatus ?? "-"}</dd>
-              <dt className="text-muted-foreground">Retry Count</dt>
+              <dt className="text-[#8098b4]">Retry Count</dt>
               <dd>{record.retryCount}</dd>
-              <dt className="text-muted-foreground">Rate Limit Remaining</dt>
+              <dt className="text-[#8098b4]">Rate Limit Remaining</dt>
               <dd>{latestJob?.rateLimit?.remaining ?? "-"}</dd>
-              <dt className="text-muted-foreground">Rate Limit Reset</dt>
+              <dt className="text-[#8098b4]">Rate Limit Reset</dt>
               <dd>{latestJob?.rateLimit?.resetAt ?? "-"}</dd>
-              <dt className="text-muted-foreground">Sync Duration</dt>
+              <dt className="text-[#8098b4]">Sync Duration</dt>
               <dd>{latestRun?.result?.durationMs ?? "-"}</dd>
-              <dt className="text-muted-foreground">Last Error</dt>
+              <dt className="text-[#8098b4]">Last Error</dt>
               <dd>{record.lastError ?? latestRun?.errorMessage ?? "-"}</dd>
             </dl>
           </AppCard>
 
-          <AppCard title="Capabilities and Metadata">
+          <AppCard className={SURFACE_CARD_CLASS} title="Capabilities and Metadata">
             <div className="space-y-3 text-sm">
               <div className="flex flex-wrap gap-2">
                 {record.capabilities.map((capability) => (
                   <AppStatusBadge key={capability} status="neutral" label={capability} />
                 ))}
               </div>
-              <pre className="overflow-x-auto rounded-md border p-3 text-xs">
+              <pre className="overflow-x-auto rounded-lg border border-[#e8edf3] bg-[#f8fafc] p-3 text-xs text-[#334155]">
                 {JSON.stringify(record.connection.metadata, null, 2)}
               </pre>
             </div>
           </AppCard>
 
-          <AppCard id="logs" title="Recent Logs and Events">
+          <AppCard id="logs" className={SURFACE_CARD_CLASS} title="Recent Logs and Events">
             <div className="space-y-2 text-sm">
               {(showAllEvents
                 ? record.integrationStatus.recentEvents
                 : record.integrationStatus.recentEvents.slice(0, EVENTS_PREVIEW_COUNT)
               ).map((event) => (
-                <div key={event.eventId} className="rounded-md border p-2">
-                  <div className="font-medium">{event.action}</div>
-                  <div className="text-muted-foreground">
+                <div
+                  key={event.eventId}
+                  className="rounded-lg border border-[#e8edf3] bg-[#f8fafc] p-2.5"
+                >
+                  <div className="font-semibold text-[#0d1b3e]">{event.action}</div>
+                  <div className="text-[11px] text-[#8098b4]">
                     <RelativeTime value={event.timestamp} fallback="-" />
                   </div>
                   <div>{event.message}</div>

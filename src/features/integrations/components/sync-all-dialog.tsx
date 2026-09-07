@@ -143,32 +143,30 @@ export function SyncAllDialog({
 
   return (
     <AppDialog open={open} onOpenChange={onOpenChange} title="Sync all connections?">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-[12.5px] leading-6 text-[#8098b4]">
         This will trigger synchronization for every active connection in the current workspace.
       </p>
 
-      <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+      <div className="space-y-3 rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4">
         <div className="flex justify-between">
-          <span className="text-sm font-medium">Total active connections</span>
-          <span className="font-semibold">{syncStats.total}</span>
+          <span className="text-sm text-[#334155]">Total active connections</span>
+          <span className="font-bold text-[#0d1b3e]">{syncStats.total}</span>
         </div>
         {syncStats.syncing > 0 && (
           <div className="flex justify-between">
-            <span className="text-sm font-medium text-amber-700">Currently syncing</span>
-            <span className="font-semibold text-amber-700">{syncStats.syncing}</span>
+            <span className="text-sm text-[#f59e0b]">Currently syncing</span>
+            <span className="font-bold text-[#f59e0b]">{syncStats.syncing}</span>
           </div>
         )}
         {syncStats.disabled > 0 && (
           <div className="flex justify-between">
-            <span className="text-sm font-medium text-muted-foreground">
-              Skipped (disabled/paused)
-            </span>
-            <span className="font-semibold text-muted-foreground">{syncStats.disabled}</span>
+            <span className="text-sm text-[#8098b4]">Skipped (disabled/paused)</span>
+            <span className="font-bold text-[#8098b4]">{syncStats.disabled}</span>
           </div>
         )}
-        <div className="flex justify-between border-t pt-3">
-          <span className="text-sm font-medium">Estimated duration</span>
-          <span className="font-semibold">~{syncStats.estimatedDuration} minutes</span>
+        <div className="flex justify-between border-t border-[#e8edf3] pt-3">
+          <span className="text-sm text-[#334155]">Estimated duration</span>
+          <span className="font-bold text-[#0d1b3e]">~{syncStats.estimatedDuration} minutes</span>
         </div>
       </div>
 
@@ -202,30 +200,30 @@ export function SyncAllOverlay({ syncState }: SyncAllOverlayProps) {
   if (!syncState) return null
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-background/40 backdrop-blur-xs">
+    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/60 backdrop-blur-xs">
       <div className="flex flex-col items-center gap-2">
         {syncState === "queued" && (
           <>
-            <div className="rounded-full border-2 border-amber-400 border-l-transparent p-3 animate-spin" />
-            <span className="text-xs font-medium text-muted-foreground">Queued</span>
+            <div className="animate-spin rounded-full border-2 border-[#f59e0b] border-l-transparent p-3" />
+            <span className="text-xs font-semibold text-[#f59e0b]">Queued</span>
           </>
         )}
         {syncState === "running" && (
           <>
-            <Loader2 className="size-6 text-sky-500 animate-spin" />
-            <span className="text-xs font-medium text-muted-foreground">Syncing...</span>
+            <Loader2 className="size-6 animate-spin text-[#2563eb]" />
+            <span className="text-xs font-semibold text-[#2563eb]">Syncing...</span>
           </>
         )}
         {syncState === "completed" && (
           <>
-            <CheckCircle2 className="size-6 text-emerald-500" />
-            <span className="text-xs font-medium text-emerald-700">Completed</span>
+            <CheckCircle2 className="size-6 text-[#10b981]" />
+            <span className="text-xs font-semibold text-[#10b981]">Completed</span>
           </>
         )}
         {syncState === "failed" && (
           <>
-            <AlertTriangle className="size-6 text-red-500" />
-            <span className="text-xs font-medium text-red-700">Failed</span>
+            <AlertTriangle className="size-6 text-[#ef4444]" />
+            <span className="text-xs font-semibold text-[#ef4444]">Failed</span>
           </>
         )}
       </div>
@@ -235,9 +233,9 @@ export function SyncAllOverlay({ syncState }: SyncAllOverlayProps) {
 
 export function getSyncIndicatorClass(syncState?: SyncState) {
   if (!syncState) return "from-slate-400/30 to-transparent"
-  if (syncState === "queued") return "bg-amber-400"
-  if (syncState === "running") return "bg-sky-400"
-  if (syncState === "completed") return "bg-emerald-400"
-  if (syncState === "failed") return "bg-red-400"
+  if (syncState === "queued") return "bg-[#f59e0b]"
+  if (syncState === "running") return "bg-[#2563eb]"
+  if (syncState === "completed") return "bg-[#10b981]"
+  if (syncState === "failed") return "bg-[#ef4444]"
   return "from-slate-400/30 to-transparent"
 }
