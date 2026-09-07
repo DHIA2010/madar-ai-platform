@@ -124,15 +124,18 @@ describe("ConnectionsOverview", () => {
     )
 
     // The page is Arabic and renders connections as table rows rather than cards.
-    expect(screen.getByText("مركز الاتصالات")).toBeTruthy()
+    expect(screen.getByText("مركز التكاملات")).toBeTruthy()
     expect(screen.getAllByText("Google Ads").length).toBeGreaterThan(0)
-    expect(screen.getByText("Google Ads Account")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "مزامنة" })).toBeTruthy()
+    expect(screen.getAllByText(/حساب/).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole("button", { name: "مزامنة" })[0]).toBeTruthy()
 
-    // The health mix and the KPI row both read from the same records.
-    expect(screen.getAllByText("سليمة").length).toBeGreaterThan(0)
-    // Appears twice by design: the KPI card label and the donut's centre caption.
-    expect(screen.getAllByText("إجمالي الاتصالات").length).toBeGreaterThan(0)
+    // The four KPI cards from the design, each with a derived hint underneath.
+    expect(screen.getByText("إجمالي التكاملات")).toBeTruthy()
+    expect(screen.getByText("التكاملات النشطة")).toBeTruthy()
+    expect(screen.getByText("بحاجة إلى انتباه")).toBeTruthy()
+    expect(screen.getByText("لا توجد مشاكل حالياً")).toBeTruthy()
+    // A platform card and a table row for the same connection, as the design shows both.
+    expect(screen.getAllByText("متصل").length).toBeGreaterThan(1)
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "إجراءات إضافية" }))
 

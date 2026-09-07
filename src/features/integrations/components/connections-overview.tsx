@@ -4,7 +4,16 @@ import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Activity, AlertTriangle, Boxes, CheckCircle2, Loader2, RefreshCcw } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Layers,
+  Loader2,
+  Plus,
+  RefreshCcw,
+  Search,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -32,74 +41,72 @@ import {
   type ConnectionActionDefinition,
   connectionActionPolicy,
 } from "../services"
-import type { ConnectionsFilterState, ConnectionsHealthState } from "../types"
+import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
 import { SyncAllDialog } from "./sync-all-dialog"
 
-import {
-  DonutBreakdown,
-  KpiCard,
-  PageHeading,
-  SURFACE_CARD_CLASS,
-  SurfaceCard,
-} from "@/components/design/dashboard-surface"
 import { tajawal } from "@/components/design/fonts"
 
 const UI_TEXT = {
-  pageTitle: "مركز الاتصالات",
-  pageSubtitle: "تابع حالة جميع المنصات المرتبطة وزامنها من مكان واحد.",
+  breadcrumb: "التكاملات ›",
+  pageTitle: "مركز التكاملات",
+  pageSubtitle:
+    "أدر جميع تكاملات التسويق، المتاجر الإلكترونية، أنظمة إدارة العملاء والتحليلات في مكان واحد.",
   legacyTitle: "Connections Overview",
-  searchAria: "البحث في الاتصالات",
-  searchPlaceholder: "ابحث عن منصة، حساب، أو حالة...",
+  searchAria: "البحث في التكاملات",
+  searchPlaceholder: "البحث في التكاملات...",
   buttons: {
-    newConnection: "اتصال جديد",
-    runSync: "مزامنة",
-    details: "التفاصيل",
-    open: "فتح",
+    newConnection: "ربط تكامل جديد",
     syncAll: "مزامنة الكل",
     syncing: "جارٍ المزامنة...",
+    runSync: "مزامنة",
+    viewDetails: "عرض التفاصيل",
+    open: "فتح",
+    cancel: "إلغاء",
   },
   sections: {
-    summaryTotal: "إجمالي الاتصالات",
-    summaryHealthy: "سليمة",
-    summaryWarning: "تحذير",
+    summaryTotal: "إجمالي التكاملات",
+    summaryActive: "التكاملات النشطة",
+    summaryAttention: "بحاجة إلى انتباه",
     summarySyncing: "قيد المزامنة",
-    summaryPlatforms: "المنصات",
-    tableTitle: "الاتصالات",
-    healthBreakdown: "حالة الاتصالات",
-    healthScore: "مؤشر الصحة",
-    syncActivity: "آخر نشاط المزامنة",
-    latestSync: "آخر مزامنة",
+    tableTitle: "التكاملات",
+    platform: "المنصة",
+    connectedAccounts: "حسابات متصلة",
+    accountLinked: "حساب متصل",
+    accountCount: (count: number) => `حساب ${count}`,
+    status: "الحالة",
     lastSync: "آخر مزامنة",
     nextSync: "المزامنة التالية",
-    platform: "المنصة",
-    connectedAccount: "الحساب المرتبط",
-    status: "الحالة",
-    health: "الصحة",
-    capabilities: "القدرات",
-    actions: "إجراءات",
-    category: "التصنيف",
-    failedLoadTitle: "تعذر تحميل الاتصالات",
-    totalConnections: "إجمالي الاتصالات",
-    noActivity: "لا يوجد نشاط مزامنة بعد.",
+    actions: "الإجراءات",
+    failedLoadTitle: "تعذر تحميل التكاملات",
+  },
+  hints: {
+    allPlatforms: "جميع المنصات المرتبطة",
+    percentOfTotal: "% من إجمالي التكاملات",
+    noConnections: "لا توجد تكاملات بعد",
+    noIssues: "لا توجد مشاكل حالياً",
+    needsReview: "تحتاج إلى مراجعة",
+    noOperations: "لا توجد عمليات حالياً",
+    operationsRunning: "عمليات جارية",
   },
   filters: {
-    category: "التصنيف",
-    capability: "القدرة",
-    workspace: "مساحة العمل",
-    platform: "المنصة",
-    health: "الصحة",
-    status: "الحالة",
-    all: "الكل",
+    allIntegrations: "كل التكاملات",
+    allStatuses: "كل الحالات",
+  },
+  toasts: {
+    syncStarted: "بدأت المزامنة بنجاح.",
+    syncFailed: "تعذر تشغيل المزامنة.",
+    deleted: "تم حذف التكامل بنجاح.",
+    deleteFailed: "تعذر حذف التكامل.",
   },
   empty: {
-    noConnectorsTitle: "لا توجد اتصالات بعد",
-    noConnectorsSubtitle: "ابدأ بإنشاء أول اتصال لمتجرك أو منصتك الإعلانية.",
+    noConnectorsTitle: "لا توجد تكاملات بعد",
+    noConnectorsSubtitle: "ابدأ بربط أول تكامل لمتجرك أو منصتك الإعلانية.",
     noSearchTitle: "لا توجد نتائج",
     noSearchSubtitle: "جرّب كلمة بحث مختلفة أو امسح البحث.",
     noFilteredTitle: "لا توجد نتائج مطابقة",
-    noFilteredSubtitle: "عدّل التصنيف أو الفلاتر لعرض الاتصالات المطابقة.",
-    tableNoRows: "لا توجد اتصالات مطابقة للبحث والفلاتر.",
+    noFilteredSubtitle: "عدّل التصنيف أو الحالة لعرض التكاملات المطابقة.",
+    tableNoRows: "لا توجد تكاملات مطابقة للبحث والفلاتر.",
   },
   overflow: {
     moreActions: "إجراءات إضافية",
@@ -125,60 +132,6 @@ const CONNECTION_STATUS_META: Record<string, { icon: string; label: string; clas
   error: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
   draft: { icon: "⚪", label: "مسودة", className: "bg-[#f1f5f9] text-[#64748b]" },
   syncing: { icon: "⟳", label: "قيد المزامنة", className: "bg-[#eff6ff] text-[#2563eb]" },
-}
-
-const HEALTH_STATUS_META: Record<
-  ConnectionsHealthState,
-  { icon: string; label: string; className: string }
-> = {
-  Healthy: { icon: "🟢", label: "سليمة", className: "bg-[#ecfdf5] text-[#10b981]" },
-  Warning: { icon: "⚠", label: "تحذير مزامنة", className: "bg-[#fffbeb] text-[#f59e0b]" },
-  Error: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
-  "Expired Token": { icon: "⚠", label: "انتهت الصلاحية", className: "bg-[#fffbeb] text-[#f59e0b]" },
-  Paused: { icon: "⏸", label: "متوقفة", className: "bg-[#fffbeb] text-[#f59e0b]" },
-  Disconnected: { icon: "🔴", label: "غير متصلة", className: "bg-[#fef2f2] text-[#ef4444]" },
-  "Running Sync": { icon: "⟳", label: "قيد المزامنة", className: "bg-[#eff6ff] text-[#2563eb]" },
-  Queued: { icon: "🟡", label: "في الانتظار", className: "bg-[#ecfeff] text-[#0891b2]" },
-}
-
-function getHealthVisuals(
-  healthState: ConnectionsHealthState,
-  backendScore?: number,
-  backendLabel?: string
-) {
-  if (typeof backendScore === "number") {
-    const bounded = Math.max(0, Math.min(100, Math.round(backendScore)))
-    const textClass =
-      bounded >= 80 ? "text-emerald-700" : bounded >= 50 ? "text-amber-700" : "text-red-700"
-    const barColor = bounded >= 80 ? "#10B981" : bounded >= 50 ? "#F59E0B" : "#EF4444"
-    return {
-      score: bounded,
-      label: backendLabel ?? (bounded >= 80 ? "Healthy" : bounded >= 50 ? "Degraded" : "Unhealthy"),
-      barColor,
-      textClass,
-    }
-  }
-
-  switch (healthState) {
-    case "Healthy":
-      return { score: 98, label: "Excellent", barColor: "#10B981", textClass: "text-emerald-700" }
-    case "Running Sync":
-      return { score: 88, label: "Good", barColor: "#0EA5E9", textClass: "text-sky-700" }
-    case "Queued":
-      return { score: 76, label: "Good", barColor: "#3B82F6", textClass: "text-blue-700" }
-    case "Warning":
-      return { score: 62, label: "Warning", barColor: "#F59E0B", textClass: "text-amber-700" }
-    case "Paused":
-      return { score: 54, label: "Warning", barColor: "#EAB308", textClass: "text-yellow-700" }
-    case "Expired Token":
-      return { score: 38, label: "Critical", barColor: "#F97316", textClass: "text-orange-700" }
-    case "Disconnected":
-      return { score: 28, label: "Critical", barColor: "#F43F5E", textClass: "text-rose-700" }
-    case "Error":
-      return { score: 18, label: "Critical", barColor: "#EF4444", textClass: "text-red-700" }
-    default:
-      return { score: 50, label: "Warning", barColor: "#F59E0B", textClass: "text-amber-700" }
-  }
 }
 
 function getCategoryPlatformOptions(category: string, platforms: string[]) {
@@ -385,25 +338,7 @@ export function ConnectionsOverview() {
     "disconnected",
     "error",
   ]
-  const healthStatuses = [
-    "all",
-    "Healthy",
-    "Warning",
-    "Error",
-    "Expired Token",
-    "Paused",
-    "Disconnected",
-    "Running Sync",
-    "Queued",
-  ]
-  const workspaceOptions = ["all", ...availableFilters.workspaces]
-  const capabilityOptions = ["all", ...availableFilters.capabilities]
   const categoryOptions = CATEGORY_OPTIONS
-  const categoryScopedPlatforms = useMemo(
-    () => getCategoryPlatformOptions(activeCategory, availableFilters.platforms),
-    [activeCategory, availableFilters.platforms]
-  )
-  const platformOptions = ["all", ...categoryScopedPlatforms]
   const categoryFilteredRecords = useMemo(() => {
     if (activeCategory === "All") {
       return filteredRecords
@@ -424,50 +359,55 @@ export function ConnectionsOverview() {
       activeCategory !== "All"
   )
 
+  // Four KPIs, matching the design's cards: value plus a short factual hint underneath. Every
+  // hint is derived, never a placeholder -- "+2 this month" in the mock has no data behind it
+  // here, so each card states something the records actually support.
   const summaryCards = useMemo(() => {
-    const healthyCount = categoryFilteredRecords.filter(
-      (record) => record.healthState === "Healthy"
+    const total = categoryFilteredRecords.length
+    const active = categoryFilteredRecords.filter(
+      (record) =>
+        record.connection.status === "connected" ||
+        record.connection.status === "valid" ||
+        record.connection.status === "authorized"
     ).length
-    const warningCount = categoryFilteredRecords.filter(
-      (record) => record.healthState === "Warning"
+    const attention = categoryFilteredRecords.filter((record) =>
+      ["Warning", "Error", "Expired Token", "Disconnected"].includes(record.healthState)
     ).length
-    const syncingCount = categoryFilteredRecords.filter(
+    const syncing = categoryFilteredRecords.filter(
       (record) => record.healthState === "Running Sync" || record.connection.status === "syncing"
     ).length
-    const platformCount = new Set(categoryFilteredRecords.map((record) => record.platformName)).size
 
-    // Icon tint pairs come from the dashboard design's KPI row: a 42px rounded tile in a pale
-    // wash of the icon's own colour.
     return [
       {
         label: UI_TEXT.sections.summaryTotal,
-        value: categoryFilteredRecords.length,
-        icon: <Boxes className="size-5 text-[#7c3aed]" />,
-        iconClassName: "bg-[#f5f3ff]",
+        value: total,
+        hint: UI_TEXT.hints.allPlatforms,
+        icon: <Layers className="size-[18px] text-[#8b5cf6]" />,
+        iconClassName: "bg-[#8b5cf6]/12",
       },
       {
-        label: UI_TEXT.sections.summaryHealthy,
-        value: healthyCount,
-        icon: <CheckCircle2 className="size-5 text-[#10b981]" />,
-        iconClassName: "bg-[#ecfdf5]",
+        label: UI_TEXT.sections.summaryActive,
+        value: active,
+        hint:
+          total === 0
+            ? UI_TEXT.hints.noConnections
+            : `${Math.round((active / total) * 100)}${UI_TEXT.hints.percentOfTotal}`,
+        icon: <CheckCircle2 className="size-[18px] text-[#19c98c]" />,
+        iconClassName: "bg-[#19c98c]/12",
       },
       {
-        label: UI_TEXT.sections.summaryWarning,
-        value: warningCount,
-        icon: <AlertTriangle className="size-5 text-[#f59e0b]" />,
-        iconClassName: "bg-[#fffbeb]",
+        label: UI_TEXT.sections.summaryAttention,
+        value: attention,
+        hint: attention === 0 ? UI_TEXT.hints.noIssues : UI_TEXT.hints.needsReview,
+        icon: <AlertTriangle className="size-[18px] text-[#f59e0b]" />,
+        iconClassName: "bg-[#f59e0b]/12",
       },
       {
         label: UI_TEXT.sections.summarySyncing,
-        value: syncingCount,
-        icon: <RefreshCcw className="size-5 text-[#2563eb]" />,
-        iconClassName: "bg-[#eff6ff]",
-      },
-      {
-        label: UI_TEXT.sections.summaryPlatforms,
-        value: platformCount,
-        icon: <Activity className="size-5 text-[#0d9488]" />,
-        iconClassName: "bg-[#f0fdfa]",
+        value: syncing,
+        hint: syncing === 0 ? UI_TEXT.hints.noOperations : UI_TEXT.hints.operationsRunning,
+        icon: <RefreshCcw className="size-[18px] text-[#2878ff]" />,
+        iconClassName: "bg-[#2878ff]/12",
       },
     ]
   }, [categoryFilteredRecords])
@@ -487,24 +427,18 @@ export function ConnectionsOverview() {
       await deleteConnection(pendingDeleteAction.connectionId)
       setDeleteDialogOpen(false)
       setPendingDeleteAction(null)
-      toast.success("Connection deleted successfully.")
+      toast.success(UI_TEXT.toasts.deleted)
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to delete connection."
-      toast.error(message)
+      toast.error(error instanceof Error ? error.message : UI_TEXT.toasts.deleteFailed)
     } finally {
       setIsDeletingConnection(false)
     }
   }
 
   const handleConnectionAction = async (
-    record: (typeof categoryFilteredRecords)[number],
+    record: ConnectionCenterRecord,
     action: ConnectionActionDefinition
   ) => {
-    if (action.requiresConfirmation) {
-      requestDeleteConnection(record.connection.connectionId, action)
-      return
-    }
-
     switch (action.id) {
       case CONNECTION_ACTION_IDS.RECONNECT:
         await connect(record.connection.connectionId)
@@ -529,266 +463,233 @@ export function ConnectionsOverview() {
     }
   }
 
-  // Health mix for the donut. Colours are meaning-bearing here (green healthy, amber warning,
-  // red error) rather than positional, so each entry carries its own.
-  const healthBreakdown = (() => {
-    const tones: Record<string, string> = {
-      Healthy: "#10b981",
-      Warning: "#f59e0b",
-      "Running Sync": "#2563eb",
-      Queued: "#0891b2",
-      Paused: "#f59e0b",
-      "Expired Token": "#f59e0b",
-      Error: "#ef4444",
-      Disconnected: "#ef4444",
+  const runSyncFor = async (record: ConnectionCenterRecord) => {
+    const connectionId = record.connection.connectionId
+    setSyncProgress((prev) => ({ ...prev, [connectionId]: "running" }))
+    try {
+      await runSync(connectionId)
+      toast.success(UI_TEXT.toasts.syncStarted)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : UI_TEXT.toasts.syncFailed)
+    } finally {
+      setSyncProgress((prev) => {
+        const next = { ...prev }
+        delete next[connectionId]
+        return next
+      })
     }
-    const labels: Record<string, string> = {
-      Healthy: "سليمة",
-      Warning: "تحذير",
-      "Running Sync": "قيد المزامنة",
-      Queued: "في الانتظار",
-      Paused: "متوقفة",
-      "Expired Token": "انتهت الصلاحية",
-      Error: "خطأ",
-      Disconnected: "غير متصلة",
-    }
-    const counts = new Map<string, number>()
-    for (const record of categoryFilteredRecords) {
-      counts.set(record.healthState, (counts.get(record.healthState) ?? 0) + 1)
-    }
-    const total = categoryFilteredRecords.length
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([state, value]) => ({
-        label: labels[state] ?? state,
-        value,
-        share: total === 0 ? 0 : Math.round((value / total) * 1000) / 10,
-        color: tones[state] ?? "#64748b",
-      }))
-  })()
-
-  // The most recent sync runs across every connection, newest first -- the same events the old
-  // per-card lists showed, collapsed into one feed so the table below can stay dense.
-  const recentActivity = categoryFilteredRecords
-    .flatMap((record) =>
-      (record.integrationStatus.recentEvents ?? []).slice(0, 3).map((event) => ({
-        key: `${record.connection.connectionId}-${event.eventId}`,
-        platformName: record.platformName,
-        action: event.action,
-        message: event.message,
-        timestamp: event.timestamp,
-        failed: event.action === "sync.failed",
-      }))
-    )
-    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
-    .slice(0, 6)
-
-  const filterSelects = [
-    {
-      label: UI_TEXT.filters.category,
-      value: activeCategory,
-      options: categoryOptions,
-      onChange: (value: string) => {
-        setActiveCategory(value)
-        const nextPlatforms = getCategoryPlatformOptions(value, availableFilters.platforms)
-        if (filters.platform !== "all" && !nextPlatforms.includes(filters.platform)) {
-          updateFilters({ platform: "all" })
-        }
-      },
-    },
-    {
-      label: UI_TEXT.filters.capability,
-      value: filters.capability,
-      options: capabilityOptions,
-      onChange: (value: string) =>
-        updateFilters({ capability: value as ConnectionsFilterState["capability"] }),
-    },
-    {
-      label: UI_TEXT.filters.workspace,
-      value: filters.workspace,
-      options: workspaceOptions,
-      onChange: (value: string) => updateFilters({ workspace: value }),
-    },
-    {
-      label: UI_TEXT.filters.platform,
-      value: filters.platform,
-      options: platformOptions,
-      onChange: (value: string) => updateFilters({ platform: value }),
-    },
-    {
-      label: UI_TEXT.filters.health,
-      value: filters.health,
-      options: healthStatuses,
-      onChange: (value: string) =>
-        updateFilters({ health: value as ConnectionsFilterState["health"] }),
-    },
-    {
-      label: UI_TEXT.filters.status,
-      value: filters.status,
-      options: statuses,
-      onChange: (value: string) =>
-        updateFilters({ status: value as ConnectionsFilterState["status"] }),
-    },
-  ]
+  }
 
   return (
-    <div className={cn(tajawal.className, "bg-[#f1f5f9] px-[22px] py-5")} dir="rtl">
-      <PageHeading
-        title={UI_TEXT.pageTitle}
-        subtitle={UI_TEXT.pageSubtitle}
-        actions={
-          <>
-            <AppButton
-              size="sm"
-              variant="outline"
-              className="h-10 rounded-lg border-[#e8edf3] bg-white px-4 text-[12.5px] text-[#334155] hover:bg-[#f8fafc]"
-              onClick={() => setSyncAllDialogOpen(true)}
-              disabled={isSyncingAll || records.length === 0}
-            >
-              {isSyncingAll ? (
-                <>
-                  <Loader2 className="ml-2 size-4 animate-spin" />
-                  {UI_TEXT.buttons.syncing}
-                </>
-              ) : (
-                <>
-                  <RefreshCcw className="ml-2 size-4" />
-                  {UI_TEXT.buttons.syncAll}
-                </>
-              )}
-            </AppButton>
+    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+      {/* Header */}
+      <div className="mb-3.5 rounded-[14px] border border-[#e1e7f0] bg-white px-6 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex shrink-0 items-center gap-2">
             <Can permission="connections:create">
               {isCurrentWorkspaceArchived ? (
                 <AppButton
-                  size="sm"
-                  className="h-10 rounded-lg bg-[#2563eb] px-4 text-[12.5px] hover:bg-[#1d4ed8]"
+                  className="h-11 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-bold hover:bg-[#1f66e0]"
                   disabled
                 >
                   {UI_TEXT.buttons.newConnection}
                 </AppButton>
               ) : (
                 <Link href={ROUTES.integrationsNew}>
-                  <AppButton
-                    size="sm"
-                    className="h-10 rounded-lg bg-[#2563eb] px-4 text-[12.5px] hover:bg-[#1d4ed8]"
-                  >
+                  <AppButton className="h-11 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-bold hover:bg-[#1f66e0]">
+                    <Plus className="ml-1.5 size-4" />
                     {UI_TEXT.buttons.newConnection}
                   </AppButton>
                 </Link>
               )}
             </Can>
-          </>
-        }
-      />
+            <AppButton
+              variant="outline"
+              className="h-11 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-xs font-semibold text-[#253756] hover:bg-[#f7f9fd]"
+              onClick={() => setSyncAllDialogOpen(true)}
+              disabled={isSyncingAll || records.length === 0}
+            >
+              {isSyncingAll ? (
+                <Loader2 className="ml-1.5 size-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="ml-1.5 size-4" />
+              )}
+              {isSyncingAll ? UI_TEXT.buttons.syncing : UI_TEXT.buttons.syncAll}
+            </AppButton>
+          </div>
 
-      {/* Filters */}
-      <div className={cn(SURFACE_CARD_CLASS, "mb-3 grid gap-2 p-3 sm:grid-cols-3 xl:grid-cols-6")}>
-        {filterSelects.map((select) => (
-          <label key={select.label} className="grid min-w-0 gap-1">
-            <span className="text-[11px] font-semibold text-[#8098b4]">{select.label}</span>
-            <AppSelect value={select.value} onValueChange={select.onChange}>
-              <AppSelectTrigger className="h-9 w-full rounded-lg border border-[#e8edf3] bg-white px-3 text-[12.5px] text-[#334155] hover:bg-[#f8fafc]">
-                <AppSelectValue />
-              </AppSelectTrigger>
-              <AppSelectContent className="z-[90] max-h-72 rounded-lg border border-[#e8edf3]">
-                {select.options.map((option) => (
-                  <AppSelectItem key={option} value={option} className="text-[12.5px]">
-                    {option === "all" || option === "All" ? UI_TEXT.filters.all : option}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
-          </label>
-        ))}
+          <div className="min-w-0 text-right">
+            <div className="mb-1 text-[11px] text-[#8190a8]">{UI_TEXT.breadcrumb}</div>
+            <h1 className="text-[30px] font-bold leading-tight text-[#0b1738]">
+              {UI_TEXT.pageTitle}
+              <span className="sr-only">{UI_TEXT.legacyTitle}</span>
+            </h1>
+            <p className="mt-1.5 text-[13px] text-[#71809a]">{UI_TEXT.pageSubtitle}</p>
+          </div>
+        </div>
       </div>
 
       {error ? (
-        <div className="mb-3 rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#B91C1C]">
+        <div className="mb-3.5 rounded-[14px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#B91C1C]">
           {UI_TEXT.sections.failedLoadTitle}: {error}
         </div>
       ) : null}
 
       {/* KPI row */}
-      <div className="mb-3 flex flex-wrap items-stretch gap-3">
+      <div className="mb-3.5 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
-          <KpiCard
+          <div
             key={card.label}
-            label={card.label}
-            value={card.value}
-            icon={card.icon}
-            iconClassName={card.iconClassName}
-            className="min-w-[180px]"
-          />
+            className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center rounded-full",
+                  card.iconClassName
+                )}
+              >
+                {card.icon}
+              </div>
+              <div className="min-w-0 text-right">
+                <div className="text-[13px] font-semibold text-[#4c5d79]">{card.label}</div>
+                <div className="mt-2 text-2xl font-bold text-[#0b1738]" dir="ltr">
+                  {card.value}
+                </div>
+                <div className="mt-1.5 text-[10px] text-[#7d8ba2]">{card.hint}</div>
+              </div>
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* Health mix + activity feed. RTL grid: the first child lands rightmost. */}
-      <div className="mb-3.5 grid gap-3 lg:grid-cols-[1fr_1.4fr]">
-        <div className={cn(SURFACE_CARD_CLASS, "px-5 py-[18px]")}>
-          <div className="mb-3.5 text-sm font-bold text-[#0d1b3e]">
-            {UI_TEXT.sections.healthBreakdown}
+      {/* Platform cards */}
+      {categoryFilteredRecords.length > 0 ? (
+        <div className="mb-3.5 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {categoryFilteredRecords.slice(0, 6).map((record) => {
+            const statusMeta = CONNECTION_STATUS_META[record.connection.status]
+            return (
+              <div
+                key={record.connection.connectionId}
+                className="flex flex-col rounded-[14px] border border-[#e1e7f0] bg-white p-4"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f8ef] px-2.5 py-1 text-[11px] font-semibold text-[#07945e]">
+                    <span className="size-1.5 rounded-full bg-[#07945e]" />
+                    {statusMeta?.label ?? record.connection.status}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb]">
+                    <ConnectorLogo platformName={record.platformName} />
+                  </div>
+                  <div className="min-w-0 text-right text-[15px] font-bold text-[#172649]">
+                    {record.platformName}
+                  </div>
+                </div>
+
+                <div className="mt-3 text-right">
+                  <div className="text-[11px] text-[#7b89a1]">{UI_TEXT.sections.accountLinked}</div>
+                  <div className="mt-1 text-[15px] font-bold text-[#12a56b]" dir="ltr">
+                    {Math.max(record.connectedAccounts?.length ?? 0, 1)}
+                  </div>
+                </div>
+
+                <Link
+                  href={ROUTES.integrationsDetails(record.connection.connectionId)}
+                  className="mt-3"
+                >
+                  <span className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#f4f8ff] text-[11px] font-semibold text-[#2878ff] transition-colors hover:bg-[#eaf1ff]">
+                    <ArrowLeft className="size-3.5" />
+                    {UI_TEXT.buttons.viewDetails}
+                  </span>
+                </Link>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {/* Table */}
+      <div className="rounded-[16px] border border-[#e1e7f0] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <AppSelect
+              value={activeCategory}
+              onValueChange={(value) => {
+                setActiveCategory(value)
+                const nextPlatforms = getCategoryPlatformOptions(value, availableFilters.platforms)
+                if (filters.platform !== "all" && !nextPlatforms.includes(filters.platform)) {
+                  updateFilters({ platform: "all" })
+                }
+              }}
+            >
+              <AppSelectTrigger className="h-9 w-[152px] rounded-[10px] border-[#e1e7f0] bg-white px-3 text-[11px] font-medium text-[#40506d]">
+                <AppSelectValue />
+              </AppSelectTrigger>
+              <AppSelectContent className="z-[90] rounded-[10px] border-[#e1e7f0]">
+                {categoryOptions.map((option) => (
+                  <AppSelectItem key={option} value={option} className="text-[12px]">
+                    {option === "All" ? UI_TEXT.filters.allIntegrations : option}
+                  </AppSelectItem>
+                ))}
+              </AppSelectContent>
+            </AppSelect>
+
+            <AppSelect
+              value={filters.status}
+              onValueChange={(value) =>
+                updateFilters({ status: value as ConnectionsFilterState["status"] })
+              }
+            >
+              <AppSelectTrigger className="h-9 w-[152px] rounded-[10px] border-[#e1e7f0] bg-white px-3 text-[11px] font-medium text-[#40506d]">
+                <AppSelectValue />
+              </AppSelectTrigger>
+              <AppSelectContent className="z-[90] rounded-[10px] border-[#e1e7f0]">
+                {statuses.map((option) => (
+                  <AppSelectItem key={option} value={option} className="text-[12px]">
+                    {option === "all"
+                      ? UI_TEXT.filters.allStatuses
+                      : (CONNECTION_STATUS_META[option]?.label ?? option)}
+                  </AppSelectItem>
+                ))}
+              </AppSelectContent>
+            </AppSelect>
           </div>
-          <DonutBreakdown
-            entries={healthBreakdown}
-            total={categoryFilteredRecords.length}
-            centerLabel={UI_TEXT.sections.totalConnections}
-            emptyLabel={UI_TEXT.empty.tableNoRows}
-          />
+
+          <div className="flex flex-1 items-center justify-end gap-3">
+            <div className="flex h-9 min-w-[240px] flex-1 items-center gap-2 rounded-[10px] border border-[#e1e7f0] bg-[#f7f9fd] px-3 sm:max-w-[390px]">
+              <Search className="size-4 shrink-0 text-[#9aa6b8]" />
+              <input
+                aria-label={UI_TEXT.searchAria}
+                value={filters.search}
+                onChange={(event) => updateFilters({ search: event.target.value })}
+                placeholder={UI_TEXT.searchPlaceholder}
+                className="min-w-0 flex-1 border-none bg-transparent text-[11px] text-[#40506d] outline-none placeholder:text-[#9aa6b8]"
+              />
+            </div>
+            <h2 className="shrink-0 text-[17px] font-bold text-[#0b1738]">
+              {UI_TEXT.sections.tableTitle}
+            </h2>
+          </div>
         </div>
 
-        <SurfaceCard title={UI_TEXT.sections.syncActivity}>
-          {recentActivity.length === 0 ? (
-            <div className="px-[18px] py-8 text-center text-xs text-[#8098b4]">
-              {UI_TEXT.sections.noActivity}
-            </div>
-          ) : (
-            recentActivity.map((activity, index) => (
-              <div
-                key={activity.key}
-                className={cn(
-                  "flex items-center gap-3 px-[18px] py-2.5",
-                  index < recentActivity.length - 1 && "border-b border-[#e8edf3]"
-                )}
-              >
-                <span
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    activity.failed ? "bg-[#ef4444]" : "bg-[#10b981]"
-                  )}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12.5px] font-semibold text-[#0d1b3e]">
-                    {activity.platformName} · {activity.action}
-                  </div>
-                  <div className="truncate text-[11px] text-[#8098b4]">{activity.message}</div>
-                </div>
-                <span className="shrink-0 text-[11px] text-[#8098b4]">
-                  <RelativeTime value={activity.timestamp} fallback="-" />
-                </span>
-              </div>
-            ))
-          )}
-        </SurfaceCard>
-      </div>
-
-      {/* Connections table */}
-      <SurfaceCard title={`${UI_TEXT.sections.tableTitle} (${categoryFilteredRecords.length})`}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-right">
+        <div className="overflow-x-auto px-2 pb-2">
+          <table className="w-full min-w-[900px] text-center">
             <thead>
-              <tr className="border-b border-[#e8edf3] bg-[#f8fafc]">
+              <tr>
                 {[
                   UI_TEXT.sections.platform,
-                  UI_TEXT.sections.connectedAccount,
+                  UI_TEXT.sections.connectedAccounts,
                   UI_TEXT.sections.status,
-                  UI_TEXT.sections.health,
                   UI_TEXT.sections.lastSync,
                   UI_TEXT.sections.nextSync,
                   UI_TEXT.sections.actions,
                 ].map((heading) => (
                   <th
                     key={heading}
-                    className="px-4 py-2.5 text-[11px] font-semibold text-[#8098b4]"
+                    className="border-b border-[#e7ecf3] px-4 py-3 text-[11px] font-semibold text-[#73819a]"
                   >
                     {heading}
                   </th>
@@ -797,144 +698,87 @@ export function ConnectionsOverview() {
             </thead>
             <tbody>
               {isLoading ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <tr key={`skeleton-${index}`} className="border-b border-[#e8edf3]">
-                    <td colSpan={7} className="px-4 py-3">
-                      <AppSkeleton className="h-8 w-full" />
+                Array.from({ length: 4 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`}>
+                    <td colSpan={6} className="border-b border-[#e7ecf3] px-4 py-3">
+                      <AppSkeleton className="h-7 w-full" />
                     </td>
                   </tr>
                 ))
               ) : categoryFilteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-xs text-[#8098b4]">
-                    {emptyState?.subtitle ?? UI_TEXT.empty.tableNoRows}
+                  <td colSpan={6} className="px-4 py-12 text-center">
+                    <p className="text-sm font-semibold text-[#1d2d4c]">
+                      {emptyState?.title ?? UI_TEXT.empty.noConnectorsTitle}
+                    </p>
+                    <p className="mt-1 text-xs text-[#7b879b]">
+                      {emptyState?.subtitle ?? UI_TEXT.empty.tableNoRows}
+                    </p>
                   </td>
                 </tr>
               ) : (
-                categoryFilteredRecords.map((record, index) => {
-                  const healthVisuals = getHealthVisuals(
-                    record.healthState,
-                    record.healthScore,
-                    record.healthLabel
-                  )
+                categoryFilteredRecords.map((record) => {
                   const statusMeta = CONNECTION_STATUS_META[record.connection.status]
-                  const healthMeta = HEALTH_STATUS_META[record.healthState]
-                  const syncState = syncProgress[record.connection.connectionId]
-                  const isSyncing = syncState && syncState !== "completed" && syncState !== "failed"
                   const workspaceStatus = availableWorkspaces.find(
                     (workspace) => workspace.id === record.connection.workspaceId
                   )?.status
-                  const runSyncAction = connectionActionPolicy.getAction(
-                    {
-                      connection: record.connection,
-                      integrationStatus: record.integrationStatus,
-                      workspaceStatus,
-                    },
-                    CONNECTION_ACTION_IDS.RUN_SYNC
-                  )
                   const availableActions = connectionActionPolicy.getAvailableActions({
                     connection: record.connection,
                     integrationStatus: record.integrationStatus,
                     workspaceStatus,
                   })
-
-                  const handleRunSync = async () => {
-                    const connectionId = record.connection.connectionId
-                    setSyncProgress((prev) => ({ ...prev, [connectionId]: "running" }))
-                    try {
-                      await runSync(connectionId)
-                      toast.success("بدأت المزامنة بنجاح.")
-                    } catch (error) {
-                      const message =
-                        error instanceof Error ? error.message : "تعذر تشغيل المزامنة."
-                      toast.error(message)
-                    } finally {
-                      setSyncProgress((prev) => {
-                        const next = { ...prev }
-                        delete next[connectionId]
-                        return next
-                      })
-                    }
-                  }
+                  const syncState = syncProgress[record.connection.connectionId]
 
                   return (
                     <tr
                       key={record.connection.connectionId}
-                      className={cn(
-                        "transition-colors hover:bg-[#f8fafc]",
-                        index < categoryFilteredRecords.length - 1 && "border-b border-[#e8edf3]"
-                      )}
+                      className="transition-colors hover:bg-[#f9fbfe]"
                     >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
+                      <td className="border-b border-[#e7ecf3] px-4 py-3">
+                        <div className="flex items-center justify-center gap-2.5">
                           <ConnectorLogo platformName={record.platformName} />
-                          <div className="min-w-0">
-                            <div className="truncate text-[12.5px] font-bold text-[#0d1b3e]">
-                              {record.platformName}
-                            </div>
-                            <div className="truncate text-[11px] text-[#8098b4]">
-                              {record.workspaceName}
-                            </div>
-                          </div>
+                          <span className="text-[11px] font-semibold text-[#1d2d4c]">
+                            {record.platformName}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[12.5px] text-[#334155]">
-                        {record.connectedAccount || "-"}
+                      <td className="border-b border-[#e7ecf3] px-4 py-3 text-[11px] text-[#52627e]">
+                        {UI_TEXT.sections.accountCount(
+                          Math.max(record.connectedAccounts?.length ?? 0, 1)
+                        )}
                       </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                            statusMeta?.className ?? "bg-[#f1f5f9] text-[#64748b]"
-                          )}
-                        >
+                      <td className="border-b border-[#e7ecf3] px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f8ef] px-3 py-1 text-[10px] font-semibold text-[#07945e]">
+                          <span className="size-1.5 rounded-full bg-[#07945e]" />
                           {statusMeta?.label ?? record.connection.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                              healthMeta?.className ?? "bg-[#f1f5f9] text-[#64748b]"
-                            )}
-                          >
-                            {healthMeta?.label ?? record.healthState}
-                          </span>
-                          <span className="text-[11px] font-bold text-[#0d1b3e]" dir="ltr">
-                            {healthVisuals.score}%
-                          </span>
-                        </div>
+                      <td className="border-b border-[#e7ecf3] px-4 py-3 text-[10px] text-[#61708a]">
+                        <RelativeTime value={record.lastSyncAt} fallback="—" />
                       </td>
-                      <td className="px-4 py-3 text-[11px] text-[#8098b4]">
-                        <RelativeTime value={record.lastSyncAt} fallback="-" />
+                      <td className="border-b border-[#e7ecf3] px-4 py-3 text-[11px] text-[#7b879b]">
+                        <RelativeTime value={record.nextSyncAt} fallback="—" />
                       </td>
-                      <td className="px-4 py-3 text-[11px] text-[#8098b4]">
-                        <RelativeTime value={record.nextSyncAt} fallback="-" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="border-b border-[#e7ecf3] px-4 py-3">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
+                            <span className="flex h-[25px] items-center rounded-[7px] border border-[#dfe6ef] bg-[#f4f7fb] px-3 text-[10px] font-semibold text-[#2878ff] transition-colors hover:bg-[#eaf1ff]">
+                              {UI_TEXT.buttons.open}
+                            </span>
+                          </Link>
                           <AppButton
                             size="sm"
-                            className="h-8 rounded-lg bg-[#2563eb] px-3 text-[11px] hover:bg-[#1d4ed8]"
-                            disabled={!runSyncAction.enabled || Boolean(isSyncing)}
-                            onClick={() => void handleRunSync()}
+                            variant="ghost"
+                            className="h-[25px] rounded-[7px] px-2 text-[10px] font-semibold text-[#2878ff] hover:bg-[#f4f7fb]"
+                            disabled={Boolean(syncState)}
+                            onClick={() => void runSyncFor(record)}
                           >
-                            {isSyncing ? (
-                              <Loader2 className="size-3.5 animate-spin" />
+                            {syncState ? (
+                              <Loader2 className="size-3 animate-spin" />
                             ) : (
                               UI_TEXT.buttons.runSync
                             )}
                           </AppButton>
-                          <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
-                            <AppButton
-                              size="sm"
-                              variant="outline"
-                              className="h-8 rounded-lg border-[#e8edf3] px-3 text-[11px] text-[#334155] hover:bg-[#f8fafc]"
-                            >
-                              {UI_TEXT.buttons.details}
-                            </AppButton>
-                          </Link>
                           <ConnectionActionsMenu
                             actions={availableActions}
                             menuLabel={UI_TEXT.overflow.moreActions}
@@ -951,7 +795,7 @@ export function ConnectionsOverview() {
             </tbody>
           </table>
         </div>
-      </SurfaceCard>
+      </div>
 
       <SyncAllDialog
         open={syncAllDialogOpen}
@@ -978,7 +822,7 @@ export function ConnectionsOverview() {
         }}
         title={pendingDeleteAction?.action.confirmation?.title ?? ""}
         description={pendingDeleteAction?.action.confirmation?.description ?? ""}
-        cancelLabel="إلغاء"
+        cancelLabel={UI_TEXT.buttons.cancel}
         confirmLabel={pendingDeleteAction?.action.confirmation?.confirmLabel ?? ""}
         confirmTone="destructive"
         loading={isDeletingConnection}
