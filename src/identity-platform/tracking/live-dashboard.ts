@@ -8,14 +8,12 @@
 // pg-mem (this codebase's test database) does not implement. Doing it here keeps the query
 // trivially portable and every edge case unit-testable without a database.
 
-import type { LiveVisitorRow } from "./repository"
+// Both row shapes are owned by the repository that produces them, and imported one-way from
+// here -- defining LiveEventRow in this file instead made the two modules import each other,
+// which the dependency-cruiser boundary check rejects even for type-only imports.
+import type { LiveEventRow, LiveVisitorRow } from "./repository"
 
-export interface LiveEventRow {
-  eventType: string
-  visitorId: string
-  properties: Record<string, unknown> | null
-  occurredAt: string
-}
+export type { LiveEventRow }
 
 export interface LiveDashboardSummary {
   liveVisitors: number

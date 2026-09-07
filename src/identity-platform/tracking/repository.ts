@@ -2,8 +2,15 @@ import { randomBytes, randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
-import type { LiveEventRow } from "./live-dashboard"
 import type { RecordClickInput } from "./types"
+
+// One captured event inside the live window, as tracking/live-dashboard.ts aggregates it.
+export interface LiveEventRow {
+  eventType: string
+  visitorId: string
+  properties: Record<string, unknown> | null
+  occurredAt: string
+}
 
 export interface LiveVisitorRow {
   visitorId: string
