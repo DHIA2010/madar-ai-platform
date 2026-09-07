@@ -2,8 +2,29 @@ import type { CacheProvider } from "../application/ports"
 import type { CampaignLinkRepository } from "../campaign-links/repository"
 
 import { resolveTrackingConfig, type TrackingRemoteConfig } from "./config"
+import {
+  countryBreakdown,
+  recentCartAdditions,
+  summarize,
+  topProducts,
+  trafficSourceBreakdown,
+  type LiveBreakdownEntry,
+  type LiveCartAddition,
+  type LiveDashboardSummary,
+  type LiveTopProduct,
+} from "./live-dashboard"
 import type { LiveVisitorRow, TrackingRepository } from "./repository"
 import type { RecordClickInput, ResolvedCampaignLink, TrackingEventType } from "./types"
+
+export interface LiveDashboard {
+  windowMinutes: number
+  summary: LiveDashboardSummary
+  countries: LiveBreakdownEntry[]
+  trafficSources: LiveBreakdownEntry[]
+  recentCartAdditions: LiveCartAddition[]
+  topProducts: LiveTopProduct[]
+  visitors: LiveVisitorRow[]
+}
 
 const REDIRECT_CACHE_TTL_SECONDS = 300
 
@@ -154,5 +175,30 @@ export class TrackingService {
     const config = await this.getTrackingConfig(organizationId)
     const sinceTimestamp = new Date(Date.now() - config.live_visitor_timeout).toISOString()
     return this.repository.listLiveVisitors(organizationId, sinceTimestamp)
+  }
+
+  // Everything the live-visitors dashboard renders, in one round trip. Both reads use the same
+  // window boundary so a KPI can never disagree with the visitor list beneath it -- computing
+  // "now" twice would let a visitor drop out of one query but not the other.
+  async getLiveDashboard(organizationId: string): Promise<LiveDashboard> {
+    const config = await this.getTrackingConfig(organizationId)
+    const windowMs = config.live_visitor_timeout
+    const sinceTimestamp = new Date(Date.now() - windowMs).toISOString()
+
+    const [visitors, events, activePlatforms] = await Promise.all([
+      this.repository.listLiveVisitors(organizationId, sinceTimestamp),
+      this.repository.listRecentEvents(organizationId, sinceTimestamp),
+      this.repository.countConnectedCommercePlatforms(organizationId),
+    ])
+
+    return {
+      windowMinutes: Math.round(windowMs / 60_000),
+      summary: summarize({ visitors, events, activePlatforms }),
+      countries: countryBreakdown(visitors),
+      trafficSources: trafficSourceBreakdown(visitors),
+      recentCartAdditions: recentCartAdditions(events),
+      topProducts: topProducts(events),
+      visitors,
+    }
   }
 }

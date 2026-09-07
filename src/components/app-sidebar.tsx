@@ -40,6 +40,7 @@ import {
   ShoppingBag,
   HelpCircle,
   Sparkles,
+  Radio,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -70,6 +71,14 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       title: t("linkBuilder"),
       url: ROUTES.campaignLinks,
       icon: <Link2 />,
+      permission: "campaigns:view",
+    },
+    {
+      title: t("liveVisitors"),
+      url: ROUTES.liveVisitors,
+      icon: <Radio />,
+      // Same permission the underlying GET /v1/tracking/live-dashboard enforces -- hiding the
+      // nav entry from someone the API would reject anyway.
       permission: "campaigns:view",
     },
     { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },

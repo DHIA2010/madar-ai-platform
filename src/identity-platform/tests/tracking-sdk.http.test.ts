@@ -434,6 +434,128 @@ describe("POST /v1/tracking/capture: heartbeat + live visitors", () => {
   })
 })
 
+describe("GET /v1/tracking/live-dashboard", () => {
+  it("requires authentication", async () => {
+    const response = await fetch(`${baseUrl}/v1/tracking/live-dashboard`)
+    expect(response.status).toBe(401)
+  })
+
+  it("builds the dashboard from real captured events", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@live-dashboard.madar",
+      "Live Dashboard Org"
+    )
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    const siteKey = await getSiteKey(accessToken)
+
+    // A connected storefront, so the "active platforms" KPI has something real to count.
+    await insertZidConnection({
+      organizationId,
+      workspaceId: actor.workspaceId as string,
+      userId: actor.userId,
+      storeDomain: "jail6w.zid.store",
+      providerAccountId: "3223383",
+    })
+
+    async function capture(body: Record<string, unknown>) {
+      const response = await fetch(`${baseUrl}/v1/tracking/capture`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          siteKey,
+          pageUrl: "https://jail6w.zid.store/products/ring",
+          ...body,
+        }),
+      })
+      expect(response.status).toBe(200)
+    }
+
+    // One visitor browses and buys; a second only looks.
+    await capture({ visitorId: "v1", sessionId: "s1", event: "page_view", eventId: "e1" })
+    await capture({
+      visitorId: "v1",
+      sessionId: "s1",
+      event: "product_view",
+      eventId: "e2",
+      properties: { product_id: "p1", product_name: "خاتم عقيق يماني", price: 1000 },
+    })
+    await capture({
+      visitorId: "v1",
+      sessionId: "s1",
+      event: "add_to_cart",
+      eventId: "e3",
+      properties: { product_id: "p1", product_name: "خاتم عقيق يماني", price: 1000, quantity: 2 },
+    })
+    await capture({
+      visitorId: "v1",
+      sessionId: "s1",
+      event: "purchase",
+      eventId: "e4",
+      properties: { order_id: "o1", revenue: 2000, currency: "SAR" },
+    })
+    await capture({ visitorId: "v2", sessionId: "s2", event: "page_view", eventId: "e5" })
+
+    const response = await fetch(`${baseUrl}/v1/tracking/live-dashboard`, {
+      headers: authHeaders(accessToken),
+    })
+    expect(response.status).toBe(200)
+
+    const body = (await response.json()) as {
+      windowMinutes: number
+      summary: Record<string, number>
+      countries: Array<{ label: string; visitors: number }>
+      trafficSources: Array<{ label: string; visitors: number }>
+      recentCartAdditions: Array<{ productId: string; productName: string; price: number }>
+      topProducts: Array<{ productId: string; addToCarts: number }>
+      visitors: Array<{ visitorId: string }>
+    }
+
+    expect(body.windowMinutes).toBe(5)
+    expect(body.summary).toMatchObject({
+      liveVisitors: 2,
+      activePlatforms: 1,
+      pageViews: 2,
+      addToCarts: 1,
+      productsAddedToCart: 1,
+      orders: 1,
+      cartValue: 2000,
+      orderValue: 2000,
+      // v1 of 2 live visitors took commerce actions.
+      engagementRate: 50,
+    })
+    expect(body.visitors).toHaveLength(2)
+    expect(body.recentCartAdditions[0]).toMatchObject({
+      productId: "p1",
+      productName: "خاتم عقيق يماني",
+      price: 1000,
+    })
+    expect(body.topProducts[0]).toMatchObject({ productId: "p1", addToCarts: 1 })
+    // Every live visitor is accounted for in the breakdowns, including those with no geo.
+    expect(body.countries.reduce((sum, entry) => sum + entry.visitors, 0)).toBe(2)
+    expect(body.trafficSources.reduce((sum, entry) => sum + entry.visitors, 0)).toBe(2)
+  })
+
+  it("returns an empty but well-formed dashboard for an organization with no traffic", async () => {
+    const { accessToken } = await registerAndProvisionOrg(
+      "owner@live-dashboard-empty.madar",
+      "Live Dashboard Empty Org"
+    )
+
+    const response = await fetch(`${baseUrl}/v1/tracking/live-dashboard`, {
+      headers: authHeaders(accessToken),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      summary: Record<string, number>
+      visitors: unknown[]
+      countries: unknown[]
+    }
+    expect(body.summary).toMatchObject({ liveVisitors: 0, pageViews: 0, engagementRate: 0 })
+    expect(body.visitors).toEqual([])
+    expect(body.countries).toEqual([])
+  })
+})
+
 describe("POST /v1/tracking/capture: referrer classification + geo fail-open", () => {
   it.each([
     ["https://www.google.com/search?q=shoes", "Organic Search"],

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
+import type { LiveEventRow } from "./live-dashboard"
 import type { RecordClickInput } from "./types"
 
 export interface LiveVisitorRow {
@@ -258,4 +259,74 @@ export class TrackingRepository {
     )
     return result.rows[0]?.tracking_config ?? null
   }
+
+  // Raw events inside the live window, aggregated in TypeScript by tracking/live-dashboard.ts
+  // rather than in SQL -- see that file's header for why. Capped because the window is
+  // configurable per organization and a busy storefront could otherwise return an unbounded set
+  // to a dashboard that only ever displays counts and a handful of rows.
+  async listRecentEvents(
+    organizationId: string,
+    sinceTimestamp: string,
+    limit = 5000
+  ): Promise<LiveEventRow[]> {
+    const result = await this.database.query<{
+      event_type: string
+      visitor_id: string
+      properties: Record<string, unknown> | null
+      occurred_at: string
+    }>(
+      `SELECT event_type, visitor_id, properties, occurred_at
+       FROM tracking_events
+       WHERE organization_id = $1 AND occurred_at >= $2::timestamptz
+       ORDER BY occurred_at DESC
+       LIMIT $3`,
+      [organizationId, sinceTimestamp, limit]
+    )
+
+    return result.rows.map((row) => ({
+      eventType: row.event_type,
+      visitorId: row.visitor_id,
+      // jsonb comes back parsed from node-postgres but as a string from some drivers/mocks;
+      // normalizing here keeps every consumer working with a real object.
+      properties: normalizeProperties(row.properties),
+      occurredAt: row.occurred_at,
+    }))
+  }
+
+  // How many commerce platforms this organization has actually connected. Counted across the
+  // three storefront connectors rather than inferred from tracking data, because a platform is
+  // "active" once it is connected -- a store with no visitors right now is still connected.
+  async countConnectedCommercePlatforms(organizationId: string): Promise<number> {
+    const result = await this.database.query<{
+      salla: string | number
+      zid: string | number
+      shopify: string | number
+    }>(
+      `SELECT
+         (SELECT count(*) FROM salla_oauth_connections
+           WHERE organization_id = $1 AND status = 'connected' AND deleted_at IS NULL) AS salla,
+         (SELECT count(*) FROM zid_oauth_connections
+           WHERE organization_id = $1 AND status = 'connected' AND deleted_at IS NULL) AS zid,
+         (SELECT count(*) FROM shopify_oauth_connections
+           WHERE organization_id = $1 AND status = 'connected' AND deleted_at IS NULL) AS shopify`,
+      [organizationId]
+    )
+
+    const row = result.rows[0]
+    if (!row) return 0
+    return [row.salla, row.zid, row.shopify].filter((count) => Number(count) > 0).length
+  }
+}
+
+function normalizeProperties(value: unknown): Record<string, unknown> | null {
+  if (!value) return null
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null
+    } catch {
+      return null
+    }
+  }
+  return typeof value === "object" ? (value as Record<string, unknown>) : null
 }

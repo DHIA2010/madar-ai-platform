@@ -2915,6 +2915,21 @@ export function createIdentityApiServer(
         return send(200, { totalLiveVisitors: visitors.length, visitors })
       }
 
+      if (method === "GET" && url.pathname === "/v1/tracking/live-dashboard") {
+        if (!trackingService) {
+          return send(503, {
+            code: "TRACKING_UNAVAILABLE",
+            message: "Tracking capture is unavailable in memory mode.",
+          })
+        }
+        // Same permission as /v1/tracking/live-visitors above, for the same reason -- this is a
+        // wider read of the identical data, not a new class of access.
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, await trackingService.getLiveDashboard(actor.organizationId))
+      }
+
       if (method === "GET" && url.pathname === "/v1/campaign-links/summary") {
         if (!aggregationService) {
           return send(503, {
