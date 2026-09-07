@@ -174,6 +174,55 @@ describe("NewConnectionWizard", () => {
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
+  // Step 3 is only reachable after a completed OAuth handshake, so it cannot be opened in local
+  // dev at all (no provider credentials are configured there). This renders it through the same
+  // callback-resume path the wizard really uses, so the import step has coverage that does not
+  // depend on being able to click through to it by hand.
+  it("renders the import step's configuration, presets and summary once resumed", async () => {
+    mockValidateConnection.mockResolvedValue({
+      payload: {
+        connectorId: "salla",
+        connectorDefinitionId: "connector_def_salla",
+        metadata: {
+          availableSallaCustomerAccounts: JSON.stringify([
+            { customerId: "998877", displayName: "Madar Test Store", isSelected: true },
+          ]),
+        },
+      },
+    })
+    window.history.pushState(
+      {},
+      "",
+      `${ROUTES.integrationsNew}?salla_oauth=connected&salla_connection_id=conn_1`
+    )
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Choose what MADAR should import")).toBeTruthy()
+    })
+
+    expect(screen.getByText("Import configuration")).toBeTruthy()
+    for (const preset of ["Recommended", "Select All", "Custom"]) {
+      expect(screen.getByRole("button", { name: preset })).toBeTruthy()
+    }
+    for (const tile of ["Estimated sync frequency", "Estimated duration", "Preset"]) {
+      expect(screen.getByText(tile)).toBeTruthy()
+    }
+
+    // Objects are selectable, and switching preset is what drives that selection.
+    fireEvent.click(screen.getByRole("button", { name: "Select All" }))
+    await waitFor(() => {
+      expect(screen.getByText("All objects")).toBeTruthy()
+    })
+
+    expect(screen.getByRole("button", { name: /Review Configuration/i })).toBeTruthy()
+  })
+
   it("moves through the full OAuth-first wizard flow and finalizes, once resumed post-callback", async () => {
     mockCreateConnection.mockResolvedValue({ connectionId: "conn_1" })
     mockConnect.mockResolvedValue({ connectionId: "conn_1" })

@@ -432,8 +432,8 @@ function SyncChip({
         "rounded-full border px-4 py-2 text-sm font-medium",
         WIZARD_INTERACTION_CLASS,
         active
-          ? "border-sky-300 bg-sky-500/15 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-900"
-          : "border-border/70 bg-background/80 text-muted-foreground hover:border-sky-200 hover:bg-muted/60 hover:text-foreground"
+          ? "border-[#2563eb] bg-[#eff6ff] font-semibold text-[#2563eb] hover:bg-[#dbeafe]"
+          : "border-[#e8edf3] bg-white text-[#8098b4] hover:border-[#bfdbfe] hover:bg-[#f8fafc] hover:text-[#334155]"
       )}
       onClick={onClick}
     >
@@ -1637,23 +1637,21 @@ export function NewConnectionWizard() {
 
     return (
       <div className="space-y-4">
-        <div className="rounded-[24px] border bg-card/95 p-5 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Import configuration
-          </p>
-          <h3 className="mt-1 text-2xl font-semibold">Choose what MADAR should import</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
+          <p className="text-[11px] font-semibold text-[#8098b4]">Import configuration</p>
+          <h3 className="mt-1 text-lg font-bold text-[#0d1b3e]">Choose what MADAR should import</h3>
+          <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
             Use a recommended set, import everything, or build a custom selection.
           </p>
         </div>
 
         {discoveredProviderAccounts.length > 1 ? (
-          <div className="rounded-[24px] border bg-card/95 p-5 shadow-sm">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Account
-            </p>
-            <h3 className="mt-1 text-lg font-semibold">Which account should MADAR connect to?</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+          <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
+            <p className="text-[11px] font-semibold text-[#8098b4]">Account</p>
+            <h3 className="mt-1 text-lg font-bold text-[#0d1b3e]">
+              Which account should MADAR connect to?
+            </h3>
+            <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
               {discoveredProviderAccounts.length} accounts were found for this connection. Pick the
               one MADAR should sync.
             </p>
@@ -1665,17 +1663,17 @@ export function NewConnectionWizard() {
                     key={account.id}
                     type="button"
                     className={cn(
-                      "rounded-[16px] border px-4 py-3 text-left text-sm font-medium",
+                      "rounded-xl border px-4 py-3 text-left text-sm font-medium",
                       WIZARD_INTERACTION_CLASS,
                       selected
-                        ? "border-sky-400 bg-sky-500/12 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-300 hover:bg-sky-500/18 hover:text-sky-900"
-                        : "border-border/70 bg-background/80 text-foreground/80 hover:border-sky-200 hover:bg-muted/50"
+                        ? "border-[#2563eb] bg-[#eff6ff] text-[#0d1b3e] hover:bg-[#dbeafe]"
+                        : "border-[#e8edf3] bg-white text-[#334155] hover:border-[#bfdbfe] hover:bg-[#f8fafc]"
                     )}
                     onClick={() => setSelectedAccountId(account.id)}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span>{account.label}</span>
-                      {selected ? <Check className="size-4 text-sky-500" /> : null}
+                      {selected ? <Check className="size-4 text-[#2563eb]" /> : null}
                     </div>
                   </button>
                 )
@@ -1707,17 +1705,17 @@ export function NewConnectionWizard() {
                 key={object}
                 type="button"
                 className={cn(
-                  "rounded-[18px] border px-4 py-3 text-left text-sm font-medium",
+                  "rounded-xl border px-4 py-3 text-left text-sm font-medium",
                   WIZARD_INTERACTION_CLASS,
                   selected
-                    ? "border-sky-400 bg-sky-500/12 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-300 hover:bg-sky-500/18 hover:text-sky-900"
-                    : "border-border/70 bg-background/80 text-foreground/80 hover:border-sky-200 hover:bg-muted/50"
+                    ? "border-[#2563eb] bg-[#eff6ff] text-[#0d1b3e] hover:bg-[#dbeafe]"
+                    : "border-[#e8edf3] bg-white text-[#334155] hover:border-[#bfdbfe] hover:bg-[#f8fafc]"
                 )}
                 onClick={() => toggleObjectSelection(object)}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span>{object}</span>
-                  {selected ? <Check className="size-4 text-sky-300" /> : null}
+                  {selected ? <Check className="size-4 text-[#2563eb]" /> : null}
                 </div>
               </button>
             )
@@ -1725,19 +1723,19 @@ export function NewConnectionWizard() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border bg-background/70 p-4">
+          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
             <p className="text-xs font-medium text-[#8098b4]">Estimated sync frequency</p>
             <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {selectedConnectorDetails.syncFrequency}
             </p>
           </div>
-          <div className="rounded-2xl border bg-background/70 p-4">
+          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
             <p className="text-xs font-medium text-[#8098b4]">Estimated duration</p>
             <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {selectedConnectorDetails.estimatedDuration}
             </p>
           </div>
-          <div className="rounded-2xl border bg-background/70 p-4">
+          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
             <p className="text-xs font-medium text-[#8098b4]">Preset</p>
             <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {syncPreset === "custom"
