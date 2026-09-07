@@ -485,6 +485,14 @@ export function ConnectionsOverview() {
       {/* Header */}
       <div className="mb-3.5 rounded-[14px] border border-[#e1e7f0] bg-white px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 text-right">
+            <div className="mb-1 text-[11px] text-[#8190a8]">{UI_TEXT.breadcrumb}</div>
+            <h1 className="text-[30px] font-bold leading-tight text-[#0b1738]">
+              {UI_TEXT.pageTitle}
+              <span className="sr-only">{UI_TEXT.legacyTitle}</span>
+            </h1>
+            <p className="mt-1.5 text-[13px] text-[#71809a]">{UI_TEXT.pageSubtitle}</p>
+          </div>
           <div className="flex shrink-0 items-center gap-2">
             <Can permission="connections:create">
               {isCurrentWorkspaceArchived ? (
@@ -516,15 +524,6 @@ export function ConnectionsOverview() {
               )}
               {isSyncingAll ? UI_TEXT.buttons.syncing : UI_TEXT.buttons.syncAll}
             </AppButton>
-          </div>
-
-          <div className="min-w-0 text-right">
-            <div className="mb-1 text-[11px] text-[#8190a8]">{UI_TEXT.breadcrumb}</div>
-            <h1 className="text-[30px] font-bold leading-tight text-[#0b1738]">
-              {UI_TEXT.pageTitle}
-              <span className="sr-only">{UI_TEXT.legacyTitle}</span>
-            </h1>
-            <p className="mt-1.5 text-[13px] text-[#71809a]">{UI_TEXT.pageSubtitle}</p>
           </div>
         </div>
       </div>
@@ -574,6 +573,19 @@ export function ConnectionsOverview() {
                 className="flex flex-col rounded-[14px] border border-[#e1e7f0] bg-white p-4"
               >
                 <div className="mb-3 flex items-center justify-between">
+                  <ConnectionActionsMenu
+                    actions={connectionActionPolicy.getAvailableActions({
+                      connection: record.connection,
+                      integrationStatus: record.integrationStatus,
+                      workspaceStatus: availableWorkspaces.find(
+                        (workspace) => workspace.id === record.connection.workspaceId
+                      )?.status,
+                    })}
+                    menuLabel={UI_TEXT.overflow.moreActions}
+                    onActionSelect={(action) => {
+                      void handleConnectionAction(record, action)
+                    }}
+                  />
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f8ef] px-2.5 py-1 text-[11px] font-semibold text-[#07945e]">
                     <span className="size-1.5 rounded-full bg-[#07945e]" />
                     {statusMeta?.label ?? record.connection.status}
@@ -613,8 +625,25 @@ export function ConnectionsOverview() {
 
       {/* Table */}
       <div className="rounded-[16px] border border-[#e1e7f0] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 lg:flex-nowrap">
+          <h2 className="shrink-0 text-[17px] font-bold text-[#0b1738]">
+            {UI_TEXT.sections.tableTitle}
+          </h2>
+
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[10px] border border-[#e1e7f0] bg-[#f7f9fd] px-3 lg:max-w-[390px]">
+              <Search className="size-4 shrink-0 text-[#9aa6b8]" />
+              <input
+                aria-label={UI_TEXT.searchAria}
+                value={filters.search}
+                onChange={(event) => updateFilters({ search: event.target.value })}
+                placeholder={UI_TEXT.searchPlaceholder}
+                className="min-w-0 flex-1 border-none bg-transparent text-[11px] text-[#40506d] outline-none placeholder:text-[#9aa6b8]"
+              />
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <AppSelect
               value={activeCategory}
               onValueChange={(value) => {
@@ -656,22 +685,6 @@ export function ConnectionsOverview() {
                 ))}
               </AppSelectContent>
             </AppSelect>
-          </div>
-
-          <div className="flex flex-1 items-center justify-end gap-3">
-            <div className="flex h-9 min-w-[240px] flex-1 items-center gap-2 rounded-[10px] border border-[#e1e7f0] bg-[#f7f9fd] px-3 sm:max-w-[390px]">
-              <Search className="size-4 shrink-0 text-[#9aa6b8]" />
-              <input
-                aria-label={UI_TEXT.searchAria}
-                value={filters.search}
-                onChange={(event) => updateFilters({ search: event.target.value })}
-                placeholder={UI_TEXT.searchPlaceholder}
-                className="min-w-0 flex-1 border-none bg-transparent text-[11px] text-[#40506d] outline-none placeholder:text-[#9aa6b8]"
-              />
-            </div>
-            <h2 className="shrink-0 text-[17px] font-bold text-[#0b1738]">
-              {UI_TEXT.sections.tableTitle}
-            </h2>
           </div>
         </div>
 

@@ -137,7 +137,10 @@ describe("ConnectionsOverview", () => {
     // A platform card and a table row for the same connection, as the design shows both.
     expect(screen.getAllByText("متصل").length).toBeGreaterThan(1)
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "إجراءات إضافية" }))
+    // Two menus per connection by design: one on its platform card, one on its table row.
+    const actionMenus = screen.getAllByRole("button", { name: "إجراءات إضافية" })
+    expect(actionMenus.length).toBeGreaterThan(1)
+    fireEvent.pointerDown(actionMenus[0])
 
     expect(await screen.findByText("Pause Sync")).toBeTruthy()
     expect(await screen.findByText("Disconnect")).toBeTruthy()
