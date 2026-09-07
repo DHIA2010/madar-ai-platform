@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 
 import { AppEmpty } from "@/components/app"
+import { KpiCard, LivePill, SurfaceCard } from "@/components/design/dashboard-surface"
 import { tajawal } from "@/features/campaign-links/components/design/fonts"
 import { WorldMapIllustration } from "@/features/live-visitors/components/world-map"
 import {
@@ -67,68 +68,6 @@ function visitorPage(visitor: LiveVisitorRecord) {
   } catch {
     return visitor.currentPageUrl
   }
-}
-
-interface KpiCardProps {
-  label: string
-  value: string
-  hint: string
-  icon: React.ReactNode
-  iconClassName: string
-  wide?: boolean
-}
-
-function KpiCard({ label, value, hint, icon, iconClassName, wide }: KpiCardProps) {
-  return (
-    <div
-      className="flex min-h-[100px] min-w-0 shrink flex-col gap-1.5 rounded-xl border border-[#e8edf3] bg-white px-[18px] py-4 shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
-      style={{ flexGrow: wide ? 1.6 : 1, flexBasis: 0 }}
-    >
-      <div className="flex items-start justify-between">
-        <div className="min-w-0">
-          <div className="mb-1.5 text-xs font-medium text-[#8098b4]">{label}</div>
-          <div className="text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]" dir="ltr">
-            {value}
-          </div>
-        </div>
-        <div
-          className={`flex size-[42px] shrink-0 items-center justify-center rounded-[10px] ${iconClassName}`}
-        >
-          {icon}
-        </div>
-      </div>
-      <div className="mt-0.5 text-[11px] text-[#8098b4]">{hint}</div>
-    </div>
-  )
-}
-
-function SectionCard({
-  title,
-  icon,
-  action,
-  children,
-  className,
-}: {
-  title: string
-  icon?: React.ReactNode
-  action?: React.ReactNode
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={`flex flex-col rounded-xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)] ${className ?? ""}`}
-    >
-      <div className="flex items-center justify-between border-b border-[#e8edf3] px-[18px] py-4">
-        <div className="flex items-center gap-2">
-          {icon}
-          <span className="text-sm font-bold text-[#0d1b3e]">{title}</span>
-        </div>
-        {action}
-      </div>
-      {children}
-    </div>
-  )
 }
 
 function DonutChart({
@@ -287,10 +226,7 @@ export default function LiveVisitorsPage() {
               <h1 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
                 الزوار المباشرون
               </h1>
-              <div className="flex items-center gap-1.5 rounded-[20px] border border-[#d1fae5] bg-[#ecfdf5] px-2.5 py-[3px]">
-                <span className="size-[7px] animate-pulse rounded-full bg-[#10b981]" />
-                <span className="text-xs font-semibold text-[#10b981]">مباشر</span>
-              </div>
+              <LivePill label="مباشر" />
               {isLoading ? <Loader2 className="size-4 animate-spin text-[#8098b4]" /> : null}
             </div>
             <p className="text-[12.5px] text-[#8098b4]">
@@ -394,7 +330,7 @@ export default function LiveVisitorsPage() {
       {/* Live list + donut + map.
           RTL grid auto-placement: the first DOM child lands in the rightmost track. */}
       <div className="mb-3.5 grid grid-cols-[1fr_1fr_2fr] gap-3">
-        <SectionCard title={`الزوار المباشرون الآن (${summary?.liveVisitors ?? 0})`}>
+        <SurfaceCard title={`الزوار المباشرون الآن (${summary?.liveVisitors ?? 0})`}>
           <div className="flex-1">
             {filteredVisitors.length === 0 ? (
               <div className="px-[18px] py-8 text-center text-xs text-[#8098b4]">
@@ -441,7 +377,7 @@ export default function LiveVisitorsPage() {
               ))
             )}
           </div>
-        </SectionCard>
+        </SurfaceCard>
 
         <div className="rounded-xl border border-[#e8edf3] bg-white px-5 py-[18px] shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]">
           <div className="mb-3.5 text-sm font-bold text-[#0d1b3e]">الزوار حسب مصدر الزيارة</div>
@@ -490,7 +426,7 @@ export default function LiveVisitorsPage() {
 
       {/* Cart additions + top products */}
       <div className="grid grid-cols-2 gap-3">
-        <SectionCard title="إضافات حديثة للسلة">
+        <SurfaceCard title="إضافات حديثة للسلة">
           <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 border-b border-[#e8edf3] bg-[#f8fafc] px-[18px] py-2">
             <span className="text-[11px] font-semibold text-[#8098b4]">المنتج</span>
             <span className="text-center text-[11px] font-semibold text-[#8098b4]">السعر</span>
@@ -534,9 +470,9 @@ export default function LiveVisitorsPage() {
               </strong>
             </span>
           </div>
-        </SectionCard>
+        </SurfaceCard>
 
-        <SectionCard title="المنتجات الأكثر تفاعلاً">
+        <SurfaceCard title="المنتجات الأكثر تفاعلاً">
           <div className="grid grid-cols-[2fr_1fr_1fr] gap-2 border-b border-[#e8edf3] bg-[#f8fafc] px-[18px] py-2">
             <span className="text-[11px] font-semibold text-[#8098b4]">المنتج</span>
             <span className="text-center text-[11px] font-semibold text-[#8098b4]">مشاهدات</span>
@@ -565,7 +501,7 @@ export default function LiveVisitorsPage() {
               </div>
             ))
           )}
-        </SectionCard>
+        </SurfaceCard>
       </div>
     </div>
   )

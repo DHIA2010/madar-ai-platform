@@ -57,6 +57,8 @@ import type { ConnectionsFilterState, ConnectionsHealthState } from "../types"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
 import { getSyncIndicatorClass, SyncAllDialog, SyncAllOverlay } from "./sync-all-dialog"
 
+import { KpiCard, SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
+
 const UI_TEXT = {
   pageTitle: "Connections Center",
   pageSubtitle: "Manage all marketing, ecommerce, CRM and analytics integrations from one place.",
@@ -485,11 +487,9 @@ function FilterSelect({
 
   return (
     <label className="relative z-0 grid min-w-0 gap-1.5 text-sm">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
+      <span className="text-[11px] font-semibold text-[#8098b4]">{label}</span>
       <AppSelect value={value} onValueChange={onChange}>
-        <AppSelectTrigger className="h-10 w-full rounded-xl border bg-background px-3 text-sm shadow-sm transition-colors hover:border-foreground/20 focus-visible:border-indigo-400 focus-visible:ring-indigo-100 data-[state=open]:z-40 data-[state=open]:border-indigo-400 data-[state=open]:shadow-md">
+        <AppSelectTrigger className="h-10 w-full rounded-lg border border-[#e8edf3] bg-white px-3 text-[12.5px] text-[#334155] transition-colors hover:bg-[#f8fafc] focus-visible:border-[#2563eb] focus-visible:ring-[#eff6ff] data-[state=open]:z-40 data-[state=open]:border-[#2563eb]">
           <AppSelectValue />
         </AppSelectTrigger>
         <AppSelectContent
@@ -636,31 +636,38 @@ export function ConnectionsOverview() {
     ).length
     const platformCount = new Set(categoryFilteredRecords.map((record) => record.platformName)).size
 
+    // Icon tint pairs come from the dashboard design's KPI row: a 42px rounded tile in a pale
+    // wash of the icon's own colour.
     return [
       {
         label: UI_TEXT.sections.summaryTotal,
         value: categoryFilteredRecords.length,
-        icon: <Boxes className="size-4 text-violet-600" />,
+        icon: <Boxes className="size-5 text-[#7c3aed]" />,
+        iconClassName: "bg-[#f5f3ff]",
       },
       {
         label: UI_TEXT.sections.summaryHealthy,
         value: healthyCount,
-        icon: <CheckCircle2 className="size-4 text-emerald-600" />,
+        icon: <CheckCircle2 className="size-5 text-[#10b981]" />,
+        iconClassName: "bg-[#ecfdf5]",
       },
       {
         label: UI_TEXT.sections.summaryWarning,
         value: warningCount,
-        icon: <AlertTriangle className="size-4 text-orange-500" />,
+        icon: <AlertTriangle className="size-5 text-[#f59e0b]" />,
+        iconClassName: "bg-[#fffbeb]",
       },
       {
         label: UI_TEXT.sections.summarySyncing,
         value: syncingCount,
-        icon: <RefreshCcw className="size-4 text-sky-600" />,
+        icon: <RefreshCcw className="size-5 text-[#2563eb]" />,
+        iconClassName: "bg-[#eff6ff]",
       },
       {
         label: UI_TEXT.sections.summaryPlatforms,
         value: platformCount,
-        icon: <Activity className="size-4 text-indigo-600" />,
+        icon: <Activity className="size-5 text-[#0d9488]" />,
+        iconClassName: "bg-[#f0fdfa]",
       },
     ]
   }, [categoryFilteredRecords])
@@ -727,21 +734,26 @@ export function ConnectionsOverview() {
       <AppContainer>
         <AppSection>
           <div className="flex items-start gap-3">
-            <div className="rounded-xl border bg-card p-2 shadow-sm">
-              <PlugZap className="size-5 text-indigo-600" />
+            <div
+              className={cn(
+                SURFACE_CARD_CLASS,
+                "flex size-[42px] shrink-0 items-center justify-center rounded-[10px] bg-[#eef2ff]"
+              )}
+            >
+              <PlugZap className="size-5 text-[#4f46e5]" />
             </div>
-            <div className="space-y-1">
-              <h1 className="text-3xl font-semibold tracking-tight">
+            <div>
+              <h1 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
                 {UI_TEXT.pageTitle}
                 <span className="sr-only">{UI_TEXT.legacyTitle}</span>
               </h1>
-              <p className="text-sm text-muted-foreground">{UI_TEXT.pageSubtitle}</p>
+              <p className="mt-1 text-[12.5px] text-[#8098b4]">{UI_TEXT.pageSubtitle}</p>
             </div>
           </div>
         </AppSection>
 
         <AppSection>
-          <div className="rounded-2xl border bg-card p-4 md:p-5">
+          <div className={cn(SURFACE_CARD_CLASS, "p-4 md:p-5")}>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="relative z-10 grid flex-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
                 <FilterSelect
@@ -866,18 +878,13 @@ export function ConnectionsOverview() {
         <AppSection className="mt-14">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {summaryCards.map((card) => (
-              <div
+              <KpiCard
                 key={card.label}
-                className="rounded-xl border bg-card px-4 py-3 shadow-sm transition-colors hover:border-foreground/15"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {card.label}
-                  </p>
-                  {card.icon}
-                </div>
-                <p className="mt-2 text-2xl font-semibold tracking-tight">{card.value}</p>
-              </div>
+                label={card.label}
+                value={card.value}
+                icon={card.icon}
+                iconClassName={card.iconClassName}
+              />
             ))}
           </div>
         </AppSection>
@@ -993,9 +1000,11 @@ export function ConnectionsOverview() {
                     <AppCard
                       key={record.connection.connectionId}
                       className={cn(
-                        "group relative rounded-2xl border-border/70 bg-card/90 shadow-sm transition-all duration-300",
+                        SURFACE_CARD_CLASS,
+                        "group relative transition-all duration-300",
                         syncState && "opacity-75",
-                        !isSyncing && "hover:-translate-y-0.5 hover:shadow-lg"
+                        !isSyncing &&
+                          "hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(15,30,62,0.10)]"
                       )}
                     >
                       <div
