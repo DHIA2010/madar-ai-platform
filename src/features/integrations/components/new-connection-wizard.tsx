@@ -51,6 +51,7 @@ import {
 } from "../services"
 
 import { useApplicationServices } from "@/application/context"
+import { SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
 
 type PlatformCategory = "All" | "Marketing" | "Analytics" | "Ecommerce"
 type WizardStep = 0 | 1 | 2 | 3
@@ -1055,16 +1056,18 @@ export function NewConnectionWizard() {
   }
 
   const renderTopProgress = () => (
-    <div className="space-y-2 rounded-[28px] border bg-gradient-to-br from-background via-background to-muted/20 p-6 shadow-sm md:p-8">
+    <div className={cn(SURFACE_CARD_CLASS, "space-y-4 p-6 md:p-8")}>
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
-            <Sparkles className="size-3.5 text-indigo-600" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#e8edf3] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#8098b4]">
+            <Sparkles className="size-3.5 text-[#4f46e5]" />
             New Connection
           </div>
           <div className="space-y-2">
-            <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">New Connection</h1>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
+            <h1 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
+              New Connection
+            </h1>
+            <p className="max-w-2xl text-[12.5px] leading-6 text-[#8098b4]">
               Connect a platform in four guided steps with OAuth-first setup and streamlined
               onboarding.
             </p>
@@ -1072,23 +1075,21 @@ export function NewConnectionWizard() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[460px]">
-          <div className="rounded-2xl border bg-background/80 p-4 shadow-sm">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Current Step
+          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
+            <p className="text-xs font-medium text-[#8098b4]">Current Step</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
+              {WIZARD_STEPS[stepIndex].label}
             </p>
-            <p className="mt-1 text-lg font-semibold">{WIZARD_STEPS[stepIndex].label}</p>
           </div>
-          <div className="rounded-2xl border bg-background/80 p-4 shadow-sm">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Completed Steps
+          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
+            <p className="text-xs font-medium text-[#8098b4]">Completed Steps</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
+              {completedSteps}
             </p>
-            <p className="mt-1 text-lg font-semibold">{completedSteps}</p>
           </div>
-          <div className="rounded-2xl border bg-background/80 p-4 shadow-sm">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Estimated Time Left
-            </p>
-            <p className="mt-1 text-lg font-semibold">
+          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
+            <p className="text-xs font-medium text-[#8098b4]">Estimated Time Left</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {estimatedMinutesLeft < 1 ? "Less than 1 min" : `${estimatedMinutesLeft} min`}
             </p>
           </div>
@@ -1096,13 +1097,13 @@ export function NewConnectionWizard() {
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 text-xs text-[#8098b4]">
           <span>Connection Progress</span>
           <span>{progressPercent}%</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 overflow-hidden rounded-full bg-[#f1f5f9]">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-cyan-500 transition-all duration-500"
+            className="h-full rounded-full bg-[#2563eb] transition-all duration-500"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
@@ -1117,10 +1118,10 @@ export function NewConnectionWizard() {
               className={cn(
                 "flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition-all",
                 state === "done"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  ? "border-[#d1fae5] bg-[#ecfdf5] text-[#10b981]"
                   : state === "active"
-                    ? "border-sky-200 bg-sky-50 text-sky-700 shadow-[0_0_0_4px_rgba(14,165,233,0.10)]"
-                    : "border-border/70 bg-background/70 text-muted-foreground"
+                    ? "border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]"
+                    : "border-[#e8edf3] bg-[#f8fafc] text-[#8098b4]"
               )}
             >
               <StepDot state={state} />
@@ -1161,7 +1162,7 @@ export function NewConnectionWizard() {
       </div>
 
       {selectedConnector ? (
-        <AppCard className="border-border/70 bg-card/95 shadow-sm">
+        <AppCard className={SURFACE_CARD_CLASS}>
           <div className="flex items-start gap-3 p-4">
             <ConnectorLogo label={selectedConnector.displayName} />
             <div className="min-w-0 flex-1 space-y-3">
@@ -1177,23 +1178,17 @@ export function NewConnectionWizard() {
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Authentication
-                  </p>
+                  <p className="text-xs font-medium text-[#8098b4]">Authentication</p>
                   <p className="mt-1 text-sm font-medium">{selectedConnectorDetails?.authMethod}</p>
                 </div>
                 <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Connection Type
-                  </p>
+                  <p className="text-xs font-medium text-[#8098b4]">Connection Type</p>
                   <p className="mt-1 text-sm font-medium">
                     {selectedConnectorDetails?.connectionType}
                   </p>
                 </div>
                 <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Permissions Preview
-                  </p>
+                  <p className="text-xs font-medium text-[#8098b4]">Permissions Preview</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {selectedConnectorDetails?.permissions.map((permission) => (
                       <span
@@ -1206,9 +1201,7 @@ export function NewConnectionWizard() {
                   </div>
                 </div>
                 <div className="sm:col-span-2 xl:col-span-3 rounded-xl bg-muted/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Capabilities
-                  </p>
+                  <p className="text-xs font-medium text-[#8098b4]">Capabilities</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {selectedConnector.capabilities.slice(0, 4).map((capability) => (
                       <span
@@ -1360,7 +1353,7 @@ export function NewConnectionWizard() {
   const renderConnectStep = () => {
     if (!selectedConnector || !selectedConnectorDetails) {
       return (
-        <AppCard className="border-border/70 bg-card/95 p-6 shadow-sm">
+        <AppCard className={cn(SURFACE_CARD_CLASS, "p-6")}>
           <div className="space-y-3 text-center">
             <CircleAlert className="mx-auto size-10 text-muted-foreground" />
             <h3 className="text-lg font-semibold">Choose a platform first</h3>
@@ -1733,22 +1726,20 @@ export function NewConnectionWizard() {
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border bg-background/70 p-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Estimated sync frequency
+            <p className="text-xs font-medium text-[#8098b4]">Estimated sync frequency</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
+              {selectedConnectorDetails.syncFrequency}
             </p>
-            <p className="mt-1 text-lg font-semibold">{selectedConnectorDetails.syncFrequency}</p>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Estimated duration
-            </p>
-            <p className="mt-1 text-lg font-semibold">
+            <p className="text-xs font-medium text-[#8098b4]">Estimated duration</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {selectedConnectorDetails.estimatedDuration}
             </p>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Preset</p>
-            <p className="mt-1 text-lg font-semibold">
+            <p className="text-xs font-medium text-[#8098b4]">Preset</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {syncPreset === "custom"
                 ? "Custom"
                 : syncPreset === "all"
@@ -1790,16 +1781,14 @@ export function NewConnectionWizard() {
             { label: "Automatic sync", value: autoSyncEnabled ? "Enabled" : "Disabled" },
           ].map((item) => (
             <div key={item.label} className="rounded-2xl border bg-background/70 p-4">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {item.label}
-              </p>
+              <p className="text-xs font-medium text-[#8098b4]">{item.label}</p>
               <p className="mt-1 text-sm font-medium">{item.value}</p>
             </div>
           ))}
         </div>
 
         <div className="rounded-[24px] border bg-background/70 p-5">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Objects</p>
+          <p className="text-xs font-medium text-[#8098b4]">Objects</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {selectedObjects.map((object) => (
               <AppBadge
@@ -1821,7 +1810,7 @@ export function NewConnectionWizard() {
     }
 
     return (
-      <div className="space-y-5 rounded-[28px] border bg-card/95 p-6 text-center shadow-sm md:p-8">
+      <div className={cn(SURFACE_CARD_CLASS, "space-y-5 p-6 text-center md:p-8")}>
         <div className="mx-auto flex size-24 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400 shadow-[0_0_0_10px_rgba(16,185,129,0.08)]">
           <CircleCheckBig className="size-12 animate-pulse" />
         </div>
@@ -1835,25 +1824,23 @@ export function NewConnectionWizard() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border bg-background/70 p-4 text-left">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Health Monitoring
-            </p>
-            <p className="mt-1 text-lg font-semibold">
+          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4 text-left">
+            <p className="text-xs font-medium text-[#8098b4]">Health Monitoring</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
               {healthMonitoringEnabled ? "Enabled" : "Disabled"}
             </p>
           </div>
-          <div className="rounded-2xl border bg-background/70 p-4 text-left">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Automatic Sync
+          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4 text-left">
+            <p className="text-xs font-medium text-[#8098b4]">Automatic Sync</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
+              {autoSyncEnabled ? "Enabled" : "Disabled"}
             </p>
-            <p className="mt-1 text-lg font-semibold">{autoSyncEnabled ? "Enabled" : "Disabled"}</p>
           </div>
-          <div className="rounded-2xl border bg-background/70 p-4 text-left">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Estimated First Sync
+          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4 text-left">
+            <p className="text-xs font-medium text-[#8098b4]">Estimated First Sync</p>
+            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
+              1-2 minutes
             </p>
-            <p className="mt-1 text-lg font-semibold">1-2 minutes</p>
           </div>
         </div>
 
@@ -1987,7 +1974,7 @@ export function NewConnectionWizard() {
               title="Create your first workspace before adding connections."
               subtitle="Connection onboarding now requires an active workspace context."
               state="empty"
-              className="border-border/70 bg-card/95"
+              className={SURFACE_CARD_CLASS}
             >
               <div className="pt-2">
                 <WorkspaceSelector
@@ -2012,7 +1999,7 @@ export function NewConnectionWizard() {
               title="This workspace is archived."
               subtitle="Restore it to add or reconnect integrations. All syncing stays paused until then."
               state="empty"
-              className="border-border/70 bg-card/95"
+              className={SURFACE_CARD_CLASS}
             >
               <div className="pt-2">
                 <WorkspaceSelector
@@ -2036,14 +2023,14 @@ export function NewConnectionWizard() {
         <AppSection>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="space-y-6">
-              <AppCard className="overflow-hidden border-border/70 bg-card/95 shadow-sm">
-                <div className="border-b bg-muted/20 px-5 py-4 md:px-6">
+              <AppCard className={cn(SURFACE_CARD_CLASS, "overflow-hidden")}>
+                <div className="border-b border-[#e8edf3] bg-[#f8fafc] px-5 py-4 md:px-6">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      <p className="text-[11px] font-semibold text-[#8098b4]">
                         Step {stepIndex + 1} of {WIZARD_STEPS.length}
                       </p>
-                      <h2 className="mt-1 text-xl font-semibold">
+                      <h2 className="mt-1 text-lg font-bold text-[#0d1b3e]">
                         {WIZARD_STEPS[stepIndex].label}
                       </h2>
                     </div>
@@ -2058,10 +2045,10 @@ export function NewConnectionWizard() {
                             className={cn(
                               "flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-all",
                               state === "done"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                ? "border-[#d1fae5] bg-[#ecfdf5] text-[#10b981]"
                                 : state === "active"
-                                  ? "border-sky-200 bg-sky-50 text-sky-700 shadow-[0_0_0_4px_rgba(99,102,241,0.10)]"
-                                  : "border-border/70 bg-background text-muted-foreground"
+                                  ? "border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]"
+                                  : "border-[#e8edf3] bg-[#f8fafc] text-[#8098b4]"
                             )}
                           >
                             <StepDot state={state} />
@@ -2146,8 +2133,8 @@ export function NewConnectionWizard() {
             </div>
 
             <div className="space-y-4">
-              <AppCard className="border-border/70 bg-card/90 shadow-sm lg:sticky lg:top-6">
-                <div className="flex items-center gap-2 border-b px-5 py-4">
+              <AppCard className={cn(SURFACE_CARD_CLASS, "lg:sticky lg:top-6")}>
+                <div className="flex items-center gap-2 border-b border-[#e8edf3] px-5 py-4">
                   <ShieldCheck className="size-4 text-indigo-600" />
                   <h3 className="text-sm font-semibold text-foreground/80">Setup Checklist</h3>
                 </div>
@@ -2178,8 +2165,8 @@ export function NewConnectionWizard() {
                 </div>
               </AppCard>
 
-              <AppCard className="border-border/70 bg-card/90 shadow-sm">
-                <div className="flex items-center gap-2 border-b px-5 py-4">
+              <AppCard className={SURFACE_CARD_CLASS}>
+                <div className="flex items-center gap-2 border-b border-[#e8edf3] px-5 py-4">
                   <PlugZap className="size-4 text-indigo-600" />
                   <h3 className="text-sm font-semibold text-foreground/80">Connection Details</h3>
                 </div>
