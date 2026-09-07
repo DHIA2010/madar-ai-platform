@@ -17,7 +17,7 @@ vi.mock("./services/live-visitors.service", () => ({
 }))
 
 // next/font must be stubbed: it is a build-time transform with no runtime implementation.
-vi.mock("@/features/campaign-links/components/design/fonts", () => ({
+vi.mock("@/components/design/fonts", () => ({
   tajawal: { className: "font-tajawal" },
 }))
 

@@ -4,15 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import {
-  Activity,
-  AlertTriangle,
-  Boxes,
-  CheckCircle2,
-  Loader2,
-  PlugZap,
-  RefreshCcw,
-} from "lucide-react"
+import { Activity, AlertTriangle, Boxes, CheckCircle2, Loader2, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -21,25 +13,13 @@ import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
-  AppCard,
   AppConfirmDialog,
-  AppContainer,
-  AppGrid,
-  AppInput,
-  AppPage,
-  AppSection,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
   AppSelectTrigger,
   AppSelectValue,
   AppSkeleton,
-  AppTable,
-  AppTableBody,
-  AppTableCell,
-  AppTableHead,
-  AppTableHeader,
-  AppTableRow,
   RelativeTime,
 } from "@/components/app"
 
@@ -51,79 +31,80 @@ import {
   CONNECTION_ACTION_IDS,
   type ConnectionActionDefinition,
   connectionActionPolicy,
-  getCapabilityLabel,
 } from "../services"
 import type { ConnectionsFilterState, ConnectionsHealthState } from "../types"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
-import { getSyncIndicatorClass, SyncAllDialog, SyncAllOverlay } from "./sync-all-dialog"
+import { SyncAllDialog } from "./sync-all-dialog"
 
-import { KpiCard, SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
+import {
+  DonutBreakdown,
+  KpiCard,
+  PageHeading,
+  SURFACE_CARD_CLASS,
+  SurfaceCard,
+} from "@/components/design/dashboard-surface"
+import { tajawal } from "@/components/design/fonts"
 
 const UI_TEXT = {
-  pageTitle: "Connections Center",
-  pageSubtitle: "Manage all marketing, ecommerce, CRM and analytics integrations from one place.",
+  pageTitle: "مركز الاتصالات",
+  pageSubtitle: "تابع حالة جميع المنصات المرتبطة وزامنها من مكان واحد.",
   legacyTitle: "Connections Overview",
-  searchAria: "Search connections",
-  searchPlaceholder: "Search connector, account, workspace, sync status, or capability",
+  searchAria: "البحث في الاتصالات",
+  searchPlaceholder: "ابحث عن منصة، حساب، أو حالة...",
   buttons: {
-    newConnection: "+ New Connection",
-    runSync: "Run Sync",
-    details: "Details",
-    open: "Open",
+    newConnection: "اتصال جديد",
+    runSync: "مزامنة",
+    details: "التفاصيل",
+    open: "فتح",
+    syncAll: "مزامنة الكل",
+    syncing: "جارٍ المزامنة...",
   },
   sections: {
-    summaryTotal: "Total Connections",
-    summaryHealthy: "Healthy",
-    summaryWarning: "Warning",
-    summarySyncing: "Syncing",
-    summaryPlatforms: "Platforms",
-    tableTitle: "Connections Table",
-    healthScore: "Health Score",
-    syncActivity: "Recent Sync Activity",
-    latestSync: "Latest Sync",
-    lastSync: "Last Sync",
-    platform: "Platform",
-    connectedAccount: "Connected Accounts",
-    status: "Status",
-    health: "Health",
-    nextSync: "Next Sync",
-    primaryAction: "Primary Action",
-    category: "Category",
-    failedLoadTitle: "Failed to load connections",
+    summaryTotal: "إجمالي الاتصالات",
+    summaryHealthy: "سليمة",
+    summaryWarning: "تحذير",
+    summarySyncing: "قيد المزامنة",
+    summaryPlatforms: "المنصات",
+    tableTitle: "الاتصالات",
+    healthBreakdown: "حالة الاتصالات",
+    healthScore: "مؤشر الصحة",
+    syncActivity: "آخر نشاط المزامنة",
+    latestSync: "آخر مزامنة",
+    lastSync: "آخر مزامنة",
+    nextSync: "المزامنة التالية",
+    platform: "المنصة",
+    connectedAccount: "الحساب المرتبط",
+    status: "الحالة",
+    health: "الصحة",
+    capabilities: "القدرات",
+    actions: "إجراءات",
+    category: "التصنيف",
+    failedLoadTitle: "تعذر تحميل الاتصالات",
+    totalConnections: "إجمالي الاتصالات",
+    noActivity: "لا يوجد نشاط مزامنة بعد.",
+  },
+  filters: {
+    category: "التصنيف",
+    capability: "القدرة",
+    workspace: "مساحة العمل",
+    platform: "المنصة",
+    health: "الصحة",
+    status: "الحالة",
+    all: "الكل",
   },
   empty: {
-    noConnectorsTitle: "No connectors yet",
-    noConnectorsSubtitle: "Start by creating your first integration connection.",
-    noSearchTitle: "No search results",
-    noSearchSubtitle: "Try a different keyword or clear the search query.",
-    noFilteredTitle: "No filtered results",
-    noFilteredSubtitle: "Adjust category or filter values to reveal matching connections.",
-    tableNoRows: "No connections matched the selected search and filters.",
+    noConnectorsTitle: "لا توجد اتصالات بعد",
+    noConnectorsSubtitle: "ابدأ بإنشاء أول اتصال لمتجرك أو منصتك الإعلانية.",
+    noSearchTitle: "لا توجد نتائج",
+    noSearchSubtitle: "جرّب كلمة بحث مختلفة أو امسح البحث.",
+    noFilteredTitle: "لا توجد نتائج مطابقة",
+    noFilteredSubtitle: "عدّل التصنيف أو الفلاتر لعرض الاتصالات المطابقة.",
+    tableNoRows: "لا توجد اتصالات مطابقة للبحث والفلاتر.",
   },
   overflow: {
-    moreActions: "More actions",
+    moreActions: "إجراءات إضافية",
   },
 } as const
-
-const CONNECTOR_ACCENT_CLASS: Record<string, string> = {
-  "Google Ads": "from-blue-500/35 via-blue-500/20 to-transparent",
-  "Google Analytics 4": "from-orange-500/35 via-orange-500/20 to-transparent",
-  "Meta Ads": "from-sky-500/35 via-blue-500/20 to-transparent",
-  "TikTok Ads": "from-zinc-900/35 via-red-500/20 to-transparent",
-  "Snapchat Ads": "from-yellow-400/35 via-yellow-200/20 to-transparent",
-  Salla: "from-emerald-500/35 via-emerald-500/20 to-transparent",
-  Zid: "from-violet-500/35 via-violet-500/20 to-transparent",
-}
-
-const CAPABILITY_STYLE: Record<string, { icon: string; label: string; tone: string }> = {
-  traffic: { icon: "📈", label: "Traffic", tone: "bg-sky-100/80 text-sky-800" },
-  ads: { icon: "💰", label: "Ads", tone: "bg-indigo-100/80 text-indigo-800" },
-  orders: { icon: "🛒", label: "Orders", tone: "bg-emerald-100/80 text-emerald-800" },
-  customers: { icon: "👥", label: "Customers", tone: "bg-fuchsia-100/80 text-fuchsia-800" },
-  products: { icon: "📦", label: "Products", tone: "bg-orange-100/80 text-orange-800" },
-  events: { icon: "📊", label: "Analytics", tone: "bg-amber-100/80 text-amber-800" },
-  campaigns: { icon: "🎯", label: "Campaigns", tone: "bg-rose-100/80 text-rose-800" },
-}
 
 const CATEGORY_OPTIONS = ["All", "Marketing Platforms", "Ecommerce", "CRM", "Analytics"]
 
@@ -135,51 +116,29 @@ const CATEGORY_PLATFORM_MAP: Record<string, string[]> = {
   Analytics: ["Google Analytics 4", "PostHog", "Mixpanel"],
 }
 
-const STATUS_BADGE_CLASS: Record<string, string> = {
-  connected: "bg-emerald-100 text-emerald-800",
-  valid: "bg-green-100 text-green-800",
-  paused: "bg-yellow-100 text-yellow-800",
-  disconnected: "bg-red-100 text-red-800",
-  syncing: "bg-sky-100 text-sky-800",
-  draft: "bg-slate-100 text-slate-700",
-  authorized: "bg-zinc-100 text-zinc-700",
-  error: "bg-red-100 text-red-800",
-}
-
-const HEALTH_BADGE_CLASS: Record<string, string> = {
-  Healthy: "bg-emerald-100 text-emerald-800",
-  Warning: "bg-orange-100 text-orange-800",
-  Paused: "bg-yellow-100 text-yellow-800",
-  Disconnected: "bg-red-100 text-red-800",
-  "Running Sync": "bg-sky-100 text-sky-800",
-  Queued: "bg-blue-100 text-blue-800",
-  "Expired Token": "bg-amber-100 text-amber-800",
-  Error: "bg-red-100 text-red-800",
-}
-
 const CONNECTION_STATUS_META: Record<string, { icon: string; label: string; className: string }> = {
-  connected: { icon: "🟢", label: "Connected", className: "bg-emerald-100 text-emerald-800" },
-  valid: { icon: "🟢", label: "Connected", className: "bg-emerald-100 text-emerald-800" },
-  authorized: { icon: "🟢", label: "Connected", className: "bg-emerald-100 text-emerald-800" },
-  paused: { icon: "⏸", label: "Paused", className: "bg-yellow-100 text-yellow-800" },
-  disconnected: { icon: "🔴", label: "Error", className: "bg-red-100 text-red-800" },
-  error: { icon: "🔴", label: "Error", className: "bg-red-100 text-red-800" },
-  draft: { icon: "⚪", label: "Draft", className: "bg-slate-100 text-slate-700" },
-  syncing: { icon: "⟳", label: "Syncing", className: "bg-sky-100 text-sky-800" },
+  connected: { icon: "🟢", label: "متصل", className: "bg-[#ecfdf5] text-[#10b981]" },
+  valid: { icon: "🟢", label: "متصل", className: "bg-[#ecfdf5] text-[#10b981]" },
+  authorized: { icon: "🟢", label: "متصل", className: "bg-[#ecfdf5] text-[#10b981]" },
+  paused: { icon: "⏸", label: "متوقف", className: "bg-[#fffbeb] text-[#f59e0b]" },
+  disconnected: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
+  error: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
+  draft: { icon: "⚪", label: "مسودة", className: "bg-[#f1f5f9] text-[#64748b]" },
+  syncing: { icon: "⟳", label: "قيد المزامنة", className: "bg-[#eff6ff] text-[#2563eb]" },
 }
 
 const HEALTH_STATUS_META: Record<
   ConnectionsHealthState,
   { icon: string; label: string; className: string }
 > = {
-  Healthy: { icon: "🟢", label: "Healthy", className: "bg-emerald-100 text-emerald-800" },
-  Warning: { icon: "⚠", label: "Sync Warning", className: "bg-orange-100 text-orange-800" },
-  Error: { icon: "🔴", label: "Error", className: "bg-red-100 text-red-800" },
-  "Expired Token": { icon: "⚠", label: "Token Expired", className: "bg-amber-100 text-amber-800" },
-  Paused: { icon: "⏸", label: "Paused", className: "bg-yellow-100 text-yellow-800" },
-  Disconnected: { icon: "🔴", label: "Disconnected", className: "bg-red-100 text-red-800" },
-  "Running Sync": { icon: "⟳", label: "Sync Running", className: "bg-sky-100 text-sky-800" },
-  Queued: { icon: "🟡", label: "Sync Queued", className: "bg-blue-100 text-blue-800" },
+  Healthy: { icon: "🟢", label: "سليمة", className: "bg-[#ecfdf5] text-[#10b981]" },
+  Warning: { icon: "⚠", label: "تحذير مزامنة", className: "bg-[#fffbeb] text-[#f59e0b]" },
+  Error: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
+  "Expired Token": { icon: "⚠", label: "انتهت الصلاحية", className: "bg-[#fffbeb] text-[#f59e0b]" },
+  Paused: { icon: "⏸", label: "متوقفة", className: "bg-[#fffbeb] text-[#f59e0b]" },
+  Disconnected: { icon: "🔴", label: "غير متصلة", className: "bg-[#fef2f2] text-[#ef4444]" },
+  "Running Sync": { icon: "⟳", label: "قيد المزامنة", className: "bg-[#eff6ff] text-[#2563eb]" },
+  Queued: { icon: "🟡", label: "في الانتظار", className: "bg-[#ecfeff] text-[#0891b2]" },
 }
 
 function getHealthVisuals(
@@ -220,65 +179,6 @@ function getHealthVisuals(
     default:
       return { score: 50, label: "Warning", barColor: "#F59E0B", textClass: "text-amber-700" }
   }
-}
-
-function statusBadge(label: string, className: string, icon?: string) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        className
-      )}
-    >
-      {icon ? <span aria-hidden="true">{icon}</span> : null}
-      <span>{label}</span>
-    </span>
-  )
-}
-
-function activityStateTone(state: "completed" | "running" | "queued") {
-  if (state === "completed") {
-    return { icon: "✓", className: "text-emerald-700" }
-  }
-  if (state === "running") {
-    return { icon: "⟳", className: "text-sky-700" }
-  }
-  return { icon: "•", className: "text-amber-700" }
-}
-
-function getActivityDetailLine(activity: {
-  state: "completed" | "running" | "queued"
-  records: string
-  time: React.ReactNode
-}) {
-  if (activity.state === "running") {
-    return "Running now"
-  }
-
-  if (activity.state === "queued") {
-    return <>Queued • {activity.time}</>
-  }
-
-  return (
-    <>
-      {activity.records} • {activity.time}
-    </>
-  )
-}
-
-function getStatusItems(status: string, healthState: ConnectionsHealthState) {
-  const primary = CONNECTION_STATUS_META[status] ?? {
-    icon: "⚪",
-    label: status,
-    className: "bg-slate-100 text-slate-700",
-  }
-
-  const items = [primary]
-  if (healthState !== "Healthy") {
-    items.push(HEALTH_STATUS_META[healthState])
-  }
-
-  return items
 }
 
 function getCategoryPlatformOptions(category: string, platforms: string[]) {
@@ -421,106 +321,6 @@ function ConnectorLogo({ platformName }: { platformName: string }) {
     >
       {platformName.slice(0, 2).toUpperCase()}
     </div>
-  )
-}
-
-function ConnectionCardSkeleton() {
-  return (
-    <div className="space-y-4 rounded-2xl border bg-card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <AppSkeleton className="h-10 w-10 rounded-lg" />
-        <AppSkeleton className="h-6 w-20 rounded-full" />
-      </div>
-      <div className="space-y-2">
-        <AppSkeleton className="h-4 w-36" />
-        <AppSkeleton className="h-3 w-28" />
-      </div>
-      <AppSkeleton className="h-2 w-full" />
-      <div className="flex gap-2">
-        <AppSkeleton className="h-6 w-20 rounded-full" />
-        <AppSkeleton className="h-6 w-20 rounded-full" />
-      </div>
-      <div className="flex gap-2">
-        <AppSkeleton className="h-8 w-24 rounded-md" />
-        <AppSkeleton className="h-8 w-20 rounded-md" />
-        <AppSkeleton className="h-8 w-8 rounded-md" />
-      </div>
-    </div>
-  )
-}
-
-const filterLabelByKey: Record<keyof Omit<ConnectionsFilterState, "search">, string> = {
-  status: UI_TEXT.sections.status,
-  health: UI_TEXT.sections.health,
-  platform: UI_TEXT.sections.platform,
-  workspace: "Workspace",
-  capability: "Capability",
-}
-
-function FilterSelect({
-  value,
-  options,
-  onChange,
-  label,
-  searchable = false,
-  searchPlaceholder = "Search options",
-  renderOption,
-}: {
-  value: string
-  options: string[]
-  onChange: (value: string) => void
-  label: string
-  searchable?: boolean
-  searchPlaceholder?: string
-  renderOption?: (option: string) => React.ReactNode
-}) {
-  const [query, setQuery] = useState("")
-
-  const scopedOptions = useMemo(() => {
-    if (!searchable || !query.trim()) {
-      return options
-    }
-
-    const needle = query.trim().toLowerCase()
-    return options.filter((option) => option.toLowerCase().includes(needle))
-  }, [options, query, searchable])
-
-  return (
-    <label className="relative z-0 grid min-w-0 gap-1.5 text-sm">
-      <span className="text-[11px] font-semibold text-[#8098b4]">{label}</span>
-      <AppSelect value={value} onValueChange={onChange}>
-        <AppSelectTrigger className="h-10 w-full rounded-lg border border-[#e8edf3] bg-white px-3 text-[12.5px] text-[#334155] transition-colors hover:bg-[#f8fafc] focus-visible:border-[#2563eb] focus-visible:ring-[#eff6ff] data-[state=open]:z-40 data-[state=open]:border-[#2563eb]">
-          <AppSelectValue />
-        </AppSelectTrigger>
-        <AppSelectContent
-          position="popper"
-          align="start"
-          sideOffset={6}
-          collisionPadding={12}
-          className="z-[90] max-h-72 w-[--radix-select-trigger-width] min-w-[220px] overflow-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-xl"
-        >
-          {searchable ? (
-            <div className="px-1 pb-1">
-              <AppInput
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={searchPlaceholder}
-                className="h-8 rounded-md border bg-background px-2 text-xs"
-              />
-            </div>
-          ) : null}
-          {scopedOptions.map((option) => (
-            <AppSelectItem
-              key={option}
-              value={option}
-              className="rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-            >
-              {renderOption ? renderOption(option) : option}
-            </AppSelectItem>
-          ))}
-        </AppSelectContent>
-      </AppSelect>
-    </label>
   )
 }
 
@@ -729,236 +529,296 @@ export function ConnectionsOverview() {
     }
   }
 
+  // Health mix for the donut. Colours are meaning-bearing here (green healthy, amber warning,
+  // red error) rather than positional, so each entry carries its own.
+  const healthBreakdown = (() => {
+    const tones: Record<string, string> = {
+      Healthy: "#10b981",
+      Warning: "#f59e0b",
+      "Running Sync": "#2563eb",
+      Queued: "#0891b2",
+      Paused: "#f59e0b",
+      "Expired Token": "#f59e0b",
+      Error: "#ef4444",
+      Disconnected: "#ef4444",
+    }
+    const labels: Record<string, string> = {
+      Healthy: "سليمة",
+      Warning: "تحذير",
+      "Running Sync": "قيد المزامنة",
+      Queued: "في الانتظار",
+      Paused: "متوقفة",
+      "Expired Token": "انتهت الصلاحية",
+      Error: "خطأ",
+      Disconnected: "غير متصلة",
+    }
+    const counts = new Map<string, number>()
+    for (const record of categoryFilteredRecords) {
+      counts.set(record.healthState, (counts.get(record.healthState) ?? 0) + 1)
+    }
+    const total = categoryFilteredRecords.length
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([state, value]) => ({
+        label: labels[state] ?? state,
+        value,
+        share: total === 0 ? 0 : Math.round((value / total) * 1000) / 10,
+        color: tones[state] ?? "#64748b",
+      }))
+  })()
+
+  // The most recent sync runs across every connection, newest first -- the same events the old
+  // per-card lists showed, collapsed into one feed so the table below can stay dense.
+  const recentActivity = categoryFilteredRecords
+    .flatMap((record) =>
+      (record.integrationStatus.recentEvents ?? []).slice(0, 3).map((event) => ({
+        key: `${record.connection.connectionId}-${event.eventId}`,
+        platformName: record.platformName,
+        action: event.action,
+        message: event.message,
+        timestamp: event.timestamp,
+        failed: event.action === "sync.failed",
+      }))
+    )
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+    .slice(0, 6)
+
+  const filterSelects = [
+    {
+      label: UI_TEXT.filters.category,
+      value: activeCategory,
+      options: categoryOptions,
+      onChange: (value: string) => {
+        setActiveCategory(value)
+        const nextPlatforms = getCategoryPlatformOptions(value, availableFilters.platforms)
+        if (filters.platform !== "all" && !nextPlatforms.includes(filters.platform)) {
+          updateFilters({ platform: "all" })
+        }
+      },
+    },
+    {
+      label: UI_TEXT.filters.capability,
+      value: filters.capability,
+      options: capabilityOptions,
+      onChange: (value: string) =>
+        updateFilters({ capability: value as ConnectionsFilterState["capability"] }),
+    },
+    {
+      label: UI_TEXT.filters.workspace,
+      value: filters.workspace,
+      options: workspaceOptions,
+      onChange: (value: string) => updateFilters({ workspace: value }),
+    },
+    {
+      label: UI_TEXT.filters.platform,
+      value: filters.platform,
+      options: platformOptions,
+      onChange: (value: string) => updateFilters({ platform: value }),
+    },
+    {
+      label: UI_TEXT.filters.health,
+      value: filters.health,
+      options: healthStatuses,
+      onChange: (value: string) =>
+        updateFilters({ health: value as ConnectionsFilterState["health"] }),
+    },
+    {
+      label: UI_TEXT.filters.status,
+      value: filters.status,
+      options: statuses,
+      onChange: (value: string) =>
+        updateFilters({ status: value as ConnectionsFilterState["status"] }),
+    },
+  ]
+
   return (
-    <AppPage>
-      <AppContainer>
-        <AppSection>
-          <div className="flex items-start gap-3">
-            <div
-              className={cn(
-                SURFACE_CARD_CLASS,
-                "flex size-[42px] shrink-0 items-center justify-center rounded-[10px] bg-[#eef2ff]"
-              )}
+    <div className={cn(tajawal.className, "bg-[#f1f5f9] px-[22px] py-5")} dir="rtl">
+      <PageHeading
+        title={UI_TEXT.pageTitle}
+        subtitle={UI_TEXT.pageSubtitle}
+        actions={
+          <>
+            <AppButton
+              size="sm"
+              variant="outline"
+              className="h-10 rounded-lg border-[#e8edf3] bg-white px-4 text-[12.5px] text-[#334155] hover:bg-[#f8fafc]"
+              onClick={() => setSyncAllDialogOpen(true)}
+              disabled={isSyncingAll || records.length === 0}
             >
-              <PlugZap className="size-5 text-[#4f46e5]" />
-            </div>
-            <div>
-              <h1 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
-                {UI_TEXT.pageTitle}
-                <span className="sr-only">{UI_TEXT.legacyTitle}</span>
-              </h1>
-              <p className="mt-1 text-[12.5px] text-[#8098b4]">{UI_TEXT.pageSubtitle}</p>
-            </div>
-          </div>
-        </AppSection>
-
-        <AppSection>
-          <div className={cn(SURFACE_CARD_CLASS, "p-4 md:p-5")}>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="relative z-10 grid flex-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-                <FilterSelect
-                  label={UI_TEXT.sections.category}
-                  value={activeCategory}
-                  options={categoryOptions}
-                  onChange={(value) => {
-                    const nextCategory = value
-                    setActiveCategory(nextCategory)
-
-                    const nextPlatforms = getCategoryPlatformOptions(
-                      nextCategory,
-                      availableFilters.platforms
-                    )
-                    if (filters.platform !== "all" && !nextPlatforms.includes(filters.platform)) {
-                      updateFilters({ platform: "all" })
-                    }
-                  }}
-                />
-                <FilterSelect
-                  label={filterLabelByKey.capability}
-                  value={filters.capability}
-                  options={capabilityOptions}
-                  onChange={(value) =>
-                    updateFilters({ capability: value as ConnectionsFilterState["capability"] })
-                  }
-                />
-                <FilterSelect
-                  label={filterLabelByKey.workspace}
-                  value={filters.workspace}
-                  options={workspaceOptions}
-                  onChange={(value) => updateFilters({ workspace: value })}
-                />
-                <FilterSelect
-                  label={filterLabelByKey.platform}
-                  value={filters.platform}
-                  options={platformOptions}
-                  searchable
-                  searchPlaceholder="Search platform"
-                  renderOption={(option) =>
-                    option === "all" ? (
-                      option
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <span className="scale-75">
-                          <ConnectorLogo platformName={option} />
-                        </span>
-                        <span>{option}</span>
-                      </span>
-                    )
-                  }
-                  onChange={(value) => updateFilters({ platform: value })}
-                />
-                <FilterSelect
-                  label={filterLabelByKey.health}
-                  value={filters.health}
-                  options={healthStatuses}
-                  onChange={(value) =>
-                    updateFilters({ health: value as ConnectionsFilterState["health"] })
-                  }
-                />
-                <FilterSelect
-                  label={filterLabelByKey.status}
-                  value={filters.status}
-                  options={statuses}
-                  onChange={(value) =>
-                    updateFilters({ status: value as ConnectionsFilterState["status"] })
-                  }
-                />
-              </div>
-
-              <div className="flex shrink-0 gap-2">
+              {isSyncingAll ? (
+                <>
+                  <Loader2 className="ml-2 size-4 animate-spin" />
+                  {UI_TEXT.buttons.syncing}
+                </>
+              ) : (
+                <>
+                  <RefreshCcw className="ml-2 size-4" />
+                  {UI_TEXT.buttons.syncAll}
+                </>
+              )}
+            </AppButton>
+            <Can permission="connections:create">
+              {isCurrentWorkspaceArchived ? (
                 <AppButton
                   size="sm"
-                  variant="outline"
-                  className="h-10 rounded-lg px-4 shadow-sm"
-                  onClick={() => setSyncAllDialogOpen(true)}
-                  disabled={isSyncingAll || records.length === 0}
-                  title={records.length === 0 ? "No connections to sync" : "Sync all connections"}
+                  className="h-10 rounded-lg bg-[#2563eb] px-4 text-[12.5px] hover:bg-[#1d4ed8]"
+                  disabled
                 >
-                  {isSyncingAll ? (
-                    <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCcw className="mr-2 size-4" />
-                      Sync All
-                    </>
-                  )}
+                  {UI_TEXT.buttons.newConnection}
                 </AppButton>
-                <Can permission="connections:create">
-                  {isCurrentWorkspaceArchived ? (
-                    <AppButton
-                      size="sm"
-                      className="h-10 rounded-lg px-4 shadow-sm"
-                      disabled
-                      title="Workspace is archived. Restore it to add a new connection."
-                    >
-                      {UI_TEXT.buttons.newConnection}
-                    </AppButton>
-                  ) : (
-                    <Link href={ROUTES.integrationsNew}>
-                      <AppButton size="sm" className="h-10 rounded-lg px-4 shadow-sm">
-                        {UI_TEXT.buttons.newConnection}
-                      </AppButton>
-                    </Link>
-                  )}
-                </Can>
-              </div>
-            </div>
-          </div>
-        </AppSection>
+              ) : (
+                <Link href={ROUTES.integrationsNew}>
+                  <AppButton
+                    size="sm"
+                    className="h-10 rounded-lg bg-[#2563eb] px-4 text-[12.5px] hover:bg-[#1d4ed8]"
+                  >
+                    {UI_TEXT.buttons.newConnection}
+                  </AppButton>
+                </Link>
+              )}
+            </Can>
+          </>
+        }
+      />
 
-        {error ? (
-          <AppSection>
-            <AppCard title={UI_TEXT.sections.failedLoadTitle} subtitle={error} state="error" />
-          </AppSection>
-        ) : null}
+      {/* Filters */}
+      <div className={cn(SURFACE_CARD_CLASS, "mb-3 grid gap-2 p-3 sm:grid-cols-3 xl:grid-cols-6")}>
+        {filterSelects.map((select) => (
+          <label key={select.label} className="grid min-w-0 gap-1">
+            <span className="text-[11px] font-semibold text-[#8098b4]">{select.label}</span>
+            <AppSelect value={select.value} onValueChange={select.onChange}>
+              <AppSelectTrigger className="h-9 w-full rounded-lg border border-[#e8edf3] bg-white px-3 text-[12.5px] text-[#334155] hover:bg-[#f8fafc]">
+                <AppSelectValue />
+              </AppSelectTrigger>
+              <AppSelectContent className="z-[90] max-h-72 rounded-lg border border-[#e8edf3]">
+                {select.options.map((option) => (
+                  <AppSelectItem key={option} value={option} className="text-[12.5px]">
+                    {option === "all" || option === "All" ? UI_TEXT.filters.all : option}
+                  </AppSelectItem>
+                ))}
+              </AppSelectContent>
+            </AppSelect>
+          </label>
+        ))}
+      </div>
 
-        <AppSection className="mt-14">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {summaryCards.map((card) => (
-              <KpiCard
-                key={card.label}
-                label={card.label}
-                value={card.value}
-                icon={card.icon}
-                iconClassName={card.iconClassName}
-              />
-            ))}
-          </div>
-        </AppSection>
+      {error ? (
+        <div className="mb-3 rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#B91C1C]">
+          {UI_TEXT.sections.failedLoadTitle}: {error}
+        </div>
+      ) : null}
 
-        <AppSection className="mt-14">
-          {emptyState && !isLoading ? (
-            <AppCard title={emptyState.title} subtitle={emptyState.subtitle} state="empty" />
-          ) : null}
-
-          <SyncAllDialog
-            open={syncAllDialogOpen}
-            onOpenChange={setSyncAllDialogOpen}
-            records={records}
-            isSyncing={isSyncingAll}
-            onSyncStart={() => setIsSyncingAll(true)}
-            onSyncEnd={() => {
-              setIsSyncingAll(false)
-              setSyncProgress({})
-            }}
-            onRunSync={runSync}
+      {/* KPI row */}
+      <div className="mb-3 flex flex-wrap items-stretch gap-3">
+        {summaryCards.map((card) => (
+          <KpiCard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            iconClassName={card.iconClassName}
+            className="min-w-[180px]"
           />
+        ))}
+      </div>
 
-          <AppGrid variant={3}>
-            {isLoading
-              ? Array.from({ length: 3 }).map((_, index) => (
-                  <ConnectionCardSkeleton key={`skeleton-${index}`} />
+      {/* Health mix + activity feed. RTL grid: the first child lands rightmost. */}
+      <div className="mb-3.5 grid gap-3 lg:grid-cols-[1fr_1.4fr]">
+        <div className={cn(SURFACE_CARD_CLASS, "px-5 py-[18px]")}>
+          <div className="mb-3.5 text-sm font-bold text-[#0d1b3e]">
+            {UI_TEXT.sections.healthBreakdown}
+          </div>
+          <DonutBreakdown
+            entries={healthBreakdown}
+            total={categoryFilteredRecords.length}
+            centerLabel={UI_TEXT.sections.totalConnections}
+            emptyLabel={UI_TEXT.empty.tableNoRows}
+          />
+        </div>
+
+        <SurfaceCard title={UI_TEXT.sections.syncActivity}>
+          {recentActivity.length === 0 ? (
+            <div className="px-[18px] py-8 text-center text-xs text-[#8098b4]">
+              {UI_TEXT.sections.noActivity}
+            </div>
+          ) : (
+            recentActivity.map((activity, index) => (
+              <div
+                key={activity.key}
+                className={cn(
+                  "flex items-center gap-3 px-[18px] py-2.5",
+                  index < recentActivity.length - 1 && "border-b border-[#e8edf3]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    activity.failed ? "bg-[#ef4444]" : "bg-[#10b981]"
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold text-[#0d1b3e]">
+                    {activity.platformName} · {activity.action}
+                  </div>
+                  <div className="truncate text-[11px] text-[#8098b4]">{activity.message}</div>
+                </div>
+                <span className="shrink-0 text-[11px] text-[#8098b4]">
+                  <RelativeTime value={activity.timestamp} fallback="-" />
+                </span>
+              </div>
+            ))
+          )}
+        </SurfaceCard>
+      </div>
+
+      {/* Connections table */}
+      <SurfaceCard title={`${UI_TEXT.sections.tableTitle} (${categoryFilteredRecords.length})`}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-right">
+            <thead>
+              <tr className="border-b border-[#e8edf3] bg-[#f8fafc]">
+                {[
+                  UI_TEXT.sections.platform,
+                  UI_TEXT.sections.connectedAccount,
+                  UI_TEXT.sections.status,
+                  UI_TEXT.sections.health,
+                  UI_TEXT.sections.lastSync,
+                  UI_TEXT.sections.nextSync,
+                  UI_TEXT.sections.actions,
+                ].map((heading) => (
+                  <th
+                    key={heading}
+                    className="px-4 py-2.5 text-[11px] font-semibold text-[#8098b4]"
+                  >
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`} className="border-b border-[#e8edf3]">
+                    <td colSpan={7} className="px-4 py-3">
+                      <AppSkeleton className="h-8 w-full" />
+                    </td>
+                  </tr>
                 ))
-              : categoryFilteredRecords.map((record) => {
+              ) : categoryFilteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-xs text-[#8098b4]">
+                    {emptyState?.subtitle ?? UI_TEXT.empty.tableNoRows}
+                  </td>
+                </tr>
+              ) : (
+                categoryFilteredRecords.map((record, index) => {
                   const healthVisuals = getHealthVisuals(
                     record.healthState,
                     record.healthScore,
                     record.healthLabel
                   )
-                  const accentClass =
-                    CONNECTOR_ACCENT_CLASS[record.platformName] ??
-                    "from-slate-400/30 to-transparent"
-                  const statusItems = getStatusItems(record.connection.status, record.healthState)
-                  const syncActivityFromRuns = (record.syncHistory?.runs ?? [])
-                    .slice(0, 3)
-                    .map((run) => ({
-                      name: `Run ${run.syncRunId.slice(0, 8)}`,
-                      state:
-                        run.status === "failed"
-                          ? ("queued" as const)
-                          : run.status === "running"
-                            ? ("running" as const)
-                            : ("completed" as const),
-                      records:
-                        run.status === "failed"
-                          ? (run.errorMessage ?? "Failed")
-                          : `${run.result?.recordsWritten ?? 0} records`,
-                      time: (
-                        <RelativeTime value={run.finishedAt ?? run.startedAt} fallback="Never" />
-                      ),
-                    }))
-
-                  const syncActivityFromEvents = record.integrationStatus.recentEvents
-                    .slice(0, 3)
-                    .map((event) => ({
-                      name: event.action,
-                      state:
-                        event.action === "sync.failed"
-                          ? ("queued" as const)
-                          : event.action === "sync.started"
-                            ? ("running" as const)
-                            : event.action.startsWith("sync.")
-                              ? ("completed" as const)
-                              : ("queued" as const),
-                      records: event.message,
-                      time: <RelativeTime value={event.timestamp} fallback="Never" />,
-                    }))
-
-                  const syncActivity =
-                    syncActivityFromRuns.length > 0 ? syncActivityFromRuns : syncActivityFromEvents
+                  const statusMeta = CONNECTION_STATUS_META[record.connection.status]
+                  const healthMeta = HEALTH_STATUS_META[record.healthState]
                   const syncState = syncProgress[record.connection.connectionId]
                   const isSyncing = syncState && syncState !== "completed" && syncState !== "failed"
                   const workspaceStatus = availableWorkspaces.find(
@@ -983,9 +843,10 @@ export function ConnectionsOverview() {
                     setSyncProgress((prev) => ({ ...prev, [connectionId]: "running" }))
                     try {
                       await runSync(connectionId)
-                      toast.success("Sync started successfully.")
+                      toast.success("بدأت المزامنة بنجاح.")
                     } catch (error) {
-                      const message = error instanceof Error ? error.message : "Failed to run sync."
+                      const message =
+                        error instanceof Error ? error.message : "تعذر تشغيل المزامنة."
                       toast.error(message)
                     } finally {
                       setSyncProgress((prev) => {
@@ -997,158 +858,83 @@ export function ConnectionsOverview() {
                   }
 
                   return (
-                    <AppCard
+                    <tr
                       key={record.connection.connectionId}
                       className={cn(
-                        SURFACE_CARD_CLASS,
-                        "group relative transition-all duration-300",
-                        syncState && "opacity-75",
-                        !isSyncing &&
-                          "hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(15,30,62,0.10)]"
+                        "transition-colors hover:bg-[#f8fafc]",
+                        index < categoryFilteredRecords.length - 1 && "border-b border-[#e8edf3]"
                       )}
                     >
-                      <div
-                        className={cn(
-                          "pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r transition-all duration-300",
-                          getSyncIndicatorClass(syncState) || accentClass
-                        )}
-                      />
-
-                      <SyncAllOverlay syncState={syncState} />
-
-                      <div className="space-y-5 text-sm">
-                        <div className="flex flex-col items-end gap-1">
-                          {statusItems.map((item) => (
-                            <div key={`${record.connection.connectionId}-${item.label}`}>
-                              {statusBadge(item.label, item.className, item.icon)}
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex items-start gap-3 rounded-xl border bg-background/70 p-3">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
                           <ConnectorLogo platformName={record.platformName} />
-                          <div className="space-y-1">
-                            <div className="text-base font-semibold leading-none">
+                          <div className="min-w-0">
+                            <div className="truncate text-[12.5px] font-bold text-[#0d1b3e]">
                               {record.platformName}
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              {record.connectedAccounts.length} Accounts Connected
-                            </p>
+                            <div className="truncate text-[11px] text-[#8098b4]">
+                              {record.workspaceName}
+                            </div>
                           </div>
                         </div>
-
-                        <div className="rounded-xl bg-muted/35 p-3">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            {UI_TEXT.sections.latestSync}
-                          </p>
-                          <p className="mt-1 text-sm font-medium text-foreground">
-                            <RelativeTime value={record.lastSyncAt} fallback="Never" />
-                          </p>
+                      </td>
+                      <td className="px-4 py-3 text-[12.5px] text-[#334155]">
+                        {record.connectedAccount || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                            statusMeta?.className ?? "bg-[#f1f5f9] text-[#64748b]"
+                          )}
+                        >
+                          {statusMeta?.label ?? record.connection.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                              healthMeta?.className ?? "bg-[#f1f5f9] text-[#64748b]"
+                            )}
+                          >
+                            {healthMeta?.label ?? record.healthState}
+                          </span>
+                          <span className="text-[11px] font-bold text-[#0d1b3e]" dir="ltr">
+                            {healthVisuals.score}%
+                          </span>
                         </div>
-
-                        <div className="space-y-2 rounded-xl border bg-background/70 p-3">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            {UI_TEXT.sections.syncActivity}
-                          </p>
-                          <div className="space-y-2">
-                            {syncActivity.map((item) => {
-                              const tone = activityStateTone(item.state)
-                              return (
-                                <div
-                                  key={`${record.connection.connectionId}-${item.name}`}
-                                  className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className={cn("text-xs font-semibold", tone.className)}>
-                                      {tone.icon}
-                                    </span>
-                                    <span className="text-xs font-medium text-foreground">
-                                      {item.name}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 pl-4 text-xs text-muted-foreground" dir="ltr">
-                                    {getActivityDetailLine(item)}
-                                  </p>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 rounded-xl border bg-background/70 p-3">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                              {UI_TEXT.sections.healthScore}
-                            </p>
-                            <p className={cn("text-lg font-semibold", healthVisuals.textClass)}>
-                              {healthVisuals.score}%
-                            </p>
-                          </div>
-                          <div className="h-2 rounded-full bg-muted">
-                            <div
-                              className="h-full rounded-full transition-all duration-700"
-                              style={{
-                                width: `${healthVisuals.score}%`,
-                                backgroundColor: healthVisuals.barColor,
-                              }}
-                            />
-                          </div>
-                          <p className={cn("text-xs font-medium", healthVisuals.textClass)}>
-                            {healthVisuals.label}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1.5">
-                          {record.capabilities.map((capability) => {
-                            const capabilityStyle = CAPABILITY_STYLE[capability] ?? {
-                              icon: "⚙️",
-                              label: getCapabilityLabel(capability),
-                              tone: "bg-slate-100 text-slate-800",
-                            }
-
-                            return (
-                              <span
-                                key={`${record.connection.connectionId}-${capability}`}
-                                className={cn(
-                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                  capabilityStyle.tone
-                                )}
-                              >
-                                <span aria-hidden="true">{capabilityStyle.icon}</span>
-                                {capabilityStyle.label}
-                              </span>
-                            )
-                          })}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                      </td>
+                      <td className="px-4 py-3 text-[11px] text-[#8098b4]">
+                        <RelativeTime value={record.lastSyncAt} fallback="-" />
+                      </td>
+                      <td className="px-4 py-3 text-[11px] text-[#8098b4]">
+                        <RelativeTime value={record.nextSyncAt} fallback="-" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
                           <AppButton
                             size="sm"
-                            className="h-8 rounded-md px-3 shadow-sm transition-all hover:shadow"
+                            className="h-8 rounded-lg bg-[#2563eb] px-3 text-[11px] hover:bg-[#1d4ed8]"
+                            disabled={!runSyncAction.enabled || Boolean(isSyncing)}
                             onClick={() => void handleRunSync()}
-                            disabled={!runSyncAction.enabled || isSyncing}
-                            title={isSyncing ? "Sync in progress..." : runSyncAction.disabledReason}
                           >
                             {isSyncing ? (
-                              <>
-                                <Loader2 className="mr-2 size-4 animate-spin" />
-                                Syncing...
-                              </>
+                              <Loader2 className="size-3.5 animate-spin" />
                             ) : (
-                              runSyncAction.label
+                              UI_TEXT.buttons.runSync
                             )}
                           </AppButton>
-
                           <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
                             <AppButton
                               size="sm"
                               variant="outline"
-                              className="h-8 rounded-md px-3 transition-colors"
+                              className="h-8 rounded-lg border-[#e8edf3] px-3 text-[11px] text-[#334155] hover:bg-[#f8fafc]"
                             >
                               {UI_TEXT.buttons.details}
                             </AppButton>
                           </Link>
-
                           <ConnectionActionsMenu
                             actions={availableActions}
                             menuLabel={UI_TEXT.overflow.moreActions}
@@ -1157,129 +943,55 @@ export function ConnectionsOverview() {
                             }}
                           />
                         </div>
-                      </div>
-                    </AppCard>
+                      </td>
+                    </tr>
                   )
-                })}
-          </AppGrid>
-        </AppSection>
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </SurfaceCard>
 
-        <AppSection className="mt-16">
-          <AppCard title={UI_TEXT.sections.tableTitle}>
-            <AppTable>
-              <AppTableHeader>
-                <AppTableRow>
-                  <AppTableHead>{UI_TEXT.sections.platform}</AppTableHead>
-                  <AppTableHead>{UI_TEXT.sections.connectedAccount}</AppTableHead>
-                  <AppTableHead>{UI_TEXT.sections.status}</AppTableHead>
-                  <AppTableHead>{UI_TEXT.sections.health}</AppTableHead>
-                  <AppTableHead>{UI_TEXT.sections.lastSync}</AppTableHead>
-                  <AppTableHead>{UI_TEXT.sections.nextSync}</AppTableHead>
-                  <AppTableHead className="text-right">
-                    {UI_TEXT.sections.primaryAction}
-                  </AppTableHead>
-                </AppTableRow>
-              </AppTableHeader>
-              <AppTableBody>
-                {categoryFilteredRecords.map((record) => (
-                  <AppTableRow
-                    key={`row-${record.connection.connectionId}`}
-                    className="h-16 transition-colors hover:bg-muted/40"
-                  >
-                    <AppTableCell>
-                      <div className="flex items-center gap-3">
-                        <ConnectorLogo platformName={record.platformName} />
-                        <span className="font-medium">{record.platformName}</span>
-                      </div>
-                    </AppTableCell>
-                    <AppTableCell className="font-medium text-foreground/90">
-                      {record.connectedAccounts.length} Accounts Connected
-                    </AppTableCell>
-                    <AppTableCell>
-                      {statusBadge(
-                        (
-                          CONNECTION_STATUS_META[record.connection.status] ?? {
-                            label: record.connection.status,
-                            className:
-                              STATUS_BADGE_CLASS[record.connection.status] ??
-                              "bg-slate-100 text-slate-700",
-                            icon: "⚪",
-                          }
-                        ).label,
-                        (
-                          CONNECTION_STATUS_META[record.connection.status] ?? {
-                            className:
-                              STATUS_BADGE_CLASS[record.connection.status] ??
-                              "bg-slate-100 text-slate-700",
-                          }
-                        ).className,
-                        (CONNECTION_STATUS_META[record.connection.status] ?? { icon: "⚪" }).icon
-                      )}
-                    </AppTableCell>
-                    <AppTableCell>
-                      {statusBadge(
-                        HEALTH_STATUS_META[record.healthState]?.label ?? record.healthState,
-                        HEALTH_STATUS_META[record.healthState]?.className ??
-                          HEALTH_BADGE_CLASS[record.healthState] ??
-                          "bg-slate-100 text-slate-700",
-                        HEALTH_STATUS_META[record.healthState]?.icon
-                      )}
-                    </AppTableCell>
-                    <AppTableCell>
-                      <RelativeTime value={record.lastSyncAt} fallback="Never" />
-                    </AppTableCell>
-                    <AppTableCell>
-                      <RelativeTime value={record.nextSyncAt} fallback="Never" />
-                    </AppTableCell>
-                    <AppTableCell>
-                      <div className="flex justify-end">
-                        <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
-                          <AppButton size="sm" variant="outline" className="h-8">
-                            {UI_TEXT.buttons.open}
-                          </AppButton>
-                        </Link>
-                      </div>
-                    </AppTableCell>
-                  </AppTableRow>
-                ))}
-                {!isLoading && categoryFilteredRecords.length === 0 ? (
-                  <AppTableRow>
-                    <AppTableCell colSpan={7} className="text-center text-muted-foreground">
-                      {UI_TEXT.empty.tableNoRows}
-                    </AppTableCell>
-                  </AppTableRow>
-                ) : null}
-              </AppTableBody>
-            </AppTable>
-          </AppCard>
-        </AppSection>
+      <SyncAllDialog
+        open={syncAllDialogOpen}
+        onOpenChange={setSyncAllDialogOpen}
+        records={records}
+        isSyncing={isSyncingAll}
+        onSyncStart={() => setIsSyncingAll(true)}
+        onSyncEnd={() => {
+          setIsSyncingAll(false)
+          setSyncProgress({})
+        }}
+        onRunSync={runSync}
+      />
 
-        <AppConfirmDialog
-          open={deleteDialogOpen}
-          onOpenChange={(open) => {
+      <AppConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeletingConnection) {
             setDeleteDialogOpen(open)
-            if (!open && !isDeletingConnection) {
+            if (!open) {
               setPendingDeleteAction(null)
             }
-          }}
-          title={pendingDeleteAction?.action.confirmation?.title ?? ""}
-          description={pendingDeleteAction?.action.confirmation?.description ?? ""}
-          cancelLabel="Cancel"
-          confirmLabel={pendingDeleteAction?.action.confirmation?.confirmLabel ?? ""}
-          confirmTone="destructive"
-          loading={isDeletingConnection}
-          onCancel={() => {
-            if (isDeletingConnection) {
-              return
-            }
+          }
+        }}
+        title={pendingDeleteAction?.action.confirmation?.title ?? ""}
+        description={pendingDeleteAction?.action.confirmation?.description ?? ""}
+        cancelLabel="إلغاء"
+        confirmLabel={pendingDeleteAction?.action.confirmation?.confirmLabel ?? ""}
+        confirmTone="destructive"
+        loading={isDeletingConnection}
+        onCancel={() => {
+          if (!isDeletingConnection) {
             setDeleteDialogOpen(false)
             setPendingDeleteAction(null)
-          }}
-          onConfirm={() => {
-            void confirmDeleteConnection()
-          }}
-        />
-      </AppContainer>
-    </AppPage>
+          }
+        }}
+        onConfirm={() => {
+          void confirmDeleteConnection()
+        }}
+      />
+    </div>
   )
 }

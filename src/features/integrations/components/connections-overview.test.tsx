@@ -2,6 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
+// next/font is a build-time transform with no runtime implementation, so it has to be stubbed
+// for anything importing the design system's typeface.
+vi.mock("@/components/design/fonts", () => ({
+  tajawal: { className: "font-tajawal" },
+}))
+
 import { ConnectionsOverview } from "./connections-overview"
 
 const mockUseConnectionsCenter = vi.fn()
@@ -117,11 +123,18 @@ describe("ConnectionsOverview", () => {
       </QueryClientProvider>
     )
 
-    expect(screen.getByText("Connections Overview")).toBeTruthy()
-    expect(screen.getAllByText("3 Accounts Connected").length).toBeGreaterThan(0)
-    expect(screen.getByRole("button", { name: "Run Sync" })).toBeTruthy()
+    // The page is Arabic and renders connections as table rows rather than cards.
+    expect(screen.getByText("مركز الاتصالات")).toBeTruthy()
+    expect(screen.getAllByText("Google Ads").length).toBeGreaterThan(0)
+    expect(screen.getByText("Google Ads Account")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "مزامنة" })).toBeTruthy()
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }))
+    // The health mix and the KPI row both read from the same records.
+    expect(screen.getAllByText("سليمة").length).toBeGreaterThan(0)
+    // Appears twice by design: the KPI card label and the donut's centre caption.
+    expect(screen.getAllByText("إجمالي الاتصالات").length).toBeGreaterThan(0)
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "إجراءات إضافية" }))
 
     expect(await screen.findByText("Pause Sync")).toBeTruthy()
     expect(await screen.findByText("Disconnect")).toBeTruthy()

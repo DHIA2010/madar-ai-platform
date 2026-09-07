@@ -17,8 +17,14 @@ import {
 } from "lucide-react"
 
 import { AppEmpty } from "@/components/app"
-import { KpiCard, LivePill, SurfaceCard } from "@/components/design/dashboard-surface"
-import { tajawal } from "@/features/campaign-links/components/design/fonts"
+import {
+  DONUT_COLORS,
+  DonutBreakdown,
+  KpiCard,
+  LivePill,
+  SurfaceCard,
+} from "@/components/design/dashboard-surface"
+import { tajawal } from "@/components/design/fonts"
 import { WorldMapIllustration } from "@/features/live-visitors/components/world-map"
 import {
   liveVisitorsService,
@@ -32,7 +38,6 @@ import {
 // between renders.
 const REFRESH_INTERVAL_MS = 15_000
 
-const DONUT_COLORS = ["#2563eb", "#7c3aed", "#10b981", "#0891b2", "#f59e0b", "#64748b"]
 const COUNTRY_BAR_COLORS = ["#2563eb", "#60a5fa", "#93c5fd", "#bfdbfe"]
 
 function formatMoney(value: number) {
@@ -68,95 +73,6 @@ function visitorPage(visitor: LiveVisitorRecord) {
   } catch {
     return visitor.currentPageUrl
   }
-}
-
-function DonutChart({
-  entries,
-  total,
-}: {
-  entries: LiveDashboardRecord["trafficSources"]
-  total: number
-}) {
-  const radius = 65
-  const circumference = 2 * Math.PI * radius
-  let cumulative = 0
-
-  return (
-    <div className="flex items-center gap-5">
-      <div className="relative shrink-0">
-        <svg width="200" height="200" viewBox="0 0 200 200">
-          <g transform="rotate(-90, 100, 100)">
-            {total === 0 ? (
-              <circle cx={100} cy={100} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={24} />
-            ) : (
-              entries.map((entry, index) => {
-                const length = (entry.visitors / total) * circumference
-                const offset = -(cumulative / total) * circumference
-                cumulative += entry.visitors
-                return (
-                  <circle
-                    key={entry.label || `unknown-${index}`}
-                    cx={100}
-                    cy={100}
-                    r={radius}
-                    fill="none"
-                    stroke={DONUT_COLORS[index % DONUT_COLORS.length]}
-                    strokeWidth={24}
-                    strokeDasharray={`${Math.max(0, length - 2)} ${circumference - length + 2}`}
-                    strokeDashoffset={offset}
-                    strokeLinecap="butt"
-                  />
-                )
-              })
-            )}
-          </g>
-          <text
-            x="100"
-            y="97"
-            textAnchor="middle"
-            className="fill-[#0d1b3e] text-2xl font-extrabold"
-          >
-            {total}
-          </text>
-          <text x="100" y="114" textAnchor="middle" className="fill-[#8098b4] text-[10px]">
-            إجمالي الزوار
-          </text>
-        </svg>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-2.5">
-        {entries.length === 0 ? (
-          <span className="text-xs text-[#8098b4]">لا توجد بيانات بعد</span>
-        ) : (
-          entries.map((entry, index) => (
-            <div key={entry.label || `unknown-${index}`} className="flex items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-[7px]">
-                <div
-                  className="size-2.5 shrink-0 rounded-[3px]"
-                  style={{ background: DONUT_COLORS[index % DONUT_COLORS.length] }}
-                />
-                <span className="truncate text-[12.5px] font-medium text-[#334155]">
-                  {entry.label || "غير معروف"}
-                </span>
-              </div>
-              <span
-                className="min-w-[28px] shrink-0 text-center text-xs font-semibold text-[#0d1b3e]"
-                dir="ltr"
-              >
-                {entry.visitors}
-              </span>
-              <span
-                className="min-w-[54px] shrink-0 text-left text-[11.5px] text-[#8098b4]"
-                dir="ltr"
-              >
-                ({entry.share}%)
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
 }
 
 export default function LiveVisitorsPage() {
@@ -381,7 +297,16 @@ export default function LiveVisitorsPage() {
 
         <div className="rounded-xl border border-[#e8edf3] bg-white px-5 py-[18px] shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]">
           <div className="mb-3.5 text-sm font-bold text-[#0d1b3e]">الزوار حسب مصدر الزيارة</div>
-          <DonutChart entries={data?.trafficSources ?? []} total={summary?.liveVisitors ?? 0} />
+          <DonutBreakdown
+            entries={(data?.trafficSources ?? []).map((entry) => ({
+              label: entry.label || "غير معروف",
+              value: entry.visitors,
+              share: entry.share,
+            }))}
+            total={summary?.liveVisitors ?? 0}
+            centerLabel="إجمالي الزوار"
+            emptyLabel="لا توجد بيانات بعد"
+          />
         </div>
 
         <div className="flex flex-col rounded-xl border border-[#e8edf3] bg-white px-5 py-[18px] shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]">

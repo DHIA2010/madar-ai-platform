@@ -127,6 +127,110 @@ export function PageHeading({ title, subtitle, badge, actions }: PageHeadingProp
   )
 }
 
+export const DONUT_COLORS = ["#2563eb", "#7c3aed", "#10b981", "#0891b2", "#f59e0b", "#64748b"]
+
+export interface DonutEntry {
+  label: string
+  value: number
+  share: number
+  /** Overrides the positional palette, for entries whose colour carries meaning (health states). */
+  color?: string
+}
+
+interface DonutBreakdownProps {
+  entries: DonutEntry[]
+  total: number
+  /** Caption under the centre figure, e.g. "إجمالي الزوار". */
+  centerLabel: string
+  emptyLabel: string
+}
+
+// The design's donut: a ring of segments with the total in the middle and a legend beside it.
+// Shared so the two dashboards built on this design can't drift on segment width or legend
+// alignment. A zero total draws a single flat ring rather than dividing by zero.
+export function DonutBreakdown({ entries, total, centerLabel, emptyLabel }: DonutBreakdownProps) {
+  const radius = 65
+  const circumference = 2 * Math.PI * radius
+  let cumulative = 0
+
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative shrink-0">
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <g transform="rotate(-90, 100, 100)">
+            {total === 0 ? (
+              <circle cx={100} cy={100} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={24} />
+            ) : (
+              entries.map((entry, index) => {
+                const length = (entry.value / total) * circumference
+                const offset = -(cumulative / total) * circumference
+                cumulative += entry.value
+                return (
+                  <circle
+                    key={entry.label || `entry-${index}`}
+                    cx={100}
+                    cy={100}
+                    r={radius}
+                    fill="none"
+                    stroke={entry.color ?? DONUT_COLORS[index % DONUT_COLORS.length]}
+                    strokeWidth={24}
+                    strokeDasharray={`${Math.max(0, length - 2)} ${circumference - length + 2}`}
+                    strokeDashoffset={offset}
+                    strokeLinecap="butt"
+                  />
+                )
+              })
+            )}
+          </g>
+          <text
+            x="100"
+            y="97"
+            textAnchor="middle"
+            className="fill-[#0d1b3e] text-2xl font-extrabold"
+          >
+            {total}
+          </text>
+          <text x="100" y="114" textAnchor="middle" className="fill-[#8098b4] text-[10px]">
+            {centerLabel}
+          </text>
+        </svg>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2.5">
+        {entries.length === 0 ? (
+          <span className="text-xs text-[#8098b4]">{emptyLabel}</span>
+        ) : (
+          entries.map((entry, index) => (
+            <div key={entry.label || `entry-${index}`} className="flex items-center">
+              <div className="flex min-w-0 flex-1 items-center gap-[7px]">
+                <div
+                  className="size-2.5 shrink-0 rounded-[3px]"
+                  style={{ background: entry.color ?? DONUT_COLORS[index % DONUT_COLORS.length] }}
+                />
+                <span className="truncate text-[12.5px] font-medium text-[#334155]">
+                  {entry.label}
+                </span>
+              </div>
+              <span
+                className="min-w-[28px] shrink-0 text-center text-xs font-semibold text-[#0d1b3e]"
+                dir="ltr"
+              >
+                {entry.value}
+              </span>
+              <span
+                className="min-w-[54px] shrink-0 text-left text-[11.5px] text-[#8098b4]"
+                dir="ltr"
+              >
+                ({entry.share}%)
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
 // The green "live" pill from the design. Only meaningful where something really is updating on
 // its own -- it animates, and a static page wearing it would be lying.
 export function LivePill({ label }: { label: string }) {
