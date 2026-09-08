@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   addMonths,
   endOfMonth,
@@ -16,27 +17,33 @@ import {
 import {
   ArrowDownRight,
   ArrowUpRight,
+  BarChart3,
   CalendarIcon,
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Download,
   Eye,
   FileText,
+  LayoutGrid,
+  Lightbulb,
   type LucideIcon,
   MousePointerClick,
   Percent,
+  RefreshCcw,
   Search,
+  Sparkles,
+  Target,
   TrendingUp,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
   AppCalendar,
-  AppCard,
-  AppPageHeader,
   AppPopover,
   AppPopoverContent,
   AppPopoverTrigger,
@@ -46,12 +53,6 @@ import {
   AppSelectItem,
   AppSelectTrigger,
   AppSelectValue,
-  AppTable,
-  AppTableBody,
-  AppTableCell,
-  AppTableHead,
-  AppTableHeader,
-  AppTableRow,
 } from "@/components/app"
 
 import {
@@ -66,14 +67,15 @@ import {
   type ExplorerLevel,
   type ExplorerPlatformFilter,
   getAvailableTabsForPlatforms,
-  getEntityLabel,
   getMetricsColumns,
   getNextHierarchyLevel,
   type MetricColumn,
   PLATFORM_NODE_CONFIG,
   type PlatformNodeKey,
 } from "./campaign-metrics"
+import { CampaignSpendDonut } from "./campaign-spend-donut"
 
+import { tajawal } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
 
 // One row per entity level, real data from campaignPerformanceService plus the display-only
@@ -108,6 +110,9 @@ type ExplorerRow = EntityRow | GroupedPlatformRow
 function isGroupedPlatformRow(row: ExplorerRow): row is GroupedPlatformRow {
   return "platformNodeKey" in row
 }
+
+// Slice colours for the chart view, in the order the rows come back.
+const DONUT_COLORS = ["#2878ff", "#1f9d55", "#8b5cf6", "#e08b00", "#e0484d", "#12a594"]
 
 const platformOptions: ExplorerPlatformFilter[] = [
   "All Platforms",
@@ -165,12 +170,90 @@ function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
   ]
 }
 
+// Colours and radii below come from the campaigns SVG export rather than the shared
+// dashboard tokens, matching the treatment the integrations surfaces already use.
+const PANEL = "rounded-[14px] border border-[#e1e7f0] bg-white"
+const HEADING = "text-[#0b1738]"
+const MUTED = "text-[#6b7b96]"
+const FILTER_TRIGGER_CLASS =
+  "h-10 w-[140px] rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738]"
+const PAGER_BUTTON_CLASS =
+  "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
+
+// The table's column labels live in campaign-metrics.ts, which the drill-down levels and other
+// screens share. Rather than translating that file (and every screen reading it), the Arabic
+// shown on this page is a display-only overlay: an unmapped label falls through in English so a
+// new column is visibly untranslated instead of silently missing.
+const COLUMN_LABEL_AR: Record<string, string> = {
+  Platform: "المنصة",
+  "Active Campaigns": "الحملات النشطة",
+  Impressions: "مرات الظهور",
+  Clicks: "النقرات",
+  CTR: "معدل النقر إلى الظهور",
+  Spend: "الإنفاق (SAR)",
+  Revenue: "الإيرادات (SAR)",
+  ROAS: "ROAS",
+  Conversions: "التحويلات",
+  Status: "الحالة",
+  Campaign: "الحملة",
+  "Ad Group": "المجموعة الإعلانية",
+  "Ad Set": "مجموعة الإعلانات",
+  Ad: "الإعلان",
+  Keyword: "الكلمة المفتاحية",
+  CPC: "تكلفة النقرة",
+  CPA: "تكلفة الاكتساب",
+  "Conversion Rate": "معدل التحويل",
+  Reach: "الوصول",
+  Frequency: "التكرار",
+}
+
+const FILTER_LABEL_AR: Record<string, string> = {
+  "All Platforms": "جميع المنصات",
+  "All Statuses": "جميع الحالات",
+  "All Objectives": "جميع الأهداف",
+  "Google Search": "بحث Google",
+  "Google Display": "شبكة Google الإعلانية",
+  YouTube: "YouTube",
+  Meta: "Meta",
+  TikTok: "TikTok",
+  Snapchat: "Snapchat",
+  Active: "نشطة",
+  Paused: "متوقفة",
+  Other: "أخرى",
+  Awareness: "الوعي",
+  Traffic: "الزيارات",
+  Leads: "العملاء المحتملون",
+  Conversions: "التحويلات",
+  Sales: "المبيعات",
+}
+
+const LEVEL_LABEL_AR: Record<string, string> = {
+  platforms: "المنصات",
+  campaigns: "الحملات",
+  adGroups: "المجموعات الإعلانية",
+  ads: "الإعلانات",
+  keywords: "الكلمات المفتاحية",
+}
+
+const STATUS_PILL_AR: Record<string, { label: string; className: string }> = {
+  active: { label: "نشطة", className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  enabled: { label: "نشطة", className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  paused: { label: "متوقفة", className: "bg-[#fff7e6] text-[#e08b00]" },
+  removed: { label: "محذوفة", className: "bg-[#fdeeee] text-[#e0484d]" },
+  ended: { label: "منتهية", className: "bg-[#eef2f8] text-[#5b6b85]" },
+}
+
+function statusPill(status: string) {
+  return (
+    STATUS_PILL_AR[status.toLowerCase()] ?? {
+      label: status,
+      className: "bg-[#eef2f8] text-[#5b6b85]",
+    }
+  )
+}
+
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value)
+  return `SAR ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)}`
 }
 
 function formatSar(value: number) {
@@ -192,11 +275,11 @@ interface CampaignKpiCardData {
 }
 
 const KPI_TONE_CLASSNAMES: Record<CampaignKpiCardData["tone"], string> = {
-  blue: "bg-blue-50 text-blue-600",
-  green: "bg-emerald-50 text-emerald-600",
-  orange: "bg-orange-50 text-orange-600",
-  rose: "bg-rose-50 text-rose-600",
-  violet: "bg-violet-50 text-violet-600",
+  blue: "bg-[#eef4ff] text-[#2878ff]",
+  green: "bg-[#e9f8ef] text-[#1f9d55]",
+  orange: "bg-[#fff3e3] text-[#e08b00]",
+  rose: "bg-[#fdeeee] text-[#e0484d]",
+  violet: "bg-[#f3eeff] text-[#8b5cf6]",
 }
 
 function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
@@ -206,56 +289,75 @@ function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
   const TrendIcon = trend === "up" ? ArrowUpRight : ArrowDownRight
 
   return (
-    <AppCard className="overflow-hidden rounded-2xl border-border/60 bg-card p-4 shadow-sm">
-      <div
-        className={cn(
-          "flex size-10 items-center justify-center rounded-xl",
-          KPI_TONE_CLASSNAMES[kpi.tone]
-        )}
-      >
-        <Icon className="size-5" />
-      </div>
-      <p className="mt-3 text-sm text-muted-foreground">{kpi.label}</p>
-      <p className="mt-1 text-2xl font-bold text-foreground">{kpi.value}</p>
-      {changeLabel ? (
-        <div className="mt-2 flex items-center gap-1 text-xs">
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 font-medium",
-              trend === "up" ? "text-emerald-600" : "text-rose-600"
-            )}
-          >
-            <TrendIcon className="size-3.5" />
-            {changeLabel}
-          </span>
-          <span className="text-muted-foreground">عن الفترة السابقة</span>
+    <div className={cn(PANEL, "p-4")}>
+      {/* RTL: the label/value block is written first so it lands on the right, icon left. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={cn("text-[11.5px] leading-[18px]", MUTED)}>{kpi.label}</p>
+          <p className={cn("mt-1.5 text-[20px] font-extrabold leading-tight", HEADING)}>
+            {kpi.value}
+          </p>
         </div>
-      ) : (
-        <p className="mt-2 text-xs text-muted-foreground">الفترة الحالية</p>
-      )}
-    </AppCard>
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-[10px]",
+            KPI_TONE_CLASSNAMES[kpi.tone]
+          )}
+        >
+          <Icon className="size-[18px]" />
+        </span>
+      </div>
+
+      {/* The export draws a sparkline here. There is no per-metric time series on the
+          campaigns service -- only the period totals and their deltas -- so the card shows
+          the real change instead of a trend line it would have to invent. */}
+      <div className="mt-3 flex items-center justify-end gap-1.5 border-t border-[#f1f4f9] pt-2.5">
+        {changeLabel ? (
+          <>
+            <span className={cn("text-[10.5px]", MUTED)}>مقارنة بالفترة السابقة</span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-0.5 text-[11px] font-bold",
+                trend === "up" ? "text-[#1f9d55]" : "text-[#e0484d]"
+              )}
+            >
+              {changeLabel}
+              <TrendIcon className="size-3" />
+            </span>
+          </>
+        ) : (
+          <span className={cn("text-[10.5px]", MUTED)}>لا توجد فترة سابقة للمقارنة</span>
+        )}
+      </div>
+    </div>
   )
 }
 
+const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+})
+
 function formatDateRangeLabel(range: DateRange | undefined) {
-  if (!range?.from) return "Date Range"
-  if (!range.to) return format(range.from, "MMM d, yyyy")
-  return `${format(range.from, "MMM d, yyyy")} - ${format(range.to, "MMM d, yyyy")}`
+  if (!range?.from) return "الفترة الزمنية"
+  if (!range.to) return ARABIC_DATE.format(range.from)
+  return `${ARABIC_DATE.format(range.from)} - ${ARABIC_DATE.format(range.to)}`
 }
 
 function getRoasClasses(roas: number) {
-  if (roas >= 4) return "text-emerald-300"
-  if (roas >= 2.5) return "text-sky-300"
-  if (roas > 0) return "text-amber-300"
-  return "text-muted-foreground"
+  if (roas >= 4) return "text-[#1f9d55]"
+  if (roas >= 2.5) return "text-[#2878ff]"
+  if (roas > 0) return "text-[#e08b00]"
+  return "text-[#95a4bd]"
 }
 
 function getSearchPlaceholder(level: ExplorerLevel) {
-  if (level === "platforms") return "Search platforms..."
-  if (level === "campaigns") return "Search campaigns..."
-  if (level === "adGroups") return "Search ad groups..."
-  if (level === "keywords") return "Search keywords..."
-  return "Search ads..."
+  if (level === "platforms") return "البحث في المنصات..."
+  if (level === "campaigns") return "البحث في الحملات..."
+  if (level === "adGroups") return "البحث في المجموعات الإعلانية..."
+  if (level === "keywords") return "البحث في الكلمات المفتاحية..."
+  return "البحث في الإعلانات..."
 }
 
 function formatDuration(value: number) {
@@ -293,8 +395,8 @@ function toEntityRow(row: CampaignPerformanceRow): EntityRow {
     nodeId: row.id,
     entityName: row.name,
     entityDescription: row.activityDate
-      ? `Last active ${row.activityDate} · ${row.status}`
-      : row.status,
+      ? `${statusPill(row.status).label} · آخر نشاط ${row.activityDate}`
+      : statusPill(row.status).label,
   }
 }
 
@@ -320,7 +422,7 @@ function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatf
             nodeId: `platform-${platformNodeKey.toLowerCase()}`,
             platformNodeKey,
             entityName: platformNodeKey,
-            entityDescription: `${activeCampaigns} active campaigns`,
+            entityDescription: `${activeCampaigns} حملة نشطة`,
             activeCampaigns,
             spend,
             revenue,
@@ -377,10 +479,10 @@ function DateRangeFilter({
       <AppPopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-11 w-[220px] items-center justify-between rounded-md border border-border bg-muted/60 px-3 text-sm text-foreground ring-offset-background transition-colors hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/35 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+          className="flex h-10 w-[250px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border border-[#e1e7f0] bg-white px-3.5 text-[12.5px] text-[#0b1738] transition-colors hover:border-[#c4d5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40"
         >
-          <span className="truncate text-left">{formatDateRangeLabel(value)}</span>
-          <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
+          <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
+          <span className="truncate">{formatDateRangeLabel(value)}</span>
         </button>
       </AppPopoverTrigger>
       <AppPopoverContent
@@ -580,6 +682,8 @@ function DateRangeFilter({
 
 export function CampaignDashboardScreen() {
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [viewMode, setViewMode] = useState<"table" | "chart">("table")
   const [currentLevel, setCurrentLevel] = useState<ExplorerLevel>("platforms")
   const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
@@ -831,7 +935,7 @@ export function CampaignDashboardScreen() {
         tone: "orange",
       },
       {
-        label: "نسبة النقر إلى الظهور",
+        label: "معدل النقر إلى الظهور",
         value: `${summary.ctr.toFixed(2)}%`,
         changePct: summary.ctrChangePct,
         icon: Percent,
@@ -839,20 +943,20 @@ export function CampaignDashboardScreen() {
       },
       {
         label: "الإنفاق",
-        value: `${formatSar(summary.spend)} SAR`,
+        value: `SAR ${formatSar(summary.spend)}`,
         changePct: summary.spendChangePct,
         icon: CreditCard,
         tone: "green",
       },
       {
         label: "الإيرادات",
-        value: `${formatSar(summary.revenue)} SAR`,
+        value: `SAR ${formatSar(summary.revenue)}`,
         changePct: summary.revenueChangePct,
         icon: FileText,
         tone: "blue",
       },
       {
-        label: "ROAS (متوسط)",
+        label: "العائد على الإنفاق (ROAS)",
         value: `${summary.roas.toFixed(2)}x`,
         changePct: summary.roasChangePct,
         icon: TrendingUp,
@@ -861,21 +965,118 @@ export function CampaignDashboardScreen() {
     ]
   }, [summary])
 
-  const PAGE_SIZE = 5
-  const totalPages = Math.max(1, Math.ceil(searchedRows.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(searchedRows.length / pageSize))
   const currentPage = Math.min(page, totalPages)
-  const paginatedRows = searchedRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const paginatedRows = searchedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  // Spend by row for the chart view -- the same real rows the table shows, not a separate
+  // series. Rows with no spend are dropped so the donut has nothing empty to draw.
+  const spendDistribution = useMemo(
+    () =>
+      searchedRows
+        .map((row, index) => ({
+          label: row.entityName,
+          value: Number((row as unknown as Record<string, unknown>).spend ?? 0),
+          color: DONUT_COLORS[index % DONUT_COLORS.length],
+        }))
+        .filter((slice) => slice.value > 0),
+    [searchedRows]
+  )
+
+  // Every recommendation below is a statement about a number already on this page. There is
+  // no AI recommendation service for campaigns, so nothing here is predicted or scored --
+  // each card names the platform and the figure that triggered it.
+  const recommendations = useMemo(() => {
+    const rows = groupedPlatformRows.filter((row) => row.impressions > 0 || row.spend > 0)
+    if (rows.length === 0) return []
+
+    const cards: Array<{
+      key: string
+      title: string
+      body: string
+      icon: LucideIcon
+      className: string
+      iconClassName: string
+    }> = []
+
+    const bestRoas = [...rows].filter((row) => row.roas > 0).sort((a, b) => b.roas - a.roas)[0]
+    if (bestRoas) {
+      cards.push({
+        key: "budget",
+        title: `زيادة الميزانية لحملات ${bestRoas.entityName}`,
+        body: `تحقق ${bestRoas.entityName} أعلى عائد على الإنفاق (${bestRoas.roas.toFixed(2)}x) في هذه الفترة.`,
+        icon: TrendingUp,
+        className: "border-[#bfe8cf] bg-[#f2fbf6]",
+        iconClassName: "bg-[#e9f8ef] text-[#1f9d55]",
+      })
+    }
+
+    const dormant = rows.find((row) => row.activeCampaigns === 0 && row.impressions > 0)
+    if (dormant) {
+      cards.push({
+        key: "reactivate",
+        title: `إعادة تفعيل حملات ${dormant.entityName}`,
+        body: `لا توجد حملات نشطة على ${dormant.entityName} رغم تسجيل ${dormant.impressions.toLocaleString()} ظهور في هذه الفترة.`,
+        icon: RefreshCcw,
+        className: "border-[#f7ddab] bg-[#fffaf0]",
+        iconClassName: "bg-[#fff3e3] text-[#e08b00]",
+      })
+    }
+
+    const weakestCtr = [...rows]
+      .filter((row) => row.impressions > 0)
+      .sort((a, b) => a.ctr - b.ctr)[0]
+    if (weakestCtr) {
+      cards.push({
+        key: "targeting",
+        title: "تحسين استهداف الجمهور",
+        body: `${weakestCtr.entityName} يسجل أدنى معدل نقر (${weakestCtr.ctr.toFixed(2)}%) بين المنصات النشطة.`,
+        icon: Target,
+        className: "border-[#e1e7f0] bg-white",
+        iconClassName: "bg-[#eef4ff] text-[#2878ff]",
+      })
+    }
+
+    return cards
+  }, [groupedPlatformRows])
+
+  // Exports exactly what is on screen -- the current columns, the current filters, the rows
+  // the table is showing -- so the file and the page can never disagree.
+  const handleExport = () => {
+    const header = columns.map((column) => COLUMN_LABEL_AR[column.label] ?? column.label)
+    const body = searchedRows.map((row) =>
+      columns.map((column) => {
+        if (column.key === "entity") return row.entityName
+        const value = (row as unknown as Record<string, unknown>)[column.key]
+        return value === undefined || value === null ? "" : String(value)
+      })
+    )
+    const csv = [header, ...body]
+      .map((line) => line.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
+      .join("\n")
+
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `campaigns-${format(new Date(), "yyyy-MM-dd")}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   const renderMetricValue = (row: ExplorerRow, column: MetricColumn) => {
     if (column.key === "entity") {
       const platformForIcon = isGroupedPlatformRow(row) ? row.platformNodeKey : row.platform
       return (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-foreground">
-            <PlatformBadge platform={platformForIcon} className="size-6" iconClassName="size-3.5" />
-            <span className="font-medium">{row.entityName}</span>
+        // RTL: the badge is written first so it lands to the right of the name, and
+        // justify-start is the right-hand edge here -- justify-end would push the whole
+        // cell to the left, away from its right-aligned column header.
+        <div className="flex items-center justify-start gap-2.5">
+          <PlatformBadge platform={platformForIcon} className="size-8" iconClassName="size-4" />
+          <div className="min-w-0 text-right">
+            <p className={cn("truncate text-[12.5px] font-bold", HEADING)}>{row.entityName}</p>
+            <p className={cn("truncate text-[11px]", MUTED)}>{row.entityDescription}</p>
           </div>
-          <p className="text-xs text-muted-foreground">{row.entityDescription}</p>
         </div>
       )
     }
@@ -894,7 +1095,26 @@ export function CampaignDashboardScreen() {
     }
 
     if (column.key === "status") {
-      return row.status
+      const pill = statusPill(row.status)
+      return (
+        <span
+          className={cn(
+            "inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+            pill.className
+          )}
+        >
+          {pill.label}
+        </span>
+      )
+    }
+
+    if (column.key === "roas") {
+      const roas = Number((row as unknown as Record<string, number>).roas ?? 0)
+      return (
+        <span className={cn("font-bold", getRoasClasses(roas))}>
+          {roas > 0 ? `${roas.toFixed(2)}x` : "-"}
+        </span>
+      )
     }
 
     const numericValue = Number(
@@ -984,96 +1204,31 @@ export function CampaignDashboardScreen() {
     }
   }
 
-  const breadcrumbItems = [
-    {
-      label: "Overview",
-      onClick: () => {
-        setCurrentLevel("platforms")
-        setSelectedPlatformNode(undefined)
-        setSelectedCampaign(undefined)
-        setSelectedAdGroup(undefined)
-        setPage(1)
-      },
-    },
-    {
-      label: "Platforms",
-      onClick: () => {
-        setCurrentLevel("platforms")
-        setSelectedCampaign(undefined)
-        setSelectedAdGroup(undefined)
-        setPage(1)
-      },
-    },
-    ...(selectedPlatformNode
-      ? [
-          {
-            label: selectedPlatformNode,
-            onClick: () => {
-              setCurrentLevel("campaigns")
-              setSelectedCampaign(undefined)
-              setSelectedAdGroup(undefined)
-              setPage(1)
-            },
-          },
-        ]
-      : []),
-    ...(selectedCampaign
-      ? [
-          {
-            label: selectedCampaign.entityName,
-            onClick: () => {
-              setCurrentLevel("adGroups")
-              setSelectedAdGroup(undefined)
-              setPage(1)
-            },
-          },
-        ]
-      : []),
-    ...(selectedAdGroup
-      ? [
-          {
-            label: selectedAdGroup.entityName,
-            onClick: () => {
-              setCurrentLevel("adGroups")
-              setPage(1)
-            },
-          },
-        ]
-      : []),
-  ]
-
   return (
-    <div className="space-y-4">
-      <AppPageHeader
-        title="Campaigns"
-        subtitle="Manage, monitor and optimize your marketing campaigns from one place."
-      />
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" dir="rtl">
-        {campaignKpiCards.map((kpi) => (
-          <CampaignKpiCard key={kpi.label} kpi={kpi} />
-        ))}
-      </section>
-
-      <AppCard
-        className="overflow-hidden border border-border bg-card"
-        contentClassName="space-y-4 p-6"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="w-[280px] max-w-lg">
-            <AppSearchInput
-              startIcon={<Search className="size-4" />}
-              placeholder={getSearchPlaceholder(currentLevel)}
-              className="h-11"
-              value={searchInput}
-              onChange={(event) => {
-                setSearchInput(event.target.value)
-                setPage(1)
-              }}
-            />
+    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+      <div className="mx-auto w-full max-w-[1500px] space-y-4">
+        {/* RTL: the title block is written first so it lands on the right, actions left. */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
+              الحملات التسويقية
+            </h1>
+            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>
+              أدر حملاتك التسويقية، راقب الأداء وحقق أفضل النتائج من مكان واحد.
+            </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <AppButton
+              variant="outline"
+              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+              icon={<Download className="size-4" />}
+              iconPosition="end"
+              disabled={searchedRows.length === 0}
+              onClick={handleExport}
+            >
+              تصدير
+            </AppButton>
             <DateRangeFilter
               value={dateRange}
               onChange={(next) => {
@@ -1081,276 +1236,419 @@ export function CampaignDashboardScreen() {
                 setPage(1)
               }}
             />
-
-            <AppSelect
-              value={platform}
-              onValueChange={(next) => {
-                setPlatform(next as ExplorerPlatformFilter)
-                setCurrentLevel("platforms")
-                setSelectedPlatformNode(undefined)
-                setSelectedCampaign(undefined)
-                setSelectedAdGroup(undefined)
-                setPage(1)
-              }}
-            >
-              <AppSelectTrigger className="w-[170px]">
-                <AppSelectValue placeholder="Platform" />
-              </AppSelectTrigger>
-              <AppSelectContent>
-                {platformOptions.map((option) => (
-                  <AppSelectItem key={option} value={option}>
-                    {option}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
-
-            <AppSelect
-              value={status}
-              onValueChange={(next) => {
-                setStatus(next as (typeof statusOptions)[number])
-                setPage(1)
-              }}
-            >
-              <AppSelectTrigger className="w-[170px]">
-                <AppSelectValue placeholder="Campaign Status" />
-              </AppSelectTrigger>
-              <AppSelectContent>
-                {statusOptions.map((option) => (
-                  <AppSelectItem key={option} value={option}>
-                    {option}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
-
-            <AppSelect
-              value={objective}
-              onValueChange={(next) => {
-                setObjective(next as CampaignTypeFilter)
-                setPage(1)
-              }}
-            >
-              <AppSelectTrigger className="w-[190px]">
-                <AppSelectValue placeholder="Campaign Objective" />
-              </AppSelectTrigger>
-              <AppSelectContent>
-                {objectiveOptions.map((option) => (
-                  <AppSelectItem key={option} value={option}>
-                    {option}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <AppButton
-              type="button"
-              size="sm"
-              variant="outline"
-              className="border-border bg-muted/60 text-muted-foreground hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-              disabled={!canGoBack}
-              onClick={handleBack}
-            >
-              Back
-            </AppButton>
+        <section className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {campaignKpiCards.map((kpi) => (
+            <CampaignKpiCard key={kpi.label} kpi={kpi} />
+          ))}
+        </section>
 
-            {breadcrumbItems.map((item, index) => (
-              <div key={`${item.label}-${index}`} className="flex items-center gap-2">
-                {index > 0 ? <span className="text-muted-foreground">&gt;</span> : null}
-                <button
-                  type="button"
-                  className="text-foreground/90 hover:text-foreground"
-                  onClick={item.onClick}
-                >
-                  {item.label}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <div className={cn(PANEL, "space-y-4 p-4 md:p-5")}>
+          {/* RTL: search first so it sits on the right, view toggle last so it sits left. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-full md:w-[380px] lg:w-[420px]">
+              <AppSearchInput
+                startIcon={<Search className="size-4 text-[#95a4bd]" />}
+                placeholder={getSearchPlaceholder(currentLevel)}
+                className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] placeholder:text-[#95a4bd]"
+                value={searchInput}
+                onChange={(event) => {
+                  setSearchInput(event.target.value)
+                  setPage(1)
+                }}
+              />
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {availableTabs.map((tab) => {
-            const platformAllowsTab = contextCampaignPlatform
-              ? CAMPAIGN_PLATFORM_HIERARCHY[contextCampaignPlatform].tabs.includes(tab.key)
-              : true
-
-            const contextAllowsTab =
-              tab.key === "campaigns"
-                ? Boolean(selectedPlatformNode)
-                : tab.key === "adGroups"
-                  ? Boolean(selectedCampaign)
-                  : Boolean(selectedAdGroup)
-
-            const disabledReason = !platformAllowsTab
-              ? "Keyword analysis is only available for Search campaigns."
-              : !contextAllowsTab
-                ? `Drill down to ${getEntityLabel(tab.key, contextCampaignPlatform).toLowerCase()} context first.`
-                : undefined
-
-            const isActive = currentLevel === tab.key
-
-            return (
-              <AppButton
-                key={tab.key}
-                type="button"
-                size="sm"
-                variant={isActive ? "default" : "outline"}
-                className={
-                  isActive
-                    ? "bg-sky-400 text-foreground hover:bg-sky-300"
-                    : "border-border bg-muted/60 text-muted-foreground hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-                }
-                disabled={!platformAllowsTab || !contextAllowsTab}
-                title={disabledReason}
-                onClick={() => {
-                  if (!platformAllowsTab || !contextAllowsTab) {
-                    return
-                  }
-                  setCurrentLevel(tab.key)
+            <div className="flex flex-wrap items-center gap-2.5">
+              <AppSelect
+                value={objective}
+                onValueChange={(next) => {
+                  setObjective(next as CampaignTypeFilter)
                   setPage(1)
                 }}
               >
-                {tab.key === "adGroups"
+                <AppSelectTrigger className={FILTER_TRIGGER_CLASS}>
+                  <AppSelectValue />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {objectiveOptions.map((option) => (
+                    <AppSelectItem key={option} value={option}>
+                      {FILTER_LABEL_AR[option] ?? option}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+
+              <AppSelect
+                value={status}
+                onValueChange={(next) => {
+                  setStatus(next as (typeof statusOptions)[number])
+                  setPage(1)
+                }}
+              >
+                <AppSelectTrigger className={FILTER_TRIGGER_CLASS}>
+                  <AppSelectValue />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {statusOptions.map((option) => (
+                    <AppSelectItem key={option} value={option}>
+                      {FILTER_LABEL_AR[option] ?? option}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+
+              <AppSelect
+                value={platform}
+                onValueChange={(next) => {
+                  setPlatform(next as ExplorerPlatformFilter)
+                  setCurrentLevel("platforms")
+                  setSelectedPlatformNode(undefined)
+                  setSelectedCampaign(undefined)
+                  setSelectedAdGroup(undefined)
+                  setPage(1)
+                }}
+              >
+                <AppSelectTrigger className={FILTER_TRIGGER_CLASS}>
+                  <AppSelectValue />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {platformOptions.map((option) => (
+                    <AppSelectItem key={option} value={option}>
+                      {FILTER_LABEL_AR[option] ?? option}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+            </div>
+
+            <div className="ms-auto flex items-center gap-1 rounded-[10px] bg-[#f2f5fa] p-1">
+              {(
+                [
+                  { key: "table", label: "جدول", icon: LayoutGrid },
+                  { key: "chart", label: "مخطط بياني", icon: BarChart3 },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={cn(
+                    "flex cursor-pointer items-center gap-1.5 rounded-[8px] px-3.5 py-2 text-[12px] font-semibold transition-colors",
+                    viewMode === option.key
+                      ? "bg-white text-[#0b1738] shadow-[0_1px_3px_rgba(11,23,56,0.12)]"
+                      : "text-[#6b7b96] hover:text-[#0b1738]"
+                  )}
+                  onClick={() => setViewMode(option.key)}
+                >
+                  <option.icon className="size-3.5" />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* The drill-down is not in the export but is the page's real navigation: without
+              it the platform rows lead nowhere. Kept, restyled to the new surface. */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-[#f1f4f9] pt-3.5">
+            <AppButton
+              type="button"
+              variant="outline"
+              className="h-8 rounded-[8px] border-[#e1e7f0] bg-white px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+              disabled={!canGoBack}
+              onClick={handleBack}
+            >
+              رجوع
+            </AppButton>
+
+            {availableTabs.map((tab) => {
+              const platformAllowsTab = contextCampaignPlatform
+                ? CAMPAIGN_PLATFORM_HIERARCHY[contextCampaignPlatform].tabs.includes(tab.key)
+                : true
+
+              const contextAllowsTab =
+                tab.key === "campaigns"
+                  ? Boolean(selectedPlatformNode)
+                  : tab.key === "adGroups"
+                    ? Boolean(selectedCampaign)
+                    : Boolean(selectedAdGroup)
+
+              const disabledReason = !platformAllowsTab
+                ? "تحليل الكلمات المفتاحية متاح لحملات البحث فقط."
+                : !contextAllowsTab
+                  ? "انتقل إلى المستوى الأعلى أولاً."
+                  : undefined
+
+              const isActive = currentLevel === tab.key
+              const label =
+                tab.key === "adGroups"
                   ? CAMPAIGN_PLATFORM_HIERARCHY[contextCampaignPlatform ?? "Google Search"]
                       .adGroupLabel
-                  : tab.label}
-              </AppButton>
-            )
-          })}
-        </div>
+                  : tab.label
 
-        <div className="overflow-x-auto">
-          <AppTable className="min-w-[1280px]">
-            <AppTableHeader>
-              <AppTableRow className="border-border hover:bg-transparent">
-                {columns.map((column) => (
-                  <AppTableHead
-                    key={column.key}
-                    className={
-                      column.key === "entity"
-                        ? "w-[26%] text-left text-muted-foreground"
-                        : "!text-center text-muted-foreground"
-                    }
-                  >
-                    {column.label}
-                  </AppTableHead>
-                ))}
-              </AppTableRow>
-            </AppTableHeader>
-            <AppTableBody>
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={cn(
+                    "rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                    isActive
+                      ? "bg-[#2878ff] text-white"
+                      : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]",
+                    !platformAllowsTab || !contextAllowsTab
+                      ? "cursor-not-allowed opacity-45"
+                      : "cursor-pointer"
+                  )}
+                  disabled={!platformAllowsTab || !contextAllowsTab}
+                  title={disabledReason}
+                  onClick={() => {
+                    if (!platformAllowsTab || !contextAllowsTab) return
+                    setCurrentLevel(tab.key)
+                    setPage(1)
+                  }}
+                >
+                  {LEVEL_LABEL_AR[tab.key] ?? label}
+                </button>
+              )
+            })}
+          </div>
+
+          {viewMode === "chart" ? (
+            <div className="rounded-[12px] border border-[#eef2f8] p-5">
               {isLoading ? (
-                <AppTableRow className="border-border">
-                  <AppTableCell colSpan={columns.length} className="py-10 text-center">
-                    <p className="text-sm text-muted-foreground">Loading campaign performance...</p>
-                  </AppTableCell>
-                </AppTableRow>
-              ) : loadError ? (
-                <AppTableRow className="border-border">
-                  <AppTableCell colSpan={columns.length} className="py-10 text-center">
-                    <p className="text-sm text-rose-600">{loadError}</p>
-                  </AppTableCell>
-                </AppTableRow>
-              ) : paginatedRows.length === 0 ? (
-                <AppTableRow className="border-border">
-                  <AppTableCell colSpan={columns.length} className="py-10 text-center">
-                    <p className="text-base font-semibold text-foreground">
-                      No performance data matches the selected filters
-                    </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Adjust platform, status, objective, hierarchy level, or date range to explore
-                      another slice.
-                    </p>
-                  </AppTableCell>
-                </AppTableRow>
+                <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>
+                  جارٍ تحميل بيانات الأداء...
+                </p>
+              ) : spendDistribution.length === 0 ? (
+                <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>
+                  لا يوجد إنفاق مسجل في هذه الفترة لعرضه على المخطط.
+                </p>
               ) : (
-                paginatedRows.map((row) => {
-                  const isDrillable =
-                    currentLevel === "platforms" ||
-                    currentLevel === "campaigns" ||
-                    currentLevel === "adGroups"
-                  const isHighlighted = highlightedRowId === row.nodeId
+                <>
+                  <h3 className={cn("mb-4 text-[14px] font-extrabold", HEADING)}>توزيع الإنفاق</h3>
+                  <CampaignSpendDonut distribution={spendDistribution} />
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-center">
+                <thead>
+                  <tr>
+                    {columns.map((column) => (
+                      <th
+                        key={column.key}
+                        className={cn(
+                          "border-b border-[#eef2f8] px-3 py-3 text-[11px] font-semibold",
+                          MUTED,
+                          column.key === "entity" ? "text-right" : "text-center"
+                        )}
+                      >
+                        {COLUMN_LABEL_AR[column.label] ?? column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={columns.length} className="py-10 text-center">
+                        <p className={cn("text-[12.5px]", MUTED)}>جارٍ تحميل بيانات الأداء...</p>
+                      </td>
+                    </tr>
+                  ) : loadError ? (
+                    <tr>
+                      <td colSpan={columns.length} className="py-10 text-center">
+                        <p className="text-[12.5px] text-[#e0484d]">{loadError}</p>
+                      </td>
+                    </tr>
+                  ) : paginatedRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={columns.length} className="px-4 py-12 text-center">
+                        <p className={cn("text-[13.5px] font-bold", HEADING)}>
+                          لا توجد بيانات مطابقة للفلاتر المحددة
+                        </p>
+                        <p className={cn("mt-2 text-[12px]", MUTED)}>
+                          غيّر المنصة أو الحالة أو الهدف أو الفترة الزمنية لاستعراض شريحة أخرى.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedRows.map((row) => {
+                      const isDrillable =
+                        currentLevel === "platforms" ||
+                        currentLevel === "campaigns" ||
+                        currentLevel === "adGroups"
+                      const isHighlighted = highlightedRowId === row.nodeId
 
-                  return (
-                    <AppTableRow
-                      key={row.nodeId}
-                      className={`${isDrillable ? "cursor-pointer" : "cursor-default"} border-border transition-colors hover:bg-muted ${isHighlighted ? "bg-muted/60" : ""}`}
-                      onClick={() => navigateToRow(row)}
-                    >
-                      {columns.map((column) => (
-                        <AppTableCell
-                          key={`${row.nodeId}-${column.key}`}
-                          className={
-                            column.key === "entity"
-                              ? "text-left"
-                              : "text-center tabular-nums text-foreground/90"
-                          }
+                      return (
+                        <tr
+                          key={row.nodeId}
+                          className={cn(
+                            "border-b border-[#f4f7fb] transition-colors hover:bg-[#f8fafd]",
+                            isDrillable ? "cursor-pointer" : "cursor-default",
+                            isHighlighted && "bg-[#f2f6fd]"
+                          )}
+                          onClick={() => navigateToRow(row)}
                         >
-                          {column.key === "roas" ? (
-                            <span
-                              className={`font-semibold ${getRoasClasses(Number((row as unknown as Record<string, unknown>)["roas"] ?? 0))}`}
+                          {columns.map((column) => (
+                            <td
+                              key={`${row.nodeId}-${column.key}`}
+                              className={cn(
+                                "px-3 py-3.5 text-[12.5px]",
+                                column.key === "entity"
+                                  ? "text-right"
+                                  : "text-center tabular-nums text-[#334155]"
+                              )}
                             >
                               {renderMetricValue(row, column)}
-                            </span>
-                          ) : (
-                            renderMetricValue(row, column)
-                          )}
-                        </AppTableCell>
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {viewMode === "table" ? (
+            <div className="flex flex-col gap-3 border-t border-[#f1f4f9] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
+              {/* RTL: the count and page-size sit on the right, the pager on the left. */}
+              <div className="flex items-center gap-3">
+                <span className={cn("text-[12px]", MUTED)}>
+                  {searchedRows.length === 0
+                    ? "لا توجد نتائج"
+                    : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, searchedRows.length)} من ${searchedRows.length}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-[12px]", MUTED)}>عدد النتائج في الصفحة</span>
+                  <AppSelect
+                    value={String(pageSize)}
+                    onValueChange={(next) => {
+                      setPageSize(Number(next))
+                      setPage(1)
+                    }}
+                  >
+                    <AppSelectTrigger className="h-9 w-[74px] rounded-[10px] border-[#e1e7f0] bg-white text-[12px] text-[#0b1738]">
+                      <AppSelectValue />
+                    </AppSelectTrigger>
+                    <AppSelectContent>
+                      {[10, 25, 50].map((option) => (
+                        <AppSelectItem key={option} value={String(option)}>
+                          {option}
+                        </AppSelectItem>
                       ))}
-                    </AppTableRow>
-                  )
-                })
-              )}
-            </AppTableBody>
-          </AppTable>
+                    </AppSelectContent>
+                  </AppSelect>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className={PAGER_BUTTON_CLASS}
+                  disabled={currentPage === 1}
+                  aria-label="الصفحة السابقة"
+                  onClick={() => setPage((previous) => Math.max(1, previous - 1))}
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+                <span
+                  className={cn(
+                    "flex h-9 min-w-9 items-center justify-center rounded-[8px] border border-[#2878ff] bg-white px-2 text-[12px] font-bold",
+                    "text-[#2878ff]"
+                  )}
+                >
+                  {currentPage}
+                </span>
+                <button
+                  type="button"
+                  className={PAGER_BUTTON_CLASS}
+                  disabled={currentPage === totalPages}
+                  aria-label="الصفحة التالية"
+                  onClick={() => setPage((previous) => Math.min(totalPages, previous + 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            {searchedRows.length === 0
-              ? "Showing 0 of 0"
-              : `Showing ${(currentPage - 1) * PAGE_SIZE + 1} - ${Math.min(currentPage * PAGE_SIZE, searchedRows.length)} of ${searchedRows.length}`}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <AppButton
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-              onClick={() => setPage((previous) => Math.max(1, previous - 1))}
-              disabled={currentPage === 1}
-            >
-              Prev
-            </AppButton>
-            <span className="min-w-24 text-center text-muted-foreground">
-              Page {currentPage} of {totalPages}
+        <div className={cn(PANEL, "p-4 md:p-5")}>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className={cn("text-[15px] font-extrabold", HEADING)}>توصيات الحملات الذكية</h2>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#eef4ff] text-[11px] font-extrabold text-[#2878ff]">
+              AI
             </span>
-            <AppButton
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-              onClick={() => setPage((previous) => Math.min(totalPages, previous + 1))}
-              disabled={currentPage === totalPages}
-            >
-              Next
-            </AppButton>
+          </div>
+
+          {/* RTL: the derived cards are written first so they sit on the right. */}
+          <div className="mt-4 grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_300px]">
+            {recommendations.length === 0 ? (
+              <div className="rounded-[12px] border border-[#eef2f8] bg-[#fafbfe] px-5 py-8 text-center">
+                <p className={cn("text-[12.5px]", MUTED)}>
+                  لا توجد توصيات بعد — تحتاج المنصات إلى بيانات أداء في هذه الفترة أولاً.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+                {recommendations.map((card) => (
+                  <div key={card.key} className={cn("rounded-[12px] border p-4", card.className)}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className={cn("text-[12.5px] font-extrabold leading-5", HEADING)}>
+                        {card.title}
+                      </p>
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-full",
+                          card.iconClassName
+                        )}
+                      >
+                        <card.icon className="size-4" />
+                      </span>
+                    </div>
+                    <p className={cn("mt-2 text-[11.5px] leading-[19px]", MUTED)}>{card.body}</p>
+                    <AppButton
+                      asChild
+                      variant="outline"
+                      className="mt-3.5 h-9 w-full rounded-[10px] border-[#e1e7f0] bg-white text-[12px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+                    >
+                      <Link href={ROUTES.ai}>عرض التفاصيل</Link>
+                    </AppButton>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="rounded-[12px] border border-[#e1e7f0] bg-gradient-to-l from-[#eef4ff] to-[#fbfcff] p-5">
+              <span className="flex size-11 items-center justify-center rounded-full bg-white text-[#e08b00] shadow-[0_4px_12px_rgba(11,23,56,0.08)]">
+                <Lightbulb className="size-5" />
+              </span>
+              <h3 className={cn("mt-3.5 text-[13.5px] font-extrabold leading-5", HEADING)}>
+                اجعل حملاتك أكثر فعالية مع الذكاء الاصطناعي
+              </h3>
+              <p className={cn("mt-2 text-[11.5px] leading-[19px]", MUTED)}>
+                احصل على تحليل أعمق لأداء حملاتك التسويقية من مركز الذكاء الاصطناعي.
+              </p>
+              <AppButton
+                asChild
+                className="mt-4 h-10 w-full rounded-[10px] bg-[#2878ff] text-[12.5px] font-semibold text-white hover:bg-[#1f66e0]"
+              >
+                <Link href={ROUTES.ai}>
+                  <span className="flex items-center justify-center gap-2">
+                    عرض التوصيات
+                    <Sparkles className="size-4" />
+                  </span>
+                </Link>
+              </AppButton>
+            </div>
           </div>
         </div>
-      </AppCard>
-
-      <AppCard
-        title="AI Campaign Recommendations"
-        subtitle="Reserved space for the upcoming AI optimization widget."
-        className="overflow-hidden border border-dashed border-border bg-card"
-      >
-        <div className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
-          Coming soon.
-        </div>
-      </AppCard>
+      </div>
     </div>
   )
 }

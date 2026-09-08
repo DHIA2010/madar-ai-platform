@@ -504,3 +504,37 @@
 .gradient-cyan {
   background-image: linear-gradient(310deg, #2af598, #009efd);
 }
+
+/* Indeterminate sync bar. runSync reports no progress until it resolves, so the wizard's
+   first-sync screen animates a travelling segment rather than filling to a percentage it
+   has no way to measure. Logical inset keeps it travelling correctly under RTL. */
+@keyframes madar-sync-sweep {
+  0% {
+    inset-inline-start: -40%;
+  }
+  100% {
+    inset-inline-start: 100%;
+  }
+}
+
+.madar-sync-track {
+  position: relative;
+  overflow: hidden;
+}
+
+.madar-sync-track > .madar-sync-bar {
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  border-radius: 9999px;
+  animation: madar-sync-sweep 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .madar-sync-track > .madar-sync-bar {
+    animation: none;
+    inset-inline-start: 0;
+    width: 100%;
+    opacity: 0.55;
+  }
+}

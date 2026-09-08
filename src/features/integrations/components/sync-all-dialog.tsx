@@ -1,13 +1,52 @@
 "use client"
 
 import { useMemo } from "react"
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react"
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Database,
+  Info,
+  Loader2,
+  RefreshCcw,
+  X,
+  Zap,
+} from "lucide-react"
 import { toast } from "sonner"
+
+import { cn } from "@/lib/utils"
 
 import { AppButton, AppDialog } from "@/components/app"
 
 import { CONNECTION_ACTION_IDS, connectionActionPolicy } from "../services"
 import type { ConnectionCenterRecord } from "../types"
+import { ConnectorLogo } from "./connector-logo"
+
+import { tajawal } from "@/components/design/fonts"
+
+// Only the statuses a runnable connection can actually be in; anything else falls through
+// to the neutral label rather than being asserted as active.
+const ROW_STATUS: Record<string, { label: string; className: string; dot: string }> = {
+  connected: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
+  valid: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
+  authorized: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
+  syncing: {
+    label: "قيد المزامنة",
+    className: "bg-[#eef4ff] text-[#2878ff]",
+    dot: "bg-[#2878ff]",
+  },
+  paused: { label: "متوقف", className: "bg-[#fffbeb] text-[#e08b00]", dot: "bg-[#e08b00]" },
+}
+
+function rowStatus(status: string) {
+  return (
+    ROW_STATUS[status] ?? {
+      label: "جاهز للمزامنة",
+      className: "bg-[#eef2f8] text-[#5b6b85]",
+      dot: "bg-[#95a4bd]",
+    }
+  )
+}
 
 interface SyncAllDialogProps {
   open: boolean
@@ -64,12 +103,16 @@ export function SyncAllDialog({
 
   const executeSyncAll = async () => {
     if (syncStats.total === 0) {
-      toast.info("No connections to sync")
+      toast.info("لا توجد تكاملات قابلة للمزامنة")
       onOpenChange(false)
       return
     }
 
     onSyncStart()
+    // The dialog promises "تعمل في الخلفية", so it closes as soon as the run is kicked off
+    // rather than holding the user on a modal until every connection finishes. The async
+    // work below keeps running; only the modal content unmounts.
+    onOpenChange(false)
 
     try {
       const activeConnections = runnableRecords.map((record) => record.connection.connectionId)
@@ -97,21 +140,20 @@ export function SyncAllDialog({
 
       // Show completion toast
       if (results.failed === 0) {
-        toast.success(`All ${results.completed} connections synchronized successfully.`)
+        toast.success(`تمت مزامنة ${results.completed} تكاملات بنجاح.`)
       } else {
-        toast.error(`${results.completed} completed, ${results.failed} failed`, {
+        toast.error(`اكتمل ${results.completed} وفشل ${results.failed}`, {
           action: {
-            label: "Retry Failed",
+            label: "إعادة محاولة الفاشلة",
             onClick: () => retryFailedSyncs(results.failedIds),
           },
         })
       }
     } catch (err) {
-      toast.error("Sync all failed. Please try again.")
+      toast.error("تعذّرت مزامنة التكاملات. حاول مرة أخرى.")
       console.error("Sync all error:", err)
     } finally {
       onSyncEnd()
-      onOpenChange(false)
     }
   }
 
@@ -133,60 +175,178 @@ export function SyncAllDialog({
     }
 
     if (failed === 0) {
-      toast.success(`All ${completed} connections synchronized successfully.`)
+      toast.success(`تمت مزامنة ${completed} تكاملات بنجاح.`)
     } else {
-      toast.error(`${completed} completed, ${failed} failed`)
+      toast.error(`اكتمل ${completed} وفشل ${failed}`)
     }
 
     onSyncEnd()
   }
 
+  const summaryCards = [
+    {
+      icon: Database,
+      tint: "text-[#2878ff]",
+      fill: "bg-[#eaf1ff]",
+      value: String(syncStats.total),
+      label: "عدد التكاملات النشطة",
+    },
+    {
+      icon: Clock,
+      tint: "text-[#1f9d55]",
+      fill: "bg-[#e9f8ef]",
+      // A rough estimate from the connection count, not a measured figure -- the wording
+      // says "حوالي" because that is all it can honestly claim.
+      value: `حوالي ${syncStats.estimatedDuration} دقيقة`,
+      label: "المدة المتوقعة",
+    },
+    {
+      icon: Zap,
+      tint: "text-[#8b5cf6]",
+      fill: "bg-[#f3eeff]",
+      value: "تعمل في الخلفية",
+      label: "يمكنك مواصلة العمل أثناء المزامنة.",
+    },
+  ]
+
   return (
-    <AppDialog open={open} onOpenChange={onOpenChange} title="Sync all connections?">
-      <p className="text-[12.5px] leading-6 text-[#8098b4]">
-        This will trigger synchronization for every active connection in the current workspace.
-      </p>
-
-      <div className="space-y-3 rounded-xl border border-[#e8edf3] bg-[#f8fafc] p-4">
-        <div className="flex justify-between">
-          <span className="text-sm text-[#334155]">Total active connections</span>
-          <span className="font-bold text-[#0d1b3e]">{syncStats.total}</span>
-        </div>
-        {syncStats.syncing > 0 && (
-          <div className="flex justify-between">
-            <span className="text-sm text-[#f59e0b]">Currently syncing</span>
-            <span className="font-bold text-[#f59e0b]">{syncStats.syncing}</span>
+    <AppDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      showCloseButton={false}
+      contentClassName={cn(tajawal.className, "max-w-[52rem] gap-0 rounded-[20px] p-0")}
+    >
+      {/* The dialog portals to the body, so it does not inherit the integrations page's own
+          dir="rtl" wrapper -- it has to declare direction and font for itself. */}
+      <div dir="rtl" className="space-y-5 p-6 text-right md:p-7">
+        {/* RTL: the icon+title group is written first so it lands on the right, close left. */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-[#eaf1ff]">
+              <RefreshCcw className="size-5 text-[#2878ff]" />
+            </span>
+            <div className="space-y-1.5">
+              <h2 className="text-[20px] font-extrabold leading-tight text-[#0b1738]">
+                مزامنة جميع التكاملات
+              </h2>
+              <p className="text-[12.5px] leading-6 text-[#6b7b96]">
+                سيتم تشغيل المزامنة لجميع التكاملات النشطة في مساحة العمل الحالية.
+              </p>
+            </div>
           </div>
-        )}
-        {syncStats.disabled > 0 && (
-          <div className="flex justify-between">
-            <span className="text-sm text-[#8098b4]">Skipped (disabled/paused)</span>
-            <span className="font-bold text-[#8098b4]">{syncStats.disabled}</span>
-          </div>
-        )}
-        <div className="flex justify-between border-t border-[#e8edf3] pt-3">
-          <span className="text-sm text-[#334155]">Estimated duration</span>
-          <span className="font-bold text-[#0d1b3e]">~{syncStats.estimatedDuration} minutes</span>
-        </div>
-      </div>
 
-      <div className="flex gap-2">
-        <AppButton variant="outline" onClick={() => onOpenChange(false)} disabled={isSyncing}>
-          Cancel
-        </AppButton>
-        <AppButton
-          onClick={() => void executeSyncAll()}
-          disabled={isSyncing || syncStats.total === 0}
-        >
-          {isSyncing ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Starting Sync...
-            </>
+          <button
+            type="button"
+            aria-label="إغلاق"
+            className="-m-1 shrink-0 cursor-pointer rounded-lg p-1 text-[#95a4bd] transition-colors hover:bg-[#f2f5fa] hover:text-[#0b1738] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="grid divide-y divide-[#eef2f8] rounded-[16px] border border-[#e1e7f0] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {summaryCards.map((card) => (
+            <div key={card.label} className="flex items-center gap-3 px-5 py-4">
+              <span
+                className={cn(
+                  "flex size-11 shrink-0 items-center justify-center rounded-[12px]",
+                  card.fill
+                )}
+              >
+                <card.icon className={cn("size-5", card.tint)} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[15px] font-extrabold leading-tight text-[#0b1738]">
+                  {card.value}
+                </p>
+                <p className="mt-1 text-[11.5px] leading-[18px] text-[#6b7b96]">{card.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-[14px] font-extrabold text-[#0b1738]">
+            التكاملات التي سيتم مزامنتها
+          </h3>
+
+          {runnableRecords.length === 0 ? (
+            <div className="rounded-[16px] border border-[#e1e7f0] px-5 py-8 text-center text-[12.5px] text-[#6b7b96]">
+              لا توجد تكاملات نشطة قابلة للمزامنة في مساحة العمل الحالية.
+            </div>
           ) : (
-            "Start Sync"
+            <div className="divide-y divide-[#eef2f8] rounded-[16px] border border-[#e1e7f0]">
+              {runnableRecords.map((record) => {
+                const status = rowStatus(record.connection.status)
+                return (
+                  <div
+                    key={record.connection.connectionId}
+                    className="flex items-center justify-between gap-3 px-4 py-3.5"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <ConnectorLogo
+                        platformName={record.platformName}
+                        className="size-11 shrink-0 rounded-[12px] border border-[#eef2f8] bg-white p-2"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-[13.5px] font-extrabold text-[#0b1738]">
+                          {record.connectedAccount}
+                        </p>
+                        <p className="truncate text-[11.5px] text-[#6b7b96]">
+                          {record.platformName}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold",
+                        status.className
+                      )}
+                    >
+                      <span className={cn("size-1.5 rounded-full", status.dot)} />
+                      {status.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
           )}
-        </AppButton>
+        </div>
+
+        {/* RTL: the icon is written first so it lands on the right of the notice. */}
+        <div className="flex items-start gap-3 rounded-[14px] border border-[#cfe0ff] bg-[#eef4ff] px-4 py-3.5">
+          <Info className="size-5 shrink-0 text-[#2878ff]" />
+          <div>
+            <p className="text-[12.5px] font-extrabold text-[#2878ff]">معلومة مهمة</p>
+            <p className="mt-1 text-[12px] leading-5 text-[#6b7b96]">
+              ستقوم المزامنة بتحديث أحدث البيانات بما في ذلك المنتجات، الطلبات، العملاء وغيرها.
+            </p>
+          </div>
+        </div>
+
+        {/* RTL + justify-end: both actions sit at the left, cancel to the right of start. */}
+        <div className="flex items-center justify-end gap-3">
+          <AppButton
+            variant="outline"
+            className="h-11 min-w-[120px] rounded-[12px] border-[#e1e7f0] bg-white px-5 text-[13px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+            onClick={() => onOpenChange(false)}
+            disabled={isSyncing}
+          >
+            إلغاء
+          </AppButton>
+          <AppButton
+            className="h-11 min-w-[170px] rounded-[12px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
+            onClick={() => void executeSyncAll()}
+            disabled={isSyncing || syncStats.total === 0}
+            loading={isSyncing}
+            icon={<RefreshCcw className="size-4 shrink-0" />}
+            iconPosition="end"
+          >
+            {isSyncing ? "جارٍ البدء..." : "بدء المزامنة"}
+          </AppButton>
+        </div>
       </div>
     </AppDialog>
   )

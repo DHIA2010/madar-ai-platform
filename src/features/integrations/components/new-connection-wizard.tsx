@@ -1,43 +1,56 @@
 "use client"
 
 import {
+  Fragment,
   type MouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  Activity,
   ArrowLeft,
   ArrowRight,
+  BarChart3,
+  BookOpen,
+  Calendar,
   Check,
+  CheckCircle2,
+  ChevronLeft,
   ChevronRight,
-  Circle,
   CircleAlert,
-  CircleCheckBig,
+  CreditCard,
+  ExternalLink,
+  Eye,
   Filter,
+  HelpCircle,
+  Info,
+  Layers,
+  Link2,
   Loader2,
-  PlugZap,
+  Lock,
+  Megaphone,
+  Package,
+  PlayCircle,
   RefreshCcw,
+  Search,
   ShieldCheck,
-  Sparkles,
+  ShoppingCart,
+  Tag,
+  Target,
+  Users,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 
-import {
-  AppBadge,
-  AppButton,
-  AppCard,
-  AppContainer,
-  AppInput,
-  AppPage,
-  AppSection,
-} from "@/components/app"
+import { AppButton, AppCard, AppContainer, AppInput, AppPage, AppSection } from "@/components/app"
 
 import { useWorkspace, WorkspaceSelector } from "@/features/workspace"
 
@@ -49,15 +62,28 @@ import {
   loadStoredConnectionReferences,
   storeConnectionReferences,
 } from "../services"
+import { ConnectorLogo } from "./connector-logo"
 
 import { useApplicationServices } from "@/application/context"
 import { SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
+import { tajawal } from "@/components/design/fonts"
 
 type PlatformCategory = "All" | "Marketing" | "Analytics" | "Ecommerce"
 type WizardStep = 0 | 1 | 2 | 3
 
 type SyncPreset = "recommended" | "all" | "custom"
 type SetupMode = "oauth" | "manual"
+type SyncPhase = "idle" | "running" | "done" | "failed"
+
+// What a finished run actually reports back. There is no mid-flight progress anywhere in
+// the integration contract -- runSync resolves once, at the end -- so the screen shows a
+// real elapsed clock and an indeterminate bar rather than a percentage it cannot know.
+interface SyncResult {
+  recordsRead: number
+  recordsWritten: number
+  recordsFailed: number
+  durationMs: number
+}
 type FlowStatus =
   | "idle"
   | "connecting"
@@ -102,27 +128,264 @@ interface WizardErrorState {
 }
 
 const WIZARD_STEPS: Array<{ label: string; description: string }> = [
-  { label: "Platform", description: "Pick the connector." },
-  { label: "Connect", description: "Authorize securely." },
-  { label: "Import", description: "Select what to sync." },
-  { label: "Review", description: "Review and create." },
+  { label: "اختيار المنصة", description: "اختر المنصة التي ترغب بربطها" },
+  { label: "تسجيل الدخول والتفويض", description: "منح صلاحيات الوصول الآمن" },
+  { label: "اختيار بيانات الاستيراد", description: "حدد البيانات المطلوبة للمزامنة" },
+  { label: "مراجعة وإتمام", description: "مراجعة الإعدادات وبدء المزامنة" },
 ]
 
-const PLATFORM_CATEGORIES: PlatformCategory[] = ["All", "Marketing", "Analytics", "Ecommerce"]
+const SUCCESS_HERO = (platformName: string) => ({
+  title: "تم الربط بنجاح",
+  subtitle: `منصة ${platformName} جاهزة الآن لمزامنة بياناتك مع مدار.`,
+})
+
+// Per-step hero copy. Steps three and four retitle the page in the export rather than
+// keeping the "ربط منصة جديدة" heading.
+const HERO_COPY: Array<{ title: string; subtitle: string }> = [
+  {
+    title: "ربط منصة جديدة",
+    subtitle: "اربط متجرك أو قنواتك التسويقية لتحصل على بيانات موحدة ورؤى أعمق.",
+  },
+  {
+    title: "ربط منصة جديدة",
+    subtitle: "اربط متجرك في خطوات بسيطة وابدأ بمزامنة بياناتك.",
+  },
+  {
+    title: "استيراد البيانات",
+    subtitle: "اختر البيانات التي تريد استيرادها من منصتك إلى مدار.",
+  },
+  {
+    title: "مراجعة وإتمام الربط",
+    subtitle: "راجع تفاصيل الربط قبل إنشائه للتأكد من صحة الإعدادات.",
+  },
+]
+
+const PLATFORM_CATEGORIES: PlatformCategory[] = ["All", "Ecommerce", "Marketing", "Analytics"]
+
+const CATEGORY_LABELS: Record<PlatformCategory, string> = {
+  All: "الكل",
+  Ecommerce: "متاجر إلكترونية",
+  Marketing: "منصات إعلانية",
+  Analytics: "منصات أخرى",
+}
+
+// The platform header on steps two to four names the category in the singular.
+const CATEGORY_SINGULAR: Record<PlatformCategory, string> = {
+  All: "منصة",
+  Ecommerce: "منصة تجارة إلكترونية",
+  Marketing: "منصة إعلانية",
+  Analytics: "منصة تحليلات",
+}
+
+// The card tag in the mockup is green for stores and red for ad platforms.
+const CATEGORY_TAG_CLASS: Record<PlatformCategory, string> = {
+  All: "bg-[#eef3fb] text-[#5b6b85]",
+  Ecommerce: "bg-[#e7f7ee] text-[#1f9d55]",
+  Marketing: "bg-[#fdecec] text-[#e0484d]",
+  Analytics: "bg-[#eaf1ff] text-[#2878ff]",
+}
+
+// Sync objects are identifiers -- they are written into the connection's metadata and read
+// back by the sync scheduler -- so the English names stay as the values and only their
+// presentation is localised here. An object with no entry falls back to a neutral tile
+// carrying its raw name, which is what a connector adding a new object should look like
+// until it is given a label.
+interface ObjectPresentation {
+  label: string
+  description: string
+  icon: typeof Users
+  tint: string
+  fill: string
+  border: string
+  check: string
+}
+
+// Every class here is written out in full. Tailwind generates utilities by scanning the
+// source, so a class assembled at runtime (tint.replace("text-", "bg-"), say) produces no
+// CSS at all and the element silently renders unstyled.
+const OBJECT_TINTS = {
+  blue: {
+    tint: "text-[#2878ff]",
+    fill: "bg-[#eef4ff]",
+    border: "border-[#c9dcff]",
+    check: "bg-[#2878ff]",
+  },
+  green: {
+    tint: "text-[#1f9d55]",
+    fill: "bg-[#e9f8ef]",
+    border: "border-[#bfe8cf]",
+    check: "bg-[#1f9d55]",
+  },
+  purple: {
+    tint: "text-[#8b5cf6]",
+    fill: "bg-[#f3eeff]",
+    border: "border-[#dccdfb]",
+    check: "bg-[#8b5cf6]",
+  },
+  amber: {
+    tint: "text-[#e08b00]",
+    fill: "bg-[#fff5e3]",
+    border: "border-[#f7ddab]",
+    check: "bg-[#e08b00]",
+  },
+  red: {
+    tint: "text-[#e0484d]",
+    fill: "bg-[#fdeeee]",
+    border: "border-[#f7c9ca]",
+    check: "bg-[#e0484d]",
+  },
+  teal: {
+    tint: "text-[#12a594]",
+    fill: "bg-[#e6f7f5]",
+    border: "border-[#b6e6df]",
+    check: "bg-[#12a594]",
+  },
+} as const
+
+function objectPresentation(name: string): ObjectPresentation {
+  const entry = OBJECT_LIBRARY[name]
+  const palette = OBJECT_TINTS[entry?.palette ?? "blue"]
+  return {
+    label: entry?.label ?? name,
+    description: entry?.description ?? "استيراد هذه البيانات من المنصة",
+    icon: entry?.icon ?? Layers,
+    ...palette,
+  }
+}
+
+const OBJECT_LIBRARY: Record<
+  string,
+  {
+    label: string
+    description: string
+    icon: typeof Users
+    palette: keyof typeof OBJECT_TINTS
+  }
+> = {
+  Customers: {
+    label: "العملاء",
+    description: "استيراد بيانات العملاء ومعلوماتهم",
+    icon: Users,
+    palette: "blue",
+  },
+  Orders: {
+    label: "الطلبات",
+    description: "استيراد الطلبات وحالاتها",
+    icon: ShoppingCart,
+    palette: "green",
+  },
+  Products: {
+    label: "المنتجات",
+    description: "استيراد المنتجات وبياناتها",
+    icon: Package,
+    palette: "purple",
+  },
+  Inventory: {
+    label: "المخزون",
+    description: "استيراد بيانات المخزون والكميات",
+    icon: Layers,
+    palette: "amber",
+  },
+  Catalog: {
+    label: "التصنيفات",
+    description: "استيراد التصنيفات والمجموعات",
+    icon: Tag,
+    palette: "red",
+  },
+  Traffic: {
+    label: "الزيارات",
+    description: "استيراد بيانات الزيارات والجلسات",
+    icon: BarChart3,
+    palette: "teal",
+  },
+  Events: {
+    label: "الأحداث",
+    description: "استيراد الأحداث والتفاعلات",
+    icon: Activity,
+    palette: "blue",
+  },
+  Conversions: {
+    label: "التحويلات",
+    description: "استيراد بيانات التحويلات",
+    icon: Target,
+    palette: "green",
+  },
+  "Page Views": {
+    label: "مشاهدات الصفحات",
+    description: "استيراد مشاهدات الصفحات",
+    icon: Eye,
+    palette: "purple",
+  },
+  Funnels: {
+    label: "مسارات التحويل",
+    description: "استيراد مسارات التحويل",
+    icon: Filter,
+    palette: "amber",
+  },
+  Campaigns: {
+    label: "الحملات",
+    description: "استيراد الحملات الإعلانية",
+    icon: Megaphone,
+    palette: "blue",
+  },
+  Ads: {
+    label: "الإعلانات",
+    description: "استيراد الإعلانات وأدائها",
+    icon: Layers,
+    palette: "purple",
+  },
+  Audience: {
+    label: "الجمهور",
+    description: "استيراد بيانات الجمهور",
+    icon: Users,
+    palette: "teal",
+  },
+  "Audience Insights": {
+    label: "رؤى الجمهور",
+    description: "استيراد رؤى وتحليلات الجمهور",
+    icon: BarChart3,
+    palette: "teal",
+  },
+  "Search Terms": {
+    label: "عبارات البحث",
+    description: "استيراد عبارات البحث المستخدمة",
+    icon: Search,
+    palette: "amber",
+  },
+  "Pixel Events": {
+    label: "أحداث البكسل",
+    description: "استيراد الأحداث المسجلة عبر البكسل",
+    icon: Activity,
+    palette: "red",
+  },
+}
+
+// Arabic one-liners for the platform grid. Keyed by the catalog's displayName; a connector
+// with no entry falls back to its English PLATFORM_DETAILS description rather than nothing.
+const PLATFORM_DESCRIPTION_AR: Record<string, string> = {
+  Salla: "زامن المنتجات والطلبات وبيانات العملاء من متجرك.",
+  Shopify: "اربط متجر شوبيفاي لمزامنة الطلبات والمنتجات.",
+  Zid: "اربط متجر زد لمزامنة الطلبات والمنتجات والعملاء.",
+  "Google Analytics 4": "استورد الجلسات والأحداث وتقارير الجمهور.",
+  "Meta Ads": "اسحب حملات فيسبوك وإنستغرام وأداء الإنفاق.",
+  "Google Ads": "اسحب الحملات والكلمات المفتاحية وبيانات التحويل.",
+  "TikTok Ads": "زامن حملات تيك توك ومقاييس الأداء.",
+  "Snapchat Ads": "زامن حملات سناب شات والإنفاق والتحويلات.",
+}
 
 const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   Salla: {
     category: "Ecommerce",
     description: "Sync products, orders, and customer records from your store.",
-    connectionType: "Commerce connector",
-    authMethod: "OAuth",
+    connectionType: "موصل التجارة الإلكترونية",
+    authMethod: "OAuth 2.0",
     permissions: ["Orders", "Products", "Customers"],
     capabilities: ["Products", "Orders", "Customers", "Catalog"],
     accountLabel: "Store",
     accountDescription: "Choose the Salla store that should connect to MADAR.",
     resourceTypeLabel: "Store",
-    syncFrequency: "Every 30 minutes",
-    estimatedDuration: "1-2 minutes",
+    syncFrequency: "كل 30 دقيقة",
+    estimatedDuration: "1 – 2 دقيقة",
     recommendedObjects: ["Products", "Orders", "Customers"],
     allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
     accounts: [
@@ -134,15 +397,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   Shopify: {
     category: "Ecommerce",
     description: "Sync products, orders, and customer records from your store.",
-    connectionType: "Commerce connector",
-    authMethod: "OAuth",
+    connectionType: "موصل التجارة الإلكترونية",
+    authMethod: "OAuth 2.0",
     permissions: ["Orders", "Products", "Customers"],
     capabilities: ["Products", "Orders", "Customers", "Catalog"],
     accountLabel: "Store",
     accountDescription: "Choose the Shopify store that should connect to MADAR.",
     resourceTypeLabel: "Store",
-    syncFrequency: "Every 30 minutes",
-    estimatedDuration: "1-2 minutes",
+    syncFrequency: "كل 30 دقيقة",
+    estimatedDuration: "1 – 2 دقيقة",
     recommendedObjects: ["Products", "Orders", "Customers"],
     allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
     accounts: [
@@ -154,15 +417,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   Zid: {
     category: "Ecommerce",
     description: "Bring store activity, product updates, and customer records together.",
-    connectionType: "Commerce connector",
-    authMethod: "OAuth",
+    connectionType: "موصل التجارة الإلكترونية",
+    authMethod: "OAuth 2.0",
     permissions: ["Orders", "Products", "Customers"],
     capabilities: ["Products", "Orders", "Customers", "Catalog"],
     accountLabel: "Store",
     accountDescription: "Choose the Zid store that should sync into MADAR.",
     resourceTypeLabel: "Store",
-    syncFrequency: "Every 30 minutes",
-    estimatedDuration: "1-2 minutes",
+    syncFrequency: "كل 30 دقيقة",
+    estimatedDuration: "1 – 2 دقيقة",
     recommendedObjects: ["Products", "Orders", "Customers"],
     allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
     accounts: [
@@ -174,15 +437,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Google Analytics 4": {
     category: "Analytics",
     description: "Capture traffic, events, and conversions for customer insight.",
-    connectionType: "Read-only analytics connector",
-    authMethod: "OAuth",
+    connectionType: "موصل التحليلات",
+    authMethod: "OAuth 2.0",
     permissions: ["Traffic", "Events", "Conversions"],
     capabilities: ["Traffic", "Events", "Conversions"],
     accountLabel: "Property",
     accountDescription: "Select the GA4 property that should feed your workspace.",
     resourceTypeLabel: "Property",
-    syncFrequency: "Every 15 minutes",
-    estimatedDuration: "Under 90 seconds",
+    syncFrequency: "كل 15 دقيقة",
+    estimatedDuration: "أقل من 90 ثانية",
     recommendedObjects: ["Traffic", "Events", "Conversions"],
     allObjects: ["Traffic", "Events", "Conversions", "Page Views", "Funnels"],
     accounts: [
@@ -194,15 +457,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Meta Ads": {
     category: "Marketing",
     description: "Sync campaign, ad, and conversion data from Meta.",
-    connectionType: "Marketing platform connector",
-    authMethod: "OAuth",
+    connectionType: "موصل المنصات الإعلانية",
+    authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Business or Ad Account",
     accountDescription: "Choose the Meta business or ad account to import from.",
     resourceTypeLabel: "Account",
-    syncFrequency: "Every 15 minutes",
-    estimatedDuration: "Under 90 seconds",
+    syncFrequency: "كل 15 دقيقة",
+    estimatedDuration: "أقل من 90 ثانية",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Audience Insights"],
     accounts: [
@@ -214,15 +477,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Google Ads": {
     category: "Marketing",
     description: "Import paid media performance and conversion signals.",
-    connectionType: "Marketing platform connector",
-    authMethod: "OAuth",
+    connectionType: "موصل المنصات الإعلانية",
+    authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Account",
     accountDescription: "Select the Google Ads account that should connect to MADAR.",
     resourceTypeLabel: "Account",
-    syncFrequency: "Every 15 minutes",
-    estimatedDuration: "Under 90 seconds",
+    syncFrequency: "كل 15 دقيقة",
+    estimatedDuration: "أقل من 90 ثانية",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Search Terms"],
     accounts: [
@@ -234,15 +497,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "TikTok Ads": {
     category: "Marketing",
     description: "Connect campaign and audience performance from TikTok Ads.",
-    connectionType: "Marketing platform connector",
-    authMethod: "OAuth",
+    connectionType: "موصل المنصات الإعلانية",
+    authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Account",
     accountDescription: "Choose the TikTok Ads account to sync into MADAR.",
     resourceTypeLabel: "Account",
-    syncFrequency: "Every 15 minutes",
-    estimatedDuration: "Under 90 seconds",
+    syncFrequency: "كل 15 دقيقة",
+    estimatedDuration: "أقل من 90 ثانية",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Audience"],
     accounts: [
@@ -253,15 +516,15 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Snapchat Ads": {
     category: "Marketing",
     description: "Sync ad delivery and conversion performance from Snapchat.",
-    connectionType: "Marketing platform connector",
-    authMethod: "OAuth",
+    connectionType: "موصل المنصات الإعلانية",
+    authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Account",
     accountDescription: "Choose the Snapchat Ads account to import from.",
     resourceTypeLabel: "Account",
-    syncFrequency: "Every 15 minutes",
-    estimatedDuration: "Under 90 seconds",
+    syncFrequency: "كل 15 دقيقة",
+    estimatedDuration: "أقل من 90 ثانية",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Pixel Events"],
     accounts: [
@@ -292,36 +555,6 @@ function stripShopDomainDecoration(value: string) {
 
 function isShopDomainValid(value: string) {
   return SHOP_DOMAIN_INPUT_PATTERN.test(stripShopDomainDecoration(value))
-}
-
-function getConnectorIcon(label: string) {
-  return label
-    .split(" ")
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase()
-}
-
-function ConnectorLogo({ label }: { label: string }) {
-  return (
-    <div className="flex size-14 items-center justify-center rounded-2xl bg-background/80 text-sm font-semibold tracking-wider shadow-sm ring-1 ring-border/70">
-      {getConnectorIcon(label)}
-    </div>
-  )
-}
-
-function StepDot({ state }: { state: "done" | "active" | "todo" }) {
-  if (state === "done") {
-    return <Check className="size-3.5" />
-  }
-
-  if (state === "active") {
-    return <Circle className="size-3.5 fill-current" />
-  }
-
-  return <Circle className="size-3.5" />
 }
 
 interface OAuthConnectorProfile {
@@ -416,66 +649,37 @@ function parseAccessibleProviderAccounts(
   }
 }
 
-function SyncChip({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean
-  children: React.ReactNode
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "rounded-full border px-4 py-2 text-sm font-medium",
-        WIZARD_INTERACTION_CLASS,
-        active
-          ? "border-[#2563eb] bg-[#eff6ff] font-semibold text-[#2563eb] hover:bg-[#dbeafe]"
-          : "border-[#e8edf3] bg-white text-[#8098b4] hover:border-[#bfdbfe] hover:bg-[#f8fafc] hover:text-[#334155]"
-      )}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  )
-}
-
 function errorMeta(kind: ErrorKind): WizardErrorState {
   switch (kind) {
     case "authorization_cancelled":
       return {
         kind,
-        title: "Authorization cancelled",
-        description: "The provider closed the OAuth session before access was granted.",
+        title: "تم إلغاء التفويض",
+        description: "أغلقت المنصة جلسة OAuth قبل منح الصلاحية.",
       }
     case "permission_denied":
       return {
         kind,
-        title: "Permission denied",
-        description:
-          "The connected account did not grant the permissions MADAR needs to sync data.",
+        title: "الصلاحية مرفوضة",
+        description: "لم يمنح الحساب المرتبط الصلاحيات التي يحتاجها مدار لمزامنة البيانات.",
       }
     case "token_expired":
       return {
         kind,
-        title: "Token expired",
-        description: "The OAuth token is no longer valid. Reconnect the platform to continue.",
+        title: "انتهت صلاحية الرمز",
+        description: "لم يعد رمز OAuth صالحاً. أعد ربط المنصة للمتابعة.",
       }
     case "network_timeout":
       return {
         kind,
-        title: "Network timeout",
-        description:
-          "The connection took too long to respond. Try again when the network is stable.",
+        title: "انتهت مهلة الشبكة",
+        description: "استغرق الاتصال وقتاً أطول من اللازم. حاول مجدداً عندما تستقر الشبكة.",
       }
     default:
       return {
         kind,
-        title: "Connection setup failed",
-        description:
-          "Something interrupted the setup flow. You can retry or choose a different account.",
+        title: "تعذّر إكمال الربط",
+        description: "حدث ما قاطع عملية الإعداد. يمكنك المحاولة مجدداً أو اختيار حساب آخر.",
       }
   }
 }
@@ -490,63 +694,194 @@ function inferErrorKind(message: string): ErrorKind {
 }
 
 const LOADING_STAGES: Record<Exclude<FlowStatus, "idle" | "finalizing">, string> = {
-  connecting: "Connecting...",
-  authorizing: "Authorizing...",
-  fetching_accounts: "Fetching accounts...",
-  almost_done: "Almost done...",
+  connecting: "جارٍ الاتصال...",
+  authorizing: "جارٍ التفويض...",
+  fetching_accounts: "جارٍ جلب الحسابات...",
+  almost_done: "على وشك الانتهاء...",
 }
 
 const ACCOUNT_FALLBACK = {
   id: "account-default",
-  label: "Primary account",
-  description: "The account selected by the provider.",
+  label: "الحساب الرئيسي",
+  description: "الحساب الذي تختاره المنصة افتراضياً.",
+}
+
+// Colours, radii and type sizes below are read straight off the new-connection SVG export
+// rather than from the shared dashboard-surface tokens -- that token set describes the
+// dashboard shell, and reusing it is what made the first pass at this page look unchanged.
+const PANEL_CLASS = "rounded-[14px] border border-[#e1e7f0] bg-white"
+const PAGE_TEXT = "text-[#0b1738]"
+const MUTED_TEXT = "text-[#6b7b96]"
+
+// The five marks orbiting the MADAR logo in the hero, with their positions in the 300x210
+// illustration box. Percentages so the whole thing scales with the card.
+const HERO_ORBIT: Array<{ platform: string; x: number; y: number }> = [
+  { platform: "Salla", x: 12, y: 16 },
+  { platform: "Google Ads", x: 86, y: 16 },
+  { platform: "Meta Ads", x: 4, y: 62 },
+  { platform: "TikTok Ads", x: 94, y: 62 },
+  { platform: "Snapchat Ads", x: 50, y: 92 },
+]
+
+function HeroConstellation() {
+  return (
+    <div
+      className="relative h-[210px] w-full max-w-[320px] shrink-0"
+      role="img"
+      aria-label="MADAR متصل بمنصات المتاجر والإعلانات"
+    >
+      <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {HERO_ORBIT.map((node) => (
+          <line
+            key={node.platform}
+            x1="50"
+            y1="50"
+            x2={node.x}
+            y2={node.y}
+            stroke="#b9cdf0"
+            strokeWidth="0.5"
+            strokeDasharray="2 2.5"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+
+      <div className="absolute left-1/2 top-1/2 flex h-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#dbe6f8] bg-white px-4 shadow-[0_6px_18px_rgba(40,120,255,0.14)]">
+        <Image src={ASSETS.logo} alt="MADAR" width={78} height={22} className="h-5 w-auto" />
+      </div>
+
+      {HERO_ORBIT.map((node) => (
+        <div
+          key={node.platform}
+          className="absolute -translate-x-1/2 -translate-y-1/2"
+          style={{ left: `${node.x}%`, top: `${node.y}%` }}
+        >
+          <ConnectorLogo
+            platformName={node.platform}
+            className="size-11 shrink-0 rounded-full border border-[#e1e7f0] bg-white p-2 shadow-[0_4px_12px_rgba(11,23,56,0.08)]"
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// The scattered dots the success screen sprinkles over its hero and main card.
+const CONFETTI: Array<{ x: number; y: number; color: string; size: number }> = [
+  { x: 6, y: 18, color: "#f0b429", size: 7 },
+  { x: 22, y: 8, color: "#f0b429", size: 6 },
+  { x: 38, y: 12, color: "#3fb37f", size: 7 },
+  { x: 12, y: 62, color: "#8b5cf6", size: 8 },
+  { x: 33, y: 74, color: "#e0484d", size: 7 },
+  { x: 60, y: 22, color: "#5aa9f8", size: 6 },
+  { x: 74, y: 58, color: "#3fb37f", size: 7 },
+  { x: 88, y: 16, color: "#f0b429", size: 6 },
+  { x: 94, y: 66, color: "#e0484d", size: 7 },
+  { x: 52, y: 84, color: "#5aa9f8", size: 6 },
+]
+
+function Confetti({ region = "full" }: { region?: "full" | "left" }) {
+  // The hero's copy occupies its right-hand half, so its dots are confined to the left.
+  const dots = region === "left" ? CONFETTI.filter((dot) => dot.x < 48) : CONFETTI
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      {dots.map((dot) => (
+        <span
+          key={`${dot.x}-${dot.y}`}
+          className="absolute rounded-full opacity-70"
+          style={{
+            left: `${dot.x}%`,
+            top: `${dot.y}%`,
+            width: dot.size,
+            height: dot.size,
+            backgroundColor: dot.color,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// The success hero swaps the orbiting platforms for the finished handshake: MADAR, a
+// completed step, and the platform that was just connected.
+function SyncingHandshake({ platformName }: { platformName: string }) {
+  return (
+    <div className="flex shrink-0 items-center gap-0">
+      <div className="flex h-11 shrink-0 items-center justify-center rounded-full border border-[#dbe6f8] bg-white px-3.5">
+        <Image src={ASSETS.logo} alt="MADAR" width={64} height={20} className="h-5 w-auto" />
+      </div>
+      <span aria-hidden className="h-px w-7 border-t-2 border-dashed border-[#c3d3e8]" />
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#3fb37f] text-white">
+        <Check className="size-5" strokeWidth={3} />
+      </span>
+      <span aria-hidden className="h-px w-7 border-t-2 border-dashed border-[#c3d3e8]" />
+      <ConnectorLogo
+        platformName={platformName}
+        className="size-11 shrink-0 rounded-xl border border-[#eef2f8] bg-white p-2 shadow-[0_4px_12px_rgba(11,23,56,0.08)]"
+      />
+    </div>
+  )
+}
+
+function SuccessHandshake({ platformName }: { platformName: string }) {
+  return (
+    <div className="relative shrink-0 pt-7">
+      <p className="absolute end-2 top-0 max-w-44 text-center text-[12.5px] font-extrabold leading-5 text-[#0b1738]">
+        خطوة جديدة نحو قرارات أعمق
+      </p>
+      {/* RTL: the first child lands rightmost, and the export reads MADAR -> done ->
+          platform from left to right, so the platform is written first. */}
+      <div className="flex items-center gap-0">
+        <ConnectorLogo
+          platformName={platformName}
+          className="size-14 shrink-0 rounded-2xl border border-[#eef2f8] bg-white p-3 shadow-[0_6px_18px_rgba(11,23,56,0.08)]"
+        />
+        <span aria-hidden className="h-px w-9 border-t-2 border-dashed border-[#c3d3e8]" />
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[#3fb37f] text-white shadow-[0_8px_20px_rgba(63,179,127,0.32)]">
+          <Check className="size-7" strokeWidth={3} />
+        </span>
+        <span aria-hidden className="h-px w-9 border-t-2 border-dashed border-[#c3d3e8]" />
+        <div className="flex size-16 shrink-0 items-center justify-center rounded-full border border-[#dbe6f8] bg-white shadow-[0_6px_18px_rgba(11,23,56,0.08)]">
+          <Image src={ASSETS.logo} alt="MADAR" width={64} height={20} className="h-5 w-auto" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Latin digits: the rest of the page (the elapsed clock, the step numbers, the export's
+// own "943/2,000") uses them, and ar-SA defaults to Arabic-Indic.
+function formatCount(value: number) {
+  return new Intl.NumberFormat("ar-SA-u-nu-latn", { useGrouping: true }).format(value)
+}
+
+function formatElapsed(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, "0")}`
+}
+
+function formatElapsedWords(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes} دقيقة و ${seconds} ثانية`
 }
 
 const WIZARD_INTERACTION_CLASS =
   "cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
-
-function useDocumentDirection() {
-  const subscribe = useCallback((callback: () => void) => {
-    if (typeof document === "undefined") {
-      return () => undefined
-    }
-
-    const observer = new MutationObserver((mutations) => {
-      if (
-        mutations.some(
-          (mutation) => mutation.type === "attributes" && mutation.attributeName === "dir"
-        )
-      ) {
-        callback()
-      }
-    })
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["dir"],
-    })
-
-    return () => observer.disconnect()
-  }, [])
-
-  const getSnapshot = useCallback(
-    () => (document.documentElement.dir === "rtl" ? "rtl" : "ltr"),
-    []
-  )
-  const getServerSnapshot = useCallback(() => "ltr" as const, [])
-
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
-}
 
 export function NewConnectionWizard() {
   const router = useRouter()
   const { refetch } = useConnectionsCenter()
   const { connectionManager, integrationApplicationService } = useApplicationServices()
   const { currentWorkspace } = useWorkspace()
-  const documentDirection = useDocumentDirection()
 
   const [stepIndex, setStepIndex] = useState<WizardStep>(0)
   const [selectedCategory, setSelectedCategory] = useState<PlatformCategory>("All")
+  const [platformSearch, setPlatformSearch] = useState("")
   const [selectedConnectorDefinitionId, setSelectedConnectorDefinitionId] = useState(
     CONNECTOR_CATALOG[0]?.connectorDefinitionId ?? ""
   )
@@ -564,6 +899,11 @@ export function NewConnectionWizard() {
   const [healthMonitoringEnabled, setHealthMonitoringEnabled] = useState(true)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true)
   const [isRunningFirstSync, setIsRunningFirstSync] = useState(false)
+  const [syncPhase, setSyncPhase] = useState<SyncPhase>("idle")
+  const [syncStartedAt, setSyncStartedAt] = useState<number | null>(null)
+  const [syncElapsedMs, setSyncElapsedMs] = useState(0)
+  const [syncOutcome, setSyncOutcome] = useState<SyncResult | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [discoveredProviderAccounts, setDiscoveredProviderAccounts] = useState<AccountOption[]>([])
@@ -585,14 +925,29 @@ export function NewConnectionWizard() {
     : undefined
 
   const filteredConnectors = useMemo(() => {
-    if (selectedCategory === "All") {
-      return CONNECTOR_CATALOG
-    }
+    const query = platformSearch.trim().toLowerCase()
 
-    return CONNECTOR_CATALOG.filter(
-      (connector) => getCategoryForConnector(connector.displayName) === selectedCategory
-    )
-  }, [selectedCategory])
+    return CONNECTOR_CATALOG.filter((connector) => {
+      const matchesCategory =
+        selectedCategory === "All" ||
+        getCategoryForConnector(connector.displayName) === selectedCategory
+
+      if (!matchesCategory) {
+        return false
+      }
+
+      if (!query) {
+        return true
+      }
+
+      // Search both the English catalog name and the Arabic blurb, since the page is Arabic
+      // but every connector is still listed under its English brand name.
+      const arabicDescription = PLATFORM_DESCRIPTION_AR[connector.displayName] ?? ""
+      return (
+        connector.displayName.toLowerCase().includes(query) || arabicDescription.includes(query)
+      )
+    })
+  }, [platformSearch, selectedCategory])
 
   const availableAccounts = useMemo(() => {
     if (!selectedConnector) {
@@ -639,7 +994,7 @@ export function NewConnectionWizard() {
       return recommendedObjects.length > 0 ? recommendedObjects : allObjects.slice(0, 3)
     })
     setSelectedAccountId((current) => current ?? availableAccounts[0]?.id ?? ACCOUNT_FALLBACK.id)
-    setConnectionName((current) => current || `${selectedConnector.displayName} Connection`)
+    setConnectionName((current) => current || `اتصال ${selectedConnector.displayName}`)
   }, [availableAccounts, allObjects, recommendedObjects, selectedConnector])
 
   useEffect(() => {
@@ -738,10 +1093,6 @@ export function NewConnectionWizard() {
       setSelectedObjects(nextPreset.length > 0 ? nextPreset : recommendedObjects)
     }
   }, [allObjects, recommendedObjects, selectedConnectorDetails, selectedObjects, syncPreset])
-
-  const completedSteps = stepIndex
-  const progressPercent = stepIndex === 3 ? 100 : Math.round((stepIndex / 3) * 100)
-  const estimatedMinutesLeft = Math.max(0, 4 - stepIndex)
 
   const resetError = useCallback(() => {
     setErrorState(null)
@@ -1034,12 +1385,43 @@ export function NewConnectionWizard() {
     }
 
     setIsRunningFirstSync(true)
+    setSyncPhase("running")
+    setSyncError(null)
+    setSyncOutcome(null)
+    setSyncElapsedMs(0)
+    setSyncStartedAt(Date.now())
+
     try {
-      await connectionManager.runSync({ connectionId: draftConnectionId, trigger: "manual" })
+      const run = await connectionManager.runSync({
+        connectionId: draftConnectionId,
+        trigger: "manual",
+      })
+      // result is optional on SyncRun: a connector that reports no counts leaves the
+      // totals off the summary rather than showing zeroes it never measured.
+      setSyncOutcome(run.result ?? null)
+      setSyncPhase(run.status === "failed" ? "failed" : "done")
+      if (run.status === "failed") {
+        setSyncError(run.errorMessage ?? "تعذّر إكمال المزامنة.")
+      }
+    } catch (error) {
+      setSyncPhase("failed")
+      setSyncError(error instanceof Error ? error.message : "تعذّر إكمال المزامنة.")
     } finally {
       setIsRunningFirstSync(false)
     }
   }, [connectionManager, draftConnectionId])
+
+  // A real clock, ticking only while a run is actually in flight.
+  useEffect(() => {
+    if (syncPhase !== "running" || syncStartedAt === null) {
+      return
+    }
+
+    const tick = () => setSyncElapsedMs(Date.now() - syncStartedAt)
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [syncPhase, syncStartedAt])
 
   const isContinueDisabled =
     flowStatus !== "idle" ||
@@ -1055,607 +1437,627 @@ export function NewConnectionWizard() {
     return "todo"
   }
 
-  const renderTopProgress = () => (
-    <div className={cn(SURFACE_CARD_CLASS, "space-y-4 p-6 md:p-8")}>
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#e8edf3] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#8098b4]">
-            <Sparkles className="size-3.5 text-[#4f46e5]" />
-            New Connection
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
-              New Connection
-            </h1>
-            <p className="max-w-2xl text-[12.5px] leading-6 text-[#8098b4]">
-              Connect a platform in four guided steps with OAuth-first setup and streamlined
-              onboarding.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[460px]">
-          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-            <p className="text-xs font-medium text-[#8098b4]">Current Step</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {WIZARD_STEPS[stepIndex].label}
-            </p>
-          </div>
-          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-            <p className="text-xs font-medium text-[#8098b4]">Completed Steps</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {completedSteps}
-            </p>
-          </div>
-          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-            <p className="text-xs font-medium text-[#8098b4]">Estimated Time Left</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {estimatedMinutesLeft < 1 ? "Less than 1 min" : `${estimatedMinutesLeft} min`}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 text-xs text-[#8098b4]">
-          <span>Connection Progress</span>
-          <span>{progressPercent}%</span>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-[#f1f5f9]">
-          <div
-            className="h-full rounded-full bg-[#2563eb] transition-all duration-500"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-2 md:grid-cols-5">
+  // Hero + stepper. In an RTL flex row the FIRST DOM child lands rightmost, so the copy
+  // block is written before the illustration to sit on the right, and step 1 is the first
+  // item in the stepper so it renders at the right-hand end of the row.
+  const renderStepper = () => (
+    <div className={cn(PANEL_CLASS, "px-5 py-5 md:px-7")}>
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
         {WIZARD_STEPS.map((step, index) => {
           const state = currentStepState(index as WizardStep)
           return (
-            <div
-              key={step.label}
-              className={cn(
-                "flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition-all",
-                state === "done"
-                  ? "border-[#d1fae5] bg-[#ecfdf5] text-[#10b981]"
-                  : state === "active"
-                    ? "border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]"
-                    : "border-[#e8edf3] bg-[#f8fafc] text-[#8098b4]"
-              )}
-            >
-              <StepDot state={state} />
-              <div className="min-w-0">
-                <div className="truncate">{step.label}</div>
-                <div className="text-[11px] font-normal opacity-80">{step.description}</div>
+            <Fragment key={step.label}>
+              {index > 0 ? (
+                <div
+                  aria-hidden
+                  className={cn(
+                    "mt-[18px] hidden h-px flex-1 lg:block",
+                    state === "todo" ? "bg-[#e1e7f0]" : "bg-[#1fa85c]"
+                  )}
+                />
+              ) : null}
+              <div className="flex items-start gap-3 text-right lg:w-auto lg:shrink-0">
+                <div
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold transition-colors",
+                    state === "done"
+                      ? "bg-[#1fa85c] text-white"
+                      : state === "active"
+                        ? "bg-[#2878ff] text-white shadow-[0_4px_12px_rgba(40,120,255,0.32)]"
+                        : "bg-[#eef2f8] text-[#95a4bd]"
+                  )}
+                >
+                  {state === "done" ? <Check className="size-4" strokeWidth={3} /> : index + 1}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <p
+                    className={cn(
+                      "text-[13px] font-bold leading-5",
+                      state === "done"
+                        ? "text-[#1fa85c]"
+                        : state === "todo"
+                          ? "text-[#95a4bd]"
+                          : PAGE_TEXT
+                    )}
+                  >
+                    {step.label}
+                  </p>
+                  {/* The export drops the sub-labels once the flow is past the first
+                      two steps, where the row would otherwise crowd the content. */}
+                  {stepIndex <= 1 ? (
+                    <p className={cn("text-[11px] leading-[18px]", MUTED_TEXT)}>
+                      {step.description}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            </Fragment>
           )
         })}
       </div>
     </div>
   )
 
-  const renderPlatformStep = () => (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Filter className="size-4" />
-        Choose a platform
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {PLATFORM_CATEGORIES.map((category) => (
-          <button
-            key={category}
-            type="button"
-            className={cn(
-              "rounded-full border px-4 py-2 text-sm font-medium",
-              WIZARD_INTERACTION_CLASS,
-              selectedCategory === category
-                ? "border-sky-300 bg-sky-500/15 text-sky-800 shadow-[0_0_0_4px_rgba(14,165,233,0.12)] hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-900"
-                : "border-border/70 bg-background/80 text-muted-foreground hover:border-sky-200 hover:bg-muted/60 hover:text-foreground"
-            )}
-            onClick={() => setSelectedCategory(category)}
-          >
-            {category}
-          </button>
-        ))}
-      </div>
+  const renderTopProgress = () => {
+    if (syncPhase !== "idle" && selectedConnector) {
+      const heading =
+        syncPhase === "running"
+          ? `جاري مزامنة بيانات ${selectedConnector.displayName}`
+          : syncPhase === "failed"
+            ? `تعذّرت مزامنة بيانات ${selectedConnector.displayName}`
+            : `اكتملت مزامنة بيانات ${selectedConnector.displayName}`
 
-      {selectedConnector ? (
-        <AppCard className={SURFACE_CARD_CLASS}>
-          <div className="flex items-start gap-3 p-4">
-            <ConnectorLogo label={selectedConnector.displayName} />
-            <div className="min-w-0 flex-1 space-y-3">
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Selected Platform
-                </p>
-                <h3 className="mt-1 text-base font-semibold">{selectedConnector.displayName}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {selectedConnectorDetails?.description}
-                </p>
+      return (
+        <div className="space-y-4">
+          {/* RTL: the heading is written first so it lands on the right, illustration left. */}
+          <div className="rounded-[18px] border border-[#dbe6f8] bg-gradient-to-l from-[#eef4ff] via-[#f5f8ff] to-[#fbfcff] px-6 py-4 md:px-8">
+            <div className="flex flex-col items-center gap-5 md:flex-row md:justify-between">
+              <div className="flex items-center gap-2.5">
+                <h1 className={cn("text-[20px] font-extrabold md:text-[22px]", PAGE_TEXT)}>
+                  {heading}
+                </h1>
+                {syncPhase === "running" ? (
+                  <RefreshCcw className="size-5 shrink-0 animate-spin text-[#2878ff]" />
+                ) : syncPhase === "failed" ? (
+                  <CircleAlert className="size-5 shrink-0 text-[#e0484d]" />
+                ) : (
+                  <Check className="size-5 shrink-0 text-[#1f9d55]" strokeWidth={3} />
+                )}
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-[#8098b4]">Authentication</p>
-                  <p className="mt-1 text-sm font-medium">{selectedConnectorDetails?.authMethod}</p>
-                </div>
-                <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-[#8098b4]">Connection Type</p>
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedConnectorDetails?.connectionType}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-[#8098b4]">Permissions Preview</p>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {selectedConnectorDetails?.permissions.map((permission) => (
-                      <span
-                        key={permission}
-                        className="rounded-full bg-background px-2 py-0.5 text-[11px] font-medium text-foreground/80"
-                      >
-                        {permission}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="sm:col-span-2 xl:col-span-3 rounded-xl bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-[#8098b4]">Capabilities</p>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {selectedConnector.capabilities.slice(0, 4).map((capability) => (
-                      <span
-                        key={capability}
-                        className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-800"
-                      >
-                        {capability}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <SyncingHandshake platformName={selectedConnector.displayName} />
             </div>
           </div>
-        </AppCard>
-      ) : null}
 
-      <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {filteredConnectors.map((connector) => {
-          const details = PLATFORM_DETAILS[connector.displayName]
-          const selected = connector.connectorDefinitionId === selectedConnectorDefinitionId
+          {renderStepper()}
+        </div>
+      )
+    }
 
-          return (
-            <button
-              key={connector.connectorDefinitionId}
-              type="button"
-              className={cn(
-                "group relative flex h-full min-h-[180px] flex-col rounded-[24px] border p-4 text-left shadow-sm",
-                WIZARD_INTERACTION_CLASS,
-                selected
-                  ? "border-sky-400 bg-slate-950 text-slate-50 shadow-[0_0_0_1px_rgba(59,130,246,0.45),0_0_28px_rgba(59,130,246,0.18)] hover:border-sky-300 hover:bg-slate-900"
-                  : "border-border/70 bg-background/80 hover:border-sky-200 hover:bg-muted/50"
+    const hero = isSuccess
+      ? SUCCESS_HERO(selectedConnector?.displayName ?? "")
+      : HERO_COPY[stepIndex]
+    const isFinalStep = stepIndex === 3 && !isSuccess
+
+    return (
+      <div className="space-y-4">
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-[18px] border px-6 py-7 md:px-8",
+            isSuccess
+              ? "border-[#c6e8d5] bg-gradient-to-l from-[#e8f7ee] via-[#f2faf5] to-[#fbfdfc]"
+              : "border-[#dbe6f8] bg-gradient-to-l from-[#e9f1ff] via-[#f3f7ff] to-[#fbfcff]"
+          )}
+        >
+          {isSuccess ? <Confetti region="left" /> : null}
+          <div className="relative flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="w-full space-y-2.5 text-center lg:text-right">
+              {isFinalStep ? null : (
+                <Link
+                  href={ROUTES.integrations}
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-[#6b7b96] transition-colors hover:text-[#2878ff]"
+                >
+                  <ChevronLeft className="size-3.5 rtl:rotate-180" />
+                  العودة إلى التكاملات
+                </Link>
               )}
-              onClick={() => handlePlatformToggle(connector.connectorDefinitionId)}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <ConnectorLogo label={connector.displayName} />
-                  <div>
-                    <div
-                      className={cn(
-                        "text-base font-semibold",
-                        selected ? "text-slate-50" : "text-foreground"
-                      )}
-                    >
-                      {connector.displayName}
-                    </div>
-                    <p
-                      className={cn(
-                        "text-xs",
-                        selected ? "text-slate-300" : "text-muted-foreground"
-                      )}
-                    >
-                      {details.description}
-                    </p>
-                  </div>
-                </div>
-                {selected ? (
-                  <div className="flex size-7 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm">
-                    <Check className="size-4" />
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                <AppBadge
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[11px]",
-                    selected ? "bg-sky-500/15 text-sky-100" : "bg-sky-100 text-sky-800"
-                  )}
-                >
-                  {details.category}
-                </AppBadge>
-                <AppBadge
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[11px]",
-                    selected
-                      ? "bg-emerald-500/15 text-emerald-100"
-                      : "bg-emerald-100 text-emerald-800"
-                  )}
-                >
-                  OAuth
-                </AppBadge>
-                <AppBadge
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[11px]",
-                    selected ? "bg-violet-500/15 text-violet-100" : "bg-violet-100 text-violet-800"
-                  )}
-                >
-                  {details.connectionType}
-                </AppBadge>
-              </div>
-
+              {isSuccess ? null : (
+                <p className="text-[12px] font-semibold text-[#2878ff]">
+                  {isFinalStep
+                    ? "الخطوة 4 من 4"
+                    : `خطوة ${stepIndex + 1} من ${WIZARD_STEPS.length}`}
+                </p>
+              )}
+              {/* RTL: the tick is written first so it lands to the right of the heading. */}
               <div
                 className={cn(
-                  "mt-4 space-y-2 text-xs",
-                  selected ? "text-slate-300" : "text-muted-foreground"
+                  "flex items-center gap-3",
+                  isSuccess ? "justify-center lg:justify-start" : ""
                 )}
               >
-                <div
-                  className={cn(
-                    "flex items-center justify-between gap-2 rounded-xl px-3 py-2",
-                    selected ? "bg-white/5" : "bg-muted/35"
-                  )}
-                >
-                  <span>Capabilities</span>
-                  <span
-                    className={cn("font-medium", selected ? "text-slate-100" : "text-foreground")}
-                  >
-                    {connector.capabilities.length}
+                {isSuccess ? (
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#3fb37f] text-white">
+                    <Check className="size-5" strokeWidth={3} />
                   </span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {connector.capabilities.slice(0, 4).map((capability) => (
-                    <span
-                      key={capability}
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                        selected
-                          ? "bg-white/5 text-slate-100 ring-white/10"
-                          : "bg-background text-foreground/80 ring-border/70"
-                      )}
-                    >
-                      {capability}
-                    </span>
-                  ))}
-                </div>
-                <div
+                ) : null}
+                <h1
                   className={cn(
-                    "flex items-center justify-between gap-2 border-t pt-2",
-                    selected ? "border-white/10" : ""
+                    "text-[26px] font-extrabold leading-[1.35] md:text-[30px]",
+                    PAGE_TEXT
                   )}
                 >
-                  <span>Permissions</span>
-                  <span
-                    className={cn("font-medium", selected ? "text-slate-100" : "text-foreground")}
-                  >
-                    {details.permissions.join(", ")}
+                  {hero.title}
+                </h1>
+              </div>
+              <p className={cn("max-w-xl text-[13px] leading-7 lg:max-w-md", MUTED_TEXT)}>
+                {hero.subtitle}
+              </p>
+              {stepIndex === 1 ? (
+                <p className="pt-1 text-[12.5px] font-bold text-[#2878ff]">
+                  الخطوة الحالية: {WIZARD_STEPS[1].label}
+                </p>
+              ) : null}
+            </div>
+
+            {isSuccess && selectedConnector ? (
+              <SuccessHandshake platformName={selectedConnector.displayName} />
+            ) : isFinalStep ? (
+              <div className="flex shrink-0 items-center gap-5">
+                <p className="text-[13px] font-bold text-[#2878ff]">أنت على وشك إنشاء التكامل!</p>
+                <div className="flex size-24 shrink-0 items-center justify-center rounded-[20px] bg-white shadow-[0_8px_24px_rgba(11,23,56,0.08)]">
+                  <span className="flex size-14 items-center justify-center rounded-full bg-[#1fa85c] text-white">
+                    <Check className="size-8" strokeWidth={3} />
                   </span>
                 </div>
               </div>
-            </button>
-          )
-        })}
+            ) : (
+              <HeroConstellation />
+            )}
+          </div>
+        </div>
+
+        {renderStepper()}
       </div>
+    )
+  }
+
+  const renderPlatformStep = () => (
+    <div className="space-y-5">
+      {/* RTL: the chips are written first so they land on the right, search on the left. */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {PLATFORM_CATEGORIES.map((category) => (
+            <button
+              key={category}
+              type="button"
+              className={cn(
+                "cursor-pointer rounded-full px-4 py-2 text-[12.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40",
+                selectedCategory === category
+                  ? "bg-[#2878ff] text-white shadow-[0_4px_12px_rgba(40,120,255,0.28)]"
+                  : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+              )}
+              onClick={() => setSelectedCategory(category)}
+            >
+              {CATEGORY_LABELS[category]}
+            </button>
+          ))}
+        </div>
+
+        <AppInput
+          value={platformSearch}
+          onChange={(event) => setPlatformSearch(event.target.value)}
+          placeholder="ابحث عن منصة..."
+          aria-label="ابحث عن منصة"
+          startIcon={<Search className="size-4 text-[#95a4bd]" />}
+          wrapperClassName="w-full md:w-[262px]"
+          className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738] placeholder:text-[#95a4bd]"
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <h2 className={cn("text-[15px] font-extrabold", PAGE_TEXT)}>المنصات المتاحة</h2>
+        <span className={cn("text-[11.5px]", MUTED_TEXT)}>{filteredConnectors.length} منصة</span>
+      </div>
+
+      {filteredConnectors.length === 0 ? (
+        <div className={cn(PANEL_CLASS, "px-5 py-10 text-center text-[13px]", MUTED_TEXT)}>
+          لا توجد منصة مطابقة لبحثك.
+        </div>
+      ) : (
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filteredConnectors.map((connector) => {
+            const details = PLATFORM_DETAILS[connector.displayName]
+            const category = getCategoryForConnector(connector.displayName)
+            const selected = connector.connectorDefinitionId === selectedConnectorDefinitionId
+            const description =
+              PLATFORM_DESCRIPTION_AR[connector.displayName] ?? details?.description ?? ""
+
+            return (
+              <button
+                key={connector.connectorDefinitionId}
+                type="button"
+                aria-pressed={selected}
+                className={cn(
+                  "group flex h-full cursor-pointer flex-col rounded-[14px] border bg-white p-4 text-right transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40",
+                  selected
+                    ? "border-[#2878ff] shadow-[0_0_0_3px_rgba(40,120,255,0.12)]"
+                    : "border-[#e1e7f0] hover:border-[#c4d5f0] hover:shadow-[0_8px_20px_rgba(11,23,56,0.07)]"
+                )}
+                onClick={() => handlePlatformToggle(connector.connectorDefinitionId)}
+              >
+                <div className="flex w-full items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <ConnectorLogo
+                      platformName={connector.displayName}
+                      className="size-10 shrink-0 rounded-[10px] border border-[#eef2f8] bg-white p-1.5"
+                    />
+                    {/* Wraps rather than truncates: at four-up "Google Analytics 4" clipped
+                        to "...Analytics 4", and RTL puts the ellipsis on the leading edge. */}
+                    <p className={cn("text-[13px] font-bold leading-[18px]", PAGE_TEXT)}>
+                      {connector.displayName}
+                    </p>
+                  </div>
+                  {selected ? (
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#2878ff] text-white">
+                      <Check className="size-3" />
+                    </span>
+                  ) : (
+                    <ChevronLeft className="size-4 shrink-0 text-[#c0cbdc]" />
+                  )}
+                </div>
+
+                <p className={cn("mt-3 text-[11.5px] leading-[19px]", MUTED_TEXT)}>{description}</p>
+
+                <div className="mt-3">
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                      CATEGORY_TAG_CLASS[category]
+                    )}
+                  >
+                    {CATEGORY_LABELS[category]}
+                  </span>
+                </div>
+
+                {/* A span, not a nested button: the whole card is already the click target. */}
+                <span
+                  className={cn(
+                    "mt-auto flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2.5 text-[12.5px] font-semibold transition-colors",
+                    selected
+                      ? "border-[#2878ff] bg-[#2878ff] text-white"
+                      : "border-[#e1e7f0] bg-white text-[#0b1738] group-hover:border-[#2878ff] group-hover:text-[#2878ff]"
+                  )}
+                >
+                  {selected ? "المنصة المختارة" : "ربط الآن"}
+                  <Link2 className="size-3.5" />
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
+  )
+
+  // The platform header that opens the main card on steps two to four.
+  const renderPlatformHeader = ({
+    trailing = null,
+    statusPill = null,
+    sub = null,
+    namePrefix = "",
+  }: {
+    trailing?: ReactNode
+    statusPill?: ReactNode
+    sub?: ReactNode
+    namePrefix?: string
+  }) => {
+    if (!selectedConnector) {
+      return null
+    }
+
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <ConnectorLogo
+            platformName={selectedConnector.displayName}
+            className="size-12 shrink-0 rounded-full border border-[#eef2f8] bg-white p-2"
+          />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <p className={cn("text-[16px] font-extrabold", PAGE_TEXT)}>
+                {namePrefix}
+                {selectedConnector.displayName}
+              </p>
+              {statusPill}
+            </div>
+            {sub}
+          </div>
+        </div>
+        {trailing}
+      </div>
+    )
+  }
+
+  const changePlatformButton = (
+    <AppButton
+      variant="outline"
+      className={cn(
+        "h-9 rounded-[10px] border-[#e1e7f0] bg-white px-3.5 text-[12px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]",
+        WIZARD_INTERACTION_CLASS
+      )}
+      icon={<RefreshCcw className="size-3.5" />}
+      iconPosition="end"
+      onClick={() => setStepIndex(0)}
+    >
+      تغيير المنصة
+    </AppButton>
   )
 
   const renderConnectStep = () => {
     if (!selectedConnector || !selectedConnectorDetails) {
       return (
-        <AppCard className={cn(SURFACE_CARD_CLASS, "p-6")}>
-          <div className="space-y-3 text-center">
-            <CircleAlert className="mx-auto size-10 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Choose a platform first</h3>
-            <p className="text-sm text-muted-foreground">
-              Select a connector on the previous step to start the OAuth flow.
-            </p>
-          </div>
-        </AppCard>
+        <div className={cn(PANEL_CLASS, "space-y-3 p-6 text-center")}>
+          <CircleAlert className="mx-auto size-10 text-[#95a4bd]" />
+          <h3 className={cn("text-[16px] font-extrabold", PAGE_TEXT)}>اختر منصة أولاً</h3>
+          <p className={cn("text-[12.5px]", MUTED_TEXT)}>
+            اختر منصة في الخطوة السابقة لبدء عملية التفويض عبر OAuth.
+          </p>
+        </div>
       )
     }
 
+    const category = getCategoryForConnector(selectedConnector.displayName)
+
     return (
-      <div className="space-y-4">
+      <div className={cn(PANEL_CLASS, "space-y-5 p-5 md:p-6")}>
+        {renderPlatformHeader({
+          sub: (
+            <span
+              className={cn(
+                "inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                CATEGORY_TAG_CLASS[category]
+              )}
+            >
+              {CATEGORY_SINGULAR[category]}
+            </span>
+          ),
+        })}
+
         {flowStatus !== "idle" ? (
-          <AppCard className="border-sky-200 bg-sky-500/10 p-5 shadow-sm">
-            <div className="flex items-start gap-4">
-              <div className="flex size-12 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-700">
-                <Loader2 className="size-5 animate-spin" />
-              </div>
-              <div className="flex-1 space-y-2">
-                <p className="text-[11px] uppercase tracking-wide text-sky-700/80">
-                  OAuth callback
-                </p>
-                <h3 className="text-lg font-semibold text-foreground">
-                  {LOADING_STAGES[flowStatus as Exclude<FlowStatus, "idle" | "finalizing">]}
-                </h3>
-                <p className="text-sm text-sky-700/80">
-                  MADAR is finishing the secure handoff for {selectedConnector.displayName}.
-                </p>
-              </div>
-            </div>
-          </AppCard>
+          <div className="flex items-center gap-3 rounded-[12px] border border-[#c9dcff] bg-[#eef4ff] px-4 py-3">
+            <Loader2 className="size-4 shrink-0 animate-spin text-[#2878ff]" />
+            <p className="text-[12.5px] font-semibold text-[#2878ff]">
+              {LOADING_STAGES[flowStatus as Exclude<FlowStatus, "idle" | "finalizing">]}
+            </p>
+          </div>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="space-y-4 rounded-[24px] border bg-gradient-to-br from-background via-background to-muted/30 p-5 shadow-sm">
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-muted-foreground">OAuth onboarding</p>
-              <div className="space-y-2">
-                <h4 className="text-xl font-semibold">
-                  Connect your {selectedConnector.displayName} account securely using OAuth.
-                </h4>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  You will be redirected to {selectedConnector.displayName}. Approve access. MADAR
-                  returns automatically. No passwords are stored.
-                </p>
-              </div>
+        <div className="rounded-[12px] border border-[#e1e7f0] p-5">
+          <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>معلومات OAuth</h3>
+          <p className={cn("mt-3 text-[12.5px] leading-6", MUTED_TEXT)}>
+            قم بتسجيل الدخول إلى متجرك ومنح مدار الصلاحيات المطلوبة.
+          </p>
+          <p className={cn("text-[12.5px] leading-6", MUTED_TEXT)}>
+            سيتم تحويلك إلى {selectedConnector.displayName} لإتمام التفويض بشكل آمن.
+          </p>
+
+          {selectedConnector.connectorId === "shopify" ? (
+            <div className="mt-4 space-y-2">
+              <AppInput
+                label="نطاق المتجر"
+                placeholder="your-store.myshopify.com"
+                value={shopDomain}
+                onChange={(event) => setShopDomain(event.target.value)}
+                className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+              />
+              <p className={cn("text-[11px] leading-5", MUTED_TEXT)}>
+                أدخل معرّف متجر شوبيفاي أو نطاق myshopify.com كاملاً.
+              </p>
             </div>
+          ) : null}
 
-            {selectedConnector.connectorId === "shopify" ? (
-              <div className="space-y-2 rounded-[20px] border border-sky-200 bg-sky-500/8 p-4">
-                <AppInput
-                  label="Shop domain"
-                  placeholder="your-store.myshopify.com"
-                  value={shopDomain}
-                  onChange={(event) => setShopDomain(event.target.value)}
-                />
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Enter your Shopify store&apos;s handle or full myshopify.com domain. MADAR uses
-                  this to build the secure authorization link for your store.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="rounded-[20px] border bg-background/75 p-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span className="rounded-full border bg-background px-3 py-1 text-foreground">
-                  MADAR
-                </span>
-                <ArrowRight className="size-4" />
-                <span className="rounded-full border bg-background px-3 py-1 text-foreground">
-                  Redirect
-                </span>
-                <ArrowRight className="size-4" />
-                <span className="rounded-full border bg-background px-3 py-1 text-foreground">
-                  Provider login
-                </span>
-                <ArrowRight className="size-4" />
-                <span className="rounded-full border bg-background px-3 py-1 text-foreground">
-                  Approve permissions
-                </span>
-                <ArrowRight className="size-4" />
-                <span className="rounded-full border bg-background px-3 py-1 text-foreground">
-                  Back to MADAR
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-[24px] border border-sky-200 bg-sky-500/8 p-4 shadow-sm">
-              <div className="flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 size-5 text-sky-500" />
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Connection Summary</p>
-                    <p className="text-sm leading-6 text-muted-foreground">
-                      A structured onboarding summary with only the setup details users need.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-background/75 p-3">
-                      <p className="text-[11px] text-muted-foreground">Platform</p>
-                      <p className="mt-1 text-sm font-medium">{selectedConnector.displayName}</p>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3">
-                      <p className="text-[11px] text-muted-foreground">Authentication</p>
-                      <p className="mt-1 text-sm font-medium">OAuth 2.0</p>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3">
-                      <p className="text-[11px] text-muted-foreground">Workspace</p>
-                      <p className="mt-1 text-sm font-medium">{workspaceLabel}</p>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3 sm:col-span-2">
-                      <p className="text-[11px] text-muted-foreground">Permissions</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {selectedConnectorDetails.permissions.map((permission) => (
-                          <span
-                            key={permission}
-                            className="rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground/80"
-                          >
-                            ✓ {permission}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3">
-                      <p className="text-[11px] text-muted-foreground">Estimated setup</p>
-                      <p className="mt-1 text-sm font-medium">&lt; 30 sec</p>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3">
-                      <p className="text-[11px] text-muted-foreground">Estimated first sync</p>
-                      <p className="mt-1 text-sm font-medium">1-2 min</p>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3 sm:col-span-2">
-                      <p className="text-[11px] text-muted-foreground">Connection type</p>
-                      <p className="mt-1 text-sm font-medium">
-                        {selectedConnectorDetails.connectionType}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-background/75 p-3 sm:col-span-2">
-                      <p className="text-[11px] text-muted-foreground">Accounts</p>
-                      <div className="mt-2 space-y-2">
-                        <div className="flex flex-wrap gap-2">
-                          {availableAccounts.map((account) => (
-                            <button
-                              key={account.id}
-                              type="button"
-                              className={cn(
-                                "rounded-full border px-2.5 py-1 text-[11px] font-medium",
-                                WIZARD_INTERACTION_CLASS,
-                                selectedAccount.id === account.id
-                                  ? "border-sky-200 bg-sky-50 text-sky-700"
-                                  : "border-border/70 bg-background text-foreground/80"
-                              )}
-                              onClick={() => setSelectedAccountId(account.id)}
-                            >
-                              {account.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-background/75 p-3 text-sm leading-6 text-muted-foreground">
-                    No passwords are stored. OAuth keeps the connection secure and MADAR handles the
-                    return flow automatically.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-[24px] border bg-background/60 p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground/90">
-              <PlugZap className="size-4 text-indigo-600" />
-              Connection Details
-            </div>
-
-            <details className="group rounded-2xl border border-border/70 bg-background/85 px-4 py-3 transition-all duration-200">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium outline-none transition-all duration-200 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <span>OAuth Information</span>
-                <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="mt-3 text-sm leading-6 text-muted-foreground">
-                Secure redirect flow with automatic return to MADAR.
-              </div>
-            </details>
-
-            <details className="group rounded-2xl border border-border/70 bg-background/85 px-4 py-3 transition-all duration-200">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium outline-none transition-all duration-200 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <span>Workspace</span>
-                <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="mt-3 text-sm leading-6 text-muted-foreground">
-                {workspaceLabel} · {workspaceId}
-              </div>
-            </details>
-
-            <details className="group rounded-2xl border border-border/70 bg-background/85 px-4 py-3 transition-all duration-200">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium outline-none transition-all duration-200 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <span>Imported Objects</span>
-                <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="mt-3 flex flex-wrap gap-2 text-sm text-muted-foreground">
-                {(selectedObjects.length > 0
-                  ? selectedObjects
-                  : selectedConnectorDetails.capabilities.slice(0, 3)
-                ).map((item: string) => (
-                  <AppBadge
-                    key={item}
-                    className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] text-sky-800"
-                  >
-                    {item}
-                  </AppBadge>
-                ))}
-              </div>
-            </details>
-
-            <details
-              className="group rounded-2xl border border-border/70 bg-background/85 px-4 py-3 transition-all duration-200"
-              open={false}
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium outline-none transition-all duration-200 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <span>Sync Frequency</span>
-                <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="mt-3 text-sm leading-6 text-muted-foreground">
-                {selectedConnectorDetails.syncFrequency}
-              </div>
-            </details>
-
-            <details className="group rounded-2xl border border-border/70 bg-background/85 px-4 py-3 transition-all duration-200">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium outline-none transition-all duration-200 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <span>Advanced setup</span>
-                <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="mt-4 space-y-3">
-                <AppInput
-                  label="API Key"
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                />
-                <AppInput
-                  label="Client Secret"
-                  value={clientSecret}
-                  onChange={(event) => setClientSecret(event.target.value)}
-                />
-                <AppInput
-                  label="Manual credentials"
-                  value={manualCredentials}
-                  onChange={(event) => setManualCredentials(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className={cn(
-                    "rounded-full border px-3 py-2 text-xs font-medium",
-                    WIZARD_INTERACTION_CLASS,
-                    setupMode === "manual"
-                      ? "border-sky-300 bg-sky-500/15 text-sky-800 hover:border-sky-200 hover:bg-sky-500/20 hover:text-sky-900"
-                      : "border-border/70 bg-background text-muted-foreground hover:border-sky-200 hover:bg-muted/60 hover:text-foreground"
-                  )}
-                  onClick={() =>
-                    setSetupMode((current) => (current === "oauth" ? "manual" : "oauth"))
-                  }
-                >
-                  {setupMode === "oauth" ? "Switch to manual setup" : "Use OAuth only"}
-                </button>
-              </div>
-            </details>
+          <div className="mt-4 flex items-center gap-2 rounded-[10px] bg-[#f2f6fd] px-3.5 py-3">
+            <Lock className="size-3.5 shrink-0 text-[#6b7b96]" />
+            <p className={cn("text-[11.5px]", MUTED_TEXT)}>
+              نستخدم بروتوكول OAuth 2.0 الآمن ولا يتم تخزين كلمات المرور.
+            </p>
           </div>
         </div>
+
+        <AppButton
+          className={cn(
+            "h-12 w-full rounded-[12px] bg-[#2878ff] text-[14px] font-extrabold text-white hover:bg-[#1f66e0]",
+            WIZARD_INTERACTION_CLASS
+          )}
+          disabled={flowStatus !== "idle"}
+          icon={<ExternalLink className="size-4" />}
+          iconPosition="end"
+          onClick={() => void beginOAuthFlow()}
+        >
+          الاتصال بـ {selectedConnector.displayName}
+        </AppButton>
+
+        <div className="rounded-[12px] border border-[#dbe6f8] bg-[#f2f7ff] p-5">
+          <h4 className={cn("text-[13px] font-extrabold", PAGE_TEXT)}>معلومة مهمة</h4>
+          <p className={cn("mt-2.5 text-[12px] leading-6", MUTED_TEXT)}>
+            نحن لا نقوم بتخزين بيانات تسجيل الدخول الخاصة بك.
+          </p>
+          <p className={cn("text-[12px] leading-6", MUTED_TEXT)}>
+            جميع الاتصالات تتم عبر OAuth الآمن.
+          </p>
+        </div>
+
+        {/* Not in the export, but dropping it would remove the only route to a manual
+            credential setup, so it stays as a collapsed escape hatch. */}
+        <details className="group rounded-[12px] border border-[#e1e7f0] px-4 py-3">
+          <summary
+            className={cn(
+              "flex cursor-pointer list-none items-center justify-between gap-3 text-[12.5px] font-semibold outline-none",
+              PAGE_TEXT
+            )}
+          >
+            <span>إعداد متقدّم</span>
+            <ChevronRight className="size-4 text-[#95a4bd] transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:-rotate-90" />
+          </summary>
+          <div className="mt-4 space-y-3">
+            <AppInput
+              label="مفتاح API"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+            />
+            <AppInput
+              label="المفتاح السري"
+              value={clientSecret}
+              onChange={(event) => setClientSecret(event.target.value)}
+              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+            />
+            <AppInput
+              label="بيانات اعتماد يدوية"
+              value={manualCredentials}
+              onChange={(event) => setManualCredentials(event.target.value)}
+              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+            />
+            <button
+              type="button"
+              className={cn(
+                "rounded-full border px-3.5 py-2 text-[11.5px] font-semibold",
+                WIZARD_INTERACTION_CLASS,
+                setupMode === "manual"
+                  ? "border-[#2878ff] bg-[#eef4ff] text-[#2878ff]"
+                  : "border-[#e1e7f0] bg-white text-[#5b6b85]"
+              )}
+              onClick={() => setSetupMode((current) => (current === "oauth" ? "manual" : "oauth"))}
+            >
+              {setupMode === "oauth" ? "التبديل إلى الإعداد اليدوي" : "استخدام OAuth فقط"}
+            </button>
+          </div>
+        </details>
       </div>
     )
   }
 
   const renderImportStep = () => {
-    if (!selectedConnectorDetails) {
+    if (!selectedConnector || !selectedConnectorDetails) {
       return null
     }
 
+    const presets: Array<{ id: SyncPreset; label: string }> = [
+      { id: "all", label: "الكل" },
+      { id: "recommended", label: "مقترح" },
+      { id: "custom", label: "مخصص" },
+    ]
+
     return (
-      <div className="space-y-4">
-        <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
-          <p className="text-[11px] font-semibold text-[#8098b4]">Import configuration</p>
-          <h3 className="mt-1 text-lg font-bold text-[#0d1b3e]">Choose what MADAR should import</h3>
-          <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
-            Use a recommended set, import everything, or build a custom selection.
-          </p>
+      <div className={cn(PANEL_CLASS, "space-y-5 p-5 md:p-6")}>
+        {renderPlatformHeader({
+          trailing: changePlatformButton,
+          statusPill: (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9f8ef] px-2.5 py-1 text-[10.5px] font-semibold text-[#1f9d55]">
+              <span className="size-1.5 rounded-full bg-[#1f9d55]" />
+              متصل
+            </span>
+          ),
+          sub: (
+            <p className={cn("text-[11.5px]", MUTED_TEXT)}>
+              {CATEGORY_SINGULAR[getCategoryForConnector(selectedConnector.displayName)]}
+            </p>
+          ),
+        })}
+
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-1.5">
+              <h3 className={cn("text-[17px] font-extrabold", PAGE_TEXT)}>
+                اختر البيانات المراد استيرادها
+              </h3>
+              <p className={cn("text-[12.5px] leading-6", MUTED_TEXT)}>
+                يمكنك اختيار مجموعة مقترحة، أو تحديد البيانات حسب احتياجك.
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1 rounded-[10px] bg-[#f2f5fa] p-1">
+              {presets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={cn(
+                    "cursor-pointer rounded-[8px] px-4 py-2 text-[12px] font-semibold transition-colors",
+                    syncPreset === preset.id
+                      ? "bg-white text-[#0b1738] shadow-[0_1px_3px_rgba(11,23,56,0.12)]"
+                      : "text-[#6b7b96] hover:text-[#0b1738]"
+                  )}
+                  onClick={() =>
+                    preset.id === "custom" ? setSyncPreset("custom") : selectPreset(preset.id)
+                  }
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+            {allObjects.map((object) => {
+              const selected = selectedObjectsSet.has(object)
+              const meta = objectPresentation(object)
+              const Icon = meta.icon
+
+              return (
+                <button
+                  key={object}
+                  type="button"
+                  aria-pressed={selected}
+                  className={cn(
+                    "cursor-pointer rounded-[12px] border p-4 text-right transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40",
+                    selected
+                      ? cn(meta.border, meta.fill)
+                      : "border-[#e1e7f0] bg-white hover:border-[#c4d5f0]"
+                  )}
+                  onClick={() => toggleObjectSelection(object)}
+                >
+                  {/* RTL: the icon is written first so it lands on the right, with the
+                      checkbox opposite it, as in the export. */}
+                  <div className="flex items-start justify-between gap-3">
+                    <span
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-[10px]",
+                        selected ? "bg-white/70" : meta.fill
+                      )}
+                    >
+                      <Icon className={cn("size-[18px] shrink-0", meta.tint)} />
+                    </span>
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors",
+                        selected
+                          ? cn("border-transparent text-white", meta.check)
+                          : "border-[#cfd9e8] bg-white"
+                      )}
+                    >
+                      {selected ? <Check className="size-3.5" strokeWidth={3} /> : null}
+                    </span>
+                  </div>
+                  <p className={cn("mt-3 text-[13.5px] font-extrabold", PAGE_TEXT)}>{meta.label}</p>
+                  <p className={cn("mt-1 text-[11.5px] leading-5", MUTED_TEXT)}>
+                    {meta.description}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
+            <Info className="size-4 shrink-0 text-[#95a4bd]" />
+            <p className={cn("text-[11.5px]", MUTED_TEXT)}>
+              سيتم استيراد البيانات التاريخية المتاحة من حسابك في {selectedConnector.displayName}
+            </p>
+          </div>
         </div>
 
         {discoveredProviderAccounts.length > 1 ? (
-          <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
-            <p className="text-[11px] font-semibold text-[#8098b4]">Account</p>
-            <h3 className="mt-1 text-lg font-bold text-[#0d1b3e]">
-              Which account should MADAR connect to?
-            </h3>
-            <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
-              {discoveredProviderAccounts.length} accounts were found for this connection. Pick the
-              one MADAR should sync.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+          <div className="space-y-3 border-t border-[#eef2f8] pt-5">
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>بأي حساب تريد ربط مدار؟</h3>
+            <div className="flex flex-wrap gap-2">
               {discoveredProviderAccounts.map((account) => {
                 const selected = selectedAccountId === account.id
                 return (
@@ -1663,18 +2065,16 @@ export function NewConnectionWizard() {
                     key={account.id}
                     type="button"
                     className={cn(
-                      "rounded-xl border px-4 py-3 text-left text-sm font-medium",
+                      "flex items-center gap-2 rounded-[10px] border px-4 py-2.5 text-[12.5px] font-semibold",
                       WIZARD_INTERACTION_CLASS,
                       selected
-                        ? "border-[#2563eb] bg-[#eff6ff] text-[#0d1b3e] hover:bg-[#dbeafe]"
-                        : "border-[#e8edf3] bg-white text-[#334155] hover:border-[#bfdbfe] hover:bg-[#f8fafc]"
+                        ? "border-[#2878ff] bg-[#eef4ff] text-[#2878ff]"
+                        : "border-[#e1e7f0] bg-white text-[#5b6b85]"
                     )}
                     onClick={() => setSelectedAccountId(account.id)}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span>{account.label}</span>
-                      {selected ? <Check className="size-4 text-[#2563eb]" /> : null}
-                    </div>
+                    {account.label}
+                    {selected ? <Check className="size-3.5" /> : null}
                   </button>
                 )
               })}
@@ -1682,69 +2082,43 @@ export function NewConnectionWizard() {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          <SyncChip
-            active={syncPreset === "recommended"}
-            onClick={() => selectPreset("recommended")}
-          >
-            Recommended
-          </SyncChip>
-          <SyncChip active={syncPreset === "all"} onClick={() => selectPreset("all")}>
-            Select All
-          </SyncChip>
-          <SyncChip active={syncPreset === "custom"} onClick={() => setSyncPreset("custom")}>
-            Custom
-          </SyncChip>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {allObjects.map((object) => {
-            const selected = selectedObjectsSet.has(object)
-            return (
-              <button
-                key={object}
-                type="button"
-                className={cn(
-                  "rounded-xl border px-4 py-3 text-left text-sm font-medium",
-                  WIZARD_INTERACTION_CLASS,
-                  selected
-                    ? "border-[#2563eb] bg-[#eff6ff] text-[#0d1b3e] hover:bg-[#dbeafe]"
-                    : "border-[#e8edf3] bg-white text-[#334155] hover:border-[#bfdbfe] hover:bg-[#f8fafc]"
-                )}
-                onClick={() => toggleObjectSelection(object)}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span>{object}</span>
-                  {selected ? <Check className="size-4 text-[#2563eb]" /> : null}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-            <p className="text-xs font-medium text-[#8098b4]">Estimated sync frequency</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {selectedConnectorDetails.syncFrequency}
-            </p>
-          </div>
-          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-            <p className="text-xs font-medium text-[#8098b4]">Estimated duration</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {selectedConnectorDetails.estimatedDuration}
-            </p>
-          </div>
-          <div className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-            <p className="text-xs font-medium text-[#8098b4]">Preset</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {syncPreset === "custom"
-                ? "Custom"
-                : syncPreset === "all"
-                  ? "All objects"
-                  : "Recommended"}
-            </p>
-          </div>
+        <div className="grid gap-3.5 border-t border-[#eef2f8] pt-5 md:grid-cols-3">
+          {[
+            {
+              label: "تكرار المزامنة",
+              value: selectedConnectorDetails.syncFrequency,
+              icon: RefreshCcw,
+              tint: "text-[#2878ff]",
+            },
+            {
+              label: "المدة المتوقعة",
+              value: selectedConnectorDetails.estimatedDuration,
+              icon: Calendar,
+              tint: "text-[#1f9d55]",
+            },
+            {
+              label: "الإعداد المسبق",
+              value:
+                syncPreset === "custom"
+                  ? "بيانات مخصصة"
+                  : syncPreset === "all"
+                    ? "جميع البيانات المحددة"
+                    : "المجموعة المقترحة",
+              icon: Layers,
+              tint: "text-[#8b5cf6]",
+            },
+          ].map((tile) => (
+            <div
+              key={tile.label}
+              className="flex items-center gap-3 rounded-[12px] border border-[#eef2f8] bg-[#fafbfe] px-4 py-3.5"
+            >
+              <tile.icon className={cn("size-[18px] shrink-0", tile.tint)} />
+              <div className="min-w-0">
+                <p className={cn("text-[11px]", MUTED_TEXT)}>{tile.label}</p>
+                <p className={cn("mt-0.5 text-[13px] font-extrabold", PAGE_TEXT)}>{tile.value}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -1755,47 +2129,116 @@ export function NewConnectionWizard() {
       return null
     }
 
+    const detailCells = [
+      { label: "الحساب", value: selectedAccount.label, icon: Users, tint: "text-[#2878ff]" },
+      { label: "مساحة العمل", value: workspaceLabel, icon: Layers, tint: "text-[#8b5cf6]" },
+      {
+        label: "المنصة",
+        value: selectedConnector.displayName,
+        icon: Link2,
+        tint: "text-[#1f9d55]",
+      },
+      {
+        label: "نوع الربط",
+        value: selectedConnectorDetails.connectionType,
+        icon: Link2,
+        tint: "text-[#2878ff]",
+      },
+      {
+        label: "طريقة المصادقة",
+        value: selectedConnectorDetails.authMethod,
+        icon: ShieldCheck,
+        tint: "text-[#1f9d55]",
+      },
+      {
+        label: "معدل المزامنة",
+        value: selectedConnectorDetails.syncFrequency,
+        icon: RefreshCcw,
+        tint: "text-[#e08b00]",
+      },
+    ]
+
     return (
       <div className="space-y-4">
-        <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
-          <p className="text-[11px] font-semibold text-[#8098b4]">Review</p>
-          <h3 className="mt-1 text-lg font-bold text-[#0d1b3e]">
-            Review your connection before creating it
-          </h3>
-          <p className="mt-1 text-[12.5px] leading-6 text-[#8098b4]">
-            Everything here stays within the existing connection manager and OAuth lifecycle.
+        <div className={cn(PANEL_CLASS, "p-5")}>
+          {renderPlatformHeader({
+            trailing: changePlatformButton,
+            namePrefix: "منصة ",
+            statusPill: (
+              <span className="inline-flex rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]">
+                جاهز للربط
+              </span>
+            ),
+            sub: (
+              <p className={cn("text-[11.5px]", MUTED_TEXT)}>
+                {CATEGORY_SINGULAR[getCategoryForConnector(selectedConnector.displayName)]}
+              </p>
+            ),
+          })}
+        </div>
+
+        <div className={cn(PANEL_CLASS, "p-5")}>
+          <div className="flex items-center gap-2">
+            <CreditCard className="size-4 text-[#6b7b96]" />
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>تفاصيل الربط</h3>
+          </div>
+          <p className={cn("mt-2 text-[12px] leading-6", MUTED_TEXT)}>
+            جميع الإعدادات التي قمت باختيارها سنُستخدم لإنشاء التكامل.
           </p>
-        </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {[
-            { label: "Platform", value: selectedConnector.displayName },
-            { label: "Workspace", value: workspaceLabel },
-            { label: "Account", value: selectedAccount.label },
-            { label: "Connection name", value: connectionName },
-            { label: "Authentication", value: selectedConnectorDetails.authMethod },
-            { label: "Sync frequency", value: selectedConnectorDetails.syncFrequency },
-            { label: "Health monitoring", value: healthMonitoringEnabled ? "Enabled" : "Disabled" },
-            { label: "Automatic sync", value: autoSyncEnabled ? "Enabled" : "Disabled" },
-          ].map((item) => (
-            <div key={item.label} className={cn(SURFACE_CARD_CLASS, "px-[18px] py-4")}>
-              <p className="text-xs font-medium text-[#8098b4]">{item.label}</p>
-              <p className="mt-1.5 text-sm font-bold text-[#0d1b3e]">{item.value}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className={cn(SURFACE_CARD_CLASS, "p-5")}>
-          <p className="text-xs font-medium text-[#8098b4]">Objects</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {selectedObjects.map((object) => (
-              <AppBadge
-                key={object}
-                className="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 py-1 text-[11px] font-semibold text-[#2563eb]"
+          <div className="mt-4 grid overflow-hidden rounded-[10px] border border-[#eef2f8] sm:grid-cols-2 lg:grid-cols-3">
+            {detailCells.map((cell) => (
+              <div
+                key={cell.label}
+                className="border-b border-s border-[#eef2f8] px-4 py-3.5 last:border-b-0 [&:nth-child(-n+3)]:lg:border-b [&:nth-child(3n)]:lg:border-s-0"
               >
-                {object}
-              </AppBadge>
+                <div className="flex items-center justify-end gap-1.5">
+                  <p className={cn("text-[11px]", MUTED_TEXT)}>{cell.label}</p>
+                  <cell.icon className={cn("size-3.5", cell.tint)} />
+                </div>
+                <p className={cn("mt-1.5 text-[13px] font-extrabold", PAGE_TEXT)}>{cell.value}</p>
+              </div>
             ))}
+          </div>
+        </div>
+
+        <div className={cn(PANEL_CLASS, "p-5")}>
+          <div className="flex items-center gap-2">
+            <Layers className="size-4 text-[#6b7b96]" />
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+              البيانات المحددة للاستيراد
+            </h3>
+          </div>
+          <p className={cn("mt-2 text-[12px]", MUTED_TEXT)}>
+            سيتم استيراد البيانات التالية من {selectedConnector.displayName}:
+          </p>
+
+          <div className="mt-3.5 flex flex-wrap gap-2">
+            {selectedObjects.map((object) => {
+              const meta = objectPresentation(object)
+              return (
+                <span
+                  key={object}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11.5px] font-semibold",
+                    meta.border,
+                    meta.fill,
+                    meta.tint
+                  )}
+                >
+                  {meta.label}
+                  <Check className="size-3" strokeWidth={3} />
+                </span>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
+            <Info className="size-4 shrink-0 text-[#95a4bd]" />
+            <p className={cn("text-[11.5px] leading-5", MUTED_TEXT)}>
+              ستبدأ المزامنة الأولى بعد إنشاء التكامل مباشرة، وسيتم تحديث البيانات حسب المعدل
+              المحدد.
+            </p>
           </div>
         </div>
       </div>
@@ -1807,77 +2250,287 @@ export function NewConnectionWizard() {
       return null
     }
 
+    // RTL: the first tile lands rightmost, which is where the export puts health monitoring.
+    const tiles = [
+      {
+        label: "مراقبة الصحة",
+        value: healthMonitoringEnabled ? "مفعلة" : "معطلة",
+        icon: Activity,
+      },
+      {
+        label: "المزامنة التلقائية",
+        value: autoSyncEnabled ? "مفعلة" : "معطلة",
+        icon: RefreshCcw,
+      },
+      {
+        label: "المزامنة الأولى المتوقعة",
+        value: selectedConnectorDetails?.estimatedDuration ?? "1 – 2 دقيقة",
+        icon: Calendar,
+      },
+    ]
+
     return (
-      <div className={cn(SURFACE_CARD_CLASS, "space-y-5 p-6 text-center md:p-8")}>
-        <div className="mx-auto flex size-24 items-center justify-center rounded-full bg-[#ecfdf5] text-[#10b981] shadow-[0_0_0_10px_rgba(16,185,129,0.08)]">
-          <CircleCheckBig className="size-12" />
+      <div className={cn(PANEL_CLASS, "relative overflow-hidden p-6 md:p-10")}>
+        <Confetti />
+
+        <div className="relative space-y-6">
+          <div className="space-y-3 text-center">
+            <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-[#3fb37f] text-white shadow-[0_10px_30px_rgba(63,179,127,0.32)]">
+              <Check className="size-10" strokeWidth={3} />
+            </span>
+            <h3 className={cn("text-[22px] font-extrabold", PAGE_TEXT)}>
+              تم ربط منصة {selectedConnector.displayName} بنجاح
+            </h3>
+            <p className={cn("mx-auto max-w-lg text-[13px] leading-6", MUTED_TEXT)}>
+              أصبح بإمكان مدار الآن استيراد بياناتك ومزامنتها تلقائياً.
+            </p>
+          </div>
+
+          <div className="grid gap-3.5 md:grid-cols-3">
+            {tiles.map((tile) => (
+              <div
+                key={tile.label}
+                className="rounded-[12px] border border-[#eef2f8] bg-[#fafbfe] px-4 py-5 text-center"
+              >
+                <tile.icon className="mx-auto size-[18px] text-[#5b6b85]" />
+                <p className={cn("mt-2.5 text-[11.5px]", MUTED_TEXT)}>{tile.label}</p>
+                <p className={cn("mt-1 text-[14px] font-extrabold", PAGE_TEXT)}>{tile.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
+            <Info className="size-4 shrink-0 text-[#95a4bd]" />
+            <p className={cn("text-[11.5px] leading-5", MUTED_TEXT)}>
+              سيبدأ استيراد البيانات الأولى خلال دقائق قليلة، وسيتم تحديث البيانات تلقائياً حسب
+              الجدول المحدد.
+            </p>
+          </div>
         </div>
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#10b981]">
-            Success
-          </p>
-          <h3 className="text-[22px] font-extrabold leading-[1.3] text-[#0d1b3e]">
-            {selectedConnector.displayName} Connected
-          </h3>
-          <p className="mx-auto max-w-2xl text-[12.5px] leading-6 text-[#8098b4]">
-            Health monitoring {healthMonitoringEnabled ? "enabled" : "disabled"}. Automatic sync{" "}
-            {autoSyncEnabled ? "enabled" : "disabled"}.
-          </p>
+      </div>
+    )
+  }
+
+  const renderSyncingStep = () => {
+    if (!selectedConnector) {
+      return null
+    }
+
+    const isRunning = syncPhase === "running"
+    const isFailed = syncPhase === "failed"
+    const objects = selectedObjects.length > 0 ? selectedObjects : allObjects
+
+    const totals = syncOutcome
+      ? [
+          { label: "سجلات مقروءة", value: formatCount(syncOutcome.recordsRead) },
+          { label: "سجلات محفوظة", value: formatCount(syncOutcome.recordsWritten) },
+          { label: "سجلات فاشلة", value: formatCount(syncOutcome.recordsFailed) },
+        ]
+      : []
+
+    return (
+      <div className="space-y-4">
+        <div className={cn(PANEL_CLASS, "p-5")}>
+          {renderPlatformHeader({
+            namePrefix: "منصة ",
+            statusPill: (
+              <span
+                className={cn(
+                  "inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                  isRunning
+                    ? "bg-[#eef4ff] text-[#2878ff]"
+                    : isFailed
+                      ? "bg-[#fdeeee] text-[#e0484d]"
+                      : "bg-[#e9f8ef] text-[#1f9d55]"
+                )}
+              >
+                {isRunning ? "جاري المزامنة" : isFailed ? "تعذّرت المزامنة" : "اكتملت المزامنة"}
+              </span>
+            ),
+            sub: (
+              <p className={cn("text-[11.5px]", MUTED_TEXT)}>
+                {CATEGORY_SINGULAR[getCategoryForConnector(selectedConnector.displayName)]}
+              </p>
+            ),
+          })}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] px-[18px] py-4 text-left">
-            <p className="text-xs font-medium text-[#8098b4]">Health Monitoring</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {healthMonitoringEnabled ? "Enabled" : "Disabled"}
-            </p>
-          </div>
-          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] px-[18px] py-4 text-left">
-            <p className="text-xs font-medium text-[#8098b4]">Automatic Sync</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              {autoSyncEnabled ? "Enabled" : "Disabled"}
-            </p>
-          </div>
-          <div className="rounded-xl border border-[#e8edf3] bg-[#f8fafc] px-[18px] py-4 text-left">
-            <p className="text-xs font-medium text-[#8098b4]">Estimated First Sync</p>
-            <p className="mt-1.5 text-[26px] font-extrabold leading-[1.1] text-[#0d1b3e]">
-              1-2 minutes
-            </p>
-          </div>
-        </div>
+        <div className={cn(PANEL_CLASS, "space-y-4 p-5 md:p-6")}>
+          {/* RTL: the elapsed clock is written first so it sits on the right, with the
+              run's state opposite it, as in the export. The export's headline is a
+              percentage; runSync reports no progress until it resolves, so the clock --
+              which is real -- takes that slot instead of a number we cannot measure. */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p
+                className={cn(
+                  "text-[32px] font-extrabold leading-none",
+                  isFailed ? "text-[#e0484d]" : "text-[#2878ff]"
+                )}
+              >
+                {formatElapsed(
+                  isRunning ? syncElapsedMs : (syncOutcome?.durationMs ?? syncElapsedMs)
+                )}
+              </p>
+              <p className={cn("mt-2 text-[12px]", MUTED_TEXT)}>
+                {isRunning
+                  ? `جاري مزامنة بيانات ${selectedConnector.displayName}...`
+                  : isFailed
+                    ? (syncError ?? "تعذّر إكمال المزامنة.")
+                    : "اكتملت المزامنة الأولى."}
+              </p>
+            </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <Link href={ROUTES.integrations}>
-            <AppButton
-              variant="outline"
-              className={cn("h-11 w-full rounded-xl px-5", WIZARD_INTERACTION_CLASS)}
-            >
-              Go to Connections
-            </AppButton>
-          </Link>
-          <AppButton
-            className={cn(
-              "h-11 rounded-xl px-5",
-              WIZARD_INTERACTION_CLASS,
-              "hover:border-primary/40 hover:bg-primary/90 hover:shadow-lg"
-            )}
-            disabled={isRunningFirstSync}
-            onClick={() => void runFirstSync()}
-          >
-            {isRunningFirstSync ? (
-              <Loader2 className="size-4 animate-spin" />
+            <div className="text-end">
+              <div className="flex items-center justify-end gap-2">
+                {isRunning ? (
+                  <Loader2 className="size-4 animate-spin text-[#2878ff]" />
+                ) : isFailed ? (
+                  <CircleAlert className="size-4 text-[#e0484d]" />
+                ) : (
+                  <Check className="size-4 text-[#1f9d55]" strokeWidth={3} />
+                )}
+                <p
+                  className={cn(
+                    "text-[12.5px] font-bold",
+                    isRunning ? "text-[#2878ff]" : isFailed ? "text-[#e0484d]" : "text-[#1f9d55]"
+                  )}
+                >
+                  {isRunning
+                    ? "المزامنة قيد التنفيذ"
+                    : isFailed
+                      ? "توقفت المزامنة"
+                      : "المزامنة مكتملة"}
+                </p>
+              </div>
+              <p className={cn("mt-1.5 text-[11.5px]", MUTED_TEXT)}>
+                الوقت المنقضي:{" "}
+                {formatElapsedWords(
+                  isRunning ? syncElapsedMs : (syncOutcome?.durationMs ?? syncElapsedMs)
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Indeterminate while running: the connector reports no percentage to fill. */}
+          <div className="madar-sync-track h-2 rounded-full bg-[#eef2f8]">
+            {isRunning ? (
+              <div className="madar-sync-bar bg-gradient-to-l from-[#2878ff] to-[#5aa9f8]" />
             ) : (
-              <RefreshCcw className="size-4" />
+              <div
+                className={cn(
+                  "h-full w-full rounded-full",
+                  isFailed ? "bg-[#e0484d]" : "bg-[#1fa85c]"
+                )}
+              />
             )}
-            Run First Sync
-          </AppButton>
-          <AppButton
-            variant="outline"
-            className={cn("h-11 rounded-xl px-5", WIZARD_INTERACTION_CLASS)}
-            onClick={goToConnections}
-          >
-            Finish
-          </AppButton>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-[#eef2f8] pt-4">
+            {objects.map((object) => {
+              const meta = objectPresentation(object)
+              return (
+                <span
+                  key={object}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11.5px] font-semibold",
+                    meta.border,
+                    meta.fill,
+                    meta.tint
+                  )}
+                >
+                  {meta.label}
+                  {isRunning ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : isFailed ? (
+                    <CircleAlert className="size-3" />
+                  ) : (
+                    <Check className="size-3" strokeWidth={3} />
+                  )}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className={cn(PANEL_CLASS, "p-5 md:p-6")}>
+          <div className="flex items-center gap-2">
+            <Layers className="size-4 text-[#6b7b96]" />
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>تفاصيل البيانات</h3>
+          </div>
+          <p className={cn("mt-2 text-[12px] leading-6", MUTED_TEXT)}>
+            {`يمكنك متابعة حالة البيانات التي يتم استيرادها من ${selectedConnector.displayName}.`}
+          </p>
+
+          <div className="mt-4 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+            {objects.map((object) => {
+              const meta = objectPresentation(object)
+              const Icon = meta.icon
+              return (
+                <div key={object} className="rounded-[12px] border border-[#e1e7f0] p-4">
+                  {/* RTL: the icon is written first so it lands on the right. */}
+                  <div className="flex items-start justify-between gap-3">
+                    <span
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-[10px]",
+                        meta.fill
+                      )}
+                    >
+                      <Icon className={cn("size-[18px] shrink-0", meta.tint)} />
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                        isRunning
+                          ? "bg-[#eef4ff] text-[#2878ff]"
+                          : isFailed
+                            ? "bg-[#fdeeee] text-[#e0484d]"
+                            : "bg-[#e9f8ef] text-[#1f9d55]"
+                      )}
+                    >
+                      {isRunning ? "جاري" : isFailed ? "متوقف" : "مكتمل"}
+                    </span>
+                  </div>
+                  <p className={cn("mt-3 text-[13px] font-extrabold", PAGE_TEXT)}>{meta.label}</p>
+                  <div className="madar-sync-track mt-3 h-1.5 rounded-full bg-[#eef2f8]">
+                    {isRunning ? (
+                      <div className="madar-sync-bar bg-[#2878ff]" />
+                    ) : (
+                      <div
+                        className={cn(
+                          "h-full w-full rounded-full",
+                          isFailed ? "bg-[#e0484d]" : "bg-[#1fa85c]"
+                        )}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Per-object counts are not reported; the run's own totals are, so they are
+              shown once, here, rather than split across tiles as invented shares. */}
+          {totals.length > 0 ? (
+            <div className="mt-4 grid gap-3.5 border-t border-[#eef2f8] pt-4 sm:grid-cols-3">
+              {totals.map((total) => (
+                <div
+                  key={total.label}
+                  className="rounded-[12px] border border-[#eef2f8] bg-[#fafbfe] px-4 py-3.5 text-center"
+                >
+                  <p className={cn("text-[11px]", MUTED_TEXT)}>{total.label}</p>
+                  <p className={cn("mt-1 text-[15px] font-extrabold", PAGE_TEXT)}>{total.value}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
+            <Info className="size-4 shrink-0 text-[#95a4bd]" />
+            <p className={cn("text-[11.5px] leading-5", MUTED_TEXT)}>
+              سيتم تحديث البيانات تلقائياً حسب الجدول المحدد بعد اكتمال هذه المزامنة.
+            </p>
+          </div>
         </div>
       </div>
     )
@@ -1896,9 +2549,7 @@ export function NewConnectionWizard() {
           </div>
           <div className="flex-1 space-y-4">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-rose-700/80">
-                Connection error
-              </p>
+              <p className="text-[11px] uppercase tracking-wide text-rose-700/80">خطأ في الاتصال</p>
               <h3 className="mt-1 text-lg font-semibold text-rose-900">{errorState.title}</h3>
               <p className="mt-1 text-sm text-rose-800">{errorState.description}</p>
             </div>
@@ -1911,21 +2562,21 @@ export function NewConnectionWizard() {
                 )}
                 onClick={handleRetry}
               >
-                Retry
+                إعادة المحاولة
               </AppButton>
               <AppButton
                 variant="outline"
                 className={cn("h-10 rounded-xl px-4", WIZARD_INTERACTION_CLASS)}
                 onClick={goToImportStep}
               >
-                Back to import setup
+                العودة إلى إعداد الاستيراد
               </AppButton>
               <AppButton
                 variant="outline"
                 className={cn("h-10 rounded-xl px-4", WIZARD_INTERACTION_CLASS)}
                 onClick={handlePreviousClick}
               >
-                Back
+                رجوع
               </AppButton>
             </div>
           </div>
@@ -1942,20 +2593,23 @@ export function NewConnectionWizard() {
     if (stepIndex === 0) return renderPlatformStep()
     if (stepIndex === 1) return renderConnectStep()
     if (stepIndex === 2) return renderImportStep()
-    if (stepIndex === 3) return isSuccess ? renderSuccessStep() : renderReviewStep()
+    if (stepIndex === 3) {
+      if (syncPhase !== "idle") return renderSyncingStep()
+      return isSuccess ? renderSuccessStep() : renderReviewStep()
+    }
     return renderSuccessStep()
   }
 
   const footerPrimaryLabel =
     stepIndex === 0
-      ? `Continue to ${selectedConnector?.displayName ?? "platform"}`
+      ? `المتابعة إلى ${selectedConnector?.displayName ?? "المنصة"}`
       : stepIndex === 1
-        ? "Continue to OAuth"
+        ? "المتابعة"
         : stepIndex === 2
-          ? "Review Configuration"
+          ? "مراجعة الإعدادات"
           : stepIndex === 3
-            ? "Create Connection"
-            : "Continue"
+            ? "إنشاء التكامل"
+            : "متابعة"
 
   const footerPrimaryAction =
     stepIndex === 1 ? beginOAuthFlow : stepIndex === 3 ? finalizeConnection : handleContinue
@@ -2017,214 +2671,319 @@ export function NewConnectionWizard() {
     )
   }
 
+  const sidebarBenefits = [
+    "ربط سريع وآمن عبر OAuth",
+    "مزامنة تلقائية للبيانات",
+    "رؤى موحدة في مكان واحد",
+    "لا حاجة إلى إدخال بيانات يدوياً",
+  ]
+
+  // The rail that replaces the step-one benefits list once the flow is under way.
+  const renderSetupChecklist = () => (
+    <div className={cn(PANEL_CLASS, "p-5")}>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+          {stepIndex === 3 ? "قائمة الإعداد" : "خطوات الإعداد"}
+        </h3>
+        {isSuccess && syncPhase === "idle" ? (
+          <Check className="size-4 text-[#1f9d55]" strokeWidth={3} />
+        ) : null}
+      </div>
+      <ul className="mt-4 space-y-3.5">
+        {WIZARD_STEPS.map((step, index) => {
+          const state =
+            isSuccess && syncPhase === "idle" ? "done" : currentStepState(index as WizardStep)
+          return (
+            <li key={step.label} className="flex items-center justify-between gap-3">
+              <span
+                className={cn(
+                  "text-[12.5px] font-semibold",
+                  state === "done"
+                    ? "text-[#1f9d55]"
+                    : state === "active"
+                      ? "text-[#2878ff]"
+                      : "text-[#95a4bd]"
+                )}
+              >
+                {step.label}
+              </span>
+              {state === "done" ? (
+                <Check className="size-4 shrink-0 text-[#1f9d55]" strokeWidth={3} />
+              ) : (
+                <span
+                  className={cn(
+                    "text-[12px] font-bold",
+                    state === "active" ? "text-[#2878ff]" : "text-[#b6c2d4]"
+                  )}
+                >
+                  {index + 1}
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+
+  // The export puts a "تواصل مع الدعم" link here. The app has no support route or address
+  // to point it at, so the card carries its copy without a link that would go nowhere.
+  const renderHelpCard = () => (
+    <div className={cn(PANEL_CLASS, "p-5")}>
+      <div className="flex items-center gap-2">
+        <HelpCircle className="size-4 text-[#2878ff]" />
+        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>هل تحتاج إلى مساعدة؟</h3>
+      </div>
+      <p className={cn("mt-2.5 text-[12px] leading-[21px]", MUTED_TEXT)}>
+        فريق الدعم جاهز لمساعدتك في أي وقت.
+      </p>
+    </div>
+  )
+
+  const renderConnectionSummaryRail = () => {
+    if (!selectedConnector || !selectedConnectorDetails) {
+      return null
+    }
+
+    const rows = [
+      { label: "المنصة", value: selectedConnector.displayName },
+      { label: "طريقة المصادقة", value: selectedConnectorDetails.authMethod },
+      { label: "مساحة العمل", value: workspaceLabel },
+      { label: "نوع الحساب", value: selectedAccount.label },
+      {
+        label: "الصلاحيات المطلوبة",
+        value: selectedConnectorDetails.permissions
+          .map((permission) => objectPresentation(permission).label)
+          .join("، "),
+      },
+      { label: "المدة المتوقعة للإعداد", value: "‏~30 ثانية" },
+      { label: "أول مزامنة متوقعة", value: selectedConnectorDetails.estimatedDuration },
+    ]
+
+    return (
+      <div className={cn(PANEL_CLASS, "p-5")}>
+        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>ملخص الاتصال</h3>
+        <dl className="mt-2 divide-y divide-[#eef2f8]">
+          {rows.map((row) => (
+            <div key={row.label} className="py-3.5">
+              <dt className={cn("text-[11px]", MUTED_TEXT)}>{row.label}</dt>
+              <dd className={cn("mt-1 text-[12.5px] font-extrabold", PAGE_TEXT)}>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    )
+  }
+
+  const gridClassName =
+    stepIndex === 0
+      ? "lg:grid-cols-[minmax(0,1fr)_286px]"
+      : stepIndex === 1
+        ? "lg:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[248px_minmax(0,1fr)_272px]"
+        : "lg:grid-cols-[268px_minmax(0,1fr)]"
+
   return (
-    <AppPage>
-      <AppContainer>
-        <AppSection>{renderTopProgress()}</AppSection>
+    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+      <div className="mx-auto w-full max-w-[1360px] space-y-5">
+        {renderTopProgress()}
 
-        <AppSection>
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="space-y-6">
-              <AppCard className={cn(SURFACE_CARD_CLASS, "overflow-hidden")}>
-                <div className="border-b border-[#e8edf3] bg-[#f8fafc] px-5 py-4 md:px-6">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-[11px] font-semibold text-[#8098b4]">
-                        Step {stepIndex + 1} of {WIZARD_STEPS.length}
-                      </p>
-                      <h2 className="mt-1 text-lg font-bold text-[#0d1b3e]">
-                        {WIZARD_STEPS[stepIndex].label}
-                      </h2>
-                    </div>
+        {/* RTL: grid columns run right to left, so the first child is the right-hand rail. */}
+        <div className={cn("grid gap-5", gridClassName)}>
+          {stepIndex === 0 ? (
+            <>
+              <div>{renderStepContent()}</div>
+              <aside className="space-y-4">
+                <div className={cn(PANEL_CLASS, "p-5 lg:sticky lg:top-5")}>
+                  <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>ماذا ستحصل؟</h3>
+                  <ul className="mt-4 space-y-3.5">
+                    {sidebarBenefits.map((benefit) => (
+                      <li key={benefit} className="flex items-start gap-2.5">
+                        <CheckCircle2 className="mt-px size-4 shrink-0 text-[#1f9d55]" />
+                        <span className={cn("text-[12px] leading-5", MUTED_TEXT)}>{benefit}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-                    <div className="flex items-center gap-2">
-                      {WIZARD_STEPS.map((step, index) => {
-                        const state =
-                          index < stepIndex ? "done" : index === stepIndex ? "active" : "todo"
-                        return (
-                          <div
-                            key={step.label}
-                            className={cn(
-                              "flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-all",
-                              state === "done"
-                                ? "border-[#d1fae5] bg-[#ecfdf5] text-[#10b981]"
-                                : state === "active"
-                                  ? "border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]"
-                                  : "border-[#e8edf3] bg-[#f8fafc] text-[#8098b4]"
-                            )}
-                          >
-                            <StepDot state={state} />
-                            <span>{step.label}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
+                <div className={cn(PANEL_CLASS, "p-5")}>
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="size-4 text-[#2878ff]" />
+                    <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+                      بحاجة إلى مساعدة؟
+                    </h3>
                   </div>
+                  {/* The export puts a "عرض الدليل" button here. There is no docs route in
+                      the app yet, so the card carries the copy only for now. */}
+                  <p className={cn("mt-2.5 text-[12px] leading-[21px]", MUTED_TEXT)}>
+                    تعرّف على كيفية ربط المنصات وما الذي تتم مزامنته في كل خطوة، أو تواصل مع فريق
+                    الدعم إذا واجهتك مشكلة أثناء الربط.
+                  </p>
                 </div>
+              </aside>
+            </>
+          ) : (
+            <>
+              <aside className="space-y-4 lg:sticky lg:top-5 lg:self-start">
+                {renderSetupChecklist()}
+                {stepIndex === 1 ? null : renderHelpCard()}
+              </aside>
 
-                <div className="space-y-6 p-5 md:p-6">{renderStepContent()}</div>
+              <div>{renderStepContent()}</div>
 
-                <div className="sticky bottom-0 border-t bg-background/95 px-4 py-3 backdrop-blur md:px-5">
-                  <div className="flex items-center gap-3">
-                    <AppButton
-                      className={cn(
-                        "h-10 min-w-[190px] rounded-xl px-4 text-sm shadow-sm",
-                        WIZARD_INTERACTION_CLASS,
-                        "hover:border-primary/40 hover:bg-primary/90 hover:shadow-lg"
-                      )}
-                      disabled={footerPrimaryDisabled}
-                      onClick={() => void footerPrimaryAction()}
-                    >
-                      <span
-                        className={cn(
-                          "flex w-full items-center justify-center gap-2",
-                          documentDirection === "rtl" && "flex-row-reverse"
-                        )}
-                      >
-                        <span className="truncate">{footerPrimaryLabel}</span>
-                        {documentDirection === "rtl" ? (
-                          <ArrowLeft className="size-4 shrink-0" />
-                        ) : (
-                          <ArrowRight className="size-4 shrink-0" />
-                        )}
-                      </span>
-                    </AppButton>
+              {stepIndex === 1 ? (
+                <aside className="lg:sticky lg:top-5 lg:self-start">
+                  {renderConnectionSummaryRail()}
+                </aside>
+              ) : null}
+            </>
+          )}
+        </div>
 
-                    <div className="flex-1" />
+        {/* RTL: the dismiss action is written first so it sits at the right-hand end,
+            with the forward actions at the left, as in the export. */}
+        <div className={cn(PANEL_CLASS, "px-4 py-3.5 md:px-5")}>
+          {syncPhase !== "idle" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {/* The export labels this "إلغاء". The sync runs server-side and there is no
+                  cancel API, so leaving the page cannot stop it -- the label says what the
+                  button actually does rather than promising a cancellation. */}
+              <AppButton
+                variant="ghost"
+                className={cn(
+                  "h-10 rounded-[10px] px-4 text-[12.5px] font-semibold text-[#6b7b96] hover:text-[#0b1738]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                onClick={goToConnections}
+              >
+                إغلاق
+              </AppButton>
 
-                    <div className="flex items-center gap-3">
-                      <AppButton
-                        variant="outline"
-                        className={cn(
-                          "h-10 min-w-[190px] rounded-xl border-border/60 bg-background/70 px-4 text-sm text-muted-foreground",
-                          WIZARD_INTERACTION_CLASS,
-                          "hover:bg-muted/60 hover:text-foreground"
-                        )}
-                        disabled={stepIndex === 0 || flowStatus !== "idle"}
-                        onClick={handlePreviousClick}
-                      >
-                        <span
-                          className={cn(
-                            "flex items-center justify-center gap-2",
-                            documentDirection === "rtl" && "flex-row-reverse"
-                          )}
-                        >
-                          {documentDirection === "rtl" ? (
-                            <ArrowRight className="size-4 shrink-0" />
-                          ) : (
-                            <ArrowLeft className="size-4 shrink-0" />
-                          )}
-                          <span>Previous</span>
-                        </span>
-                      </AppButton>
-                      <AppButton
-                        variant="ghost"
-                        className={cn(
-                          "h-10 rounded-xl px-4 text-sm text-muted-foreground",
-                          WIZARD_INTERACTION_CLASS,
-                          "hover:bg-muted/60 hover:text-foreground"
-                        )}
-                        onClick={exitWizard}
-                      >
-                        Cancel
-                      </AppButton>
-                    </div>
-                  </div>
-                </div>
-              </AppCard>
+              <div className="flex-1" />
+
+              {syncPhase === "failed" ? (
+                <AppButton
+                  className={cn(
+                    "h-10 min-w-[170px] rounded-[10px] bg-[#2878ff] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1f66e0]",
+                    WIZARD_INTERACTION_CLASS
+                  )}
+                  disabled={isRunningFirstSync}
+                  loading={isRunningFirstSync}
+                  icon={<RefreshCcw className="size-4 shrink-0" />}
+                  iconPosition="end"
+                  onClick={() => void runFirstSync()}
+                >
+                  إعادة المحاولة
+                </AppButton>
+              ) : syncPhase === "done" ? (
+                <AppButton
+                  className={cn(
+                    "h-10 min-w-[190px] rounded-[10px] bg-[#1fa85c] px-4 text-[12.5px] font-semibold text-white hover:bg-[#188a4a]",
+                    WIZARD_INTERACTION_CLASS
+                  )}
+                  icon={<ArrowLeft className="size-4 shrink-0" />}
+                  iconPosition="end"
+                  onClick={goToConnections}
+                >
+                  الانتقال إلى التكاملات
+                </AppButton>
+              ) : null}
             </div>
+          ) : isSuccess ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <AppButton
+                variant="ghost"
+                className={cn(
+                  "h-10 rounded-[10px] px-4 text-[12.5px] font-semibold text-[#6b7b96] hover:text-[#0b1738]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                icon={<Check className="size-4 text-[#1f9d55]" strokeWidth={3} />}
+                iconPosition="end"
+                onClick={goToConnections}
+              >
+                إنهاء
+              </AppButton>
 
-            <div className="space-y-4">
-              <AppCard className={cn(SURFACE_CARD_CLASS, "lg:sticky lg:top-6")}>
-                <div className="flex items-center gap-2 border-b border-[#e8edf3] px-5 py-4">
-                  <ShieldCheck className="size-4 text-indigo-600" />
-                  <h3 className="text-sm font-semibold text-foreground/80">Setup Checklist</h3>
-                </div>
-                <div className="space-y-3 p-5 text-sm">
-                  {[
-                    "Select a platform",
-                    "Authorize OAuth access",
-                    "Choose import objects",
-                    "Review and create",
-                  ].map((item, index) => (
-                    <div
-                      key={item}
-                      className="flex items-center gap-3 rounded-2xl border bg-background/70 px-4 py-3 transition-all duration-200 hover:-translate-y-0.5"
-                    >
-                      <div
-                        className={cn(
-                          "flex size-7 items-center justify-center rounded-full transition-colors",
-                          index <= stepIndex
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {index <= stepIndex ? <Check className="size-3.5" /> : index + 1}
-                      </div>
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </AppCard>
+              <div className="flex-1" />
 
-              <AppCard className={SURFACE_CARD_CLASS}>
-                <div className="flex items-center gap-2 border-b border-[#e8edf3] px-5 py-4">
-                  <PlugZap className="size-4 text-indigo-600" />
-                  <h3 className="text-sm font-semibold text-foreground/80">Connection Details</h3>
-                </div>
-                <div className="space-y-2 p-4 text-sm">
-                  {[
-                    {
-                      title: "OAuth Information",
-                      body: "OAuth authorization is used for the selected platform.",
-                    },
-                    {
-                      title: "Workspace context",
-                      body: workspaceLabel,
-                    },
-                    {
-                      title: "Import Objects",
-                      body: (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {(selectedObjects.length > 0
-                            ? selectedObjects
-                            : (selectedConnectorDetails?.recommendedObjects ?? [])
-                          ).map((item) => (
-                            <AppBadge
-                              key={item}
-                              className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] text-sky-800"
-                            >
-                              {item}
-                            </AppBadge>
-                          ))}
-                        </div>
-                      ),
-                    },
-                    {
-                      title: "Expected Sync Frequency",
-                      body: selectedConnectorDetails?.syncFrequency ?? "Every 30 minutes",
-                    },
-                  ].map((section, index) => (
-                    <details
-                      key={section.title}
-                      className="group rounded-2xl border bg-background/75 px-4 py-3 transition-all duration-200 open:bg-background/90"
-                      open={index === 0}
-                    >
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium outline-none">
-                        <span>{section.title}</span>
-                        <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-                      </summary>
-                      <div className="mt-3 text-sm leading-6 text-muted-foreground">
-                        {section.body}
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </AppCard>
+              <AppButton
+                variant="outline"
+                className={cn(
+                  "h-10 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                icon={<ArrowLeft className="size-4 shrink-0" />}
+                iconPosition="start"
+                onClick={goToConnections}
+              >
+                الانتقال إلى التكاملات
+              </AppButton>
+              <AppButton
+                className={cn(
+                  "h-10 min-w-[190px] rounded-[10px] bg-[#2878ff] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1f66e0]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                disabled={isRunningFirstSync || !draftConnectionId}
+                loading={isRunningFirstSync}
+                icon={<PlayCircle className="size-4 shrink-0" />}
+                iconPosition="end"
+                onClick={() => void runFirstSync()}
+              >
+                تشغيل المزامنة الآن
+              </AppButton>
             </div>
-          </div>
-        </AppSection>
-      </AppContainer>
-    </AppPage>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <AppButton
+                variant="ghost"
+                className={cn(
+                  "h-10 rounded-[10px] px-4 text-[12.5px] font-semibold text-[#6b7b96] hover:text-[#0b1738]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                onClick={exitWizard}
+              >
+                إلغاء
+              </AppButton>
+
+              <div className="flex-1" />
+
+              <AppButton
+                variant="outline"
+                className={cn(
+                  "h-10 min-w-[130px] rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                disabled={stepIndex === 0 || flowStatus !== "idle"}
+                icon={<ArrowRight className="size-4 shrink-0" />}
+                iconPosition="start"
+                onClick={handlePreviousClick}
+              >
+                السابق
+              </AppButton>
+              <AppButton
+                className={cn(
+                  "h-10 min-w-[170px] rounded-[10px] px-4 text-[12.5px] font-semibold text-white",
+                  stepIndex === 3
+                    ? "bg-[#1fa85c] hover:bg-[#188a4a]"
+                    : "bg-[#2878ff] hover:bg-[#1f66e0]",
+                  WIZARD_INTERACTION_CLASS
+                )}
+                disabled={footerPrimaryDisabled}
+                icon={
+                  stepIndex === 3 ? (
+                    <Check className="size-4 shrink-0" strokeWidth={3} />
+                  ) : (
+                    <ArrowLeft className="size-4 shrink-0" />
+                  )
+                }
+                iconPosition="end"
+                onClick={() => void footerPrimaryAction()}
+              >
+                {footerPrimaryLabel}
+              </AppButton>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
