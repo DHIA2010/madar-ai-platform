@@ -9,7 +9,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Layers,
-  Loader2,
   Plus,
   RefreshCcw,
   Search,
@@ -504,8 +503,10 @@ export function ConnectionsOverview() {
                 </AppButton>
               ) : (
                 <Link href={ROUTES.integrationsNew}>
-                  <AppButton className="h-11 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-bold hover:bg-[#1f66e0]">
-                    <Plus className="ml-1.5 size-4" />
+                  <AppButton
+                    className="h-11 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-bold hover:bg-[#1f66e0]"
+                    icon={<Plus className="size-4" />}
+                  >
                     {UI_TEXT.buttons.newConnection}
                   </AppButton>
                 </Link>
@@ -516,12 +517,9 @@ export function ConnectionsOverview() {
               className="h-11 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-xs font-semibold text-[#253756] hover:bg-[#f7f9fd]"
               onClick={() => setSyncAllDialogOpen(true)}
               disabled={isSyncingAll || records.length === 0}
+              loading={isSyncingAll}
+              icon={<RefreshCcw className="size-4" />}
             >
-              {isSyncingAll ? (
-                <Loader2 className="ml-1.5 size-4 animate-spin" />
-              ) : (
-                <RefreshCcw className="ml-1.5 size-4" />
-              )}
               {isSyncingAll ? UI_TEXT.buttons.syncing : UI_TEXT.buttons.syncAll}
             </AppButton>
           </div>
@@ -784,13 +782,10 @@ export function ConnectionsOverview() {
                             variant="ghost"
                             className="h-[25px] rounded-[7px] px-2 text-[10px] font-semibold text-[#2878ff] hover:bg-[#f4f7fb]"
                             disabled={Boolean(syncState)}
+                            loading={Boolean(syncState)}
                             onClick={() => void runSyncFor(record)}
                           >
-                            {syncState ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
-                              UI_TEXT.buttons.runSync
-                            )}
+                            {UI_TEXT.buttons.runSync}
                           </AppButton>
                           <ConnectionActionsMenu
                             actions={availableActions}
