@@ -22,7 +22,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CircleAlert,
   Download,
   Globe,
   Loader2,
@@ -31,21 +30,29 @@ import {
   ShoppingBag,
   Store,
   Wallet,
+  ChevronsLeft,
+  ChevronsRight,
+  LayoutGrid,
+  List,
+  MoreHorizontal,
+  Plus,
   type LucideIcon,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
+import Link from "next/link"
+
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
+import { tajawal } from "@/components/design/fonts"
 import {
   productListService,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
 
-import { AppCard } from "@/components/app"
 import { Button } from "@/components/ui/button"
 import { Can } from "@/features/authentication/components"
 import { Calendar } from "@/components/ui/calendar"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -55,18 +62,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type ProductStatus = ProductRecord["status"]
 type ProductRow = ProductRecord
+
+// Colours and radii from the products SVG export, matching the campaigns/stores surfaces.
+const PANEL = "rounded-[14px] border border-[#e1e7f0] bg-white"
+const HEADING = "text-[#0b1738]"
+const MUTED = "text-[#6b7b96]"
+const FILTER_TRIGGER_CLASS =
+  "h-10 w-[146px] rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738]"
+const PAGER_BUTTON_CLASS =
+  "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
+
+// The filter values drive the filtering, so only their display is localised.
+const FILTER_LABEL_AR: Record<string, string> = {
+  "All Platforms": "جميع المنصات",
+  "All Categories": "جميع الفئات",
+  "All Inventory Status": "جميع حالات المخزون",
+  "All Status": "جميع الحالات",
+  Shopify: "Shopify",
+  Salla: "Salla",
+  Zid: "Zid",
+  "In Stock": "متوفر",
+  "Low Stock": "مخزون منخفض",
+  "Out of Stock": "نفدت الكمية",
+  Active: "نشط",
+  Draft: "مسودة",
+  Archived: "مؤرشف",
+}
+
+const STATUS_PILL_AR: Record<ProductStatus, { label: string; className: string }> = {
+  Active: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  Draft: { label: "مسودة", className: "bg-[#eef4ff] text-[#2878ff]" },
+  Archived: { label: "مؤرشف", className: "bg-[#eef2f8] text-[#5b6b85]" },
+}
+
+const INVENTORY_PILL_AR: Record<string, { label: string; className: string }> = {
+  "In Stock": { label: "متوفر", className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  "Low Stock": { label: "مخزون منخفض", className: "bg-[#fff7e6] text-[#e08b00]" },
+  "Out of Stock": { label: "نفدت الكمية", className: "bg-[#fdeeee] text-[#e0484d]" },
+}
+
+const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+})
 
 const FALLBACK_PRODUCT_IMAGE = "/products/01.png"
 const platformOptions = ["All Platforms", "Shopify", "Salla", "Zid"]
@@ -87,7 +129,6 @@ const monthOptions = [
   "Dec",
 ]
 const yearOptions = Array.from({ length: 21 }, (_, index) => 2018 + index)
-const PAGE_SIZE = 6
 
 function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
   const today = new Date()
@@ -122,42 +163,43 @@ interface ProductKpiCardData {
 }
 
 const PRODUCT_KPI_TONE_CLASSNAMES: Record<ProductKpiCardData["tone"], string> = {
-  blue: "bg-blue-50 text-blue-600",
-  green: "bg-emerald-50 text-emerald-600",
-  rose: "bg-rose-50 text-rose-600",
-  violet: "bg-violet-50 text-violet-600",
+  blue: "bg-[#eef4ff] text-[#2878ff]",
+  green: "bg-[#e9f8ef] text-[#1f9d55]",
+  rose: "bg-[#fdeeee] text-[#e0484d]",
+  violet: "bg-[#f3eeff] text-[#8b5cf6]",
 }
 
 function ProductKpiCard({ kpi }: { kpi: ProductKpiCardData }) {
   const Icon = kpi.icon
 
   return (
-    <AppCard className="overflow-hidden rounded-2xl border-border/60 bg-card p-4 shadow-sm">
-      <div
-        className={cn(
-          "flex size-10 items-center justify-center rounded-xl",
-          PRODUCT_KPI_TONE_CLASSNAMES[kpi.tone]
-        )}
-      >
-        <Icon className="size-5" />
+    <div className={cn(PANEL, "p-4")}>
+      {/* RTL: the label/value block is written first so it lands on the right. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={cn("text-[12px] leading-[18px]", MUTED)}>{kpi.label}</p>
+          <p className={cn("mt-1.5 text-[22px] font-extrabold leading-tight", HEADING)}>
+            {kpi.value}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-[12px]",
+            PRODUCT_KPI_TONE_CLASSNAMES[kpi.tone]
+          )}
+        >
+          <Icon className="size-5" />
+        </span>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground">{kpi.label}</p>
-      <p className="mt-1 text-2xl font-bold text-foreground">{kpi.value}</p>
-      <p className="mt-2 text-xs text-muted-foreground">{kpi.footnote}</p>
-    </AppCard>
+
+      {/* The export shows a sparkline and a month-over-month delta. listProducts returns the
+          current catalogue only -- no history and no series -- so neither can be computed.
+          The card states what the figure actually covers instead. */}
+      <p className={cn("mt-3 border-t border-[#f1f4f9] pt-2.5 text-[10.5px]", MUTED)}>
+        {kpi.footnote}
+      </p>
+    </div>
   )
-}
-
-function getStatusClasses(status: ProductStatus) {
-  if (status === "Active") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700"
-  }
-
-  if (status === "Draft") {
-    return "border-amber-200 bg-amber-50 text-amber-700"
-  }
-
-  return "border-border bg-muted text-muted-foreground"
 }
 
 function getInventoryStatus(stock: number) {
@@ -170,20 +212,6 @@ function getInventoryStatus(stock: number) {
   }
 
   return "In Stock"
-}
-
-function getInventoryStatusClasses(stock: number) {
-  const inventoryStatus = getInventoryStatus(stock)
-
-  if (inventoryStatus === "In Stock") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700"
-  }
-
-  if (inventoryStatus === "Low Stock") {
-    return "border-amber-200 bg-amber-50 text-amber-700"
-  }
-
-  return "border-rose-200 bg-rose-50 text-rose-700"
 }
 
 function PlatformIcon({ platform }: { platform: ProductRow["platform"] }) {
@@ -204,14 +232,14 @@ function PlatformIcon({ platform }: { platform: ProductRow["platform"] }) {
 
 function formatDateRangeLabel(range: DateRange | undefined) {
   if (!range?.from) {
-    return "Date Range"
+    return "الفترة الزمنية"
   }
 
   if (!range.to) {
-    return format(range.from, "MMM d, yyyy")
+    return ARABIC_DATE.format(range.from)
   }
 
-  return `${format(range.from, "MMM d, yyyy")} - ${format(range.to, "MMM d, yyyy")}`
+  return `${ARABIC_DATE.format(range.from)} - ${ARABIC_DATE.format(range.to)}`
 }
 
 function DateRangeFilter({
@@ -243,9 +271,9 @@ function DateRangeFilter({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="h-11 min-w-[240px] justify-start rounded-2xl border border-border bg-card px-4 text-left text-sm font-medium text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl transition-colors hover:border-sky-400/45 hover:bg-card"
+          className="h-10 w-[205px] justify-between gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-3.5 text-[12.5px] font-normal text-[#0b1738] hover:border-[#c4d5f0] hover:bg-white"
         >
-          <CalendarIcon className="mr-2 size-4 text-sky-300" />
+          <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
           <span className="truncate">{formatDateRangeLabel(value)}</span>
         </Button>
       </PopoverTrigger>
@@ -460,6 +488,9 @@ export default function ProductsPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [category, setCategory] = useState("All Categories")
   const [platform, setPlatform] = useState("All Platforms")
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState("All Inventory Status")
@@ -551,42 +582,75 @@ export default function ProductsPage() {
 
     return [
       {
-        label: "Total Products",
+        label: "إجمالي المنتجات",
         value: filteredProducts.length.toLocaleString(),
-        footnote: "Across all connected stores",
+        footnote: "من جميع المتاجر المتصلة",
         icon: Package,
         tone: "blue",
       },
       {
-        label: "Active Products",
+        label: "المنتجات النشطة",
         value: activeCount.toLocaleString(),
-        footnote: "Live and visible to customers",
+        footnote: "منشورة وظاهرة للعملاء",
         icon: CheckCircle2,
         tone: "green",
       },
       {
-        label: "Low / Out of Stock",
+        label: "منتجات منخفضة المخزون",
         value: lowOrOutOfStockCount.toLocaleString(),
-        footnote: "Stock at or below 30 units",
+        footnote: "المخزون 30 وحدة أو أقل",
         icon: AlertTriangle,
         tone: "rose",
       },
       {
-        label: "Inventory Value",
+        label: "قيمة المخزون",
         value: formatCurrency(inventoryValue),
-        footnote: "At cost price across available stock",
+        footnote: "بسعر التكلفة للكمية المتاحة",
         icon: Wallet,
         tone: "violet",
       },
     ]
   }, [filteredProducts])
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   )
+
+  // The checkboxes in the export are wired to the export button: with a selection the CSV
+  // covers exactly those rows, without one it covers everything the filters left.
+  const selectedProducts = useMemo(
+    () => filteredProducts.filter((product) => selectedIds.has(product.id)),
+    [filteredProducts, selectedIds]
+  )
+  const exportRows = selectedProducts.length > 0 ? selectedProducts : filteredProducts
+  const allOnPageSelected =
+    paginatedProducts.length > 0 &&
+    paginatedProducts.every((product) => selectedIds.has(product.id))
+
+  const toggleProduct = (id: string) =>
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+
+  const togglePage = () =>
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (allOnPageSelected) {
+        paginatedProducts.forEach((product) => next.delete(product.id))
+      } else {
+        paginatedProducts.forEach((product) => next.add(product.id))
+      }
+      return next
+    })
 
   function exportToCSV(rows: ProductRow[]) {
     const headers = [
@@ -627,281 +691,479 @@ export default function ProductsPage() {
     URL.revokeObjectURL(url)
   }
 
-  return (
-    <div className="space-y-4">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {productKpiCards.map((kpi) => (
-          <ProductKpiCard key={kpi.label} kpi={kpi} />
-        ))}
-      </section>
+  const filterSelects: Array<{
+    value: string
+    onChange: (next: string) => void
+    options: readonly string[]
+  }> = [
+    { value: statusFilter, onChange: setStatusFilter, options: statusOptions },
+    { value: category, onChange: setCategory, options: dynamicCategoryOptions },
+    {
+      value: inventoryStatusFilter,
+      onChange: setInventoryStatusFilter,
+      options: inventoryStatusOptions,
+    },
+    { value: platform, onChange: setPlatform, options: platformOptions },
+  ]
 
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b py-4">
+  return (
+    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+      <div className="mx-auto w-full max-w-[1500px] space-y-4">
+        {/* RTL: the title block is written first so it lands on the right, actions left. */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle className="text-lg mb-0">Products</CardTitle>
-            <CardDescription>
-              Executive product performance across connected stores.
-            </CardDescription>
+            <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>المنتجات</h1>
+            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>
+              إدارة منتجاتك ومتابعة المخزون والأداء عبر جميع المتاجر المتصلة.
+            </p>
           </div>
 
-          <div className="relative mb-0 w-[280px] max-w-lg">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by product or SKU..."
-              className="pl-9"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* The export pairs this with an import action. There is no product import in the
+                app, so the button offers only what exists. */}
+            <Can permission="products:export">
+              <Button
+                variant="outline"
+                className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+                disabled={exportRows.length === 0}
+                onClick={() => exportToCSV(exportRows)}
+              >
+                تصدير
+                <Download className="size-4" />
+              </Button>
+            </Can>
+
+            <Button
+              asChild
+              className="h-11 gap-2 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
+            >
+              <Link href={ROUTES.productsAdd}>
+                إضافة منتج
+                <Plus className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <section className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {productKpiCards.map((kpi) => (
+            <ProductKpiCard key={kpi.label} kpi={kpi} />
+          ))}
+        </section>
+
+        <div className={cn(PANEL, "space-y-4 p-4 md:p-5")}>
+          {/* RTL: the date range is written first so it sits on the right, search last. */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <DateRangeFilter
+              value={dateRange}
+              onChange={(next) => {
+                setDateRange(next)
                 setPage(1)
               }}
             />
-          </div>
-        </CardHeader>
 
-        <CardContent className="space-y-4 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-3">
-              <DateRangeFilter value={dateRange} onChange={setDateRange} />
-
-              <Select value={platform} onValueChange={(next) => setPlatform(next)}>
-                <SelectTrigger className="w-[170px]">
-                  <SelectValue placeholder="Platform" />
-                </SelectTrigger>
-                <SelectContent>
-                  {platformOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={category} onValueChange={(next) => setCategory(next)}>
-                <SelectTrigger className="w-[170px]">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dynamicCategoryOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
+            {filterSelects.map((filter, index) => (
               <Select
-                value={inventoryStatusFilter}
-                onValueChange={(next) => setInventoryStatusFilter(next)}
+                key={index}
+                value={filter.value}
+                onValueChange={(next) => {
+                  filter.onChange(next)
+                  setPage(1)
+                }}
               >
-                <SelectTrigger className="w-[170px]">
-                  <SelectValue placeholder="Inventory Status" />
+                <SelectTrigger className={FILTER_TRIGGER_CLASS}>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {inventoryStatusOptions.map((option) => (
+                  {filter.options.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option}
+                      {FILTER_LABEL_AR[option] ?? option}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            ))}
 
-              <Select value={statusFilter} onValueChange={(next) => setStatusFilter(next)}>
-                <SelectTrigger className="w-[170px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="relative ms-auto w-full md:w-[225px]">
+              <Search className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-[#95a4bd]" />
+              <Input
+                placeholder="البحث في المنتجات أو SKU..."
+                className="h-10 rounded-[10px] border-[#e1e7f0] bg-white pe-9 text-[12.5px] placeholder:text-[#95a4bd]"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(1)
+                }}
+              />
+            </div>
+          </div>
+
+          {/* RTL: the view toggle is written first so it sits on the right. */}
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#f1f4f9] pt-3.5">
+            <div className="flex items-center gap-1 rounded-[10px] bg-[#f2f5fa] p-1">
+              {(
+                [
+                  { key: "table", label: "عرض جدول", icon: List },
+                  { key: "grid", label: "عرض شبكي", icon: LayoutGrid },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  aria-label={option.label}
+                  aria-pressed={viewMode === option.key}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-center rounded-[8px] px-3 py-1.5 transition-colors",
+                    viewMode === option.key
+                      ? "bg-white text-[#2878ff] shadow-[0_1px_3px_rgba(11,23,56,0.12)]"
+                      : "text-[#6b7b96] hover:text-[#0b1738]"
+                  )}
+                  onClick={() => setViewMode(option.key)}
+                >
+                  <option.icon className="size-4" />
+                </button>
+              ))}
             </div>
 
-            <div className="flex gap-2">
-              <Can permission="products:export">
-                <Button size="sm" variant="outline" onClick={() => exportToCSV(filteredProducts)}>
-                  <Download className="mr-2 size-4" />
-                  Export
-                </Button>
-              </Can>
-            </div>
+            <span className="text-[12px] font-semibold text-[#2878ff]">
+              {filteredProducts.length} منتج
+            </span>
+
+            {selectedProducts.length > 0 ? (
+              <span className={cn("text-[12px]", MUTED)}>{selectedProducts.length} محدد</span>
+            ) : null}
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 rounded-[20px] border border-border bg-card py-16 text-sm text-muted-foreground">
+            <div
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-[12px] border border-[#eef2f8] py-16 text-[12.5px]",
+                MUTED
+              )}
+            >
               <Loader2 className="size-4 animate-spin" />
-              Loading products from your connected stores...
+              جارٍ تحميل المنتجات من متاجرك المتصلة...
             </div>
           ) : loadError ? (
-            <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-8 text-center text-sm text-rose-700">
+            <div className="rounded-[12px] border border-[#f7c9ca] bg-[#fdeeee] px-4 py-8 text-center text-[12.5px] text-[#e0484d]">
               {loadError}
             </div>
-          ) : (
-            <div className="relative w-full overflow-x-auto">
-              <Table className="min-w-[1080px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[22%] text-center">Product</TableHead>
-                    <TableHead className="w-[10%] text-center">SKU</TableHead>
-                    <TableHead className="w-[14%] text-center">Category</TableHead>
-                    <TableHead className="w-[10%] text-center">Status</TableHead>
-                    <TableHead className="w-[12%] text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <span>Inventory Status</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                                aria-label="Inventory status classification"
-                              >
-                                <CircleAlert className="size-4" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              sideOffset={8}
-                              className="max-w-[260px] rounded-2xl border border-sky-400/15 bg-card px-4 py-3 text-left text-foreground shadow-[0_16px_36px_-20px_rgba(2,6,23,0.9)] ring-1 ring-sky-400/10"
-                            >
-                              <div className="space-y-2">
-                                <div>
-                                  <p className="text-xs font-semibold text-foreground">
-                                    Inventory Status Classification
-                                  </p>
-                                </div>
-                                <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
-                                  <p>
-                                    <span className="font-semibold text-emerald-600">In Stock</span>
-                                    <br />
-                                    More than 30 units available.
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-amber-600">Low Stock</span>
-                                    <br />
-                                    Between 1 and 30 units available.
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-rose-600">
-                                      Out of Stock
-                                    </span>
-                                    <br />
-                                    No inventory available.
-                                  </p>
-                                </div>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    </TableHead>
-                    <TableHead className="w-[10%] text-center">Available Stock</TableHead>
-                    <TableHead className="w-[8%] text-center">Cost Price</TableHead>
-                    <TableHead className="w-[10%] text-center">Selling Price</TableHead>
-                    <TableHead className="w-[10%] text-center">Platform</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedProducts.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="w-[22%] text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {/* Static export mode cannot use the default next/image loader here. */}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={product.image ?? FALLBACK_PRODUCT_IMAGE}
-                            alt={product.name}
-                            width={40}
-                            height={40}
-                            className="h-10 w-10 rounded-full border bg-muted/50 object-cover p-1"
-                          />
-                          <div className="min-w-0 leading-tight text-center">
-                            <p className="font-semibold">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">{product.platform}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[10%] text-center">{product.sku}</TableCell>
-                      <TableCell className="w-[14%] text-center">{product.category}</TableCell>
-                      <TableCell className="w-[10%] text-center">
-                        <div className="flex items-center justify-center">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(product.status)}`}
-                          >
-                            {product.status}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[12%] text-center">
-                        <div className="flex items-center justify-center">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getInventoryStatusClasses(product.availableStock)}`}
-                          >
-                            {getInventoryStatus(product.availableStock)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[10%] text-center tabular-nums">
-                        {product.availableStock.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="w-[8%] text-center tabular-nums">
-                        {product.costPrice === null
-                          ? "—"
-                          : formatCurrency(product.costPrice, product.currency)}
-                      </TableCell>
-                      <TableCell className="w-[10%] text-center tabular-nums">
+          ) : paginatedProducts.length === 0 ? (
+            <div className="rounded-[12px] border border-[#eef2f8] px-4 py-12 text-center">
+              <p className={cn("text-[13.5px] font-bold", HEADING)}>
+                لا توجد منتجات مطابقة للفلاتر الحالية
+              </p>
+              <p className={cn("mt-2 text-[12px]", MUTED)}>
+                جرّب تغيير المنصة أو الفئة أو حالة المخزون أو الفترة الزمنية.
+              </p>
+            </div>
+          ) : viewMode === "grid" ? (
+            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {paginatedProducts.map((product) => {
+                const status = STATUS_PILL_AR[product.status]
+                const inventory = INVENTORY_PILL_AR[getInventoryStatus(product.availableStock)]
+
+                return (
+                  <div key={product.id} className="rounded-[12px] border border-[#e1e7f0] p-4">
+                    {/* Static export mode cannot use the default next/image loader here. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={product.image ?? FALLBACK_PRODUCT_IMAGE}
+                      alt={product.name}
+                      className="mx-auto h-24 w-24 rounded-[10px] border border-[#eef2f8] bg-[#fafbfe] object-contain p-2"
+                    />
+                    <p className={cn("mt-3 truncate text-[13px] font-extrabold", HEADING)}>
+                      {product.name}
+                    </p>
+                    <p className={cn("mt-0.5 truncate text-[11px]", MUTED)}>{product.category}</p>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                          status.className
+                        )}
+                      >
+                        {status.label}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                          inventory.className
+                        )}
+                      >
+                        {inventory.label}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-[#f1f4f9] pt-2.5">
+                      <span className={cn("text-[11px]", MUTED)}>
+                        {product.availableStock.toLocaleString()} متاح
+                      </span>
+                      <span className={cn("text-[12.5px] font-extrabold", HEADING)}>
                         {formatCurrency(product.sellingPrice, product.currency)}
-                      </TableCell>
-                      <TableCell className="w-[10%] text-center">
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                          <PlatformIcon platform={product.platform} />
-                          <span>{product.platform}</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1180px] text-center">
+                <thead>
+                  <tr>
+                    <th className="border-b border-[#eef2f8] px-3 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label="تحديد كل المنتجات في الصفحة"
+                        className="size-4 cursor-pointer accent-[#2878ff]"
+                        checked={allOnPageSelected}
+                        onChange={togglePage}
+                      />
+                    </th>
+                    {[
+                      { key: "product", label: "المنتج", align: "text-right" },
+                      { key: "sku", label: "SKU", align: "text-center" },
+                      { key: "category", label: "الفئة", align: "text-center" },
+                      { key: "status", label: "الحالة", align: "text-center" },
+                      { key: "inventory", label: "حالة المخزون", align: "text-center" },
+                      { key: "stock", label: "الكمية المتاحة", align: "text-center" },
+                      { key: "cost", label: "سعر التكلفة", align: "text-center" },
+                      { key: "price", label: "سعر البيع", align: "text-center" },
+                      { key: "platform", label: "المنصة", align: "text-center" },
+                      { key: "actions", label: "إجراءات", align: "text-center" },
+                    ].map((column) => (
+                      <th
+                        key={column.key}
+                        className={cn(
+                          "border-b border-[#eef2f8] px-3 py-3 text-[11px] font-semibold",
+                          MUTED,
+                          column.align
+                        )}
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedProducts.map((product) => {
+                    const status = STATUS_PILL_AR[product.status]
+                    const inventory = INVENTORY_PILL_AR[getInventoryStatus(product.availableStock)]
+
+                    return (
+                      <tr
+                        key={product.id}
+                        className="border-b border-[#f4f7fb] transition-colors hover:bg-[#f8fafd]"
+                      >
+                        <td className="px-3 py-3.5">
+                          <input
+                            type="checkbox"
+                            aria-label={`تحديد ${product.name}`}
+                            className="size-4 cursor-pointer accent-[#2878ff]"
+                            checked={selectedIds.has(product.id)}
+                            onChange={() => toggleProduct(product.id)}
+                          />
+                        </td>
+
+                        <td className="px-3 py-3.5 text-right">
+                          {/* RTL: the thumbnail is written first so it lands to the right. */}
+                          <div className="flex items-center justify-start gap-2.5">
+                            {/* Static export mode cannot use the default next/image loader. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={product.image ?? FALLBACK_PRODUCT_IMAGE}
+                              alt={product.name}
+                              width={40}
+                              height={40}
+                              className="size-10 shrink-0 rounded-[10px] border border-[#eef2f8] bg-[#fafbfe] object-contain p-1"
+                            />
+                            <div className="min-w-0">
+                              <p className={cn("truncate text-[12.5px] font-bold", HEADING)}>
+                                {product.name}
+                              </p>
+                              <p className={cn("truncate text-[11px]", MUTED)}>
+                                {product.platform}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className={cn("px-3 py-3.5 text-[11.5px]", MUTED)}>
+                          {product.sku || "—"}
+                        </td>
+                        <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
+                          {product.category}
+                        </td>
+
+                        <td className="px-3 py-3.5">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                              status.className
+                            )}
+                          >
+                            {status.label}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-3.5">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                              inventory.className
+                            )}
+                          >
+                            {inventory.label}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-3.5 text-[12.5px] tabular-nums text-[#334155]">
+                          {product.availableStock.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-3.5 text-[12.5px] tabular-nums text-[#334155]">
+                          {product.costPrice === null
+                            ? "—"
+                            : formatCurrency(product.costPrice, product.currency)}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-3.5 text-[12.5px] font-bold tabular-nums",
+                            HEADING
+                          )}
+                        >
+                          {formatCurrency(product.sellingPrice, product.currency)}
+                        </td>
+
+                        <td className="px-3 py-3.5">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-2 text-[12px] font-semibold",
+                              HEADING
+                            )}
+                          >
+                            <PlatformIcon platform={product.platform} />
+                            {product.platform}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-3.5">
+                          <button
+                            type="button"
+                            aria-label={`إجراءات ${product.name}`}
+                            className="mx-auto flex size-8 cursor-not-allowed items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#b6c2d4]"
+                            title="لا توجد إجراءات متاحة على المنتج بعد"
+                            disabled
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
 
-          {!isLoading && !loadError && (
-            <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                {filteredProducts.length === 0
-                  ? "Showing 0 of 0"
-                  : `Showing ${(currentPage - 1) * PAGE_SIZE + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredProducts.length)} of ${filteredProducts.length}`}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Prev
-                </Button>
-                <span className="min-w-24 text-center text-muted-foreground">
-                  Page {currentPage} of {totalPages}
+          {!isLoading && !loadError ? (
+            <div className="flex flex-col gap-3 border-t border-[#f1f4f9] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
+              {/* RTL: count and page size on the right, pager on the left. */}
+              <div className="flex items-center gap-3">
+                <span className={cn("text-[12px]", MUTED)}>
+                  {filteredProducts.length === 0
+                    ? "لا توجد نتائج"
+                    : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, filteredProducts.length)} من ${filteredProducts.length}`}
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl border-border bg-muted/60 text-foreground/90 hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                  disabled={currentPage === totalPages}
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-[12px]", MUTED)}>عدد العناصر في الصفحة</span>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(next) => {
+                      setPageSize(Number(next))
+                      setPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-[74px] rounded-[10px] border-[#e1e7f0] bg-white text-[12px] text-[#0b1738]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 25, 50].map((option) => (
+                        <SelectItem key={option} value={String(option)}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className={PAGER_BUTTON_CLASS}
+                  disabled={currentPage === 1}
+                  aria-label="الصفحة الأولى"
+                  onClick={() => setPage(1)}
                 >
-                  Next
-                </Button>
+                  <ChevronsRight className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  className={PAGER_BUTTON_CLASS}
+                  disabled={currentPage === 1}
+                  aria-label="الصفحة السابقة"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+
+                {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
+                  const first = Math.max(1, Math.min(currentPage - 2, totalPages - 4))
+                  const pageNumber = Math.max(1, first) + index
+                  if (pageNumber > totalPages) return null
+
+                  return (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      className={cn(
+                        "flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-[8px] border px-2 text-[12px] font-bold transition-colors",
+                        pageNumber === currentPage
+                          ? "border-[#2878ff] bg-white text-[#2878ff]"
+                          : "border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+                      )}
+                      onClick={() => setPage(pageNumber)}
+                    >
+                      {pageNumber}
+                    </button>
+                  )
+                })}
+
+                <button
+                  type="button"
+                  className={PAGER_BUTTON_CLASS}
+                  disabled={currentPage === totalPages}
+                  aria-label="الصفحة التالية"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  className={PAGER_BUTTON_CLASS}
+                  disabled={currentPage === totalPages}
+                  aria-label="الصفحة الأخيرة"
+                  onClick={() => setPage(totalPages)}
+                >
+                  <ChevronsLeft className="size-4" />
+                </button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }
