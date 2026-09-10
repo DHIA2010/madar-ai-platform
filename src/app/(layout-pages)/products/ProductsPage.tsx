@@ -84,6 +84,7 @@ const FILTER_LABEL_AR: Record<string, string> = {
   Shopify: "Shopify",
   Salla: "Salla",
   Zid: "Zid",
+  Madar: "مدار",
   "In Stock": "متوفر",
   "Low Stock": "مخزون منخفض",
   "Out of Stock": "نفدت الكمية",
@@ -111,7 +112,9 @@ const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
 })
 
 const FALLBACK_PRODUCT_IMAGE = "/products/01.png"
-const platformOptions = ["All Platforms", "Shopify", "Salla", "Zid"]
+// "Madar" covers products authored on the Add Product page rather than synced from a
+// storefront -- GET /v1/products returns both sources in one list.
+const platformOptions = ["All Platforms", "Shopify", "Salla", "Zid", "Madar"]
 const inventoryStatusOptions = ["All Inventory Status", "In Stock", "Low Stock", "Out of Stock"]
 const statusOptions = ["All Status", "Active", "Draft", "Archived"]
 const monthOptions = [

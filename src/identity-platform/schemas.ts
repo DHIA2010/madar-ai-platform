@@ -1,5 +1,10 @@
 import { z } from "zod"
 
+// Imported rather than restated as local tuples (the pattern the rest of this file uses for
+// small closed sets) so the request contract and the service's own rules cannot drift apart:
+// adding a product type in one place and forgetting the other would be silently accepted.
+import { PRODUCT_STATUSES, PRODUCT_TYPES, PRODUCT_UNITS } from "./products/catalog-types"
+
 export const registerSchema = z
   .object({
     email: z.string().email(),
@@ -420,4 +425,84 @@ export const captureTrackingEventSchema = z.object({
 
 export const aggregateCampaignLinksSchema = z.object({
   metricDate: dateOnlySchema.optional(),
+})
+
+// --- Native product catalogue (migration 047) ---------------------------------------------
+//
+// Shape-level validation only. The rules that depend on the chosen product type -- which types
+// carry a stock code, which need a price, that a bundle has components and a variable product
+// has priced variants -- live in products/catalog-service.ts, because they are business rules
+// about a product rather than facts about the request body.
+
+const productMoneySchema = z.number().finite().min(0).max(1_000_000_000)
+const productQuantitySchema = z.number().finite().min(0).max(1_000_000_000)
+
+const productComponentSchema = z.object({
+  componentRef: z.string().min(1).max(200).nullable().default(null),
+  customName: z.string().max(200).nullable().default(null),
+  customStock: productQuantitySchema.nullable().default(null),
+  requiredQuantity: z.number().finite().positive().max(1_000_000_000),
+  requiredUnit: z.enum(PRODUCT_UNITS),
+  stockUnit: z.enum(PRODUCT_UNITS),
+  conversionFactor: z.number().finite().positive().max(1_000_000).nullable().default(null),
+  note: z.string().max(500).nullable().default(null),
+})
+
+const productVariantOptionSchema = z.object({
+  name: z.string().min(1).max(120),
+  values: z.array(z.string().min(1).max(120)).max(50),
+})
+
+const productVariantSchema = z.object({
+  sku: z.string().max(120).nullable().default(null),
+  price: productMoneySchema.nullable().default(null),
+  stock: productQuantitySchema.nullable().default(null),
+  optionValues: z.array(z.string().min(1).max(120)).max(8),
+})
+
+// A closed set rather than free-form jsonb: unknown keys are dropped, so a typo in the client
+// cannot quietly persist a field nothing will ever read back.
+const productAttributesSchema = z.object({
+  supplier: z.string().max(200).nullable().optional(),
+  stockNotes: z.string().max(500).nullable().optional(),
+  stockLocation: z.string().max(200).nullable().optional(),
+  batchNumber: z.string().max(120).nullable().optional(),
+  brand: z.string().max(200).nullable().optional(),
+  model: z.string().max(200).nullable().optional(),
+  barcode: z.string().max(120).nullable().optional(),
+  countryOfOrigin: z.string().max(200).nullable().optional(),
+  minPurchase: productQuantitySchema.nullable().optional(),
+  internalNotes: z.string().max(1000).nullable().optional(),
+  expiryDate: dateOnlySchema.nullable().optional(),
+  pricingType: z.string().max(60).nullable().optional(),
+  serviceDuration: productQuantitySchema.nullable().optional(),
+  serviceDurationUnit: z.string().max(30).nullable().optional(),
+  deliveryMethod: z.string().max(60).nullable().optional(),
+  bookingEnabled: z.boolean().nullable().optional(),
+  offerPrice: productMoneySchema.nullable().optional(),
+  systemRequirements: z.string().max(1000).nullable().optional(),
+  productLanguage: z.string().max(60).nullable().optional(),
+  preparationMinutes: productQuantitySchema.nullable().optional(),
+})
+
+export const createProductSchema = z.object({
+  productType: z.enum(PRODUCT_TYPES),
+  name: z.string().min(1).max(200),
+  sku: z.string().max(120).nullable().optional().default(null),
+  category: z.string().max(200).default(""),
+  description: z.string().max(2000).default(""),
+  status: z.enum(PRODUCT_STATUSES).default("draft"),
+  currency: z.string().length(3).default("SAR"),
+  baseUnit: z.string().max(60).nullable().optional().default(null),
+  sellPrice: productMoneySchema.nullable().optional().default(null),
+  costPrice: productMoneySchema.nullable().optional().default(null),
+  stockQuantity: productQuantitySchema.nullable().optional().default(null),
+  minStock: productQuantitySchema.nullable().optional().default(null),
+  // Already-hosted URLs. There is no product-image upload endpoint yet, so the API stores what
+  // it is given rather than accepting file bytes.
+  imageUrls: z.array(z.string().url().max(2000)).max(12).default([]),
+  attributes: productAttributesSchema.default({}),
+  components: z.array(productComponentSchema).max(100).default([]),
+  variantOptions: z.array(productVariantOptionSchema).max(8).default([]),
+  variants: z.array(productVariantSchema).max(200).default([]),
 })

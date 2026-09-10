@@ -30,7 +30,10 @@ function getWorkspaceIdFromStorage(): string | null {
   }
 }
 
-export type ProductPlatform = "Salla" | "Shopify" | "Zid"
+// "Madar" is a product authored in this platform (the native catalogue behind
+// POST /v1/products) rather than synced from a storefront. GET /v1/products returns both
+// sources in one list, so every consumer of this type has to expect it.
+export type ProductPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
 export type ProductStatus = "Active" | "Draft" | "Archived"
 
 export interface ProductRecord {

@@ -1,0 +1,550 @@
+// @vitest-environment node
+//
+// Covers the native product catalogue (migration 047): POST /v1/products, GET /v1/products/:id,
+// and the merge of authored products into the existing synced-product list.
+
+import type { AddressInfo } from "node:net"
+
+import { newDb } from "pg-mem"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
+
+import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
+import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/migration-runner"
+import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { createIdentityApiServer } from "../interfaces/rest/server"
+
+let database: PostgresDatabase
+let server: ReturnType<typeof createIdentityApiServer>
+let baseUrl = ""
+let container: ReturnType<typeof createIdentityPlatform>
+
+beforeEach(async () => {
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000"
+  process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET = "12345678901234567890123456789012"
+
+  const mem = newDb({ autoCreateForeignKeyIndices: true })
+  const adapter = mem.adapters.createPg()
+  database = new PostgresDatabase(new adapter.Pool())
+
+  await runIdentityMigrations(database, process.cwd())
+  await runSqlFile(
+    database,
+    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+  )
+
+  container = createIdentityPlatform({ mode: "memory" })
+  ;(container.infrastructure as { database?: PostgresDatabase }).database = database
+
+  server = createIdentityApiServer(container)
+  await new Promise<void>((resolve) => server.listen(0, resolve))
+  baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+})
+
+afterEach(async () => {
+  if (server) {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()))
+    })
+  }
+  await database.end()
+})
+
+async function signIn(email: string, orgName: string) {
+  const registerResponse = await fetch(`${baseUrl}/v1/auth/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email,
+      password: "VeryStrongPassword123!",
+      fullName: "Catalog Test",
+      organizationName: orgName,
+    }),
+  })
+  const registration = (await registerResponse.json()) as { verificationToken: string }
+
+  await fetch(`${baseUrl}/v1/auth/verify-email`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: registration.verificationToken }),
+  })
+
+  const loginResponse = await fetch(`${baseUrl}/v1/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password: "VeryStrongPassword123!" }),
+  })
+  const login = (await loginResponse.json()) as { session: { accessToken: string } }
+  const actor = await container.commands.resolveActorFromAccessToken(login.session.accessToken)
+
+  await database.query(
+    `insert into users (id, email, password_hash, full_name, email_verified_at)
+     values ($1, $2, 'hash', 'Catalog Test', now()) on conflict (id) do nothing`,
+    [actor.userId, email]
+  )
+  await database.query(
+    `insert into organizations (id, name, owner_user_id, status)
+     values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+    [actor.organizationId, orgName, actor.userId]
+  )
+
+  // Registration creates the workspace inside the in-memory container rather than in this
+  // pg-mem instance, so products.workspace_id would have nothing to reference.
+  if (actor.workspaceId) {
+    await database.query(
+      `insert into workspaces (id, organization_id, name, status)
+       values ($1, $2, $3, 'active') on conflict (id) do nothing`,
+      [actor.workspaceId, actor.organizationId, `${orgName} Workspace`]
+    )
+  }
+
+  return { token: login.session.accessToken, actor }
+}
+
+function authHeaders(token: string) {
+  return { "content-type": "application/json", authorization: `Bearer ${token}` }
+}
+
+async function createProduct(token: string, body: Record<string, unknown>) {
+  const response = await fetch(`${baseUrl}/v1/products`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+const SIMPLE_PRODUCT = {
+  productType: "simple",
+  name: "قميص قطن",
+  sku: "SKU-100",
+  category: "ملابس",
+  description: "قميص قطن ناعم",
+  status: "active",
+  sellPrice: 120,
+  costPrice: 70,
+  stockQuantity: 25,
+  minStock: 5,
+  baseUnit: "حبة (PCS)",
+}
+
+describe("native product catalogue", () => {
+  it("creates a simple product and returns it through the merged list", async () => {
+    const { token } = await signIn("catalog-simple@example.com", "Catalog Simple")
+
+    const created = await createProduct(token, SIMPLE_PRODUCT)
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      productType: "simple",
+      name: "قميص قطن",
+      sku: "SKU-100",
+      status: "active",
+      sellPrice: 120,
+      costPrice: 70,
+      stockQuantity: 25,
+      currency: "SAR",
+    })
+    expect(typeof created.body.id).toBe("string")
+
+    const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+    const list = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+
+    expect(listResponse.status).toBe(200)
+    expect(list.items).toHaveLength(1)
+    // Projected into the same shape the synced products already use.
+    expect(list.items[0]).toMatchObject({
+      id: created.body.id,
+      name: "قميص قطن",
+      sku: "SKU-100",
+      status: "Active",
+      availableStock: 25,
+      sellingPrice: 120,
+      platform: "Madar",
+    })
+  })
+
+  it("fetches one product by id and 404s for an unknown or non-uuid id", async () => {
+    const { token } = await signIn("catalog-byid@example.com", "Catalog ById")
+    const created = await createProduct(token, SIMPLE_PRODUCT)
+
+    const found = await fetch(`${baseUrl}/v1/products/${String(created.body.id)}`, {
+      headers: authHeaders(token),
+    })
+    expect(found.status).toBe(200)
+    expect((await found.json()) as Record<string, unknown>).toMatchObject({ sku: "SKU-100" })
+
+    const missing = await fetch(`${baseUrl}/v1/products/6f6d1f9c-0000-4000-8000-000000000000`, {
+      headers: authHeaders(token),
+    })
+    expect(missing.status).toBe(404)
+
+    // The synced aggregation's ids look like this and legitimately reach the same route --
+    // they must 404, not blow up on a uuid cast.
+    const external = await fetch(`${baseUrl}/v1/products/salla:12345`, {
+      headers: authHeaders(token),
+    })
+    expect(external.status).toBe(404)
+  })
+
+  it("rejects a duplicate stock code within the organization", async () => {
+    const { token } = await signIn("catalog-dupe@example.com", "Catalog Dupe")
+
+    expect((await createProduct(token, SIMPLE_PRODUCT)).status).toBe(201)
+
+    const duplicate = await createProduct(token, { ...SIMPLE_PRODUCT, name: "آخر" })
+    expect(duplicate.status).toBe(409)
+    expect(duplicate.body).toMatchObject({ code: "PRODUCT_SKU_TAKEN" })
+  })
+
+  it("keeps stock codes scoped to one organization", async () => {
+    const first = await signIn("catalog-org-a@example.com", "Catalog Org A")
+    const second = await signIn("catalog-org-b@example.com", "Catalog Org B")
+
+    expect((await createProduct(first.token, SIMPLE_PRODUCT)).status).toBe(201)
+    // The same code in a different organization is a different product, not a conflict.
+    expect((await createProduct(second.token, SIMPLE_PRODUCT)).status).toBe(201)
+
+    const listResponse = await fetch(`${baseUrl}/v1/products`, {
+      headers: authHeaders(second.token),
+    })
+    const list = (await listResponse.json()) as { items: unknown[] }
+    expect(list.items).toHaveLength(1)
+  })
+
+  it("stores a raw material without a stock code even when one is sent", async () => {
+    const { token } = await signIn("catalog-raw@example.com", "Catalog Raw")
+
+    const created = await createProduct(token, {
+      productType: "raw",
+      name: "أرز بسمتي",
+      sku: "SHOULD-BE-DROPPED",
+      category: "مواد خام",
+      stockQuantity: 25,
+      baseUnit: "كجم (KG)",
+      costPrice: 12,
+      attributes: { supplier: "مؤسسة التموين", batchNumber: "LOT-001" },
+    })
+
+    expect(created.status).toBe(201)
+    // A raw material is identified by its own stock record, so it carries no stock code.
+    expect(created.body.sku).toBeNull()
+    expect(created.body.attributes).toMatchObject({
+      supplier: "مؤسسة التموين",
+      batchNumber: "LOT-001",
+    })
+  })
+
+  it("requires a price and stock only for the types that have them", async () => {
+    const { token } = await signIn("catalog-required@example.com", "Catalog Required")
+
+    const noPrice = await createProduct(token, {
+      productType: "simple",
+      name: "بدون سعر",
+      sku: "SKU-NOPRICE",
+      category: "ملابس",
+      stockQuantity: 5,
+    })
+    expect(noPrice.status).toBe(422)
+    expect((noPrice.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+      "sellPrice"
+    )
+
+    const noStock = await createProduct(token, {
+      productType: "simple",
+      name: "بدون مخزون",
+      sku: "SKU-NOSTOCK",
+      category: "ملابس",
+      sellPrice: 10,
+    })
+    expect(noStock.status).toBe(422)
+    expect((noStock.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+      "stockQuantity"
+    )
+
+    // A service has no stock at all, so the same omission is fine here.
+    const service = await createProduct(token, {
+      productType: "service",
+      name: "استشارة",
+      sku: "SVC-1",
+      category: "خدمات",
+      sellPrice: 300,
+      attributes: { pricingType: "سعر ثابت", serviceDuration: 1, serviceDurationUnit: "ساعة" },
+    })
+    expect(service.status).toBe(201)
+    expect(service.body.stockQuantity).toBeNull()
+  })
+
+  it("requires a description for a digital product only", async () => {
+    const { token } = await signIn("catalog-digital@example.com", "Catalog Digital")
+
+    const missing = await createProduct(token, {
+      productType: "digital",
+      name: "كتاب رقمي",
+      sku: "DIG-1",
+      category: "رقمي",
+      sellPrice: 45,
+    })
+    expect(missing.status).toBe(422)
+    expect((missing.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+      "description"
+    )
+
+    const withDescription = await createProduct(token, {
+      productType: "digital",
+      name: "كتاب رقمي",
+      sku: "DIG-1",
+      category: "رقمي",
+      description: "ملف PDF قابل للتحميل",
+      sellPrice: 45,
+    })
+    expect(withDescription.status).toBe(201)
+  })
+
+  describe("bundles", () => {
+    const BUNDLE_BASE = {
+      productType: "bundle",
+      name: "وجبة دجاج",
+      category: "وجبات",
+      status: "active",
+    }
+
+    it("stores components and drops the stock code", async () => {
+      const { token } = await signIn("catalog-bundle@example.com", "Catalog Bundle")
+
+      const created = await createProduct(token, {
+        ...BUNDLE_BASE,
+        sku: "SHOULD-BE-DROPPED",
+        components: [
+          {
+            componentRef: "salla:900",
+            requiredQuantity: 300,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+            note: "أرز",
+          },
+          {
+            customName: "دجاج",
+            customStock: 40,
+            requiredQuantity: 500,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+        ],
+      })
+
+      expect(created.status).toBe(201)
+      expect(created.body.sku).toBeNull()
+
+      const components = created.body.components as Array<Record<string, unknown>>
+      expect(components).toHaveLength(2)
+      expect(components[0]).toMatchObject({
+        componentRef: "salla:900",
+        customName: null,
+        requiredQuantity: 300,
+        requiredUnit: "جرام",
+        stockUnit: "كجم",
+        position: 0,
+      })
+      expect(components[1]).toMatchObject({
+        componentRef: null,
+        customName: "دجاج",
+        customStock: 40,
+        position: 1,
+      })
+    })
+
+    it("rejects a bundle with no components", async () => {
+      const { token } = await signIn("catalog-bundle-empty@example.com", "Catalog Bundle Empty")
+
+      const created = await createProduct(token, { ...BUNDLE_BASE, components: [] })
+      expect(created.status).toBe(422)
+      expect((created.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+        "components"
+      )
+    })
+
+    it("rejects a component that is both a catalogue reference and a hand-typed name", async () => {
+      const { token } = await signIn("catalog-bundle-both@example.com", "Catalog Bundle Both")
+
+      const created = await createProduct(token, {
+        ...BUNDLE_BASE,
+        components: [
+          {
+            componentRef: "salla:900",
+            customName: "أرز",
+            requiredQuantity: 1,
+            requiredUnit: "حبة",
+            stockUnit: "حبة",
+          },
+        ],
+      })
+      expect(created.status).toBe(422)
+      expect((created.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+        "components.0"
+      )
+    })
+
+    it("demands a conversion factor when the units cannot be bridged by formula", async () => {
+      const { token } = await signIn("catalog-bundle-units@example.com", "Catalog Bundle Units")
+
+      // حبة is a count and كجم is a mass: no formula relates them, so a factor is required
+      // rather than guessed.
+      const missing = await createProduct(token, {
+        ...BUNDLE_BASE,
+        components: [
+          {
+            customName: "دجاج كامل",
+            customStock: 40,
+            requiredQuantity: 1,
+            requiredUnit: "حبة",
+            stockUnit: "كجم",
+          },
+        ],
+      })
+      expect(missing.status).toBe(422)
+      expect((missing.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+        "components.0.conversionFactor"
+      )
+
+      const supplied = await createProduct(token, {
+        ...BUNDLE_BASE,
+        components: [
+          {
+            customName: "دجاج كامل",
+            customStock: 40,
+            requiredQuantity: 1,
+            requiredUnit: "حبة",
+            stockUnit: "كجم",
+            conversionFactor: 1.2,
+          },
+        ],
+      })
+      expect(supplied.status).toBe(201)
+
+      // Same dimension (grams against kilos) converts by formula, so no factor is needed.
+      const sameDimension = await createProduct(token, {
+        ...BUNDLE_BASE,
+        name: "وجبة أرز",
+        components: [
+          {
+            customName: "أرز",
+            customStock: 25,
+            requiredQuantity: 300,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+        ],
+      })
+      expect(sameDimension.status).toBe(201)
+    })
+  })
+
+  describe("variable products", () => {
+    const VARIABLE_BASE = {
+      productType: "variable",
+      name: "تيشيرت",
+      sku: "TSH-100",
+      category: "ملابس",
+      status: "active",
+      variantOptions: [{ name: "المقاس", values: ["S", "M"] }],
+    }
+
+    it("stores options and variants and reports merged stock and the cheapest price", async () => {
+      const { token } = await signIn("catalog-variable@example.com", "Catalog Variable")
+
+      const created = await createProduct(token, {
+        ...VARIABLE_BASE,
+        variants: [
+          { sku: "TSH-100-S", price: 120, stock: 4, optionValues: ["S"] },
+          { sku: "TSH-100-M", price: 95, stock: 6, optionValues: ["M"] },
+        ],
+      })
+
+      expect(created.status).toBe(201)
+      expect(created.body.variantOptions).toHaveLength(1)
+      expect(created.body.variants).toHaveLength(2)
+      // A variable product carries no price of its own -- each variant is priced in its row.
+      expect(created.body.sellPrice).toBeNull()
+
+      const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      const list = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+
+      expect(list.items[0]).toMatchObject({
+        platform: "Madar",
+        availableStock: 10, // 4 + 6 across the variants
+        sellingPrice: 95, // the cheapest variant, which is what a listing shows
+      })
+    })
+
+    it("requires every variant to be priced", async () => {
+      const { token } = await signIn("catalog-variable-price@example.com", "Catalog Var Price")
+
+      const created = await createProduct(token, {
+        ...VARIABLE_BASE,
+        variants: [
+          { sku: "TSH-100-S", price: 120, stock: 4, optionValues: ["S"] },
+          { sku: "TSH-100-M", price: null, stock: 6, optionValues: ["M"] },
+        ],
+      })
+
+      expect(created.status).toBe(422)
+      expect((created.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+        "variants.1.price"
+      )
+    })
+
+    it("rejects duplicate combinations and duplicate variant stock codes", async () => {
+      const { token } = await signIn("catalog-variable-dupe@example.com", "Catalog Var Dupe")
+
+      const duplicateCombination = await createProduct(token, {
+        ...VARIABLE_BASE,
+        variants: [
+          { sku: "A", price: 10, stock: 1, optionValues: ["S"] },
+          { sku: "B", price: 10, stock: 1, optionValues: ["S"] },
+        ],
+      })
+      expect(duplicateCombination.status).toBe(422)
+
+      const duplicateSku = await createProduct(token, {
+        ...VARIABLE_BASE,
+        variants: [
+          { sku: "SAME", price: 10, stock: 1, optionValues: ["S"] },
+          { sku: "SAME", price: 10, stock: 1, optionValues: ["M"] },
+        ],
+      })
+      expect(duplicateSku.status).toBe(422)
+      expect(
+        (duplicateSku.body.details as { fields: Record<string, string> }).fields
+      ).toHaveProperty("variants.1.sku")
+    })
+
+    it("rejects a variable product with no variants", async () => {
+      const { token } = await signIn("catalog-variable-none@example.com", "Catalog Var None")
+
+      const created = await createProduct(token, { ...VARIABLE_BASE, variants: [] })
+      expect(created.status).toBe(422)
+      expect((created.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+        "variants"
+      )
+    })
+  })
+
+  it("rejects an unknown product type at the request boundary", async () => {
+    const { token } = await signIn("catalog-badtype@example.com", "Catalog Bad Type")
+
+    const created = await createProduct(token, {
+      productType: "teleportation",
+      name: "غير معروف",
+      category: "x",
+    })
+    expect(created.status).toBe(400)
+  })
+
+  it("refuses an unauthenticated create", async () => {
+    const response = await fetch(`${baseUrl}/v1/products`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(SIMPLE_PRODUCT),
+    })
+    expect(response.status).toBe(401)
+  })
+})

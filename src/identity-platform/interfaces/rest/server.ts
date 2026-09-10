@@ -27,6 +27,8 @@ import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { ProductsAggregationService } from "../../products/service"
+import { ProductCatalogRepository } from "../../products/catalog-repository"
+import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { CustomersAggregationService } from "../../customers/service"
 import { OrdersAggregationService } from "../../orders/service"
 import { StoresAggregationService } from "../../stores/service"
@@ -79,6 +81,7 @@ import {
   createWorkspaceSchema,
   createNativeCampaignSchema,
   createCampaignLinkSchema,
+  createProductSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
   importCampaignsSchema,
@@ -497,6 +500,9 @@ export function createIdentityApiServer(
     : null
   const productsAggregationService = container.infrastructure.database
     ? new ProductsAggregationService(container.infrastructure.database)
+    : null
+  const productCatalogService = container.infrastructure.database
+    ? new ProductCatalogService(new ProductCatalogRepository(container.infrastructure.database))
     : null
   const customersAggregationService = container.infrastructure.database
     ? new CustomersAggregationService(container.infrastructure.database)
@@ -2396,15 +2402,68 @@ export function createIdentityApiServer(
         )
       }
 
-      if (method === "GET" && url.pathname === "/v1/products") {
-        if (!productsAggregationService) {
+      if (url.pathname === "/v1/products") {
+        if (!productsAggregationService || !productCatalogService) {
           return send(503, {
             code: "PRODUCTS_UNAVAILABLE",
             message: "Product aggregation is unavailable in memory mode.",
           })
         }
 
-        return send(200, { items: await productsAggregationService.listProducts(actor) })
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("products:view")) {
+            throw ERRORS.forbidden()
+          }
+
+          // Products authored here and products synced from a storefront are one list to the
+          // user, so both sources are merged and re-sorted by activity rather than returned as
+          // two separate feeds the client would have to stitch together.
+          const [synced, native] = await Promise.all([
+            productsAggregationService.listProducts(actor),
+            productCatalogService.list(actor.organizationId, actor.workspaceId),
+          ])
+
+          const items = [...native.map(toNormalizedProduct), ...synced].sort((left, right) =>
+            right.activityDate.localeCompare(left.activityDate)
+          )
+
+          return send(200, { items })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("products:create")) {
+            throw ERRORS.forbidden()
+          }
+
+          const payload = createProductSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await productCatalogService.create({
+              organizationId: actor.organizationId,
+              workspaceId: actor.workspaceId,
+              createdBy: actor.userId,
+              product: payload,
+            })
+          )
+        }
+      }
+
+      const nativeProductMatch = url.pathname.match(/^\/v1\/products\/([^/]+)$/)
+      if (method === "GET" && nativeProductMatch) {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product aggregation is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:view")) {
+          throw ERRORS.forbidden()
+        }
+
+        return send(
+          200,
+          await productCatalogService.getById(actor.organizationId, nativeProductMatch[1])
+        )
       }
 
       if (method === "GET" && url.pathname === "/v1/customers") {

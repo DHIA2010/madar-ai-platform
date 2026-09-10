@@ -3,6 +3,10 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 export type NormalizedProductStatus = "Active" | "Draft" | "Archived"
 
+// "Madar" is a product authored in this platform (the native catalogue, migration 047) rather
+// than synced from a storefront. It shares this shape so a single list can show both.
+export type NormalizedProductPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
+
 export interface NormalizedProduct {
   id: string
   name: string
@@ -13,7 +17,7 @@ export interface NormalizedProduct {
   costPrice: number | null
   sellingPrice: number
   currency: string | null
-  platform: "Salla" | "Shopify" | "Zid"
+  platform: NormalizedProductPlatform
   image: string | null
   activityDate: string
 }
