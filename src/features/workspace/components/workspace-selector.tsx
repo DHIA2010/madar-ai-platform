@@ -37,7 +37,7 @@ export function WorkspaceSelector({
           onClick={() => setOpen(true)}
           aria-label={triggerAriaLabel ?? "Open workspace manager"}
           className={cn(
-            "flex w-full items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/60 px-3 py-2.5 text-start transition-colors hover:bg-sidebar-accent"
+            "flex w-full cursor-pointer items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/60 px-3 py-2.5 text-start transition-colors hover:bg-sidebar-accent"
           )}
         >
           <div className="flex min-w-0 flex-1 flex-col">

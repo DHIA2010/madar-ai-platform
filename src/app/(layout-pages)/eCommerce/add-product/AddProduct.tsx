@@ -43,17 +43,25 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
 import { PRODUCT_TYPES, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
+import { SearchableSelect, type SelectOption } from "./searchable-select"
+import {
+  BASE_UNIT_OPTIONS,
+  CATEGORY_ICON,
+  CATEGORY_TINT,
+  COMPONENT_FALLBACK_ICON,
+  COMPONENT_FALLBACK_TINT,
+  COMPONENT_UNIT_OPTIONS,
+  DELIVERY_METHOD_OPTIONS,
+  LOCATION_ICON,
+  LOCATION_TINT,
+  PRICING_TYPE_OPTIONS,
+  PRODUCT_LANGUAGE_OPTIONS,
+  SERVICE_DURATION_UNIT_OPTIONS,
+} from "./select-options"
 
 const PANEL =
   "rounded-[16px] border border-[#e1e7f0] bg-white shadow-[0_1px_2px_rgba(11,23,56,0.04)]"
@@ -69,19 +77,19 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"]
 const MAX_GENERATED_VARIANTS = 100
 
-const UNITS = ["حبة", "جرام", "كجم", "مل", "لتر"] as const
-type Unit = (typeof UNITS)[number]
-
 // Each unit reduces to a base dimension so a recipe measured in جرام can be checked against
 // stock counted in كجم. Units in different dimensions never convert by formula, which is what
 // makes an item-specific pairing (حبة against كجم) ask for a factor instead of guessing.
-const UNIT_BASE: Record<Unit, { dimension: "count" | "mass" | "volume"; factor: number }> = {
+const UNIT_BASE = {
   حبة: { dimension: "count", factor: 1 },
   جرام: { dimension: "mass", factor: 1 },
   كجم: { dimension: "mass", factor: 1000 },
   مل: { dimension: "volume", factor: 1 },
   لتر: { dimension: "volume", factor: 1000 },
-}
+} as const satisfies Record<string, { dimension: "count" | "mass" | "volume"; factor: number }>
+
+// The unit vocabulary is UNIT_BASE's own keys, so there is exactly one place a unit is declared.
+type Unit = keyof typeof UNIT_BASE
 
 function convertUnits(quantity: number, from: Unit, to: Unit) {
   const source = UNIT_BASE[from]
@@ -89,12 +97,6 @@ function convertUnits(quantity: number, from: Unit, to: Unit) {
   if (source.dimension !== target.dimension) return null
   return (quantity * source.factor) / target.factor
 }
-
-const BASE_UNIT_OPTIONS = ["كجم (KG)", "جرام (G)", "لتر (L)", "مل (ML)", "حبة (PCS)"]
-const PRICING_TYPES = ["سعر ثابت", "سعر بالساعة", "حسب الطلب"]
-const SERVICE_DURATION_UNITS = ["دقيقة", "ساعة", "يوم"]
-const DELIVERY_METHODS = ["عبر الإنترنت", "في الموقع", "لدى العميل"]
-const PRODUCT_LANGUAGES = ["العربية", "الإنجليزية", "متعدد اللغات"]
 
 // A component is normally a product picked from inventory. CUSTOM_COMPONENT lets a recipe name
 // one that is not in the catalogue yet, so a bundle can be defined before its raw materials
@@ -208,7 +210,7 @@ export default function AddProduct() {
   const [scrollToError, setScrollToError] = useState(0)
 
   // Stock and pricing
-  const [baseUnit, setBaseUnit] = useState(BASE_UNIT_OPTIONS[0])
+  const [baseUnit, setBaseUnit] = useState(BASE_UNIT_OPTIONS[0].value)
   const [stockQty, setStockQty] = useState("")
   const [minStock, setMinStock] = useState("")
   const [costPrice, setCostPrice] = useState("")
@@ -224,16 +226,18 @@ export default function AddProduct() {
   const [minPurchase, setMinPurchase] = useState("")
 
   // Service
-  const [pricingType, setPricingType] = useState(PRICING_TYPES[0])
+  const [pricingType, setPricingType] = useState(PRICING_TYPE_OPTIONS[0].value)
   const [serviceDuration, setServiceDuration] = useState("")
-  const [serviceDurationUnit, setServiceDurationUnit] = useState(SERVICE_DURATION_UNITS[1])
-  const [deliveryMethod, setDeliveryMethod] = useState(DELIVERY_METHODS[0])
+  const [serviceDurationUnit, setServiceDurationUnit] = useState(
+    SERVICE_DURATION_UNIT_OPTIONS[1].value
+  )
+  const [deliveryMethod, setDeliveryMethod] = useState(DELIVERY_METHOD_OPTIONS[0].value)
   const [bookingEnabled, setBookingEnabled] = useState(false)
 
   // Digital
   const [offerPrice, setOfferPrice] = useState("")
   const [systemRequirements, setSystemRequirements] = useState("")
-  const [productLanguage, setProductLanguage] = useState(PRODUCT_LANGUAGES[0])
+  const [productLanguage, setProductLanguage] = useState(PRODUCT_LANGUAGE_OPTIONS[0].value)
 
   // Bundle
   const [components, setComponents] = useState<ComponentRow[]>([emptyComponent()])
@@ -249,7 +253,10 @@ export default function AddProduct() {
   const [catalogue, setCatalogue] = useState<ProductRecord[]>([])
   const [catalogueLoaded, setCatalogueLoaded] = useState(false)
 
-  const type = PRODUCT_TYPES.find((entry) => entry.key === productType) ?? PRODUCT_TYPES[2]
+  // Every ProductTypeKey has an entry, so the fallback is unreachable -- it exists only to keep
+  // the type non-optional. It is written as the first entry rather than a positional index, so
+  // reordering PRODUCT_TYPES cannot quietly change which type a lookup miss lands on.
+  const type = PRODUCT_TYPES.find((entry) => entry.key === productType) ?? PRODUCT_TYPES[0]
   const isBundle = productType === "bundle"
   const isVariable = productType === "variable"
   const isService = productType === "service"
@@ -316,6 +323,49 @@ export default function AddProduct() {
   const productById = useMemo(
     () => new Map(catalogue.map((product) => [product.id, product])),
     [catalogue]
+  )
+
+  const categoryOptions = useMemo<SelectOption[]>(
+    () =>
+      knownCategories.map((option) => ({
+        value: option,
+        label: option,
+        icon: CATEGORY_ICON,
+        tint: CATEGORY_TINT,
+      })),
+    [knownCategories]
+  )
+
+  // A bundle is assembled from raw materials, so the picker offers those alone rather than the
+  // whole catalogue. Products synced from a storefront carry no type at all (productType is
+  // null for them), and a finished storefront product is not a raw material anyway, so they are
+  // excluded too -- which is also what stops the list being the wall of near-duplicate finished
+  // goods it used to be.
+  const rawMaterials = useMemo(
+    () => catalogue.filter((product) => product.productType === "raw"),
+    [catalogue]
+  )
+
+  const componentOptions = useMemo<SelectOption[]>(
+    () =>
+      rawMaterials.map((product) => ({
+        value: product.id,
+        label: product.name,
+        // Two raw materials can share a name, so the stock figure and category are what tell
+        // them apart in the list.
+        hint: [
+          `${NUMBER_AR.format(product.availableStock)} في المخزون`,
+          product.category || null,
+          product.sku || null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        imageUrl: product.image,
+        icon: COMPONENT_FALLBACK_ICON,
+        tint: COMPONENT_FALLBACK_TINT,
+        keywords: `${product.sku} ${product.category}`,
+      })),
+    [rawMaterials]
   )
 
   /* ---------------------------------------------------------------- bundle */
@@ -670,18 +720,15 @@ export default function AddProduct() {
 
                 <Field label="الفئة" required error={showErrors ? errors.category : null}>
                   {knownCategories.length > 0 ? (
-                    <Select value={category} onValueChange={setCategory}>
-                      <SelectTrigger className={FIELD_CLASS}>
-                        <SelectValue placeholder="اختر الفئة" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {knownCategories.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={category}
+                      options={categoryOptions}
+                      onChange={setCategory}
+                      placeholder="اختر الفئة"
+                      searchPlaceholder="البحث عن فئة..."
+                      emptyLabel="لا توجد فئة مطابقة"
+                      ariaLabel="الفئة"
+                    />
                   ) : (
                     <Input
                       value={category}
@@ -859,12 +906,24 @@ export default function AddProduct() {
                   </Field>
 
                   <Field label="موقع المخزون">
-                    <Input
-                      value={stockLocation}
-                      onChange={(event) => setStockLocation(event.target.value)}
-                      placeholder="المستودع الرئيسي"
-                      className={FIELD_CLASS}
-                    />
+                    {/* RTL: the tile is written first so it lands to the right of the field. */}
+                    <div className="flex items-center gap-2 rounded-[12px] border border-[#e1e7f0] bg-white px-2.5">
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-[8px]",
+                          LOCATION_TINT
+                        )}
+                      >
+                        <LOCATION_ICON className="size-4" />
+                      </span>
+                      <Input
+                        value={stockLocation}
+                        aria-label="موقع المخزون"
+                        onChange={(event) => setStockLocation(event.target.value)}
+                        placeholder="المستودع الرئيسي"
+                        className="h-11 rounded-none border-0 bg-transparent p-0 text-[13px] focus-visible:ring-0"
+                      />
+                    </div>
                   </Field>
                 </div>
               </section>
@@ -969,18 +1028,12 @@ export default function AddProduct() {
 
                   <div className="mt-4 grid gap-4 md:grid-cols-3">
                     <Field label="نوع التسعير" required>
-                      <Select value={pricingType} onValueChange={setPricingType}>
-                        <SelectTrigger className={FIELD_CLASS}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PRICING_TYPES.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={pricingType}
+                        options={PRICING_TYPE_OPTIONS}
+                        onChange={setPricingType}
+                        ariaLabel="نوع التسعير"
+                      />
                     </Field>
 
                     <Field label="السعر" required error={showErrors ? errors.servicePrice : null}>
@@ -999,21 +1052,14 @@ export default function AddProduct() {
                           placeholder="1"
                           className={FIELD_CLASS}
                         />
-                        <Select value={serviceDurationUnit} onValueChange={setServiceDurationUnit}>
-                          <SelectTrigger
-                            className={cn(FIELD_CLASS, "w-[104px] shrink-0")}
-                            aria-label="وحدة مدة الخدمة"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SERVICE_DURATION_UNITS.map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="w-[128px] shrink-0">
+                          <SearchableSelect
+                            value={serviceDurationUnit}
+                            options={SERVICE_DURATION_UNIT_OPTIONS}
+                            onChange={setServiceDurationUnit}
+                            ariaLabel="وحدة مدة الخدمة"
+                          />
+                        </div>
                       </div>
                       <p className={cn(HINT, MUTED)}>المدة الافتراضية لتقديم الخدمة</p>
                     </Field>
@@ -1039,7 +1085,7 @@ export default function AddProduct() {
                     <div>
                       <Label
                         htmlFor="booking"
-                        className={cn("text-[13px] font-extrabold", HEADING)}
+                        className={cn("cursor-pointer text-[13px] font-extrabold", HEADING)}
                       >
                         تفعيل الحجز المسبق
                       </Label>
@@ -1506,11 +1552,14 @@ export default function AddProduct() {
                     </Button>
                   </div>
 
-                  {catalogueLoaded && catalogue.length === 0 ? (
+                  {/* The picker offers raw materials only, so the notice is about those rather
+                      than the catalogue as a whole -- a shop full of finished products still has
+                      nothing to assemble a bundle from. */}
+                  {catalogueLoaded && rawMaterials.length === 0 ? (
                     <div className="mt-4 rounded-[12px] border border-[#cfe0ff] bg-[#f2f7ff] px-4 py-3">
                       <p className={cn("text-[11.5px] leading-5", HEADING)}>
-                        لا توجد منتجات في المخزون بعد — يمكنك إضافة المكونات يدوياً الآن وربطها
-                        بالمخزون لاحقاً.
+                        لا توجد مواد خام في المخزون بعد — يمكنك إضافة المكونات يدوياً الآن وربطها
+                        بالمخزون لاحقاً، أو إنشاء مادة خام من نوع &quot;مادة خام&quot; أولاً.
                       </p>
                     </div>
                   ) : null}
@@ -1603,40 +1652,51 @@ export default function AddProduct() {
                                     ) : null}
                                   </div>
                                 ) : (
-                                  <Select
+                                  <SearchableSelect
                                     value={entry.row.productId}
-                                    onValueChange={(next) =>
+                                    options={componentOptions}
+                                    onChange={(next) =>
                                       updateComponent(entry.row.id, { productId: next })
                                     }
-                                  >
-                                    <SelectTrigger
-                                      ref={(node) => {
-                                        componentTriggers.current[entry.row.id] = node
-                                      }}
-                                      className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-bold text-[#0b1738] shadow-none focus:ring-0 focus-visible:ring-0"
-                                      aria-label="المكون"
-                                    >
-                                      <SelectValue placeholder="اختر المكون" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {catalogue.map((product) => (
-                                        <SelectItem key={product.id} value={product.id}>
-                                          {product.name}
-                                        </SelectItem>
-                                      ))}
-                                      <SelectItem value={CUSTOM_COMPONENT}>
-                                        + مكون جديد غير موجود في المخزون
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                    placeholder="اختر المكون"
+                                    searchPlaceholder="ابحث في المواد الخام..."
+                                    emptyLabel={
+                                      rawMaterials.length === 0
+                                        ? "لا توجد مواد خام في المخزون بعد"
+                                        : "لا توجد مادة خام مطابقة"
+                                    }
+                                    ariaLabel="المكون"
+                                    compact
+                                    hideTriggerMark
+                                    triggerRef={(node) => {
+                                      componentTriggers.current[entry.row.id] = node
+                                    }}
+                                    triggerClassName="h-auto border-0 bg-transparent p-0 font-bold shadow-none hover:border-0 focus-visible:ring-0"
+                                    footer={(close) => (
+                                      <button
+                                        type="button"
+                                        className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] px-2 py-2 text-right text-[12px] font-semibold text-[#2878ff] transition-colors hover:bg-[#eef4ff]"
+                                        onClick={() => {
+                                          updateComponent(entry.row.id, {
+                                            productId: CUSTOM_COMPONENT,
+                                          })
+                                          close()
+                                        }}
+                                      >
+                                        <Plus className="size-4 shrink-0" />
+                                        مكون جديد غير موجود في المخزون
+                                      </button>
+                                    )}
+                                  />
                                 )}
                               </div>
                             </td>
 
                             <td className="px-2 py-3">
-                              <Select
+                              <SearchableSelect
                                 value={entry.row.requiredUnit}
-                                onValueChange={(next) => {
+                                options={COMPONENT_UNIT_OPTIONS}
+                                onChange={(next) => {
                                   const unit = next as Unit
                                   const comparable =
                                     UNIT_BASE[unit].dimension ===
@@ -1646,21 +1706,11 @@ export default function AddProduct() {
                                     ...(comparable ? {} : { stockUnit: unit }),
                                   })
                                 }}
-                              >
-                                <SelectTrigger
-                                  className={cn(FIELD_CLASS, "h-9 w-[86px] text-[12px]")}
-                                  aria-label="وحدة القياس"
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {UNITS.map((unit) => (
-                                    <SelectItem key={unit} value={unit}>
-                                      {unit}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                ariaLabel="وحدة القياس"
+                                searchPlaceholder="البحث عن وحدة قياس..."
+                                compact
+                                triggerClassName="w-[104px]"
+                              />
                             </td>
 
                             <td className="px-2 py-3">
@@ -1706,29 +1756,18 @@ export default function AddProduct() {
                                       {NUMBER_AR.format(entry.product?.availableStock ?? 0)}
                                     </span>
                                   )}
-                                  <Select
+                                  <SearchableSelect
                                     value={entry.row.stockUnit}
-                                    onValueChange={(next) =>
+                                    options={COMPONENT_UNIT_OPTIONS}
+                                    onChange={(next) =>
                                       updateComponent(entry.row.id, { stockUnit: next as Unit })
                                     }
-                                  >
-                                    <SelectTrigger
-                                      className={cn(
-                                        "h-auto gap-0.5 border-0 bg-transparent p-0 text-[12px] font-semibold shadow-none focus:ring-0 focus-visible:ring-0 [&>svg]:size-3 [&>svg]:opacity-40",
-                                        MUTED
-                                      )}
-                                      aria-label="وحدة المخزون"
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {UNITS.map((unit) => (
-                                        <SelectItem key={unit} value={unit}>
-                                          {unit}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    ariaLabel="وحدة المخزون"
+                                    searchPlaceholder="البحث عن وحدة قياس..."
+                                    compact
+                                    hideTriggerMark
+                                    triggerClassName="h-auto w-auto border-0 bg-transparent p-0 font-semibold text-[#6b7b96] shadow-none hover:border-0 focus-visible:ring-0"
+                                  />
                                 </div>
                               ) : (
                                 <span className={cn("text-[12px]", MUTED)}>—</span>
@@ -2100,18 +2139,12 @@ export default function AddProduct() {
 
                   {isService ? (
                     <Field label="طريقة تقديم الخدمة">
-                      <Select value={deliveryMethod} onValueChange={setDeliveryMethod}>
-                        <SelectTrigger className={FIELD_CLASS}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DELIVERY_METHODS.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={deliveryMethod}
+                        options={DELIVERY_METHOD_OPTIONS}
+                        onChange={setDeliveryMethod}
+                        ariaLabel="طريقة تقديم الخدمة"
+                      />
                     </Field>
                   ) : null}
 
@@ -2130,18 +2163,12 @@ export default function AddProduct() {
                         </p>
                       </Field>
                       <Field label="لغة المنتج (اختياري)">
-                        <Select value={productLanguage} onValueChange={setProductLanguage}>
-                          <SelectTrigger className={FIELD_CLASS}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PRODUCT_LANGUAGES.map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          value={productLanguage}
+                          options={PRODUCT_LANGUAGE_OPTIONS}
+                          onChange={setProductLanguage}
+                          ariaLabel="لغة المنتج"
+                        />
                       </Field>
                     </>
                   ) : null}
@@ -2321,7 +2348,10 @@ export default function AddProduct() {
                   onCheckedChange={setPublished}
                   className="h-6 w-11 data-[state=checked]:bg-[#2878ff] [&>span]:size-5"
                 />
-                <Label htmlFor="published" className={cn("text-[15px] font-extrabold", HEADING)}>
+                <Label
+                  htmlFor="published"
+                  className={cn("cursor-pointer text-[15px] font-extrabold", HEADING)}
+                >
                   {published ? "منشور" : "غير منشور"}
                 </Label>
               </div>
@@ -2582,18 +2612,13 @@ function DateInput({ value, onChange }: { value: string; onChange: (next: string
 
 function UnitSelect({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={FIELD_CLASS} aria-label="وحدة القياس">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {BASE_UNIT_OPTIONS.map((option) => (
-          <SelectItem key={option} value={option}>
-            {option}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <SearchableSelect
+      value={value}
+      options={BASE_UNIT_OPTIONS}
+      onChange={onChange}
+      ariaLabel="وحدة القياس"
+      searchPlaceholder="البحث عن وحدة قياس..."
+    />
   )
 }
 

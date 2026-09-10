@@ -112,6 +112,7 @@ export function toNormalizedProduct(product: ProductView): NormalizedProduct {
     sellingPrice,
     currency: product.currency,
     platform: "Madar",
+    productType: product.productType,
     image: product.imageUrls[0] ?? null,
     activityDate: product.updatedAt,
   }

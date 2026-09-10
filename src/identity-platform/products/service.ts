@@ -1,4 +1,5 @@
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+import type { ProductType } from "./catalog-types"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 export type NormalizedProductStatus = "Active" | "Draft" | "Archived"
@@ -18,6 +19,11 @@ export interface NormalizedProduct {
   sellingPrice: number
   currency: string | null
   platform: NormalizedProductPlatform
+  // Null for a synced product: Salla, Shopify and Zid have no equivalent of our product-type
+  // vocabulary, so the type is genuinely unknown rather than defaulted to something plausible.
+  // Only native (Madar-authored) products carry one, which is what lets a bundle's component
+  // picker offer raw materials alone.
+  productType: ProductType | null
   image: string | null
   activityDate: string
 }
@@ -76,6 +82,7 @@ function normalizeSallaProduct(row: CommerceRecordRow): NormalizedProduct {
     sellingPrice: toNumber(payload.price?.amount),
     currency: payload.price?.currency ?? null,
     platform: "Salla",
+    productType: null,
     image: payload.main_image ?? payload.thumbnail ?? payload.images?.[0]?.url ?? null,
     activityDate: toIsoDate(row.updated_at),
   }
@@ -113,6 +120,7 @@ function normalizeShopifyProduct(row: CommerceRecordRow): NormalizedProduct {
     sellingPrice: toNumber(primaryVariant?.price),
     currency: null,
     platform: "Shopify",
+    productType: null,
     image: payload.image?.src ?? payload.images?.[0]?.src ?? null,
     activityDate: toIsoDate(row.updated_at),
   }
@@ -158,6 +166,7 @@ function normalizeZidProduct(row: CommerceRecordRow): NormalizedProduct {
     sellingPrice: toNumber(payload.price),
     currency: null,
     platform: "Zid",
+    productType: null,
     image: payload.images?.[0]?.image?.large ?? payload.images?.[0]?.image?.thumbnail ?? null,
     activityDate: toIsoDate(row.updated_at),
   }

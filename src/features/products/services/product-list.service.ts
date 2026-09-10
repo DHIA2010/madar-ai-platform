@@ -36,6 +36,17 @@ function getWorkspaceIdFromStorage(): string | null {
 export type ProductPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
 export type ProductStatus = "Active" | "Draft" | "Archived"
 
+// Only products authored in Madar carry a type; a synced storefront product has no
+// equivalent field, so it arrives as null rather than a guessed default.
+export type ProductKind =
+  | "raw"
+  | "simple"
+  | "bundle"
+  | "variable"
+  | "weighted"
+  | "service"
+  | "digital"
+
 export interface ProductRecord {
   id: string
   name: string
@@ -47,6 +58,7 @@ export interface ProductRecord {
   sellingPrice: number
   currency: string | null
   platform: ProductPlatform
+  productType: ProductKind | null
   image: string | null
   activityDate: string
 }
