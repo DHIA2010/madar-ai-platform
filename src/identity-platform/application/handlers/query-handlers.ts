@@ -148,12 +148,21 @@ export class IdentityQueryHandlers {
 
   async listOrganizations(actor: AuthenticatedActor, query: ListOrganizationsQuery) {
     const memberships = await this.repositories.memberships.listByUserId(actor.userId)
-    const organizationIds = new Set(
-      memberships
-        .filter((membership) => membership.status === "active" && !membership.deletedAt)
-        .map((membership) => membership.organizationId)
-    )
+    // Deduplicated: a user can hold several memberships in one organization (one per workspace).
+    const organizationIds = [
+      ...new Set(
+        memberships
+          .filter((membership) => membership.status === "active" && !membership.deletedAt)
+          .map((membership) => membership.organizationId)
+      ),
+    ]
+    // The membership filter belongs in the query, not after it. Paging the whole organizations
+    // table first and filtering the page afterwards returned nothing whenever the caller's own
+    // organization sorted past the first page -- with 70 organizations and a page size of 20,
+    // a user whose organization was not among the 20 most recently created saw no organization
+    // at all, which emptied the settings screen and the workspace switcher with it.
     const organizations = await this.repositories.organizations.list({
+      ids: organizationIds,
       status: query.status,
       page: query.page,
       pageSize: query.pageSize,
@@ -162,7 +171,7 @@ export class IdentityQueryHandlers {
     return {
       page: query.page,
       pageSize: query.pageSize,
-      items: organizations.filter((organization) => organizationIds.has(organization.id)),
+      items: organizations,
     }
   }
 

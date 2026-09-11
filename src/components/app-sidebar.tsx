@@ -9,10 +9,8 @@ import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { NavMain } from "@/components/nav-main"
-import { NavUser } from "@/components/nav-user"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { SettingsHelpCard } from "@/components/settings-help-card"
 import { usePermissions } from "@/features/authentication"
-import { WorkspaceSelector } from "@/features/workspace"
 import {
   Sidebar,
   SidebarContent,
@@ -22,7 +20,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
 import {
   ChartNoAxesCombined,
   CircleUserRound,
@@ -38,7 +35,6 @@ import {
   Tv,
   House,
   ShoppingBag,
-  HelpCircle,
   Sparkles,
   Radio,
 } from "lucide-react"
@@ -54,7 +50,6 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const locale = useLocale() as Locale
   const dir = localeDirection(locale)
   const t = useTranslations("sidebar.nav")
-  const tCommon = useTranslations("common")
   const { can } = usePermissions()
 
   const navMain = [
@@ -84,16 +79,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },
     { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
     { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
-    {
-      title: t("pos"),
-      url: ROUTES.pos,
-      icon: <CreditCard />,
-      permission: "pos:view",
-      items: [
-        { title: t("posRoles"), url: ROUTES.posRoles },
-        { title: t("posEmployees"), url: ROUTES.posEmployees },
-      ],
-    },
+    { title: t("pos"), url: ROUTES.pos, icon: <CreditCard />, permission: "pos:view" },
     {
       title: t("customers"),
       url: "/customers",
@@ -119,7 +105,9 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <ShieldCheck />,
       permission: "users:view",
     },
-    { title: t("settings"), url: "/settings", icon: <Settings2 /> },
+    // No sub-items: the settings screens carry their own section rail beside the content, and
+    // duplicating it here gave two navigations for the same set of pages.
+    { title: t("settings"), url: ROUTES.settings, icon: <Settings2 /> },
   ].filter((item) => !item.permission || can(item.permission))
 
   return (
@@ -128,9 +116,12 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
         side={locale === "ar" ? "right" : "left"}
         collapsible="icon"
         {...props}
-        className="border-none shadow-sm"
+        className="border-none border-e border-e-sidebar-border"
       >
-        <SidebarHeader className="h-20 justify-center px-4" dir={dir}>
+        <SidebarHeader
+          className="justify-center border-b border-sidebar-border px-4 pt-[18px] pb-[14px]"
+          dir={dir}
+        >
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild className="p-1 hover:bg-transparent">
@@ -158,25 +149,15 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
             </div>
           </ScrollArea>
         </SidebarContent>
-        <SidebarFooter className="gap-3 px-3 pb-4" dir={dir}>
-          <WorkspaceSelector compact />
-          <NavUser />
-          <div className="flex items-center justify-center gap-1 border-t border-sidebar-border pt-3">
-            <ThemeToggle />
-            <Button variant="ghost" size="icon" className="size-9 rounded-full" asChild>
-              <Link href={ROUTES.settings} aria-label={tCommon("settings")}>
-                <Settings2 className="size-4" />
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 rounded-full"
-              aria-label={tCommon("help")}
-            >
-              <HelpCircle className="size-4" />
-            </Button>
-          </div>
+        {/* The account/workspace switcher and the signed-in user used to live here; they now sit
+            in the header (admin-layout.tsx) instead, one click away regardless of whether this
+            rail is expanded or collapsed to icons. The theme toggle, settings shortcut, and help
+            icon that replaced them are gone too -- settings is already the last item in the nav
+            list above, and this help card is the one thing worth always having in reach.
+            group-data-[collapsible=icon]:hidden matches every other piece of sidebar text: there
+            is no room for a paragraph of Arabic in a 40px-wide collapsed rail. */}
+        <SidebarFooter className="px-3 pb-4 group-data-[collapsible=icon]:hidden" dir={dir}>
+          <SettingsHelpCard />
         </SidebarFooter>
       </Sidebar>
     </div>

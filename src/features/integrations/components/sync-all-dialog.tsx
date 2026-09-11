@@ -22,7 +22,7 @@ import { CONNECTION_ACTION_IDS, connectionActionPolicy } from "../services"
 import type { ConnectionCenterRecord } from "../types"
 import { ConnectorLogo } from "./connector-logo"
 
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 
 // Only the statuses a runnable connection can actually be in; anything else falls through
 // to the neutral label rather than being asserted as active.
@@ -214,7 +214,7 @@ export function SyncAllDialog({
       open={open}
       onOpenChange={onOpenChange}
       showCloseButton={false}
-      contentClassName={cn(tajawal.className, "max-w-[52rem] gap-0 rounded-[20px] p-0")}
+      contentClassName={cn(cairo.className, "max-w-[52rem] gap-0 rounded-[20px] p-0")}
     >
       {/* The dialog portals to the body, so it does not inherit the integrations page's own
           dir="rtl" wrapper -- it has to declare direction and font for itself. */}

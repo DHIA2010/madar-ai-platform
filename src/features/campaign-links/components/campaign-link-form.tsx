@@ -31,9 +31,10 @@ import {
 } from "../services/link-list.service"
 import { CampaignLinkPreviewPanel } from "./campaign-link-preview-panel"
 import { DialogInput, DialogSelect } from "./design/dialog-input"
-import { tajawal } from "./design/fonts"
 import { SectionHeader } from "./design/section-header"
 import { SegmentedControl } from "./design/segmented-control"
+
+import { cairo } from "@/components/design/fonts"
 
 interface CustomParamRow {
   key: string
@@ -215,7 +216,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
     <AppForm
       dir="rtl"
       onSubmit={handleSubmit}
-      className={`${tajawal.variable} flex flex-col gap-6 font-[family-name:var(--font-tajawal)]`}
+      className={`${cairo.variable} flex flex-col gap-6 font-[family-name:var(--font-cairo)]`}
     >
       <div className="flex flex-col gap-0 lg:flex-row">
         <div className="flex-1 space-y-8 lg:pe-6">

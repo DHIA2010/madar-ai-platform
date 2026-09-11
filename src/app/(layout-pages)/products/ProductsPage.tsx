@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   addMonths,
   endOfDay,
@@ -22,14 +22,20 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
+  Eye,
   Globe,
   Loader2,
   Package,
+  Pencil,
   Search,
   ShoppingBag,
   Store,
+  Tag,
+  Trash2,
   Wallet,
+  X,
   ChevronsLeft,
   ChevronsRight,
   LayoutGrid,
@@ -41,10 +47,14 @@ import {
 import type { DateRange } from "react-day-picker"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
+import { toast } from "sonner"
+
+import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 import {
   productListService,
   type ProductRecord,
@@ -54,6 +64,21 @@ import { Button } from "@/components/ui/button"
 import { Can } from "@/features/authentication/components"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
@@ -215,6 +240,165 @@ function getInventoryStatus(stock: number) {
   }
 
   return "In Stock"
+}
+
+// Only products authored in Madar are ours to change. A synced storefront row belongs to
+// Salla/Shopify/Zid -- deleting it here would be undone by the next sync -- so that entry is
+// disabled with the reason rather than hidden or, worse, offered and silently ineffective.
+function DetailStat({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string
+  value: string
+  emphasis?: boolean
+}) {
+  return (
+    <div className="px-4 py-3.5 text-center">
+      <p className={cn("text-[10.5px]", MUTED)}>{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-[15px] font-extrabold",
+          emphasis ? "text-[#1f9d55]" : "text-[#0b1738]"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+  muted = false,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  muted?: boolean
+}) {
+  // RTL: the tile is written first so it lands to the right of the text.
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-[#f2f5fa] text-[#5b6b85]">
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0">
+        <dt className={cn("text-[10.5px]", MUTED)}>{label}</dt>
+        <dd
+          className={cn(
+            "mt-0.5 truncate text-[12.5px] font-semibold",
+            muted ? MUTED : "text-[#0b1738]"
+          )}
+        >
+          {value}
+        </dd>
+      </div>
+    </div>
+  )
+}
+
+function ProductRowActions({
+  product,
+  busy,
+  onView,
+  onEdit,
+  onCopySku,
+  onExport,
+  onDelete,
+}: {
+  product: ProductRow
+  busy: boolean
+  onView: () => void
+  onEdit: () => void
+  onCopySku: () => void
+  onExport: () => void
+  onDelete: () => void
+}) {
+  const isNative = product.platform === "Madar"
+
+  // Radix locks pointer events on the body while the menu is open and releases them as it
+  // closes. Opening a dialog in the same tick mounts it under that lock and the whole page stops
+  // responding, so the action is deferred by a tick. preventDefault must NOT be called here --
+  // on onSelect it suppresses the close itself, which leaves the lock in place permanently.
+  const afterClose = (action: () => void) => () => {
+    setTimeout(action, 0)
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`إجراءات ${product.name}`}
+          disabled={busy}
+          className="mx-auto flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:bg-[#f4f7fc] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <MoreHorizontal className="size-4" />
+          )}
+        </button>
+      </DropdownMenuTrigger>
+
+      {/* Radix portals this to document.body, which does not inherit the page's dir. */}
+      <DropdownMenuContent
+        align="end"
+        className={cn(cairo.className, "w-52 rounded-[12px] [direction:rtl]")}
+      >
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 text-[12.5px]"
+          onSelect={afterClose(onView)}
+        >
+          <Eye className="size-4" />
+          عرض التفاصيل
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 text-[12.5px]"
+          disabled={!isNative}
+          title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
+          onSelect={afterClose(onEdit)}
+        >
+          <Pencil className="size-4" />
+          تعديل المنتج
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 text-[12.5px]"
+          disabled={!product.sku}
+          onSelect={afterClose(onCopySku)}
+        >
+          <Copy className="size-4" />
+          نسخ رمز المنتج
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 text-[12.5px]"
+          onSelect={afterClose(onExport)}
+        >
+          <Download className="size-4" />
+          تصدير هذا المنتج
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 text-[12.5px] text-[#e0484d] focus:text-[#e0484d]"
+          disabled={!isNative}
+          title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
+          onSelect={afterClose(onDelete)}
+        >
+          <Trash2 className="size-4" />
+          حذف المنتج
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 function PlatformIcon({ platform }: { platform: ProductRow["platform"] }) {
@@ -499,39 +683,33 @@ export default function ProductsPage() {
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState("All Inventory Status")
   const [statusFilter, setStatusFilter] = useState("All Status")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  const router = useRouter()
+  const [detailProduct, setDetailProduct] = useState<ProductRow | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<ProductRow | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  // Hoisted out of the effect so a delete can refresh the same way the first load does,
+  // instead of the two drifting into separate fetch paths.
+  const loadProducts = useCallback(async () => {
+    setIsLoading(true)
+    setLoadError(null)
 
-    async function loadProducts() {
-      setIsLoading(true)
-      setLoadError(null)
-
-      try {
-        const items = await productListService.listProducts()
-        if (!cancelled) {
-          setProducts(items)
-        }
-      } catch (error) {
-        // Logged rather than swallowed: a silent generic message here previously hid a real
-        // client-side bug (a malformed endpoint URL) that never even reached the backend.
-        console.error("Failed to load products", error)
-        if (!cancelled) {
-          setLoadError("Couldn't load products from your connected stores. Please try again.")
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadProducts()
-
-    return () => {
-      cancelled = true
+    try {
+      const items = await productListService.listProducts()
+      setProducts(items)
+    } catch (error) {
+      // Logged rather than swallowed: a silent generic message here previously hid a real
+      // client-side bug (a malformed endpoint URL) that never even reached the backend.
+      console.error("Failed to load products", error)
+      setLoadError("Couldn't load products from your connected stores. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadProducts()
+  }, [loadProducts])
 
   const dynamicCategoryOptions = useMemo(() => {
     const realCategories = Array.from(
@@ -655,6 +833,49 @@ export default function ProductsPage() {
       return next
     })
 
+  const copyToClipboard = async (value: string, label: string) => {
+    if (!value) {
+      toast.error(`لا يوجد ${label} لهذا المنتج.`)
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(`تم نسخ ${label}.`, { description: value })
+    } catch {
+      // Clipboard access is refused outside a secure context and in some embedded browsers.
+      toast.error(`تعذر النسخ — انسخ ${label} يدوياً.`, { description: value })
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+
+    setDeletingId(pendingDelete.id)
+    try {
+      await productListService.deleteProduct(pendingDelete.id)
+      toast.success("تم حذف المنتج.", { description: pendingDelete.name })
+      setPendingDelete(null)
+      setSelectedIds((current) => {
+        const next = new Set(current)
+        next.delete(pendingDelete.id)
+        return next
+      })
+      await loadProducts()
+    } catch (error) {
+      const status = error instanceof AppError ? error.status : undefined
+      toast.error(status === 403 ? "لا تملك صلاحية حذف المنتجات." : "تعذر حذف المنتج.", {
+        description:
+          status === 403
+            ? "تواصل مع مالك الحساب لمنحك صلاحية products:delete."
+            : error instanceof Error
+              ? error.message
+              : undefined,
+      })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   function exportToCSV(rows: ProductRow[]) {
     const headers = [
       "Product",
@@ -710,7 +931,7 @@ export default function ProductsPage() {
   ]
 
   return (
-    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
       <div className="mx-auto w-full max-w-[1500px] space-y-4">
         {/* RTL: the title block is written first so it lands on the right, actions left. */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1052,15 +1273,19 @@ export default function ProductsPage() {
                         </td>
 
                         <td className="px-3 py-3.5">
-                          <button
-                            type="button"
-                            aria-label={`إجراءات ${product.name}`}
-                            className="mx-auto flex size-8 cursor-not-allowed items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#b6c2d4]"
-                            title="لا توجد إجراءات متاحة على المنتج بعد"
-                            disabled
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </button>
+                          <ProductRowActions
+                            product={product}
+                            busy={deletingId === product.id}
+                            onView={() => setDetailProduct(product)}
+                            onEdit={() =>
+                              router.push(
+                                `${ROUTES.productsAdd}?id=${encodeURIComponent(product.id)}`
+                              )
+                            }
+                            onCopySku={() => copyToClipboard(product.sku, "رمز المنتج")}
+                            onExport={() => exportToCSV([product])}
+                            onDelete={() => setPendingDelete(product)}
+                          />
                         </td>
                       </tr>
                     )
@@ -1167,6 +1392,214 @@ export default function ProductsPage() {
           ) : null}
         </div>
       </div>
+
+      {/* Details. The old version was a flat label/value grid: no image, status and stock shown
+          as plain text while the table beside it used coloured pills, and no way to act on what
+          you were looking at without closing and reopening the row menu. */}
+      <Dialog
+        open={detailProduct !== null}
+        onOpenChange={(open) => !open && setDetailProduct(null)}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className={cn(
+            cairo.className,
+            // sm:-prefixed because DialogContent's own sm:max-w-sm would otherwise win.
+            "gap-0 rounded-[18px] p-0 sm:max-w-[42rem] [direction:rtl]"
+          )}
+        >
+          {detailProduct ? (
+            <>
+              {/* RTL: the image is written first so it lands to the right of the name. */}
+              <DialogHeader className="flex-row items-start gap-3.5 space-y-0 border-b border-[#eef2f8] p-5 text-right">
+                <span className="size-14 shrink-0 overflow-hidden rounded-[12px] border border-[#eef2f8] bg-[#fafbfe]">
+                  {/* Static export mode cannot use the default next/image loader here. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={detailProduct.image ?? FALLBACK_PRODUCT_IMAGE}
+                    alt=""
+                    className="size-full object-contain p-1.5"
+                  />
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="truncate text-[16px] font-extrabold text-[#0b1738]">
+                    {detailProduct.name}
+                  </DialogTitle>
+                  <DialogDescription className="mt-0.5 text-[11.5px] text-[#6b7b96]">
+                    {detailProduct.platform === "Madar"
+                      ? "منتج تمت إضافته في مدار"
+                      : `منتج مستورد من ${detailProduct.platform}`}
+                  </DialogDescription>
+
+                  {/* The same pills the table uses, so the two read as one system. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                        STATUS_PILL_AR[detailProduct.status].className
+                      )}
+                    >
+                      {STATUS_PILL_AR[detailProduct.status].label}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                        INVENTORY_PILL_AR[getInventoryStatus(detailProduct.availableStock)]
+                          .className
+                      )}
+                    >
+                      {INVENTORY_PILL_AR[getInventoryStatus(detailProduct.availableStock)].label}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="إغلاق"
+                  className="shrink-0 cursor-pointer rounded-full p-1 text-[#95a4bd] transition-colors hover:bg-[#f2f5fa] hover:text-[#0b1738]"
+                  onClick={() => setDetailProduct(null)}
+                >
+                  <X className="size-4" />
+                </button>
+              </DialogHeader>
+
+              {/* The three figures someone opens this for, given room to be read at a glance. */}
+              <div className="grid grid-cols-3 divide-x divide-x-reverse divide-[#eef2f8] border-b border-[#eef2f8]">
+                <DetailStat
+                  label="سعر البيع"
+                  value={formatCurrency(detailProduct.sellingPrice, detailProduct.currency)}
+                  emphasis
+                />
+                <DetailStat
+                  label="سعر التكلفة"
+                  value={
+                    detailProduct.costPrice === null
+                      ? "—"
+                      : formatCurrency(detailProduct.costPrice, detailProduct.currency)
+                  }
+                />
+                <DetailStat
+                  label="الكمية المتاحة"
+                  value={detailProduct.availableStock.toLocaleString()}
+                />
+              </div>
+
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3.5 p-5">
+                <DetailRow
+                  icon={Tag}
+                  label="رمز المنتج"
+                  value={detailProduct.sku || "لا يوجد رمز لهذا النوع"}
+                  muted={!detailProduct.sku}
+                />
+                <DetailRow icon={LayoutGrid} label="الفئة" value={detailProduct.category || "—"} />
+                <DetailRow
+                  icon={Wallet}
+                  label="هامش الربح"
+                  // Only shown when both figures are real -- a margin against an unknown cost
+                  // would be an invented number.
+                  value={
+                    detailProduct.costPrice === null || detailProduct.sellingPrice <= 0
+                      ? "—"
+                      : `${formatCurrency(
+                          detailProduct.sellingPrice - detailProduct.costPrice,
+                          detailProduct.currency
+                        )} · ${Math.round(
+                          ((detailProduct.sellingPrice - detailProduct.costPrice) /
+                            detailProduct.sellingPrice) *
+                            100
+                        )}%`
+                  }
+                  muted={detailProduct.costPrice === null}
+                />
+                <DetailRow
+                  icon={CalendarIcon}
+                  label="آخر تحديث"
+                  value={ARABIC_DATE.format(new Date(detailProduct.activityDate))}
+                />
+              </dl>
+
+              {/* RTL: the primary action is written first so it sits at the right of the group. */}
+              <DialogFooter className="mx-0 mb-0 flex-row items-center gap-2 rounded-b-[18px] border-t border-[#eef2f8] bg-[#fafbfe] p-4 sm:justify-start">
+                {detailProduct.platform === "Madar" ? (
+                  <>
+                    <Button
+                      className="h-10 gap-2 rounded-[10px] bg-[#2878ff] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1f66e0]"
+                      onClick={() => {
+                        const id = detailProduct.id
+                        setDetailProduct(null)
+                        router.push(`${ROUTES.productsAdd}?id=${encodeURIComponent(id)}`)
+                      }}
+                    >
+                      <Pencil className="size-4" />
+                      تعديل المنتج
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-10 gap-2 rounded-[10px] border-[#f7c9ca] px-4 text-[12.5px] font-semibold text-[#e0484d] hover:bg-[#fdeeee]"
+                      onClick={() => {
+                        const target = detailProduct
+                        setDetailProduct(null)
+                        setTimeout(() => setPendingDelete(target), 0)
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                      حذف
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-[11.5px] text-[#6b7b96]">
+                    هذا المنتج يُدار من {detailProduct.platform} ولا يمكن تعديله هنا.
+                  </p>
+                )}
+
+                <Button
+                  variant="ghost"
+                  className="ms-auto h-10 rounded-[10px] px-4 text-[12.5px] font-semibold text-[#5b6b85]"
+                  onClick={() => setDetailProduct(null)}
+                >
+                  إغلاق
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Deleting is not undoable from this screen, so it asks first and names the product. */}
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <DialogContent className={cn(cairo.className, "sm:max-w-[28rem] [direction:rtl]")}>
+          <DialogHeader className="text-right">
+            <DialogTitle className="text-[15px] font-extrabold text-[#0b1738]">
+              حذف المنتج؟
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-6 text-[#6b7b96]">
+              سيتم حذف <span className="font-bold text-[#0b1738]">{pendingDelete?.name}</span> من
+              قائمة المنتجات. لن يظهر بعد ذلك في المتجر أو في التقارير.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2">
+            <Button
+              className="bg-[#e0484d] text-white hover:bg-[#c93f44]"
+              disabled={deletingId !== null}
+              onClick={() => void confirmDelete()}
+            >
+              {deletingId !== null ? "جارٍ الحذف..." : "حذف"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={deletingId !== null}
+              onClick={() => setPendingDelete(null)}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

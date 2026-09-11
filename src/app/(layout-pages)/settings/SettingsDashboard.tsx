@@ -1,13 +1,22 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+// الإعدادات العامة -- the account's own record as it appears on invoices and official documents,
+// its national address, its regional defaults, and account security.
+//
+// Every field persists for real. name / locale / timezone / currency are columns on the
+// organization; everything else is a key in organizations.settings, a free-form jsonb the backend
+// MERGES on write (see OrganizationEntity.update), so a partial save never clears the other keys.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
-  ChevronLeft,
-  CreditCard,
-  Layers,
-  LayoutGrid,
-  Pencil,
+  AlertTriangle,
+  Bell,
+  Building2,
+  Globe,
+  Info,
+  Mail,
+  MapPin,
   ShieldCheck,
   Trash2,
   Upload,
@@ -24,13 +33,54 @@ import {
   AppSelectTrigger,
   AppSelectValue,
 } from "@/components/app"
+import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
+import type { OrganizationSettings } from "@/features/workspace"
 import { ROUTES } from "@/constants/routes"
+import { cn } from "@/lib/utils"
 
-// Deterministic display labels for codes the org itself stores -- not fabricated data, just
-// formatting of the real stored country/currency code (falls back to the raw code otherwise).
+const CARD =
+  "rounded-[12px] border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
+const NAVY = "text-[#0d1b3e]"
+const MUTED = "text-[#8098b4]"
+
+const CURRENCY_OPTIONS = [
+  { code: "SAR", label: "الريال السعودي (SAR)" },
+  { code: "USD", label: "الدولار الأمريكي (USD)" },
+]
+
+// Real IANA zone identifiers -- written verbatim to organizations.timezone, so these have to be
+// zones the platform can actually resolve.
+const TIMEZONE_OPTIONS = [
+  { code: "Asia/Riyadh", label: "الرياض (GMT+3)" },
+  { code: "Asia/Dubai", label: "دبي (GMT+4)" },
+  { code: "Asia/Kuwait", label: "الكويت (GMT+3)" },
+  { code: "Asia/Qatar", label: "الدوحة (GMT+3)" },
+  { code: "Asia/Bahrain", label: "المنامة (GMT+3)" },
+  { code: "Asia/Muscat", label: "مسقط (GMT+4)" },
+  { code: "Africa/Cairo", label: "القاهرة (GMT+2)" },
+  { code: "Asia/Baghdad", label: "بغداد (GMT+3)" },
+  { code: "Asia/Amman", label: "عمّان (GMT+3)" },
+  { code: "UTC", label: "التوقيت العالمي (UTC)" },
+]
+
+// Only the locales the app actually ships messages for -- offering more would promise
+// translations that do not exist.
+const LOCALE_OPTIONS = [
+  { code: "ar", label: "العربية" },
+  { code: "en", label: "English" },
+]
+
 const COUNTRY_OPTIONS = [
   { code: "SA", label: "المملكة العربية السعودية" },
   { code: "AE", label: "الإمارات العربية المتحدة" },
@@ -44,263 +94,141 @@ const COUNTRY_OPTIONS = [
   { code: "MA", label: "المغرب" },
 ]
 
-const CURRENCY_OPTIONS = [
-  { code: "SAR", label: "الريال السعودي (SAR)" },
-  { code: "USD", label: "الدولار الأمريكي (USD)" },
-]
+// The settings keys this screen owns, as plain text. Kept as one list so the draft, the dirty
+// check and the save payload can never drift apart.
+const TEXT_KEYS = [
+  "commercialRegistration",
+  "taxNumber",
+  "phone",
+  "email",
+  "website",
+  "addressShort",
+  "buildingNumber",
+  "street",
+  "secondaryNumber",
+  "district",
+  "postalCode",
+  "city",
+  "country",
+] as const
 
-function ComingSoonPill() {
-  return (
-    <span className="inline-flex items-center rounded-full bg-[#F0F1F4] px-2.5 py-0.5 text-[10px] font-semibold text-[#98A2B3]">
-      قريباً
-    </span>
-  )
+type TextKey = (typeof TEXT_KEYS)[number]
+
+interface Draft {
+  name: string
+  locale: string
+  timezone: string
+  currency: string
+  notifyEmail: boolean
+  text: Record<TextKey, string>
+}
+
+function buildDraft(
+  organization: {
+    name?: string
+    locale?: string
+    timezone?: string
+    currency?: string
+    settings?: OrganizationSettings
+  } | null
+): Draft {
+  const settings = organization?.settings ?? {}
+  const text = {} as Record<TextKey, string>
+  for (const key of TEXT_KEYS) {
+    const value = settings[key]
+    text[key] = typeof value === "string" ? value : ""
+  }
+  return {
+    name: organization?.name ?? "",
+    locale: organization?.locale ?? "",
+    timezone: organization?.timezone ?? "",
+    currency: organization?.currency ?? "",
+    notifyEmail: settings.notifyEmail ?? false,
+    text,
+  }
+}
+
+// Real formats, not invented ones: a Saudi VAT number is 15 digits, a commercial registration is
+// 10, and the National Address uses a 4-digit building number, 4-digit secondary number and
+// 5-digit postal code. Blank is always allowed -- these are optional until an invoice needs them.
+const DIGIT_RULES: Partial<Record<TextKey, { length: number; message: string }>> = {
+  taxNumber: { length: 15, message: "الرقم الضريبي يتكوّن من 15 رقماً." },
+  commercialRegistration: { length: 10, message: "رقم السجل التجاري يتكوّن من 10 أرقام." },
+  buildingNumber: { length: 4, message: "رقم المبنى يتكوّن من 4 أرقام." },
+  secondaryNumber: { length: 4, message: "الرقم الفرعي يتكوّن من 4 أرقام." },
+  postalCode: { length: 5, message: "الرمز البريدي يتكوّن من 5 أرقام." },
+}
+
+function validate(draft: Draft): Partial<Record<TextKey | "name", string>> {
+  const errors: Partial<Record<TextKey | "name", string>> = {}
+
+  if (!draft.name.trim()) {
+    errors.name = "اسم الحساب مطلوب."
+  }
+
+  for (const [key, rule] of Object.entries(DIGIT_RULES) as [
+    TextKey,
+    { length: number; message: string },
+  ][]) {
+    const value = draft.text[key].trim()
+    if (value && !new RegExp(`^\\d{${rule.length}}$`).test(value)) {
+      errors[key] = rule.message
+    }
+  }
+
+  const email = draft.text.email.trim()
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "صيغة البريد الإلكتروني غير صحيحة."
+  }
+
+  return errors
 }
 
 function getInitials(name: string | undefined) {
   if (!name) return "؟"
   const parts = name.trim().split(/\s+/)
-  const initials = parts
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-  return initials.toUpperCase() || "؟"
+  return (
+    parts
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "؟"
+  )
 }
 
-function CardHeader({
+// RTL: the icon tile is written first so it lands at the right, ahead of the text it labels.
+function SectionHeader({
   title,
   subtitle,
   icon,
-  tint,
-  size = 48,
+  tint = "blue",
 }: {
   title: string
   subtitle: string
   icon: React.ReactNode
-  tint: "mint" | "violet"
-  size?: number
+  tint?: "blue" | "violet"
 }) {
-  const bg = tint === "mint" ? "#E8F8F4" : "#F1EEFF"
   return (
-    <div className="mb-5 flex items-start justify-between">
-      <div>
-        <h2 className="text-[17px] font-bold text-[#18233A]">{title}</h2>
-        <p className="mt-1 text-[11px] text-[#667085]">{subtitle}</p>
-      </div>
-      <div
-        className="flex shrink-0 items-center justify-center rounded-2xl"
-        style={{ width: size, height: size, background: bg }}
+    <div className="mb-5 flex items-center gap-3">
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-[10px]",
+          tint === "violet" ? "bg-[#f5f3ff] text-[#7c3aed]" : "bg-[#eff6ff] text-[#2563eb]"
+        )}
       >
         {icon}
+      </span>
+      <div className="min-w-0">
+        <h2 className={cn("text-[15px] font-bold", NAVY)}>{title}</h2>
+        <p className={cn("mt-0.5 text-[12px]", MUTED)}>{subtitle}</p>
       </div>
     </div>
   )
 }
 
-interface EditableFieldProps {
-  label: string
-  value: string
-  displayValue?: string
-  placeholder?: string
-  onSave: (value: string) => Promise<void>
-}
-
-function EditableField({ label, value, displayValue, placeholder, onSave }: EditableFieldProps) {
-  const [draft, setDraft] = useState(value)
-  const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-
-  useEffect(() => {
-    if (!isEditing) {
-      setDraft(value)
-    }
-  }, [value, isEditing])
-
-  async function handleSave() {
-    const trimmed = draft.trim()
-    if (trimmed === value) {
-      setIsEditing(false)
-      return
-    }
-    setIsSaving(true)
-    try {
-      await onSave(trimmed)
-      setIsEditing(false)
-      toast.success("تم الحفظ")
-    } catch {
-      toast.error("تعذّر الحفظ. حاول مرة أخرى.")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  if (!isEditing) {
-    return (
-      <div className="flex items-center justify-between border-b border-[#EEF0F4] py-3 last:border-b-0">
-        <button
-          type="button"
-          onClick={() => setIsEditing(true)}
-          className="flex items-center gap-1.5 rounded-xl border border-[#DDD6FE] bg-white px-4 py-1.5 text-xs font-bold text-[#7357D8] transition-opacity hover:opacity-80"
-        >
-          تعديل
-          <Pencil className="size-3" />
-        </button>
-        <div className="flex min-w-0 items-center gap-6">
-          <span className="truncate text-xs font-bold text-[#18233A]">
-            {(displayValue ?? value) || <span className="text-[#98A2B3]">—</span>}
-          </span>
-          <span className="shrink-0 text-xs text-[#52607A]">{label}</span>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-end gap-2 border-b border-[#EEF0F4] py-3 last:border-b-0">
-      <AppInput
-        label={label}
-        value={draft}
-        placeholder={placeholder}
-        onChange={(event) => setDraft(event.target.value)}
-        wrapperClassName="flex-1"
-      />
-      <div className="flex shrink-0 gap-1.5 pb-0.5">
-        <AppButton type="button" size="sm" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "جارٍ الحفظ…" : "حفظ"}
-        </AppButton>
-        <AppButton
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setDraft(value)
-            setIsEditing(false)
-          }}
-          disabled={isSaving}
-        >
-          إلغاء
-        </AppButton>
-      </div>
-    </div>
-  )
-}
-
-interface EditableSelectFieldProps {
-  label: string
-  value: string
-  options: Array<{ code: string; label: string }>
-  onSave: (value: string) => Promise<void>
-}
-
-function EditableSelectField({ label, value, options, onSave }: EditableSelectFieldProps) {
-  const [draft, setDraft] = useState(value)
-  const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-
-  useEffect(() => {
-    if (!isEditing) {
-      setDraft(value)
-    }
-  }, [value, isEditing])
-
-  async function handleSave() {
-    if (draft === value || !draft) {
-      setIsEditing(false)
-      return
-    }
-    setIsSaving(true)
-    try {
-      await onSave(draft)
-      setIsEditing(false)
-      toast.success("تم الحفظ")
-    } catch {
-      toast.error("تعذّر الحفظ. حاول مرة أخرى.")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const displayLabel = options.find((option) => option.code === value)?.label ?? value
-
-  if (!isEditing) {
-    return (
-      <div className="flex items-center justify-between border-b border-[#EEF0F4] py-3 last:border-b-0">
-        <button
-          type="button"
-          onClick={() => setIsEditing(true)}
-          className="flex items-center gap-1.5 rounded-xl border border-[#DDD6FE] bg-white px-4 py-1.5 text-xs font-bold text-[#7357D8] transition-opacity hover:opacity-80"
-        >
-          تعديل
-          <Pencil className="size-3" />
-        </button>
-        <div className="flex min-w-0 items-center gap-6">
-          <span className="truncate text-xs font-bold text-[#18233A]">
-            {displayLabel || <span className="text-[#98A2B3]">—</span>}
-          </span>
-          <span className="shrink-0 text-xs text-[#52607A]">{label}</span>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-end gap-2 border-b border-[#EEF0F4] py-3 last:border-b-0">
-      <div className="flex-1 space-y-1.5">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <AppSelect value={draft} onValueChange={setDraft}>
-          <AppSelectTrigger className="h-10 w-full">
-            <AppSelectValue />
-          </AppSelectTrigger>
-          <AppSelectContent>
-            {options.map((option) => (
-              <AppSelectItem key={option.code} value={option.code}>
-                {option.label}
-              </AppSelectItem>
-            ))}
-          </AppSelectContent>
-        </AppSelect>
-      </div>
-      <div className="flex shrink-0 gap-1.5 pb-0.5">
-        <AppButton type="button" size="sm" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "جارٍ الحفظ…" : "حفظ"}
-        </AppButton>
-        <AppButton
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setDraft(value)
-            setIsEditing(false)
-          }}
-          disabled={isSaving}
-        >
-          إلغاء
-        </AppButton>
-      </div>
-    </div>
-  )
-}
-
-function StatCell({
-  label,
-  value,
-  comingSoon,
-}: {
-  label: string
-  value: React.ReactNode
-  comingSoon?: boolean
-}) {
-  return (
-    <div className="flex flex-col items-end gap-1 border-e border-[#EEF0F4] px-5 py-3 last:border-e-0">
-      <span className="text-[10px] text-[#667085]">{label}</span>
-      {comingSoon ? (
-        <ComingSoonPill />
-      ) : (
-        <span className="text-[13px] font-bold text-[#18233A]">{value}</span>
-      )}
-    </div>
-  )
-}
+const FIELD_CLASS = "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px]"
+// #0b1738 is the field-label colour every other form in the app already renders.
+const LABEL_CLASS = "text-[12.5px] font-medium text-[#0b1738]"
 
 function ChangePasswordForm() {
   const { changePassword } = useAuth()
@@ -345,44 +273,54 @@ function ChangePasswordForm() {
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex w-full items-center justify-between rounded-xl border border-[#E8EBF0] px-4 py-3 text-start transition-colors hover:bg-[#FAFBFC]"
+        className="flex min-h-[64px] w-full items-center justify-between gap-3 rounded-[10px] border border-[#e8edf3] bg-[#f8fafc] px-4 py-3.5 text-start transition-colors hover:border-[#c7d9ff] hover:bg-[#eff6ff]"
       >
-        <ChevronLeft className="size-[18px] shrink-0 text-[#18233A]" />
-        <div className="flex flex-col items-end">
-          <span className="text-[11px] font-bold text-[#18233A]">تغيير كلمة المرور</span>
-          <span className="mt-0.5 text-[9px] text-[#667085]">تحديث كلمة المرور الخاصة بحسابك</span>
-        </div>
+        <span className="flex flex-col">
+          <span className={cn("text-[13px] font-bold", NAVY)}>تغيير كلمة المرور</span>
+          <span className={cn("mt-0.5 text-[12px]", MUTED)}>تحديث كلمة المرور الخاصة بحسابك</span>
+        </span>
+        <span className="rounded-[8px] border border-[#c7d9ff] bg-white px-4 py-2 text-[12px] font-semibold text-[#2563eb]">
+          تغيير
+        </span>
       </button>
     )
   }
 
   return (
-    <form className="space-y-3 rounded-xl border border-[#E8EBF0] p-4" onSubmit={handleSubmit}>
-      <AppPasswordInput
-        label="كلمة المرور الحالية"
-        value={currentPassword}
-        onChange={(event) => setCurrentPassword(event.target.value)}
-        required
-      />
-      <AppPasswordInput
-        label="كلمة المرور الجديدة"
-        value={newPassword}
-        onChange={(event) => setNewPassword(event.target.value)}
-        required
-        helperText="12 حرفاً على الأقل."
-      />
-      <AppPasswordInput
-        label="تأكيد كلمة المرور الجديدة"
-        value={confirmPassword}
-        onChange={(event) => setConfirmPassword(event.target.value)}
-        required
-      />
+    <form className="space-y-3 rounded-[10px] border border-[#e8edf3] p-4" onSubmit={handleSubmit}>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <AppPasswordInput
+          label="كلمة المرور الحالية"
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+          required
+          className={FIELD_CLASS}
+          labelClassName={LABEL_CLASS}
+        />
+        <AppPasswordInput
+          label="كلمة المرور الجديدة"
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+          required
+          helperText="12 حرفاً على الأقل."
+          className={FIELD_CLASS}
+          labelClassName={LABEL_CLASS}
+        />
+        <AppPasswordInput
+          label="تأكيد كلمة المرور الجديدة"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          required
+          className={FIELD_CLASS}
+          labelClassName={LABEL_CLASS}
+        />
+      </div>
       {errorText ? <p className="text-xs text-rose-600">{errorText}</p> : null}
       <div className="flex justify-end gap-2">
         <AppButton
           type="button"
           variant="outline"
-          size="sm"
+          className="h-11 rounded-[10px] px-5 text-[13px]"
           onClick={() => {
             setExpanded(false)
             setCurrentPassword("")
@@ -394,7 +332,11 @@ function ChangePasswordForm() {
         >
           إلغاء
         </AppButton>
-        <AppButton type="submit" size="sm" disabled={isSaving}>
+        <AppButton
+          type="submit"
+          className="h-11 rounded-[10px] px-5 text-[13px]"
+          disabled={isSaving}
+        >
           {isSaving ? "جارٍ الحفظ…" : "حفظ كلمة المرور"}
         </AppButton>
       </div>
@@ -402,50 +344,36 @@ function ChangePasswordForm() {
   )
 }
 
-function ListRow({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-xl border border-[#E8EBF0] px-4 py-2.5 opacity-70 transition-colors">
-      <ComingSoonPill />
-      <div className="flex items-center gap-2.5">
-        <div className="flex flex-col items-end">
-          <span className="text-[11px] font-bold text-[#18233A]">{title}</span>
-          <span className="mt-px text-[9px] text-[#667085]">{subtitle}</span>
-        </div>
-        <ChevronLeft className="size-[18px] shrink-0 text-[#18233A]" />
-      </div>
-    </div>
-  )
-}
-
 export default function SettingsDashboard() {
-  const {
-    currentOrganization,
-    updateOrganization,
-    uploadOrganizationLogo,
-    getConnectedPlatformsCount,
-  } = useWorkspace()
+  const { currentOrganization, updateOrganization, uploadOrganizationLogo, deleteOrganization } =
+    useWorkspace()
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [isUploadingLogo, setIsUploadingLogo] = useState(false)
-  const [stats, setStats] = useState<{
-    connected: number
-    total: number
-    userCount: number
-  } | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [draft, setDraft] = useState<Draft>(() => buildDraft(currentOrganization))
+  const [errors, setErrors] = useState<Partial<Record<TextKey | "name", string>>>({})
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // The organization arrives after the first render (and changes when the workspace switches),
+  // so the draft is rebuilt from it -- but only while the form is clean, so a refresh mid-edit
+  // cannot wipe what is being typed.
+  const saved = useMemo(() => buildDraft(currentOrganization), [currentOrganization])
+  const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(saved), [draft, saved])
+  const isDirtyRef = useRef(isDirty)
+  isDirtyRef.current = isDirty
 
   useEffect(() => {
-    if (!currentOrganization?.id) return
-    let cancelled = false
-    getConnectedPlatformsCount(currentOrganization.id)
-      .then((result) => {
-        if (!cancelled) setStats(result)
-      })
-      .catch(() => {
-        if (!cancelled) setStats(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [currentOrganization?.id, getConnectedPlatformsCount])
+    if (!isDirtyRef.current) setDraft(saved)
+  }, [saved])
+
+  const savedName = currentOrganization?.name ?? ""
+  const canDelete = deleteConfirmation.trim() === savedName && savedName.length > 0
+
+  const setText = useCallback((key: TextKey, value: string) => {
+    setDraft((current) => ({ ...current, text: { ...current.text, [key]: value } }))
+  }, [])
 
   async function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -463,42 +391,94 @@ export default function SettingsDashboard() {
     }
   }
 
-  async function saveField(field: "name" | "country" | "currency", value: string) {
+  async function handleSave() {
     if (!currentOrganization) return
-    if (field === "name") {
-      await updateOrganization(currentOrganization.id, { name: value })
-    } else if (field === "currency") {
-      await updateOrganization(currentOrganization.id, { currency: value })
-    } else {
+
+    const found = validate(draft)
+    setErrors(found)
+    if (Object.keys(found).length > 0) {
+      toast.error("راجع الحقول المحدّدة قبل الحفظ.")
+      return
+    }
+
+    // settings is merged server-side, so sending only this screen's keys leaves anything else
+    // stored there untouched.
+    const settings: OrganizationSettings = { notifyEmail: draft.notifyEmail }
+    for (const key of TEXT_KEYS) {
+      settings[key] = draft.text[key].trim()
+    }
+
+    setIsSaving(true)
+    try {
       await updateOrganization(currentOrganization.id, {
-        settings: { [field]: value },
+        name: draft.name.trim(),
+        locale: draft.locale || undefined,
+        timezone: draft.timezone || undefined,
+        currency: draft.currency || undefined,
+        settings,
       })
+      toast.success("تم حفظ الإعدادات")
+    } catch {
+      toast.error("تعذّر الحفظ. حاول مرة أخرى.")
+    } finally {
+      setIsSaving(false)
     }
   }
 
+  async function handleDelete() {
+    if (!currentOrganization || !canDelete) return
+    setIsDeleting(true)
+    try {
+      await deleteOrganization(currentOrganization.id)
+      setIsDeleteOpen(false)
+      toast.success("تم حذف الحساب")
+      // The organization this session was working in no longer exists; a full reload lets the
+      // workspace provider resolve whatever context remains rather than leaving a dead one.
+      window.setTimeout(() => {
+        window.location.href = "/"
+      }, 1200)
+    } catch {
+      toast.error("تعذّر حذف الحساب. حاول مرة أخرى.")
+      setIsDeleting(false)
+    }
+  }
+
+  const textField = (
+    key: TextKey,
+    label: string,
+    extra?: Partial<React.ComponentProps<typeof AppInput>>
+  ) => (
+    <AppInput
+      label={label}
+      value={draft.text[key]}
+      onChange={(event) => setText(key, event.target.value)}
+      errorText={errors[key]}
+      className={FIELD_CLASS}
+      labelClassName={LABEL_CLASS}
+      {...extra}
+    />
+  )
+
   return (
-    <div dir="rtl" className="flex flex-col gap-5">
+    <div dir="rtl" className="flex flex-col gap-4 pb-4">
       <div>
-        <h1 className="text-[26px] font-bold leading-tight text-[#18233A]">الإعدادات</h1>
-        <p className="mt-1 text-[13px] text-[#667085]">إدارة حسابك وتفضيلاتك والفوترة والدعم</p>
+        <h1 className={cn("text-[22px] font-extrabold leading-tight", NAVY)}>الإعدادات العامة</h1>
+        <p className={cn("mt-1 text-[13px]", MUTED)}>
+          إدارة معلومات الحساب والتهيئات الأساسية للنظام
+        </p>
       </div>
 
-      {/* Organization Card */}
-      <div
-        className="rounded-2xl bg-white p-6"
-        style={{ border: "1px solid #E8EBF0", boxShadow: "0 2px 10px rgba(16,42,92,0.04)" }}
-      >
-        <CardHeader
-          title="معلومات المؤسسة"
-          subtitle="بيانات مؤسستك وحسابك على منصة مدار"
-          icon={<LayoutGrid className="size-[22px]" color="#18B89A" />}
-          tint="mint"
+      <section className={cn(CARD, "p-5")}>
+        <SectionHeader
+          title="معلومات الحساب"
+          subtitle="بيانات الحساب التي ستظهر في الفواتير والمستندات الرسمية"
+          icon={<Building2 className="size-[18px]" />}
         />
 
-        <div className="flex flex-col gap-6 sm:flex-row">
-          {/* Logo */}
-          <div className="flex shrink-0 flex-col items-center gap-3">
-            <div className="flex size-[120px] items-center justify-center overflow-hidden rounded-2xl border border-[#E8EBF0] bg-white">
+        {/* RTL: the logo column is written first so it lands on the right, as in the design. */}
+        <div className="flex flex-col gap-5 lg:flex-row">
+          <div className="flex w-full shrink-0 flex-col items-center gap-2.5 lg:w-[116px]">
+            <div className="flex size-[92px] items-center justify-center overflow-hidden rounded-[12px] border border-[#e8edf3] bg-[#f8fafc]">
               {currentOrganization?.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -507,7 +487,7 @@ export default function SettingsDashboard() {
                   className="size-full object-cover"
                 />
               ) : (
-                <span className="text-3xl font-bold text-[#18233A]">
+                <span className={cn("text-[24px] font-extrabold", NAVY)}>
                   {getInitials(currentOrganization?.name)}
                 </span>
               )}
@@ -516,7 +496,7 @@ export default function SettingsDashboard() {
               type="button"
               onClick={() => logoInputRef.current?.click()}
               disabled={isUploadingLogo}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#E8EBF0] bg-white py-2 text-[11px] font-bold text-[#18233A] transition-opacity hover:opacity-80 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-1.5 rounded-[8px] border border-[#e8edf3] bg-white py-2 text-[12px] font-semibold text-[#334155] transition-colors hover:border-[#c7d9ff] hover:text-[#2563eb] disabled:opacity-50"
             >
               {isUploadingLogo ? "جارٍ الرفع…" : "تغيير الشعار"}
               <Upload className="size-3" />
@@ -530,191 +510,288 @@ export default function SettingsDashboard() {
             />
           </div>
 
-          {/* Info rows */}
-          <div className="flex flex-1 flex-col">
-            <EditableField
-              label="اسم المؤسسة"
-              value={currentOrganization?.name ?? ""}
-              onSave={(value) => saveField("name", value)}
+          <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <AppInput
+              label="اسم الحساب"
+              required
+              value={draft.name}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, name: event.target.value }))
+              }
+              errorText={errors.name}
+              className={FIELD_CLASS}
+              labelClassName={LABEL_CLASS}
             />
-            <EditableSelectField
-              label="الدولة"
-              value={currentOrganization?.settings.country ?? ""}
-              options={COUNTRY_OPTIONS}
-              onSave={(value) => saveField("country", value)}
-            />
-            <EditableSelectField
-              label="العملة (عملة التقارير)"
-              value={currentOrganization?.currency ?? ""}
-              options={CURRENCY_OPTIONS}
-              onSave={(value) => saveField("currency", value)}
-            />
+            {textField("commercialRegistration", "رقم السجل التجاري", {
+              inputMode: "numeric",
+              placeholder: "1012345678",
+            })}
+            {textField("taxNumber", "الرقم الضريبي", {
+              inputMode: "numeric",
+              placeholder: "300000000000003",
+            })}
+            {textField("phone", "رقم الهاتف", {
+              inputMode: "tel",
+              placeholder: "+966 50 000 0000",
+            })}
+            {textField("email", "البريد الإلكتروني", {
+              type: "email",
+              placeholder: "info@example.sa",
+            })}
+            {textField("website", "الموقع الإلكتروني", { placeholder: "example.sa" })}
           </div>
         </div>
+      </section>
 
-        {/* Stats sub-card */}
-        <div className="mt-5 rounded-2xl" style={{ border: "1px solid #E8EBF0" }}>
-          <div
-            className="grid grid-cols-2 sm:grid-cols-4"
-            style={{ borderBottom: "1px solid #EEF0F4" }}
-          >
-            <StatCell label="الباقة الحالية" value={null} comingSoon />
-            <StatCell label="تاريخ بداية الاشتراك" value={null} comingSoon />
-            <StatCell label="عدد المستخدمين" value={stats ? stats.userCount : "—"} />
-            <StatCell
-              label={`عدد المنصات المتصلة${stats ? ` (من أصل ${stats.total})` : ""}`}
-              value={stats ? stats.connected : "—"}
+      <section className={cn(CARD, "p-5")}>
+        <SectionHeader
+          title="معلومات العنوان الوطني"
+          subtitle="أدخل بيانات العنوان الوطني لاستخدامها في الفواتير والمستندات"
+          icon={<MapPin className="size-[18px]" />}
+        />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {textField("addressShort", "العنوان المختصر", { placeholder: "حي العليا" })}
+          {textField("buildingNumber", "رقم المبنى", { inputMode: "numeric", placeholder: "0000" })}
+          {textField("street", "الشارع", { placeholder: "طريق الملك فهد" })}
+          {textField("secondaryNumber", "الرقم الفرعي", {
+            inputMode: "numeric",
+            placeholder: "0000",
+          })}
+          {textField("district", "الحي", { placeholder: "العليا" })}
+          {textField("postalCode", "الرمز البريدي", { inputMode: "numeric", placeholder: "00000" })}
+          {textField("city", "المدينة", { placeholder: "الرياض" })}
+        </div>
+      </section>
+
+      {/* RTL: regional is written first so it lands on the right, notifications on the left. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className={cn(CARD, "p-5")}>
+          <SectionHeader
+            title="الإعدادات الإقليمية"
+            subtitle="تحديد اللغة والمنطقة الزمنية والعملة"
+            icon={<Globe className="size-[18px]" />}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className={LABEL_CLASS}>
+                اللغة <span className="text-[#e0484d]">*</span>
+              </span>
+              <AppSelect
+                value={draft.locale}
+                onValueChange={(value) => setDraft((current) => ({ ...current, locale: value }))}
+              >
+                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
+                  <AppSelectValue placeholder="اختر اللغة" />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {LOCALE_OPTIONS.map((option) => (
+                    <AppSelectItem key={option.code} value={option.code}>
+                      {option.label}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className={LABEL_CLASS}>
+                المنطقة الزمنية <span className="text-[#e0484d]">*</span>
+              </span>
+              <AppSelect
+                value={draft.timezone}
+                onValueChange={(value) => setDraft((current) => ({ ...current, timezone: value }))}
+              >
+                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
+                  <AppSelectValue placeholder="اختر المنطقة الزمنية" />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {TIMEZONE_OPTIONS.map((option) => (
+                    <AppSelectItem key={option.code} value={option.code}>
+                      {option.label}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className={LABEL_CLASS}>العملة (عملة التقارير)</span>
+              <AppSelect
+                value={draft.currency}
+                onValueChange={(value) => setDraft((current) => ({ ...current, currency: value }))}
+              >
+                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
+                  <AppSelectValue placeholder="اختر العملة" />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {CURRENCY_OPTIONS.map((option) => (
+                    <AppSelectItem key={option.code} value={option.code}>
+                      {option.label}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className={LABEL_CLASS}>الدولة</span>
+              <AppSelect
+                value={draft.text.country}
+                onValueChange={(value) => setText("country", value)}
+              >
+                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
+                  <AppSelectValue placeholder="اختر الدولة" />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {COUNTRY_OPTIONS.map((option) => (
+                    <AppSelectItem key={option.code} value={option.code}>
+                      {option.label}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+            </div>
+          </div>
+        </section>
+
+        <section className={cn(CARD, "p-5")}>
+          <SectionHeader
+            title="إعدادات الإشعارات"
+            subtitle="تفعيل الإشعارات المهمة عبر القنوات المختلفة"
+            icon={<Bell className="size-[18px]" />}
+            tint="violet"
+          />
+
+          {/* RTL: the mark is written first so it sits at the right of the label. */}
+          <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[#e8edf3] px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb]">
+                <Mail className="size-4" />
+              </span>
+              <div>
+                <p className={cn("text-[13px] font-bold", NAVY)}>إشعارات البريد الإلكتروني</p>
+                <p className={cn("mt-0.5 text-[12px]", MUTED)}>
+                  استلام الإشعارات عبر البريد الإلكتروني
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={draft.notifyEmail}
+              onCheckedChange={(next) => setDraft((current) => ({ ...current, notifyEmail: next }))}
+              aria-label="إشعارات البريد الإلكتروني"
+              className="h-6 w-11 data-[state=checked]:bg-[#2563eb] [&>span]:size-5"
             />
           </div>
-          <div className="grid grid-cols-2">
-            <div className="flex flex-col items-end gap-1 px-5 py-3 pe-5">
-              <span className="text-[10px] text-[#667085]">المتبقي على الاشتراك</span>
-              <ComingSoonPill />
-            </div>
-            <div
-              className="flex flex-col items-end gap-1 border-e px-5 py-3 ps-5"
-              style={{ borderColor: "#EEF0F4" }}
-            >
-              <span className="text-[10px] text-[#667085]">تاريخ انتهاء الاشتراك</span>
-              <span className="text-xs font-bold text-[#18233A]">—</span>
-            </div>
+
+          {/* The preference is stored, but nothing sends on it yet -- there is no notifications
+              service in the platform. Saying so beats a switch that silently promises email. */}
+          <div className="mt-3 flex items-start gap-2.5 rounded-[10px] border border-[#c7d9ff] bg-[#eff6ff] px-4 py-3">
+            <Info className="mt-0.5 size-4 shrink-0 text-[#2563eb]" />
+            <p className={cn("text-[12px] leading-[1.6]", MUTED)}>
+              يُحفظ تفضيلك الآن، وسيبدأ الإرسال فور تفعيل خدمة الإشعارات على المنصة.
+            </p>
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* Subscription Card */}
-      <div
-        className="rounded-2xl bg-white p-6"
-        style={{ border: "1px solid #E8EBF0", boxShadow: "0 2px 10px rgba(16,42,92,0.04)" }}
-      >
-        <CardHeader
-          title="الاشتراك والفوترة"
-          subtitle="تفاصيل اشتراكك الحالي ودورة الفوترة"
-          icon={<Layers className="size-[22px]" color="#7357D8" />}
-          tint="violet"
+      <section className={cn(CARD, "p-5")}>
+        <SectionHeader
+          title="الأمان وكلمة المرور"
+          subtitle="إدارة أمان حسابك وتغيير كلمة المرور"
+          icon={<ShieldCheck className="size-[18px]" />}
         />
+        <ChangePasswordForm />
+      </section>
 
-        <div className="flex flex-col gap-5 sm:flex-row">
-          {/* Countdown mini-card */}
-          <div
-            className="flex shrink-0 flex-col items-center justify-between gap-3 rounded-2xl p-4 sm:w-[200px]"
-            style={{ background: "#F5FCFA", border: "1px solid #DCEFE9" }}
-          >
-            <span className="text-xs font-bold text-[#18233A]">المتبقي على الاشتراك</span>
-            <p className="text-lg font-bold text-[#98A2B3]">قريباً</p>
+      {/* RTL: the danger card is written first so it lands on the right and the save action on
+          the left, as in the design. */}
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={() => {
+            setDeleteConfirmation("")
+            setIsDeleteOpen(true)
+          }}
+          className="flex flex-1 items-center gap-3 rounded-[12px] border border-[#f7d4d4] bg-[#fef4f4] px-5 py-3.5 text-start transition-colors hover:border-[#f0b4b4] hover:bg-[#fdecec]"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-[#fde2e2] text-[#dc2626]">
+            <Trash2 className="size-[18px]" />
+          </span>
+          <span className="flex flex-col">
+            <span className="text-[14px] font-bold text-[#dc2626]">حذف الحساب</span>
+            <span className="mt-0.5 text-[12.5px] text-[#b06a6a]">
+              سيتم حذف جميع البيانات بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
+            </span>
+          </span>
+        </button>
+
+        <AppButton
+          type="button"
+          onClick={handleSave}
+          disabled={!isDirty || isSaving}
+          className="h-[74px] shrink-0 rounded-[12px] px-10 text-[15px] font-bold sm:w-[190px]"
+        >
+          {isSaving ? "جارٍ الحفظ…" : "حفظ التغييرات"}
+        </AppButton>
+      </div>
+
+      <p className={cn("text-center text-[12px]", MUTED)}>
+        {isDirty ? "لديك تغييرات غير محفوظة." : "كل التغييرات محفوظة."}
+      </p>
+
+      {/* Deleting is irreversible from this screen, so it asks for the account name to be typed
+          rather than accepting a single click. */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-[30rem] [direction:rtl]">
+          <DialogHeader className="text-right">
+            <DialogTitle className={cn("flex items-center gap-2 text-[16px] font-extrabold", NAVY)}>
+              <AlertTriangle className="size-5 text-[#dc2626]" />
+              حذف الحساب نهائياً
+            </DialogTitle>
+            <DialogDescription className={cn("text-[12.5px] leading-[1.7]", MUTED)}>
+              سيتم حذف حساب <span className="font-bold text-[#0d1b3e]">{savedName || "—"}</span>{" "}
+              وجميع بياناته. لا يمكن التراجع عن هذا الإجراء. اكتب اسم الحساب للتأكيد.
+            </DialogDescription>
+          </DialogHeader>
+
+          <AppInput
+            label="اسم الحساب"
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            placeholder={savedName}
+            className={FIELD_CLASS}
+            labelClassName={LABEL_CLASS}
+          />
+
+          <DialogFooter className="gap-2 sm:justify-start">
             <AppButton
               type="button"
               variant="outline"
-              size="sm"
-              fullWidth
-              disabled
-              className="border-[#E8EBF0] bg-white text-[10px] font-bold text-[#18233A]"
+              className="h-11 rounded-[10px] px-5 text-[13px]"
+              onClick={() => setIsDeleteOpen(false)}
+              disabled={isDeleting}
             >
-              إدارة الاشتراك والفوترة
+              إلغاء
             </AppButton>
-          </div>
+            <AppButton
+              type="button"
+              onClick={handleDelete}
+              disabled={!canDelete || isDeleting}
+              className="h-11 rounded-[10px] bg-[#dc2626] px-5 text-[13px] text-white hover:bg-[#b91c1c]"
+            >
+              {isDeleting ? "جارٍ الحذف…" : "حذف الحساب"}
+            </AppButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          {/* Timeline */}
-          <div className="flex flex-1 flex-col justify-center gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-[11px] text-[#667085]">تاريخ بداية الاشتراك</span>
-                <span className="text-[13px] font-bold text-[#18233A]">—</span>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-[11px] text-[#667085]">تاريخ انتهاء الاشتراك</span>
-                <span className="text-[13px] font-bold text-[#18233A]">—</span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex justify-center">
-                <ComingSoonPill />
-              </div>
-              <div className="relative flex items-center" style={{ height: 8 }}>
-                <div className="w-full rounded-full" style={{ height: 4, background: "#DCE2EA" }} />
-                <span
-                  className="absolute rounded-full border-2 border-white"
-                  style={{ width: 10, height: 10, background: "#C9D2DF", right: -3 }}
-                />
-                <span
-                  className="absolute rounded-full border-2 border-white"
-                  style={{ width: 10, height: 10, background: "#C9D2DF", left: -3 }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] text-[#667085]">
-                <span>—</span>
-                <span>—</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Security + Billing row */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div
-          className="rounded-2xl bg-white p-6"
-          style={{ border: "1px solid #E8EBF0", boxShadow: "0 2px 10px rgba(16,42,92,0.04)" }}
-        >
-          <CardHeader
-            title="الأمان وكلمة المرور"
-            subtitle="إدارة أمان حسابك وتغيير كلمة المرور"
-            icon={<ShieldCheck className="size-5" color="#7357D8" />}
-            tint="violet"
-            size={44}
-          />
-          <ChangePasswordForm />
-        </div>
-
-        <div
-          className="rounded-2xl bg-white p-6"
-          style={{ border: "1px solid #E8EBF0", boxShadow: "0 2px 10px rgba(16,42,92,0.04)" }}
-        >
-          <CardHeader
-            title="الاشتراك والفوترة"
-            subtitle="إدارة طرق الدفع والفواتير"
-            icon={<CreditCard className="size-5" color="#18B89A" />}
-            tint="mint"
-            size={44}
-          />
-          <div className="flex flex-col gap-2">
-            <ListRow title="تفاصيل الباقة" subtitle="عرض تفاصيل الباقة الحالية والحدود" />
-            <ListRow title="طرق الدفع" subtitle="إدارة بيانات الدفع وطرق السداد" />
-            <ListRow title="الفواتير والسجلات" subtitle="عرض الفواتير وتاريخ المعاملات" />
-          </div>
-        </div>
-      </div>
-
-      {/* Delete Account */}
-      <div
-        className="flex items-center justify-between rounded-2xl bg-white px-5 py-4"
-        style={{ border: "1px solid #F5DADB" }}
-      >
-        <ComingSoonPill />
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end">
-            <span className="text-sm font-bold text-[#E5484D]">حذف الحساب</span>
-            <span className="mt-0.5 text-[10px] text-[#667085]">
-              حذف حسابك وجميع بياناتك بشكل نهائي
-            </span>
-          </div>
-          <div
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl"
-            style={{ background: "#FFF0F0" }}
-          >
-            <Trash2 className="size-5" color="#E5484D" />
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <p className="pb-4 text-center text-[10px] text-[#667085]">
+      <p className={cn("text-center text-[11.5px]", MUTED)}>
         © {new Date().getFullYear()} مدار. جميع الحقوق محفوظة &nbsp;|&nbsp;{" "}
-        <Link href={ROUTES.privacy} className="hover:text-[#18233A]">
+        <Link href={ROUTES.privacy} className="hover:text-[#2563eb]">
           سياسة الخصوصية
         </Link>
         &nbsp;|&nbsp;
-        <Link href={ROUTES.terms} className="hover:text-[#18233A]">
+        <Link href={ROUTES.terms} className="hover:text-[#2563eb]">
           الشروط والأحكام
         </Link>
       </p>

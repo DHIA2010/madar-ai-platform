@@ -56,6 +56,46 @@ async function registerAndLogin(
 }
 
 describe("organization platform", () => {
+  // Regression: listOrganizations used to page the whole organizations table and only then drop
+  // the rows the caller was not a member of, so a caller whose own organization sorted past the
+  // first page received an empty list. Registering more organizations than fit on one page puts
+  // the caller's own (oldest, since the default sort is createdAt:desc) off page one.
+  it("returns the caller's organization even when it sorts past the first page", async () => {
+    const container = createContainer()
+    const owner = await registerAndLogin(container, "paged-owner@madar.test")
+    const ownOrganizationId = owner.actor.organizationId
+
+    // Other people's organizations, all newer than the caller's.
+    for (let index = 0; index < 5; index += 1) {
+      await registerAndLogin(container, `paged-other-${index}@madar.test`)
+    }
+
+    const firstPage = await container.queries.listOrganizations(owner.actor, {
+      page: 1,
+      pageSize: 2,
+    })
+
+    expect(firstPage.items.map((organization) => organization.id)).toEqual([ownOrganizationId])
+  })
+
+  it("never returns an organization the caller is not a member of", async () => {
+    const container = createContainer()
+    const owner = await registerAndLogin(container, "scoped-owner@madar.test")
+    const stranger = await registerAndLogin(container, "scoped-stranger@madar.test")
+
+    const listed = await container.queries.listOrganizations(owner.actor, {
+      page: 1,
+      pageSize: 50,
+    })
+
+    expect(listed.items.map((organization) => organization.id)).toEqual([
+      owner.actor.organizationId,
+    ])
+    expect(listed.items.map((organization) => organization.id)).not.toContain(
+      stranger.actor.organizationId
+    )
+  })
+
   it("supports organization lifecycle transitions", async () => {
     const container = createContainer()
     const owner = await registerAndLogin(container, "owner-org@madar.test")

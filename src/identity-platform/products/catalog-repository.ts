@@ -171,6 +171,17 @@ function mapVariant(row: VariantRow): ProductVariantView {
 export class ProductCatalogRepository {
   constructor(private readonly database: PostgresDatabase) {}
 
+  // Soft delete: the row stays so anything already referencing it (a bundle recipe, an order
+  // line) still resolves, and every read path already filters on deleted_at IS NULL.
+  async softDelete(organizationId: string, id: string): Promise<boolean> {
+    const result = await this.database.query(
+      `UPDATE products SET deleted_at = now(), updated_at = now()
+       WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`,
+      [organizationId, id]
+    )
+    return result.rowCount > 0
+  }
+
   async findBySku(organizationId: string, sku: string): Promise<{ id: string } | null> {
     const result = await this.database.query<{ id: string }>(
       `SELECT id FROM products
@@ -282,6 +293,59 @@ export class ProductCatalogRepository {
     }))
   }
 
+  // A full replace rather than a field-by-field patch: the form always submits the whole
+  // product, and the children (components, options, variants) have no stable client-side
+  // identity to diff against, so they are rewritten wholesale inside the same transaction.
+  async update(input: {
+    organizationId: string
+    id: string
+    product: CreateProductInput
+  }): Promise<ProductView | null> {
+    let updated = false
+
+    await this.database.withTransaction(async () => {
+      const result = await this.database.query(
+        `UPDATE products SET
+           product_type = $3, name = $4, sku = $5, category = $6, description = $7,
+           status = $8, currency = $9, base_unit = $10, sell_price = $11, cost_price = $12,
+           stock_quantity = $13, min_stock = $14, image_urls = $15::jsonb,
+           attributes = $16::jsonb, updated_at = now()
+         WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [
+          input.organizationId,
+          input.id,
+          input.product.productType,
+          input.product.name,
+          input.product.sku,
+          input.product.category,
+          input.product.description,
+          input.product.status,
+          input.product.currency,
+          input.product.baseUnit,
+          input.product.sellPrice,
+          input.product.costPrice,
+          input.product.stockQuantity,
+          input.product.minStock,
+          JSON.stringify(input.product.imageUrls),
+          JSON.stringify(input.product.attributes),
+        ]
+      )
+
+      if (result.rowCount === 0) return
+      updated = true
+
+      await this.database.query(`DELETE FROM product_components WHERE product_id = $1`, [input.id])
+      await this.database.query(`DELETE FROM product_variant_options WHERE product_id = $1`, [
+        input.id,
+      ])
+      await this.database.query(`DELETE FROM product_variants WHERE product_id = $1`, [input.id])
+
+      await this.insertChildren(input.id, input.product)
+    })
+
+    return updated ? this.findById(input.organizationId, input.id) : null
+  }
+
   // The product and its children are one unit: a bundle with no components or a variable
   // product with no variants is not a valid half-state to leave behind, so a failure part-way
   // through the children rolls the parent back too.
@@ -323,52 +387,7 @@ export class ProductCatalogRepository {
         ]
       )
 
-      for (const [index, component] of input.product.components.entries()) {
-        await this.database.query(
-          `INSERT INTO product_components (
-             id, product_id, component_ref, custom_name, custom_stock, required_quantity,
-             required_unit, stock_unit, conversion_factor, note, position
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [
-            randomUUID(),
-            productId,
-            component.componentRef,
-            component.customName,
-            component.customStock,
-            component.requiredQuantity,
-            component.requiredUnit,
-            component.stockUnit,
-            component.conversionFactor,
-            component.note,
-            index,
-          ]
-        )
-      }
-
-      for (const [index, option] of input.product.variantOptions.entries()) {
-        await this.database.query(
-          `INSERT INTO product_variant_options (id, product_id, name, option_values, position)
-           VALUES ($1, $2, $3, $4::jsonb, $5)`,
-          [randomUUID(), productId, option.name, JSON.stringify(option.values), index]
-        )
-      }
-
-      for (const [index, variant] of input.product.variants.entries()) {
-        await this.database.query(
-          `INSERT INTO product_variants (
-             id, product_id, sku, price, stock, option_values, position
-           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
-          [
-            randomUUID(),
-            productId,
-            variant.sku,
-            variant.price,
-            variant.stock,
-            JSON.stringify(variant.optionValues),
-            index,
-          ]
-        )
-      }
+      await this.insertChildren(productId, input.product)
     })
 
     const created = await this.findById(input.organizationId, productId)
@@ -376,5 +395,56 @@ export class ProductCatalogRepository {
       throw new Error("Product row disappeared immediately after creation.")
     }
     return created
+  }
+
+  // Shared by create and update: both write the same child rows, and update rewrites them
+  // wholesale after clearing the old ones.
+  private async insertChildren(productId: string, product: CreateProductInput) {
+    for (const [index, component] of product.components.entries()) {
+      await this.database.query(
+        `INSERT INTO product_components (
+           id, product_id, component_ref, custom_name, custom_stock, required_quantity,
+           required_unit, stock_unit, conversion_factor, note, position
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          randomUUID(),
+          productId,
+          component.componentRef,
+          component.customName,
+          component.customStock,
+          component.requiredQuantity,
+          component.requiredUnit,
+          component.stockUnit,
+          component.conversionFactor,
+          component.note,
+          index,
+        ]
+      )
+    }
+
+    for (const [index, option] of product.variantOptions.entries()) {
+      await this.database.query(
+        `INSERT INTO product_variant_options (id, product_id, name, option_values, position)
+         VALUES ($1, $2, $3, $4::jsonb, $5)`,
+        [randomUUID(), productId, option.name, JSON.stringify(option.values), index]
+      )
+    }
+
+    for (const [index, variant] of product.variants.entries()) {
+      await this.database.query(
+        `INSERT INTO product_variants (
+           id, product_id, sku, price, stock, option_values, position
+         ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+        [
+          randomUUID(),
+          productId,
+          variant.sku,
+          variant.price,
+          variant.stock,
+          JSON.stringify(variant.optionValues),
+          index,
+        ]
+      )
+    }
   }
 }

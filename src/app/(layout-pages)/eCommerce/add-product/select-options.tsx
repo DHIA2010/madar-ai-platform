@@ -8,6 +8,7 @@ import {
   Banknote,
   Beaker,
   Box,
+  Boxes,
   CalendarClock,
   Clock,
   Droplet,
@@ -65,12 +66,28 @@ export const BASE_UNIT_OPTIONS: SelectOption[] = [
     tint: BLUE,
     keywords: "pcs piece قطعة",
   },
+  {
+    value: "كرتون (CTN)",
+    label: "كرتون",
+    hint: "تعبئة · حدد عدد الحبات",
+    icon: Boxes,
+    tint: TEAL,
+    keywords: "ctn carton case صندوق علبة",
+  },
 ]
 
 // The recipe/stock units on a bundle component row. These are the raw unit strings the
 // conversion table in the page keys on, so the value is the bare unit with no suffix.
 export const COMPONENT_UNIT_OPTIONS: SelectOption[] = [
   { value: "حبة", label: "حبة", hint: "عدد", icon: Box, tint: BLUE, keywords: "pcs piece قطعة" },
+  {
+    value: "كرتون",
+    label: "كرتون",
+    hint: "تعبئة · حدد عدد الحبات",
+    icon: Boxes,
+    tint: TEAL,
+    keywords: "ctn carton case صندوق علبة",
+  },
   { value: "جرام", label: "جرام", hint: "وزن", icon: Weight, tint: GREEN, keywords: "g gram" },
   {
     value: "كجم",

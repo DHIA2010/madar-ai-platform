@@ -26,14 +26,15 @@ import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
+import { PosDeviceSettingsService } from "../../pos/device-settings-service"
+import { PosDevicesService } from "../../pos/devices-service"
+import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { CustomersAggregationService } from "../../customers/service"
 import { OrdersAggregationService } from "../../orders/service"
 import { StoresAggregationService } from "../../stores/service"
-import { PosRepository } from "../../pos/repository"
-import { PosService } from "../../pos/service"
 import { CampaignRepository } from "../../campaigns/repository"
 import { CampaignService } from "../../campaigns/service"
 import {
@@ -61,7 +62,6 @@ import { OrderAttributionService } from "../../attribution/service"
 import { ORDER_PROVIDERS, type OrderProvider } from "../../attribution/types"
 import { AggregationRepository } from "../../aggregation/repository"
 import { AggregationService } from "../../aggregation/service"
-import { HmacTokenService, ScryptPasswordHasher } from "../../infrastructure/jwt/token-service"
 import type { IntegrationProvider } from "../../integrations/provider-contracts"
 import {
   beginGoogleAdsSyncRequestTrace,
@@ -82,6 +82,10 @@ import {
   createNativeCampaignSchema,
   createCampaignLinkSchema,
   createProductSchema,
+  customPaymentMethodSchema,
+  paymentMethodUpdateSchema,
+  posDeviceSchema,
+  posDeviceSettingsSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
   importCampaignsSchema,
@@ -98,11 +102,6 @@ import {
   integrationSyncSchema,
   inviteOrganizationMemberSchema,
   loginSchema,
-  posCreateEmployeeSchema,
-  posCreateRoleSchema,
-  posLoginSchema,
-  posUpdateEmployeeSchema,
-  posUpdateRoleSchema,
   removeMemberSchema,
   refreshSchema,
   registerSchema,
@@ -501,6 +500,15 @@ export function createIdentityApiServer(
   const productsAggregationService = container.infrastructure.database
     ? new ProductsAggregationService(container.infrastructure.database)
     : null
+  const posDeviceSettingsService = container.infrastructure.database
+    ? new PosDeviceSettingsService(container.infrastructure.database)
+    : null
+  const posDevicesService = container.infrastructure.database
+    ? new PosDevicesService(container.infrastructure.database)
+    : null
+  const posPaymentMethodsService = container.infrastructure.database
+    ? new PosPaymentMethodsService(container.infrastructure.database)
+    : null
   const productCatalogService = container.infrastructure.database
     ? new ProductCatalogService(new ProductCatalogRepository(container.infrastructure.database))
     : null
@@ -518,13 +526,6 @@ export function createIdentityApiServer(
     : null
   const storesAggregationService = container.infrastructure.database
     ? new StoresAggregationService(container.infrastructure.database)
-    : null
-  const posService = container.infrastructure.database
-    ? new PosService(
-        new PosRepository(container.infrastructure.database),
-        new HmacTokenService(container.config.jwtSecret, container.config.tokenHashSecret),
-        new ScryptPasswordHasher()
-      )
     : null
   const campaignRepositoryForLinks = container.infrastructure.database
     ? new CampaignRepository(container.infrastructure.database)
@@ -697,52 +698,6 @@ export function createIdentityApiServer(
           context
         )
         return send(200, { reset: true })
-      }
-
-      // POS employees aren't `users` rows -- their tokens are verified against a separate
-      // session store (see PosService.resolveActor), so these can never be authenticated via
-      // the regular resolveActorFromAccessToken() gate below and must be handled up here.
-      if (method === "POST" && url.pathname === "/v1/pos/auth/login") {
-        if (!posService) {
-          return send(503, {
-            code: "POS_UNAVAILABLE",
-            message: "POS is unavailable in memory mode.",
-          })
-        }
-        return send(200, await posService.login(posLoginSchema.parse(await readJsonBody(request))))
-      }
-
-      if (url.pathname === "/v1/pos/auth/session" || url.pathname === "/v1/pos/auth/logout") {
-        if (!posService) {
-          return send(503, {
-            code: "POS_UNAVAILABLE",
-            message: "POS is unavailable in memory mode.",
-          })
-        }
-        const posToken = getBearerToken(request)
-        if (!posToken) {
-          return send(401, { code: "POS_AUTH_TOKEN_MISSING", message: "Authentication required." })
-        }
-        const posActor = await posService.resolveActor(posToken)
-
-        if (method === "GET" && url.pathname === "/v1/pos/auth/session") {
-          const employee = await posService.getEmployee(
-            posActor.organizationId,
-            posActor.employeeId
-          )
-          if (!employee) {
-            return send(401, {
-              code: "POS_AUTH_TOKEN_INVALID",
-              message: "Session is invalid or expired.",
-            })
-          }
-          return send(200, { employee })
-        }
-
-        if (method === "POST" && url.pathname === "/v1/pos/auth/logout") {
-          await posService.logout(posActor.sessionId)
-          return send(200, { loggedOut: true })
-        }
       }
 
       if (method === "GET" && url.pathname === "/v1/integrations/google/oauth/callback") {
@@ -2402,6 +2357,185 @@ export function createIdentityApiServer(
         )
       }
 
+      if (url.pathname === "/v1/pos/payment-methods") {
+        if (!posPaymentMethodsService) {
+          return send(503, {
+            code: "POS_PAYMENT_METHODS_UNAVAILABLE",
+            message: "Payment methods are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, {
+            items: await posPaymentMethodsService.list(actor.organizationId, actor.workspaceId),
+          })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = customPaymentMethodSchema.parse(await readJsonBody(request))
+          return send(201, {
+            items: await posPaymentMethodsService.createCustom({
+              organizationId: actor.organizationId,
+              workspaceId: actor.workspaceId,
+              updatedBy: actor.userId,
+              method: payload,
+            }),
+          })
+        }
+      }
+
+      const paymentMethodMatch = url.pathname.match(/^\/v1\/pos\/payment-methods\/([^/]+)$/)
+      if (paymentMethodMatch && (method === "PATCH" || method === "DELETE")) {
+        if (!posPaymentMethodsService) {
+          return send(503, {
+            code: "POS_PAYMENT_METHODS_UNAVAILABLE",
+            message: "Payment methods are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        if (method === "DELETE") {
+          await posPaymentMethodsService.deleteCustom(actor.organizationId, paymentMethodMatch[1])
+          return send(204, null)
+        }
+
+        const payload = paymentMethodUpdateSchema.parse(await readJsonBody(request))
+        return send(200, {
+          items: await posPaymentMethodsService.save({
+            organizationId: actor.organizationId,
+            workspaceId: actor.workspaceId,
+            updatedBy: actor.userId,
+            code: paymentMethodMatch[1],
+            update: payload,
+          }),
+        })
+      }
+
+      if (url.pathname === "/v1/pos/devices") {
+        if (!posDevicesService) {
+          return send(503, {
+            code: "POS_DEVICES_UNAVAILABLE",
+            message: "Point-of-sale devices are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, {
+            items: await posDevicesService.list(actor.organizationId, actor.workspaceId),
+          })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = posDeviceSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await posDevicesService.create({
+              organizationId: actor.organizationId,
+              workspaceId: actor.workspaceId,
+              createdBy: actor.userId,
+              device: payload,
+            })
+          )
+        }
+      }
+
+      // Checked before the /:id match below so "counts-by-workspace" is never read as a device id.
+      if (method === "GET" && url.pathname === "/v1/pos/devices/counts-by-workspace") {
+        if (!posDevicesService) {
+          return send(503, {
+            code: "POS_DEVICES_UNAVAILABLE",
+            message: "Point-of-sale devices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+
+        return send(200, {
+          counts: await posDevicesService.countByWorkspace(actor.organizationId),
+        })
+      }
+
+      const posDeviceMatch = url.pathname.match(/^\/v1\/pos\/devices\/([^/]+)$/)
+      if (posDeviceMatch && method === "GET") {
+        if (!posDevicesService) {
+          return send(503, {
+            code: "POS_DEVICES_UNAVAILABLE",
+            message: "Point-of-sale devices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+
+        return send(200, await posDevicesService.getById(actor.organizationId, posDeviceMatch[1]))
+      }
+
+      if (posDeviceMatch && (method === "PATCH" || method === "DELETE")) {
+        if (!posDevicesService) {
+          return send(503, {
+            code: "POS_DEVICES_UNAVAILABLE",
+            message: "Point-of-sale devices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        if (method === "DELETE") {
+          await posDevicesService.delete(actor.organizationId, posDeviceMatch[1])
+          return send(204, null)
+        }
+
+        const payload = posDeviceSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await posDevicesService.update({
+            organizationId: actor.organizationId,
+            id: posDeviceMatch[1],
+            device: payload,
+          })
+        )
+      }
+
+      if (url.pathname === "/v1/pos/device-settings") {
+        if (!posDeviceSettingsService) {
+          return send(503, {
+            code: "POS_DEVICE_SETTINGS_UNAVAILABLE",
+            message: "Point-of-sale device settings are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) {
+            throw ERRORS.forbidden()
+          }
+          return send(
+            200,
+            await posDeviceSettingsService.get(actor.organizationId, actor.workspaceId)
+          )
+        }
+
+        // PATCH rather than PUT even though the body is the complete configuration: every
+        // other write in this API is a PATCH, and the shared CORS allow-list is built from that
+        // convention -- a PUT is refused at preflight before it ever reaches this handler.
+        if (method === "PATCH") {
+          // Changing the hardware a till sells through is an operational change, not a display
+          // preference, so it takes the manage grant rather than plain view.
+          if (!actor.modulePermissions.includes("pos:manage")) {
+            throw ERRORS.forbidden()
+          }
+          const payload = posDeviceSettingsSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await posDeviceSettingsService.save({
+              organizationId: actor.organizationId,
+              workspaceId: actor.workspaceId,
+              updatedBy: actor.userId,
+              settings: payload,
+            })
+          )
+        }
+      }
+
       if (url.pathname === "/v1/products") {
         if (!productsAggregationService || !productCatalogService) {
           return send(503, {
@@ -2449,6 +2583,43 @@ export function createIdentityApiServer(
       }
 
       const nativeProductMatch = url.pathname.match(/^\/v1\/products\/([^/]+)$/)
+      if (method === "PATCH" && nativeProductMatch) {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product aggregation is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:edit")) {
+          throw ERRORS.forbidden()
+        }
+
+        const payload = createProductSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await productCatalogService.update({
+            organizationId: actor.organizationId,
+            id: nativeProductMatch[1],
+            product: payload,
+          })
+        )
+      }
+
+      if (method === "DELETE" && nativeProductMatch) {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product aggregation is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:delete")) {
+          throw ERRORS.forbidden()
+        }
+
+        await productCatalogService.delete(actor.organizationId, nativeProductMatch[1])
+        return send(204, null)
+      }
+
       if (method === "GET" && nativeProductMatch) {
         if (!productCatalogService) {
           return send(503, {
@@ -3152,100 +3323,6 @@ export function createIdentityApiServer(
           linkId
         )
         return send(200, { archived: true })
-      }
-
-      if (url.pathname === "/v1/pos/roles") {
-        if (!posService) {
-          return send(503, {
-            code: "POS_UNAVAILABLE",
-            message: "POS is unavailable in memory mode.",
-          })
-        }
-        if (!actor.modulePermissions.includes("pos:view")) {
-          throw ERRORS.forbidden()
-        }
-
-        if (method === "GET") {
-          return send(200, { items: await posService.listRoles(actor.organizationId) })
-        }
-
-        if (method === "POST") {
-          if (!actor.modulePermissions.includes("pos:manage")) {
-            throw ERRORS.forbidden()
-          }
-          const payload = posCreateRoleSchema.parse(await readJsonBody(request))
-          return send(201, await posService.createRole(actor.organizationId, payload))
-        }
-      }
-
-      const posRoleMatch = url.pathname.match(/^\/v1\/pos\/roles\/([^/]+)$/)
-      if (posRoleMatch && (method === "PATCH" || method === "DELETE")) {
-        if (!posService) {
-          return send(503, {
-            code: "POS_UNAVAILABLE",
-            message: "POS is unavailable in memory mode.",
-          })
-        }
-        if (!actor.modulePermissions.includes("pos:manage")) {
-          throw ERRORS.forbidden()
-        }
-        const roleId = decodeURIComponent(posRoleMatch[1])
-
-        if (method === "PATCH") {
-          const payload = posUpdateRoleSchema.parse(await readJsonBody(request))
-          return send(200, await posService.updateRole(actor.organizationId, roleId, payload))
-        }
-
-        await posService.deleteRole(actor.organizationId, roleId)
-        return send(200, { deleted: true })
-      }
-
-      if (url.pathname === "/v1/pos/employees") {
-        if (!posService) {
-          return send(503, {
-            code: "POS_UNAVAILABLE",
-            message: "POS is unavailable in memory mode.",
-          })
-        }
-        if (!actor.modulePermissions.includes("pos:view")) {
-          throw ERRORS.forbidden()
-        }
-
-        if (method === "GET") {
-          return send(200, { items: await posService.listEmployees(actor.organizationId) })
-        }
-
-        if (method === "POST") {
-          if (!actor.modulePermissions.includes("pos:manage")) {
-            throw ERRORS.forbidden()
-          }
-          const payload = posCreateEmployeeSchema.parse(await readJsonBody(request))
-          return send(
-            201,
-            await posService.createEmployee(actor.organizationId, {
-              fullName: payload.fullName,
-              email: payload.email,
-              password: payload.password,
-              posRoleId: payload.posRoleId ?? null,
-            })
-          )
-        }
-      }
-
-      const posEmployeeMatch = url.pathname.match(/^\/v1\/pos\/employees\/([^/]+)$/)
-      if (method === "PATCH" && posEmployeeMatch) {
-        if (!posService) {
-          return send(503, {
-            code: "POS_UNAVAILABLE",
-            message: "POS is unavailable in memory mode.",
-          })
-        }
-        if (!actor.modulePermissions.includes("pos:manage")) {
-          throw ERRORS.forbidden()
-        }
-        const employeeId = decodeURIComponent(posEmployeeMatch[1])
-        const payload = posUpdateEmployeeSchema.parse(await readJsonBody(request))
-        return send(200, await posService.updateEmployee(actor.organizationId, employeeId, payload))
       }
 
       if (method === "GET" && url.pathname === "/v1/audit-logs") {

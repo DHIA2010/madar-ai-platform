@@ -4,6 +4,33 @@ import { z } from "zod"
 // small closed sets) so the request contract and the service's own rules cannot drift apart:
 // adding a product type in one place and forgetting the other would be silently accepted.
 import { PRODUCT_STATUSES, PRODUCT_TYPES, PRODUCT_UNITS } from "./products/catalog-types"
+import { PAYMENT_KINDS } from "./pos/payment-methods-service"
+import {
+  BAUD_RATES,
+  type BaudRate,
+  CARD_READER_AUTH_TYPES,
+  CARD_READER_CONNECTION_METHODS,
+  DEVICE_CONNECTIONS,
+  DEVICE_TYPES,
+  DISPLAY_BRIGHTNESS_LEVELS,
+  DISPLAY_LANGUAGES,
+  DISPLAY_TEXT_DIRECTIONS,
+  DISPLAY_TIMEOUTS,
+  DRAWER_CONNECTIONS,
+  DRAWER_OPEN_METHODS,
+  DRAWER_TRIGGERS,
+  PAPER_WIDTHS,
+  PRINT_DENSITIES,
+  PRINT_DIRECTIONS,
+  PRINTER_CHARSETS,
+  PRINTER_CONNECTIONS,
+  SCANNER_CHARSETS,
+  SCANNER_CONNECTIONS,
+  SCANNER_INPUT_MODES,
+  SCANNER_LINE_ENDINGS,
+  TRAILING_DIGIT_MEANINGS,
+  WEIGHT_UNITS,
+} from "./pos/device-settings-types"
 
 export const registerSchema = z
   .object({
@@ -48,6 +75,10 @@ export const createWorkspaceSchema = z.object({
   organizationId: z.string().uuid(),
   name: z.string().min(2),
   metadata: z.record(z.string(), z.string()).optional(),
+  // Previously absent from this schema, so a request that included it (e.g. a branch's initial
+  // currency/timezone) had it silently stripped by parse() before the command ever saw it -- the
+  // workspace was created with empty settings no matter what the caller sent.
+  settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 })
 
 const rolePermissionSchema = z.object({
@@ -276,35 +307,6 @@ export const integrationEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 })
 
-export const posLoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-})
-
-export const posCreateRoleSchema = z.object({
-  name: z.string().min(2).max(100),
-  permissions: z.array(z.string().min(1).max(100)).default([]),
-})
-
-export const posUpdateRoleSchema = z.object({
-  name: z.string().min(2).max(100).optional(),
-  permissions: z.array(z.string().min(1).max(100)).optional(),
-})
-
-export const posCreateEmployeeSchema = z.object({
-  fullName: z.string().min(2).max(150),
-  email: z.string().email(),
-  password: z.string().min(8).max(200),
-  posRoleId: z.string().uuid().nullable().optional(),
-})
-
-export const posUpdateEmployeeSchema = z.object({
-  fullName: z.string().min(2).max(150).optional(),
-  posRoleId: z.string().uuid().nullable().optional(),
-  status: z.enum(["active", "inactive"]).optional(),
-  password: z.string().min(8).max(200).optional(),
-})
-
 const CAMPAIGN_PLATFORM_VALUES = ["google_ads", "meta_ads", "snapchat_ads", "tiktok_ads"] as const
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
 
@@ -463,6 +465,8 @@ const productVariantSchema = z.object({
 // A closed set rather than free-form jsonb: unknown keys are dropped, so a typo in the client
 // cannot quietly persist a field nothing will ever read back.
 const productAttributesSchema = z.object({
+  unitsPerCarton: productQuantitySchema.nullable().optional(),
+  linkedUnitProductId: z.string().max(200).nullable().optional(),
   supplier: z.string().max(200).nullable().optional(),
   stockNotes: z.string().max(500).nullable().optional(),
   stockLocation: z.string().max(200).nullable().optional(),
@@ -505,4 +509,170 @@ export const createProductSchema = z.object({
   components: z.array(productComponentSchema).max(100).default([]),
   variantOptions: z.array(productVariantOptionSchema).max(8).default([]),
   variants: z.array(productVariantSchema).max(200).default([]),
+})
+
+// --- Point-of-sale hardware (migration 048) ------------------------------------------------
+//
+// Every group is required in full: the screen always submits the complete configuration, and a
+// partial body would leave the stored row saying a peripheral is enabled while the fields that
+// describe it went missing.
+
+export const posDeviceSettingsSchema = z.object({
+  scale: z.object({
+    enabled: z.boolean(),
+    name: z.string().max(120).nullable(),
+    connection: z.enum(DEVICE_CONNECTIONS),
+    port: z.string().max(60).nullable(),
+    // A closed set rather than a free number -- an arbitrary baud rate will not open the port.
+    // Refined against BAUD_RATES rather than restating the literals, so the list stays declared
+    // in exactly one place; the type guard narrows the parsed value to BaudRate.
+    baudRate: z
+      .number()
+      .refine((rate): rate is BaudRate => (BAUD_RATES as readonly number[]).includes(rate), {
+        message: "Unsupported baud rate",
+      }),
+    defaultWeightUnit: z.enum(WEIGHT_UNITS),
+    trailingDigits: z.enum(TRAILING_DIGIT_MEANINGS),
+    indicatorStart: z.number().int().min(1).max(255),
+    decimals: z.number().int().min(0).max(4),
+    blockUnstableWeight: z.boolean(),
+    autoZero: z.boolean(),
+  }),
+  receiptPrinter: z.object({
+    enabled: z.boolean(),
+    name: z.string().max(120).nullable(),
+    model: z.string().max(120).nullable(),
+    connection: z.enum(PRINTER_CONNECTIONS),
+    port: z.string().max(60).nullable(),
+    baudRate: z
+      .number()
+      .refine((rate): rate is BaudRate => (BAUD_RATES as readonly number[]).includes(rate), {
+        message: "Unsupported baud rate",
+      }),
+    networkAddress: z.string().max(120).nullable(),
+    paperWidth: z.enum(PAPER_WIDTHS),
+    printDirection: z.enum(PRINT_DIRECTIONS),
+    printDensity: z.enum(PRINT_DENSITIES),
+    charset: z.enum(PRINTER_CHARSETS),
+    // More than a couple of copies is a misconfiguration rather than an intent, and each one
+    // costs paper on every sale.
+    copies: z.number().int().min(1).max(5),
+    autoCut: z.boolean(),
+    printLogo: z.boolean(),
+    extraCopy: z.boolean(),
+    footerText: z.string().max(200).nullable(),
+  }),
+  barcodeScanner: z.object({
+    enabled: z.boolean(),
+    name: z.string().max(120).nullable(),
+    connection: z.enum(SCANNER_CONNECTIONS),
+    inputMode: z.enum(SCANNER_INPUT_MODES),
+    charset: z.enum(SCANNER_CHARSETS),
+    lineEnding: z.enum(SCANNER_LINE_ENDINGS),
+    prefix: z.string().max(10).nullable(),
+    suffix: z.string().max(10).nullable(),
+    inputDelayMs: z.number().int().min(0).max(5000),
+    allowRepeatScans: z.boolean(),
+    beepOnScan: z.boolean(),
+    uppercaseOutput: z.boolean(),
+    hideControlChars: z.boolean(),
+  }),
+  cashDrawer: z.object({
+    enabled: z.boolean(),
+    name: z.string().max(120).nullable(),
+    connection: z.enum(DRAWER_CONNECTIONS),
+    port: z.string().max(60).nullable(),
+    openTimeMs: z.number().int().min(100).max(2000),
+    openMethod: z.enum(DRAWER_OPEN_METHODS),
+    openTrigger: z.enum(DRAWER_TRIGGERS),
+    openOnCancel: z.boolean(),
+  }),
+  customerDisplay: z.object({
+    enabled: z.boolean(),
+    name: z.string().max(120).nullable(),
+    connection: z.enum(DEVICE_CONNECTIONS),
+    port: z.string().max(60).nullable(),
+    brightness: z.enum(DISPLAY_BRIGHTNESS_LEVELS),
+    screenTimeout: z.enum(DISPLAY_TIMEOUTS),
+    language: z.enum(DISPLAY_LANGUAGES),
+    textDirection: z.enum(DISPLAY_TEXT_DIRECTIONS),
+    welcomeMessage: z.string().max(120).nullable(),
+    showStoreLogo: z.boolean(),
+    showProductName: z.boolean(),
+    showPrice: z.boolean(),
+    showQuantity: z.boolean(),
+    showTotal: z.boolean(),
+    showPromoMessages: z.boolean(),
+  }),
+  cardReader: z.object({
+    enabled: z.boolean(),
+    name: z.string().max(120).nullable(),
+    provider: z.string().max(80).nullable(),
+    terminalId: z.string().max(80).nullable(),
+    connectionMethod: z.enum(CARD_READER_CONNECTION_METHODS),
+    port: z.string().max(60).nullable(),
+    apiUrl: z.string().max(300).nullable(),
+    authType: z.enum(CARD_READER_AUTH_TYPES),
+    apiKey: z.string().max(300).nullable(),
+    requestTimeoutSeconds: z.number().int().min(5).max(120),
+    sendDigitalReceipt: z.boolean(),
+    autoCompleteAfterSuccess: z.boolean(),
+    sandboxMode: z.boolean(),
+  }),
+})
+
+// Per-device settings. Only the scale has any today; the others store an empty object rather
+// than a null, so the column always holds a readable shape.
+const deviceScaleSettingsSchema = z.object({
+  defaultWeightUnit: z.enum(WEIGHT_UNITS),
+  trailingDigits: z.enum(TRAILING_DIGIT_MEANINGS),
+  indicatorStart: z.number().int().min(1).max(255),
+  decimals: z.number().int().min(0).max(4),
+  autoZero: z.boolean(),
+  blockUnstableWeight: z.boolean(),
+})
+
+export const posDeviceSchema = z.object({
+  name: z.string().min(1).max(120),
+  deviceType: z.enum(DEVICE_TYPES),
+  model: z.string().max(120).nullable().default(null),
+  description: z.string().max(300).nullable().default(null),
+  connection: z.enum(DEVICE_CONNECTIONS),
+  // COM3, USB, or an address -- the shape follows the connection, so it stays free text.
+  port: z.string().max(60).nullable().default(null),
+  baudRate: z
+    .number()
+    .int()
+    .refine((rate) => (BAUD_RATES as readonly number[]).includes(rate), {
+      message: "Unsupported baud rate",
+    })
+    .nullable()
+    .default(null),
+  enabled: z.boolean().default(true),
+  settings: deviceScaleSettingsSchema.partial().default({}),
+})
+
+export const paymentMethodUpdateSchema = z.object({
+  enabled: z.boolean(),
+  // Percent, not basis points -- the screen and the provider's contract both talk in percent.
+  feePercent: z.number().min(0).max(100),
+  // Provider-linking fields with no dedicated column -- stored in pos_payment_methods.settings
+  // jsonb, the same free-form pattern workspace metadata already uses for branch fields.
+  merchantId: z.string().max(120).nullable().default(null),
+  apiKey: z.string().max(300).nullable().default(null),
+  // Only applied when the target row is a branch's own method -- see save()'s own comment.
+  name: z.string().min(1).max(120).optional(),
+  subtitle: z.string().max(200).nullable().optional(),
+})
+
+export const customPaymentMethodSchema = paymentMethodUpdateSchema.extend({
+  // Lowercase, no spaces: the code is how a till refers to the method, not what it displays.
+  code: z
+    .string()
+    .min(2)
+    .max(40)
+    .regex(/^[a-z0-9_]+$/, "Use lowercase letters, digits and underscores"),
+  name: z.string().min(1).max(120),
+  subtitle: z.string().max(200).nullable().default(null),
+  kind: z.enum(PAYMENT_KINDS),
 })

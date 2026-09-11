@@ -24,7 +24,7 @@ import {
   LivePill,
   SurfaceCard,
 } from "@/components/design/dashboard-surface"
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 import { WorldMapIllustration } from "@/features/live-visitors/components/world-map"
 import {
   liveVisitorsService,
@@ -133,7 +133,7 @@ export default function LiveVisitorsPage() {
   const maxCountryShare = Math.max(1, ...(data?.countries ?? []).map((entry) => entry.share))
 
   return (
-    <div className={`${tajawal.className} bg-[#f1f5f9] px-[22px] py-5`} dir="rtl">
+    <div className={`${cairo.className} bg-[#f1f5f9] px-[22px] py-5`} dir="rtl">
       {/* Header */}
       <div className="mb-4">
         <div className="mb-3.5 flex items-start justify-between">

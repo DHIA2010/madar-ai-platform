@@ -13,19 +13,43 @@ interface RawOrganization {
   name: string
   logoUrl?: string | null
   currency?: string
+  timezone?: string
+  locale?: string
+  createdAt?: string
   settings?: Record<string, unknown>
   subscriptionReference?: string | null
   status?: "active" | "archived" | "deleted"
 }
 
+// Allow-list shaped, like toOrganizationDto: a key absent from this list is dropped on the way
+// in, so every settings field the UI reads has to be named here.
+const SETTINGS_TEXT_KEYS = [
+  "storeName",
+  "country",
+  "commercialRegistration",
+  "taxNumber",
+  "phone",
+  "email",
+  "website",
+  "addressShort",
+  "buildingNumber",
+  "street",
+  "secondaryNumber",
+  "district",
+  "postalCode",
+  "city",
+] as const
+
 function toOrganizationSettingsDto(
   raw: Record<string, unknown> | undefined
 ): OrganizationSettingsDto {
   const settings = raw ?? {}
-  return {
-    storeName: typeof settings.storeName === "string" ? settings.storeName : undefined,
-    country: typeof settings.country === "string" ? settings.country : undefined,
+  const mapped: Record<string, string | boolean | undefined> = {}
+  for (const key of SETTINGS_TEXT_KEYS) {
+    mapped[key] = typeof settings[key] === "string" ? (settings[key] as string) : undefined
   }
+  mapped.notifyEmail = typeof settings.notifyEmail === "boolean" ? settings.notifyEmail : undefined
+  return mapped as OrganizationSettingsDto
 }
 
 interface RawWorkspace {
@@ -34,6 +58,8 @@ interface RawWorkspace {
   name: string
   settings?: Record<string, unknown>
   status?: "active" | "archived"
+  metadata?: Record<string, unknown>
+  createdAt?: string
 }
 
 function slugify(name: string): string {
@@ -56,6 +82,12 @@ function toOrganizationDto(raw: RawOrganization): OrganizationDto {
     slug: slugify(raw.name) || raw.id,
     logoUrl: raw.logoUrl ?? null,
     currency: raw.currency ?? "SAR",
+    // Carried through explicitly: this mapper is allow-list shaped, so a field missing here is
+    // silently dropped. These three were, which is why a saved timezone came back blank even
+    // though the PATCH had returned it.
+    timezone: raw.timezone,
+    locale: raw.locale,
+    createdAt: raw.createdAt,
     settings: toOrganizationSettingsDto(raw.settings),
     subscription: {
       id: raw.subscriptionReference ?? raw.id,
@@ -77,6 +109,13 @@ function toOrganizationDto(raw: RawOrganization): OrganizationDto {
 
 function toWorkspaceDto(raw: RawWorkspace): WorkspaceDto {
   const settings = raw.settings ?? {}
+  const metadata = raw.metadata ?? {}
+  const stringMetadata: Record<string, string> = {}
+  for (const [key, value] of Object.entries(metadata)) {
+    if (typeof value === "string") {
+      stringMetadata[key] = value
+    }
+  }
   return {
     id: raw.id,
     organizationId: raw.organizationId,
@@ -89,6 +128,8 @@ function toWorkspaceDto(raw: RawWorkspace): WorkspaceDto {
       dateFormat: typeof settings.dateFormat === "string" ? settings.dateFormat : "dd/MM/yyyy",
     },
     status: raw.status,
+    metadata: stringMetadata,
+    createdAt: raw.createdAt,
   }
 }
 
@@ -165,7 +206,13 @@ export class WorkspaceApiAdapter {
 
   updateOrganization(
     organizationId: string,
-    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+    payload: {
+      name?: string
+      currency?: string
+      timezone?: string
+      locale?: string
+      settings?: OrganizationSettingsDto
+    }
   ): Promise<OrganizationDto> {
     return this.client
       .patch<typeof payload, RawOrganization>(`/v1/organizations/${organizationId}`, payload)
@@ -205,6 +252,15 @@ export class WorkspaceApiAdapter {
       .then(toOrganizationDto)
   }
 
+  deleteOrganization(organizationId: string): Promise<OrganizationDto> {
+    return this.client
+      .post<
+        Record<string, never>,
+        RawOrganization
+      >(`/v1/organizations/${organizationId}/delete`, {})
+      .then(toOrganizationDto)
+  }
+
   createWorkspace(payload: {
     organizationId: string
     name: string
@@ -216,9 +272,17 @@ export class WorkspaceApiAdapter {
       .then(toWorkspaceDto)
   }
 
-  updateWorkspace(workspaceId: string, payload: { name?: string }): Promise<WorkspaceDto> {
+  updateWorkspace(
+    workspaceId: string,
+    payload: {
+      name?: string
+      status?: "active" | "archived"
+      metadata?: Record<string, string>
+      settings?: Record<string, string | boolean | number>
+    }
+  ): Promise<WorkspaceDto> {
     return this.client
-      .patch<{ name?: string }, RawWorkspace>(`/v1/workspaces/${workspaceId}`, payload)
+      .patch<typeof payload, RawWorkspace>(`/v1/workspaces/${workspaceId}`, payload)
       .then(toWorkspaceDto)
   }
 

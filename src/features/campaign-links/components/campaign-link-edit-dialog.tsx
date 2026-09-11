@@ -12,7 +12,8 @@ import {
   linkListService,
 } from "../services/link-list.service"
 import { DialogInput } from "./design/dialog-input"
-import { tajawal } from "./design/fonts"
+
+import { cairo } from "@/components/design/fonts"
 
 interface CustomParamRow {
   key: string
@@ -128,7 +129,7 @@ export function CampaignLinkEditDialog({
     >
       <div
         dir="rtl"
-        className={`${tajawal.variable} flex h-full flex-col font-[family-name:var(--font-tajawal)]`}
+        className={`${cairo.variable} flex h-full flex-col font-[family-name:var(--font-cairo)]`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
           <div className="flex items-center gap-3">

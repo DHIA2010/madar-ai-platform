@@ -56,7 +56,13 @@ export class WorkspaceApplicationService {
 
   updateOrganization(
     organizationId: string,
-    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+    payload: {
+      name?: string
+      currency?: string
+      timezone?: string
+      locale?: string
+      settings?: OrganizationSettingsDto
+    }
   ): Promise<OrganizationDto> {
     return this.gateway.updateOrganization(organizationId, payload)
   }
@@ -80,6 +86,10 @@ export class WorkspaceApplicationService {
     return this.gateway.restoreOrganization(organizationId)
   }
 
+  deleteOrganization(organizationId: string): Promise<OrganizationDto> {
+    return this.gateway.deleteOrganization(organizationId)
+  }
+
   createWorkspace(payload: {
     organizationId: string
     name: string
@@ -89,7 +99,15 @@ export class WorkspaceApplicationService {
     return this.gateway.createWorkspace(payload)
   }
 
-  updateWorkspace(workspaceId: string, payload: { name?: string }): Promise<WorkspaceDto> {
+  updateWorkspace(
+    workspaceId: string,
+    payload: {
+      name?: string
+      status?: "active" | "archived"
+      metadata?: Record<string, string>
+      settings?: Record<string, string | boolean | number>
+    }
+  ): Promise<WorkspaceDto> {
     return this.gateway.updateWorkspace(workspaceId, payload)
   }
 

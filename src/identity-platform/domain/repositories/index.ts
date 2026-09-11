@@ -23,6 +23,11 @@ export interface OrganizationRepository {
   findById(id: string): Promise<OrganizationState | null>
   list(input?: {
     ownerUserId?: string
+    // Restricts the page to these organizations. Callers that can only see some organizations
+    // must narrow here rather than filtering the returned page: filtering afterwards drops rows
+    // that paging already excluded, so a caller whose organization sorts past the first page
+    // sees nothing at all.
+    ids?: string[]
     status?: OrganizationState["status"]
     page?: number
     pageSize?: number

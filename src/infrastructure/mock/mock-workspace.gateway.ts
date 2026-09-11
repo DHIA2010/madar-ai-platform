@@ -108,7 +108,13 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
 
   async updateOrganization(
     organizationId: string,
-    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+    payload: {
+      name?: string
+      currency?: string
+      timezone?: string
+      locale?: string
+      settings?: OrganizationSettingsDto
+    }
   ): Promise<OrganizationDto> {
     await waitForMock()
     const organization = mockOrganizations.find((entry) => entry.id === organizationId)
@@ -164,13 +170,38 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     return organization
   }
 
-  async updateWorkspace(workspaceId: string, payload: { name?: string }): Promise<WorkspaceDto> {
+  async deleteOrganization(organizationId: string): Promise<OrganizationDto> {
+    await waitForMock()
+    const organization = mockOrganizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      throw new Error("Organization not found")
+    }
+    return { ...organization, status: "deleted" }
+  }
+
+  async updateWorkspace(
+    workspaceId: string,
+    payload: {
+      name?: string
+      status?: "active" | "archived"
+      metadata?: Record<string, string>
+      settings?: Record<string, string | boolean | number>
+    }
+  ): Promise<WorkspaceDto> {
     await waitForMock()
     const workspace = findWorkspace(workspaceId)
     if (!workspace) {
       throw new Error("Workspace not found")
     }
-    return { ...workspace, ...(payload.name !== undefined ? { name: payload.name } : {}) }
+    return {
+      ...workspace,
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.status !== undefined ? { status: payload.status } : {}),
+      ...(payload.metadata !== undefined ? { metadata: payload.metadata } : {}),
+      ...(payload.settings !== undefined
+        ? { settings: { ...workspace.settings, ...payload.settings } }
+        : {}),
+    }
   }
 
   async archiveWorkspace(workspaceId: string): Promise<WorkspaceDto> {
@@ -179,7 +210,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     if (!workspace) {
       throw new Error("Workspace not found")
     }
-    return workspace
+    return { ...workspace, status: "archived" }
   }
 
   async restoreWorkspace(workspaceId: string): Promise<WorkspaceDto> {
@@ -188,7 +219,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     if (!workspace) {
       throw new Error("Workspace not found")
     }
-    return workspace
+    return { ...workspace, status: "active" }
   }
 }
 

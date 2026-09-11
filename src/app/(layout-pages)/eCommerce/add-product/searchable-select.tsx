@@ -8,12 +8,12 @@
 // the only way to find anything.
 
 import { useId, useMemo, useState, type Ref } from "react"
-import { Check, ChevronDown, Search } from "lucide-react"
+import { Check, ChevronDown, Plus, Search } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 
 export interface SelectOption {
   value: string
@@ -56,6 +56,8 @@ export function SearchableSelect({
   footer,
   triggerRef,
   hideTriggerMark = false,
+  onCreate,
+  createLabel = (draft: string) => `إضافة "${draft}"`,
 }: {
   value: string
   options: SelectOption[]
@@ -76,6 +78,11 @@ export function SearchableSelect({
   // Rendered under the list -- used by the component picker to offer a manual entry when the
   // catalogue has nothing suitable.
   footer?: (close: () => void) => React.ReactNode
+  // Makes the control creatable: whatever is typed can be added as a new option. Used by the
+  // category field, whose list is only ever the set of categories other products already use --
+  // without this the first category could never be created and no new one ever introduced.
+  onCreate?: (draft: string) => void
+  createLabel?: (draft: string) => string
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
@@ -83,7 +90,9 @@ export function SearchableSelect({
   const listboxId = useId()
 
   const selected = options.find((option) => option.value === value) ?? null
-  const showSearch = options.length >= SEARCH_THRESHOLD
+  // A creatable control always needs the field, since it doubles as the place a new value is
+  // typed -- not just a filter over what already exists.
+  const showSearch = Boolean(onCreate) || options.length >= SEARCH_THRESHOLD
 
   const filtered = useMemo(() => {
     const term = normalize(query)
@@ -92,6 +101,14 @@ export function SearchableSelect({
       normalize(`${option.label} ${option.hint ?? ""} ${option.keywords ?? ""}`).includes(term)
     )
   }, [options, query])
+
+  const draft = query.trim()
+  // Offered only when the text typed is not already one of the options, so the same value
+  // cannot be added twice.
+  const canCreate =
+    Boolean(onCreate) &&
+    draft !== "" &&
+    !options.some((option) => normalize(option.label) === normalize(draft))
 
   const close = () => {
     setOpen(false)
@@ -143,7 +160,7 @@ export function SearchableSelect({
         align="start"
         sideOffset={6}
         className={cn(
-          tajawal.className,
+          cairo.className,
           "w-[var(--radix-popover-trigger-width)] min-w-[240px] rounded-[16px] border-[#e1e7f0] p-1.5 shadow-[0_12px_32px_rgba(11,23,56,0.12)]"
         )}
       >
@@ -162,9 +179,29 @@ export function SearchableSelect({
           </div>
         ) : null}
 
+        {canCreate ? (
+          <button
+            type="button"
+            className="mb-1.5 flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] border border-dashed border-[#c4d5f0] px-2 py-2 text-right transition-colors hover:bg-[#eef4ff]"
+            onClick={() => {
+              onCreate?.(draft)
+              close()
+            }}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-[#eef4ff] text-[#2878ff]">
+              <Plus className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[#2878ff]">
+              {createLabel(draft)}
+            </span>
+          </button>
+        ) : null}
+
         <div id={listboxId} role="listbox" className="max-h-[264px] overflow-y-auto">
           {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[12px] text-[#6b7b96]">{emptyLabel}</p>
+            canCreate ? null : (
+              <p className="px-3 py-6 text-center text-[12px] text-[#6b7b96]">{emptyLabel}</p>
+            )
           ) : (
             filtered.map((option) => {
               const isSelected = option.value === value

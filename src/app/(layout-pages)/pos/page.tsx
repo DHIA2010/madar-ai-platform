@@ -1,5 +1,5 @@
-import PosLandingPage from "./PosLandingPage"
+import CashierPage from "./CashierPage"
 
 export default function Page() {
-  return <PosLandingPage />
+  return <CashierPage />
 }

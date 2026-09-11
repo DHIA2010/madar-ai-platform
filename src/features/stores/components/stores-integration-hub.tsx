@@ -71,7 +71,7 @@ import {
   type StoreSyncHealth,
 } from "../services"
 
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 
 const platformOptions = ["All Platforms", "Salla", "Shopify", "Zid"]
 const connectionStatusOptions = [
@@ -680,7 +680,7 @@ export function StoresIntegrationHub() {
   ]
 
   return (
-    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
       <div className="mx-auto w-full max-w-[1500px] space-y-4">
         {/* RTL: the title block is written first so it lands on the right, action left. */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

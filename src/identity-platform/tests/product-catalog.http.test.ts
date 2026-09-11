@@ -528,6 +528,211 @@ describe("native product catalogue", () => {
     })
   })
 
+  describe("updating", () => {
+    async function patch(token: string, id: string, body: Record<string, unknown>) {
+      const response = await fetch(`${baseUrl}/v1/products/${id}`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify(body),
+      })
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+    }
+
+    it("changes fields and keeps the same id", async () => {
+      const { token } = await signIn("catalog-update@example.com", "Catalog Update")
+      const created = await createProduct(token, SIMPLE_PRODUCT)
+      const id = String(created.body.id)
+
+      const updated = await patch(token, id, {
+        ...SIMPLE_PRODUCT,
+        name: "قميص كتان",
+        sellPrice: 155,
+        stockQuantity: 40,
+        status: "draft",
+      })
+
+      expect(updated.status).toBe(200)
+      expect(updated.body).toMatchObject({
+        id,
+        name: "قميص كتان",
+        sellPrice: 155,
+        stockQuantity: 40,
+        status: "draft",
+      })
+    })
+
+    it("lets a product keep its own stock code", async () => {
+      const { token } = await signIn("catalog-update-sku@example.com", "Catalog Update Sku")
+      const created = await createProduct(token, SIMPLE_PRODUCT)
+
+      // Re-sending the same code must not read as a conflict with itself.
+      const updated = await patch(token, String(created.body.id), {
+        ...SIMPLE_PRODUCT,
+        name: "اسم جديد",
+      })
+      expect(updated.status).toBe(200)
+    })
+
+    it("still rejects a stock code held by another product", async () => {
+      const { token } = await signIn("catalog-update-dupe@example.com", "Catalog Update Dupe")
+      const first = await createProduct(token, SIMPLE_PRODUCT)
+      await createProduct(token, { ...SIMPLE_PRODUCT, sku: "SKU-200", name: "آخر" })
+
+      const updated = await patch(token, String(first.body.id), {
+        ...SIMPLE_PRODUCT,
+        sku: "SKU-200",
+      })
+      expect(updated.status).toBe(409)
+    })
+
+    it("replaces the component list wholesale", async () => {
+      const { token } = await signIn("catalog-update-comp@example.com", "Catalog Update Comp")
+      const created = await createProduct(token, {
+        productType: "bundle",
+        name: "وجبة",
+        category: "وجبات",
+        components: [
+          {
+            customName: "أرز",
+            customStock: 25,
+            requiredQuantity: 300,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+          {
+            customName: "دجاج",
+            customStock: 40,
+            requiredQuantity: 500,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+        ],
+      })
+      expect((created.body.components as unknown[]).length).toBe(2)
+
+      const updated = await patch(token, String(created.body.id), {
+        productType: "bundle",
+        name: "وجبة",
+        category: "وجبات",
+        components: [
+          {
+            customName: "أرز",
+            customStock: 25,
+            requiredQuantity: 250,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+        ],
+      })
+
+      expect(updated.status).toBe(200)
+      const components = updated.body.components as Array<Record<string, unknown>>
+      expect(components).toHaveLength(1)
+      expect(components[0]).toMatchObject({ customName: "أرز", requiredQuantity: 250 })
+    })
+
+    it("applies the same type rules as creation", async () => {
+      const { token } = await signIn("catalog-update-rules@example.com", "Catalog Update Rules")
+      const created = await createProduct(token, SIMPLE_PRODUCT)
+
+      const updated = await patch(token, String(created.body.id), {
+        ...SIMPLE_PRODUCT,
+        sellPrice: null,
+      })
+      expect(updated.status).toBe(422)
+      expect((updated.body.details as { fields: Record<string, string> }).fields).toHaveProperty(
+        "sellPrice"
+      )
+    })
+
+    it("404s for another organization, an unknown id, or a synced id", async () => {
+      const first = await signIn("catalog-upd-a@example.com", "Catalog Upd A")
+      const second = await signIn("catalog-upd-b@example.com", "Catalog Upd B")
+      const created = await createProduct(first.token, SIMPLE_PRODUCT)
+
+      expect((await patch(second.token, String(created.body.id), SIMPLE_PRODUCT)).status).toBe(404)
+      expect(
+        (await patch(first.token, "6f6d1f9c-0000-4000-8000-000000000000", SIMPLE_PRODUCT)).status
+      ).toBe(404)
+      expect((await patch(first.token, "salla:900", SIMPLE_PRODUCT)).status).toBe(404)
+    })
+  })
+
+  describe("deleting", () => {
+    it("removes a product from the list and 404s afterwards", async () => {
+      const { token } = await signIn("catalog-delete@example.com", "Catalog Delete")
+      const created = await createProduct(token, SIMPLE_PRODUCT)
+      const id = String(created.body.id)
+
+      const removed = await fetch(`${baseUrl}/v1/products/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(token),
+      })
+      expect(removed.status).toBe(204)
+
+      const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      expect(((await listResponse.json()) as { items: unknown[] }).items).toHaveLength(0)
+
+      const fetched = await fetch(`${baseUrl}/v1/products/${id}`, { headers: authHeaders(token) })
+      expect(fetched.status).toBe(404)
+    })
+
+    it("frees the stock code so it can be used again", async () => {
+      const { token } = await signIn("catalog-delete-sku@example.com", "Catalog Delete Sku")
+      const created = await createProduct(token, SIMPLE_PRODUCT)
+
+      await fetch(`${baseUrl}/v1/products/${String(created.body.id)}`, {
+        method: "DELETE",
+        headers: authHeaders(token),
+      })
+
+      // The unique index is partial on deleted_at IS NULL, so a deleted product does not hold
+      // its code hostage.
+      expect((await createProduct(token, SIMPLE_PRODUCT)).status).toBe(201)
+    })
+
+    it("is idempotent and refuses ids from another organization", async () => {
+      const first = await signIn("catalog-del-a@example.com", "Catalog Del A")
+      const second = await signIn("catalog-del-b@example.com", "Catalog Del B")
+      const created = await createProduct(first.token, SIMPLE_PRODUCT)
+      const id = String(created.body.id)
+
+      // Another organization must not be able to delete it, even knowing the id.
+      const cross = await fetch(`${baseUrl}/v1/products/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(second.token),
+      })
+      expect(cross.status).toBe(404)
+
+      expect(
+        (
+          await fetch(`${baseUrl}/v1/products/${id}`, {
+            method: "DELETE",
+            headers: authHeaders(first.token),
+          })
+        ).status
+      ).toBe(204)
+      // A second delete finds nothing left to delete.
+      expect(
+        (
+          await fetch(`${baseUrl}/v1/products/${id}`, {
+            method: "DELETE",
+            headers: authHeaders(first.token),
+          })
+        ).status
+      ).toBe(404)
+    })
+
+    it("404s for a synced product id rather than failing on a uuid cast", async () => {
+      const { token } = await signIn("catalog-del-ext@example.com", "Catalog Del Ext")
+      const response = await fetch(`${baseUrl}/v1/products/salla:900`, {
+        method: "DELETE",
+        headers: authHeaders(token),
+      })
+      expect(response.status).toBe(404)
+    })
+  })
+
   it("rejects an unknown product type at the request boundary", async () => {
     const { token } = await signIn("catalog-badtype@example.com", "Catalog Bad Type")
 

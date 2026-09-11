@@ -8,7 +8,7 @@ import { NewConnectionWizard } from "./new-connection-wizard"
 
 // next/font is a build-time transform with no runtime implementation under vitest.
 vi.mock("@/components/design/fonts", () => ({
-  tajawal: { className: "font-tajawal" },
+  cairo: { className: "font-cairo" },
 }))
 
 const mockRefetch = vi.fn()

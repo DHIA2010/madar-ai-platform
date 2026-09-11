@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next"
 import "./globals.css"
-import { Inter } from "next/font/google"
 import { headers } from "next/headers"
 import { NextIntlClientProvider } from "next-intl"
 import { getLocale, getMessages } from "next-intl/server"
@@ -11,13 +10,9 @@ import { WorkspaceProvider } from "@/features/workspace"
 import { DEFAULT_THEME, THEME_KEYS } from "@/constants/theme"
 import { localeDirection } from "@/i18n/locales"
 import { isMarketingHostname } from "@/features/marketing-site/marketing-constants"
+import { cairo } from "@/components/design/fonts"
 import StoreContextProvider from "@/providers/store-context-provider"
 import QueryProvider from "../providers/query-provider"
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-})
 
 /* SEO Metadata */
 export const metadata: Metadata = {
@@ -111,9 +106,11 @@ export default async function RootLayout({
   const htmlLang = isMarketingSite ? "en" : locale
   const htmlDir = isMarketingSite ? "ltr" : localeDirection(locale as "ar" | "en")
 
+  // cairo.variable goes on <html>, not <body>: globals.css derives --font-sans from it on :root,
+  // and a custom property defined only on <body> is out of scope there.
   return (
-    <html lang={htmlLang} dir={htmlDir} suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`} suppressHydrationWarning>
+    <html lang={htmlLang} dir={htmlDir} className={cairo.variable} suppressHydrationWarning>
+      <body className={`${cairo.className} antialiased`} suppressHydrationWarning>
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider
             attribute="class"

@@ -170,7 +170,13 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
 
   async updateOrganization(
     organizationId: string,
-    payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+    payload: {
+      name?: string
+      currency?: string
+      timezone?: string
+      locale?: string
+      settings?: OrganizationSettingsDto
+    }
   ): Promise<OrganizationDto> {
     try {
       if (this.resolveBackend() === "mock") {
@@ -255,7 +261,32 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
   }
 
-  async updateWorkspace(workspaceId: string, payload: { name?: string }): Promise<WorkspaceDto> {
+  async deleteOrganization(organizationId: string): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.deleteOrganization(organizationId)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.deleteOrganization(organizationId)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async updateWorkspace(
+    workspaceId: string,
+    payload: {
+      name?: string
+      status?: "active" | "archived"
+      metadata?: Record<string, string>
+      settings?: Record<string, string | boolean | number>
+    }
+  ): Promise<WorkspaceDto> {
     try {
       if (this.resolveBackend() === "mock") {
         const mockGateway = await this.getMockGateway()

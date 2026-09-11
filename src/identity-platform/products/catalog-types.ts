@@ -34,7 +34,7 @@ export const TYPES_REQUIRING_SELL_PRICE: ProductType[] = [
 // variable product holds stock per variant, and a service or digital download has none.
 export const TYPES_REQUIRING_STOCK: ProductType[] = ["raw", "simple", "weighted"]
 
-export const PRODUCT_UNITS = ["حبة", "جرام", "كجم", "مل", "لتر"] as const
+export const PRODUCT_UNITS = ["حبة", "كرتون", "جرام", "كجم", "مل", "لتر"] as const
 export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 
 // Each unit reduces to a base dimension, so a recipe measured in جرام can be checked against
@@ -43,9 +43,13 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 // Kept in step with the same table in the Add Product page.
 export const UNIT_BASE: Record<
   ProductUnit,
-  { dimension: "count" | "mass" | "volume"; factor: number }
+  { dimension: "count" | "pack" | "mass" | "volume"; factor: number }
 > = {
   حبة: { dimension: "count", factor: 1 },
+  // A carton has no universal size -- 12 waters, 6 oils, 24 juices -- so it sits in its own
+  // dimension and can never be bridged to pieces by formula. A recipe pairing the two must
+  // supply the count explicitly, which is what the conversion factor is for.
+  كرتون: { dimension: "pack", factor: 1 },
   جرام: { dimension: "mass", factor: 1 },
   كجم: { dimension: "mass", factor: 1000 },
   مل: { dimension: "volume", factor: 1 },
@@ -86,6 +90,12 @@ export interface ProductVariantInput {
 }
 
 export interface ProductAttributes {
+  // How many base units make one carton of this product. A carton has no universal size, so it
+  // is recorded per product rather than derived from the unit.
+  unitsPerCarton?: number | null
+  // The piece-measured product this carton packages. Selling a carton is selling that many of
+  // it, so the two stock figures are the same stock counted differently.
+  linkedUnitProductId?: string | null
   supplier?: string | null
   stockNotes?: string | null
   stockLocation?: string | null

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 // next/font is a build-time transform with no runtime implementation, so it has to be stubbed
 // for anything importing the design system's typeface.
 vi.mock("@/components/design/fonts", () => ({
-  tajawal: { className: "font-tajawal" },
+  cairo: { className: "font-cairo" },
 }))
 
 import { ConnectionsOverview } from "./connections-overview"

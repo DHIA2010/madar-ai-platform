@@ -8,8 +8,9 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { NotificationDropdown } from "@/components/notification-dropdown"
 import { GlobalSearch } from "@/components/global-search"
-import { UserDropdown } from "@/components/UserDropdown"
+import { NavUser } from "@/components/nav-user"
 import { Button } from "@/components/ui/button"
+import { WorkspaceSelector } from "@/features/workspace"
 
 import Footer from "@/components/layout/Footer"
 
@@ -77,7 +78,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <NotificationDropdown />
               </div>
               <LanguageSwitcher />
-              <UserDropdown />
+              {/* Moved here from the sidebar footer: the account/workspace switcher and the
+                  signed-in user, both one click away from the same page regardless of whether
+                  the rail is expanded or collapsed to icons. */}
+              <div className="hidden w-[200px] lg:block">
+                <WorkspaceSelector compact />
+              </div>
+              <NavUser variant="header" />
             </div>
           </div>
         </header>

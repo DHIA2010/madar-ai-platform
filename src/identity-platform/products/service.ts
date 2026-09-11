@@ -24,6 +24,9 @@ export interface NormalizedProduct {
   // Only native (Madar-authored) products carry one, which is what lets a bundle's component
   // picker offer raw materials alone.
   productType: ProductType | null
+  // Also null for a synced product: the storefronts do not expose a unit of measure, and it is
+  // what lets a carton product be linked to the piece product it packages.
+  baseUnit: string | null
   image: string | null
   activityDate: string
 }
@@ -83,6 +86,7 @@ function normalizeSallaProduct(row: CommerceRecordRow): NormalizedProduct {
     currency: payload.price?.currency ?? null,
     platform: "Salla",
     productType: null,
+    baseUnit: null,
     image: payload.main_image ?? payload.thumbnail ?? payload.images?.[0]?.url ?? null,
     activityDate: toIsoDate(row.updated_at),
   }
@@ -121,6 +125,7 @@ function normalizeShopifyProduct(row: CommerceRecordRow): NormalizedProduct {
     currency: null,
     platform: "Shopify",
     productType: null,
+    baseUnit: null,
     image: payload.image?.src ?? payload.images?.[0]?.src ?? null,
     activityDate: toIsoDate(row.updated_at),
   }
@@ -167,6 +172,7 @@ function normalizeZidProduct(row: CommerceRecordRow): NormalizedProduct {
     currency: null,
     platform: "Zid",
     productType: null,
+    baseUnit: null,
     image: payload.images?.[0]?.image?.large ?? payload.images?.[0]?.image?.thumbnail ?? null,
     activityDate: toIsoDate(row.updated_at),
   }

@@ -18,7 +18,7 @@ vi.mock("./services/live-visitors.service", () => ({
 
 // next/font must be stubbed: it is a build-time transform with no runtime implementation.
 vi.mock("@/components/design/fonts", () => ({
-  tajawal: { className: "font-tajawal" },
+  cairo: { className: "font-cairo" },
 }))
 
 const { default: LiveVisitorsPage } =

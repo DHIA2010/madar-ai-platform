@@ -14,13 +14,6 @@ export const ROUTES = {
   productsAdd: "/eCommerce/add-product",
   orders: "/orders",
   pos: "/pos",
-  posEmployees: "/pos/employees",
-  posRoles: "/pos/roles",
-  posAuth: {
-    login: "/pos/auth/login",
-    register: "/pos/auth/register",
-  },
-  posPortal: "/pos/portal",
   customers: "/customers",
   customersDetails: (customerId: string) => `/customers/${customerId}`,
   reports: "/reports",
@@ -37,6 +30,11 @@ export const ROUTES = {
   administrationAuditLog: "/administration/audit-log",
   administrationSessions: "/administration/sessions",
   settings: "/settings",
+  settingsGeneral: "/settings",
+  settingsDevices: "/settings/devices",
+  settingsDeviceNew: "/settings/devices/new",
+  settingsBranches: "/settings/branches",
+  settingsPayments: "/settings/payments",
   auth: {
     basic: {
       login: "/auth/basic/login",

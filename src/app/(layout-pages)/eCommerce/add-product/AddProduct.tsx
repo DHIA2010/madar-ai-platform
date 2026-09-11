@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Barcode,
   Boxes,
@@ -16,6 +17,7 @@ import {
   ImageIcon,
   Info,
   Layers,
+  Loader2,
   Package,
   Pencil,
   Plus,
@@ -31,12 +33,15 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 import { useAuth } from "@/features/authentication"
 import {
   productListService,
+  type CreateProductInput,
+  type ProductDetail,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
 
@@ -47,6 +52,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
 import { PRODUCT_TYPES, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
+import { DateField } from "./date-field"
 import { SearchableSelect, type SelectOption } from "./searchable-select"
 import {
   BASE_UNIT_OPTIONS,
@@ -82,11 +88,20 @@ const MAX_GENERATED_VARIANTS = 100
 // makes an item-specific pairing (حبة against كجم) ask for a factor instead of guessing.
 const UNIT_BASE = {
   حبة: { dimension: "count", factor: 1 },
+  // A carton sits in its own dimension rather than in "count" with a factor, because unlike a
+  // kilo (always 1000 grams) a carton has no universal size -- 12 bottles of water, 6 of oil,
+  // 24 juices. Its size is a property of the product, so it is asked for per product (the
+  // packaging field below) or per recipe row (the component table's conversion factor), and can
+  // never be assumed by formula.
+  كرتون: { dimension: "pack", factor: 1 },
   جرام: { dimension: "mass", factor: 1 },
   كجم: { dimension: "mass", factor: 1000 },
   مل: { dimension: "volume", factor: 1 },
   لتر: { dimension: "volume", factor: 1000 },
-} as const satisfies Record<string, { dimension: "count" | "mass" | "volume"; factor: number }>
+} as const satisfies Record<
+  string,
+  { dimension: "count" | "pack" | "mass" | "volume"; factor: number }
+>
 
 // The unit vocabulary is UNIT_BASE's own keys, so there is exactly one place a unit is declared.
 type Unit = keyof typeof UNIT_BASE
@@ -194,8 +209,16 @@ export default function AddProduct() {
   const componentNameInputs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const { currentUser } = useAuth()
+  const router = useRouter()
+  // The same form serves both jobs: with ?id= it loads that product and saves over it, without
+  // it creates a new one. Duplicating this page for editing would mean maintaining seven
+  // type-specific layouts twice.
+  const editingId = useSearchParams().get("id")
+  const isEditing = editingId !== null
 
-  const [productType, setProductType] = useState<ProductTypeKey>("bundle")
+  // The ordinary product is the common case and the first card in the row, so the page opens on
+  // it rather than on a bundle.
+  const [productType, setProductType] = useState<ProductTypeKey>("simple")
 
   // Shared identity
   const [name, setName] = useState("")
@@ -208,6 +231,8 @@ export default function AddProduct() {
   const [expiryDate, setExpiryDate] = useState("")
   const [showErrors, setShowErrors] = useState(false)
   const [scrollToError, setScrollToError] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [loadingProduct, setLoadingProduct] = useState(false)
 
   // Stock and pricing
   const [baseUnit, setBaseUnit] = useState(BASE_UNIT_OPTIONS[0].value)
@@ -218,6 +243,10 @@ export default function AddProduct() {
   const [supplier, setSupplier] = useState("")
   const [stockNotes, setStockNotes] = useState("")
   const [stockLocation, setStockLocation] = useState("")
+  // How many base units make one carton, for this product. Empty until the author says.
+  const [unitsPerCarton, setUnitsPerCarton] = useState("")
+  // The piece-measured product a carton packages.
+  const [linkedUnitProductId, setLinkedUnitProductId] = useState("")
   const [batchNumber, setBatchNumber] = useState("")
   const [brand, setBrand] = useState("")
   const [model, setModel] = useState("")
@@ -247,6 +276,8 @@ export default function AddProduct() {
   const [variantOverrides, setVariantOverrides] = useState<Record<string, VariantOverride>>({})
   const [excludedVariants, setExcludedVariants] = useState<ReadonlySet<string>>(new Set())
   const [selectedVariants, setSelectedVariants] = useState<ReadonlySet<string>>(new Set())
+  const [bulkPrice, setBulkPrice] = useState("")
+  const [bulkStock, setBulkStock] = useState("")
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [extraOpen, setExtraOpen] = useState(true)
 
@@ -312,6 +343,117 @@ export default function AddProduct() {
     return () => window.removeEventListener("beforeunload", warn)
   }, [name, description, images.length])
 
+  // Hydrates the whole form from a stored product. Numbers become strings because every input
+  // on this page is a controlled text field -- and null must become "" rather than "null".
+  useEffect(() => {
+    if (!editingId) return
+    let cancelled = false
+
+    const asText = (value: number | null | undefined) =>
+      value === null || value === undefined ? "" : String(value)
+
+    setLoadingProduct(true)
+    productListService
+      .getProduct(editingId)
+      .then((product: ProductDetail) => {
+        if (cancelled) return
+
+        setProductType(product.productType)
+        setName(product.name)
+        setSku(product.sku ?? "")
+        setCategory(product.category)
+        setDescription(product.description)
+        setPublished(product.status === "active")
+        setBaseUnit(product.baseUnit || BASE_UNIT_OPTIONS[0].value)
+        setSellPrice(asText(product.sellPrice))
+        setCostPrice(asText(product.costPrice))
+        setStockQty(asText(product.stockQuantity))
+        setMinStock(asText(product.minStock))
+
+        const attributes = (product.attributes ?? {}) as Record<string, unknown>
+        const text = (key: string) => (attributes[key] == null ? "" : String(attributes[key]))
+        setUnitsPerCarton(text("unitsPerCarton"))
+        setLinkedUnitProductId(text("linkedUnitProductId"))
+        setSupplier(text("supplier"))
+        setStockNotes(text("stockNotes"))
+        setStockLocation(text("stockLocation"))
+        setBatchNumber(text("batchNumber"))
+        setBrand(text("brand"))
+        setModel(text("model"))
+        setBarcode(text("barcode"))
+        setCountryOfOrigin(text("countryOfOrigin"))
+        setMinPurchase(text("minPurchase"))
+        setInternalNotes(text("internalNotes"))
+        setExpiryDate(text("expiryDate"))
+        setOfferPrice(text("offerPrice"))
+        setSystemRequirements(text("systemRequirements"))
+        if (attributes.pricingType) setPricingType(String(attributes.pricingType))
+        if (attributes.serviceDurationUnit)
+          setServiceDurationUnit(String(attributes.serviceDurationUnit))
+        if (attributes.deliveryMethod) setDeliveryMethod(String(attributes.deliveryMethod))
+        if (attributes.productLanguage) setProductLanguage(String(attributes.productLanguage))
+        setBookingEnabled(attributes.bookingEnabled === true)
+        // One field backs both, so whichever the stored type uses is the one to restore.
+        setServiceDuration(
+          text(product.productType === "bundle" ? "preparationMinutes" : "serviceDuration")
+        )
+
+        if (product.components.length > 0) {
+          setComponents(
+            product.components.map((component) => ({
+              id: crypto.randomUUID(),
+              productId: component.componentRef ?? CUSTOM_COMPONENT,
+              customName: component.customName ?? "",
+              customStock: asText(component.customStock),
+              requiredUnit: component.requiredUnit as Unit,
+              requiredQuantity: asText(component.requiredQuantity),
+              stockUnit: component.stockUnit as Unit,
+              conversionFactor: asText(component.conversionFactor),
+              note: component.note ?? "",
+            }))
+          )
+        }
+
+        if (product.variantOptions.length > 0) {
+          setOptions(
+            product.variantOptions.map((option) => ({
+              id: crypto.randomUUID(),
+              name: option.name,
+              values: option.values,
+              draft: "",
+            }))
+          )
+          setOptionsOpen(true)
+        }
+
+        if (product.variants.length > 0) {
+          setVariantOverrides(
+            Object.fromEntries(
+              product.variants.map((variant) => [
+                variant.optionValues.join(" / "),
+                {
+                  sku: variant.sku ?? "",
+                  price: asText(variant.price),
+                  stock: asText(variant.stock),
+                },
+              ])
+            )
+          )
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("تعذر تحميل المنتج للتعديل.")
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoadingProduct(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editingId])
+
   const knownCategories = useMemo(
     () => [...new Set(catalogue.map((product) => product.category).filter(Boolean))].sort(),
     [catalogue]
@@ -325,16 +467,23 @@ export default function AddProduct() {
     [catalogue]
   )
 
-  const categoryOptions = useMemo<SelectOption[]>(
-    () =>
-      knownCategories.map((option) => ({
-        value: option,
-        label: option,
-        icon: CATEGORY_ICON,
-        tint: CATEGORY_TINT,
-      })),
-    [knownCategories]
-  )
+  // The list is the set of categories other products already use. A category the author has
+  // just typed is not among them yet -- it only becomes "known" once a product carrying it is
+  // saved -- so it is added here, otherwise the trigger would fall back to the placeholder and
+  // the choice would look lost.
+  const categoryOptions = useMemo<SelectOption[]>(() => {
+    const names =
+      knownCategories.includes(category) || category.trim() === ""
+        ? knownCategories
+        : [category, ...knownCategories]
+
+    return names.map((option) => ({
+      value: option,
+      label: option,
+      icon: CATEGORY_ICON,
+      tint: CATEGORY_TINT,
+    }))
+  }, [knownCategories, category])
 
   // A bundle is assembled from raw materials, so the picker offers those alone rather than the
   // whole catalogue. Products synced from a storefront carry no type at all (productType is
@@ -345,6 +494,31 @@ export default function AddProduct() {
     () => catalogue.filter((product) => product.productType === "raw"),
     [catalogue]
   )
+
+  // Candidates a carton can package: products this organisation authored that are counted in
+  // pieces. A synced storefront product carries no unit, so it cannot be linked -- there is
+  // nothing to say how many of it a carton holds.
+  const pieceProductOptions = useMemo<SelectOption[]>(
+    () =>
+      catalogue
+        .filter(
+          (product) => product.platform === "Madar" && (product.baseUnit ?? "").startsWith("حبة")
+        )
+        .map((product) => ({
+          value: product.id,
+          label: product.name,
+          hint: [`${NUMBER_AR.format(product.availableStock)} حبة في المخزون`, product.sku || null]
+            .filter(Boolean)
+            .join(" · "),
+          imageUrl: product.image,
+          icon: COMPONENT_FALLBACK_ICON,
+          tint: COMPONENT_FALLBACK_TINT,
+          keywords: `${product.sku} ${product.category}`,
+        })),
+    [catalogue]
+  )
+
+  const linkedUnitProduct = catalogue.find((product) => product.id === linkedUnitProductId) ?? null
 
   const componentOptions = useMemo<SelectOption[]>(
     () =>
@@ -483,16 +657,40 @@ export default function AddProduct() {
       return next
     })
 
-  // Applies one value across every selected row -- the reason the checkbox column exists. Pricing
-  // 20 variants one cell at a time is the single most tedious part of this form.
-  const applyToSelected = (patch: Partial<VariantOverride>) => {
+  // Fills price and quantity across many rows at once -- pricing 24 variants one cell at a time
+  // is the most tedious part of this form. Scope is the selection when there is one, otherwise
+  // every row in the table, so a full sheet does not require ticking every box first.
+  //
+  // Applied on an explicit press rather than as the field is typed: writing on each keystroke
+  // put 1, then 12, then 120 into every row, and made an intermediate value impossible to undo.
+  const applyBulkValues = () => {
+    const patch: Partial<VariantOverride> = {}
+    if (bulkPrice.trim() !== "") patch.price = bulkPrice.trim()
+    if (bulkStock.trim() !== "") patch.stock = bulkStock.trim()
+
+    if (Object.keys(patch).length === 0) {
+      toast.error("أدخل سعراً أو كمية لتطبيقها.")
+      return
+    }
+
+    const targets =
+      selectedVariants.size > 0
+        ? [...selectedVariants]
+        : activeVariants.map((variant) => variant.key)
+
+    if (targets.length === 0) return
+
     setVariantOverrides((current) => {
       const next = { ...current }
-      selectedVariants.forEach((key) => {
+      targets.forEach((key) => {
         next[key] = { ...(next[key] ?? { sku: "", price: "", stock: "" }), ...patch }
       })
       return next
     })
+
+    setBulkPrice("")
+    setBulkStock("")
+    toast.success(`تم التطبيق على ${NUMBER_AR.format(targets.length)} متغير.`)
   }
 
   const excludeVariants = (keys: Iterable<string>) => {
@@ -594,10 +792,106 @@ export default function AddProduct() {
       ["simple", "raw", "weighted"].includes(productType) && stockQty.trim() === ""
         ? "الكمية الحالية في المخزون مطلوبة"
         : null,
+    // A carton with nothing to package is not a sellable thing -- selling one has to deduct
+    // from some piece-measured product's stock.
+    linkedUnitProduct:
+      baseUnit.startsWith("كرتون") && linkedUnitProductId === ""
+        ? "اختر المنتج المرتبط المباع بالحبة"
+        : null,
   }
   const isValid = Object.values(errors).every((error) => error === null)
 
-  const submit = (asDraft: boolean) => {
+  // Optional numbers are sent as null rather than 0: an untouched cost field means "not stated",
+  // which is a different fact from "costs nothing".
+  const optionalNumber = (raw: string): number | null => {
+    if (raw.trim() === "") return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const buildPayload = (asDraft: boolean): CreateProductInput => ({
+    productType,
+    name: name.trim(),
+    // The server drops this for the types that carry no stock code, but sending null keeps the
+    // request honest about what was actually entered.
+    sku: showsSku ? sku.trim() || null : null,
+    category: category.trim(),
+    description: description.trim(),
+    status: asDraft ? "draft" : published ? "active" : "draft",
+    baseUnit: baseUnit || null,
+    sellPrice: optionalNumber(sellPrice),
+    costPrice: optionalNumber(costPrice),
+    stockQuantity: optionalNumber(stockQty),
+    minStock: optionalNumber(minStock),
+    // Images are still local object URLs at this point. There is no product-image upload
+    // endpoint, so nothing is sent rather than a blob: URL no other client could resolve.
+    imageUrls: [],
+    attributes: {
+      unitsPerCarton: packagingApplies ? optionalNumber(unitsPerCarton) : null,
+      linkedUnitProductId: packagingApplies ? linkedUnitProductId || null : null,
+      supplier: supplier.trim() || null,
+      stockNotes: stockNotes.trim() || null,
+      stockLocation: stockLocation.trim() || null,
+      batchNumber: batchNumber.trim() || null,
+      brand: brand.trim() || null,
+      model: model.trim() || null,
+      barcode: barcode.trim() || null,
+      countryOfOrigin: countryOfOrigin.trim() || null,
+      minPurchase: optionalNumber(minPurchase),
+      internalNotes: internalNotes.trim() || null,
+      expiryDate: expiryDate || null,
+      pricingType: isService ? pricingType : null,
+      serviceDuration: optionalNumber(serviceDuration),
+      serviceDurationUnit: isService ? serviceDurationUnit : null,
+      deliveryMethod: isService ? deliveryMethod : null,
+      bookingEnabled: isService ? bookingEnabled : null,
+      offerPrice: optionalNumber(offerPrice),
+      systemRequirements: systemRequirements.trim() || null,
+      productLanguage: productType === "digital" ? productLanguage : null,
+      preparationMinutes: isBundle ? optionalNumber(serviceDuration) : null,
+    },
+    components: isBundle
+      ? resolvedComponents
+          .filter((entry) => entry.label !== "" && entry.required !== null)
+          .map((entry) => ({
+            componentRef: entry.isCustom ? null : entry.row.productId || null,
+            customName: entry.isCustom ? entry.row.customName.trim() : null,
+            customStock: entry.isCustom ? optionalNumber(entry.row.customStock) : null,
+            requiredQuantity: Number(entry.row.requiredQuantity),
+            requiredUnit: entry.row.requiredUnit,
+            stockUnit: entry.row.stockUnit,
+            conversionFactor: optionalNumber(entry.row.conversionFactor),
+            note: entry.row.note.trim() || null,
+          }))
+      : [],
+    variantOptions: isVariable
+      ? filledOptions.map((option) => ({ name: option.name.trim(), values: option.values }))
+      : [],
+    variants: isVariable
+      ? activeVariants.map((variant) => {
+          const override = variantOverride(variant.key)
+          return {
+            sku: override.sku.trim() || null,
+            price: optionalNumber(override.price),
+            stock: optionalNumber(override.stock),
+            optionValues: variant.values,
+          }
+        })
+      : [],
+  })
+
+  const cancel = () => router.push(ROUTES.products)
+
+  // The server validates the same rules again and answers with a field map, so its verdict is
+  // shown against the fields rather than as one opaque failure.
+  const applyServerErrors = (details: unknown): string[] => {
+    if (!details || typeof details !== "object") return []
+    const fields = (details as { fields?: Record<string, string> }).fields
+    if (!fields || typeof fields !== "object") return []
+    return Object.entries(fields).map(([field, message]) => `${field}: ${message}`)
+  }
+
+  const submit = async (asDraft: boolean) => {
     setShowErrors(true)
 
     if (!asDraft && !isValid) {
@@ -612,28 +906,85 @@ export default function AddProduct() {
       return
     }
 
-    // The backend exposes GET /v1/products only: there is no create endpoint, and no schema for
-    // any of these product types. Rather than swallow the form or fake a success, the page says
-    // so and keeps what was typed.
-    toast.error(
-      asDraft
-        ? "حفظ المسودة غير متاح بعد — لا توجد واجهة برمجية لإنشاء المنتجات."
-        : `${type.saveLabel} غير متاح بعد — لا توجد واجهة برمجية لإنشاء المنتجات.`,
-      { description: "بياناتك ما زالت في النموذج ولم تُفقد." }
-    )
+    setSaving(true)
+    try {
+      const payload = buildPayload(asDraft)
+      const saved = isEditing
+        ? await productListService.updateProduct(editingId, payload)
+        : await productListService.createProduct(payload)
+
+      toast.success(
+        isEditing ? "تم حفظ التعديلات." : asDraft ? "تم حفظ المسودة." : `تم حفظ ${type.title}.`,
+        { description: saved.sku ? `رمز المنتج: ${saved.sku}` : saved.name }
+      )
+      // The form is deliberately not cleared before navigating: if the push fails the work is
+      // still on screen.
+      router.push(ROUTES.products)
+    } catch (error) {
+      const status = error instanceof AppError ? error.status : undefined
+      const serverFields = error instanceof AppError ? applyServerErrors(error.details) : []
+
+      if (status === 404) {
+        toast.error("المنتج غير موجود.", { description: "ربما تم حذفه من جهاز آخر." })
+      } else if (status === 409) {
+        toast.error("رمز المنتج (SKU) مستخدم بالفعل.", {
+          description: "غيّر الرمز أو استخدم زر التوليد التلقائي.",
+        })
+      } else if (status === 403) {
+        toast.error(
+          isEditing ? "لا تملك صلاحية تعديل المنتجات." : "لا تملك صلاحية إنشاء المنتجات.",
+          {
+            description: `تواصل مع مالك الحساب لمنحك صلاحية products:${isEditing ? "edit" : "create"}.`,
+          }
+        )
+      } else if (serverFields.length > 0) {
+        toast.error("تعذر حفظ المنتج — راجع الحقول التالية.", {
+          description: serverFields.slice(0, 4).join(" · "),
+        })
+      } else {
+        toast.error(isEditing ? "تعذر حفظ التعديلات." : "تعذر حفظ المنتج.", {
+          description: error instanceof Error ? error.message : "حدث خطأ غير متوقع. حاول مرة أخرى.",
+        })
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const baseUnitShort = baseUnit.split(" ")[0]
 
+  // Only a carton needs a pack size. A product already counted in pieces is the base itself --
+  // asking how many pieces are in a carton would be asking about a different product.
+  const packagingApplies = baseUnitShort === "كرتون"
+  const perCarton = Number(unitsPerCarton)
+  const hasPackaging = packagingApplies && unitsPerCarton.trim() !== "" && perCarton > 0
+
+  // Splits a quantity into whole cartons and the pieces left over, which is how stock is read
+  // on a shelf: "1 carton and 11 pieces" rather than 1.92 cartons. When the base unit is the
+  // carton itself the quantity is already in cartons, so the split runs the other way.
+  const packagingBreakdown = (() => {
+    if (!hasPackaging) return null
+    const quantity = Number(stockQty)
+    if (stockQty.trim() === "" || !Number.isFinite(quantity) || quantity < 0) return null
+
+    const pieces = baseUnitShort === "كرتون" ? quantity * perCarton : quantity
+    const cartons = Math.floor(pieces / perCarton)
+    const remainder = Math.round((pieces - cartons * perCarton) * 1000) / 1000
+
+    return { pieces, cartons, remainder }
+  })()
+
   return (
-    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 pb-28 pt-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 pb-28 pt-5")} dir="rtl">
       <div className="mx-auto w-full max-w-[1400px] space-y-4">
         <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
           <Link href={ROUTES.products} className="transition-colors hover:text-[#2878ff]">
             المنتجات
           </Link>
           <ChevronLeft className="size-3.5 text-[#b6c2d4]" />
-          <span className={cn("font-semibold", HEADING)}>إضافة منتج جديد</span>
+          <span className={cn("font-semibold", HEADING)}>
+            {isEditing ? "تعديل منتج" : "إضافة منتج جديد"}
+          </span>
         </nav>
 
         {/* RTL: the icon is written first so it lands to the right of the title. */}
@@ -643,11 +994,18 @@ export default function AddProduct() {
           </span>
           <div>
             <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
-              {type.pageTitle}
+              {isEditing ? `تعديل ${type.title}` : type.pageTitle}
             </h1>
             <p className={cn("mt-1 text-[12.5px]", MUTED)}>{type.pageSubtitle}</p>
           </div>
         </div>
+
+        {loadingProduct ? (
+          <div className="flex items-center gap-2 rounded-[12px] border border-[#cfe0ff] bg-[#f2f7ff] px-4 py-2.5">
+            <Loader2 className="size-4 animate-spin text-[#2878ff]" />
+            <p className={cn("text-[12px]", HEADING)}>جارٍ تحميل بيانات المنتج...</p>
+          </div>
+        ) : null}
 
         <section className={cn(PANEL, "p-4 md:p-5")}>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -659,11 +1017,23 @@ export default function AddProduct() {
                   key={option.key}
                   type="button"
                   aria-pressed={isSelected}
+                  // The type decides which sections exist, so switching it on an existing
+                  // product would silently discard its components or variants. Editing keeps
+                  // the type it was saved with.
+                  disabled={isEditing && !isSelected}
+                  title={
+                    isEditing && !isSelected
+                      ? "لا يمكن تغيير نوع منتج محفوظ — أنشئ منتجاً جديداً بالنوع المطلوب"
+                      : undefined
+                  }
                   className={cn(
-                    "cursor-pointer rounded-[12px] border p-3.5 text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40",
+                    "rounded-[12px] border p-3.5 text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40",
                     isSelected
                       ? "border-[#2878ff] bg-[#f7faff] shadow-[0_0_0_3px_rgba(40,120,255,0.12)]"
-                      : "border-[#e1e7f0] hover:border-[#c4d5f0]"
+                      : "border-[#e1e7f0] hover:border-[#c4d5f0]",
+                    isEditing && !isSelected
+                      ? "cursor-not-allowed opacity-45 hover:border-[#e1e7f0]"
+                      : "cursor-pointer"
                   )}
                   onClick={() => setProductType(option.key)}
                 >
@@ -712,6 +1082,7 @@ export default function AddProduct() {
                 <Field label={type.nameLabel} required error={showErrors ? errors.name : null}>
                   <Input
                     value={name}
+                    aria-label={type.nameLabel}
                     onChange={(event) => setName(event.target.value)}
                     placeholder={type.nameLabel}
                     className={FIELD_CLASS}
@@ -719,24 +1090,21 @@ export default function AddProduct() {
                 </Field>
 
                 <Field label="الفئة" required error={showErrors ? errors.category : null}>
-                  {knownCategories.length > 0 ? (
-                    <SearchableSelect
-                      value={category}
-                      options={categoryOptions}
-                      onChange={setCategory}
-                      placeholder="اختر الفئة"
-                      searchPlaceholder="البحث عن فئة..."
-                      emptyLabel="لا توجد فئة مطابقة"
-                      ariaLabel="الفئة"
-                    />
-                  ) : (
-                    <Input
-                      value={category}
-                      onChange={(event) => setCategory(event.target.value)}
-                      placeholder="أدخل الفئة"
-                      className={FIELD_CLASS}
-                    />
-                  )}
+                  {/* Creatable: a category is just a name carried on the product, so a new one
+                      is typed here and joins the list once a product using it is saved. The
+                      control handles an empty catalogue on its own -- with nothing to pick
+                      from, typing is the only path and the create row is the whole panel. */}
+                  <SearchableSelect
+                    value={category}
+                    options={categoryOptions}
+                    onChange={setCategory}
+                    onCreate={setCategory}
+                    createLabel={(draft) => `إضافة فئة "${draft}"`}
+                    placeholder="اختر الفئة أو اكتب فئة جديدة"
+                    searchPlaceholder="ابحث أو اكتب فئة جديدة..."
+                    emptyLabel="لا توجد فئة مطابقة"
+                    ariaLabel="الفئة"
+                  />
                 </Field>
 
                 {showsSku ? (
@@ -745,6 +1113,7 @@ export default function AddProduct() {
                     <div className="flex items-center gap-2">
                       <Input
                         value={sku}
+                        aria-label={type.skuLabel}
                         onChange={(event) => setSku(event.target.value)}
                         placeholder="SKU-001"
                         className={FIELD_CLASS}
@@ -807,10 +1176,18 @@ export default function AddProduct() {
                       min={0}
                       step="any"
                       value={stockQty}
+                      aria-label="الكمية الحالية في المخزون"
                       onChange={(event) => setStockQty(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
                     />
+                    {packagingBreakdown ? (
+                      <PackagingReadout
+                        breakdown={packagingBreakdown}
+                        perCarton={perCarton}
+                        linkedName={linkedUnitProduct?.name ?? null}
+                      />
+                    ) : null}
                   </Field>
 
                   <Field label="الحد الأدنى للمخزون">
@@ -819,12 +1196,56 @@ export default function AddProduct() {
                       min={0}
                       step="any"
                       value={minStock}
+                      aria-label="الحد الأدنى للمخزون"
                       onChange={(event) => setMinStock(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
                     />
                     <p className={cn(HINT, MUTED)}>سيتم تنبيهك عند الوصول إلى هذا الحد</p>
                   </Field>
+
+                  {/* Only asked for when the product is counted in pieces or cartons -- a carton's
+                      size is a fact about this product, not about the unit itself. */}
+                  {packagingApplies ? (
+                    <>
+                      <Field
+                        label="المنتج المرتبط (بالحبة)"
+                        required
+                        error={showErrors ? errors.linkedUnitProduct : null}
+                      >
+                        <SearchableSelect
+                          value={linkedUnitProductId}
+                          options={pieceProductOptions}
+                          onChange={setLinkedUnitProductId}
+                          placeholder="اختر المنتج المباع بالحبة"
+                          searchPlaceholder="ابحث في المنتجات بالحبة..."
+                          emptyLabel={
+                            pieceProductOptions.length === 0
+                              ? "لا يوجد منتج مقاس بالحبة بعد"
+                              : "لا يوجد منتج مطابق"
+                          }
+                          ariaLabel="المنتج المرتبط"
+                        />
+                        <p className={cn(HINT, MUTED)}>
+                          الكرتون تعبئة لهذا المنتج — بيع كرتون يخصم من مخزونه
+                        </p>
+                      </Field>
+
+                      <Field label="عدد الحبات في الكرتون" required>
+                        <SuffixInput
+                          value={unitsPerCarton}
+                          onChange={setUnitsPerCarton}
+                          suffix="حبة"
+                          label="عدد الحبات في الكرتون"
+                        />
+                        <p className={cn(HINT, MUTED)}>
+                          {hasPackaging && linkedUnitProduct
+                            ? `1 كرتون = ${NUMBER_AR.format(perCarton)} حبة من ${linkedUnitProduct.name}`
+                            : "يربط كمية الكرتون بكمية الحبة"}
+                        </p>
+                      </Field>
+                    </>
+                  ) : null}
 
                   <Field label="سعر الشراء (التكلفة)">
                     <MoneyInput value={costPrice} onChange={setCostPrice} label="سعر الشراء" />
@@ -834,6 +1255,7 @@ export default function AddProduct() {
                   <Field label="المورد (اختياري)">
                     <Input
                       value={supplier}
+                      aria-label="المورد"
                       onChange={(event) => setSupplier(event.target.value)}
                       placeholder="اسم المورد"
                       className={FIELD_CLASS}
@@ -883,10 +1305,18 @@ export default function AddProduct() {
                       type="number"
                       min={0}
                       value={stockQty}
+                      aria-label="الكمية الحالية في المخزون"
                       onChange={(event) => setStockQty(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
                     />
+                    {packagingBreakdown ? (
+                      <PackagingReadout
+                        breakdown={packagingBreakdown}
+                        perCarton={perCarton}
+                        linkedName={linkedUnitProduct?.name ?? null}
+                      />
+                    ) : null}
                   </Field>
 
                   <Field label="الحد الأدنى للمخزون">
@@ -894,12 +1324,56 @@ export default function AddProduct() {
                       type="number"
                       min={0}
                       value={minStock}
+                      aria-label="الحد الأدنى للمخزون"
                       onChange={(event) => setMinStock(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
                     />
                     <p className={cn(HINT, MUTED)}>سيتم تنبيهك عند الوصول إلى هذا الحد</p>
                   </Field>
+
+                  {/* Only asked for when the product is counted in pieces or cartons -- a carton's
+                      size is a fact about this product, not about the unit itself. */}
+                  {packagingApplies ? (
+                    <>
+                      <Field
+                        label="المنتج المرتبط (بالحبة)"
+                        required
+                        error={showErrors ? errors.linkedUnitProduct : null}
+                      >
+                        <SearchableSelect
+                          value={linkedUnitProductId}
+                          options={pieceProductOptions}
+                          onChange={setLinkedUnitProductId}
+                          placeholder="اختر المنتج المباع بالحبة"
+                          searchPlaceholder="ابحث في المنتجات بالحبة..."
+                          emptyLabel={
+                            pieceProductOptions.length === 0
+                              ? "لا يوجد منتج مقاس بالحبة بعد"
+                              : "لا يوجد منتج مطابق"
+                          }
+                          ariaLabel="المنتج المرتبط"
+                        />
+                        <p className={cn(HINT, MUTED)}>
+                          الكرتون تعبئة لهذا المنتج — بيع كرتون يخصم من مخزونه
+                        </p>
+                      </Field>
+
+                      <Field label="عدد الحبات في الكرتون" required>
+                        <SuffixInput
+                          value={unitsPerCarton}
+                          onChange={setUnitsPerCarton}
+                          suffix="حبة"
+                          label="عدد الحبات في الكرتون"
+                        />
+                        <p className={cn(HINT, MUTED)}>
+                          {hasPackaging && linkedUnitProduct
+                            ? `1 كرتون = ${NUMBER_AR.format(perCarton)} حبة من ${linkedUnitProduct.name}`
+                            : "يربط كمية الكرتون بكمية الحبة"}
+                        </p>
+                      </Field>
+                    </>
+                  ) : null}
 
                   <Field label="وحدة القياس" required>
                     <UnitSelect value={baseUnit} onChange={setBaseUnit} />
@@ -958,6 +1432,7 @@ export default function AddProduct() {
                         min={0}
                         step="any"
                         value={minPurchase}
+                        aria-label="الحد الأدنى للشراء"
                         onChange={(event) => setMinPurchase(event.target.value)}
                         placeholder="0.1"
                         className={FIELD_CLASS}
@@ -996,21 +1471,33 @@ export default function AddProduct() {
                     >
                       <SuffixInput
                         value={stockQty}
+                        aria-label="الكمية الحالية في المخزون"
                         onChange={setStockQty}
                         suffix={baseUnitShort}
                         label="الكمية الحالية في المخزون"
                       />
+                      {packagingBreakdown ? (
+                        <PackagingReadout
+                          breakdown={packagingBreakdown}
+                          perCarton={perCarton}
+                          linkedName={linkedUnitProduct?.name ?? null}
+                        />
+                      ) : null}
                     </Field>
 
                     <Field label="الحد الأدنى للمخزون">
                       <SuffixInput
                         value={minStock}
+                        aria-label="الحد الأدنى للمخزون"
                         onChange={setMinStock}
                         suffix={baseUnitShort}
                         label="الحد الأدنى للمخزون"
                       />
                       <p className={cn(HINT, MUTED)}>سيتم تنبيهك عند الوصول إلى هذا الحد</p>
                     </Field>
+
+                    {/* No carton packaging here: a weighted product is sold by the kilo, and its
+                        unit selector offers weights only -- there is no piece to package. */}
                   </div>
                 </section>
               </>
@@ -1303,48 +1790,86 @@ export default function AddProduct() {
                     </p>
                   ) : null}
 
-                  {selectedVariants.size > 0 ? (
-                    /* RTL: the count is written first so it anchors right of the bulk actions. */
+                  {/* Always on screen once there are rows: the previous version only appeared
+                      after ticking a checkbox, which made filling a 24-row sheet require ticking
+                      24 boxes to discover the shortcut that exists for exactly that case. */}
+                  {activeVariants.length > 0 ? (
                     <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-[#c4d5f0] bg-[#f2f7ff] px-4 py-2.5">
                       <p className={cn("text-[11.5px] font-bold", HEADING)}>
-                        {NUMBER_AR.format(selectedVariants.size)} محدد
+                        تطبيق سريع
+                        <span className={cn("ms-1.5 font-semibold", MUTED)}>
+                          {selectedVariants.size > 0
+                            ? `على ${NUMBER_AR.format(selectedVariants.size)} محدد`
+                            : `على الكل (${NUMBER_AR.format(activeVariants.length)})`}
+                        </span>
                       </p>
 
                       <Input
                         type="number"
                         min={0}
                         step="0.01"
-                        aria-label="سعر موحد للمتغيرات المحددة"
-                        placeholder="سعر موحد"
-                        className="h-9 w-[116px] rounded-[10px] border-[#c4d5f0] bg-white text-[12px]"
-                        onChange={(event) => applyToSelected({ price: event.target.value })}
+                        value={bulkPrice}
+                        aria-label="سعر موحد"
+                        placeholder="السعر"
+                        className="h-9 w-[110px] rounded-[10px] border-[#c4d5f0] bg-white text-[12px]"
+                        onChange={(event) => setBulkPrice(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            applyBulkValues()
+                          }
+                        }}
                       />
                       <Input
                         type="number"
                         min={0}
-                        aria-label="كمية موحدة للمتغيرات المحددة"
-                        placeholder="كمية موحدة"
-                        className="h-9 w-[116px] rounded-[10px] border-[#c4d5f0] bg-white text-[12px]"
-                        onChange={(event) => applyToSelected({ stock: event.target.value })}
+                        value={bulkStock}
+                        aria-label="كمية موحدة"
+                        placeholder="الكمية"
+                        className="h-9 w-[110px] rounded-[10px] border-[#c4d5f0] bg-white text-[12px]"
+                        onChange={(event) => setBulkStock(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            applyBulkValues()
+                          }
+                        }}
                       />
 
-                      <button
-                        type="button"
-                        className="cursor-pointer text-[11.5px] font-semibold text-[#e0484d] transition-opacity hover:opacity-70"
-                        onClick={() => excludeVariants(selectedVariants)}
+                      <Button
+                        className="h-9 gap-1.5 rounded-[10px] bg-[#2878ff] px-4 text-[12px] font-semibold text-white hover:bg-[#1f66e0]"
+                        disabled={bulkPrice.trim() === "" && bulkStock.trim() === ""}
+                        onClick={applyBulkValues}
                       >
-                        استبعاد المحدد
-                      </button>
-                      <button
-                        type="button"
-                        className={cn(
-                          "ms-auto cursor-pointer text-[11.5px] font-semibold transition-opacity hover:opacity-70",
-                          MUTED
-                        )}
-                        onClick={() => setSelectedVariants(new Set())}
-                      >
-                        إلغاء التحديد
-                      </button>
+                        تطبيق
+                        <CircleCheckBig className="size-3.5" />
+                      </Button>
+
+                      {selectedVariants.size > 0 ? (
+                        <>
+                          <button
+                            type="button"
+                            className="cursor-pointer text-[11.5px] font-semibold text-[#e0484d] transition-opacity hover:opacity-70"
+                            onClick={() => excludeVariants(selectedVariants)}
+                          >
+                            استبعاد المحدد
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              "ms-auto cursor-pointer text-[11.5px] font-semibold transition-opacity hover:opacity-70",
+                              MUTED
+                            )}
+                            onClick={() => setSelectedVariants(new Set())}
+                          >
+                            إلغاء التحديد
+                          </button>
+                        </>
+                      ) : (
+                        <p className={cn("ms-auto text-[10.5px]", MUTED)}>
+                          حدد صفوفاً لتطبيق القيم عليها وحدها
+                        </p>
+                      )}
                     </div>
                   ) : null}
 
@@ -2079,6 +2604,7 @@ export default function AddProduct() {
                       <Field label="رقم الدفعة (اختياري)">
                         <Input
                           value={batchNumber}
+                          aria-label="رقم الدفعة"
                           onChange={(event) => setBatchNumber(event.target.value)}
                           placeholder="LOT-001"
                           className={FIELD_CLASS}
@@ -2098,6 +2624,7 @@ export default function AddProduct() {
                       <Field label="علامة تجارية (اختياري)">
                         <Input
                           value={brand}
+                          aria-label="العلامة التجارية"
                           onChange={(event) => setBrand(event.target.value)}
                           placeholder="العلامة التجارية"
                           className={FIELD_CLASS}
@@ -2129,6 +2656,7 @@ export default function AddProduct() {
                       <Field label="بلد المنشأ (اختياري)">
                         <Input
                           value={countryOfOrigin}
+                          aria-label="بلد المنشأ"
                           onChange={(event) => setCountryOfOrigin(event.target.value)}
                           placeholder="المملكة العربية السعودية"
                           className={FIELD_CLASS}
@@ -2387,6 +2915,7 @@ export default function AddProduct() {
                     <Field label="العلامة التجارية (اختياري)">
                       <Input
                         value={brand}
+                        aria-label="العلامة التجارية"
                         onChange={(event) => setBrand(event.target.value)}
                         placeholder="Nike"
                         className={FIELD_CLASS}
@@ -2395,6 +2924,7 @@ export default function AddProduct() {
                     <Field label="الموديل (اختياري)">
                       <Input
                         value={model}
+                        aria-label="الموديل"
                         onChange={(event) => setModel(event.target.value)}
                         placeholder="Air Max"
                         className={FIELD_CLASS}
@@ -2441,20 +2971,34 @@ export default function AddProduct() {
       {/* RTL: the primary action is written first so it sits at the right of the pair. */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[#e1e7f0] bg-white/95 px-6 py-3 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1400px] items-center justify-end gap-2.5">
+          {/* Both are disabled while a save is in flight, so a double click cannot create the
+              product twice -- there is no idempotency key on this endpoint. */}
           <Button
             className="h-11 gap-2 rounded-[12px] bg-[#2878ff] px-6 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
-            onClick={() => submit(false)}
+            disabled={saving}
+            onClick={() => void submit(false)}
           >
-            {type.saveLabel}
-            <Save className="size-4" />
+            {saving ? "جارٍ الحفظ..." : isEditing ? "حفظ التعديلات" : type.saveLabel}
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           </Button>
           <Button
             variant="outline"
             className="h-11 gap-2 rounded-[12px] border-[#e1e7f0] bg-white px-5 text-[13px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
-            onClick={() => submit(true)}
+            disabled={saving}
+            onClick={() => void submit(true)}
           >
             حفظ كمسودة
             <Tag className="size-4" />
+          </Button>
+          {/* RTL: written last so it sits at the far left, away from the save actions -- it is
+              the destructive-by-omission choice and should not be the easy one to hit. */}
+          <Button
+            variant="ghost"
+            className="h-11 rounded-[12px] px-5 text-[13px] font-semibold text-[#6b7b96] hover:bg-[#f2f5fa] hover:text-[#0b1738]"
+            disabled={saving}
+            onClick={cancel}
+          >
+            إلغاء
           </Button>
         </div>
       </div>
@@ -2593,21 +3137,7 @@ function SuffixInput({
 }
 
 function DateInput({ value, onChange }: { value: string; onChange: (next: string) => void }) {
-  // RTL: the field is written first so the calendar chip sits on the left.
-  return (
-    <div className="flex overflow-hidden rounded-[12px] border border-[#e1e7f0] bg-white">
-      <Input
-        type="date"
-        value={value}
-        aria-label="التاريخ"
-        onChange={(event) => onChange(event.target.value)}
-        className="h-11 rounded-none border-0 bg-transparent text-[13px] focus-visible:ring-0"
-      />
-      <span className="flex w-12 shrink-0 items-center justify-center border-s border-[#e1e7f0] bg-[#f8fafd] text-[#95a4bd]">
-        <CalendarDays className="size-4" />
-      </span>
-    </div>
-  )
+  return <DateField value={value} onChange={onChange} />
 }
 
 function UnitSelect({ value, onChange }: { value: string; onChange: (next: string) => void }) {
@@ -2640,6 +3170,37 @@ function QuickFact({
       </div>
       <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f2f5fa] text-[#5b6b85]">
         <Icon className="size-4" />
+      </span>
+    </div>
+  )
+}
+
+function PackagingReadout({
+  breakdown,
+  perCarton,
+  linkedName,
+}: {
+  breakdown: { pieces: number; cartons: number; remainder: number }
+  perCarton: number
+  linkedName: string | null
+}) {
+  const { cartons, remainder, pieces } = breakdown
+
+  // Read out both ways round: the shelf figure (whole cartons plus loose pieces) and the total
+  // in single units, since a stock count is done in one and a sale happens in the other.
+  const shelf =
+    remainder === 0
+      ? `${NUMBER_AR.format(cartons)} كرتون`
+      : cartons === 0
+        ? `${NUMBER_AR.format(remainder)} حبة`
+        : `${NUMBER_AR.format(cartons)} كرتون و ${NUMBER_AR.format(remainder)} حبة`
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-[10px] bg-[#f2fbf6] px-2.5 py-1.5">
+      <span className="text-[11px] font-bold text-[#1f9d55]">{shelf}</span>
+      <span className="text-[10.5px] text-[#6b7b96]">
+        = {NUMBER_AR.format(pieces)} حبة{linkedName ? ` من ${linkedName}` : ""} · الكرتون{" "}
+        {NUMBER_AR.format(perCarton)} حبة
       </span>
     </div>
   )

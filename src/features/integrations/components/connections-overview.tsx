@@ -44,7 +44,7 @@ import { ConnectionActionsMenu } from "./connection-actions-menu"
 import { ConnectorLogo } from "./connector-logo"
 import { SyncAllDialog } from "./sync-all-dialog"
 
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 
 const UI_TEXT = {
   breadcrumb: "التكاملات ›",
@@ -375,7 +375,7 @@ export function ConnectionsOverview() {
   }
 
   return (
-    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
       {/* Header */}
       <div className="mb-3.5 rounded-[14px] border border-[#e1e7f0] bg-white px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">

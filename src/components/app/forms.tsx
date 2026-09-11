@@ -58,7 +58,11 @@ export function AppFormField({
         {label ? (
           <FieldLabel htmlFor={id} className={labelClassName}>
             {label}
-            {required ? <span aria-hidden="true">*</span> : null}
+            {required ? (
+              <span aria-hidden="true" className="text-[#e0484d]">
+                *
+              </span>
+            ) : null}
           </FieldLabel>
         ) : null}
         {children}

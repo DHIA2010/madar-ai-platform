@@ -40,7 +40,7 @@ import {
   IconBadge,
   type IconBadgeTone,
 } from "@/features/campaign-links/components/design/icon-badge"
-import { tajawal } from "@/features/campaign-links/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 import {
   campaignPickerService,
   type CampaignPlatform,
@@ -374,7 +374,7 @@ export default function CampaignLinksPage() {
   return (
     <div
       dir="rtl"
-      className={`${tajawal.variable} min-h-full space-y-6 bg-[#F8FAFC] p-6 font-[family-name:var(--font-tajawal)]`}
+      className={`${cairo.variable} min-h-full space-y-6 bg-[#F8FAFC] p-6 font-[family-name:var(--font-cairo)]`}
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -575,7 +575,7 @@ export default function CampaignLinksPage() {
       >
         <div
           dir="rtl"
-          className={`${tajawal.variable} flex h-full flex-col font-[family-name:var(--font-tajawal)]`}
+          className={`${cairo.variable} flex h-full flex-col font-[family-name:var(--font-cairo)]`}
         >
           <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
             <div className="flex items-center gap-3">
@@ -685,7 +685,7 @@ export default function CampaignLinksPage() {
       >
         <div
           dir="rtl"
-          className={`${tajawal.variable} space-y-4 p-6 font-[family-name:var(--font-tajawal)]`}
+          className={`${cairo.variable} space-y-4 p-6 font-[family-name:var(--font-cairo)]`}
         >
           <h2 className="text-[16px] font-bold text-[#172033]">حذف رابط الحملة؟</h2>
           <p className="text-sm text-[#64748B]">

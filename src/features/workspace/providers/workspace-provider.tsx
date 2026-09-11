@@ -208,15 +208,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const createWorkspace = useCallback(
     async (payload: WorkspaceCreatePayload) => {
+      // Only real, user-entered values are written -- an empty branch field is left out of
+      // metadata entirely rather than stored as "".
+      const metadataEntries: Array<[string, string | undefined]> = [
+        ["description", payload.description.trim()],
+        ["city", payload.city?.trim()],
+        ["address", payload.address?.trim()],
+        ["district", payload.district?.trim()],
+        ["phone", payload.phone?.trim()],
+        ["email", payload.email?.trim()],
+        ["code", payload.code?.trim()],
+        ["managerId", payload.managerId?.trim()],
+        ["managerName", payload.managerName?.trim()],
+        ["openedAt", payload.openedAt?.trim()],
+      ]
+      const metadata = Object.fromEntries(
+        metadataEntries.filter((entry): entry is [string, string] => Boolean(entry[1]))
+      )
+
       const workspace = await workspaceApplicationService.createWorkspace({
         organizationId: payload.organizationId,
         name: payload.name.trim(),
-        metadata: payload.description.trim()
-          ? { description: payload.description.trim() }
-          : undefined,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         settings: {
           locale: payload.language.trim() || "en-US",
           timezone: payload.timezone.trim() || "UTC",
+          ...(payload.currency?.trim() ? { currency: payload.currency.trim() } : {}),
         },
       })
 
@@ -247,7 +264,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const updateOrganization = useCallback(
     async (
       organizationId: string,
-      payload: { name?: string; currency?: string; settings?: OrganizationSettingsDto }
+      payload: {
+        name?: string
+        currency?: string
+        timezone?: string
+        locale?: string
+        settings?: OrganizationSettingsDto
+      }
     ) => {
       const organization = await workspaceApplicationService.updateOrganization(
         organizationId,
@@ -286,6 +309,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [availableOrganizations, setAvailableOrganizations, workspaceApplicationService]
   )
 
+  // Soft delete on the backend. The organization stays in the list marked deleted rather than
+  // disappearing, so the caller decides what to show next.
+  const deleteOrganization = useCallback(
+    async (organizationId: string) => {
+      const organization = await workspaceApplicationService.deleteOrganization(organizationId)
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      return organization
+    },
+    [availableOrganizations, setAvailableOrganizations, workspaceApplicationService]
+  )
+
   const uploadOrganizationLogo = useCallback(
     async (organizationId: string, file: File) => {
       const dataBase64 = await fileToBase64(file)
@@ -315,7 +349,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   )
 
   const updateWorkspace = useCallback(
-    async (workspaceId: string, payload: { name?: string }) => {
+    async (
+      workspaceId: string,
+      payload: {
+        name?: string
+        status?: "active" | "archived"
+        metadata?: Record<string, string>
+        settings?: Record<string, string | boolean | number>
+      }
+    ) => {
       const workspace = await workspaceApplicationService.updateWorkspace(workspaceId, payload)
       setAvailableWorkspaces(mergeById(availableWorkspaces, [workspace]))
       if (currentWorkspace?.id === workspaceId) {
@@ -371,6 +413,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       getConnectedPlatformsCount,
       archiveOrganization,
       restoreOrganization,
+      deleteOrganization,
       updateWorkspace,
       archiveWorkspace,
       restoreWorkspace,
@@ -382,6 +425,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       availableWorkspaces,
       createOrganization,
       createWorkspace,
+      deleteOrganization,
       uploadOrganizationLogo,
       getConnectedPlatformsCount,
       currentOrganization,

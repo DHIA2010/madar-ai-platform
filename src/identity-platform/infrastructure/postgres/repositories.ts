@@ -283,6 +283,7 @@ class PostgresOrganizationRepository implements OrganizationRepository {
   async list(
     input: {
       ownerUserId?: string
+      ids?: string[]
       status?: OrganizationState["status"]
       page?: number
       pageSize?: number
@@ -297,6 +298,17 @@ class PostgresOrganizationRepository implements OrganizationRepository {
     if (input.ownerUserId) {
       values.push(input.ownerUserId)
       where.push(`owner_user_id = $${values.length}`)
+    }
+    if (input.ids) {
+      // An empty allow-list means "no organizations", not "every organization".
+      if (input.ids.length === 0) return []
+      // A bounded IN list rather than = ANY($n::uuid[]): the array form matches nothing under
+      // pg-mem on indexed uuid columns, which the tests run against.
+      const placeholders = input.ids.map((id) => {
+        values.push(id)
+        return `$${values.length}`
+      })
+      where.push(`id IN (${placeholders.join(", ")})`)
     }
     if (input.status) {
       values.push(input.status)

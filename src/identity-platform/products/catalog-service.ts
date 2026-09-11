@@ -47,6 +47,49 @@ export class ProductCatalogService {
     return product
   }
 
+  async update(input: {
+    organizationId: string
+    id: string
+    product: CreateProductInput
+  }): Promise<ProductView> {
+    if (!UUID_PATTERN.test(input.id)) throw PRODUCT_ERRORS.notFound()
+
+    const normalized = normalizeProduct(input.product)
+    const fields = validateProduct(normalized)
+
+    if (Object.keys(fields).length > 0) {
+      throw PRODUCT_ERRORS.validation(fields)
+    }
+
+    // Existence is settled before the stock-code check. The other order reports "code taken" for
+    // a product that does not exist, because the code legitimately belongs to some other row --
+    // a confusing answer to a request that was never going to apply to anything.
+    const current = await this.repository.findById(input.organizationId, input.id)
+    if (!current) throw PRODUCT_ERRORS.notFound()
+
+    if (normalized.sku) {
+      const existing = await this.repository.findBySku(input.organizationId, normalized.sku)
+      // A product keeping its own code is not a conflict -- only another row holding it is.
+      if (existing && existing.id !== input.id) {
+        throw PRODUCT_ERRORS.duplicateSku(normalized.sku)
+      }
+    }
+
+    const updated = await this.repository.update({ ...input, product: normalized })
+    if (!updated) throw PRODUCT_ERRORS.notFound()
+    return updated
+  }
+
+  async delete(organizationId: string, id: string): Promise<void> {
+    if (!UUID_PATTERN.test(id)) throw PRODUCT_ERRORS.notFound()
+
+    // Only products authored here can be deleted. A synced storefront product is owned by
+    // Salla/Shopify/Zid -- it has no row in this table, and the next sync would bring it back
+    // regardless, so pretending to delete it would be a lie.
+    const deleted = await this.repository.softDelete(organizationId, id)
+    if (!deleted) throw PRODUCT_ERRORS.notFound()
+  }
+
   async create(input: {
     organizationId: string
     workspaceId: string | null
@@ -113,6 +156,7 @@ export function toNormalizedProduct(product: ProductView): NormalizedProduct {
     currency: product.currency,
     platform: "Madar",
     productType: product.productType,
+    baseUnit: product.baseUnit,
     image: product.imageUrls[0] ?? null,
     activityDate: product.updatedAt,
   }

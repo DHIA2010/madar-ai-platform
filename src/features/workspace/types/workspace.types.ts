@@ -30,6 +30,19 @@ export interface WorkspaceSettings {
 export interface OrganizationSettings {
   storeName?: string
   country?: string
+  commercialRegistration?: string
+  taxNumber?: string
+  phone?: string
+  email?: string
+  website?: string
+  addressShort?: string
+  buildingNumber?: string
+  street?: string
+  secondaryNumber?: string
+  district?: string
+  postalCode?: string
+  city?: string
+  notifyEmail?: boolean
 }
 
 export interface Organization {
@@ -38,6 +51,11 @@ export interface Organization {
   slug: string
   logoUrl: string | null
   currency: string
+  // Real, writable organization columns (see OrganizationDto). Optional because older cached
+  // read models and the mock gateway predate them.
+  timezone?: string
+  locale?: string
+  createdAt?: string
   settings: OrganizationSettings
   subscription: Subscription
   status?: "active" | "archived" | "deleted"
@@ -56,6 +74,10 @@ export interface Workspace {
   slug: string
   settings: WorkspaceSettings
   status?: "active" | "archived"
+  // Free-form branch fields (city, address, district, phone, email, code, managerId,
+  // managerName, openedAt) live here -- see WorkspaceDto in @/application/contracts/workspace.contracts.
+  metadata?: Record<string, string>
+  createdAt?: string
 }
 
 export interface Membership {
@@ -94,6 +116,18 @@ export interface WorkspaceCreatePayload {
   description: string
   language: string
   timezone: string
+  // Branch-specific fields, packed into the workspace's metadata alongside description --
+  // absent when this payload comes from the plain workspace-switcher "add workspace" flow.
+  city?: string
+  address?: string
+  district?: string
+  phone?: string
+  email?: string
+  code?: string
+  managerId?: string
+  managerName?: string
+  openedAt?: string
+  currency?: string
 }
 
 export interface OrganizationCreatePayload {

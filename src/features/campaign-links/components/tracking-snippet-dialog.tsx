@@ -7,7 +7,8 @@ import { toast } from "sonner"
 import { AppButton, AppDialog } from "@/components/app"
 
 import { buildSnippetTag, trackingSnippetService } from "../services/tracking-snippet.service"
-import { tajawal } from "./design/fonts"
+
+import { cairo } from "@/components/design/fonts"
 
 interface TrackingSnippetDialogProps {
   open: boolean
@@ -70,7 +71,7 @@ export function TrackingSnippetDialog({ open, onOpenChange }: TrackingSnippetDia
     >
       <div
         dir="rtl"
-        className={`${tajawal.variable} space-y-4 p-6 font-[family-name:var(--font-tajawal)]`}
+        className={`${cairo.variable} space-y-4 p-6 font-[family-name:var(--font-cairo)]`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

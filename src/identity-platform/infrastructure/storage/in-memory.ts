@@ -99,6 +99,7 @@ class InMemoryOrganizationRepository implements OrganizationRepository {
   async list(
     input: {
       ownerUserId?: string
+      ids?: string[]
       status?: OrganizationState["status"]
       page?: number
       pageSize?: number
@@ -107,7 +108,11 @@ class InMemoryOrganizationRepository implements OrganizationRepository {
   ) {
     const page = input.page ?? 1
     const pageSize = input.pageSize ?? 20
+    // An empty allow-list means "no organizations", not "every organization" -- so this narrows
+    // before paging, exactly as the Postgres implementation does.
+    const allowed = input.ids ? new Set(input.ids) : null
     const rows = [...this.store.organizations.values()]
+      .filter((organization) => (allowed ? allowed.has(organization.id) : true))
       .filter((organization) =>
         input.ownerUserId ? organization.ownerUserId === input.ownerUserId : true
       )

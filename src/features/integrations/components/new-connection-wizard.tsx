@@ -66,7 +66,7 @@ import { ConnectorLogo } from "./connector-logo"
 
 import { useApplicationServices } from "@/application/context"
 import { SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
-import { tajawal } from "@/components/design/fonts"
+import { cairo } from "@/components/design/fonts"
 
 type PlatformCategory = "All" | "Marketing" | "Analytics" | "Ecommerce"
 type WizardStep = 0 | 1 | 2 | 3
@@ -2783,7 +2783,7 @@ export function NewConnectionWizard() {
         : "lg:grid-cols-[268px_minmax(0,1fr)]"
 
   return (
-    <div className={cn(tajawal.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
       <div className="mx-auto w-full max-w-[1360px] space-y-5">
         {renderTopProgress()}
 
