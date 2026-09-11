@@ -26,9 +26,9 @@ import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
-import { PosDeviceSettingsService } from "../../pos/device-settings-service"
 import { PosDevicesService } from "../../pos/devices-service"
 import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
+import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
@@ -85,7 +85,8 @@ import {
   customPaymentMethodSchema,
   paymentMethodUpdateSchema,
   posDeviceSchema,
-  posDeviceSettingsSchema,
+  openShiftSchema,
+  closeShiftSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
   importCampaignsSchema,
@@ -500,11 +501,11 @@ export function createIdentityApiServer(
   const productsAggregationService = container.infrastructure.database
     ? new ProductsAggregationService(container.infrastructure.database)
     : null
-  const posDeviceSettingsService = container.infrastructure.database
-    ? new PosDeviceSettingsService(container.infrastructure.database)
-    : null
   const posDevicesService = container.infrastructure.database
     ? new PosDevicesService(container.infrastructure.database)
+    : null
+  const posShiftsService = container.infrastructure.database
+    ? new PosShiftsService(container.infrastructure.database)
     : null
   const posPaymentMethodsService = container.infrastructure.database
     ? new PosPaymentMethodsService(container.infrastructure.database)
@@ -2496,44 +2497,62 @@ export function createIdentityApiServer(
         )
       }
 
-      if (url.pathname === "/v1/pos/device-settings") {
-        if (!posDeviceSettingsService) {
+      if (url.pathname === "/v1/pos/shifts") {
+        if (!posShiftsService) {
           return send(503, {
-            code: "POS_DEVICE_SETTINGS_UNAVAILABLE",
-            message: "Point-of-sale device settings are unavailable in memory mode.",
+            code: "POS_SHIFTS_UNAVAILABLE",
+            message: "Point-of-sale shifts are unavailable in memory mode.",
           })
         }
 
         if (method === "GET") {
-          if (!actor.modulePermissions.includes("pos:view")) {
-            throw ERRORS.forbidden()
-          }
-          return send(
-            200,
-            await posDeviceSettingsService.get(actor.organizationId, actor.workspaceId)
-          )
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          // Every branch, not just the caller's current workspace -- a manager reviewing history
+          // needs the whole organization's shifts, the same reasoning devices' countByWorkspace
+          // already applies.
+          return send(200, { items: await posShiftsService.list(actor.organizationId, null) })
         }
 
-        // PATCH rather than PUT even though the body is the complete configuration: every
-        // other write in this API is a PATCH, and the shared CORS allow-list is built from that
-        // convention -- a PUT is refused at preflight before it ever reaches this handler.
-        if (method === "PATCH") {
-          // Changing the hardware a till sells through is an operational change, not a display
-          // preference, so it takes the manage grant rather than plain view.
-          if (!actor.modulePermissions.includes("pos:manage")) {
-            throw ERRORS.forbidden()
-          }
-          const payload = posDeviceSettingsSchema.parse(await readJsonBody(request))
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = openShiftSchema.parse(await readJsonBody(request))
           return send(
-            200,
-            await posDeviceSettingsService.save({
+            201,
+            await posShiftsService.open({
               organizationId: actor.organizationId,
-              workspaceId: actor.workspaceId,
-              updatedBy: actor.userId,
-              settings: payload,
+              workspaceId: payload.workspaceId,
+              cashierUserId: payload.cashierUserId,
+              openedBy: actor.userId,
+              openingCashAmount: payload.openingCashAmount,
+              openingNotes: payload.openingNotes,
             })
           )
         }
+      }
+
+      // Checked before a generic /:id match would exist, the same way counts-by-workspace is
+      // checked before the device /:id route -- "close" must never be read as a shift id.
+      const shiftCloseMatch = url.pathname.match(/^\/v1\/pos\/shifts\/([^/]+)\/close$/)
+      if (shiftCloseMatch && method === "PATCH") {
+        if (!posShiftsService) {
+          return send(503, {
+            code: "POS_SHIFTS_UNAVAILABLE",
+            message: "Point-of-sale shifts are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        const payload = closeShiftSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await posShiftsService.close({
+            organizationId: actor.organizationId,
+            id: shiftCloseMatch[1],
+            closedBy: actor.userId,
+            closingCashAmount: payload.closingCashAmount,
+            closingNotes: payload.closingNotes,
+          })
+        )
       }
 
       if (url.pathname === "/v1/products") {

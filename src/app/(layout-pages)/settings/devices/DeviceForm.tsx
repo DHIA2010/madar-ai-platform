@@ -37,12 +37,21 @@ import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 import {
   BAUD_RATES,
+  DEFAULT_DEVICE_PRINTER_SETTINGS,
   DEFAULT_DEVICE_SCALE_SETTINGS,
+  PRINTER_ROLES,
   posDevicesService,
   type DeviceConnection,
+  type DevicePrinterSettings,
   type DeviceScaleSettings,
   type DeviceType,
   type PosDeviceInput,
+  type PaperWidth,
+  type PosDeviceSettingsInput,
+  type PrintDensity,
+  type PrintDirection,
+  type PrinterCharset,
+  type PrinterRole,
   type TrailingDigitMeaning,
 } from "@/features/pos/services/pos-device-settings.service"
 
@@ -99,6 +108,42 @@ function isDeviceType(value: string | null): value is DeviceType {
   return value !== null && DEVICE_TYPE_VALUES.has(value)
 }
 
+const PRINTER_ROLE_LABEL: Record<PrinterRole, string> = {
+  receipt: "إيصالات العملاء",
+  kitchen: "شاشة المطبخ",
+  bar: "البار",
+}
+
+const PAPER_WIDTH_LABEL: Record<PaperWidth, string> = {
+  "58mm": "58 مم",
+  "80mm": "80 مم",
+}
+
+const PRINT_DIRECTION_LABEL: Record<PrintDirection, string> = {
+  vertical: "عمودي",
+  horizontal: "أفقي",
+}
+
+const PRINT_DENSITY_LABEL: Record<PrintDensity, string> = {
+  light: "فاتحة",
+  normal: "عادية",
+  dark: "داكنة",
+}
+
+const PRINTER_CHARSET_LABEL: Record<PrinterCharset, string> = {
+  utf8: "UTF-8",
+  cp1256: "CP1256 (عربي)",
+  iso88596: "ISO-8859-6 (عربي)",
+}
+
+// Scale and receipt_printer are the only kinds with a per-unit shape; every other kind stores an
+// empty object -- same split the backend's settingsFor() draws.
+function defaultSettingsFor(deviceType: DeviceType): PosDeviceSettingsInput {
+  if (deviceType === "scale") return DEFAULT_DEVICE_SCALE_SETTINGS
+  if (deviceType === "receipt_printer") return DEFAULT_DEVICE_PRINTER_SETTINGS
+  return {}
+}
+
 function buildEmpty(deviceType: DeviceType): PosDeviceInput {
   return {
     name: "",
@@ -109,7 +154,7 @@ function buildEmpty(deviceType: DeviceType): PosDeviceInput {
     port: null,
     baudRate: 9600,
     enabled: true,
-    settings: DEFAULT_DEVICE_SCALE_SETTINGS,
+    settings: defaultSettingsFor(deviceType),
   }
 }
 
@@ -143,7 +188,7 @@ export default function DeviceForm() {
         port: found.port,
         baudRate: found.baudRate,
         enabled: found.enabled,
-        settings: { ...DEFAULT_DEVICE_SCALE_SETTINGS, ...found.settings },
+        settings: { ...defaultSettingsFor(found.deviceType), ...found.settings },
       })
     } catch {
       toast.error("تعذر تحميل الجهاز.")
@@ -159,10 +204,13 @@ export default function DeviceForm() {
   const patch = (changes: Partial<PosDeviceInput>) =>
     setDevice((current) => ({ ...current, ...changes }))
 
-  const patchSettings = (changes: Partial<DeviceScaleSettings>) =>
+  const patchSettings = (changes: Partial<DeviceScaleSettings> | Partial<DevicePrinterSettings>) =>
     setDevice((current) => ({ ...current, settings: { ...current.settings, ...changes } }))
 
   const isScale = device.deviceType === "scale"
+  const isPrinter = device.deviceType === "receipt_printer"
+  const printerSettings = device.settings as Partial<DevicePrinterSettings>
+  const scaleSettings = device.settings as Partial<DeviceScaleSettings>
   // A serial device needs a speed; a USB one negotiates its own, so asking would be noise.
   const needsBaudRate = device.connection === "serial"
 
@@ -188,7 +236,7 @@ export default function DeviceForm() {
         // Only a scale has these, and only a serial device has a speed -- sending them anyway
         // would store settings the device cannot act on.
         baudRate: needsBaudRate ? device.baudRate : null,
-        settings: isScale ? device.settings : {},
+        settings: isScale || isPrinter ? device.settings : {},
       }
 
       if (editingId) {
@@ -296,7 +344,10 @@ export default function DeviceForm() {
                     value,
                     label: entry.label,
                   }))}
-                  onChange={(value) => patch({ deviceType: value as DeviceType })}
+                  onChange={(value) => {
+                    const deviceType = value as DeviceType
+                    patch({ deviceType, settings: defaultSettingsFor(deviceType) })
+                  }}
                 />
               </Field>
 
@@ -385,7 +436,7 @@ export default function DeviceForm() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="وحدة الوزن الافتراضية" required>
                   <PlainSelect
-                    value={device.settings.defaultWeightUnit ?? "kg"}
+                    value={scaleSettings.defaultWeightUnit ?? "kg"}
                     ariaLabel="وحدة الوزن الافتراضية"
                     options={[
                       { value: "kg", label: "كيلوجرام (كجم)" },
@@ -399,7 +450,7 @@ export default function DeviceForm() {
                     both options are on screen rather than hidden in a list. */}
                 <Field label="الأرقام الأخيرة تمثل" required>
                   <RadioPair
-                    value={device.settings.trailingDigits ?? "weight"}
+                    value={scaleSettings.trailingDigits ?? "weight"}
                     ariaLabel="الأرقام الأخيرة تمثل"
                     options={[
                       { value: "price", label: "السعر" },
@@ -416,7 +467,7 @@ export default function DeviceForm() {
                     type="number"
                     min={1}
                     max={255}
-                    value={device.settings.indicatorStart ?? 1}
+                    value={scaleSettings.indicatorStart ?? 1}
                     aria-label="بداية مؤشر الميزان"
                     className={FIELD_CLASS}
                     onChange={(event) => {
@@ -432,7 +483,7 @@ export default function DeviceForm() {
 
                 <Field label="الجزء العشري" required>
                   <PlainSelect
-                    value={String(device.settings.decimals ?? 3)}
+                    value={String(scaleSettings.decimals ?? 3)}
                     ariaLabel="الجزء العشري"
                     options={[0, 1, 2, 3, 4].map((value) => ({
                       value: String(value),
@@ -448,15 +499,138 @@ export default function DeviceForm() {
                   id="auto-zero"
                   label="تصفير الوزن تلقائيا"
                   hint="إعادة تثبيت الميزان إلى الصفر قبل قراءة الوزن."
-                  checked={device.settings.autoZero ?? true}
+                  checked={scaleSettings.autoZero ?? true}
                   onChange={(autoZero) => patchSettings({ autoZero })}
                 />
                 <ToggleRow
                   id="block-unstable"
                   label="منع الإضافة إلى الكاشير"
                   hint="منع إضافة المنتج إذا كان الوزن غير مستقر."
-                  checked={device.settings.blockUnstableWeight ?? false}
+                  checked={scaleSettings.blockUnstableWeight ?? false}
                   onChange={(blockUnstableWeight) => patchSettings({ blockUnstableWeight })}
+                />
+              </div>
+            </section>
+          ) : null}
+
+          {isPrinter ? (
+            <section className={cn(PANEL, "p-5")}>
+              {/* RTL: the icon is written first so it sits to the right of the title. */}
+              <div className="mb-4 flex items-center gap-2">
+                <Printer className="size-[18px] text-[#2878ff]" />
+                <h2 className={cn("text-[16px] font-bold", HEADING)}>إعدادات الطابعة</h2>
+              </div>
+
+              {/* A restaurant sends the same sale to more than one printer -- a receipt with
+                  prices, a kitchen ticket without them. This role only labels what this printer
+                  is for; nothing in the platform dispatches a print job to it yet. */}
+              <Field label="دور الطابعة" required>
+                <PlainSelect
+                  value={printerSettings.role ?? "receipt"}
+                  ariaLabel="دور الطابعة"
+                  options={PRINTER_ROLES.map((role) => ({
+                    value: role,
+                    label: PRINTER_ROLE_LABEL[role],
+                  }))}
+                  onChange={(value) => patchSettings({ role: value as PrinterRole })}
+                />
+              </Field>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="عرض الورق" required>
+                  <PlainSelect
+                    value={printerSettings.paperWidth ?? "80mm"}
+                    ariaLabel="عرض الورق"
+                    options={Object.entries(PAPER_WIDTH_LABEL).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                    onChange={(value) => patchSettings({ paperWidth: value as PaperWidth })}
+                  />
+                </Field>
+
+                <Field label="اتجاه الطباعة" required>
+                  <PlainSelect
+                    value={printerSettings.printDirection ?? "vertical"}
+                    ariaLabel="اتجاه الطباعة"
+                    options={Object.entries(PRINT_DIRECTION_LABEL).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                    onChange={(value) => patchSettings({ printDirection: value as PrintDirection })}
+                  />
+                </Field>
+
+                <Field label="كثافة الطباعة" required>
+                  <PlainSelect
+                    value={printerSettings.printDensity ?? "normal"}
+                    ariaLabel="كثافة الطباعة"
+                    options={Object.entries(PRINT_DENSITY_LABEL).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                    onChange={(value) => patchSettings({ printDensity: value as PrintDensity })}
+                  />
+                </Field>
+
+                <Field label="ترميز الأحرف" required>
+                  <PlainSelect
+                    value={printerSettings.charset ?? "utf8"}
+                    ariaLabel="ترميز الأحرف"
+                    options={Object.entries(PRINTER_CHARSET_LABEL).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                    onChange={(value) => patchSettings({ charset: value as PrinterCharset })}
+                  />
+                </Field>
+
+                {/* Only meaningful for a network printer -- kept when switching away so flipping
+                    back does not lose an address that was already typed. */}
+                {device.connection === "network" ? (
+                  <Field label="عنوان الشبكة (IP)">
+                    <IconInput
+                      value={printerSettings.networkAddress ?? ""}
+                      ariaLabel="عنوان الشبكة"
+                      placeholder="192.168.1.50"
+                      icon={Cable}
+                      onChange={(value) => patchSettings({ networkAddress: value || null })}
+                    />
+                  </Field>
+                ) : null}
+
+                <Field label="نص أسفل الإيصال">
+                  <Input
+                    value={printerSettings.footerText ?? ""}
+                    aria-label="نص أسفل الإيصال"
+                    placeholder="شكرا لزيارتكم"
+                    className={FIELD_CLASS}
+                    onChange={(event) => patchSettings({ footerText: event.target.value || null })}
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-5 grid gap-4 border-t border-[#F1F4F9] pt-5 sm:grid-cols-2">
+                <ToggleRow
+                  id="auto-cut"
+                  label="قص الورق تلقائيا"
+                  hint="قص الإيصال تلقائيا بعد انتهاء الطباعة."
+                  checked={printerSettings.autoCut ?? true}
+                  onChange={(autoCut) => patchSettings({ autoCut })}
+                />
+                <ToggleRow
+                  id="print-logo"
+                  label="طباعة شعار المتجر"
+                  hint="إضافة شعار المتجر أعلى الإيصال."
+                  checked={printerSettings.printLogo ?? false}
+                  onChange={(printLogo) => patchSettings({ printLogo })}
+                />
+                <ToggleRow
+                  id="extra-copy"
+                  label="طباعة نسخة إضافية"
+                  hint="طباعة نسخة ثانية من كل إيصال."
+                  checked={printerSettings.extraCopy ?? false}
+                  onChange={(extraCopy) => patchSettings({ extraCopy })}
                 />
               </div>
             </section>
@@ -519,7 +693,12 @@ export default function DeviceForm() {
       </div>
 
       {/* RTL: the primary action is written first so it sits at the right of the pair. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E8EBF0] bg-white/95 px-6 py-3 backdrop-blur">
+      <div className="sticky bottom-0 z-30 -mx-[22px] border-t border-[#E8EBF0] bg-white/95 px-6 py-3 backdrop-blur">
+        {/* was `fixed inset-x-0`: that draws over the app sidebar's own help card since it
+            positions against the whole viewport rather than this settings column. `sticky`
+            stays pinned to the bottom without leaving this column's real width; the negative
+            margin cancels the settings layout's own px-[22px] so the bar still reaches this
+            column's edges. */}
         <div className="mx-auto flex w-full max-w-[1400px] items-center gap-2.5">
           <Button
             className="h-11 gap-2 rounded-[12px] bg-[#2878ff] px-6 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"

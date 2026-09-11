@@ -7,27 +7,12 @@ import { PRODUCT_STATUSES, PRODUCT_TYPES, PRODUCT_UNITS } from "./products/catal
 import { PAYMENT_KINDS } from "./pos/payment-methods-service"
 import {
   BAUD_RATES,
-  type BaudRate,
-  CARD_READER_AUTH_TYPES,
-  CARD_READER_CONNECTION_METHODS,
   DEVICE_CONNECTIONS,
-  DEVICE_TYPES,
-  DISPLAY_BRIGHTNESS_LEVELS,
-  DISPLAY_LANGUAGES,
-  DISPLAY_TEXT_DIRECTIONS,
-  DISPLAY_TIMEOUTS,
-  DRAWER_CONNECTIONS,
-  DRAWER_OPEN_METHODS,
-  DRAWER_TRIGGERS,
   PAPER_WIDTHS,
   PRINT_DENSITIES,
   PRINT_DIRECTIONS,
   PRINTER_CHARSETS,
-  PRINTER_CONNECTIONS,
-  SCANNER_CHARSETS,
-  SCANNER_CONNECTIONS,
-  SCANNER_INPUT_MODES,
-  SCANNER_LINE_ENDINGS,
+  PRINTER_ROLES,
   TRAILING_DIGIT_MEANINGS,
   WEIGHT_UNITS,
 } from "./pos/device-settings-types"
@@ -511,118 +496,11 @@ export const createProductSchema = z.object({
   variants: z.array(productVariantSchema).max(200).default([]),
 })
 
-// --- Point-of-sale hardware (migration 048) ------------------------------------------------
-//
-// Every group is required in full: the screen always submits the complete configuration, and a
-// partial body would leave the stored row saying a peripheral is enabled while the fields that
-// describe it went missing.
-
-export const posDeviceSettingsSchema = z.object({
-  scale: z.object({
-    enabled: z.boolean(),
-    name: z.string().max(120).nullable(),
-    connection: z.enum(DEVICE_CONNECTIONS),
-    port: z.string().max(60).nullable(),
-    // A closed set rather than a free number -- an arbitrary baud rate will not open the port.
-    // Refined against BAUD_RATES rather than restating the literals, so the list stays declared
-    // in exactly one place; the type guard narrows the parsed value to BaudRate.
-    baudRate: z
-      .number()
-      .refine((rate): rate is BaudRate => (BAUD_RATES as readonly number[]).includes(rate), {
-        message: "Unsupported baud rate",
-      }),
-    defaultWeightUnit: z.enum(WEIGHT_UNITS),
-    trailingDigits: z.enum(TRAILING_DIGIT_MEANINGS),
-    indicatorStart: z.number().int().min(1).max(255),
-    decimals: z.number().int().min(0).max(4),
-    blockUnstableWeight: z.boolean(),
-    autoZero: z.boolean(),
-  }),
-  receiptPrinter: z.object({
-    enabled: z.boolean(),
-    name: z.string().max(120).nullable(),
-    model: z.string().max(120).nullable(),
-    connection: z.enum(PRINTER_CONNECTIONS),
-    port: z.string().max(60).nullable(),
-    baudRate: z
-      .number()
-      .refine((rate): rate is BaudRate => (BAUD_RATES as readonly number[]).includes(rate), {
-        message: "Unsupported baud rate",
-      }),
-    networkAddress: z.string().max(120).nullable(),
-    paperWidth: z.enum(PAPER_WIDTHS),
-    printDirection: z.enum(PRINT_DIRECTIONS),
-    printDensity: z.enum(PRINT_DENSITIES),
-    charset: z.enum(PRINTER_CHARSETS),
-    // More than a couple of copies is a misconfiguration rather than an intent, and each one
-    // costs paper on every sale.
-    copies: z.number().int().min(1).max(5),
-    autoCut: z.boolean(),
-    printLogo: z.boolean(),
-    extraCopy: z.boolean(),
-    footerText: z.string().max(200).nullable(),
-  }),
-  barcodeScanner: z.object({
-    enabled: z.boolean(),
-    name: z.string().max(120).nullable(),
-    connection: z.enum(SCANNER_CONNECTIONS),
-    inputMode: z.enum(SCANNER_INPUT_MODES),
-    charset: z.enum(SCANNER_CHARSETS),
-    lineEnding: z.enum(SCANNER_LINE_ENDINGS),
-    prefix: z.string().max(10).nullable(),
-    suffix: z.string().max(10).nullable(),
-    inputDelayMs: z.number().int().min(0).max(5000),
-    allowRepeatScans: z.boolean(),
-    beepOnScan: z.boolean(),
-    uppercaseOutput: z.boolean(),
-    hideControlChars: z.boolean(),
-  }),
-  cashDrawer: z.object({
-    enabled: z.boolean(),
-    name: z.string().max(120).nullable(),
-    connection: z.enum(DRAWER_CONNECTIONS),
-    port: z.string().max(60).nullable(),
-    openTimeMs: z.number().int().min(100).max(2000),
-    openMethod: z.enum(DRAWER_OPEN_METHODS),
-    openTrigger: z.enum(DRAWER_TRIGGERS),
-    openOnCancel: z.boolean(),
-  }),
-  customerDisplay: z.object({
-    enabled: z.boolean(),
-    name: z.string().max(120).nullable(),
-    connection: z.enum(DEVICE_CONNECTIONS),
-    port: z.string().max(60).nullable(),
-    brightness: z.enum(DISPLAY_BRIGHTNESS_LEVELS),
-    screenTimeout: z.enum(DISPLAY_TIMEOUTS),
-    language: z.enum(DISPLAY_LANGUAGES),
-    textDirection: z.enum(DISPLAY_TEXT_DIRECTIONS),
-    welcomeMessage: z.string().max(120).nullable(),
-    showStoreLogo: z.boolean(),
-    showProductName: z.boolean(),
-    showPrice: z.boolean(),
-    showQuantity: z.boolean(),
-    showTotal: z.boolean(),
-    showPromoMessages: z.boolean(),
-  }),
-  cardReader: z.object({
-    enabled: z.boolean(),
-    name: z.string().max(120).nullable(),
-    provider: z.string().max(80).nullable(),
-    terminalId: z.string().max(80).nullable(),
-    connectionMethod: z.enum(CARD_READER_CONNECTION_METHODS),
-    port: z.string().max(60).nullable(),
-    apiUrl: z.string().max(300).nullable(),
-    authType: z.enum(CARD_READER_AUTH_TYPES),
-    apiKey: z.string().max(300).nullable(),
-    requestTimeoutSeconds: z.number().int().min(5).max(120),
-    sendDigitalReceipt: z.boolean(),
-    autoCompleteAfterSuccess: z.boolean(),
-    sandboxMode: z.boolean(),
-  }),
-})
-
-// Per-device settings. Only the scale has any today; the others store an empty object rather
-// than a null, so the column always holds a readable shape.
+// Per-device settings. Keyed to deviceType via the discriminated union below, so a printer's
+// settings are actually validated against printer fields instead of silently being checked
+// against the scale's shape (and anything that didn't happen to also be a scale field being
+// dropped) -- which is what a single shared `settings` schema used to do regardless of the
+// row's real deviceType.
 const deviceScaleSettingsSchema = z.object({
   defaultWeightUnit: z.enum(WEIGHT_UNITS),
   trailingDigits: z.enum(TRAILING_DIGIT_MEANINGS),
@@ -632,9 +510,21 @@ const deviceScaleSettingsSchema = z.object({
   blockUnstableWeight: z.boolean(),
 })
 
-export const posDeviceSchema = z.object({
+const devicePrinterSettingsSchema = z.object({
+  role: z.enum(PRINTER_ROLES),
+  paperWidth: z.enum(PAPER_WIDTHS),
+  printDirection: z.enum(PRINT_DIRECTIONS),
+  printDensity: z.enum(PRINT_DENSITIES),
+  charset: z.enum(PRINTER_CHARSETS),
+  networkAddress: z.string().max(120).nullable(),
+  autoCut: z.boolean(),
+  printLogo: z.boolean(),
+  extraCopy: z.boolean(),
+  footerText: z.string().max(200).nullable(),
+})
+
+const baseDeviceFields = {
   name: z.string().min(1).max(120),
-  deviceType: z.enum(DEVICE_TYPES),
   model: z.string().max(120).nullable().default(null),
   description: z.string().max(300).nullable().default(null),
   connection: z.enum(DEVICE_CONNECTIONS),
@@ -649,7 +539,61 @@ export const posDeviceSchema = z.object({
     .nullable()
     .default(null),
   enabled: z.boolean().default(true),
-  settings: deviceScaleSettingsSchema.partial().default({}),
+}
+
+// Every kind besides scale/receipt_printer stores an empty object rather than a null, so the
+// column always holds a readable shape even though nothing has a per-unit setting to put there
+// yet.
+const emptyDeviceSettingsSchema = z.object({}).default({})
+
+export const posDeviceSchema = z.discriminatedUnion("deviceType", [
+  z.object({
+    ...baseDeviceFields,
+    deviceType: z.literal("scale"),
+    settings: deviceScaleSettingsSchema.partial().default({}),
+  }),
+  z.object({
+    ...baseDeviceFields,
+    deviceType: z.literal("receipt_printer"),
+    settings: devicePrinterSettingsSchema.partial().default({}),
+  }),
+  z.object({
+    ...baseDeviceFields,
+    deviceType: z.literal("barcode_scanner"),
+    settings: emptyDeviceSettingsSchema,
+  }),
+  z.object({
+    ...baseDeviceFields,
+    deviceType: z.literal("cash_drawer"),
+    settings: emptyDeviceSettingsSchema,
+  }),
+  z.object({
+    ...baseDeviceFields,
+    deviceType: z.literal("customer_display"),
+    settings: emptyDeviceSettingsSchema,
+  }),
+  z.object({
+    ...baseDeviceFields,
+    deviceType: z.literal("card_reader"),
+    settings: emptyDeviceSettingsSchema,
+  }),
+])
+
+// A cashier's session at a branch -- opened with a counted starting float, closed with a counted
+// ending one. Amounts are counted cash, never negative.
+export const openShiftSchema = z.object({
+  // Explicit rather than inferred from the caller's own session workspace: this screen manages
+  // every branch's shifts at once, and the admin opening one on a cashier's behalf picks which
+  // branch it belongs to.
+  workspaceId: z.string().uuid(),
+  cashierUserId: z.string().uuid(),
+  openingCashAmount: z.number().min(0),
+  openingNotes: z.string().max(500).nullable().optional().default(null),
+})
+
+export const closeShiftSchema = z.object({
+  closingCashAmount: z.number().min(0),
+  closingNotes: z.string().max(500).nullable().optional().default(null),
 })
 
 export const paymentMethodUpdateSchema = z.object({

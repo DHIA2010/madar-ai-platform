@@ -2969,7 +2969,12 @@ export default function AddProduct() {
       </div>
 
       {/* RTL: the primary action is written first so it sits at the right of the pair. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[#e1e7f0] bg-white/95 px-6 py-3 backdrop-blur">
+      <div className="sticky bottom-0 z-30 -mx-6 border-t border-[#e1e7f0] bg-white/95 px-6 py-3 backdrop-blur">
+        {/* was `fixed inset-x-0`: that draws over the app sidebar's own help card since it
+            positions against the whole viewport rather than this page's own column. `sticky`
+            stays pinned to the bottom without leaving this column's real width; the negative
+            margin cancels the admin shell's own p-6 so the bar still reaches this column's
+            edges. */}
         <div className="mx-auto flex w-full max-w-[1400px] items-center justify-end gap-2.5">
           {/* Both are disabled while a save is in flight, so a double click cannot create the
               product twice -- there is no idempotency key on this endpoint. */}

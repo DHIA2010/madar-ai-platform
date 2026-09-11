@@ -24,6 +24,7 @@ import {
   ChartNoAxesCombined,
   CircleUserRound,
   ClipboardList,
+  Clock,
   CreditCard,
   ShieldCheck,
   Gauge,
@@ -80,6 +81,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
     { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
     { title: t("pos"), url: ROUTES.pos, icon: <CreditCard />, permission: "pos:view" },
+    { title: t("shifts"), url: ROUTES.shifts, icon: <Clock />, permission: "pos:view" },
     {
       title: t("customers"),
       url: "/customers",

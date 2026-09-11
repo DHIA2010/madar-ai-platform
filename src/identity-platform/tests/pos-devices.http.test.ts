@@ -243,6 +243,62 @@ describe("point-of-sale device registry", () => {
     expect(cross.status).toBe(404)
   })
 
+  // posDeviceSchema used to validate every device's `settings` against the scale shape
+  // regardless of deviceType -- a printer's own fields (role, paperWidth, ...) shared no
+  // properties with a scale's, so they were silently stripped down to {} on the way in. It is
+  // now a discriminated union keyed on deviceType, so each kind's settings are checked (and kept)
+  // against its own shape.
+  it("keeps a printer's own settings, not the scale's shape", async () => {
+    const { token } = await signIn("registry-printer@example.com", "Registry Printer")
+
+    const created = await createDevice(token, {
+      name: "طابعة المطبخ",
+      deviceType: "receipt_printer",
+      model: "Epson TM-T20",
+      connection: "network",
+      enabled: true,
+      settings: {
+        role: "kitchen",
+        paperWidth: "58mm",
+        printDirection: "horizontal",
+        printDensity: "dark",
+        charset: "cp1256",
+        networkAddress: "192.168.1.50",
+        autoCut: false,
+        printLogo: false,
+        extraCopy: true,
+        footerText: null,
+      },
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      deviceType: "receipt_printer",
+      settings: {
+        role: "kitchen",
+        paperWidth: "58mm",
+        printDirection: "horizontal",
+        printDensity: "dark",
+        charset: "cp1256",
+        networkAddress: "192.168.1.50",
+        autoCut: false,
+        extraCopy: true,
+      },
+    })
+
+    // A printer created without settings gets the printer defaults, not the scale's (and not an
+    // empty object either -- see settingsFor() in devices-service.ts).
+    const bare = await createDevice(token, {
+      name: "طابعة الإيصالات",
+      deviceType: "receipt_printer",
+      connection: "usb",
+      enabled: true,
+    })
+    expect(bare.status).toBe(201)
+    expect(bare.body).toMatchObject({
+      settings: { role: "receipt", paperWidth: "80mm" },
+    })
+  })
+
   it("rejects a device type or connection outside the allowed set", async () => {
     const { token } = await signIn("registry-invalid@example.com", "Registry Invalid")
 

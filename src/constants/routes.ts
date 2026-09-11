@@ -14,6 +14,7 @@ export const ROUTES = {
   productsAdd: "/eCommerce/add-product",
   orders: "/orders",
   pos: "/pos",
+  shifts: "/shifts",
   customers: "/customers",
   customersDetails: (customerId: string) => `/customers/${customerId}`,
   reports: "/reports",

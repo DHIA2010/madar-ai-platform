@@ -4,8 +4,10 @@ import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import {
+  DEFAULT_DEVICE_PRINTER_SETTINGS,
   DEFAULT_DEVICE_SCALE_SETTINGS,
   type DeviceConnection,
+  type DevicePrinterSettings,
   type DeviceScaleSettings,
   type DeviceType,
 } from "./device-settings-types"
@@ -21,6 +23,13 @@ const DEVICE_ERRORS = {
   notFound: () => new IdentityError("POS_DEVICE_NOT_FOUND", 404, "business", "Device not found."),
 }
 
+// Scale and receipt_printer are the only kinds with a per-unit shape today (see
+// device-settings-types.ts); every other kind stores an empty object.
+export type PosDeviceSettingsInput =
+  | Partial<DeviceScaleSettings>
+  | Partial<DevicePrinterSettings>
+  | Record<string, never>
+
 export interface PosDeviceInput {
   name: string
   deviceType: DeviceType
@@ -30,8 +39,7 @@ export interface PosDeviceInput {
   port: string | null
   baudRate: number | null
   enabled: boolean
-  // Only the scale populates this today; other kinds store an empty object.
-  settings: Partial<DeviceScaleSettings>
+  settings: PosDeviceSettingsInput
 }
 
 export interface PosDeviceView extends PosDeviceInput {
@@ -81,6 +89,15 @@ function toObject(value: unknown): Record<string, unknown> {
   return {}
 }
 
+// A saved row from before a field existed gets the default rather than undefined, which would
+// otherwise reach the screen reading it -- same reasoning for scale and receipt_printer alike.
+function settingsFor(deviceType: DeviceType, stored: unknown): PosDeviceSettingsInput {
+  const raw = toObject(stored)
+  if (deviceType === "scale") return { ...DEFAULT_DEVICE_SCALE_SETTINGS, ...raw }
+  if (deviceType === "receipt_printer") return { ...DEFAULT_DEVICE_PRINTER_SETTINGS, ...raw }
+  return raw
+}
+
 function mapDevice(row: DeviceRow): PosDeviceView {
   const lastSeenAt = row.last_seen_at ? toIso(row.last_seen_at) : null
 
@@ -94,12 +111,7 @@ function mapDevice(row: DeviceRow): PosDeviceView {
     port: row.port,
     baudRate: row.baud_rate === null ? null : Number(row.baud_rate),
     enabled: row.enabled,
-    // A scale saved before a field existed gets the default rather than undefined, which would
-    // otherwise reach the screen reading it.
-    settings:
-      (row.device_type as DeviceType) === "scale"
-        ? { ...DEFAULT_DEVICE_SCALE_SETTINGS, ...toObject(row.settings) }
-        : toObject(row.settings),
+    settings: settingsFor(row.device_type as DeviceType, row.settings),
     lastSeenAt,
     online: lastSeenAt !== null && Date.now() - new Date(lastSeenAt).getTime() <= ONLINE_WINDOW_MS,
     createdAt: toIso(row.created_at),
