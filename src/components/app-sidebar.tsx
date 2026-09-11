@@ -26,6 +26,7 @@ import {
   ClipboardList,
   Clock,
   CreditCard,
+  FileText,
   ShieldCheck,
   Gauge,
   Grid2x2,
@@ -81,6 +82,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
     { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
     { title: t("pos"), url: ROUTES.pos, icon: <CreditCard />, permission: "pos:view" },
+    { title: t("invoices"), url: ROUTES.invoices, icon: <FileText />, permission: "pos:view" },
     { title: t("shifts"), url: ROUTES.shifts, icon: <Clock />, permission: "pos:view" },
     {
       title: t("customers"),

@@ -27,6 +27,7 @@ import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { PosDevicesService } from "../../pos/devices-service"
+import { PosInvoicesService, type InvoiceStatus } from "../../pos/invoices-service"
 import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
 import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
@@ -87,6 +88,8 @@ import {
   posDeviceSchema,
   openShiftSchema,
   closeShiftSchema,
+  createInvoiceSchema,
+  invoiceStatusSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
   importCampaignsSchema,
@@ -510,6 +513,10 @@ export function createIdentityApiServer(
   const posPaymentMethodsService = container.infrastructure.database
     ? new PosPaymentMethodsService(container.infrastructure.database)
     : null
+  const posInvoicesService =
+    container.infrastructure.database && posPaymentMethodsService
+      ? new PosInvoicesService(container.infrastructure.database, posPaymentMethodsService)
+      : null
   const productCatalogService = container.infrastructure.database
     ? new ProductCatalogService(new ProductCatalogRepository(container.infrastructure.database))
     : null
@@ -2552,6 +2559,91 @@ export function createIdentityApiServer(
             closingCashAmount: payload.closingCashAmount,
             closingNotes: payload.closingNotes,
           })
+        )
+      }
+
+      // Checked before the /v1/pos/invoices GET/POST block below so "summary" is never read as
+      // an invoice id, the same defensive ordering devices' counts-by-workspace already uses.
+      if (method === "GET" && url.pathname === "/v1/pos/invoices/summary") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+
+        return send(
+          200,
+          await posInvoicesService.summary(actor.organizationId, {
+            workspaceId: url.searchParams.get("workspaceId"),
+            status: url.searchParams.get("status") as InvoiceStatus | null,
+            paymentMethodCode: url.searchParams.get("paymentMethodCode"),
+            from: url.searchParams.get("from"),
+            to: url.searchParams.get("to"),
+          })
+        )
+      }
+
+      if (url.pathname === "/v1/pos/invoices") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, {
+            items: await posInvoicesService.list(actor.organizationId, {
+              workspaceId: url.searchParams.get("workspaceId"),
+              status: url.searchParams.get("status") as InvoiceStatus | null,
+              paymentMethodCode: url.searchParams.get("paymentMethodCode"),
+              from: url.searchParams.get("from"),
+              to: url.searchParams.get("to"),
+              search: url.searchParams.get("search"),
+            }),
+          })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = createInvoiceSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await posInvoicesService.create({
+              organizationId: actor.organizationId,
+              workspaceId: actor.workspaceId,
+              cashierUserId: actor.userId,
+              customerName: payload.customerName,
+              customerPhone: payload.customerPhone,
+              paymentMethodCode: payload.paymentMethodCode,
+              discountAmount: payload.discountAmount,
+              items: payload.items,
+            })
+          )
+        }
+      }
+
+      const invoiceStatusMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/status$/)
+      if (invoiceStatusMatch && method === "PATCH") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        const payload = invoiceStatusSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await posInvoicesService.setStatus(
+            actor.organizationId,
+            invoiceStatusMatch[1],
+            payload.status
+          )
         )
       }
 

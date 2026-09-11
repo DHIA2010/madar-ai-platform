@@ -38,6 +38,7 @@
       "products": "Products",
       "orders": "Orders",
       "pos": "Cashier",
+      "invoices": "Invoices",
       "shifts": "Shifts",
       "customers": "Customers",
       "reports": "Reports",

@@ -596,6 +596,31 @@ export const closeShiftSchema = z.object({
   closingNotes: z.string().max(500).nullable().optional().default(null),
 })
 
+// A line item is a snapshot at the moment of sale, not a live reference: productId carries
+// whatever id the picker had (a native product's uuid, a synced storefront product's external
+// id, or nothing for a hand-typed line), but productName/unitPrice are what the invoice actually
+// reads, so a later price change or product deletion never rewrites history.
+export const createInvoiceItemSchema = z.object({
+  productId: z.string().max(120).nullable().optional().default(null),
+  productName: z.string().min(1).max(200),
+  unitPrice: z.number().min(0),
+  quantity: z.number().positive(),
+})
+
+export const createInvoiceSchema = z.object({
+  // Null customer name is a deliberate value, not a missing field -- it is how "عميل نقدي"
+  // (walk-in, no customer) is recorded.
+  customerName: z.string().max(120).nullable().optional().default(null),
+  customerPhone: z.string().max(30).nullable().optional().default(null),
+  paymentMethodCode: z.string().min(1).max(60),
+  discountAmount: z.number().min(0).default(0),
+  items: z.array(createInvoiceItemSchema).min(1),
+})
+
+export const invoiceStatusSchema = z.object({
+  status: z.enum(["cancelled", "returned"]),
+})
+
 export const paymentMethodUpdateSchema = z.object({
   enabled: z.boolean(),
   // Percent, not basis points -- the screen and the provider's contract both talk in percent.
