@@ -1,6 +1,7 @@
 import type {
   AddTeamMemberRequestDto,
   AdministrationInvitationDto,
+  AdministrationOrgSessionDto,
   AdministrationRepository,
   AdministrationRoleDto,
   AdministrationSessionDto,
@@ -19,6 +20,7 @@ import type {
   DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
+  GetOrganizationSessionsRequestDto,
   GetRolesRequestDto,
   GetTeamMembersRequestDto,
   GetTeamsRequestDto,
@@ -44,6 +46,7 @@ import {
   type CustomRoleApiEntry,
   type InvitationApiEntry,
   type OrganizationMemberApiEntry,
+  type OrganizationSessionApiEntry,
   type RoleApiEntry,
   type SessionApiEntry,
   type TeamApiEntry,
@@ -93,15 +96,22 @@ function resolveTarget(entry: AuditLogsApiResponse["items"]["data"][number]) {
   return entry.targetId ? `${entry.targetType}:${entry.targetId}` : entry.targetType
 }
 
+function inferStatus(action: string): AuditLogEventDto["status"] {
+  return action.toLowerCase().includes("fail") ? "failed" : "success"
+}
+
 function mapAuditLogEntry(entry: AuditLogsApiResponse["items"]["data"][number]): AuditLogEventDto {
   return {
     id: entry.id,
+    actorUserId: entry.actorUserId,
     actor: entry.actorName ?? "System",
     action: humanizeAction(entry.action),
     target: resolveTarget(entry),
     category: "audit",
     createdAt: entry.createdAt,
     severity: inferSeverity(entry.action),
+    status: inferStatus(entry.action),
+    ipAddress: entry.ipAddress ?? null,
   }
 }
 
@@ -156,10 +166,7 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       workspaces,
       status: pickAggregateStatus(rows.map((row) => row.status)),
       lastLogin: lastLoginAt ?? "",
-      mfaEnabled: false,
       teams: Array.from(new Set(first.teams.map((team) => team.name))),
-      recentActivity: [],
-      devices: [],
     }
   })
 }
@@ -206,13 +213,32 @@ function mapSessionEntry(
   }
 }
 
+function mapOrgSessionEntry(
+  entry: OrganizationSessionApiEntry,
+  currentSessionId: string
+): AdministrationOrgSessionDto {
+  const { browser, device } = parseUserAgent(entry.userAgent)
+  return {
+    id: entry.id,
+    userId: entry.userId,
+    fullName: entry.fullName,
+    email: entry.email,
+    browser,
+    device,
+    ip: entry.ipAddress,
+    location: entry.location,
+    loginTime: entry.createdAt,
+    lastActivity: entry.updatedAt,
+    current: entry.id === currentSessionId,
+  }
+}
+
 function mapInvitationEntry(entry: InvitationApiEntry): AdministrationInvitationDto {
   return {
     id: entry.id,
     email: entry.email,
     roleId: entry.role,
     workspace: entry.workspaceName ?? "Organization-wide",
-    department: "",
     status: entry.status,
     expiresAt: entry.expiresAt,
     invitedAt: entry.createdAt,
@@ -377,6 +403,19 @@ export class DataAdministrationRepository implements AdministrationRepository {
       const response = await this.adapter.getCurrentSession()
       return response.sessions
         .map((entry) => mapSessionEntry(entry, response.currentSessionId))
+        .sort((left, right) => (left.current === right.current ? 0 : left.current ? -1 : 1))
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async getOrganizationSessions(
+    request: GetOrganizationSessionsRequestDto
+  ): Promise<AdministrationOrgSessionDto[]> {
+    try {
+      const response = await this.adapter.getOrganizationSessions(request.organizationId)
+      return response.items
+        .map((entry) => mapOrgSessionEntry(entry, response.currentSessionId))
         .sort((left, right) => (left.current === right.current ? 0 : left.current ? -1 : 1))
     } catch (error) {
       throw mapRepositoryError(error)

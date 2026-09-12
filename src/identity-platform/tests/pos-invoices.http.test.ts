@@ -234,8 +234,10 @@ describe("point-of-sale invoices", () => {
       completedCount: 1,
       cancelledCount: 1,
       returnedCount: 0,
-      // Average is over completed invoices only -- the cancelled one must not pull it down.
+      // Average and total are over completed invoices only -- the cancelled one must not pull
+      // either figure down.
       averageCompletedValue: 36.8,
+      totalCompletedAmount: 36.8,
     })
   })
 
@@ -268,7 +270,105 @@ describe("point-of-sale invoices", () => {
     expect((await listInvoices(second.token)).body.items).toHaveLength(0)
   })
 
+  it("persists a note typed on the cart before checkout", async () => {
+    const { token } = await signIn("invoice-notes@example.com", "Invoice Notes")
+
+    const created = await createInvoice(token, { ...COFFEE_SALE, notes: "بدون سكر" })
+    expect(created.status).toBe(201)
+    expect(created.body.notes).toBe("بدون سكر")
+
+    // A sale with no note recorded reads back null, not an empty string or missing key.
+    const withoutNote = await createInvoice(token, COFFEE_SALE)
+    expect(withoutNote.body.notes).toBeNull()
+  })
+
   it("refuses an unauthenticated read", async () => {
     expect((await fetch(`${baseUrl}/v1/pos/invoices`)).status).toBe(401)
+  })
+})
+
+async function holdOrder(token: string, body: Record<string, unknown>) {
+  const response = await fetch(`${baseUrl}/v1/pos/held-orders`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+async function listHeldOrders(token: string, workspaceId: string) {
+  const response = await fetch(
+    `${baseUrl}/v1/pos/held-orders?workspaceId=${encodeURIComponent(workspaceId)}`,
+    { headers: authHeaders(token) }
+  )
+  return {
+    status: response.status,
+    body: (await response.json()) as { items: Array<Record<string, unknown>> },
+  }
+}
+
+async function removeHeldOrder(token: string, id: string) {
+  const response = await fetch(`${baseUrl}/v1/pos/held-orders/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+const HELD_CART = {
+  customerName: "زائر",
+  discountAmount: 0,
+  notes: "سيعود بعد قليل",
+  items: [{ productId: null, productName: "شاي أخضر", unitPrice: 15, quantity: 1 }],
+}
+
+describe("point-of-sale held orders", () => {
+  it("parks a cart and resumes it exactly as it was held", async () => {
+    const { token, actor } = await signIn("held-resume@example.com", "Held Resume")
+
+    const held = await holdOrder(token, { ...HELD_CART, workspaceId: actor.workspaceId })
+    expect(held.status).toBe(201)
+    expect(held.body).toMatchObject({
+      customerName: "زائر",
+      notes: "سيعود بعد قليل",
+      items: HELD_CART.items,
+    })
+
+    expect((await listHeldOrders(token, actor.workspaceId!)).body.items).toHaveLength(1)
+
+    // Resuming reads the parked cart back and consumes it -- it is the one real in-progress
+    // cart, not a template that stays behind for reuse.
+    const resumed = await removeHeldOrder(token, String(held.body.id))
+    expect(resumed.status).toBe(200)
+    expect(resumed.body).toMatchObject({ customerName: "زائر", notes: "سيعود بعد قليل" })
+    expect((await listHeldOrders(token, actor.workspaceId!)).body.items).toHaveLength(0)
+  })
+
+  it("404s resuming an order twice", async () => {
+    const { token, actor } = await signIn("held-double@example.com", "Held Double")
+    const held = await holdOrder(token, { ...HELD_CART, workspaceId: actor.workspaceId })
+
+    expect((await removeHeldOrder(token, String(held.body.id))).status).toBe(200)
+    expect((await removeHeldOrder(token, String(held.body.id))).status).toBe(404)
+  })
+
+  it("keeps one organization's held orders out of another's", async () => {
+    const first = await signIn("held-org-a@example.com", "Held Org A")
+    const second = await signIn("held-org-b@example.com", "Held Org B")
+
+    await holdOrder(first.token, { ...HELD_CART, workspaceId: first.actor.workspaceId })
+
+    expect((await listHeldOrders(second.token, second.actor.workspaceId!)).body.items).toHaveLength(
+      0
+    )
+  })
+
+  it("refuses an unauthenticated hold", async () => {
+    const response = await fetch(`${baseUrl}/v1/pos/held-orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...HELD_CART, workspaceId: "00000000-0000-0000-0000-000000000000" }),
+    })
+    expect(response.status).toBe(401)
   })
 })

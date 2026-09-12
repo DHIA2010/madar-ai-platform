@@ -1,16 +1,23 @@
 export interface AuditLogEventDto {
   id: string
+  actorUserId: string | null
   actor: string
   action: string
   target: string
   category: "activity" | "audit"
   createdAt: string
+  // Both derived client-side from the real `action` string (e.g. "auth.login_failed" is a real,
+  // already-audited event) -- there is no separate backend classification for either field.
   severity: "low" | "medium" | "high"
+  status: "success" | "failed"
+  ipAddress: string | null
 }
 
 export interface GetAuditLogsRequestDto {
   page: number
   pageSize: number
+  // Narrows to one member's own events -- used by the user profile drawer's real Recent Activity.
+  actorUserId?: string
 }
 
 export interface AuditLogListDto {
@@ -34,10 +41,11 @@ export interface AdministrationUserDto {
   workspaces: string[]
   status: AdministrationUserStatus
   lastLogin: string
-  mfaEnabled: boolean
   teams: string[]
-  recentActivity: string[]
-  devices: Array<{ name: string; browser: string; lastActive: string }>
+  // No MFA field: MFA isn't a feature this backend has, so there is nothing real to report.
+  // No recentActivity/devices here either -- the profile drawer fetches those itself, on demand,
+  // via the actorUserId-filtered audit log and the org-wide session list (real, but too
+  // expensive to eagerly join onto every row of the user list).
 }
 
 export interface GetUsersRequestDto {
@@ -67,7 +75,9 @@ export interface AdministrationInvitationDto {
   email: string
   roleId: string
   workspace: string
-  department: string
+  // No "department" field: an invitation never captures one anywhere in this backend (not
+  // hidden, not optional -- the invite command/schema has no such input), so there is nothing
+  // real to show here.
   status: AdministrationInvitationStatus
   expiresAt: string
   invitedAt: string
@@ -105,6 +115,27 @@ export interface AdministrationSessionDto {
 
 export interface RevokeSessionRequestDto {
   sessionId: string
+}
+
+// Every active member's real sessions, org-wide -- distinct from AdministrationSessionDto (the
+// caller's own sessions only, backed by /v1/auth/session). Used by the Administration "Sessions"
+// tab, which is an admin-facing view across the whole organization, not a self-service one.
+export interface AdministrationOrgSessionDto {
+  id: string
+  userId: string
+  fullName: string | null
+  email: string | null
+  browser: string
+  device: string
+  ip: string
+  location: string | null
+  loginTime: string
+  lastActivity: string
+  current: boolean
+}
+
+export interface GetOrganizationSessionsRequestDto {
+  organizationId: string
 }
 
 export interface AdministrationTeamDto {
@@ -241,6 +272,9 @@ export interface AdministrationGateway {
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>
   resendInvitation(request: ResendInvitationRequestDto): Promise<AdministrationInvitationDto>
   getSessions(): Promise<AdministrationSessionDto[]>
+  getOrganizationSessions(
+    request: GetOrganizationSessionsRequestDto
+  ): Promise<AdministrationOrgSessionDto[]>
   revokeSession(request: RevokeSessionRequestDto): Promise<void>
   getTeams(request: GetTeamsRequestDto): Promise<AdministrationTeamDto[]>
   createTeam(request: CreateTeamRequestDto): Promise<AdministrationTeamDto>

@@ -2,6 +2,7 @@ import type {
   AddTeamMemberRequestDto,
   AdministrationGateway,
   AdministrationInvitationDto,
+  AdministrationOrgSessionDto,
   AdministrationRoleDto,
   AdministrationSessionDto,
   AdministrationTeamDto,
@@ -17,6 +18,7 @@ import type {
   DeleteTeamRequestDto,
   GetAuditLogsRequestDto,
   GetInvitationsRequestDto,
+  GetOrganizationSessionsRequestDto,
   GetRolesRequestDto,
   GetTeamMembersRequestDto,
   GetTeamsRequestDto,
@@ -86,6 +88,12 @@ export class AdministrationApplicationService {
 
   getSessions(): Promise<AdministrationSessionDto[]> {
     return this.gateway.getSessions()
+  }
+
+  getOrganizationSessions(
+    request: GetOrganizationSessionsRequestDto
+  ): Promise<AdministrationOrgSessionDto[]> {
+    return this.gateway.getOrganizationSessions(request)
   }
 
   revokeSession(request: RevokeSessionRequestDto): Promise<void> {

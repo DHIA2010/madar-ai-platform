@@ -5,7 +5,10 @@ export type CustomerStatus = "new" | "active" | "at_risk" | "churned" | "inactiv
 // Value tier, computed server-side from real lifetime value/order count.
 export type CustomerSegment = "VIP" | "Loyal" | "One Time" | "New"
 
-export type CustomerPlatform = "Salla" | "Shopify" | "Zid"
+// "Madar" is a customer authored natively in this platform rather than synced from a storefront
+// -- every consumer of CustomerRecord has to expect it, the same way ProductPlatform includes
+// "Madar" for native products.
+export type CustomerPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
 
 export interface CustomerRecord {
   id: string

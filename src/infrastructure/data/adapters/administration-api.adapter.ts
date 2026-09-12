@@ -32,6 +32,8 @@ interface AuditLogApiEntry {
   targetType: string
   targetId: string | null
   details: Record<string, unknown>
+  ipAddress: string
+  userAgent: string
   createdAt: string
 }
 
@@ -101,6 +103,25 @@ export interface CurrentSessionApiResponse {
   currentSessionId: string
 }
 
+export interface OrganizationSessionApiEntry {
+  id: string
+  userId: string
+  fullName: string | null
+  email: string | null
+  workspaceId: string | null
+  userAgent: string
+  ipAddress: string
+  createdAt: string
+  updatedAt: string
+  expiresAt: string
+  location: string | null
+}
+
+export interface OrganizationSessionsApiResponse {
+  items: OrganizationSessionApiEntry[]
+  currentSessionId: string
+}
+
 export interface TeamApiEntry {
   id: string
   organizationId: string
@@ -165,9 +186,19 @@ export class AdministrationApiAdapter {
   getAuditLogs(request: GetAuditLogsRequestDto): Promise<AuditLogsApiResponse["items"]> {
     return this.client
       .get<AuditLogsApiResponse>("/v1/audit-logs", {
-        query: { page: request.page, pageSize: request.pageSize },
+        query: {
+          page: request.page,
+          pageSize: request.pageSize,
+          actorUserId: request.actorUserId,
+        },
       })
       .then((response) => response.items)
+  }
+
+  getOrganizationSessions(organizationId: string): Promise<OrganizationSessionsApiResponse> {
+    return this.client.get<OrganizationSessionsApiResponse>(
+      `/v1/organizations/${organizationId}/sessions`
+    )
   }
 
   getOrganizationMembers(organizationId: string): Promise<OrganizationMemberApiEntry[]> {

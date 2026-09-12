@@ -17,6 +17,7 @@ let database: PostgresDatabase
 let server: ReturnType<typeof createIdentityApiServer>
 let baseUrl = ""
 let container: ReturnType<typeof createIdentityPlatform>
+let uploadedObjects: Array<{ key: string; contentType: string }>
 
 beforeEach(async () => {
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000"
@@ -34,6 +35,21 @@ beforeEach(async () => {
 
   container = createIdentityPlatform({ mode: "memory" })
   ;(container.infrastructure as { database?: PostgresDatabase }).database = database
+
+  // Mirrors settings.http.test.ts's stub for the org-logo route -- a fake gateway that records
+  // what it was asked to store and hands back a deterministic, real-shaped URL.
+  uploadedObjects = []
+  ;(
+    container.infrastructure as {
+      objectStorage?: { uploadPublicObject: (input: unknown) => Promise<string> }
+    }
+  ).objectStorage = {
+    async uploadPublicObject(input: unknown) {
+      const typed = input as { key: string; contentType: string }
+      uploadedObjects.push({ key: typed.key, contentType: typed.contentType })
+      return `https://cdn.test.local/product-images-bucket/${typed.key}`
+    },
+  }
 
   server = createIdentityApiServer(container)
   await new Promise<void>((resolve) => server.listen(0, resolve))
@@ -749,6 +765,64 @@ describe("native product catalogue", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(SIMPLE_PRODUCT),
+    })
+    expect(response.status).toBe(401)
+  })
+})
+
+describe("POST /v1/products/images", () => {
+  it("uploads a real image and returns a hosted url usable as imageUrls[0]", async () => {
+    const { token, actor } = await signIn("catalog-image@example.com", "Catalog Image")
+
+    const response = await fetch(`${baseUrl}/v1/products/images`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        contentType: "image/png",
+        dataBase64: Buffer.from("fake-png-bytes").toString("base64"),
+      }),
+    })
+    expect(response.status).toBe(201)
+    const body = (await response.json()) as { url: string }
+    expect(body.url).toBe(`https://cdn.test.local/product-images-bucket/${uploadedObjects[0].key}`)
+    expect(uploadedObjects[0].key).toMatch(
+      new RegExp(`^products/${actor.organizationId}/.+\\.png$`)
+    )
+
+    // The url this route hands back is exactly what a real create call persists and later
+    // reads back -- not a separate, only-tested-in-isolation shape.
+    const created = await createProduct(token, { ...SIMPLE_PRODUCT, imageUrls: [body.url] })
+    expect(created.status).toBe(201)
+    const fetched = await fetch(`${baseUrl}/v1/products/${String(created.body.id)}`, {
+      headers: authHeaders(token),
+    })
+    const detail = (await fetched.json()) as { imageUrls: string[] }
+    expect(detail.imageUrls).toEqual([body.url])
+  })
+
+  it("rejects an oversized upload", async () => {
+    const { token } = await signIn("catalog-image-big@example.com", "Catalog Image Big")
+
+    const response = await fetch(`${baseUrl}/v1/products/images`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        contentType: "image/png",
+        dataBase64: Buffer.alloc(11 * 1024 * 1024).toString("base64"),
+      }),
+    })
+    expect(response.status).toBe(400)
+    expect(uploadedObjects).toHaveLength(0)
+  })
+
+  it("refuses an unauthenticated upload", async () => {
+    const response = await fetch(`${baseUrl}/v1/products/images`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contentType: "image/png",
+        dataBase64: Buffer.from("fake-png-bytes").toString("base64"),
+      }),
     })
     expect(response.status).toBe(401)
   })

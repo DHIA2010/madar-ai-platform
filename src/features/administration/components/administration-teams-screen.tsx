@@ -1,28 +1,23 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Pencil, Trash2, X } from "lucide-react"
+import Link from "next/link"
+import { Loader2, Pencil, Search, Trash2, Users, UsersRound, UserX, X } from "lucide-react"
 import { toast } from "sonner"
 
+import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
+
 import {
-  AppBadge,
   AppButton,
-  AppCard,
   AppConfirmDialog,
   AppDialog,
   AppInput,
-  AppPageHeader,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
   AppSelectTrigger,
   AppSelectValue,
-  AppTable,
-  AppTableBody,
-  AppTableCell,
-  AppTableHead,
-  AppTableHeader,
-  AppTableRow,
   AppTextarea,
 } from "@/components/app"
 
@@ -37,16 +32,41 @@ import { AdministrationModuleNav } from "./administration-module-nav"
 import { useApplicationServices } from "@/application"
 import type { AdministrationTeamDto } from "@/application/contracts"
 
+const HEADING = "text-[#0d1b3e]"
+const MUTED = "text-[#5b6b85]"
+const PANEL =
+  "rounded-2xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
+
 type TeamDraft = {
   name: string
   description: string
   workspaceId: string
 }
 
-const defaultDraft: TeamDraft = {
-  name: "",
-  description: "",
-  workspaceId: "",
+const defaultDraft: TeamDraft = { name: "", description: "", workspaceId: "" }
+
+function StatCard({
+  icon: Icon,
+  tint,
+  label,
+  value,
+}: {
+  icon: typeof Users
+  tint: string
+  label: string
+  value: number
+}) {
+  return (
+    <div className={cn(PANEL, "flex flex-col gap-3 p-4")}>
+      <span className={cn("flex size-10 items-center justify-center rounded-xl", tint)}>
+        <Icon className="size-[18px]" />
+      </span>
+      <div>
+        <p className={cn("text-[21px] font-extrabold", HEADING)}>{value}</p>
+        <p className={cn("mt-0.5 text-[12px] font-semibold", MUTED)}>{label}</p>
+      </div>
+    </div>
+  )
 }
 
 function TeamDialog({
@@ -102,9 +122,9 @@ function TeamDialog({
     try {
       await addTeamMember.mutateAsync({ teamId: team.id, userId: selectedAddUserId })
       setSelectedAddUserId("")
-      toast.success("Member added")
+      toast.success("تمت إضافة العضو.")
     } catch {
-      toast.error("Failed to add member")
+      toast.error("تعذر إضافة العضو.")
     }
   }
 
@@ -112,9 +132,9 @@ function TeamDialog({
     if (!team) return
     try {
       await removeTeamMember.mutateAsync({ teamId: team.id, userId })
-      toast.success("Member removed")
+      toast.success("تمت إزالة العضو.")
     } catch {
-      toast.error("Failed to remove member")
+      toast.error("تعذر إزالة العضو.")
     }
   }
 
@@ -130,7 +150,6 @@ function TeamDialog({
 
   async function handleSave() {
     if (!currentOrganization || draft.name.trim().length === 0) return
-
     try {
       if (team) {
         await updateTeam.mutateAsync({
@@ -139,7 +158,7 @@ function TeamDialog({
           description: draft.description.trim() || undefined,
           workspaceId: draft.workspaceId || null,
         })
-        toast.success(`Team "${draft.name.trim()}" updated`)
+        toast.success(`تم تحديث فريق "${draft.name.trim()}".`)
       } else {
         const created = await createTeam.mutateAsync({
           organizationId: currentOrganization.id,
@@ -154,11 +173,11 @@ function TeamDialog({
             )
           )
         }
-        toast.success(`Team "${draft.name.trim()}" created`)
+        toast.success(`تم إنشاء فريق "${draft.name.trim()}".`)
       }
       onOpenChange(false)
     } catch {
-      toast.error(team ? "Failed to update team" : "Failed to create team")
+      toast.error(team ? "تعذر تحديث الفريق." : "تعذر إنشاء الفريق.")
     }
   }
 
@@ -168,23 +187,28 @@ function TeamDialog({
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={team ? `Edit Team — ${team.name}` : "Create Team"}
-      description="Cross-functional teams organize members by workspace and ownership domain."
+      title={<span dir="rtl">{team ? `تعديل الفريق — ${team.name}` : "إنشاء فريق"}</span>}
+      description={
+        <span dir="rtl">الفرق التعاونية تنظم الأعضاء حسب مكان العمل ونطاق المسؤولية.</span>
+      }
       footer={
         <>
           <AppButton variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            إلغاء
           </AppButton>
-          <AppButton onClick={handleSave} disabled={isSaving || draft.name.trim().length === 0}>
-            {team ? "Save changes" : "Create team"}
+          <AppButton
+            onClick={() => void handleSave()}
+            disabled={isSaving || draft.name.trim().length === 0}
+          >
+            {team ? "حفظ التعديلات" : "إنشاء الفريق"}
           </AppButton>
         </>
       }
-      contentClassName="sm:max-w-2xl"
+      contentClassName="sm:max-w-2xl [direction:rtl]"
     >
-      <div className="grid gap-3 md:grid-cols-2">
+      <div dir="rtl" className="grid gap-3 md:grid-cols-2">
         <AppInput
-          label="Team name"
+          label="اسم الفريق"
           wrapperClassName="md:col-span-2"
           value={draft.name}
           onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
@@ -195,7 +219,7 @@ function TeamDialog({
           onValueChange={(next) => setDraft((current) => ({ ...current, workspaceId: next }))}
         >
           <AppSelectTrigger className="h-10">
-            <AppSelectValue placeholder="Workspace (optional)" />
+            <AppSelectValue placeholder="مكان العمل (اختياري)" />
           </AppSelectTrigger>
           <AppSelectContent position="popper" align="start">
             {availableWorkspaces.map((workspace) => (
@@ -207,7 +231,7 @@ function TeamDialog({
         </AppSelect>
 
         <AppTextarea
-          label="Description"
+          label="الوصف"
           className="min-h-[90px]"
           wrapperClassName="md:col-span-2"
           value={draft.description}
@@ -217,20 +241,20 @@ function TeamDialog({
         />
       </div>
 
-      <div className="mt-4 space-y-3 border-t border-border/70 pt-4">
-        <p className="text-sm font-medium">Members</p>
+      <div dir="rtl" className="mt-4 space-y-3 border-t border-[#eef2f8] pt-4">
+        <p className={cn("text-[12.5px] font-bold", HEADING)}>أعضاء الفريق</p>
 
         {team ? (
           <>
             <div className="flex items-end gap-2">
               <AppSelect value={selectedAddUserId} onValueChange={setSelectedAddUserId}>
                 <AppSelectTrigger className="h-10 flex-1">
-                  <AppSelectValue placeholder="Select a member to add" />
+                  <AppSelectValue placeholder="اختر عضواً للإضافة" />
                 </AppSelectTrigger>
                 <AppSelectContent position="popper" align="start">
                   {addableUsers.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Everyone in the organization is already a member.
+                    <div className={cn("px-2 py-1.5 text-[12.5px]", MUTED)}>
+                      جميع أعضاء المنظمة منضمون بالفعل.
                     </div>
                   ) : (
                     addableUsers.map((user) => (
@@ -242,37 +266,39 @@ function TeamDialog({
                 </AppSelectContent>
               </AppSelect>
               <AppButton
-                onClick={handleAddExistingMember}
+                onClick={() => void handleAddExistingMember()}
                 disabled={!selectedAddUserId || addTeamMember.isPending}
               >
-                Add
+                إضافة
               </AppButton>
             </div>
 
             <div className="max-h-56 space-y-2 overflow-y-auto">
               {membersLoading ? (
-                <p className="text-sm text-muted-foreground">Loading members…</p>
+                <p className={cn("text-[12.5px]", MUTED)}>جارٍ تحميل الأعضاء...</p>
               ) : members.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No members yet.</p>
+                <p className={cn("text-[12.5px]", MUTED)}>لا يوجد أعضاء بعد.</p>
               ) : (
                 members.map((member) => (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
+                    className="flex items-center justify-between rounded-lg border border-[#e8edf3] px-3 py-2"
                   >
                     <div>
-                      <p className="text-sm font-medium">{member.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{member.email}</p>
+                      <p className={cn("text-[12.5px] font-semibold", HEADING)}>
+                        {member.fullName}
+                      </p>
+                      <p className={cn("text-[11px]", MUTED)}>{member.email}</p>
                     </div>
-                    <AppButton
-                      size="sm"
-                      variant="ghost"
+                    <button
+                      type="button"
                       disabled={removeTeamMember.isPending}
-                      onClick={() => handleRemoveExistingMember(member.userId)}
-                      aria-label={`Remove ${member.fullName}`}
+                      onClick={() => void handleRemoveExistingMember(member.userId)}
+                      aria-label={`إزالة ${member.fullName}`}
+                      className="flex size-7 items-center justify-center rounded-full text-[#8098b4] hover:bg-[#f4f7fc]"
                     >
-                      <X className="size-4" />
-                    </AppButton>
+                      <X className="size-3.5" />
+                    </button>
                   </div>
                 ))
               )}
@@ -280,19 +306,19 @@ function TeamDialog({
           </>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">
-              You&apos;ll be added automatically as the manager. Optionally add more members now.
+            <p className={cn("text-[11px]", MUTED)}>
+              سيتم إضافتك تلقائياً كمدير للفريق. يمكنك إضافة أعضاء آخرين الآن اختيارياً.
             </p>
 
             <div className="flex items-end gap-2">
               <AppSelect value={selectedAddUserId} onValueChange={setSelectedAddUserId}>
                 <AppSelectTrigger className="h-10 flex-1">
-                  <AppSelectValue placeholder="Select a member to add" />
+                  <AppSelectValue placeholder="اختر عضواً للإضافة" />
                 </AppSelectTrigger>
                 <AppSelectContent position="popper" align="start">
                   {selectableNewUsers.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      {users.length === 0 ? "No organization members found." : "All members added."}
+                    <div className={cn("px-2 py-1.5 text-[12.5px]", MUTED)}>
+                      {users.length === 0 ? "لا يوجد أعضاء في المنظمة." : "تمت إضافة جميع الأعضاء."}
                     </div>
                   ) : (
                     selectableNewUsers.map((user) => (
@@ -304,13 +330,13 @@ function TeamDialog({
                 </AppSelectContent>
               </AppSelect>
               <AppButton onClick={handleAddNewMember} disabled={!selectedAddUserId}>
-                Add
+                إضافة
               </AppButton>
             </div>
 
             <div className="max-h-56 space-y-2 overflow-y-auto">
               {selectedNewMemberIds.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No additional members selected.</p>
+                <p className={cn("text-[12.5px]", MUTED)}>لم يتم اختيار أعضاء إضافيين.</p>
               ) : (
                 selectedNewMemberIds.map((userId) => {
                   const user = users.find((candidate) => candidate.id === userId)
@@ -318,20 +344,22 @@ function TeamDialog({
                   return (
                     <div
                       key={userId}
-                      className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
+                      className="flex items-center justify-between rounded-lg border border-[#e8edf3] px-3 py-2"
                     >
                       <div>
-                        <p className="text-sm font-medium">{user.fullName}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                        <p className={cn("text-[12.5px] font-semibold", HEADING)}>
+                          {user.fullName}
+                        </p>
+                        <p className={cn("text-[11px]", MUTED)}>{user.email}</p>
                       </div>
-                      <AppButton
-                        size="sm"
-                        variant="ghost"
+                      <button
+                        type="button"
                         onClick={() => handleRemoveNewMember(userId)}
-                        aria-label={`Remove ${user.fullName}`}
+                        aria-label={`إزالة ${user.fullName}`}
+                        className="flex size-7 items-center justify-center rounded-full text-[#8098b4] hover:bg-[#f4f7fc]"
                       >
-                        <X className="size-4" />
-                      </AppButton>
+                        <X className="size-3.5" />
+                      </button>
                     </div>
                   )
                 })
@@ -352,14 +380,24 @@ export function AdministrationTeamsScreen() {
     currentOrganization?.id
   )
   const { deleteTeam } = useTeamMutations(currentOrganization?.id)
-  const teams = data ?? []
+  const teams = useMemo(() => data ?? [], [data])
 
+  const [search, setSearch] = useState("")
   const [open, setOpen] = useState(false)
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null)
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null)
   const [dialogInstanceKey, setDialogInstanceKey] = useState(0)
   const editingTeam = teams.find((team) => team.id === editingTeamId) ?? null
   const deletingTeam = teams.find((team) => team.id === deletingTeamId) ?? null
+
+  const filteredTeams = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return teams
+    return teams.filter((team) => team.name.toLowerCase().includes(term))
+  }, [teams, search])
+
+  const totalMembers = teams.reduce((total, team) => total + team.members, 0)
+  const teamsWithoutManager = teams.filter((team) => team.manager === "Unassigned").length
 
   function openCreateDialog() {
     setEditingTeamId(null)
@@ -375,93 +413,183 @@ export function AdministrationTeamsScreen() {
 
   async function handleDeleteTeam() {
     if (!deletingTeam) return
-
     try {
       await deleteTeam.mutateAsync({ teamId: deletingTeam.id })
-      toast.success(`Team "${deletingTeam.name}" deleted`)
+      toast.success(`تم حذف فريق "${deletingTeam.name}".`)
       setDeletingTeamId(null)
     } catch {
-      toast.error("Failed to delete team")
+      toast.error("تعذر حذف الفريق.")
     }
   }
 
   return (
-    <div className="space-y-4">
+    <div dir="rtl" className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
-      <AppPageHeader
-        title="Teams"
-        subtitle="Organize members by function, manager, workspace, and ownership domain."
-        actions={<AppButton onClick={openCreateDialog}>Create Team</AppButton>}
-      />
+      <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
+        <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
+          الرئيسية
+        </Link>
+        <span>/</span>
+        <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
+          الإدارة
+        </Link>
+        <span>/</span>
+        <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
+          <UsersRound className="size-3.5" />
+          الفرق
+        </span>
+      </nav>
 
-      <AppCard
-        title="Teams Management"
-        subtitle="Cross-functional teams with workspace and management metadata."
-        className="shadow-sm"
-      >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الفرق</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>
+            تنظيم أعضاء الفريق حسب الوظيفة، المدير، ومكان العمل.
+          </p>
+        </div>
+        <AppButton
+          onClick={openCreateDialog}
+          className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+        >
+          إنشاء فريق جديد
+        </AppButton>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          icon={UsersRound}
+          tint="bg-[#f0fdf4] text-[#16a34a]"
+          label="إجمالي الفرق"
+          value={teams.length}
+        />
+        <StatCard
+          icon={Users}
+          tint="bg-[#eff6ff] text-[#2563eb]"
+          label="إجمالي الأعضاء"
+          value={totalMembers}
+        />
+        <StatCard
+          icon={UserX}
+          tint="bg-[#fffbeb] text-[#92400e]"
+          label="فرق بدون مدير"
+          value={teamsWithoutManager}
+        />
+      </div>
+
+      <div className={cn(PANEL, "p-4")}>
+        <div className="relative">
+          <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
+          <AppInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="البحث في الفرق..."
+            className="h-10 rounded-[10px] border-[#e8edf3] bg-white ps-9 text-[13px]"
+          />
+        </div>
+      </div>
+
+      <section className={cn(PANEL, "overflow-hidden")}>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading teams…</p>
+          <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+            <Loader2 className="size-4 animate-spin" />
+            جارٍ تحميل الفرق...
+          </div>
         ) : isError ? (
-          <p className="text-sm text-destructive">Failed to load teams.</p>
-        ) : teams.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No teams yet. Create the first one.</p>
+          <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل الفرق.</p>
+        ) : filteredTeams.length === 0 ? (
+          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>لا توجد فرق مطابقة.</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border/70">
-            <AppTable>
-              <AppTableHeader>
-                <AppTableRow>
-                  <AppTableHead>Team</AppTableHead>
-                  <AppTableHead>Manager</AppTableHead>
-                  <AppTableHead>Members</AppTableHead>
-                  <AppTableHead>Workspace</AppTableHead>
-                  <AppTableHead>Description</AppTableHead>
-                  <AppTableHead className="text-right">Actions</AppTableHead>
-                </AppTableRow>
-              </AppTableHeader>
-              <AppTableBody>
-                {teams.map((team) => (
-                  <AppTableRow key={team.id}>
-                    <AppTableCell>
-                      <span className="inline-flex items-center gap-2">
-                        <span className={`size-2.5 rounded-full ${team.color}`} />
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-center">
+              <thead>
+                <tr>
+                  {[
+                    { key: "team", label: "الفريق" },
+                    { key: "manager", label: "المدير" },
+                    { key: "members", label: "أعضاء الفريق" },
+                    { key: "workspace", label: "مكان العمل" },
+                    { key: "description", label: "الوصف" },
+                    { key: "actions", label: "الإجراءات" },
+                  ].map((column) => (
+                    <th
+                      key={column.key}
+                      className={cn(
+                        "border-b border-[#eef2f8] bg-[#f4f7fc] px-3 py-3 text-[11px] font-semibold",
+                        MUTED
+                      )}
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTeams.map((team, index) => (
+                  <tr
+                    key={team.id}
+                    className={cn(
+                      "border-b border-[#f4f7fb] last:border-b-0",
+                      index % 2 === 0 ? "bg-white" : "bg-[#fafbfd]"
+                    )}
+                  >
+                    <td className="px-3 py-3">
+                      <span
+                        className={cn(
+                          "flex items-center justify-center gap-2 text-[12.5px] font-bold",
+                          HEADING
+                        )}
+                      >
+                        <span className={cn("size-2.5 rounded-full", team.color)} />
                         {team.name}
                       </span>
-                    </AppTableCell>
-                    <AppTableCell>{team.manager}</AppTableCell>
-                    <AppTableCell>{team.members}</AppTableCell>
-                    <AppTableCell>
-                      <AppBadge variant="outline">{team.workspace}</AppBadge>
-                    </AppTableCell>
-                    <AppTableCell>{team.description || "—"}</AppTableCell>
-                    <AppTableCell>
-                      <div className="flex justify-end gap-2">
-                        <AppButton
-                          size="sm"
-                          variant="outline"
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-3 text-[12px] font-semibold",
+                        team.manager === "Unassigned" ? MUTED : HEADING
+                      )}
+                    >
+                      {team.manager === "Unassigned" ? "بدون مدير" : team.manager}
+                    </td>
+                    <td className={cn("px-3 py-3 text-[12px] font-semibold", HEADING)}>
+                      {team.members}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="rounded-full bg-[#f4f7fc] px-2.5 py-0.5 text-[10.5px] font-semibold text-[#5b6b85]">
+                        {team.workspace}
+                      </span>
+                    </td>
+                    <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
+                      {team.description || "—"}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
                           onClick={() => openEditDialog(team)}
-                          aria-label={`Edit ${team.name}`}
+                          aria-label={`تعديل ${team.name}`}
+                          className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
                         >
-                          <Pencil className="size-4" />
-                          Edit
-                        </AppButton>
-                        <AppButton
-                          size="sm"
-                          variant="outline"
+                          <Pencil className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setDeletingTeamId(team.id)}
-                          aria-label={`Delete ${team.name}`}
+                          aria-label={`حذف ${team.name}`}
+                          className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#dc2626] hover:bg-[#fef2f2]"
                         >
-                          <Trash2 className="size-4" />
-                        </AppButton>
+                          <Trash2 className="size-3.5" />
+                        </button>
                       </div>
-                    </AppTableCell>
-                  </AppTableRow>
+                    </td>
+                  </tr>
                 ))}
-              </AppTableBody>
-            </AppTable>
+              </tbody>
+            </table>
           </div>
         )}
-      </AppCard>
+      </section>
 
       <TeamDialog
         key={dialogInstanceKey}
@@ -478,17 +606,21 @@ export function AdministrationTeamsScreen() {
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setDeletingTeamId(null)
         }}
-        title="Delete team"
+        title={<span dir="rtl">حذف الفريق</span>}
         description={
-          deletingTeam
-            ? `This permanently removes "${deletingTeam.name}" and its member roster. This can't be undone.`
-            : undefined
+          <span dir="rtl">
+            {deletingTeam
+              ? `سيتم حذف "${deletingTeam.name}" وقائمة أعضائه نهائياً. لا يمكن التراجع عن هذا الإجراء.`
+              : null}
+          </span>
         }
-        confirmLabel="Delete team"
+        confirmLabel="حذف الفريق"
+        cancelLabel="إلغاء"
         confirmTone="destructive"
         loading={deleteTeam.isPending}
         onConfirm={handleDeleteTeam}
         onCancel={() => setDeletingTeamId(null)}
+        contentClassName="[direction:rtl]"
       />
     </div>
   )

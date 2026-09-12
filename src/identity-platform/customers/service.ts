@@ -2,7 +2,10 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { IntegrationProviderError } from "../integrations/provider-error"
 
-export type CustomerPlatform = "Salla" | "Shopify" | "Zid"
+// "Madar" is a customer authored natively in this platform (see native-customers-service.ts)
+// rather than synced from a storefront -- every consumer of CustomerSummary has to expect it,
+// the same way ProductPlatform already includes "Madar" for native products.
+export type CustomerPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
 // Engagement recency, computed from real order dates -- not a field any provider syncs.
 export type CustomerStatus = "new" | "active" | "at_risk" | "churned" | "inactive"
 // Value tier, computed from real lifetime value/order count -- not a field any provider syncs.

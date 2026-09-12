@@ -191,6 +191,13 @@ export const uploadOrganizationLogoSchema = z.object({
   dataBase64: z.string().min(1),
 })
 
+// One image at a time, uploaded ahead of the product create/update call -- a product can be
+// created with several images, and during creation there is no product id yet to attach to.
+export const uploadProductImageSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  dataBase64: z.string().min(1),
+})
+
 // 12-char minimum matches registerSchema's own password rule, for consistency across the app.
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
@@ -487,13 +494,22 @@ export const createProductSchema = z.object({
   costPrice: productMoneySchema.nullable().optional().default(null),
   stockQuantity: productQuantitySchema.nullable().optional().default(null),
   minStock: productQuantitySchema.nullable().optional().default(null),
-  // Already-hosted URLs. There is no product-image upload endpoint yet, so the API stores what
-  // it is given rather than accepting file bytes.
+  // Already-hosted URLs, uploaded separately via POST /v1/products/images -- this schema stores
+  // what it is given rather than accepting raw file bytes itself.
   imageUrls: z.array(z.string().url().max(2000)).max(12).default([]),
   attributes: productAttributesSchema.default({}),
   components: z.array(productComponentSchema).max(100).default([]),
   variantOptions: z.array(productVariantOptionSchema).max(8).default([]),
   variants: z.array(productVariantSchema).max(200).default([]),
+})
+
+// A native (Madar-authored) customer -- see native-customers-service.ts and migration
+// 060_native_customers.sql.
+export const createCustomerSchema = z.object({
+  name: z.string().min(1).max(120),
+  email: z.string().max(160).nullable().optional().default(null),
+  phone: z.string().max(30).nullable().optional().default(null),
+  notes: z.string().max(500).nullable().optional().default(null),
 })
 
 // Per-device settings. Keyed to deviceType via the discriminated union below, so a printer's
@@ -596,6 +612,12 @@ export const closeShiftSchema = z.object({
   closingNotes: z.string().max(500).nullable().optional().default(null),
 })
 
+export const recordCashMovementSchema = z.object({
+  type: z.enum(["withdrawal", "deposit"]),
+  amount: z.number().positive(),
+  note: z.string().max(300).nullable().optional().default(null),
+})
+
 // A line item is a snapshot at the moment of sale, not a live reference: productId carries
 // whatever id the picker had (a native product's uuid, a synced storefront product's external
 // id, or nothing for a hand-typed line), but productName/unitPrice are what the invoice actually
@@ -614,6 +636,19 @@ export const createInvoiceSchema = z.object({
   customerPhone: z.string().max(30).nullable().optional().default(null),
   paymentMethodCode: z.string().min(1).max(60),
   discountAmount: z.number().min(0).default(0),
+  notes: z.string().max(500).nullable().optional().default(null),
+  items: z.array(createInvoiceItemSchema).min(1),
+})
+
+// A parked cart -- same item/customer/discount/notes shape as createInvoiceSchema, minus a
+// payment method (not chosen yet, that only happens at actual checkout). workspaceId travels
+// explicitly in the body, the same way openShiftSchema takes it, rather than being inferred.
+export const holdOrderSchema = z.object({
+  workspaceId: z.string().min(1),
+  customerName: z.string().max(120).nullable().optional().default(null),
+  customerPhone: z.string().max(30).nullable().optional().default(null),
+  discountAmount: z.number().min(0).default(0),
+  notes: z.string().max(500).nullable().optional().default(null),
   items: z.array(createInvoiceItemSchema).min(1),
 })
 

@@ -302,10 +302,14 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
   async append(entry: AuditLogState) {
     this.store.auditLogs.push({ ...entry })
   }
-  async listRecent(organizationId: string, page: number, pageSize: number) {
+  async listRecent(organizationId: string, page: number, pageSize: number, actorUserId?: string) {
     const start = (page - 1) * pageSize
     return this.store.auditLogs
-      .filter((entry) => entry.organizationId === organizationId)
+      .filter(
+        (entry) =>
+          entry.organizationId === organizationId &&
+          (!actorUserId || entry.actorUserId === actorUserId)
+      )
       .slice()
       .reverse()
       .slice(start, start + pageSize)
@@ -316,8 +320,12 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
           : null,
       }))
   }
-  async count(organizationId: string) {
-    return this.store.auditLogs.filter((entry) => entry.organizationId === organizationId).length
+  async count(organizationId: string, actorUserId?: string) {
+    return this.store.auditLogs.filter(
+      (entry) =>
+        entry.organizationId === organizationId &&
+        (!actorUserId || entry.actorUserId === actorUserId)
+    ).length
   }
   async getLastLoginTimestamps(organizationId: string) {
     const map: Record<string, string> = {}

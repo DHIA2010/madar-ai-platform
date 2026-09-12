@@ -1,3 +1,5 @@
+import { fileToBase64 } from "@/lib/file-to-base64"
+
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
 
@@ -150,6 +152,22 @@ export const productListService = {
 
   async createProduct(input: CreateProductInput): Promise<CreatedProduct> {
     return client.post<CreateProductInput, CreatedProduct>(PRODUCTS_ENDPOINT, input)
+  },
+
+  // Uploaded ahead of the create/update call, same shape as the existing avatar/org-logo
+  // uploads -- the product itself may not exist yet (a brand-new product's images are picked
+  // before the first save), so this returns a real, already-hosted URL to include in
+  // imageUrls rather than attaching to a product id directly.
+  async uploadImage(file: File): Promise<string> {
+    const dataBase64 = await fileToBase64(file)
+    const response = await client.post<
+      { contentType: string; dataBase64: string },
+      { url: string }
+    >([PRODUCTS_ENDPOINT, "images"].join(PATH_SEPARATOR), {
+      contentType: file.type,
+      dataBase64,
+    })
+    return response.url
   },
 
   async getProduct(id: string): Promise<ProductDetail> {

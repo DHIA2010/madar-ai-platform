@@ -22,7 +22,9 @@ export function useSessionMutations() {
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: administrationQueryKeys.sessions() })
+      // Covers both the caller's own sessions() key and the org-wide organizationSessions() key
+      // -- both are nested under this same namespace.
+      await queryClient.invalidateQueries({ queryKey: administrationQueryKeys.all })
     },
   })
 

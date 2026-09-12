@@ -128,6 +128,49 @@ async function listShifts(token: string) {
   }
 }
 
+async function recordCashMovement(token: string, shiftId: string, body: Record<string, unknown>) {
+  const response = await fetch(`${baseUrl}/v1/pos/shifts/${shiftId}/cash-movements`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+async function listCashMovements(token: string, shiftId: string) {
+  const response = await fetch(`${baseUrl}/v1/pos/shifts/${shiftId}/cash-movements`, {
+    headers: authHeaders(token),
+  })
+  return {
+    status: response.status,
+    body: (await response.json()) as { items: Array<Record<string, unknown>> },
+  }
+}
+
+async function getShiftDetail(token: string, shiftId: string) {
+  const response = await fetch(`${baseUrl}/v1/pos/shifts/${shiftId}/detail`, {
+    headers: authHeaders(token),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+async function createInvoice(token: string, body: Record<string, unknown>) {
+  const response = await fetch(`${baseUrl}/v1/pos/invoices`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+async function enablePaymentMethod(token: string, code: string) {
+  await fetch(`${baseUrl}/v1/pos/payment-methods/${code}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ enabled: true, feePercent: 0, merchantId: null, apiKey: null }),
+  })
+}
+
 describe("point-of-sale cashier shifts", () => {
   it("opens a shift with a counted starting float", async () => {
     const { token, actor } = await signIn("shift-open@example.com", "Shift Open")
@@ -255,6 +298,145 @@ describe("point-of-sale cashier shifts", () => {
     })
 
     expect((await listShifts(second.token)).body.items).toHaveLength(0)
+  })
+
+  it("records a cash withdrawal and deposit against an open shift", async () => {
+    const { token, actor } = await signIn("shift-cash-movement@example.com", "Shift Cash Movement")
+
+    const opened = await openShift(token, {
+      workspaceId: actor.workspaceId,
+      cashierUserId: actor.userId,
+      openingCashAmount: 200,
+    })
+    const shiftId = String(opened.body.id)
+
+    const withdrawal = await recordCashMovement(token, shiftId, {
+      type: "withdrawal",
+      amount: 50,
+      note: "سحب للبنك",
+    })
+    expect(withdrawal.status).toBe(201)
+    expect(withdrawal.body).toMatchObject({ type: "withdrawal", amount: 50, note: "سحب للبنك" })
+
+    const deposit = await recordCashMovement(token, shiftId, { type: "deposit", amount: 20 })
+    expect(deposit.status).toBe(201)
+    expect(deposit.body).toMatchObject({ type: "deposit", amount: 20, note: null })
+
+    const list = await listCashMovements(token, shiftId)
+    expect(list.body.items).toHaveLength(2)
+  })
+
+  it("refuses a cash movement against a closed shift", async () => {
+    const { token, actor } = await signIn("shift-cash-closed@example.com", "Shift Cash Closed")
+
+    const opened = await openShift(token, {
+      workspaceId: actor.workspaceId,
+      cashierUserId: actor.userId,
+      openingCashAmount: 100,
+    })
+    await closeShift(token, String(opened.body.id), { closingCashAmount: 100 })
+
+    const movement = await recordCashMovement(token, String(opened.body.id), {
+      type: "withdrawal",
+      amount: 10,
+    })
+    expect(movement.status).toBe(409)
+    expect(movement.body).toMatchObject({ code: "POS_SHIFT_NOT_OPEN" })
+  })
+
+  it("assigns a real sequential shift number", async () => {
+    const { token, actor } = await signIn("shift-number@example.com", "Shift Number")
+
+    const first = await openShift(token, {
+      workspaceId: actor.workspaceId,
+      cashierUserId: actor.userId,
+      openingCashAmount: 100,
+    })
+    expect(typeof first.body.shiftNumber).toBe("number")
+    expect(first.body.shiftNumber).toBeGreaterThan(0)
+  })
+
+  it("builds a real shift detail: payment breakdown, cash summary, and activity log", async () => {
+    const { token, actor } = await signIn("shift-detail@example.com", "Shift Detail")
+    await enablePaymentMethod(token, "mada")
+
+    const opened = await openShift(token, {
+      workspaceId: actor.workspaceId,
+      cashierUserId: actor.userId,
+      openingCashAmount: 100,
+    })
+    const shiftId = String(opened.body.id)
+
+    // Cash sale (115 total), card sale (230 total), and a cash sale later returned (46 total) --
+    // the same numbers already proven correct against the real API for the close dialog.
+    await createInvoice(token, {
+      customerName: null,
+      paymentMethodCode: "cash",
+      discountAmount: 0,
+      items: [{ productId: null, productName: "قهوة", unitPrice: 100, quantity: 1 }],
+    })
+    await createInvoice(token, {
+      customerName: null,
+      paymentMethodCode: "mada",
+      discountAmount: 0,
+      items: [{ productId: null, productName: "كيك", unitPrice: 200, quantity: 1 }],
+    })
+    const toReturn = await createInvoice(token, {
+      customerName: null,
+      paymentMethodCode: "cash",
+      discountAmount: 0,
+      items: [{ productId: null, productName: "شاي", unitPrice: 40, quantity: 1 }],
+    })
+    await fetch(`${baseUrl}/v1/pos/invoices/${toReturn.body.id}/status`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ status: "returned" }),
+    })
+
+    await recordCashMovement(token, shiftId, { type: "withdrawal", amount: 25, note: null })
+    await recordCashMovement(token, shiftId, { type: "deposit", amount: 10, note: null })
+
+    const detail = await getShiftDetail(token, shiftId)
+    expect(detail.status).toBe(200)
+    expect(detail.body).toMatchObject({
+      totalSales: 345, // 115 + 230, the returned invoice excluded
+      invoiceCount: 3, // includes the returned one -- it is still a real invoice that happened
+      cashSummary: {
+        openingCashAmount: 100,
+        cashSales: 115,
+        otherSales: 230,
+        cashReturns: 46,
+        withdrawals: 25,
+        deposits: 10,
+        // 100 + 115 - 46 - 25 + 10
+        expectedCashAmount: 154,
+      },
+    })
+
+    const breakdown = detail.body.paymentBreakdown as Array<Record<string, unknown>>
+    expect(breakdown).toHaveLength(2)
+    const cashEntry = breakdown.find((entry) => entry.code === "cash")
+    const madaEntry = breakdown.find((entry) => entry.code === "mada")
+    expect(cashEntry).toMatchObject({ amount: 115 })
+    expect(madaEntry).toMatchObject({ amount: 230 })
+
+    // Activity: opening float, both cash movements, and every real invoice (sale or return),
+    // most recent first (no close yet).
+    const activity = detail.body.activity as Array<Record<string, unknown>>
+    expect(activity.map((entry) => entry.type)).toEqual([
+      "deposit",
+      "withdrawal",
+      "return",
+      "sale",
+      "sale",
+      "open",
+    ])
+
+    const returnEntry = activity.find((entry) => entry.type === "return")
+    expect(returnEntry).toMatchObject({
+      amount: 46,
+      reference: String(toReturn.body.invoiceNumber),
+    })
   })
 
   it("refuses an unauthenticated read", async () => {

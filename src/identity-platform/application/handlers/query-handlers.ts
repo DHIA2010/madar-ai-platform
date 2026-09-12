@@ -375,12 +375,62 @@ export class IdentityQueryHandlers {
     return {
       page: query.page,
       pageSize: query.pageSize,
-      total: await this.repositories.auditLogs.count(actor.organizationId),
+      total: await this.repositories.auditLogs.count(actor.organizationId, query.actorUserId),
       data: await this.repositories.auditLogs.listRecent(
         actor.organizationId,
         query.page,
-        query.pageSize
+        query.pageSize,
+        query.actorUserId
       ),
     }
+  }
+
+  // Every active member's real sessions, org-wide -- gated on the same permission that already
+  // lets an admin revoke someone else's session (command-handlers.ts's revokeSession), since
+  // viewing and terminating another member's session are the same level of authority. Composed
+  // from two already-real primitives (org memberships + per-user session listing) rather than a
+  // new session-store index.
+  async getOrganizationSessions(actor: AuthenticatedActor, organizationId: string) {
+    if (organizationId !== actor.organizationId || !hasPermission(actor.roles, "session:revoke")) {
+      throw ERRORS.forbidden()
+    }
+
+    const now = Date.now()
+    const memberships = await this.repositories.memberships.listByOrganizationId(organizationId)
+    const activeUserIds = [
+      ...new Set(
+        memberships.filter((membership) => membership.status === "active").map((m) => m.userId)
+      ),
+    ]
+
+    const sessionsByUser = await Promise.all(
+      activeUserIds.map(async (userId) => {
+        const [user, sessions] = await Promise.all([
+          this.repositories.users.findById(userId),
+          this.repositories.sessions.listByUserId(userId),
+        ])
+        return sessions
+          .filter(
+            (session) =>
+              session.organizationId === organizationId &&
+              !session.revokedAt &&
+              new Date(session.expiresAt).getTime() > now
+          )
+          .map((session) => ({
+            id: session.id,
+            userId,
+            fullName: user?.fullName ?? null,
+            email: user?.email ?? null,
+            workspaceId: session.workspaceId,
+            userAgent: session.userAgent,
+            ipAddress: session.ipAddress,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            expiresAt: session.expiresAt,
+          }))
+      })
+    )
+
+    return { items: sessionsByUser.flat(), currentSessionId: actor.sessionId }
   }
 }

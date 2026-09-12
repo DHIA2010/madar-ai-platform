@@ -7,6 +7,8 @@ export const administrationQueryKeys = {
   invitations: (organizationId: string | null | undefined) =>
     [...administrationQueryKeys.all, "invitations", organizationId ?? "none"] as const,
   sessions: () => [...administrationQueryKeys.all, "sessions"] as const,
+  organizationSessions: (organizationId: string | null | undefined) =>
+    [...administrationQueryKeys.all, "org-sessions", organizationId ?? "none"] as const,
   teams: (organizationId: string | null | undefined) =>
     [...administrationQueryKeys.all, "teams", organizationId ?? "none"] as const,
   teamMembers: (teamId: string | null | undefined) =>

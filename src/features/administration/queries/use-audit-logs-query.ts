@@ -9,13 +9,16 @@ import type { AdministrationApplicationService } from "@/application"
 export function useAuditLogsQuery(
   service: AdministrationApplicationService,
   page = 1,
-  pageSize = 50
+  pageSize = 50,
+  actorUserId?: string
 ) {
   return useQuery({
-    queryKey: administrationQueryKeys.auditLogs(page, pageSize),
+    queryKey: actorUserId
+      ? [...administrationQueryKeys.auditLogs(page, pageSize), "actor", actorUserId]
+      : administrationQueryKeys.auditLogs(page, pageSize),
     queryFn: async () => {
       try {
-        return await service.getAuditLogs({ page, pageSize })
+        return await service.getAuditLogs({ page, pageSize, actorUserId })
       } catch (error) {
         throw toAppError(error)
       }

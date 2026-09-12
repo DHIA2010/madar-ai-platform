@@ -41,7 +41,7 @@ export function PermissionMatrix({
   groups,
   value,
   onChange,
-  title = "Permission Matrix",
+  title = "مصفوفة الصلاحيات",
   subtitle,
 }: PermissionMatrixProps) {
   const [query, setQuery] = useState("")
@@ -84,92 +84,94 @@ export function PermissionMatrix({
   }
 
   return (
-    <AppCard
-      title={title}
-      subtitle={subtitle ?? "Use module-level controls for enterprise-grade permission governance."}
-      className="shadow-sm"
-      contentClassName="space-y-4"
-      actions={
-        <div className="flex items-center gap-2">
-          <AppButton variant="outline" size="sm" onClick={() => setAll(true)}>
-            Bulk enable
-          </AppButton>
-          <AppButton variant="outline" size="sm" onClick={() => setAll(false)}>
-            Bulk disable
-          </AppButton>
+    <div dir="rtl">
+      <AppCard
+        title={title}
+        subtitle={subtitle ?? "استخدم عناصر التحكم على مستوى الوحدة لإدارة صلاحيات دقيقة."}
+        className="shadow-sm"
+        contentClassName="space-y-4"
+        actions={
+          <div className="flex items-center gap-2">
+            <AppButton variant="outline" size="sm" onClick={() => setAll(true)}>
+              تفعيل الكل
+            </AppButton>
+            <AppButton variant="outline" size="sm" onClick={() => setAll(false)}>
+              تعطيل الكل
+            </AppButton>
+          </div>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+          <AppInput
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="البحث في الوحدات أو الصلاحيات"
+          />
         </div>
-      }
-    >
-      <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-        <AppInput
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search modules or permissions"
-        />
-      </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border/70">
-        <AppTable>
-          <AppTableHeader>
-            <AppTableRow>
-              <AppTableHead className="w-[220px]">Module</AppTableHead>
-              {ACTION_COLUMNS.map((action) => (
-                <AppTableHead key={action} className="text-center capitalize">
-                  {action}
-                </AppTableHead>
-              ))}
-            </AppTableRow>
-          </AppTableHeader>
-          <AppTableBody>
-            {filtered.map((group) => {
-              const isExpanded = expanded[group.module] ?? true
-              return [
-                <AppTableRow key={group.module}>
-                  <AppTableCell>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 text-sm font-medium hover:text-primary"
-                      onClick={() => toggleModule(group.module)}
-                    >
-                      <span>{isExpanded ? "−" : "+"}</span>
-                      <span>{group.label}</span>
-                    </button>
-                  </AppTableCell>
-                  {ACTION_COLUMNS.map((action) => {
-                    const enabled = group.actions.includes(action)
-                    const key = `${group.module}:${action}`
-                    return (
-                      <AppTableCell key={key} className="text-center">
-                        {enabled ? (
-                          <AppCheckbox
-                            checked={value[group.module]?.includes(action) ?? false}
-                            onCheckedChange={(checked) =>
-                              toggleAction(group.module, action, Boolean(checked))
-                            }
-                            aria-label={`${group.label} ${action}`}
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </AppTableCell>
-                    )
-                  })}
-                </AppTableRow>,
-                isExpanded ? (
-                  <AppTableRow key={`${group.module}-details`}>
-                    <AppTableCell
-                      colSpan={ACTION_COLUMNS.length + 1}
-                      className="bg-muted/20 text-xs text-muted-foreground"
-                    >
-                      Available actions: {group.actions.join(", ")}
+        <div className="overflow-x-auto rounded-xl border border-border/70">
+          <AppTable>
+            <AppTableHeader>
+              <AppTableRow>
+                <AppTableHead className="w-[220px]">الوحدة</AppTableHead>
+                {ACTION_COLUMNS.map((action) => (
+                  <AppTableHead key={action} className="text-center capitalize">
+                    {action}
+                  </AppTableHead>
+                ))}
+              </AppTableRow>
+            </AppTableHeader>
+            <AppTableBody>
+              {filtered.map((group) => {
+                const isExpanded = expanded[group.module] ?? true
+                return [
+                  <AppTableRow key={group.module}>
+                    <AppTableCell>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 text-sm font-medium hover:text-primary"
+                        onClick={() => toggleModule(group.module)}
+                      >
+                        <span>{isExpanded ? "−" : "+"}</span>
+                        <span>{group.label}</span>
+                      </button>
                     </AppTableCell>
-                  </AppTableRow>
-                ) : null,
-              ]
-            })}
-          </AppTableBody>
-        </AppTable>
-      </div>
-    </AppCard>
+                    {ACTION_COLUMNS.map((action) => {
+                      const enabled = group.actions.includes(action)
+                      const key = `${group.module}:${action}`
+                      return (
+                        <AppTableCell key={key} className="text-center">
+                          {enabled ? (
+                            <AppCheckbox
+                              checked={value[group.module]?.includes(action) ?? false}
+                              onCheckedChange={(checked) =>
+                                toggleAction(group.module, action, Boolean(checked))
+                              }
+                              aria-label={`${group.label} ${action}`}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </AppTableCell>
+                      )
+                    })}
+                  </AppTableRow>,
+                  isExpanded ? (
+                    <AppTableRow key={`${group.module}-details`}>
+                      <AppTableCell
+                        colSpan={ACTION_COLUMNS.length + 1}
+                        className="bg-muted/20 text-xs text-muted-foreground"
+                      >
+                        الصلاحيات المتاحة: {group.actions.join("، ")}
+                      </AppTableCell>
+                    </AppTableRow>
+                  ) : null,
+                ]
+              })}
+            </AppTableBody>
+          </AppTable>
+        </div>
+      </AppCard>
+    </div>
   )
 }

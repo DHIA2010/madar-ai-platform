@@ -5,19 +5,18 @@
 //
 // This is the management/history view: a manager opens or closes a shift on a cashier's behalf
 // and reviews past ones across every branch. The live "وردية مفتوحة" widget on the cashier
-// screen's own top bar (a separate page, not yet built) will read the same pos_shifts records
-// this page writes.
+// screen's own top bar reads the same pos_shifts records this page writes.
 //
-// Deliberately absent: sales totals, invoice counts, and "expected vs. counted" cash variance.
-// Those need a real till recording transactions against a shift, and nothing does that yet -- the
-// cashier screen is still a placeholder. Showing them now would mean fabricating numbers, so this
-// first version tracks only what is real today: who worked, when, and how much cash was counted
-// in and out. They get added once a real till exists to report them.
+// The close dialog's shift summary (cash sales, other sales, cash returns, cash withdrawals/
+// deposits, expected drawer amount) is computed from real records: pos_invoices this shift's
+// cashier created in this branch since it opened, and pos_cash_movements for any manual
+// withdrawal/deposit recorded from the cashier screen mid-shift -- not fabricated.
 
 import { useEffect, useMemo, useState } from "react"
 import {
   CheckCircle2,
   Clock,
+  Eye,
   Lightbulb,
   Loader2,
   Plus,
@@ -25,10 +24,12 @@ import {
   Search,
   Wallet,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 import { useWorkspace } from "@/features/workspace"
 import { useUsersQuery } from "@/features/administration/queries/use-users-query"
 import { useApplicationServices } from "@/application/context"
@@ -37,6 +38,7 @@ import {
   type Shift,
   type ShiftStatus,
 } from "@/features/pos/services/pos-shifts.service"
+import { ShiftCloseDialog } from "./ShiftCloseDialog"
 
 import {
   AppSelect,
@@ -60,7 +62,9 @@ import { Label } from "@/components/ui/label"
 const PANEL =
   "rounded-2xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
 const HEADING = "text-[#0d1b3e]"
-const MUTED = "text-[#8098b4]"
+// A darker secondary gray than the app's usual #8098b4 -- that shade read as too faint across
+// this page's table headers, subtitle, notes, and pagination text.
+const MUTED = "text-[#5b6b85]"
 const FIELD_CLASS =
   "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 const BLUE_TINT = "bg-[#eff6ff] text-[#2563eb]"
@@ -106,6 +110,7 @@ const STATUS_LABEL: Record<ShiftStatus, string> = {
 }
 
 export default function ShiftsPage() {
+  const router = useRouter()
   const { currentOrganization, availableWorkspaces } = useWorkspace()
   const { administrationApplicationService } = useApplicationServices()
   // Real madar.app users (Administration → Users) -- the same roster a cashier now signs in as,
@@ -234,38 +239,10 @@ export default function ShiftsPage() {
   }
 
   // --- Close an existing shift -------------------------------------------------------------
+  // The dialog itself (real cash summary, keypad, variance message) is shared with the single-
+  // shift detail page -- see ShiftCloseDialog.tsx.
 
   const [closeTarget, setCloseTarget] = useState<Shift | null>(null)
-  const [closingCashAmount, setClosingCashAmount] = useState("")
-  const [closingNotes, setClosingNotes] = useState("")
-  const [closing, setClosing] = useState(false)
-  const [showCloseErrors, setShowCloseErrors] = useState(false)
-
-  const closeErrors = {
-    amount: closingCashAmount.trim() && Number(closingCashAmount) >= 0 ? null : "أدخل مبلغا صحيحا",
-  }
-  const isCloseFormValid = Object.values(closeErrors).every((error) => error === null)
-
-  const submitCloseShift = async () => {
-    if (!closeTarget) return
-    setShowCloseErrors(true)
-    if (!isCloseFormValid) return
-
-    setClosing(true)
-    try {
-      await posShiftsService.close(closeTarget.id, {
-        closingCashAmount: Number(closingCashAmount),
-        closingNotes: closingNotes.trim() || null,
-      })
-      toast.success("تم إنهاء الوردية.")
-      setCloseTarget(null)
-      await load()
-    } catch {
-      toast.error("تعذر إنهاء الوردية.")
-    } finally {
-      setClosing(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -430,8 +407,9 @@ export default function ShiftsPage() {
                   {pagedShifts.map((shift, index) => (
                     <tr
                       key={shift.id}
+                      onClick={() => router.push(ROUTES.shiftsDetails(shift.id))}
                       className={cn(
-                        "border-b border-[#f4f7fb] last:border-b-0",
+                        "cursor-pointer border-b border-[#f4f7fb] last:border-b-0 hover:bg-[#f7faff]",
                         index % 2 === 0 ? "bg-white" : "bg-[#fafbfd]"
                       )}
                     >
@@ -441,7 +419,7 @@ export default function ShiftsPage() {
                           فُتحت {formatDateTime(shift.openedAt)}
                         </p>
                       </td>
-                      <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
+                      <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
                         {workspaceName(shift.workspaceId)}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
@@ -450,7 +428,7 @@ export default function ShiftsPage() {
                       <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
                         {formatAmount(shift.closingCashAmount)}
                       </td>
-                      <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
+                      <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
                         {formatDuration(shift.openedAt, shift.closedAt)}
                       </td>
                       <td className="px-3 py-3.5">
@@ -471,23 +449,26 @@ export default function ShiftsPage() {
                           {STATUS_LABEL[shift.status]}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5">
-                        {shift.status === "open" ? (
+                      <td className="px-3 py-3.5" onClick={(event) => event.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-2">
                           <Button
                             variant="outline"
-                            className="h-8 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
-                            onClick={() => {
-                              setCloseTarget(shift)
-                              setClosingCashAmount("")
-                              setClosingNotes("")
-                              setShowCloseErrors(false)
-                            }}
+                            className="h-8 gap-1 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
+                            onClick={() => router.push(ROUTES.shiftsDetails(shift.id))}
                           >
-                            إنهاء الوردية
+                            <Eye className="size-3.5" />
+                            عرض
                           </Button>
-                        ) : (
-                          <span className={cn("text-[11.5px]", MUTED)}>—</span>
-                        )}
+                          {shift.status === "open" ? (
+                            <Button
+                              variant="outline"
+                              className="h-8 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
+                              onClick={() => setCloseTarget(shift)}
+                            >
+                              إنهاء الوردية
+                            </Button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -664,91 +645,20 @@ export default function ShiftsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Close shift dialog */}
-      <Dialog
-        open={closeTarget !== null}
-        onOpenChange={(open) => {
-          if (!closing && !open) setCloseTarget(null)
+      <ShiftCloseDialog
+        shift={closeTarget}
+        onOpenChange={(open) => !open && setCloseTarget(null)}
+        onClosed={() => {
+          setCloseTarget(null)
+          void load()
         }}
-      >
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
-          <DialogHeader className="text-right">
-            <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              إنهاء الوردية
-            </DialogTitle>
-            <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              {closeTarget ? (
-                <>
-                  وردية {cashierName(closeTarget.cashierUserId)} في{" "}
-                  {workspaceName(closeTarget.workspaceId)}، بدأت بمبلغ{" "}
-                  {formatAmount(closeTarget.openingCashAmount)}. أدخل المبلغ النقدي المعدود في الدرج
-                  الآن.
-                </>
-              ) : null}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-4">
-            <div>
-              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                المبلغ النقدي الختامي <span className="text-[#e0484d]">*</span>
-              </Label>
-              <div className="relative">
-                <Wallet className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={closingCashAmount}
-                  onChange={(event) => setClosingCashAmount(event.target.value)}
-                  placeholder="0.00"
-                  className={cn(FIELD_CLASS, "ps-9")}
-                />
-              </div>
-              {showCloseErrors && closeErrors.amount ? (
-                <p className="mt-1.5 text-[10.5px] text-[#e0484d]">{closeErrors.amount}</p>
-              ) : null}
-            </div>
-
-            <div>
-              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                ملاحظات (اختياري)
-              </Label>
-              <Input
-                value={closingNotes}
-                onChange={(event) => setClosingNotes(event.target.value)}
-                placeholder="مثال: تسليم الوردية للمناوبة التالية"
-                className={FIELD_CLASS}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
-              disabled={closing}
-              onClick={() => void submitCloseShift()}
-            >
-              {closing ? "جارٍ الإنهاء..." : "إنهاء الوردية"}
-              {closing ? <Loader2 className="size-4 animate-spin" /> : null}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
-              disabled={closing}
-              onClick={() => setCloseTarget(null)}
-            >
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
 
       <section className={cn(PANEL, "flex items-start gap-3 p-4")}>
         <Lightbulb className="mt-0.5 size-[18px] shrink-0 text-[#e08b00]" />
         <p className={cn("text-[12px] leading-6", MUTED)}>
-          هذا الإصدار يسجل بداية ونهاية كل وردية والمبلغ النقدي المعدود فقط. ملخص المبيعات والفواتير
-          خلال الوردية سيُضاف بمجرد ربط شاشة الكاشير الفعلية بنظام البيع.
+          إغلاق الوردية يحسب المبيعات والمرتجعات والسحب والإيداع الفعلية لهذه الوردية تلقائيا. سجّل
+          أي سحب أو إيداع نقدي أثناء الوردية من شاشة الكاشير حتى يظهر هنا عند الإغلاق.
         </p>
       </section>
     </div>

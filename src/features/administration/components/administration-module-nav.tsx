@@ -2,40 +2,52 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import {
+  BarChart3,
+  Grid2x2,
+  History,
+  Mail,
+  Monitor,
+  ShieldCheck,
+  Users,
+  UsersRound,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-const IAM_NAV_ITEMS = [
-  { href: ROUTES.administration, label: "Overview" },
-  { href: ROUTES.administrationUsers, label: "Users" },
-  { href: ROUTES.administrationRoles, label: "Roles" },
-  { href: ROUTES.administrationTeams, label: "Teams" },
-  { href: ROUTES.administrationInvitations, label: "Invitations" },
-  { href: ROUTES.administrationActivityLog, label: "Activity Log" },
-  { href: ROUTES.administrationAuditLog, label: "Audit Log" },
-  { href: ROUTES.administrationSessions, label: "Sessions" },
+const NAV_ITEMS = [
+  { href: ROUTES.administration, label: "نظرة عامة", icon: Grid2x2 },
+  { href: ROUTES.administrationUsers, label: "المستخدمون", icon: Users },
+  { href: ROUTES.administrationRoles, label: "الأدوار", icon: ShieldCheck },
+  { href: ROUTES.administrationTeams, label: "الفرق", icon: UsersRound },
+  { href: ROUTES.administrationInvitations, label: "الدعوات", icon: Mail },
+  { href: ROUTES.administrationActivityLog, label: "السجل الشامل", icon: History },
+  { href: ROUTES.administrationAuditLog, label: "سجلات التدقيق", icon: BarChart3 },
+  { href: ROUTES.administrationSessions, label: "الجلسات النشطة", icon: Monitor },
 ]
 
 export function AdministrationModuleNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="overflow-x-auto rounded-xl border border-border/70 bg-card p-1">
+    <nav dir="rtl" className="overflow-x-auto rounded-2xl border border-[#e8edf3] bg-white p-1.5">
       <ul className="flex min-w-max items-center gap-1">
-        {IAM_NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.map((item) => {
           const active = pathname === item.href
+          const Icon = item.icon
           return (
             <li key={item.href}>
               <Link
                 href={item.href}
                 className={cn(
-                  "inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors",
+                  "flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-semibold transition-colors",
                   active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    ? "bg-[#2563eb] text-white"
+                    : "text-[#5b6b85] hover:bg-[#f4f7fc] hover:text-[#0d1b3e]"
                 )}
               >
+                <Icon className="size-3.5" />
                 {item.label}
               </Link>
             </li>

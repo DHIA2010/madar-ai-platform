@@ -27,6 +27,7 @@ import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { PosDevicesService } from "../../pos/devices-service"
+import { PosHeldOrdersService } from "../../pos/held-orders-service"
 import { PosInvoicesService, type InvoiceStatus } from "../../pos/invoices-service"
 import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
 import { PosShiftsService } from "../../pos/shifts-service"
@@ -34,6 +35,11 @@ import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { CustomersAggregationService } from "../../customers/service"
+import {
+  NativeCustomersService,
+  toNormalizedCustomer,
+  toNormalizedCustomerDetail,
+} from "../../customers/native-customers-service"
 import { OrdersAggregationService } from "../../orders/service"
 import { StoresAggregationService } from "../../stores/service"
 import { CampaignRepository } from "../../campaigns/repository"
@@ -88,7 +94,10 @@ import {
   posDeviceSchema,
   openShiftSchema,
   closeShiftSchema,
+  recordCashMovementSchema,
   createInvoiceSchema,
+  createCustomerSchema,
+  holdOrderSchema,
   invoiceStatusSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
@@ -122,6 +131,7 @@ import {
   updateWorkspaceSchema,
   uploadAvatarSchema,
   uploadOrganizationLogoSchema,
+  uploadProductImageSchema,
   changePasswordSchema,
   verifyEmailSchema,
 } from "../../schemas"
@@ -507,9 +517,6 @@ export function createIdentityApiServer(
   const posDevicesService = container.infrastructure.database
     ? new PosDevicesService(container.infrastructure.database)
     : null
-  const posShiftsService = container.infrastructure.database
-    ? new PosShiftsService(container.infrastructure.database)
-    : null
   const posPaymentMethodsService = container.infrastructure.database
     ? new PosPaymentMethodsService(container.infrastructure.database)
     : null
@@ -517,11 +524,25 @@ export function createIdentityApiServer(
     container.infrastructure.database && posPaymentMethodsService
       ? new PosInvoicesService(container.infrastructure.database, posPaymentMethodsService)
       : null
+  const posShiftsService =
+    container.infrastructure.database && posInvoicesService && posPaymentMethodsService
+      ? new PosShiftsService(
+          container.infrastructure.database,
+          posInvoicesService,
+          posPaymentMethodsService
+        )
+      : null
+  const posHeldOrdersService = container.infrastructure.database
+    ? new PosHeldOrdersService(container.infrastructure.database)
+    : null
   const productCatalogService = container.infrastructure.database
     ? new ProductCatalogService(new ProductCatalogRepository(container.infrastructure.database))
     : null
   const customersAggregationService = container.infrastructure.database
     ? new CustomersAggregationService(container.infrastructure.database)
+    : null
+  const nativeCustomersService = container.infrastructure.database
+    ? new NativeCustomersService(container.infrastructure.database)
     : null
   const ordersAggregationService = container.infrastructure.database
     ? new OrdersAggregationService(container.infrastructure.database)
@@ -1867,6 +1888,36 @@ export function createIdentityApiServer(
         )
       }
 
+      const organizationSessionsMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/sessions$/
+      )
+      if (method === "GET" && organizationSessionsMatch) {
+        const result = await container.queries.getOrganizationSessions(
+          actor,
+          organizationSessionsMatch[1]
+        )
+        // Resolved per unique IP rather than per session -- several sessions commonly share one
+        // IP (same office/device), and a lookup can mean a real network round trip the first
+        // time (see GeoIpService's own comment).
+        const uniqueIps = [...new Set(result.items.map((session) => session.ipAddress))]
+        const geoByIp = new Map(
+          await Promise.all(
+            uniqueIps.map(async (ip) => [ip, await geoIpService.lookup(ip)] as const)
+          )
+        )
+        return send(200, {
+          ...result,
+          items: result.items.map((session) => {
+            const geo = geoByIp.get(session.ipAddress)
+            const location =
+              geo?.city && geo?.countryCode
+                ? `${geo.city}, ${geo.countryCode}`
+                : (geo?.countryCode ?? null)
+            return { ...session, location }
+          }),
+        })
+      }
+
       const organizationTeamsMatch = url.pathname.match(/^\/v1\/organizations\/([^/]+)\/teams$/)
       if (method === "GET" && organizationTeamsMatch) {
         return send(200, await container.queries.listTeams(actor, organizationTeamsMatch[1]))
@@ -2562,6 +2613,75 @@ export function createIdentityApiServer(
         )
       }
 
+      const shiftCashMovementsMatch = url.pathname.match(
+        /^\/v1\/pos\/shifts\/([^/]+)\/cash-movements$/
+      )
+      if (shiftCashMovementsMatch) {
+        if (!posShiftsService) {
+          return send(503, {
+            code: "POS_SHIFTS_UNAVAILABLE",
+            message: "Point-of-sale shifts are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, {
+            items: await posShiftsService.listCashMovements(
+              actor.organizationId,
+              shiftCashMovementsMatch[1]
+            ),
+          })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = recordCashMovementSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await posShiftsService.recordCashMovement({
+              organizationId: actor.organizationId,
+              shiftId: shiftCashMovementsMatch[1],
+              type: payload.type,
+              amount: payload.amount,
+              note: payload.note,
+              createdBy: actor.userId,
+            })
+          )
+        }
+      }
+
+      // Checked before the plain /v1/pos/shifts/:id match below so "detail" is never read as a
+      // shift id, the same defensive ordering devices' counts-by-workspace already uses.
+      const shiftDetailMatch = url.pathname.match(/^\/v1\/pos\/shifts\/([^/]+)\/detail$/)
+      if (shiftDetailMatch && method === "GET") {
+        if (!posShiftsService) {
+          return send(503, {
+            code: "POS_SHIFTS_UNAVAILABLE",
+            message: "Point-of-sale shifts are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+
+        return send(
+          200,
+          await posShiftsService.getDetail(actor.organizationId, shiftDetailMatch[1])
+        )
+      }
+
+      const shiftByIdMatch = url.pathname.match(/^\/v1\/pos\/shifts\/([^/]+)$/)
+      if (shiftByIdMatch && method === "GET") {
+        if (!posShiftsService) {
+          return send(503, {
+            code: "POS_SHIFTS_UNAVAILABLE",
+            message: "Point-of-sale shifts are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+
+        return send(200, await posShiftsService.getById(actor.organizationId, shiftByIdMatch[1]))
+      }
+
       // Checked before the /v1/pos/invoices GET/POST block below so "summary" is never read as
       // an invoice id, the same defensive ordering devices' counts-by-workspace already uses.
       if (method === "GET" && url.pathname === "/v1/pos/invoices/summary") {
@@ -2620,6 +2740,7 @@ export function createIdentityApiServer(
               customerPhone: payload.customerPhone,
               paymentMethodCode: payload.paymentMethodCode,
               discountAmount: payload.discountAmount,
+              notes: payload.notes,
               items: payload.items,
             })
           )
@@ -2645,6 +2766,55 @@ export function createIdentityApiServer(
             payload.status
           )
         )
+      }
+
+      if (url.pathname === "/v1/pos/held-orders") {
+        if (!posHeldOrdersService) {
+          return send(503, {
+            code: "POS_HELD_ORDERS_UNAVAILABLE",
+            message: "Held orders are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          const workspaceId = url.searchParams.get("workspaceId")
+          if (!workspaceId) throw ERRORS.validation({ workspaceId: "Required." })
+          return send(200, {
+            items: await posHeldOrdersService.list(actor.organizationId, workspaceId, actor.userId),
+          })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = holdOrderSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await posHeldOrdersService.hold({
+              organizationId: actor.organizationId,
+              workspaceId: payload.workspaceId,
+              cashierUserId: actor.userId,
+              customerName: payload.customerName,
+              customerPhone: payload.customerPhone,
+              discountAmount: payload.discountAmount,
+              notes: payload.notes,
+              items: payload.items,
+            })
+          )
+        }
+      }
+
+      const heldOrderMatch = url.pathname.match(/^\/v1\/pos\/held-orders\/([^/]+)$/)
+      if (heldOrderMatch && method === "DELETE") {
+        if (!posHeldOrdersService) {
+          return send(503, {
+            code: "POS_HELD_ORDERS_UNAVAILABLE",
+            message: "Held orders are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        return send(200, await posHeldOrdersService.remove(actor.organizationId, heldOrderMatch[1]))
       }
 
       if (url.pathname === "/v1/products") {
@@ -2691,6 +2861,39 @@ export function createIdentityApiServer(
             })
           )
         }
+      }
+
+      if (method === "POST" && url.pathname === "/v1/products/images") {
+        if (
+          !actor.modulePermissions.includes("products:create") &&
+          !actor.modulePermissions.includes("products:edit")
+        ) {
+          throw ERRORS.forbidden()
+        }
+        if (!container.infrastructure.objectStorage) {
+          return send(503, {
+            code: "PRODUCT_IMAGE_UPLOAD_UNAVAILABLE",
+            message: "Image uploads are not available right now.",
+          })
+        }
+
+        const payload = uploadProductImageSchema.parse(await readJsonBody(request))
+        const buffer = Buffer.from(payload.dataBase64, "base64")
+        const MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024
+        if (buffer.length === 0 || buffer.length > MAX_PRODUCT_IMAGE_BYTES) {
+          throw ERRORS.validation({ image: "Image must be between 1 byte and 10MB." })
+        }
+
+        const extension =
+          payload.contentType.split("/")[1] === "jpeg" ? "jpg" : payload.contentType.split("/")[1]
+        const key = `products/${actor.organizationId}/${randomUUID()}.${extension}`
+        const imageUrl = await container.infrastructure.objectStorage.uploadPublicObject({
+          key,
+          body: buffer,
+          contentType: payload.contentType,
+        })
+
+        return send(201, { url: imageUrl })
       }
 
       const nativeProductMatch = url.pathname.match(/^\/v1\/products\/([^/]+)$/)
@@ -2748,19 +2951,67 @@ export function createIdentityApiServer(
         )
       }
 
-      if (method === "GET" && url.pathname === "/v1/customers") {
-        if (!customersAggregationService) {
-          return send(503, {
-            code: "CUSTOMERS_UNAVAILABLE",
-            message: "Customer aggregation is unavailable in memory mode.",
-          })
+      const NATIVE_CUSTOMER_ID_PATTERN =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+      if (url.pathname === "/v1/customers") {
+        if (method === "GET") {
+          if (!customersAggregationService) {
+            return send(503, {
+              code: "CUSTOMERS_UNAVAILABLE",
+              message: "Customer aggregation is unavailable in memory mode.",
+            })
+          }
+
+          // Native (Madar-authored) customers merged in alongside the synced-storefront
+          // aggregation, same pattern GET /v1/products already uses for native vs. synced
+          // products -- one list, not two feeds the client has to stitch together.
+          const [synced, native] = await Promise.all([
+            customersAggregationService.listCustomers(actor),
+            nativeCustomersService
+              ? nativeCustomersService.list(actor.organizationId, actor.workspaceId)
+              : Promise.resolve([]),
+          ])
+          const items = [...native.map(toNormalizedCustomer), ...synced].sort((left, right) =>
+            right.createdAt.localeCompare(left.createdAt)
+          )
+          return send(200, { items })
         }
 
-        return send(200, { items: await customersAggregationService.listCustomers(actor) })
+        if (method === "POST") {
+          if (!nativeCustomersService) {
+            return send(503, {
+              code: "CUSTOMERS_UNAVAILABLE",
+              message: "Customer creation is unavailable in memory mode.",
+            })
+          }
+
+          const payload = createCustomerSchema.parse(await readJsonBody(request))
+          const created = await nativeCustomersService.create({
+            organizationId: actor.organizationId,
+            workspaceId: actor.workspaceId,
+            createdBy: actor.userId,
+            name: payload.name,
+            email: payload.email,
+            phone: payload.phone,
+            notes: payload.notes,
+          })
+          return send(201, toNormalizedCustomer(created))
+        }
       }
 
       const customerDetailMatch = url.pathname.match(/^\/v1\/customers\/([^/]+)$/)
       if (method === "GET" && customerDetailMatch) {
+        const customerId = decodeURIComponent(customerDetailMatch[1])
+
+        // A native customer's id is a plain uuid; a synced customer's id is always
+        // "provider:entityId" -- checked first so a native id never reaches the provider-only
+        // aggregation lookup, which would otherwise reject it as an invalid customer id.
+        if (nativeCustomersService && NATIVE_CUSTOMER_ID_PATTERN.test(customerId)) {
+          const native = await nativeCustomersService.getById(actor.organizationId, customerId)
+          if (native) return send(200, toNormalizedCustomerDetail(native))
+        }
+
         if (!customersAggregationService) {
           return send(503, {
             code: "CUSTOMERS_UNAVAILABLE",
@@ -2768,10 +3019,7 @@ export function createIdentityApiServer(
           })
         }
 
-        const customer = await customersAggregationService.getCustomer(
-          actor,
-          decodeURIComponent(customerDetailMatch[1])
-        )
+        const customer = await customersAggregationService.getCustomer(actor, customerId)
         if (!customer) {
           return send(404, { code: "CUSTOMER_NOT_FOUND", message: "Customer not found." })
         }
@@ -3441,6 +3689,7 @@ export function createIdentityApiServer(
           items: await container.queries.getAuditLogs(actor, {
             page: parsePage(url.searchParams.get("page"), 1),
             pageSize: Math.min(parsePage(url.searchParams.get("pageSize"), 20), 100),
+            actorUserId: url.searchParams.get("actorUserId") ?? undefined,
           }),
         })
       }

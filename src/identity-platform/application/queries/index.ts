@@ -1,6 +1,8 @@
 export interface ListAuditLogsQuery {
   page: number
   pageSize: number
+  // Narrows to one member's own events -- the user profile drawer's real "Recent Activity" card.
+  actorUserId?: string
 }
 
 export interface ListOrganizationsQuery {

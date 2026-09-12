@@ -46,10 +46,23 @@ const client = createHttpDataClient({
   getWorkspaceId: getWorkspaceIdFromStorage,
 })
 
+export interface CreateCustomerInput {
+  name: string
+  email: string | null
+  phone: string | null
+  notes: string | null
+}
+
 export const customerListService = {
   async listCustomers(): Promise<CustomerRecord[]> {
     const response = await client.get<{ items: CustomerRecord[] }>(CUSTOMERS_ENDPOINT)
     return response.items
+  },
+
+  // Creates a native (platform: "Madar") customer -- sits alongside the synced-storefront
+  // aggregation the same way a native product sits alongside a synced one.
+  async createCustomer(input: CreateCustomerInput): Promise<CustomerRecord> {
+    return client.post<CreateCustomerInput, CustomerRecord>(CUSTOMERS_ENDPOINT, input)
   },
 
   async getCustomer(customerId: string): Promise<CustomerDetail | null> {

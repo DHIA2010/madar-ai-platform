@@ -62,3 +62,6 @@ override.tf.json
 # redistributing the .mmdb file, and stage/production download it at container startup instead
 # (see src/identity-platform/geo/download-database.ts).
 identity-platform/geoip/
+
+# The root /node_modules rule above doesn't reach this nested one.
+identity-platform/node_modules/

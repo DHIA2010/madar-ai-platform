@@ -41,6 +41,7 @@ export interface CreateInvoiceInput {
   customerPhone: string | null
   paymentMethodCode: string
   discountAmount: number
+  notes: string | null
   items: InvoiceItemInput[]
 }
 
@@ -61,6 +62,7 @@ export interface InvoiceView {
   discountAmount: number
   taxAmount: number
   totalAmount: number
+  notes: string | null
   createdAt: string
   items: InvoiceItemView[]
 }
@@ -73,6 +75,9 @@ export interface InvoiceSummary {
   // Over completed invoices only -- a cancelled or returned sale never happened for the purpose
   // of "what does a typical sale look like here", so it would only skew the figure.
   averageCompletedValue: number
+  // Same completed-only scope as the average -- this is what the cashier screen's "مبيعات اليوم"
+  // reads when filtered to today and the current branch.
+  totalCompletedAmount: number
 }
 
 export interface InvoiceListFilter {
@@ -102,6 +107,7 @@ interface InvoiceRow {
   discount_amount: string | number
   tax_amount: string | number
   total_amount: string | number
+  notes: string | null
   created_at: Date | string
   [key: string]: unknown
 }
@@ -144,6 +150,7 @@ function mapInvoice(row: InvoiceRow, items: InvoiceItemView[]): InvoiceView {
     discountAmount: Number(row.discount_amount),
     taxAmount: Number(row.tax_amount),
     totalAmount: Number(row.total_amount),
+    notes: row.notes,
     createdAt: toIso(row.created_at),
     items,
   }
@@ -152,7 +159,7 @@ function mapInvoice(row: InvoiceRow, items: InvoiceItemView[]): InvoiceView {
 const INVOICE_SELECT = `
   SELECT id, workspace_id, invoice_number, status, customer_name, customer_phone,
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
-         total_amount, created_at
+         total_amount, notes, created_at
     FROM pos_invoices
 `
 
@@ -252,6 +259,7 @@ export class PosInvoicesService {
       cancelled_count: string | null
       returned_count: string | null
       average_completed_value: string | null
+      total_completed_amount: string | null
     }>(
       // sum(case when ...) rather than count(*) FILTER (WHERE ...): the test harness's in-memory
       // Postgres (pg-mem) does not implement FILTER, and silently returns the unfiltered count
@@ -262,7 +270,8 @@ export class PosInvoicesService {
          sum(case when status = 'completed' then 1 else 0 end) AS completed_count,
          sum(case when status = 'cancelled' then 1 else 0 end) AS cancelled_count,
          sum(case when status = 'returned' then 1 else 0 end) AS returned_count,
-         avg(case when status = 'completed' then total_amount end) AS average_completed_value
+         avg(case when status = 'completed' then total_amount end) AS average_completed_value,
+         sum(case when status = 'completed' then total_amount else 0 end) AS total_completed_amount
        FROM pos_invoices
        WHERE ${conditions.join(" AND ")}`,
       params
@@ -275,6 +284,7 @@ export class PosInvoicesService {
       cancelledCount: Number(row?.cancelled_count ?? 0),
       returnedCount: Number(row?.returned_count ?? 0),
       averageCompletedValue: row?.average_completed_value ? Number(row.average_completed_value) : 0,
+      totalCompletedAmount: Number(row?.total_completed_amount ?? 0),
     }
   }
 
@@ -306,8 +316,8 @@ export class PosInvoicesService {
       `INSERT INTO pos_invoices
          (id, organization_id, workspace_id, invoice_number, status, customer_name,
           customer_phone, cashier_user_id, payment_method_code, subtotal_amount,
-          discount_amount, tax_amount, total_amount)
-       VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12)`,
+          discount_amount, tax_amount, total_amount, notes)
+       VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         id,
         input.organizationId,
@@ -321,6 +331,7 @@ export class PosInvoicesService {
         input.discountAmount,
         taxAmount,
         totalAmount,
+        input.notes,
       ]
     )
 

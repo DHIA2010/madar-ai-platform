@@ -148,6 +148,10 @@ interface ImageDraft {
   id: string
   name: string
   previewUrl: string
+  // Present only for a freshly picked local file awaiting upload -- previewUrl is a blob: URL
+  // in that case. An image hydrated from an existing product has no file: previewUrl is already
+  // the real hosted URL, and nothing needs uploading again on save.
+  file: File | null
 }
 
 function emptyComponent(): ComponentRow {
@@ -316,7 +320,9 @@ export default function AddProduct() {
 
   useEffect(() => {
     return () => {
-      images.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+      images.forEach((image) => {
+        if (image.file) URL.revokeObjectURL(image.previewUrl)
+      })
     }
   }, [images])
 
@@ -438,6 +444,17 @@ export default function AddProduct() {
                 },
               ])
             )
+          )
+        }
+
+        if (product.imageUrls.length > 0) {
+          setImages(
+            product.imageUrls.map((url) => ({
+              id: crypto.randomUUID(),
+              name: url.split("/").pop() ?? url,
+              previewUrl: url,
+              file: null,
+            }))
           )
         }
       })
@@ -749,6 +766,7 @@ export default function AddProduct() {
         id: crypto.randomUUID(),
         name: file.name,
         previewUrl: URL.createObjectURL(file),
+        file,
       })
     }
 
@@ -758,7 +776,7 @@ export default function AddProduct() {
   const removeImage = (id: string) =>
     setImages((current) => {
       const target = current.find((image) => image.id === id)
-      if (target) URL.revokeObjectURL(target.previewUrl)
+      if (target?.file) URL.revokeObjectURL(target.previewUrl)
       return current.filter((image) => image.id !== id)
     })
 
@@ -809,7 +827,7 @@ export default function AddProduct() {
     return Number.isFinite(parsed) ? parsed : null
   }
 
-  const buildPayload = (asDraft: boolean): CreateProductInput => ({
+  const buildPayload = (asDraft: boolean, imageUrls: string[]): CreateProductInput => ({
     productType,
     name: name.trim(),
     // The server drops this for the types that carry no stock code, but sending null keeps the
@@ -823,9 +841,7 @@ export default function AddProduct() {
     costPrice: optionalNumber(costPrice),
     stockQuantity: optionalNumber(stockQty),
     minStock: optionalNumber(minStock),
-    // Images are still local object URLs at this point. There is no product-image upload
-    // endpoint, so nothing is sent rather than a blob: URL no other client could resolve.
-    imageUrls: [],
+    imageUrls,
     attributes: {
       unitsPerCarton: packagingApplies ? optionalNumber(unitsPerCarton) : null,
       linkedUnitProductId: packagingApplies ? linkedUnitProductId || null : null,
@@ -907,8 +923,26 @@ export default function AddProduct() {
     }
 
     setSaving(true)
+
+    // Uploaded first and separately from the save itself: a failure here is "couldn't upload a
+    // photo", a distinct, more specific problem than "couldn't save the product".
+    let imageUrls: string[]
     try {
-      const payload = buildPayload(asDraft)
+      imageUrls = await Promise.all(
+        images.map((image) =>
+          image.file
+            ? productListService.uploadImage(image.file)
+            : Promise.resolve(image.previewUrl)
+        )
+      )
+    } catch {
+      toast.error("تعذر رفع إحدى الصور.", { description: "تحقق من الاتصال وحاول مرة أخرى." })
+      setSaving(false)
+      return
+    }
+
+    try {
+      const payload = buildPayload(asDraft, imageUrls)
       const saved = isEditing
         ? await productListService.updateProduct(editingId, payload)
         : await productListService.createProduct(payload)

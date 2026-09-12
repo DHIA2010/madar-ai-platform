@@ -1,3 +1,5 @@
+import type { PaymentKind } from "./pos-payment-methods.service"
+
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
 
@@ -25,11 +27,11 @@ function getWorkspaceIdFromStorage(): string | null {
 export type ShiftStatus = "open" | "closed"
 
 // A cashier's session at a branch: a counted starting float, and (once closed) a counted ending
-// one. Deliberately carries no sales/expected-cash figures -- nothing in the platform records a
-// transaction against a till yet (the cashier screen is still a placeholder), so a number here
-// would be fabricated rather than real. Add those once a real till exists to report them.
+// one. shiftNumber is a real sequential number ("#21") assigned when opened -- null for shifts
+// opened before that existed, rather than a fabricated backfilled value.
 export interface Shift {
   id: string
+  shiftNumber: number | null
   workspaceId: string
   cashierUserId: string
   status: ShiftStatus
@@ -55,6 +57,66 @@ export interface CloseShiftInput {
   closingNotes: string | null
 }
 
+export type CashMovementType = "withdrawal" | "deposit"
+
+// A manual cash-drawer adjustment mid-shift -- a manager pulling change out or topping the float
+// up -- distinct from a sale or a return, which pos_invoices already covers.
+export interface CashMovement {
+  id: string
+  shiftId: string
+  type: CashMovementType
+  amount: number
+  note: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+export interface RecordCashMovementInput {
+  type: CashMovementType
+  amount: number
+  note: string | null
+}
+
+export interface PaymentBreakdownEntry {
+  code: string
+  name: string
+  kind: PaymentKind | null
+  amount: number
+  percentage: number
+}
+
+export interface ShiftCashSummary {
+  openingCashAmount: number
+  cashSales: number
+  otherSales: number
+  cashReturns: number
+  withdrawals: number
+  deposits: number
+  expectedCashAmount: number
+}
+
+export type ShiftActivityType = "open" | "close" | "withdrawal" | "deposit" | "sale" | "return"
+
+export interface ShiftActivityEntry {
+  type: ShiftActivityType
+  amount: number
+  note: string | null
+  occurredAt: string
+  reference: string
+}
+
+// Everything the shift detail page shows, computed server-side from real pos_invoices and
+// pos_cash_movements rows for this shift's own window -- not recomputed client-side, so the page
+// and the close dialog (which does its own smaller version of this same math) can never disagree.
+export interface ShiftDetail {
+  shift: Shift
+  totalSales: number
+  invoiceCount: number
+  paymentBreakdown: PaymentBreakdownEntry[]
+  cashSummary: ShiftCashSummary
+  activity: ShiftActivityEntry[]
+}
+
 const sessionManager = createSessionManager()
 const client = createHttpDataClient({
   getSession: () => sessionManager.restore(),
@@ -75,6 +137,30 @@ export const posShiftsService = {
     return client.patch<CloseShiftInput, Shift>(
       [SHIFTS_ENDPOINT, encodeURIComponent(id), "close"].join(PATH_SEPARATOR),
       input
+    )
+  },
+
+  async listCashMovements(shiftId: string): Promise<CashMovement[]> {
+    const response = await client.get<{ items: CashMovement[] }>(
+      [SHIFTS_ENDPOINT, encodeURIComponent(shiftId), "cash-movements"].join(PATH_SEPARATOR)
+    )
+    return response.items
+  },
+
+  async recordCashMovement(shiftId: string, input: RecordCashMovementInput): Promise<CashMovement> {
+    return client.post<RecordCashMovementInput, CashMovement>(
+      [SHIFTS_ENDPOINT, encodeURIComponent(shiftId), "cash-movements"].join(PATH_SEPARATOR),
+      input
+    )
+  },
+
+  async get(id: string): Promise<Shift> {
+    return client.get<Shift>([SHIFTS_ENDPOINT, encodeURIComponent(id)].join(PATH_SEPARATOR))
+  },
+
+  async getDetail(id: string): Promise<ShiftDetail> {
+    return client.get<ShiftDetail>(
+      [SHIFTS_ENDPOINT, encodeURIComponent(id), "detail"].join(PATH_SEPARATOR)
     )
   },
 }

@@ -52,6 +52,7 @@ export interface Invoice {
   discountAmount: number
   taxAmount: number
   totalAmount: number
+  notes: string | null
   createdAt: string
   items: InvoiceItem[]
 }
@@ -62,6 +63,7 @@ export interface InvoiceSummary {
   cancelledCount: number
   returnedCount: number
   averageCompletedValue: number
+  totalCompletedAmount: number
 }
 
 export interface InvoiceListFilter {
@@ -85,6 +87,7 @@ export interface CreateInvoiceInput {
   customerPhone: string | null
   paymentMethodCode: string
   discountAmount: number
+  notes: string | null
   items: CreateInvoiceItemInput[]
 }
 

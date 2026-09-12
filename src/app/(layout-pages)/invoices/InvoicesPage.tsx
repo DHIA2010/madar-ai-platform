@@ -854,6 +854,9 @@ function CreateInvoiceDialog({
         customerPhone: customerPhone.trim() || null,
         paymentMethodCode,
         discountAmount: discount,
+        // This form has no note field of its own -- the cashier screen's "ملاحظة" button is the
+        // one place a note gets typed.
+        notes: null,
         items: lines.map((line) => ({
           productId: line.productId,
           productName: line.productName,

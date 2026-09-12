@@ -361,3 +361,131 @@ describe("GET /v1/customers: real customer aggregation with order stats", () => 
     expect(response.status).toBe(401)
   })
 })
+
+async function createCustomer(
+  login: { session: { accessToken: string } },
+  body: Record<string, unknown>
+) {
+  const response = await fetch(`${baseUrl}/v1/customers`, {
+    method: "POST",
+    headers: { ...authHeaders(login), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+describe("native customers: authored in Madar rather than synced from a storefront", () => {
+  it("creates a native customer and lists it as a brand-new, zero-order customer", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-native@madar.test",
+      "Native Customers"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001650"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Native" })
+
+    const created = await createCustomer(login, {
+      name: "زائر البقالة",
+      phone: "0555000111",
+      email: null,
+      notes: "يفضل التوصيل مساءً",
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      name: "زائر البقالة",
+      phone: "0555000111",
+      platform: "Madar",
+      totalOrders: 0,
+      totalRevenue: 0,
+      lifetimeValue: 0,
+      lastPurchaseAt: null,
+      status: "new",
+      segment: "New",
+    })
+
+    const listResponse = await fetch(`${baseUrl}/v1/customers`, { headers: authHeaders(login) })
+    const listBody = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+    expect(listBody.items).toHaveLength(1)
+    expect(listBody.items[0]).toMatchObject({ id: created.body.id, platform: "Madar" })
+  })
+
+  it("merges native customers alongside synced ones in one list", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-merged@madar.test",
+      "Merged Customers"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001640"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Merged" })
+    const connectionId = await insertConnectedSallaConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertRecord({
+      table: "salla_records",
+      connectionId,
+      entityType: "customers",
+      entityId: "synced-1",
+      updatedAt: "2026-08-16T00:00:00Z",
+      payload: { full_name: "عميل متجر", email: "synced@example.com" },
+    })
+    await createCustomer(login, { name: "عميل الكاشير", phone: null, email: null, notes: null })
+
+    const response = await fetch(`${baseUrl}/v1/customers`, { headers: authHeaders(login) })
+    const body = (await response.json()) as { items: Array<{ name: string; platform: string }> }
+    expect(body.items).toHaveLength(2)
+    expect(body.items.map((item) => item.platform).sort()).toEqual(["Madar", "Salla"])
+  })
+
+  it("reads back a native customer's own detail without hitting the synced-only lookup", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-detail@madar.test",
+      "Native Detail"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001660"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Detail" })
+
+    const created = await createCustomer(login, {
+      name: "عميل تفاصيل",
+      phone: "0501234567",
+      email: null,
+      notes: null,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/customers/${created.body.id}`, {
+      headers: authHeaders(login),
+    })
+    expect(response.status).toBe(200)
+    const detail = (await response.json()) as {
+      orders: unknown[]
+      productsPurchased: unknown[]
+      averageOrderValue: number
+    }
+    expect(detail).toMatchObject({ orders: [], productsPurchased: [], averageOrderValue: 0 })
+  })
+
+  it("keeps one organization's native customers out of another's", async () => {
+    const first = await registerAndProvisionOrg("customers-native-a@madar.test", "Native Org A")
+    const second = await registerAndProvisionOrg("customers-native-b@madar.test", "Native Org B")
+    const firstWorkspaceId = first.actor.workspaceId ?? "00000000-0000-4000-8000-000000001670"
+    await provisionWorkspace({
+      organizationId: first.actor.organizationId,
+      workspaceId: firstWorkspaceId,
+      label: "Native Org A",
+    })
+
+    await createCustomer(first.login, { name: "عميل أ", phone: null, email: null, notes: null })
+
+    const response = await fetch(`${baseUrl}/v1/customers`, { headers: authHeaders(second.login) })
+    const body = (await response.json()) as { items: unknown[] }
+    expect(body.items).toHaveLength(0)
+  })
+
+  it("rejects an unauthenticated create", async () => {
+    const response = await fetch(`${baseUrl}/v1/customers`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "لن ينجح", phone: null, email: null, notes: null }),
+    })
+    expect(response.status).toBe(401)
+  })
+})

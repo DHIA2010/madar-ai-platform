@@ -1,5 +1,6 @@
 export const ASSETS = {
   logo: "/images/madar-logo.png",
+  posLogo: "/images/madar_pos_logo.png",
   platforms: {
     googleAds: "/images/platforms/google-ads.png",
     googleAnalytics: "/images/platforms/google-analytics.png",

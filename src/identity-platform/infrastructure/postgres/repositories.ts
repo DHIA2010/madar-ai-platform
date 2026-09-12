@@ -765,7 +765,7 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       ],
     })
   }
-  async listRecent(organizationId: string, page: number, pageSize: number) {
+  async listRecent(organizationId: string, page: number, pageSize: number, actorUserId?: string) {
     const offset = (page - 1) * pageSize
     const toIsoString = (value: unknown): string | null => {
       if (!value) return null
@@ -773,16 +773,19 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       return String(value)
     }
     const result = await this.db.query({
-      name: "identity-audit-list-recent",
+      name: actorUserId ? "identity-audit-list-recent-by-actor" : "identity-audit-list-recent",
       text: `
         SELECT a.*, u.full_name AS actor_name
         FROM audit_logs a
         LEFT JOIN users u ON u.id = a.actor_user_id
         WHERE a.organization_id = $1
+          ${actorUserId ? "AND a.actor_user_id = $4" : ""}
         ORDER BY a.created_at DESC
         LIMIT $2 OFFSET $3
       `,
-      values: [organizationId, pageSize, offset],
+      values: actorUserId
+        ? [organizationId, pageSize, offset, actorUserId]
+        : [organizationId, pageSize, offset],
     })
     return result.rows.map((row) => ({
       id: String(row.id),
@@ -803,11 +806,13 @@ class PostgresAuditLogRepository implements AuditLogRepository {
       createdAt: toIsoString(row.created_at) ?? "",
     }))
   }
-  async count(organizationId: string) {
+  async count(organizationId: string, actorUserId?: string) {
     const result = await this.db.query<{ count: string }>({
-      name: "identity-audit-count",
-      text: "SELECT COUNT(*)::text AS count FROM audit_logs WHERE organization_id = $1",
-      values: [organizationId],
+      name: actorUserId ? "identity-audit-count-by-actor" : "identity-audit-count",
+      text: actorUserId
+        ? "SELECT COUNT(*)::text AS count FROM audit_logs WHERE organization_id = $1 AND actor_user_id = $2"
+        : "SELECT COUNT(*)::text AS count FROM audit_logs WHERE organization_id = $1",
+      values: actorUserId ? [organizationId, actorUserId] : [organizationId],
     })
     return Number(result.rows[0]?.count ?? 0)
   }

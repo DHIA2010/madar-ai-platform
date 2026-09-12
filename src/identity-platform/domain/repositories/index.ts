@@ -91,8 +91,15 @@ export interface AuditLogListItem extends AuditLogState {
 
 export interface AuditLogRepository {
   append(entry: AuditLogState): Promise<void>
-  listRecent(organizationId: string, page: number, pageSize: number): Promise<AuditLogListItem[]>
-  count(organizationId: string): Promise<number>
+  // actorUserId narrows to one member's own events -- used by the user profile drawer's real
+  // "Recent Activity" card, so it isn't left permanently empty.
+  listRecent(
+    organizationId: string,
+    page: number,
+    pageSize: number,
+    actorUserId?: string
+  ): Promise<AuditLogListItem[]>
+  count(organizationId: string, actorUserId?: string): Promise<number>
   getLastLoginTimestamps(organizationId: string): Promise<Record<string, string>>
 }
 
