@@ -18,7 +18,6 @@ const mockInvitations = [
     email: "sara@madar.ai",
     roleId: "viewer",
     workspace: "Demo Workspace",
-    department: "",
     status: "pending" as const,
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
     invitedAt: new Date().toISOString(),
@@ -75,31 +74,29 @@ describe("AdministrationInvitationsScreen", () => {
     mockResendInvitationMutateAsync.mockClear()
   })
 
-  it("opens invite dialog when clicking Invite Users", () => {
+  it("opens invite dialog when clicking دعوة مستخدمين", () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Invite Users" }))
+    fireEvent.click(screen.getByRole("button", { name: "دعوة مستخدمين" }))
 
-    expect(screen.getByRole("dialog", { name: "Invite Users" })).toBeTruthy()
+    expect(screen.getByRole("dialog", { name: "دعوة مستخدمين" })).toBeTruthy()
     expect(
-      screen.getByText(
-        "New members start with no permissions — add them to a team afterward to grant access."
-      )
+      screen.getByText("الأعضاء الجدد يبدأون بلا صلاحيات -- أضفهم إلى فريق لاحقاً لمنحهم الوصول.")
     ).toBeTruthy()
   })
 
   it("defaults invited members to no role and supports a single workspace checkbox", async () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Invite Users" }))
+    fireEvent.click(screen.getByRole("button", { name: "دعوة مستخدمين" }))
 
     fireEvent.click(screen.getByLabelText("Retail Expansion"))
 
-    fireEvent.change(screen.getByLabelText("Email addresses"), {
+    fireEvent.change(screen.getByLabelText("عناوين البريد الإلكتروني"), {
       target: { value: "new.user@madar.ai" },
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Send invitation" }))
+    fireEvent.click(screen.getByRole("button", { name: "إرسال الدعوة" }))
 
     await waitFor(() => {
       expect(mockSendInvitationMutateAsync).toHaveBeenCalledWith({
@@ -111,25 +108,25 @@ describe("AdministrationInvitationsScreen", () => {
     })
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Invite Users" })).toBeNull()
+      expect(screen.queryByRole("dialog", { name: "دعوة مستخدمين" })).toBeNull()
     })
 
-    expect(toastSuccess).toHaveBeenCalledWith("Invitation sent to 1 recipient(s)")
+    expect(toastSuccess).toHaveBeenCalledWith("تم إرسال الدعوة إلى 1 مستلم.")
   })
 
   it("sends one invitation per selected workspace when multiple are checked", async () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Invite Users" }))
+    fireEvent.click(screen.getByRole("button", { name: "دعوة مستخدمين" }))
 
     fireEvent.click(screen.getByLabelText("Demo Workspace"))
     fireEvent.click(screen.getByLabelText("Retail Expansion"))
 
-    fireEvent.change(screen.getByLabelText("Email addresses"), {
+    fireEvent.change(screen.getByLabelText("عناوين البريد الإلكتروني"), {
       target: { value: "new.user@madar.ai" },
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Send invitation" }))
+    fireEvent.click(screen.getByRole("button", { name: "إرسال الدعوة" }))
 
     await waitFor(() => {
       expect(mockSendInvitationMutateAsync).toHaveBeenCalledTimes(2)
@@ -149,20 +146,18 @@ describe("AdministrationInvitationsScreen", () => {
     })
 
     await waitFor(() => {
-      expect(toastSuccess).toHaveBeenCalledWith(
-        "Invitation sent to 1 recipient(s) across 2 workspaces"
-      )
+      expect(toastSuccess).toHaveBeenCalledWith("تم إرسال الدعوة إلى 1 مستلم.")
     })
   })
 
   it("cancels an invitation from row action", async () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    fireEvent.click(screen.getByRole("button", { name: "إلغاء" }))
 
     await waitFor(() => {
       expect(mockCancelInvitationMutateAsync).toHaveBeenCalledWith("inv-1")
     })
-    expect(toastSuccess).toHaveBeenCalledWith("Invitation canceled")
+    expect(toastSuccess).toHaveBeenCalledWith("تم إلغاء الدعوة.")
   })
 })

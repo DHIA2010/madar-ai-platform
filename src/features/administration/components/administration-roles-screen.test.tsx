@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AdministrationRolesScreen } from "./administration-roles-screen"
@@ -12,6 +12,9 @@ const mockCreateRoleMutateAsync = vi.fn().mockResolvedValue({})
 const mockUpdateRoleMutateAsync = vi.fn().mockResolvedValue({})
 const mockDeleteRoleMutateAsync = vi.fn().mockResolvedValue({})
 
+// Order matters: several assertions below pick a role by its index in this array (there's no
+// longer a distinct "Edit" button text to target the editable one by name -- every role now
+// shows the same "عرض التفاصيل" button, real vs. read-only mode is decided inside the dialog).
 const mockRoles = [
   {
     id: "owner",
@@ -176,74 +179,91 @@ describe("AdministrationRolesScreen", () => {
     mockUpdateRoleMutateAsync.mockClear()
   })
 
-  it("only shows Edit for editable (custom) roles, and Clone for all roles", () => {
+  it("shows 'عرض التفاصيل' and 'استنساخ' for every role, but delete only for editable (custom) roles", () => {
     render(<AdministrationRolesScreen />)
 
-    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1)
-    expect(screen.getAllByRole("button", { name: "Clone" })).toHaveLength(mockRoles.length)
+    expect(screen.getAllByRole("button", { name: "عرض التفاصيل" })).toHaveLength(mockRoles.length)
+    expect(screen.getAllByRole("button", { name: "استنساخ" })).toHaveLength(mockRoles.length)
+    expect(screen.queryByRole("button", { name: "حذف Owner" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "حذف Viewer" })).toBeNull()
+    expect(screen.getByRole("button", { name: "حذف RevOps" })).toBeTruthy()
+  })
+
+  it("opens a default (non-editable) role read-only, with no editable fields or save path", () => {
+    render(<AdministrationRolesScreen />)
+
+    // mockRoles[0] is "Owner", a default/non-editable role.
+    fireEvent.click(screen.getAllByRole("button", { name: "عرض التفاصيل" })[0])
+
+    const dialog = screen.getByRole("dialog", { name: "تفاصيل الدور" })
+    expect(within(dialog).getByText("Owner")).toBeTruthy()
+    expect(screen.queryByLabelText("اسم الدور")).toBeNull()
+    expect(within(dialog).queryByRole("button", { name: "حفظ التعديلات" })).toBeNull()
+    expect(within(dialog).getByRole("button", { name: "إغلاق" })).toBeTruthy()
   })
 
   it("edits the custom role and calls updateRole with the current permission set", async () => {
     render(<AdministrationRolesScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }))
-    expect(screen.getByRole("dialog", { name: "Edit Role" })).toBeTruthy()
-    expect((screen.getByLabelText("Role name") as HTMLInputElement).value).toBe("RevOps")
+    // mockRoles[2] is "RevOps", the one editable (custom) role.
+    fireEvent.click(screen.getAllByRole("button", { name: "عرض التفاصيل" })[2])
+    expect(screen.getByRole("dialog", { name: "تعديل الدور" })).toBeTruthy()
+    expect((screen.getByLabelText("اسم الدور") as HTMLInputElement).value).toBe("RevOps")
 
-    fireEvent.change(screen.getByLabelText("Role name"), { target: { value: "RevOps Updated" } })
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+    fireEvent.change(screen.getByLabelText("اسم الدور"), { target: { value: "RevOps Updated" } })
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }))
 
     await vi.waitFor(() => {
       expect(mockUpdateRoleMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({ roleId: "custom-revops", name: "RevOps Updated" })
       )
     })
-    expect(toastSuccess).toHaveBeenCalledWith('Role "RevOps Updated" updated')
+    expect(toastSuccess).toHaveBeenCalledWith('تم تحديث دور "RevOps Updated".')
   })
 
   it("clones a system role into a new custom role", async () => {
     render(<AdministrationRolesScreen />)
 
-    const cloneButtons = screen.getAllByRole("button", { name: "Clone" })
+    const cloneButtons = screen.getAllByRole("button", { name: "استنساخ" })
     fireEvent.click(cloneButtons[0])
 
-    expect(screen.getByRole("dialog", { name: "Create Role from Clone" })).toBeTruthy()
-    expect((screen.getByLabelText("Role name") as HTMLInputElement).value).toBe("Owner Copy")
+    expect(screen.getByRole("dialog", { name: "إنشاء دور من نسخة" })).toBeTruthy()
+    expect((screen.getByLabelText("اسم الدور") as HTMLInputElement).value).toBe("Owner (نسخة)")
 
-    fireEvent.click(screen.getByRole("button", { name: "Create role" }))
+    fireEvent.click(screen.getByRole("button", { name: "إنشاء الدور" }))
 
     await vi.waitFor(() => {
       expect(mockCreateRoleMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ organizationId: "org-1", name: "Owner Copy" })
+        expect.objectContaining({ organizationId: "org-1", name: "Owner (نسخة)" })
       )
     })
-    expect(toastSuccess).toHaveBeenCalledWith('Role "Owner Copy" created')
+    expect(toastSuccess).toHaveBeenCalledWith('تم إنشاء دور "Owner (نسخة)".')
   })
 
   it("deletes a custom role after confirming, but never offers delete for default roles", async () => {
     render(<AdministrationRolesScreen />)
 
-    expect(screen.queryByRole("button", { name: "Delete Owner" })).toBeNull()
-    expect(screen.queryByRole("button", { name: "Delete Viewer" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "حذف Owner" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "حذف Viewer" })).toBeNull()
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete RevOps" }))
-    expect(screen.getByRole("dialog", { name: "Delete role" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "حذف RevOps" }))
+    expect(screen.getByRole("dialog", { name: "حذف الدور" })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete role" }))
+    fireEvent.click(screen.getByRole("button", { name: "حذف الدور" }))
 
     await vi.waitFor(() => {
       expect(mockDeleteRoleMutateAsync).toHaveBeenCalledWith({ roleId: "custom-revops" })
     })
-    expect(toastSuccess).toHaveBeenCalledWith('Role "RevOps" deleted')
+    expect(toastSuccess).toHaveBeenCalledWith('تم حذف دور "RevOps".')
   })
 
   it("closes dialog on Escape", () => {
     render(<AdministrationRolesScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Create Custom Role" }))
-    expect(screen.getByRole("dialog", { name: "Create Custom Role" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "إنشاء دور جديد" }))
+    expect(screen.getByRole("dialog", { name: "إنشاء دور مخصص" })).toBeTruthy()
 
     fireEvent.keyDown(document, { key: "Escape" })
-    expect(screen.queryByRole("dialog", { name: "Create Custom Role" })).toBeNull()
+    expect(screen.queryByRole("dialog", { name: "إنشاء دور مخصص" })).toBeNull()
   })
 })
