@@ -19,11 +19,13 @@ import {
   Info,
   Loader2,
   MoreVertical,
+  PiggyBank,
   Plus,
   RotateCcw,
   Settings2,
   Smartphone,
   Trash2,
+  UserRound,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -69,6 +71,8 @@ const KIND_MARK: Record<PaymentKind, { icon: LucideIcon; tint: string }> = {
   wallet: { icon: Smartphone, tint: "bg-[#efe9ff] text-[#8b5cf6]" },
   transfer: { icon: Building2, tint: "bg-[#e2f6f4] text-[#12a594]" },
   bnpl: { icon: CalendarClock, tint: "bg-[#fff3dc] text-[#e08b00]" },
+  credit: { icon: UserRound, tint: "bg-[#fdeeee] text-[#c0392b]" },
+  prepaid: { icon: PiggyBank, tint: "bg-[#eafaf0] text-[#0f9d58]" },
 }
 
 const KIND_LABEL: Record<PaymentKind, string> = {
@@ -77,6 +81,8 @@ const KIND_LABEL: Record<PaymentKind, string> = {
   wallet: "محفظة رقمية",
   transfer: "تحويل بنكي",
   bnpl: "دفع لاحق",
+  credit: "آجل على حساب العميل",
+  prepaid: "محفظة العميل المسبقة",
 }
 
 const NOTES = [

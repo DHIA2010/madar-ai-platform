@@ -338,12 +338,18 @@ export class PosShiftsService {
       methods.filter((method) => method.kind === "cash").map((method) => method.code)
     )
 
+    // Grouped by the real per-method payment lines, not the invoice's own single
+    // payment_method_code column (which reads "split" for a multi-method sale) -- this is what
+    // keeps a half-cash/half-card sale correctly split between both methods here, instead of
+    // landing entirely under one bucket or being invisible to the cash-drawer reconciliation.
     const amountByCode = new Map<string, number>()
     for (const invoice of completed) {
-      amountByCode.set(
-        invoice.paymentMethodCode,
-        (amountByCode.get(invoice.paymentMethodCode) ?? 0) + invoice.totalAmount
-      )
+      for (const payment of invoice.payments) {
+        amountByCode.set(
+          payment.paymentMethodCode,
+          (amountByCode.get(payment.paymentMethodCode) ?? 0) + payment.amount
+        )
+      }
     }
     const paymentBreakdown: PaymentBreakdownEntry[] = Array.from(amountByCode.entries())
       .map(([code, amount]) => ({
@@ -355,15 +361,25 @@ export class PosShiftsService {
       }))
       .sort((a, b) => b.amount - a.amount)
 
-    const cashSales = completed
-      .filter((invoice) => cashCodes.has(invoice.paymentMethodCode))
-      .reduce((total, invoice) => total + invoice.totalAmount, 0)
+    const cashSales = completed.reduce(
+      (total, invoice) =>
+        total +
+        invoice.payments
+          .filter((payment) => cashCodes.has(payment.paymentMethodCode))
+          .reduce((sum, payment) => sum + payment.amount, 0),
+      0
+    )
     const otherSales = totalSales - cashSales
     const cashReturns = mine
-      .filter(
-        (invoice) => invoice.status === "returned" && cashCodes.has(invoice.paymentMethodCode)
+      .filter((invoice) => invoice.status === "returned")
+      .reduce(
+        (total, invoice) =>
+          total +
+          invoice.payments
+            .filter((payment) => cashCodes.has(payment.paymentMethodCode))
+            .reduce((sum, payment) => sum + payment.amount, 0),
+        0
       )
-      .reduce((total, invoice) => total + invoice.totalAmount, 0)
     const withdrawals = movements
       .filter((movement) => movement.type === "withdrawal")
       .reduce((total, movement) => total + movement.amount, 0)

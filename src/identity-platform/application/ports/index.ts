@@ -53,6 +53,7 @@ export interface EmailGateway {
     workspaceId?: string
     organizationName?: string
     workspaceName?: string
+    fullName?: string
   }): Promise<void>
 }
 

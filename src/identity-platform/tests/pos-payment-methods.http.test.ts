@@ -138,6 +138,8 @@ describe("point-of-sale payment methods", () => {
       "bank_transfer",
       "tamara",
       "tabby",
+      "customer_credit",
+      "customer_wallet",
     ])
 
     // Nothing stored yet, so every row is still on the catalogue default.

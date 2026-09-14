@@ -17,8 +17,19 @@ const ERRORS = {
     ),
 }
 
-// How a method is settled, which is what decides the icon and what its settings mean.
-export const PAYMENT_KINDS = ["cash", "card", "wallet", "transfer", "bnpl"] as const
+// How a method is settled, which is what decides the icon and what its settings mean. Two kinds
+// never collect money at sale time -- both always require a real customerId (see
+// invoices-service.ts): "credit" adds to the customer's balance_due (they now owe more), and
+// "prepaid" spends down their wallet_balance (money they already gave the store in advance).
+export const PAYMENT_KINDS = [
+  "cash",
+  "card",
+  "wallet",
+  "transfer",
+  "bnpl",
+  "credit",
+  "prepaid",
+] as const
 export type PaymentKind = (typeof PAYMENT_KINDS)[number]
 
 export interface PaymentMethodCatalogEntry {
@@ -97,6 +108,26 @@ export const PAYMENT_METHOD_CATALOG: PaymentMethodCatalogEntry[] = [
     subtitle: "التقسيط بدون فوائد",
     kind: "bnpl",
     defaultFeePercent: 0,
+    defaultEnabled: false,
+  },
+  {
+    code: "customer_credit",
+    name: "آجل",
+    subtitle: "يُسجَّل في حساب العميل",
+    kind: "credit",
+    defaultFeePercent: 0,
+    // Off by default: unlike every other method, turning this on lets a cashier create real
+    // customer debt, so a branch has to opt in deliberately.
+    defaultEnabled: false,
+  },
+  {
+    code: "customer_wallet",
+    name: "محفظة العميل",
+    subtitle: "خصم من رصيد العميل المسبق",
+    kind: "prepaid",
+    defaultFeePercent: 0,
+    // Off by default, same reasoning as customer_credit -- this spends a customer's real prepaid
+    // balance, so a branch has to opt in deliberately.
     defaultEnabled: false,
   },
 ]

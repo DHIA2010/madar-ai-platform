@@ -8,13 +8,14 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-import { AppButton, AppCheckbox, AppDialog, AppTextarea } from "@/components/app"
+import { AppButton } from "@/components/app"
 
 import { useWorkspace } from "@/features/workspace"
 
 import { formatRelativeArabic } from "../lib/format-arabic-time"
 import { useInvitationMutations } from "../queries/use-invitation-mutations"
 import { useInvitationsQuery } from "../queries/use-invitations-query"
+import { AdministrationAddUserDialog } from "./administration-add-user-dialog"
 import { AdministrationModuleNav } from "./administration-module-nav"
 
 import { useApplicationServices } from "@/application"
@@ -24,29 +25,6 @@ const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
 const PANEL =
   "rounded-2xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
-
-// Invitations no longer grant a role: new members start with no permissions
-// and gain access only once an admin adds them to a team.
-const DEFAULT_INVITE_ROLE_ID = "viewer"
-
-const STATUS_LABEL: Record<AdministrationInvitationStatus, string> = {
-  pending: "قيد الانتظار",
-  accepted: "مقبولة",
-  declined: "مرفوضة",
-  canceled: "ملغاة",
-  expired: "منتهية",
-}
-
-const STATUS_TINT: Record<AdministrationInvitationStatus, string> = {
-  pending: "bg-[#fffbeb] text-[#92400e]",
-  accepted: "bg-[#f0fdf4] text-[#15803d]",
-  declined: "bg-[#fef2f2] text-[#dc2626]",
-  canceled: "bg-[#f2f5fa] text-[#5b6b85]",
-  expired: "bg-[#f2f5fa] text-[#5b6b85]",
-}
-
-type InvitationDraft = { emails: string; workspaceIds: string[] }
-const defaultDraft: InvitationDraft = { emails: "", workspaceIds: [] }
 
 function StatCard({
   icon: Icon,
@@ -72,24 +50,33 @@ function StatCard({
   )
 }
 
+const STATUS_LABEL: Record<AdministrationInvitationStatus, string> = {
+  pending: "قيد الانتظار",
+  accepted: "مقبولة",
+  declined: "مرفوضة",
+  canceled: "ملغاة",
+  expired: "منتهية",
+}
+
+const STATUS_TINT: Record<AdministrationInvitationStatus, string> = {
+  pending: "bg-[#fffbeb] text-[#92400e]",
+  accepted: "bg-[#f0fdf4] text-[#15803d]",
+  declined: "bg-[#fef2f2] text-[#dc2626]",
+  canceled: "bg-[#f2f5fa] text-[#5b6b85]",
+  expired: "bg-[#f2f5fa] text-[#5b6b85]",
+}
+
 export function AdministrationInvitationsScreen() {
   const { administrationApplicationService } = useApplicationServices()
-  const { currentOrganization, availableWorkspaces } = useWorkspace()
+  const { currentOrganization } = useWorkspace()
   const { data, isLoading, isError } = useInvitationsQuery(
     administrationApplicationService,
     currentOrganization?.id
   )
-  const { sendInvitation, cancelInvitation, resendInvitation } = useInvitationMutations(
-    currentOrganization?.id
-  )
+  const { cancelInvitation, resendInvitation } = useInvitationMutations(currentOrganization?.id)
   const invitations = useMemo(() => data ?? [], [data])
-  const inviteableWorkspaces = useMemo(
-    () => availableWorkspaces.filter((workspace) => workspace.status !== "archived"),
-    [availableWorkspaces]
-  )
 
-  const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState(defaultDraft)
+  const [addUserOpen, setAddUserOpen] = useState(false)
 
   const counts = useMemo(
     () => ({
@@ -102,48 +89,6 @@ export function AdministrationInvitationsScreen() {
     }),
     [invitations]
   )
-
-  const parsedEmails = useMemo(
-    () =>
-      draft.emails
-        .split(/[\n,; ]/)
-        .map((email) => email.trim())
-        .filter(Boolean),
-    [draft.emails]
-  )
-
-  function toggleWorkspace(workspaceId: string, checked: boolean) {
-    setDraft((current) => ({
-      ...current,
-      workspaceIds: checked
-        ? [...current.workspaceIds, workspaceId]
-        : current.workspaceIds.filter((id) => id !== workspaceId),
-    }))
-  }
-
-  async function handleSendInvitations() {
-    if (parsedEmails.length === 0 || !currentOrganization) return
-    const workspaceIds = draft.workspaceIds.length > 0 ? draft.workspaceIds : [undefined]
-    try {
-      await Promise.all(
-        parsedEmails.flatMap((email) =>
-          workspaceIds.map((workspaceId) =>
-            sendInvitation.mutateAsync({
-              organizationId: currentOrganization.id,
-              email,
-              roleId: DEFAULT_INVITE_ROLE_ID,
-              workspaceId,
-            })
-          )
-        )
-      )
-      setDraft(defaultDraft)
-      setOpen(false)
-      toast.success(`تم إرسال الدعوة إلى ${parsedEmails.length} مستلم.`)
-    } catch {
-      toast.error("تعذر إرسال بعض الدعوات.")
-    }
-  }
 
   async function handleResend(invitationId: string, email: string) {
     try {
@@ -186,14 +131,14 @@ export function AdministrationInvitationsScreen() {
         <div>
           <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الدعوات</h1>
           <p className={cn("mt-1 text-[13px]", MUTED)}>
-            دعوة مستخدمين جدد ومتابعة حالة الدعوات المرسلة.
+            دعوة مستخدمين جدد أو إضافتهم مباشرةً، ومتابعة حالة الدعوات المرسلة.
           </p>
         </div>
         <AppButton
-          onClick={() => setOpen(true)}
+          onClick={() => setAddUserOpen(true)}
           className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
-          دعوة مستخدمين
+          إضافة مستخدم
         </AppButton>
       </div>
 
@@ -240,6 +185,7 @@ export function AdministrationInvitationsScreen() {
               <thead>
                 <tr>
                   {[
+                    { key: "name", label: "الاسم" },
                     { key: "email", label: "البريد الإلكتروني" },
                     { key: "workspace", label: "مكان العمل" },
                     { key: "status", label: "الحالة" },
@@ -267,6 +213,9 @@ export function AdministrationInvitationsScreen() {
                       index % 2 === 0 ? "bg-white" : "bg-[#fafbfd]"
                     )}
                   >
+                    <td className={cn("px-3 py-3 text-[12.5px] font-semibold", HEADING)}>
+                      {invitation.fullName ?? "—"}
+                    </td>
                     <td className={cn("px-3 py-3 text-[12.5px] font-bold", HEADING)}>
                       {invitation.email}
                     </td>
@@ -318,71 +267,11 @@ export function AdministrationInvitationsScreen() {
         )}
       </section>
 
-      <AppDialog
-        open={open}
-        onOpenChange={setOpen}
-        title={<span dir="rtl">دعوة مستخدمين</span>}
-        description={
-          <span dir="rtl">
-            الأعضاء الجدد يبدأون بلا صلاحيات -- أضفهم إلى فريق لاحقاً لمنحهم الوصول.
-          </span>
-        }
-        footer={
-          <>
-            <AppButton variant="outline" onClick={() => setOpen(false)}>
-              إلغاء
-            </AppButton>
-            <AppButton
-              onClick={() => void handleSendInvitations()}
-              disabled={sendInvitation.isPending}
-            >
-              إرسال الدعوة
-            </AppButton>
-          </>
-        }
-        contentClassName="sm:max-w-2xl [direction:rtl]"
-      >
-        <div dir="rtl" className="grid gap-3 md:grid-cols-2">
-          <AppTextarea
-            label="عناوين البريد الإلكتروني"
-            helperText="افصل بينها بفاصلة أو مسافة أو سطر جديد"
-            placeholder="sara@madar.ai, ali@madar.ai"
-            className="min-h-[120px]"
-            wrapperClassName="md:col-span-2"
-            value={draft.emails}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, emails: event.target.value }))
-            }
-          />
-
-          <div className="space-y-2 rounded-lg border border-[#e8edf3] p-3 md:col-span-2">
-            <p className={cn("text-[12.5px] font-bold", HEADING)}>أماكن العمل (اختياري)</p>
-            <p className={cn("text-[11px]", MUTED)}>
-              اتركها بلا تحديد لمنح وصول على مستوى المنظمة. اختيار عدة أماكن يرسل دعوة لكل مكان عمل.
-            </p>
-            {inviteableWorkspaces.length === 0 ? (
-              <p className={cn("text-[12.5px]", MUTED)}>لا توجد أماكن عمل متاحة.</p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {inviteableWorkspaces.map((workspace) => (
-                  <label
-                    key={workspace.id}
-                    className="flex items-center gap-2 text-[12.5px]"
-                    htmlFor={`invite-workspace-${workspace.id}`}
-                  >
-                    <AppCheckbox
-                      id={`invite-workspace-${workspace.id}`}
-                      checked={draft.workspaceIds.includes(workspace.id)}
-                      onCheckedChange={(checked) => toggleWorkspace(workspace.id, checked === true)}
-                    />
-                    {workspace.name}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </AppDialog>
+      <AdministrationAddUserDialog
+        open={addUserOpen}
+        onOpenChange={setAddUserOpen}
+        organizationId={currentOrganization?.id}
+      />
     </div>
   )
 }

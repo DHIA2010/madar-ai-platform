@@ -22,7 +22,7 @@ function getWorkspaceIdFromStorage(): string | null {
   }
 }
 
-export type PaymentKind = "cash" | "card" | "wallet" | "transfer" | "bnpl"
+export type PaymentKind = "cash" | "card" | "wallet" | "transfer" | "bnpl" | "credit" | "prepaid"
 
 export interface PaymentMethod {
   id: string | null

@@ -4,6 +4,7 @@ import type {
   AssignMemberRoleRequestDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
+  CreateMemberDirectRequestDto,
   CreateTeamRequestDto,
   DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
@@ -14,11 +15,14 @@ import type {
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SendMemberPasswordResetRequestDto,
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberIdentityRequestDto,
   UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
+  UploadMemberAvatarRequestDto,
 } from "@/application/contracts/administration.contracts"
 import type { ApiClient } from "@/infrastructure/http"
 
@@ -71,6 +75,7 @@ export interface OrganizationMembersApiResponse {
 export interface InvitationApiEntry {
   id: string
   email: string
+  fullName: string | null
   organizationId: string
   workspaceId: string | null
   workspaceName: string | null
@@ -217,10 +222,11 @@ export class AdministrationApiAdapter {
 
   sendInvitation(request: SendInvitationRequestDto): Promise<InvitationApiEntry> {
     return this.client.post<
-      { email: string; role: string; workspaceId?: string },
+      { email: string; fullName?: string; role: string; workspaceId?: string },
       InvitationApiEntry
     >(`/v1/organizations/${request.organizationId}/invitations`, {
       email: request.email,
+      fullName: request.fullName,
       role: request.roleId,
       workspaceId: request.workspaceId,
     })
@@ -410,12 +416,57 @@ export class AdministrationApiAdapter {
 
   updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void> {
     return this.client
-      .post<{ profile: Record<string, string> }, unknown>(
+      .post<{ workspaceId?: string | null; profile: Record<string, string> }, unknown>(
         `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/profile`,
         {
+          workspaceId: request.workspaceId,
           profile: request.profile,
         }
       )
       .then(() => undefined)
+  }
+
+  updateMemberIdentity(request: UpdateMemberIdentityRequestDto): Promise<void> {
+    return this.client
+      .post<
+        { fullName?: string },
+        unknown
+      >(`/v1/organizations/${request.organizationId}/members/${request.memberUserId}/identity`, { fullName: request.fullName })
+      .then(() => undefined)
+  }
+
+  uploadMemberAvatar(request: UploadMemberAvatarRequestDto): Promise<{ avatarUrl: string }> {
+    return this.client
+      .post<{ contentType: string; dataBase64: string }, { avatarUrl: string | null }>(
+        `/v1/organizations/${request.organizationId}/members/${request.memberUserId}/avatar`,
+        {
+          contentType: request.contentType,
+          dataBase64: request.dataBase64,
+        }
+      )
+      .then((response) => ({ avatarUrl: response.avatarUrl ?? "" }))
+  }
+
+  sendMemberPasswordReset(request: SendMemberPasswordResetRequestDto): Promise<void> {
+    return this.client
+      .post<
+        Record<string, never>,
+        unknown
+      >(`/v1/organizations/${request.organizationId}/members/${request.memberUserId}/password-reset`, {})
+      .then(() => undefined)
+  }
+
+  createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }> {
+    return this.client
+      .post<
+        { workspaceIds?: string[]; email: string; fullName: string; password: string },
+        { user: { id: string } }
+      >(`/v1/organizations/${request.organizationId}/members`, {
+        workspaceIds: request.workspaceIds,
+        email: request.email,
+        fullName: request.fullName,
+        password: request.password,
+      })
+      .then((response) => ({ userId: response.user.id }))
   }
 }

@@ -40,6 +40,12 @@ function customerDetailEndpoint(customerId: string): string {
   return [CUSTOMERS_ENDPOINT, encodeURIComponent(customerId)].join(String.fromCharCode(47))
 }
 
+function customerWalletTopUpEndpoint(customerId: string): string {
+  return [CUSTOMERS_ENDPOINT, encodeURIComponent(customerId), "wallet-top-ups"].join(
+    String.fromCharCode(47)
+  )
+}
+
 const sessionManager = createSessionManager()
 const client = createHttpDataClient({
   getSession: () => sessionManager.restore(),
@@ -74,5 +80,14 @@ export const customerListService = {
       }
       throw error
     }
+  },
+
+  // Records real money collected in advance -- a native ("Madar") customer only, since a synced
+  // storefront customer has no real wallet_balance column to top up.
+  async topUpWallet(customerId: string, amount: number): Promise<CustomerRecord> {
+    return client.post<{ amount: number }, CustomerRecord>(
+      customerWalletTopUpEndpoint(customerId),
+      { amount }
+    )
   },
 }

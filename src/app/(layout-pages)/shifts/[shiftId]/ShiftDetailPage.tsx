@@ -20,10 +20,12 @@ import {
   Home,
   Loader2,
   Lock,
+  PiggyBank,
   Printer,
   Repeat,
   RotateCcw,
   Store,
+  UserRound,
   Wallet,
   XCircle,
 } from "lucide-react"
@@ -78,6 +80,8 @@ const PAYMENT_KIND_ICON: Record<PaymentKind, typeof Wallet> = {
   wallet: Wallet,
   transfer: Repeat,
   bnpl: CreditCard,
+  credit: UserRound,
+  prepaid: PiggyBank,
 }
 
 const ACTIVITY_META: Record<ShiftActivityType, { label: string; tint: string }> = {

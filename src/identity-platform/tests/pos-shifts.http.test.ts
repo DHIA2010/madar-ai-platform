@@ -371,19 +371,19 @@ describe("point-of-sale cashier shifts", () => {
     // the same numbers already proven correct against the real API for the close dialog.
     await createInvoice(token, {
       customerName: null,
-      paymentMethodCode: "cash",
+      payments: [{ paymentMethodCode: "cash", amount: 115 }],
       discountAmount: 0,
       items: [{ productId: null, productName: "قهوة", unitPrice: 100, quantity: 1 }],
     })
     await createInvoice(token, {
       customerName: null,
-      paymentMethodCode: "mada",
+      payments: [{ paymentMethodCode: "mada", amount: 230 }],
       discountAmount: 0,
       items: [{ productId: null, productName: "كيك", unitPrice: 200, quantity: 1 }],
     })
     const toReturn = await createInvoice(token, {
       customerName: null,
-      paymentMethodCode: "cash",
+      payments: [{ paymentMethodCode: "cash", amount: 46 }],
       discountAmount: 0,
       items: [{ productId: null, productName: "شاي", unitPrice: 40, quantity: 1 }],
     })

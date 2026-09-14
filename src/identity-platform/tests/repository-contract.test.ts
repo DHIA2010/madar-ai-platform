@@ -131,6 +131,7 @@ async function seedAndAssertContract(repositories: IdentityRepositories) {
     id: "00000000-0000-0000-0000-000000000012",
     token: "contract-token-001",
     email: "invitee@test.local",
+    fullName: null,
     organizationId: organization.id,
     workspaceId,
     role: "viewer",

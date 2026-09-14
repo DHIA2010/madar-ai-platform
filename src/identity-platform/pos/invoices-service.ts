@@ -6,6 +6,12 @@ import type { PosPaymentMethodsService } from "./payment-methods-service"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// The literal payment_method_code stored on pos_invoices once more than one method was used --
+// keeps the existing "filter/group by payment_method_code" callers (list(), summary(),
+// shifts-service.ts) meaningful for a split sale instead of picking one method arbitrarily. The
+// real per-method breakdown always lives in pos_invoice_payments.
+const SPLIT_PAYMENT_CODE = "split"
+
 const INVOICE_ERRORS = {
   notFound: () => new IdentityError("POS_INVOICE_NOT_FOUND", 404, "business", "Invoice not found."),
   noWorkspace: () =>
@@ -22,6 +28,41 @@ const INVOICE_ERRORS = {
       "validation",
       "This payment method is not enabled for this branch."
     ),
+  paymentAmountMismatch: () =>
+    new IdentityError(
+      "POS_INVOICE_PAYMENT_AMOUNT_MISMATCH",
+      400,
+      "validation",
+      "The payment amounts must add up to the invoice total."
+    ),
+  deferredRequiresCustomer: () =>
+    new IdentityError(
+      "POS_INVOICE_DEFERRED_REQUIRES_CUSTOMER",
+      400,
+      "validation",
+      "A deferred (آجل) amount must be attributed to a real customer."
+    ),
+  walletRequiresCustomer: () =>
+    new IdentityError(
+      "POS_INVOICE_WALLET_REQUIRES_CUSTOMER",
+      400,
+      "validation",
+      "A customer-wallet amount must be attributed to a real customer."
+    ),
+  insufficientWalletBalance: () =>
+    new IdentityError(
+      "POS_INVOICE_INSUFFICIENT_WALLET_BALANCE",
+      400,
+      "validation",
+      "The customer's wallet balance is lower than the amount being charged to it."
+    ),
+  customerNotFound: () =>
+    new IdentityError(
+      "POS_INVOICE_CUSTOMER_NOT_FOUND",
+      404,
+      "business",
+      "The selected customer was not found."
+    ),
 }
 
 export type InvoiceStatus = "completed" | "cancelled" | "returned"
@@ -33,13 +74,25 @@ export interface InvoiceItemInput {
   quantity: number
 }
 
+export interface InvoicePaymentInput {
+  paymentMethodCode: string
+  amount: number
+}
+
 export interface CreateInvoiceInput {
   organizationId: string
   workspaceId: string | null
   cashierUserId: string | null
   customerName: string | null
   customerPhone: string | null
-  paymentMethodCode: string
+  // A real customer this sale is attributed to (see migration 062_pos_split_payments.sql's
+  // pos_invoices.customer_id) -- distinct from customerName/customerPhone, which stay a snapshot
+  // either way. Required whenever any payment line uses a "credit"-kind method: a deferred
+  // amount has to land on an actual account, not a free-text name.
+  customerId: string | null
+  // One or more methods settling this sale -- amounts must add up to the computed total exactly
+  // (see create()). A single-entry array is the common case (one method, full amount).
+  payments: InvoicePaymentInput[]
   discountAmount: number
   notes: string | null
   items: InvoiceItemInput[]
@@ -49,6 +102,8 @@ export interface InvoiceItemView extends InvoiceItemInput {
   lineTotal: number
 }
 
+export type InvoicePaymentView = InvoicePaymentInput
+
 export interface InvoiceView {
   id: string
   workspaceId: string
@@ -56,8 +111,10 @@ export interface InvoiceView {
   status: InvoiceStatus
   customerName: string | null
   customerPhone: string | null
+  customerId: string | null
   cashierUserId: string | null
   paymentMethodCode: string
+  payments: InvoicePaymentView[]
   subtotalAmount: number
   discountAmount: number
   taxAmount: number
@@ -101,6 +158,7 @@ interface InvoiceRow {
   status: string
   customer_name: string | null
   customer_phone: string | null
+  customer_id: string | null
   cashier_user_id: string | null
   payment_method_code: string
   subtotal_amount: string | number
@@ -122,6 +180,13 @@ interface InvoiceItemRow {
   [key: string]: unknown
 }
 
+interface InvoicePaymentRow {
+  invoice_id: string
+  payment_method_code: string
+  amount: string | number
+  [key: string]: unknown
+}
+
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
 }
@@ -136,7 +201,18 @@ function mapItem(row: InvoiceItemRow): InvoiceItemView {
   }
 }
 
-function mapInvoice(row: InvoiceRow, items: InvoiceItemView[]): InvoiceView {
+function mapPayment(row: InvoicePaymentRow): InvoicePaymentView {
+  return {
+    paymentMethodCode: row.payment_method_code,
+    amount: Number(row.amount),
+  }
+}
+
+function mapInvoice(
+  row: InvoiceRow,
+  items: InvoiceItemView[],
+  payments: InvoicePaymentView[]
+): InvoiceView {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -144,8 +220,10 @@ function mapInvoice(row: InvoiceRow, items: InvoiceItemView[]): InvoiceView {
     status: row.status as InvoiceStatus,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
+    customerId: row.customer_id,
     cashierUserId: row.cashier_user_id,
     paymentMethodCode: row.payment_method_code,
+    payments,
     subtotalAmount: Number(row.subtotal_amount),
     discountAmount: Number(row.discount_amount),
     taxAmount: Number(row.tax_amount),
@@ -157,7 +235,7 @@ function mapInvoice(row: InvoiceRow, items: InvoiceItemView[]): InvoiceView {
 }
 
 const INVOICE_SELECT = `
-  SELECT id, workspace_id, invoice_number, status, customer_name, customer_phone,
+  SELECT id, workspace_id, invoice_number, status, customer_name, customer_phone, customer_id,
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
          total_amount, notes, created_at
     FROM pos_invoices
@@ -207,20 +285,41 @@ export class PosInvoicesService {
     )
     if (result.rows.length === 0) return []
 
-    const itemRows = await this.database.query<InvoiceItemRow>(
-      `SELECT invoice_id, product_id, product_name, unit_price, quantity, line_total
-         FROM pos_invoice_items
-        WHERE invoice_id = ANY($1::uuid[])`,
-      [result.rows.map((row) => row.id)]
-    )
+    const invoiceIds = result.rows.map((row) => row.id)
+    // A plain IN-list rather than `= ANY($1::uuid[])`: the latter is standard, well-supported SQL
+    // against real Postgres, but the test harness's in-memory engine (pg-mem) silently returns no
+    // rows for it (the same class of gap already documented on summary()'s FILTER avoidance).
+    const idPlaceholders = invoiceIds.map((_, index) => `$${index + 1}`).join(", ")
+    const [itemRows, paymentRows] = await Promise.all([
+      this.database.query<InvoiceItemRow>(
+        `SELECT invoice_id, product_id, product_name, unit_price, quantity, line_total
+           FROM pos_invoice_items
+          WHERE invoice_id IN (${idPlaceholders})`,
+        invoiceIds
+      ),
+      this.database.query<InvoicePaymentRow>(
+        `SELECT invoice_id, payment_method_code, amount
+           FROM pos_invoice_payments
+          WHERE invoice_id IN (${idPlaceholders})`,
+        invoiceIds
+      ),
+    ])
     const itemsByInvoice = new Map<string, InvoiceItemView[]>()
     for (const item of itemRows.rows) {
       const list = itemsByInvoice.get(item.invoice_id) ?? []
       list.push(mapItem(item))
       itemsByInvoice.set(item.invoice_id, list)
     }
+    const paymentsByInvoice = new Map<string, InvoicePaymentView[]>()
+    for (const payment of paymentRows.rows) {
+      const list = paymentsByInvoice.get(payment.invoice_id) ?? []
+      list.push(mapPayment(payment))
+      paymentsByInvoice.set(payment.invoice_id, list)
+    }
 
-    return result.rows.map((row) => mapInvoice(row, itemsByInvoice.get(row.id) ?? []))
+    return result.rows.map((row) =>
+      mapInvoice(row, itemsByInvoice.get(row.id) ?? [], paymentsByInvoice.get(row.id) ?? [])
+    )
   }
 
   // Same filters as list() (minus search, which has no bearing on the totals), so the summary
@@ -290,15 +389,18 @@ export class PosInvoicesService {
 
   async create(input: CreateInvoiceInput): Promise<InvoiceView> {
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
+    if (input.payments.length === 0) throw INVOICE_ERRORS.invalidPaymentMethod()
 
-    // A sale can only be recorded against a payment method this branch has actually turned on --
-    // the same list the "New Invoice" picker itself is built from, so a request can never name a
-    // method the UI would never have offered.
+    // Every payment line can only name a method this branch has actually turned on -- the same
+    // list the payment picker itself is built from, so a request can never name a method the UI
+    // would never have offered.
     const methods = await this.paymentMethodsService.list(input.organizationId, input.workspaceId)
-    const method = methods.find((candidate) => candidate.code === input.paymentMethodCode)
-    if (!method || !method.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
+    const methodByCode = new Map(methods.map((candidate) => [candidate.code, candidate]))
+    for (const payment of input.payments) {
+      const method = methodByCode.get(payment.paymentMethodCode)
+      if (!method || !method.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
+    }
 
-    const id = randomUUID()
     const subtotalAmount = input.items.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
       0
@@ -307,50 +409,123 @@ export class PosInvoicesService {
     const taxAmount = Math.round(taxableAmount * VAT_RATE * 100) / 100
     const totalAmount = Math.round((taxableAmount + taxAmount) * 100) / 100
 
+    // The payment lines have to fully settle the invoice -- not more, not less. A tiny epsilon
+    // absorbs float/decimal rounding noise across several lines, the same tolerance the frontend
+    // checkout uses to decide when "المبلغ المتبقي" reads as zero.
+    const paidAmount = Math.round(input.payments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100
+    if (Math.abs(paidAmount - totalAmount) > 0.01) throw INVOICE_ERRORS.paymentAmountMismatch()
+
+    // A "credit" line defers that amount to the customer's real account instead of collecting it
+    // now, and a "prepaid" line spends down their real wallet instead -- both can only ever be
+    // attributed to a real, existing customer record.
+    const sumByKind = (kind: string) =>
+      Math.round(
+        input.payments
+          .filter((payment) => methodByCode.get(payment.paymentMethodCode)?.kind === kind)
+          .reduce((sum, payment) => sum + payment.amount, 0) * 100
+      ) / 100
+    const deferredAmount = sumByKind("credit")
+    const prepaidAmount = sumByKind("prepaid")
+    if (deferredAmount > 0 && !input.customerId) throw INVOICE_ERRORS.deferredRequiresCustomer()
+    if (prepaidAmount > 0 && !input.customerId) throw INVOICE_ERRORS.walletRequiresCustomer()
+
+    let customerWalletBalance = 0
+    if (input.customerId) {
+      const customer = await this.database.query<{ id: string; wallet_balance: string | number }>(
+        `SELECT id, wallet_balance FROM customers
+          WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
+        [input.customerId, input.organizationId]
+      )
+      const customerRow = customer.rows[0]
+      if (!customerRow) throw INVOICE_ERRORS.customerNotFound()
+      customerWalletBalance = Number(customerRow.wallet_balance) || 0
+    }
+    if (prepaidAmount > customerWalletBalance) throw INVOICE_ERRORS.insufficientWalletBalance()
+
+    const id = randomUUID()
+    const paymentMethodCode =
+      input.payments.length === 1 ? input.payments[0].paymentMethodCode : SPLIT_PAYMENT_CODE
+
     const numberResult = await this.database.query<{ nextval: string }>(
       `SELECT nextval('pos_invoice_number_seq')`
     )
     const invoiceNumber = `INV-${String(numberResult.rows[0].nextval).padStart(6, "0")}`
 
-    await this.database.query(
-      `INSERT INTO pos_invoices
-         (id, organization_id, workspace_id, invoice_number, status, customer_name,
-          customer_phone, cashier_user_id, payment_method_code, subtotal_amount,
-          discount_amount, tax_amount, total_amount, notes)
-       VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [
-        id,
-        input.organizationId,
-        input.workspaceId,
-        invoiceNumber,
-        input.customerName,
-        input.customerPhone,
-        input.cashierUserId,
-        input.paymentMethodCode,
-        subtotalAmount,
-        input.discountAmount,
-        taxAmount,
-        totalAmount,
-        input.notes,
-      ]
-    )
-
-    for (const item of input.items) {
+    await this.database.withTransaction(async () => {
       await this.database.query(
-        `INSERT INTO pos_invoice_items
-           (id, invoice_id, product_id, product_name, unit_price, quantity, line_total)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO pos_invoices
+           (id, organization_id, workspace_id, invoice_number, status, customer_name,
+            customer_phone, customer_id, cashier_user_id, payment_method_code, subtotal_amount,
+            discount_amount, tax_amount, total_amount, notes)
+         VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
-          randomUUID(),
           id,
-          item.productId,
-          item.productName,
-          item.unitPrice,
-          item.quantity,
-          Math.round(item.unitPrice * item.quantity * 100) / 100,
+          input.organizationId,
+          input.workspaceId,
+          invoiceNumber,
+          input.customerName,
+          input.customerPhone,
+          input.customerId,
+          input.cashierUserId,
+          paymentMethodCode,
+          subtotalAmount,
+          input.discountAmount,
+          taxAmount,
+          totalAmount,
+          input.notes,
         ]
       )
-    }
+
+      for (const item of input.items) {
+        await this.database.query(
+          `INSERT INTO pos_invoice_items
+             (id, invoice_id, product_id, product_name, unit_price, quantity, line_total)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            randomUUID(),
+            id,
+            item.productId,
+            item.productName,
+            item.unitPrice,
+            item.quantity,
+            Math.round(item.unitPrice * item.quantity * 100) / 100,
+          ]
+        )
+      }
+
+      for (const payment of input.payments) {
+        await this.database.query(
+          `INSERT INTO pos_invoice_payments (id, invoice_id, payment_method_code, amount)
+           VALUES ($1, $2, $3, $4)`,
+          [randomUUID(), id, payment.paymentMethodCode, payment.amount]
+        )
+      }
+
+      if (deferredAmount > 0) {
+        await this.database.query(
+          `UPDATE customers SET balance_due = balance_due + $2, updated_at = now() WHERE id = $1`,
+          [input.customerId, deferredAmount]
+        )
+      }
+
+      if (prepaidAmount > 0) {
+        // The `wallet_balance >= $2` guard re-checks solvency at the same moment as the debit,
+        // closing the race the earlier read-then-check above can't rule out on its own (two
+        // concurrent sales both reading a sufficient balance before either writes).
+        const debited = await this.database.query(
+          `UPDATE customers SET wallet_balance = wallet_balance - $2, updated_at = now()
+            WHERE id = $1 AND wallet_balance >= $2`,
+          [input.customerId, prepaidAmount]
+        )
+        if (debited.rowCount === 0) throw INVOICE_ERRORS.insufficientWalletBalance()
+
+        await this.database.query(
+          `INSERT INTO customer_wallet_transactions (id, customer_id, type, amount, invoice_id)
+           VALUES ($1, $2, 'purchase', $3, $4)`,
+          [randomUUID(), input.customerId, prepaidAmount, id]
+        )
+      }
+    })
 
     const created = await this.findById(input.organizationId, id)
     if (!created) throw INVOICE_ERRORS.notFound()
@@ -384,12 +559,20 @@ export class PosInvoicesService {
     const row = result.rows[0]
     if (!row) return null
 
-    const itemRows = await this.database.query<InvoiceItemRow>(
-      `SELECT invoice_id, product_id, product_name, unit_price, quantity, line_total
-         FROM pos_invoice_items
-        WHERE invoice_id = $1`,
-      [id]
-    )
-    return mapInvoice(row, itemRows.rows.map(mapItem))
+    const [itemRows, paymentRows] = await Promise.all([
+      this.database.query<InvoiceItemRow>(
+        `SELECT invoice_id, product_id, product_name, unit_price, quantity, line_total
+           FROM pos_invoice_items
+          WHERE invoice_id = $1`,
+        [id]
+      ),
+      this.database.query<InvoicePaymentRow>(
+        `SELECT invoice_id, payment_method_code, amount
+           FROM pos_invoice_payments
+          WHERE invoice_id = $1`,
+        [id]
+      ),
+    ])
+    return mapInvoice(row, itemRows.rows.map(mapItem), paymentRows.rows.map(mapPayment))
   }
 }

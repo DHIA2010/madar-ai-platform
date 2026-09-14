@@ -7,7 +7,10 @@ import { toAppError } from "@/lib/app-errors"
 import { administrationQueryKeys } from "./administration-query-keys"
 
 import { useApplicationServices } from "@/application"
-import type { SendInvitationRequestDto } from "@/application/contracts"
+import type {
+  CreateMemberDirectRequestDto,
+  SendInvitationRequestDto,
+} from "@/application/contracts"
 
 export function useInvitationMutations(organizationId: string | null | undefined) {
   const queryClient = useQueryClient()
@@ -52,5 +55,18 @@ export function useInvitationMutations(organizationId: string | null | undefined
     onSuccess: invalidate,
   })
 
-  return { sendInvitation, cancelInvitation, resendInvitation }
+  const createMemberDirect = useMutation({
+    mutationKey: ["administration", "invitations", "create-member-direct"],
+    mutationFn: async (request: CreateMemberDirectRequestDto) => {
+      try {
+        return await administrationApplicationService.createMemberDirect(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: administrationQueryKeys.users(organizationId) }),
+  })
+
+  return { sendInvitation, cancelInvitation, resendInvitation, createMemberDirect }
 }

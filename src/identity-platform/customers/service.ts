@@ -33,6 +33,13 @@ export interface CustomerSummary {
   lastPurchaseAt: string | null
   status: CustomerStatus
   segment: CustomerSegment
+  // Real running amount this customer owes from deferred ("آجل") POS sales -- only a "Madar"
+  // (native) customer can ever have one (see native-customers-service.ts's customers.balance_due
+  // column); a synced storefront customer has no such account here, so this is always null.
+  balanceDue: number | null
+  // Real prepaid balance a sale can spend down via the "customer_wallet" payment method -- same
+  // "Madar"-only scope as balanceDue (customers.wallet_balance column).
+  walletBalance: number | null
 }
 
 export interface CustomerDetail extends CustomerSummary {
@@ -150,6 +157,8 @@ function normalizeSallaCustomer(row: CustomerRecordRow): CustomerSummary {
     lastPurchaseAt,
     status: computeStatus({ createdAt, totalOrders, lastPurchaseAt }),
     segment: computeSegment({ totalOrders, lifetimeValue: totalRevenue }),
+    balanceDue: null,
+    walletBalance: null,
   }
 }
 
@@ -181,6 +190,8 @@ function normalizeShopifyCustomer(row: CustomerRecordRow): CustomerSummary {
     lastPurchaseAt,
     status: computeStatus({ createdAt, totalOrders, lastPurchaseAt }),
     segment: computeSegment({ totalOrders, lifetimeValue: totalRevenue }),
+    balanceDue: null,
+    walletBalance: null,
   }
 }
 
@@ -210,6 +221,8 @@ function normalizeZidCustomer(row: CustomerRecordRow): CustomerSummary {
     lastPurchaseAt,
     status: computeStatus({ createdAt, totalOrders, lastPurchaseAt }),
     segment: computeSegment({ totalOrders, lifetimeValue: totalRevenue }),
+    balanceDue: null,
+    walletBalance: null,
   }
 }
 

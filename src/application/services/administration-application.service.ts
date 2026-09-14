@@ -13,6 +13,7 @@ import type {
   AuditLogListDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
+  CreateMemberDirectRequestDto,
   CreateTeamRequestDto,
   DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
@@ -28,11 +29,14 @@ import type {
   ResendInvitationRequestDto,
   RevokeSessionRequestDto,
   SendInvitationRequestDto,
+  SendMemberPasswordResetRequestDto,
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberIdentityRequestDto,
   UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
+  UploadMemberAvatarRequestDto,
 } from "../contracts"
 
 export class AdministrationApplicationService {
@@ -68,6 +72,22 @@ export class AdministrationApplicationService {
 
   updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void> {
     return this.gateway.updateMemberProfile(request)
+  }
+
+  updateMemberIdentity(request: UpdateMemberIdentityRequestDto): Promise<void> {
+    return this.gateway.updateMemberIdentity(request)
+  }
+
+  uploadMemberAvatar(request: UploadMemberAvatarRequestDto): Promise<{ avatarUrl: string }> {
+    return this.gateway.uploadMemberAvatar(request)
+  }
+
+  sendMemberPasswordReset(request: SendMemberPasswordResetRequestDto): Promise<void> {
+    return this.gateway.sendMemberPasswordReset(request)
+  }
+
+  createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }> {
+    return this.gateway.createMemberDirect(request)
   }
 
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]> {

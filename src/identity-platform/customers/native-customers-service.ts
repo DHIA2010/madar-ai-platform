@@ -27,6 +27,13 @@ export interface NativeCustomerView {
   notes: string | null
   createdAt: string
   updatedAt: string
+  // Real running amount owed from deferred ("آجل") POS sales -- see migration
+  // 062_pos_split_payments.sql. Grows via invoices-service.ts's create(); there is no settlement
+  // flow yet, so it never shrinks today.
+  balanceDue: number
+  // Real prepaid balance -- see migration 063_customer_wallet.sql. Grows via topUpWallet() below,
+  // shrinks via invoices-service.ts's create() when a sale uses the "customer_wallet" method.
+  walletBalance: number
 }
 
 interface CustomerRow {
@@ -38,6 +45,8 @@ interface CustomerRow {
   notes: string | null
   created_at: Date | string
   updated_at: Date | string
+  balance_due: string | number
+  wallet_balance: string | number
   [key: string]: unknown
 }
 
@@ -55,11 +64,14 @@ function mapRow(row: CustomerRow): NativeCustomerView {
     notes: row.notes,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
+    balanceDue: Number(row.balance_due) || 0,
+    walletBalance: Number(row.wallet_balance) || 0,
   }
 }
 
 const CUSTOMER_SELECT = `
-  SELECT id, workspace_id, name, email, phone, notes, created_at, updated_at
+  SELECT id, workspace_id, name, email, phone, notes, created_at, updated_at, balance_due,
+         wallet_balance
     FROM customers
    WHERE deleted_at IS NULL
 `
@@ -83,6 +95,8 @@ export function toNormalizedCustomer(customer: NativeCustomerView): CustomerSumm
     lastPurchaseAt: null,
     status: "new",
     segment: "New",
+    balanceDue: customer.balanceDue,
+    walletBalance: customer.walletBalance,
   }
 }
 
@@ -147,5 +161,32 @@ export class NativeCustomersService {
     )
     const row = result.rows[0]
     return row ? mapRow(row) : null
+  }
+
+  // Records real money a cashier collected in advance -- the only way wallet_balance ever grows.
+  // There is no invoice behind this (it isn't a sale), only a customer_wallet_transactions row
+  // for the audit trail.
+  async topUpWallet(
+    organizationId: string,
+    customerId: string,
+    amount: number,
+    createdBy: string | null
+  ): Promise<NativeCustomerView> {
+    const existing = await this.getById(organizationId, customerId)
+    if (!existing) throw CUSTOMER_ERRORS.notFound()
+
+    await this.database.query(
+      `UPDATE customers SET wallet_balance = wallet_balance + $2, updated_at = now() WHERE id = $1`,
+      [customerId, amount]
+    )
+    await this.database.query(
+      `INSERT INTO customer_wallet_transactions (id, customer_id, type, amount, created_by)
+       VALUES ($1, $2, 'top_up', $3, $4)`,
+      [randomUUID(), customerId, amount, createdBy]
+    )
+
+    const updated = await this.getById(organizationId, customerId)
+    if (!updated) throw CUSTOMER_ERRORS.notFound()
+    return updated
   }
 }

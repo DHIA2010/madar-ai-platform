@@ -19,6 +19,8 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
     lastPurchaseAt: "2026-08-18T00:00:00.000Z",
     status: "active",
     segment: "VIP",
+    balanceDue: null,
+    walletBalance: null,
   },
   {
     id: "salla:2",
@@ -33,6 +35,8 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
     lastPurchaseAt: "2026-08-01T00:00:00.000Z",
     status: "active",
     segment: "One Time",
+    balanceDue: null,
+    walletBalance: null,
   },
 ]
 

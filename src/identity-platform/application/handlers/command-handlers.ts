@@ -14,6 +14,7 @@ import type {
   ChangeEmailCommand,
   ChangePasswordCommand,
   CreateCustomRoleCommand,
+  CreateMemberDirectCommand,
   CreateOrganizationCommand,
   CreateTeamCommand,
   CreateWorkspaceCommand,
@@ -35,17 +36,20 @@ import type {
   RemoveTeamMemberCommand,
   ResetPasswordCommand,
   RevokeSessionCommand,
+  SendMemberPasswordResetCommand,
   SetMemberModuleAccessCommand,
   SuspendMemberCommand,
   SwitchWorkspaceCommand,
   TransferOwnershipCommand,
   UpdateCustomRoleCommand,
+  UpdateMemberIdentityCommand,
   UpdateMemberProfileCommand,
   UpdateOrganizationCommand,
   UpdateProfileCommand,
   UpdateTeamCommand,
   UpdateWorkspaceCommand,
   UploadAvatarCommand,
+  UploadMemberAvatarCommand,
   VerifyEmailCommand,
 } from "../commands"
 import type {
@@ -1843,6 +1847,7 @@ export class IdentityCommandHandlers {
       id: this.deps.uuid.generate(),
       token: this.deps.tokenService.generateOpaqueToken(),
       email: command.email,
+      fullName: command.fullName ?? null,
       organizationId: command.organizationId,
       workspaceId: command.workspaceId ?? null,
       role: command.role,
@@ -1865,6 +1870,7 @@ export class IdentityCommandHandlers {
       workspaceId: command.workspaceId,
       organizationName: organizationState.name,
       workspaceName,
+      fullName: invitation.fullName ?? undefined,
     })
     await this.audit(
       "organization.invite_created",
@@ -2070,6 +2076,7 @@ export class IdentityCommandHandlers {
       workspaceId: invitation.workspaceId ?? undefined,
       organizationName: organizationState?.name,
       workspaceName: workspaceState?.name ?? undefined,
+      fullName: invitation.fullName ?? undefined,
     })
     await this.audit(
       "organization.invitation_resent",
@@ -2398,11 +2405,19 @@ export class IdentityCommandHandlers {
     context: RequestContext
   ) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
-      command.memberUserId,
-      command.organizationId
-    )
-    if (!memberState) {
+    // A member can hold several memberships in this org (one per workspace), each with its own
+    // profile -- findByUserAndOrganization's unqualified "LIMIT 1" would silently edit an
+    // arbitrary one of them. A real workspaceId targets the exact membership being edited.
+    const memberState = command.workspaceId
+      ? await this.deps.repositories.memberships.findByUserAndWorkspace(
+          command.memberUserId,
+          command.workspaceId
+        )
+      : await this.deps.repositories.memberships.findByUserAndOrganization(
+          command.memberUserId,
+          command.organizationId
+        )
+    if (!memberState || memberState.organizationId !== command.organizationId) {
       throw ERRORS.notFound("Membership")
     }
     const member = MembershipEntity.rehydrate(memberState)
@@ -2418,6 +2433,220 @@ export class IdentityCommandHandlers {
       memberState.id
     )
     return member.toState()
+  }
+
+  async updateMemberIdentity(
+    actor: AuthenticatedActor,
+    command: UpdateMemberIdentityCommand,
+    context: RequestContext
+  ) {
+    await this.requireOrganizationWriteAccess(actor, command.organizationId)
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.memberUserId,
+      command.organizationId
+    )
+    if (!memberState || memberState.organizationId !== command.organizationId) {
+      throw ERRORS.notFound("Membership")
+    }
+    const userState = await this.deps.repositories.users.findById(command.memberUserId)
+    if (!userState) {
+      throw ERRORS.notFound("User")
+    }
+    const user = UserEntity.rehydrate(userState)
+    user.updateProfile({ fullName: command.fullName }, this.now)
+    await this.deps.repositories.users.save(user.toState())
+    await this.audit(
+      "user.identity_updated",
+      context,
+      actor.userId,
+      command.organizationId,
+      memberState.workspaceId,
+      "user",
+      command.memberUserId
+    )
+    return this.toProfileDto(user.toState())
+  }
+
+  async uploadMemberAvatar(
+    actor: AuthenticatedActor,
+    command: UploadMemberAvatarCommand,
+    context: RequestContext
+  ) {
+    if (!this.deps.objectStorage) {
+      throw ERRORS.serviceUnavailable("Avatar uploads are not available right now.")
+    }
+    await this.requireOrganizationWriteAccess(actor, command.organizationId)
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.memberUserId,
+      command.organizationId
+    )
+    if (!memberState || memberState.organizationId !== command.organizationId) {
+      throw ERRORS.notFound("Membership")
+    }
+
+    const buffer = Buffer.from(command.dataBase64, "base64")
+    const MAX_AVATAR_BYTES = 3 * 1024 * 1024
+    if (buffer.length === 0 || buffer.length > MAX_AVATAR_BYTES) {
+      throw ERRORS.validation({ avatar: "Image must be between 1 byte and 3MB." })
+    }
+
+    const userState = await this.deps.repositories.users.findById(command.memberUserId)
+    if (!userState) {
+      throw ERRORS.notFound("User")
+    }
+
+    const extension =
+      command.contentType.split("/")[1] === "jpeg" ? "jpg" : command.contentType.split("/")[1]
+    const key = `avatars/${command.memberUserId}/${this.deps.uuid.generate()}.${extension}`
+    const avatarUrl = await this.deps.objectStorage.uploadPublicObject({
+      key,
+      body: buffer,
+      contentType: command.contentType,
+    })
+
+    const user = UserEntity.rehydrate(userState)
+    user.updateProfile({ avatarUrl }, this.now)
+    await this.deps.repositories.users.save(user.toState())
+    await this.audit(
+      "user.avatar_uploaded_by_admin",
+      context,
+      actor.userId,
+      command.organizationId,
+      memberState.workspaceId,
+      "user",
+      command.memberUserId
+    )
+    return this.toProfileDto(user.toState())
+  }
+
+  async sendMemberPasswordReset(
+    actor: AuthenticatedActor,
+    command: SendMemberPasswordResetCommand,
+    context: RequestContext
+  ) {
+    await this.requireOrganizationWriteAccess(actor, command.organizationId)
+    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.memberUserId,
+      command.organizationId
+    )
+    if (!memberState || memberState.organizationId !== command.organizationId) {
+      throw ERRORS.notFound("Membership")
+    }
+    const userState = await this.deps.repositories.users.findById(command.memberUserId)
+    if (!userState) {
+      throw ERRORS.notFound("User")
+    }
+    // Reuses the real, already-rate-limited forgot-password flow verbatim (same token creation +
+    // email send a self-service request would trigger) rather than a second, parallel mechanism.
+    const result = await this.createPasswordReset({ email: userState.email }, context)
+    await this.audit(
+      "membership.password_reset_triggered_by_admin",
+      context,
+      actor.userId,
+      command.organizationId,
+      memberState.workspaceId,
+      "user",
+      command.memberUserId
+    )
+    return result
+  }
+
+  async createMemberDirect(
+    actor: AuthenticatedActor,
+    command: CreateMemberDirectCommand,
+    context: RequestContext
+  ) {
+    // Same authority level as inviteMember (creating a member is creating a member, regardless of
+    // which of the two mechanisms was used), not the stricter org:write most member-targeting
+    // mutations require.
+    const membership = await this.requireOrganizationMembership(
+      actor.userId,
+      command.organizationId
+    )
+    if (
+      !(
+        hasPermission([membership.role], "membership:write") ||
+        ["owner", "admin"].includes(membership.role)
+      )
+    ) {
+      throw ERRORS.forbidden()
+    }
+
+    if (await this.deps.repositories.users.findByEmail(command.email.toLowerCase())) {
+      throw ERRORS.emailAlreadyExists()
+    }
+
+    const requestedWorkspaceIds = [...new Set(command.workspaceIds ?? [])]
+    let membershipWorkspaceIds: string[]
+    if (requestedWorkspaceIds.length > 0) {
+      for (const workspaceId of requestedWorkspaceIds) {
+        const workspaceState = await this.deps.repositories.workspaces.findById(workspaceId)
+        if (!workspaceState || workspaceState.organizationId !== command.organizationId) {
+          throw ERRORS.notFound("Workspace")
+        }
+      }
+      membershipWorkspaceIds = requestedWorkspaceIds
+    } else {
+      membershipWorkspaceIds = [
+        await this.resolveMembershipWorkspaceId(command.organizationId, null),
+      ]
+    }
+
+    const timestamp = this.now
+    const userId = this.deps.uuid.generate()
+    const user = UserEntity.register({
+      id: userId,
+      email: command.email,
+      passwordHash: this.deps.hasher.hash(command.password),
+      fullName: command.fullName,
+      timezone: "UTC",
+      language: "en",
+      organizationId: command.organizationId,
+      workspaceId: membershipWorkspaceIds[0],
+      now: timestamp,
+    })
+    // The admin is vouching for this account directly (they chose the password themselves) --
+    // there's no email round-trip to wait for, so it's verified/active immediately instead of
+    // sitting in the pending_verification state a self-registered or invited user would.
+    user.verifyEmail(timestamp)
+    await this.deps.repositories.users.save(user.toState())
+
+    // One real membership per requested workspace, all under the same new user, created
+    // atomically in this one call -- exactly how a multi-workspace *invite* ends up creating
+    // several memberships for one user (via several accepted invitations), just without the
+    // separate invite/accept round-trip for each.
+    const membershipEntities = []
+    for (const workspaceId of membershipWorkspaceIds) {
+      const membershipEntity = MembershipEntity.create({
+        id: this.deps.uuid.generate(),
+        organizationId: command.organizationId,
+        workspaceId,
+        userId,
+        role: "viewer",
+        status: "active",
+        invitedByUserId: actor.userId,
+        acceptedAt: timestamp,
+        now: timestamp,
+      })
+      await this.deps.repositories.memberships.save(membershipEntity.toState())
+      membershipEntities.push(membershipEntity)
+    }
+
+    await this.audit(
+      "membership.created_directly",
+      context,
+      actor.userId,
+      command.organizationId,
+      membershipWorkspaceIds[0],
+      "membership",
+      membershipEntities[0].toState().id,
+      { email: user.email, workspaceIds: membershipWorkspaceIds }
+    )
+
+    return {
+      user: this.toProfileDto(user.toState()),
+      memberships: membershipEntities.map((entity) => entity.toState()),
+    }
   }
 
   async switchWorkspace(

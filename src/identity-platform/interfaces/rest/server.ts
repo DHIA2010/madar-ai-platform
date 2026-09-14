@@ -97,6 +97,7 @@ import {
   recordCashMovementSchema,
   createInvoiceSchema,
   createCustomerSchema,
+  topUpWalletSchema,
   holdOrderSchema,
   invoiceStatusSchema,
   previewCampaignLinkSchema,
@@ -105,6 +106,7 @@ import {
   matchOrdersSchema,
   aggregateCampaignLinksSchema,
   captureTrackingEventSchema,
+  createMemberDirectSchema,
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
   integrationAccountsQuerySchema,
@@ -124,12 +126,14 @@ import {
   suspendMemberSchema,
   switchWorkspaceSchema,
   updateCustomRoleSchema,
+  updateMemberIdentitySchema,
   updateMemberProfileSchema,
   updateOrganizationSchema,
   updateProfileSchema,
   updateTeamSchema,
   updateWorkspaceSchema,
   uploadAvatarSchema,
+  uploadMemberAvatarSchema,
   uploadOrganizationLogoSchema,
   uploadProductImageSchema,
   changePasswordSchema,
@@ -1887,6 +1891,23 @@ export function createIdentityApiServer(
           await container.queries.listOrganizationMembers(actor, organizationMembersMatch[1])
         )
       }
+      if (method === "POST" && organizationMembersMatch) {
+        const payload = createMemberDirectSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await container.commands.createMemberDirect(
+            actor,
+            {
+              organizationId: organizationMembersMatch[1],
+              workspaceIds: payload.workspaceIds,
+              email: payload.email,
+              fullName: payload.fullName,
+              password: payload.password,
+            },
+            context
+          )
+        )
+      }
 
       const organizationSessionsMatch = url.pathname.match(
         /^\/v1\/organizations\/([^/]+)\/sessions$/
@@ -2055,6 +2076,7 @@ export function createIdentityApiServer(
               organizationId: organizationInvitationsMatch[1],
               workspaceId: payload.workspaceId,
               email: payload.email,
+              fullName: payload.fullName,
               role: payload.role,
               idempotencyKey: payload.idempotencyKey,
             },
@@ -2203,7 +2225,7 @@ export function createIdentityApiServer(
       }
 
       const memberActionMatch = url.pathname.match(
-        /^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/(suspend|reactivate|remove|transfer-ownership|roles|custom-role|module-access|profile)$/
+        /^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/(suspend|reactivate|remove|transfer-ownership|roles|custom-role|module-access|profile|identity|avatar|password-reset)$/
       )
       if (memberActionMatch && method === "POST") {
         const organizationId = memberActionMatch[1]
@@ -2304,6 +2326,7 @@ export function createIdentityApiServer(
           )
         }
         if (action === "profile") {
+          const profilePayload = updateMemberProfileSchema.parse(await readJsonBody(request))
           return send(
             200,
             await container.commands.updateMemberProfile(
@@ -2311,8 +2334,46 @@ export function createIdentityApiServer(
               {
                 organizationId,
                 memberUserId,
-                profile: updateMemberProfileSchema.parse(await readJsonBody(request)).profile,
+                workspaceId: profilePayload.workspaceId,
+                profile: profilePayload.profile,
               },
+              context
+            )
+          )
+        }
+        if (action === "identity") {
+          const identityPayload = updateMemberIdentitySchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await container.commands.updateMemberIdentity(
+              actor,
+              { organizationId, memberUserId, fullName: identityPayload.fullName },
+              context
+            )
+          )
+        }
+        if (action === "avatar") {
+          const avatarPayload = uploadMemberAvatarSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await container.commands.uploadMemberAvatar(
+              actor,
+              {
+                organizationId,
+                memberUserId,
+                contentType: avatarPayload.contentType,
+                dataBase64: avatarPayload.dataBase64,
+              },
+              context
+            )
+          )
+        }
+        if (action === "password-reset") {
+          return send(
+            200,
+            await container.commands.sendMemberPasswordReset(
+              actor,
+              { organizationId, memberUserId },
               context
             )
           )
@@ -2738,7 +2799,8 @@ export function createIdentityApiServer(
               cashierUserId: actor.userId,
               customerName: payload.customerName,
               customerPhone: payload.customerPhone,
-              paymentMethodCode: payload.paymentMethodCode,
+              customerId: payload.customerId,
+              payments: payload.payments,
               discountAmount: payload.discountAmount,
               notes: payload.notes,
               items: payload.items,
@@ -3025,6 +3087,31 @@ export function createIdentityApiServer(
         }
 
         return send(200, customer)
+      }
+
+      const customerWalletTopUpMatch = url.pathname.match(
+        /^\/v1\/customers\/([^/]+)\/wallet-top-ups$/
+      )
+      if (method === "POST" && customerWalletTopUpMatch) {
+        if (!nativeCustomersService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer wallet top-ups are unavailable in memory mode.",
+          })
+        }
+        // Same gate as recording a sale (POS_INVOICE routes) -- accepting real money to top up a
+        // wallet is at least as sensitive as completing a checkout.
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        const customerId = decodeURIComponent(customerWalletTopUpMatch[1])
+        const payload = topUpWalletSchema.parse(await readJsonBody(request))
+        const updated = await nativeCustomersService.topUpWallet(
+          actor.organizationId,
+          customerId,
+          payload.amount,
+          actor.userId
+        )
+        return send(200, toNormalizedCustomer(updated))
       }
 
       if (method === "GET" && url.pathname === "/v1/orders") {

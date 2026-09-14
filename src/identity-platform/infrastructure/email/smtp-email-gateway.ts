@@ -39,13 +39,15 @@ export class SmtpEmailGateway implements EmailGateway {
     token: string
     organizationId: string
     workspaceId?: string
+    fullName?: string
   }) {
     const workspaceInfo = input.workspaceId ? `\nWorkspace: ${input.workspaceId}` : ""
+    const greeting = input.fullName ? `Hi ${input.fullName},\n\n` : ""
     await this.transport.sendMail({
       from: this.config.emailFrom,
       to: input.email,
       subject: "Workspace invitation",
-      text: `Invitation token: ${input.token}\nOrganization: ${input.organizationId}${workspaceInfo}`,
+      text: `${greeting}Invitation token: ${input.token}\nOrganization: ${input.organizationId}${workspaceInfo}`,
     })
   }
 }

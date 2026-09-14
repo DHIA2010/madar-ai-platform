@@ -23,6 +23,13 @@ export interface CustomerRecord {
   lastPurchaseAt: string | null
   status: CustomerStatus
   segment: CustomerSegment
+  // Real running amount owed from deferred ("آجل") POS sales -- only ever set for a "Madar"
+  // (native) customer, since only they have a real account to owe against. Always null for a
+  // synced storefront customer.
+  balanceDue: number | null
+  // Real prepaid balance a sale can spend down via the "customer_wallet" payment method -- same
+  // "Madar"-only scope as balanceDue.
+  walletBalance: number | null
 }
 
 export interface CustomerOrder {

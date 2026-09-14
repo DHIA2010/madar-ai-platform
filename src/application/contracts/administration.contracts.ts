@@ -34,7 +34,14 @@ export interface AdministrationUserDto {
   fullName: string
   email: string
   avatarUrl: string | null
+  // Real, distinct departments across every one of this member's workspace memberships, joined
+  // for display -- a summary, since department is stored per-membership (per-workspace), not
+  // per-user. Empty string when none of their memberships has one set.
   department: string
+  // The same data, unflattened -- one real entry per workspace membership, each independently
+  // editable (see UpdateMemberProfileRequestDto.workspaceId). This is what an edit UI should
+  // actually present for a member who belongs to more than one workspace.
+  departments: Array<{ workspaceId: string; workspaceName: string; department: string }>
   roleId: string
   customRoleId: string | null
   moduleAccessRevoked: boolean
@@ -73,6 +80,10 @@ export type AdministrationInvitationStatus =
 export interface AdministrationInvitationDto {
   id: string
   email: string
+  // A suggested name for the invitee, set by whoever sent the invite -- real (stored on the
+  // invitation, personalizes the invite email, pre-fills the accept-invite page), but optional:
+  // older invitations and any that omit it have none.
+  fullName: string | null
   roleId: string
   workspace: string
   // No "department" field: an invitation never captures one anywhere in this backend (not
@@ -90,6 +101,7 @@ export interface GetInvitationsRequestDto {
 export interface SendInvitationRequestDto {
   organizationId: string
   email: string
+  fullName?: string
   roleId: string
   workspaceId?: string
 }
@@ -255,7 +267,41 @@ export interface SetMemberModuleAccessRequestDto {
 export interface UpdateMemberProfileRequestDto {
   organizationId: string
   memberUserId: string
+  // Targets one specific membership (a member has one per workspace, each with its own
+  // profile/department) -- omitted, the backend falls back to an arbitrary membership in the
+  // org, which is only safe for a member who belongs to just one workspace.
+  workspaceId?: string | null
   profile: Record<string, string>
+}
+
+export interface UpdateMemberIdentityRequestDto {
+  organizationId: string
+  memberUserId: string
+  fullName?: string
+}
+
+export interface UploadMemberAvatarRequestDto {
+  organizationId: string
+  memberUserId: string
+  contentType: "image/png" | "image/jpeg" | "image/webp" | "image/gif"
+  dataBase64: string
+}
+
+export interface SendMemberPasswordResetRequestDto {
+  organizationId: string
+  memberUserId: string
+}
+
+// No role field -- new members always start as "viewer" here too, matching the invitations
+// screen's own DEFAULT_INVITE_ROLE_ID (roles come from teams, not from how the member was added).
+export interface CreateMemberDirectRequestDto {
+  organizationId: string
+  // One real membership is created per workspace here, all under the same new user, in one
+  // atomic call -- omitted/empty falls back to the organization's first workspace.
+  workspaceIds?: string[]
+  email: string
+  fullName: string
+  password: string
 }
 
 export interface AdministrationGateway {
@@ -267,6 +313,10 @@ export interface AdministrationGateway {
   assignMemberCustomRole(request: AssignMemberCustomRoleRequestDto): Promise<void>
   setMemberModuleAccess(request: SetMemberModuleAccessRequestDto): Promise<void>
   updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void>
+  updateMemberIdentity(request: UpdateMemberIdentityRequestDto): Promise<void>
+  uploadMemberAvatar(request: UploadMemberAvatarRequestDto): Promise<{ avatarUrl: string }>
+  sendMemberPasswordReset(request: SendMemberPasswordResetRequestDto): Promise<void>
+  createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }>
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]>
   sendInvitation(request: SendInvitationRequestDto): Promise<AdministrationInvitationDto>
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>

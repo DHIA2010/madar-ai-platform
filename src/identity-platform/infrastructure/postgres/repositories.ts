@@ -182,6 +182,7 @@ function mapInvitation(row: Record<string, unknown>, token: string): InvitationS
     id: String(row.id),
     token,
     email: String(row.email),
+    fullName: (row.full_name as string | null) ?? null,
     organizationId: String(row.organization_id),
     workspaceId: (row.workspace_id as string | null) ?? null,
     role: row.role_code as InvitationState["role"],
@@ -695,14 +696,15 @@ class PostgresInvitationRepository implements InvitationRepository {
       name: "identity-invitations-upsert",
       text: `
         INSERT INTO organization_invitations (
-          id, organization_id, workspace_id, email, role_code, invited_by_user_id,
+          id, organization_id, workspace_id, email, full_name, role_code, invited_by_user_id,
           token_hash, status, idempotency_key,
           expires_at, created_at, accepted_at, declined_at, canceled_at,
           last_sent_at, resend_count, deleted_at
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         ON CONFLICT (id) DO UPDATE SET
           email = EXCLUDED.email,
+          full_name = EXCLUDED.full_name,
           workspace_id = EXCLUDED.workspace_id,
           role_code = EXCLUDED.role_code,
           token_hash = EXCLUDED.token_hash,
@@ -721,6 +723,7 @@ class PostgresInvitationRepository implements InvitationRepository {
         entry.organizationId,
         entry.workspaceId,
         entry.email,
+        entry.fullName,
         entry.role,
         entry.invitedBy,
         this.tokenService.hashOpaqueToken(entry.token),

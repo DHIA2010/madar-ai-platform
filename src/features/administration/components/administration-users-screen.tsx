@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   Ban,
@@ -16,7 +16,6 @@ import {
   Search,
   SlidersHorizontal,
   UserCheck,
-  UserCog,
   Users as UsersIcon,
   UserX,
 } from "lucide-react"
@@ -28,6 +27,10 @@ import { ROUTES } from "@/constants/routes"
 import {
   AppButton,
   AppConfirmDialog,
+  AppDropdownMenu,
+  AppDropdownMenuContent,
+  AppDropdownMenuItem,
+  AppDropdownMenuTrigger,
   AppInput,
   AppSelect,
   AppSelectContent,
@@ -43,6 +46,7 @@ import { formatRelativeArabic } from "../lib/format-arabic-time"
 import { useRolesQuery } from "../queries/use-roles-query"
 import { useUserMutations } from "../queries/use-user-mutations"
 import { useUsersQuery } from "../queries/use-users-query"
+import { AdministrationAddUserDialog } from "./administration-add-user-dialog"
 import { AdministrationModuleNav } from "./administration-module-nav"
 import { AdministrationUserProfileDrawer } from "./administration-user-profile-drawer"
 
@@ -133,6 +137,9 @@ export function AdministrationUsersScreen() {
     assignCustomRole,
     setModuleAccess,
     updateProfile,
+    updateIdentity,
+    uploadAvatar,
+    sendPasswordReset,
   } = useUserMutations(currentOrganization?.id)
   const allUsers = useMemo(() => data ?? [], [data])
   const assignableRoles = useMemo(
@@ -151,12 +158,18 @@ export function AdministrationUsersScreen() {
   const [pageSize, setPageSize] = useState(10)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [openActionsFor, setOpenActionsFor] = useState<string | null>(null)
+  const [addUserOpen, setAddUserOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<AdministrationUserDto | undefined>()
   const [profileOpen, setProfileOpen] = useState(false)
   const [deactivatingUser, setDeactivatingUser] = useState<AdministrationUserDto | null>(null)
   const [deactivateReason, setDeactivateReason] = useState("")
   const [editingUser, setEditingUser] = useState<AdministrationUserDto | null>(null)
-  const [editDepartment, setEditDepartment] = useState("")
+  const [editFullName, setEditFullName] = useState("")
+  const [editAvatarUrl, setEditAvatarUrl] = useState<string | null>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  // Keyed by workspaceId (department lives per-membership) -- "" is a fallback key used only for
+  // the edge case where a member has no real workspace membership rows to key on.
+  const [editDepartments, setEditDepartments] = useState<Record<string, string>>({})
   const [bulkRoleValue, setBulkRoleValue] = useState("")
   const [assigningBulkRole, setAssigningBulkRole] = useState(false)
 
@@ -247,17 +260,92 @@ export function AdministrationUsersScreen() {
 
   async function handleEditUser() {
     if (!editingUser || !currentOrganization) return
+    const targets =
+      editingUser.departments.length > 0
+        ? editingUser.departments
+        : [{ workspaceId: "", workspaceName: "", department: "" }]
+    const changedDepartments = targets.filter(
+      (entry) => (editDepartments[entry.workspaceId] ?? "").trim() !== entry.department
+    )
+    const trimmedName = editFullName.trim()
+    const nameChanged = trimmedName.length > 0 && trimmedName !== editingUser.fullName
+    if (changedDepartments.length === 0 && !nameChanged) {
+      setEditingUser(null)
+      setEditDepartments({})
+      setEditFullName("")
+      return
+    }
     try {
-      await updateProfile.mutateAsync({
-        organizationId: currentOrganization.id,
-        memberUserId: editingUser.id,
-        profile: { department: editDepartment.trim() },
-      })
+      await Promise.all([
+        ...(nameChanged
+          ? [
+              updateIdentity.mutateAsync({
+                organizationId: currentOrganization.id,
+                memberUserId: editingUser.id,
+                fullName: trimmedName,
+              }),
+            ]
+          : []),
+        ...changedDepartments.map((entry) =>
+          updateProfile.mutateAsync({
+            organizationId: currentOrganization.id,
+            memberUserId: editingUser.id,
+            workspaceId: entry.workspaceId || undefined,
+            profile: { department: (editDepartments[entry.workspaceId] ?? "").trim() },
+          })
+        ),
+      ])
       toast.success(`تم تحديث ${editingUser.fullName}.`)
       setEditingUser(null)
-      setEditDepartment("")
+      setEditDepartments({})
+      setEditFullName("")
     } catch {
       toast.error("تعذر تحديث المستخدم.")
+    }
+  }
+
+  async function handleEditAvatarFile(file: File) {
+    if (!editingUser || !currentOrganization) return
+    const MAX_AVATAR_BYTES = 3 * 1024 * 1024
+    if (file.size > MAX_AVATAR_BYTES) {
+      toast.error("يجب ألا يتجاوز حجم الصورة 3 ميغابايت.")
+      return
+    }
+    const contentType = file.type as "image/png" | "image/jpeg" | "image/webp" | "image/gif"
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(contentType)) {
+      toast.error("صيغة الصورة غير مدعومة.")
+      return
+    }
+    try {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "")
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(file)
+      })
+      const result = await uploadAvatar.mutateAsync({
+        organizationId: currentOrganization.id,
+        memberUserId: editingUser.id,
+        contentType,
+        dataBase64,
+      })
+      setEditAvatarUrl(result.avatarUrl)
+      toast.success("تم تحديث الصورة الشخصية.")
+    } catch {
+      toast.error("تعذر رفع الصورة.")
+    }
+  }
+
+  async function handleSendPasswordReset() {
+    if (!editingUser || !currentOrganization) return
+    try {
+      await sendPasswordReset.mutateAsync({
+        organizationId: currentOrganization.id,
+        memberUserId: editingUser.id,
+      })
+      toast.success(`تم إرسال رابط إعادة تعيين كلمة المرور إلى ${editingUser.email}.`)
+    } catch {
+      toast.error("تعذر إرسال رابط إعادة تعيين كلمة المرور.")
     }
   }
 
@@ -369,13 +457,10 @@ export function AdministrationUsersScreen() {
           </p>
         </div>
         <AppButton
-          asChild
+          onClick={() => setAddUserOpen(true)}
           className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
-          <Link href={ROUTES.administrationInvitations}>
-            <UserCog className="size-4" />
-            دعوة مستخدم
-          </Link>
+          إضافة مستخدم
         </AppButton>
       </div>
 
@@ -656,70 +741,88 @@ export function AdministrationUsersScreen() {
                       <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
                         {formatRelativeArabic(user.lastLogin, "لم يسجّل الدخول")}
                       </td>
-                      <td className="relative px-3 py-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOpenActionsFor((current) => (current === user.id ? null : user.id))
-                          }
-                          aria-label="الإجراءات"
-                          className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
+                      <td className="px-3 py-3">
+                        <AppDropdownMenu
+                          open={openActionsFor === user.id}
+                          onOpenChange={(open) => setOpenActionsFor(open ? user.id : null)}
                         >
-                          <MoreHorizontal className="size-4" />
-                        </button>
-                        {openActionsFor === user.id ? (
-                          <div className="absolute inset-inline-end-3 top-11 z-10 flex w-44 flex-col overflow-hidden rounded-[10px] border border-[#e8edf3] bg-white py-1 text-right shadow-lg">
+                          <AppDropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              onClick={() => {
+                              aria-label="الإجراءات"
+                              className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </button>
+                          </AppDropdownMenuTrigger>
+                          <AppDropdownMenuContent align="end" className="w-44 text-right">
+                            <AppDropdownMenuItem
+                              onSelect={(event) => {
+                                // preventDefault stops Radix from returning focus to the trigger
+                                // before the drawer/dialog (rendered outside this dropdown) can
+                                // open; closing the menu explicitly via setOpenActionsFor(null) is
+                                // what actually releases Radix's disableOutsidePointerEvents lock
+                                // on <body> -- without it the page stays unclickable until refresh.
+                                event.preventDefault()
+                                setOpenActionsFor(null)
                                 setSelectedUser(user)
                                 setProfileOpen(true)
-                                setOpenActionsFor(null)
                               }}
-                              className="flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold text-[#5b6b85] hover:bg-[#f7faff]"
+                              className="gap-2 text-[12.5px] font-semibold text-[#5b6b85]"
                             >
                               <Eye className="size-3.5" />
                               عرض الملف الشخصي
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingUser(user)
-                                setEditDepartment(user.department)
+                            </AppDropdownMenuItem>
+                            <AppDropdownMenuItem
+                              onSelect={(event) => {
+                                event.preventDefault()
                                 setOpenActionsFor(null)
+                                setEditingUser(user)
+                                setEditFullName(user.fullName)
+                                setEditAvatarUrl(user.avatarUrl)
+                                setEditDepartments(
+                                  user.departments.length > 0
+                                    ? Object.fromEntries(
+                                        user.departments.map((entry) => [
+                                          entry.workspaceId,
+                                          entry.department,
+                                        ])
+                                      )
+                                    : { "": "" }
+                                )
                               }}
-                              className="flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold text-[#5b6b85] hover:bg-[#f7faff]"
+                              className="gap-2 text-[12.5px] font-semibold text-[#5b6b85]"
                             >
                               <Pencil className="size-3.5" />
                               تعديل
-                            </button>
+                            </AppDropdownMenuItem>
                             {user.id === currentUser?.id ? null : user.status === "suspended" ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void handleReactivateUser(user)
+                              <AppDropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault()
                                   setOpenActionsFor(null)
+                                  void handleReactivateUser(user)
                                 }}
-                                className="flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold text-[#16a34a] hover:bg-[#f0fdf4]"
+                                className="gap-2 text-[12.5px] font-semibold text-[#16a34a] focus:text-[#16a34a]"
                               >
                                 <RotateCcw className="size-3.5" />
                                 إعادة تفعيل
-                              </button>
+                              </AppDropdownMenuItem>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDeactivatingUser(user)
+                              <AppDropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault()
                                   setOpenActionsFor(null)
+                                  setDeactivatingUser(user)
                                 }}
-                                className="flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold text-[#dc2626] hover:bg-[#fef2f2]"
+                                className="gap-2 text-[12.5px] font-semibold text-[#dc2626] focus:text-[#dc2626]"
                               >
                                 <Ban className="size-3.5" />
                                 إيقاف
-                              </button>
+                              </AppDropdownMenuItem>
                             )}
-                          </div>
-                        ) : null}
+                          </AppDropdownMenuContent>
+                        </AppDropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -791,6 +894,12 @@ export function AdministrationUsersScreen() {
           )}
       />
 
+      <AdministrationAddUserDialog
+        open={addUserOpen}
+        onOpenChange={setAddUserOpen}
+        organizationId={currentOrganization?.id}
+      />
+
       <AppConfirmDialog
         open={Boolean(deactivatingUser)}
         onOpenChange={(open) => {
@@ -831,29 +940,125 @@ export function AdministrationUsersScreen() {
         onOpenChange={(open) => {
           if (!open) {
             setEditingUser(null)
-            setEditDepartment("")
+            setEditDepartments({})
+            setEditFullName("")
+            setEditAvatarUrl(null)
           }
         }}
         title={<span dir="rtl">تعديل المستخدم</span>}
         description={
-          <span dir="rtl">{editingUser ? `تحديث بيانات ${editingUser.fullName}.` : null}</span>
+          <span dir="rtl">
+            {editingUser
+              ? editingUser.departments.length > 1
+                ? `القسم يُحفظ لكل مساحة عمل على حدة لدى ${editingUser.fullName}.`
+                : `تحديث بيانات ${editingUser.fullName}.`
+              : null}
+          </span>
         }
         confirmLabel="حفظ"
         cancelLabel="إلغاء"
-        loading={updateProfile.isPending}
+        loading={updateProfile.isPending || updateIdentity.isPending}
         onConfirm={handleEditUser}
         onCancel={() => {
           setEditingUser(null)
-          setEditDepartment("")
+          setEditDepartments({})
+          setEditFullName("")
+          setEditAvatarUrl(null)
         }}
         contentClassName="[direction:rtl]"
       >
-        <AppInput
-          label="القسم"
-          value={editDepartment}
-          onChange={(event) => setEditDepartment(event.target.value)}
-          placeholder="مثال: التسويق"
-        />
+        <div dir="rtl" className="flex flex-col gap-3.5">
+          <div className={cn(PANEL, "flex items-center gap-3 p-3.5")}>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              aria-label="تغيير الصورة الشخصية"
+              className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#eff6ff] text-[15px] font-bold text-[#2563eb]"
+            >
+              {editAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={editAvatarUrl} alt="" className="size-full object-cover" />
+              ) : editingUser ? (
+                initials(editingUser.fullName)
+              ) : null}
+              {uploadAvatar.isPending ? (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <Loader2 className="size-4 animate-spin text-white" />
+                </span>
+              ) : null}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) void handleEditAvatarFile(file)
+                event.target.value = ""
+              }}
+            />
+            <div className="min-w-0 flex-1">
+              <AppInput
+                value={editFullName}
+                onChange={(event) => setEditFullName(event.target.value)}
+                placeholder="الاسم الكامل"
+                className="h-9"
+              />
+              <p className={cn("mt-1.5 truncate text-[11px]", MUTED)}>{editingUser?.email}</p>
+            </div>
+          </div>
+
+          {editingUser && editingUser.departments.length > 0 ? (
+            <div className={cn(PANEL, "flex flex-col divide-y divide-[#eef2f8] p-1")}>
+              {editingUser.departments.map((entry) => (
+                <div key={entry.workspaceId} className="flex items-center gap-2.5 px-2.5 py-1.5">
+                  <span className={cn("w-28 shrink-0 truncate text-[11.5px] font-semibold", MUTED)}>
+                    {entry.workspaceName}
+                  </span>
+                  <input
+                    value={editDepartments[entry.workspaceId] ?? ""}
+                    onChange={(event) =>
+                      setEditDepartments((current) => ({
+                        ...current,
+                        [entry.workspaceId]: event.target.value,
+                      }))
+                    }
+                    placeholder="القسم"
+                    className="h-8 min-w-0 flex-1 rounded-[8px] border border-[#e8edf3] bg-white px-2.5 text-[12px] text-[#0d1b3e] placeholder:text-[#8098b4]"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <input
+              value={editDepartments[""] ?? ""}
+              onChange={(event) =>
+                setEditDepartments((current) => ({ ...current, "": event.target.value }))
+              }
+              placeholder="القسم"
+              className="h-9 min-w-0 rounded-[9px] border border-[#e8edf3] bg-white px-3 text-[12.5px] text-[#0d1b3e] placeholder:text-[#8098b4]"
+            />
+          )}
+
+          <div className={cn(PANEL, "flex items-center justify-between gap-3 p-3.5")}>
+            <div>
+              <p className={cn("text-[12.5px] font-extrabold", HEADING)}>كلمة المرور</p>
+              <p className={cn("text-[11px]", MUTED)}>
+                لا تُعرض كلمة المرور أو تُغيَّر هنا مباشرة.
+              </p>
+            </div>
+            <AppButton
+              type="button"
+              variant="outline"
+              loading={sendPasswordReset.isPending}
+              onClick={() => void handleSendPasswordReset()}
+              className="h-9 shrink-0 rounded-[9px] border-[#e8edf3] text-[12px] font-semibold text-[#5b6b85]"
+            >
+              إرسال رابط إعادة التعيين
+            </AppButton>
+          </div>
+        </div>
       </AppConfirmDialog>
     </div>
   )

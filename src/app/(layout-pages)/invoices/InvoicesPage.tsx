@@ -852,7 +852,10 @@ function CreateInvoiceDialog({
       const invoice = await posInvoicesService.create({
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
-        paymentMethodCode,
+        customerId: null,
+        // This quick-add form only ever picks one method for the whole total -- splitting a
+        // sale across several is the cashier checkout's own flow (CashierPage.tsx).
+        payments: [{ paymentMethodCode, amount: total }],
         discountAmount: discount,
         // This form has no note field of its own -- the cashier screen's "ملاحظة" button is the
         // one place a note gets typed.

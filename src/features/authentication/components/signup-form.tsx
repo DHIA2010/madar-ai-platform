@@ -142,6 +142,9 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   const searchParams = useSearchParams()
   const invitationToken = searchParams.get("invitation")
   const invitationEmail = searchParams.get("email") ?? ""
+  // A suggested name the inviting admin typed in -- pre-filled but never locked (unlike email,
+  // there's no security reason to stop the invitee from correcting or replacing it).
+  const invitationFullName = searchParams.get("fullName") ?? ""
   const isInvitationMode = Boolean(invitationToken)
   // Deliberately independent of isInvitationMode -- a marketplace-install visitor isn't
   // joining an existing org, they need one created for them same as any normal signup
@@ -192,7 +195,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   const form = useForm<SignupFormValues>({
     resolver,
     defaultValues: {
-      fullName: "",
+      fullName: invitationFullName,
       email: invitationEmail,
       password: "",
       confirmPassword: "",

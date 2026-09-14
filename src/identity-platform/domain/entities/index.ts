@@ -757,6 +757,10 @@ export interface InvitationState {
   id: string
   token: string
   email: string
+  // A suggested name for the invitee, set by whoever sent the invite -- used to personalize the
+  // invitation email and pre-fill (not lock) the name field on the accept-invite page. Null for
+  // invitations that never set one.
+  fullName: string | null
   organizationId: string
   workspaceId: string | null
   role: Role
@@ -789,6 +793,10 @@ export class InvitationEntity {
 
   get email() {
     return this.state.email
+  }
+
+  get fullName() {
+    return this.state.fullName
   }
 
   get organizationId() {

@@ -112,6 +112,14 @@ function authHeaders(token: string) {
   return { "content-type": "application/json", authorization: `Bearer ${token}` }
 }
 
+async function enablePaymentMethod(token: string, code: string) {
+  await fetch(`${baseUrl}/v1/pos/payment-methods/${code}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ enabled: true, feePercent: 0, merchantId: null, apiKey: null }),
+  })
+}
+
 async function createInvoice(token: string, body: Record<string, unknown>) {
   const response = await fetch(`${baseUrl}/v1/pos/invoices`, {
     method: "POST",
@@ -147,9 +155,10 @@ async function setStatus(token: string, id: string, status: string) {
   return { status: response.status, body: (await response.json()) as Record<string, unknown> }
 }
 
+// Subtotal 32 (24 + 8), no discount, 15% VAT -> tax 4.80, total 36.80.
 const COFFEE_SALE = {
   customerName: null,
-  paymentMethodCode: "cash",
+  payments: [{ paymentMethodCode: "cash", amount: 36.8 }],
   discountAmount: 0,
   items: [
     { productId: null, productName: "قهوة مختصة", unitPrice: 12, quantity: 2 },
@@ -164,11 +173,12 @@ describe("point-of-sale invoices", () => {
     const created = await createInvoice(token, COFFEE_SALE)
 
     expect(created.status).toBe(201)
-    // Subtotal 32 (24 + 8), no discount, 15% VAT -> tax 4.80, total 36.80.
     expect(created.body).toMatchObject({
       status: "completed",
       customerName: null,
+      customerId: null,
       paymentMethodCode: "cash",
+      payments: [{ paymentMethodCode: "cash", amount: 36.8 }],
       subtotalAmount: 32,
       discountAmount: 0,
       taxAmount: 4.8,
@@ -181,7 +191,11 @@ describe("point-of-sale invoices", () => {
   it("applies a discount before computing tax", async () => {
     const { token } = await signIn("invoice-discount@example.com", "Invoice Discount")
 
-    const created = await createInvoice(token, { ...COFFEE_SALE, discountAmount: 8 })
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      discountAmount: 8,
+      payments: [{ paymentMethodCode: "cash", amount: 27.6 }],
+    })
 
     // Subtotal 32, discount 8 -> taxable 24, VAT 3.60, total 27.60 -- matches the reference
     // invoice's own numbers (34 subtotal, 8 discount, 3.90 tax on a slightly different cart).
@@ -191,6 +205,151 @@ describe("point-of-sale invoices", () => {
       taxAmount: 3.6,
       totalAmount: 27.6,
     })
+  })
+
+  it("splits a sale across more than one payment method", async () => {
+    const { token } = await signIn("invoice-split@example.com", "Invoice Split")
+    await enablePaymentMethod(token, "mada")
+
+    // Total is 36.80 -- 20 cash, 16.80 mada.
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [
+        { paymentMethodCode: "cash", amount: 20 },
+        { paymentMethodCode: "mada", amount: 16.8 },
+      ],
+    })
+
+    expect(created.status).toBe(201)
+    expect(created.body.paymentMethodCode).toBe("split")
+    expect(created.body.payments).toEqual(
+      expect.arrayContaining([
+        { paymentMethodCode: "cash", amount: 20 },
+        { paymentMethodCode: "mada", amount: 16.8 },
+      ])
+    )
+    expect(created.body.totalAmount).toBe(36.8)
+  })
+
+  it("rejects payment lines that don't add up to the total", async () => {
+    const { token } = await signIn("invoice-mismatch@example.com", "Invoice Mismatch")
+
+    const short = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [{ paymentMethodCode: "cash", amount: 10 }],
+    })
+    expect(short.status).toBe(400)
+    expect(short.body).toMatchObject({ code: "POS_INVOICE_PAYMENT_AMOUNT_MISMATCH" })
+  })
+
+  it("defers part of a sale to a real customer's account and grows their balance", async () => {
+    const { token } = await signIn("invoice-deferred@example.com", "Invoice Deferred")
+    await enablePaymentMethod(token, "customer_credit")
+
+    const customerResponse = await fetch(`${baseUrl}/v1/customers`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ name: "أحمد", email: null, phone: null, notes: null }),
+    })
+    const customer = (await customerResponse.json()) as { id: string }
+
+    // Total 36.80 -- 20 cash now, 16.80 deferred to the customer's account.
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      customerId: customer.id,
+      payments: [
+        { paymentMethodCode: "cash", amount: 20 },
+        { paymentMethodCode: "customer_credit", amount: 16.8 },
+      ],
+    })
+    expect(created.status).toBe(201)
+    expect(created.body.customerId).toBe(customer.id)
+
+    const detailResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}`, {
+      headers: authHeaders(token),
+    })
+    const detail = (await detailResponse.json()) as { balanceDue: number }
+    expect(detail.balanceDue).toBe(16.8)
+  })
+
+  it("rejects a deferred amount with no real customer attached", async () => {
+    const { token } = await signIn("invoice-deferred-noone@example.com", "Invoice Deferred Noone")
+    await enablePaymentMethod(token, "customer_credit")
+
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [{ paymentMethodCode: "customer_credit", amount: 36.8 }],
+    })
+    expect(created.status).toBe(400)
+    expect(created.body).toMatchObject({ code: "POS_INVOICE_DEFERRED_REQUIRES_CUSTOMER" })
+  })
+
+  it("spends down a real customer wallet balance topped up beforehand", async () => {
+    const { token } = await signIn("invoice-wallet@example.com", "Invoice Wallet")
+    await enablePaymentMethod(token, "customer_wallet")
+
+    const customerResponse = await fetch(`${baseUrl}/v1/customers`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ name: "منى", email: null, phone: null, notes: null }),
+    })
+    const customer = (await customerResponse.json()) as { id: string }
+
+    const topUpResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}/wallet-top-ups`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ amount: 100 }),
+    })
+    expect(topUpResponse.status).toBe(200)
+    const toppedUp = (await topUpResponse.json()) as { walletBalance: number }
+    expect(toppedUp.walletBalance).toBe(100)
+
+    // Total 36.80, all spent from the wallet.
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      customerId: customer.id,
+      payments: [{ paymentMethodCode: "customer_wallet", amount: 36.8 }],
+    })
+    expect(created.status).toBe(201)
+
+    const detailResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}`, {
+      headers: authHeaders(token),
+    })
+    const detail = (await detailResponse.json()) as { walletBalance: number }
+    expect(detail.walletBalance).toBe(63.2)
+  })
+
+  it("rejects a wallet payment larger than the customer's real balance", async () => {
+    const { token } = await signIn("invoice-wallet-short@example.com", "Invoice Wallet Short")
+    await enablePaymentMethod(token, "customer_wallet")
+
+    const customerResponse = await fetch(`${baseUrl}/v1/customers`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ name: "سعيد", email: null, phone: null, notes: null }),
+    })
+    const customer = (await customerResponse.json()) as { id: string }
+    // Wallet starts at 0 -- never topped up.
+
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      customerId: customer.id,
+      payments: [{ paymentMethodCode: "customer_wallet", amount: 36.8 }],
+    })
+    expect(created.status).toBe(400)
+    expect(created.body).toMatchObject({ code: "POS_INVOICE_INSUFFICIENT_WALLET_BALANCE" })
+  })
+
+  it("rejects a wallet payment with no real customer attached", async () => {
+    const { token } = await signIn("invoice-wallet-noone@example.com", "Invoice Wallet Noone")
+    await enablePaymentMethod(token, "customer_wallet")
+
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [{ paymentMethodCode: "customer_wallet", amount: 36.8 }],
+    })
+    expect(created.status).toBe(400)
+    expect(created.body).toMatchObject({ code: "POS_INVOICE_WALLET_REQUIRES_CUSTOMER" })
   })
 
   it("rejects an invoice with no items", async () => {
@@ -248,14 +407,14 @@ describe("point-of-sale invoices", () => {
     // signIn() never turns it on.
     const disabled = await createInvoice(token, {
       ...COFFEE_SALE,
-      paymentMethodCode: "bank_transfer",
+      payments: [{ paymentMethodCode: "bank_transfer", amount: 36.8 }],
     })
     expect(disabled.status).toBe(400)
     expect(disabled.body).toMatchObject({ code: "POS_INVOICE_INVALID_PAYMENT_METHOD" })
 
     const unknown = await createInvoice(token, {
       ...COFFEE_SALE,
-      paymentMethodCode: "not_a_real_method",
+      payments: [{ paymentMethodCode: "not_a_real_method", amount: 36.8 }],
     })
     expect(unknown.status).toBe(400)
     expect(unknown.body).toMatchObject({ code: "POS_INVOICE_INVALID_PAYMENT_METHOD" })

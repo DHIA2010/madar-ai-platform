@@ -17,6 +17,7 @@ export type {
   AuditLogListDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
+  CreateMemberDirectRequestDto,
   CreateTeamRequestDto,
   DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
@@ -33,11 +34,14 @@ export type {
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SendMemberPasswordResetRequestDto,
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberIdentityRequestDto,
   UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
+  UploadMemberAvatarRequestDto,
 } from "./administration.contracts"
 export type {
   AIAnomalyDto,

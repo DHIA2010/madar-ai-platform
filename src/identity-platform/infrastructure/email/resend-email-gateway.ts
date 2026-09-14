@@ -131,20 +131,24 @@ export class ResendEmailGateway implements EmailGateway {
     workspaceId?: string
     organizationName?: string
     workspaceName?: string
+    fullName?: string
   }) {
-    const url = `${this.config.appUrl.replace(/\/$/, "")}/auth/basic/register?invitation=${encodeURIComponent(input.token)}&email=${encodeURIComponent(input.email)}`
+    const url =
+      `${this.config.appUrl.replace(/\/$/, "")}/auth/basic/register?invitation=${encodeURIComponent(input.token)}&email=${encodeURIComponent(input.email)}` +
+      (input.fullName ? `&fullName=${encodeURIComponent(input.fullName)}` : "")
     const orgLabel = input.organizationName ?? "a MADAR organization"
     const scope = input.workspaceName
       ? ` &mdash; workspace <strong>${escapeHtml(input.workspaceName)}</strong>`
       : ""
+    const greeting = input.fullName ? `Hi ${escapeHtml(input.fullName)}, y` : "Y"
     await this.send({
       to: input.email,
       subject: `You've been invited to join ${input.organizationName ?? "MADAR"}`,
-      text: `You've been invited to join ${orgLabel}${input.workspaceName ? ` (workspace: ${input.workspaceName})` : ""} on MADAR. Accept your invitation: ${url}`,
+      text: `${input.fullName ? `Hi ${input.fullName}, y` : "Y"}ou've been invited to join ${orgLabel}${input.workspaceName ? ` (workspace: ${input.workspaceName})` : ""} on MADAR. Accept your invitation: ${url}`,
       html: renderLayout({
         preheader: `You've been invited to join ${orgLabel} on MADAR.`,
         heading: "You've been invited",
-        bodyHtml: `You've been invited to join <strong>${escapeHtml(orgLabel)}</strong>${scope} on MADAR. Sign in (or create an account with this email address) to accept.`,
+        bodyHtml: `${greeting}ou've been invited to join <strong>${escapeHtml(orgLabel)}</strong>${scope} on MADAR. Sign in (or create an account with this email address) to accept.`,
         ctaLabel: "Accept invitation",
         ctaUrl: url,
       }),

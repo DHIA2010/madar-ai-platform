@@ -15,6 +15,7 @@ import type {
   AuditLogListDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
+  CreateMemberDirectRequestDto,
   CreateTeamRequestDto,
   DeleteCustomRoleRequestDto,
   DeleteTeamRequestDto,
@@ -31,11 +32,14 @@ import type {
   RevokeSessionRequestDto,
   RolePermissionDto,
   SendInvitationRequestDto,
+  SendMemberPasswordResetRequestDto,
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
   UpdateCustomRoleRequestDto,
+  UpdateMemberIdentityRequestDto,
   UpdateMemberProfileRequestDto,
   UpdateTeamRequestDto,
+  UploadMemberAvatarRequestDto,
 } from "@/application/contracts/administration.contracts"
 import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
 
@@ -154,12 +158,29 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       .sort()
       .at(-1)
 
+    // Department lives per-membership (per-workspace), not per-user -- a member with several
+    // real workspace memberships can genuinely have a different one in each. Summarized here as
+    // the distinct real values (empty ones excluded) rather than picking one row arbitrarily.
+    const departments = rows
+      .filter((row): row is typeof row & { workspaceId: string; workspaceName: string } =>
+        Boolean(row.workspaceId && row.workspaceName)
+      )
+      .map((row) => ({
+        workspaceId: row.workspaceId,
+        workspaceName: row.workspaceName,
+        department: row.profile?.department ?? "",
+      }))
+    const distinctDepartments = Array.from(
+      new Set(departments.map((entry) => entry.department).filter(Boolean))
+    )
+
     return {
       id: userId,
       fullName: first.fullName ?? first.email ?? "Unknown",
       email: first.email ?? "",
       avatarUrl: first.avatarUrl,
-      department: first.profile?.department ?? "",
+      department: distinctDepartments.join("، "),
+      departments,
       roleId: pickPrimaryRole(rows.map((row) => row.role)),
       customRoleId: first.customRoleId,
       moduleAccessRevoked: first.moduleAccessRevoked,
@@ -237,6 +258,7 @@ function mapInvitationEntry(entry: InvitationApiEntry): AdministrationInvitation
   return {
     id: entry.id,
     email: entry.email,
+    fullName: entry.fullName,
     roleId: entry.role,
     workspace: entry.workspaceName ?? "Organization-wide",
     status: entry.status,
@@ -568,6 +590,38 @@ export class DataAdministrationRepository implements AdministrationRepository {
   async updateMemberProfile(request: UpdateMemberProfileRequestDto): Promise<void> {
     try {
       await this.adapter.updateMemberProfile(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async updateMemberIdentity(request: UpdateMemberIdentityRequestDto): Promise<void> {
+    try {
+      await this.adapter.updateMemberIdentity(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async uploadMemberAvatar(request: UploadMemberAvatarRequestDto): Promise<{ avatarUrl: string }> {
+    try {
+      return await this.adapter.uploadMemberAvatar(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async sendMemberPasswordReset(request: SendMemberPasswordResetRequestDto): Promise<void> {
+    try {
+      await this.adapter.sendMemberPasswordReset(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }> {
+    try {
+      return await this.adapter.createMemberDirect(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

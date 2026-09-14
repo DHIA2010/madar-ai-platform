@@ -3,12 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AdministrationInvitationsScreen } from "./administration-invitations-screen"
 
-const { toastSuccess, toastError } = vi.hoisted(() => ({
+const { toastSuccess } = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
-  toastError: vi.fn(),
 }))
 
-const mockSendInvitationMutateAsync = vi.fn().mockResolvedValue({})
 const mockCancelInvitationMutateAsync = vi.fn().mockResolvedValue(undefined)
 const mockResendInvitationMutateAsync = vi.fn().mockResolvedValue({})
 
@@ -16,6 +14,7 @@ const mockInvitations = [
   {
     id: "inv-1",
     email: "sara@madar.ai",
+    fullName: "Sara Ahmed",
     roleId: "viewer",
     workspace: "Demo Workspace",
     status: "pending" as const,
@@ -27,7 +26,7 @@ const mockInvitations = [
 vi.mock("sonner", () => ({
   toast: {
     success: toastSuccess,
-    error: toastError,
+    error: vi.fn(),
   },
 }))
 
@@ -38,10 +37,6 @@ vi.mock("@/application", () => ({
 vi.mock("@/features/workspace", () => ({
   useWorkspace: () => ({
     currentOrganization: { id: "org-1", name: "Org", slug: "org" },
-    availableWorkspaces: [
-      { id: "ws-1", organizationId: "org-1", name: "Demo Workspace", slug: "demo-workspace" },
-      { id: "ws-2", organizationId: "org-1", name: "Retail Expansion", slug: "retail-expansion" },
-    ],
   }),
 }))
 
@@ -55,7 +50,6 @@ vi.mock("../queries/use-invitations-query", () => ({
 
 vi.mock("../queries/use-invitation-mutations", () => ({
   useInvitationMutations: () => ({
-    sendInvitation: { mutateAsync: mockSendInvitationMutateAsync, isPending: false },
     cancelInvitation: { mutateAsync: mockCancelInvitationMutateAsync, isPending: false },
     resendInvitation: { mutateAsync: mockResendInvitationMutateAsync, isPending: false },
   }),
@@ -65,89 +59,43 @@ vi.mock("./administration-module-nav", () => ({
   AdministrationModuleNav: () => <nav data-testid="administration-nav" />,
 }))
 
+vi.mock("./administration-add-user-dialog", () => ({
+  AdministrationAddUserDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="add-user-dialog" /> : null,
+}))
+
 describe("AdministrationInvitationsScreen", () => {
   beforeEach(() => {
     toastSuccess.mockReset()
-    toastError.mockReset()
-    mockSendInvitationMutateAsync.mockClear()
     mockCancelInvitationMutateAsync.mockClear()
     mockResendInvitationMutateAsync.mockClear()
   })
 
-  it("opens invite dialog when clicking دعوة مستخدمين", () => {
+  it("opens the add-user dialog when clicking إضافة مستخدم", () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "دعوة مستخدمين" }))
-
-    expect(screen.getByRole("dialog", { name: "دعوة مستخدمين" })).toBeTruthy()
-    expect(
-      screen.getByText("الأعضاء الجدد يبدأون بلا صلاحيات -- أضفهم إلى فريق لاحقاً لمنحهم الوصول.")
-    ).toBeTruthy()
+    expect(screen.queryByTestId("add-user-dialog")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "إضافة مستخدم" }))
+    expect(screen.getByTestId("add-user-dialog")).toBeTruthy()
   })
 
-  it("defaults invited members to no role and supports a single workspace checkbox", async () => {
+  it("renders the invitations table", () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "دعوة مستخدمين" }))
-
-    fireEvent.click(screen.getByLabelText("Retail Expansion"))
-
-    fireEvent.change(screen.getByLabelText("عناوين البريد الإلكتروني"), {
-      target: { value: "new.user@madar.ai" },
-    })
-
-    fireEvent.click(screen.getByRole("button", { name: "إرسال الدعوة" }))
-
-    await waitFor(() => {
-      expect(mockSendInvitationMutateAsync).toHaveBeenCalledWith({
-        organizationId: "org-1",
-        email: "new.user@madar.ai",
-        roleId: "viewer",
-        workspaceId: "ws-2",
-      })
-    })
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "دعوة مستخدمين" })).toBeNull()
-    })
-
-    expect(toastSuccess).toHaveBeenCalledWith("تم إرسال الدعوة إلى 1 مستلم.")
+    expect(screen.getByText("Sara Ahmed")).toBeTruthy()
+    expect(screen.getByText("sara@madar.ai")).toBeTruthy()
+    expect(screen.getByText("Demo Workspace")).toBeTruthy()
   })
 
-  it("sends one invitation per selected workspace when multiple are checked", async () => {
+  it("resends an invitation from row action", async () => {
     render(<AdministrationInvitationsScreen />)
 
-    fireEvent.click(screen.getByRole("button", { name: "دعوة مستخدمين" }))
-
-    fireEvent.click(screen.getByLabelText("Demo Workspace"))
-    fireEvent.click(screen.getByLabelText("Retail Expansion"))
-
-    fireEvent.change(screen.getByLabelText("عناوين البريد الإلكتروني"), {
-      target: { value: "new.user@madar.ai" },
-    })
-
-    fireEvent.click(screen.getByRole("button", { name: "إرسال الدعوة" }))
+    fireEvent.click(screen.getByRole("button", { name: "إعادة إرسال" }))
 
     await waitFor(() => {
-      expect(mockSendInvitationMutateAsync).toHaveBeenCalledTimes(2)
+      expect(mockResendInvitationMutateAsync).toHaveBeenCalledWith("inv-1")
     })
-
-    expect(mockSendInvitationMutateAsync).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      email: "new.user@madar.ai",
-      roleId: "viewer",
-      workspaceId: "ws-1",
-    })
-    expect(mockSendInvitationMutateAsync).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      email: "new.user@madar.ai",
-      roleId: "viewer",
-      workspaceId: "ws-2",
-    })
-
-    await waitFor(() => {
-      expect(toastSuccess).toHaveBeenCalledWith("تم إرسال الدعوة إلى 1 مستلم.")
-    })
+    expect(toastSuccess).toHaveBeenCalledWith("تمت إعادة إرسال الدعوة إلى sara@madar.ai.")
   })
 
   it("cancels an invitation from row action", async () => {

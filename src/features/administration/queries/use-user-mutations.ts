@@ -11,9 +11,12 @@ import type {
   AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
   ReactivateMemberRequestDto,
+  SendMemberPasswordResetRequestDto,
   SetMemberModuleAccessRequestDto,
   SuspendMemberRequestDto,
+  UpdateMemberIdentityRequestDto,
   UpdateMemberProfileRequestDto,
+  UploadMemberAvatarRequestDto,
 } from "@/application/contracts"
 
 export function useUserMutations(organizationId: string | null | undefined) {
@@ -95,6 +98,41 @@ export function useUserMutations(organizationId: string | null | undefined) {
     onSuccess: invalidate,
   })
 
+  const updateIdentity = useMutation({
+    mutationKey: ["administration", "users", "update-identity"],
+    mutationFn: async (request: UpdateMemberIdentityRequestDto) => {
+      try {
+        return await administrationApplicationService.updateMemberIdentity(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  const uploadAvatar = useMutation({
+    mutationKey: ["administration", "users", "upload-avatar"],
+    mutationFn: async (request: UploadMemberAvatarRequestDto) => {
+      try {
+        return await administrationApplicationService.uploadMemberAvatar(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  const sendPasswordReset = useMutation({
+    mutationKey: ["administration", "users", "send-password-reset"],
+    mutationFn: async (request: SendMemberPasswordResetRequestDto) => {
+      try {
+        return await administrationApplicationService.sendMemberPasswordReset(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+  })
+
   return {
     suspendUser,
     reactivateUser,
@@ -102,5 +140,8 @@ export function useUserMutations(organizationId: string | null | undefined) {
     assignCustomRole,
     setModuleAccess,
     updateProfile,
+    updateIdentity,
+    uploadAvatar,
+    sendPasswordReset,
   }
 }

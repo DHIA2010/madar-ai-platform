@@ -125,6 +125,7 @@ export const inviteMemberSchema = z.object({
 export const inviteOrganizationMemberSchema = z.object({
   workspaceId: z.string().uuid().optional(),
   email: z.string().email(),
+  fullName: z.string().min(2).optional(),
   role: z.enum(["owner", "admin", "manager", "analyst", "viewer"]),
   idempotencyKey: z.string().min(8).max(100).optional(),
 })
@@ -167,7 +168,24 @@ export const removeMemberSchema = z.object({
 })
 
 export const updateMemberProfileSchema = z.object({
+  // Targets one specific membership (a member has one per workspace) -- omitted, the command
+  // falls back to an arbitrary membership in the org, which is only safe for a member who has
+  // just one.
+  workspaceId: z.string().uuid().nullable().optional(),
   profile: z.record(z.string(), z.string()),
+})
+
+export const updateMemberIdentitySchema = z.object({
+  fullName: z.string().min(2).optional(),
+})
+
+// Admin-on-a-member counterpart to createMemberDirectSchema's password rule and
+// registerSchema's own -- 12-char minimum kept consistent across every place a password is set.
+export const createMemberDirectSchema = z.object({
+  workspaceIds: z.array(z.string().uuid()).optional(),
+  email: z.string().email(),
+  fullName: z.string().min(2),
+  password: z.string().min(12),
 })
 
 export const updateProfileSchema = z.object({
@@ -179,6 +197,13 @@ export const updateProfileSchema = z.object({
 })
 
 export const uploadAvatarSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+  dataBase64: z.string().min(1),
+})
+
+// Same shape as uploadAvatarSchema -- an admin uploading a photo for another member, not the
+// caller's own avatar.
+export const uploadMemberAvatarSchema = z.object({
   contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
   dataBase64: z.string().min(1),
 })
@@ -512,6 +537,12 @@ export const createCustomerSchema = z.object({
   notes: z.string().max(500).nullable().optional().default(null),
 })
 
+// Real money a cashier collected to top up a customer's prepaid wallet -- see
+// migration 063_customer_wallet.sql.
+export const topUpWalletSchema = z.object({
+  amount: z.number().positive(),
+})
+
 // Per-device settings. Keyed to deviceType via the discriminated union below, so a printer's
 // settings are actually validated against printer fields instead of silently being checked
 // against the scale's shape (and anything that didn't happen to also be a scale field being
@@ -629,12 +660,22 @@ export const createInvoiceItemSchema = z.object({
   quantity: z.number().positive(),
 })
 
+// One settling line -- an invoice can be paid across more than one of these (see
+// PosInvoicesService.create(), migration 062_pos_split_payments.sql).
+export const createInvoicePaymentSchema = z.object({
+  paymentMethodCode: z.string().min(1).max(60),
+  amount: z.number().positive(),
+})
+
 export const createInvoiceSchema = z.object({
   // Null customer name is a deliberate value, not a missing field -- it is how "عميل نقدي"
   // (walk-in, no customer) is recorded.
   customerName: z.string().max(120).nullable().optional().default(null),
   customerPhone: z.string().max(30).nullable().optional().default(null),
-  paymentMethodCode: z.string().min(1).max(60),
+  // A real customer this sale is attributed to -- required whenever a payment line uses a
+  // "credit" (آجل) method, since that amount has to land on an actual account.
+  customerId: z.string().uuid().nullable().optional().default(null),
+  payments: z.array(createInvoicePaymentSchema).min(1),
   discountAmount: z.number().min(0).default(0),
   notes: z.string().max(500).nullable().optional().default(null),
   items: z.array(createInvoiceItemSchema).min(1),

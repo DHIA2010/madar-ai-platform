@@ -32,6 +32,11 @@ export interface InvoiceItem {
   lineTotal: number
 }
 
+export interface InvoicePayment {
+  paymentMethodCode: string
+  amount: number
+}
+
 // Real VAT (Saudi Arabia's statutory 15% rate), not a fabricated figure -- there is no per-
 // organization tax configuration anywhere in the platform yet, so this is the one rate applied.
 export const VAT_RATE = 0.15
@@ -46,8 +51,15 @@ export interface Invoice {
   // empty for any branch without a connected storefront).
   customerName: string | null
   customerPhone: string | null
+  // A real customer this sale is attributed to -- distinct from customerName/customerPhone,
+  // which stay a text snapshot either way. Only set when a payment line deferred an amount to a
+  // real customer's account, or the cashier explicitly picked one.
+  customerId: string | null
   cashierUserId: string | null
+  // The single method's code, or "split" once more than one payments[] line was used -- the real
+  // per-method breakdown always lives in payments.
   paymentMethodCode: string
+  payments: InvoicePayment[]
   subtotalAmount: number
   discountAmount: number
   taxAmount: number
@@ -85,7 +97,8 @@ export interface CreateInvoiceItemInput {
 export interface CreateInvoiceInput {
   customerName: string | null
   customerPhone: string | null
-  paymentMethodCode: string
+  customerId: string | null
+  payments: InvoicePayment[]
   discountAmount: number
   notes: string | null
   items: CreateInvoiceItemInput[]
