@@ -433,7 +433,7 @@ export default function CashierPage() {
   // customer record (picking a synced storefront customer, or free-typing the name, leaves this
   // null). Required for any "credit" (آجل) or "prepaid" (محفظة العميل) amount, since both move a
   // real balance on that customer's own account. selectedCustomer carries their real
-  // balanceDue/walletBalance for the checkout dialog's live context panel.
+  // accountBalance for the checkout dialog's live context panel.
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null)
   // Committed discount configuration -- what the sale actually uses. A percentage is always
@@ -511,9 +511,11 @@ export default function CashierPage() {
   const prepaidAmount = sumByKind("prepaid")
   const needsCustomerForDeferred = deferredAmount > 0 && !customerId
   const needsCustomerForPrepaid = prepaidAmount > 0 && !customerId
-  const walletBalance = selectedCustomer?.walletBalance ?? 0
+  // A negative account balance (the customer already owes money) has nothing available to spend
+  // via the wallet-kind method -- floored at 0 rather than showing a negative "available" figure.
+  const availableBalance = Math.max(0, selectedCustomer?.accountBalance ?? 0)
   const insufficientWallet =
-    prepaidAmount > 0 && customerId !== null && prepaidAmount > walletBalance
+    prepaidAmount > 0 && customerId !== null && prepaidAmount > availableBalance
 
   // Only cash can be handed over in excess and give change back -- a card/transfer/wallet/credit
   // tap is always for the exact amount asked, so any excess there is a real typo, not a tender to
@@ -675,6 +677,7 @@ export default function CashierPage() {
         phone: newCustomerPhone.trim() || null,
         email: null,
         notes: null,
+        region: null,
       })
       toast.success("تم إضافة العميل.")
       setCustomerName(created.name)
@@ -693,13 +696,41 @@ export default function CashierPage() {
   }
 
   // --- Wallet top-up -----------------------------------------------------------------------
-  // Real money a cashier collected in advance -- the only way a customer's wallet_balance ever
-  // grows (see native-customers-service.ts's topUpWallet). Only ever offered for a native
-  // ("Madar") customer, since a synced storefront one has no real wallet column.
+  // Real money a cashier collected in advance, credited to the customer's real unified account
+  // balance -- the exact same real event as a "سند قبض" (receipt), so it submits through that
+  // same endpoint (see native-customers-service.ts's createAccountTransaction). Only ever
+  // offered for a native ("Madar") customer, since a synced storefront one has no real account.
 
   const [topUpCustomer, setTopUpCustomer] = useState<CustomerRecord | null>(null)
   const [topUpAmount, setTopUpAmount] = useState("")
+  const [topUpPaymentMethodCode, setTopUpPaymentMethodCode] = useState("")
   const [toppingUpWallet, setToppingUpWallet] = useState(false)
+
+  // A top-up needs the real enabled catalog too (same data the checkout dialog fetches, just
+  // triggered independently since this dialog can open without ever opening checkout).
+  useEffect(() => {
+    if (!topUpCustomer) return
+    void posPaymentMethodsService
+      .list()
+      .then((methods) => {
+        const enabled = methods.filter((method) => method.enabled)
+        setPaymentMethods(
+          enabled.map((method) => ({
+            code: method.code,
+            name: method.name,
+            subtitle: method.subtitle,
+            kind: method.kind,
+          }))
+        )
+      })
+      .catch(() => setPaymentMethods([]))
+  }, [topUpCustomer])
+
+  // Only a method that's real money handed over can fund a top-up -- آجل/محفظة العميل themselves
+  // would be circular, same rule the backend enforces.
+  const topUpEligibleMethods = paymentMethods.filter((method) =>
+    (["cash", "card", "transfer", "wallet"] as PaymentKind[]).includes(method.kind)
+  )
 
   const submitWalletTopUp = async () => {
     if (!topUpCustomer) return
@@ -708,14 +739,26 @@ export default function CashierPage() {
       toast.error("أدخل مبلغاً صحيحاً.")
       return
     }
+    if (!topUpPaymentMethodCode) {
+      toast.error("اختر طريقة الدفع التي استلمت بها المبلغ.")
+      return
+    }
     setToppingUpWallet(true)
     try {
-      const updated = await customerListService.topUpWallet(topUpCustomer.id, amount)
+      const updated = await customerListService.createReceipt(topUpCustomer.id, {
+        amount,
+        taxInclusive: false,
+        taxAmount: 0,
+        paymentMethodCode: topUpPaymentMethodCode,
+        notes: null,
+        attachments: [],
+      })
       toast.success(`تم شحن محفظة ${updated.name} بمبلغ ${formatAmount(amount)}.`)
       setCustomers((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
       setSelectedCustomer((current) => (current?.id === updated.id ? updated : current))
       setTopUpCustomer(null)
       setTopUpAmount("")
+      setTopUpPaymentMethodCode("")
     } catch {
       toast.error("تعذر شحن المحفظة.")
     } finally {
@@ -1571,7 +1614,7 @@ export default function CashierPage() {
                   <div className="min-w-0 text-right">
                     <p className={cn("text-[11.5px]", MUTED)}>رصيد العميل الحالي</p>
                     <p className="text-[15px] font-bold text-[#2563eb]">
-                      {formatAmount(walletBalance)}
+                      {formatAmount(availableBalance)}
                     </p>
                   </div>
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-[12px] bg-[#eaf1fe] text-[#2563eb]">
@@ -1920,13 +1963,15 @@ export default function CashierPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {customer.platform === "Madar" ? (
-                          <span className="rounded-full bg-[#eafaf0] px-2 py-0.5 text-[10px] font-semibold text-[#0f9d58]">
-                            محفظة {formatAmount(customer.walletBalance ?? 0)}
-                          </span>
-                        ) : null}
-                        {customer.platform === "Madar" && (customer.balanceDue ?? 0) > 0 ? (
-                          <span className="rounded-full bg-[#fef2f2] px-2 py-0.5 text-[10px] font-semibold text-[#dc2626]">
-                            مستحق {formatAmount(customer.balanceDue ?? 0)}
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              (customer.accountBalance ?? 0) >= 0
+                                ? "bg-[#eafaf0] text-[#0f9d58]"
+                                : "bg-[#fef2f2] text-[#dc2626]"
+                            )}
+                          >
+                            رصيد {formatAmount(Math.abs(customer.accountBalance ?? 0))}
                           </span>
                         ) : null}
                         {customer.platform === "Madar" ? (
@@ -1959,39 +2004,72 @@ export default function CashierPage() {
       </Dialog>
 
       {/* Wallet top-up -- real money collected in advance, credited to a native customer's real
-          wallet_balance (see native-customers-service.ts's topUpWallet). */}
+          unified account balance via the same "سند قبض" endpoint (see
+          native-customers-service.ts's createAccountTransaction). */}
       <Dialog
         open={topUpCustomer !== null}
-        onOpenChange={(open) => !toppingUpWallet && !open && setTopUpCustomer(null)}
+        onOpenChange={(open) => {
+          if (toppingUpWallet || open) return
+          setTopUpCustomer(null)
+          setTopUpAmount("")
+          setTopUpPaymentMethodCode("")
+        }}
       >
-        <DialogContent className="sm:max-w-[22rem] [direction:rtl]">
+        <DialogContent className="sm:max-w-[24rem] [direction:rtl]">
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
               شحن محفظة {topUpCustomer?.name}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              الرصيد الحالي: {formatAmount(topUpCustomer?.walletBalance ?? 0)}
+              الرصيد الحالي: {formatAmount(topUpCustomer?.accountBalance ?? 0)}
             </DialogDescription>
           </DialogHeader>
 
-          <div>
-            <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>المبلغ</Label>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              dir="ltr"
-              value={topUpAmount}
-              onChange={(event) => setTopUpAmount(event.target.value)}
-              placeholder="0.00"
-              className={cn(FIELD_CLASS, "h-11 text-left")}
-            />
+          <div className="flex flex-col gap-3">
+            <div>
+              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                المبلغ
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                dir="ltr"
+                value={topUpAmount}
+                onChange={(event) => setTopUpAmount(event.target.value)}
+                placeholder="0.00"
+                className={cn(FIELD_CLASS, "h-11 text-left")}
+              />
+            </div>
+            <div>
+              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                استلمت المبلغ عبر
+              </Label>
+              {topUpEligibleMethods.length === 0 ? (
+                <p className="text-[11px] text-[#e0484d]">
+                  لا توجد طريقة دفع مناسبة مفعّلة لهذا الفرع.
+                </p>
+              ) : (
+                <AppSelect value={topUpPaymentMethodCode} onValueChange={setTopUpPaymentMethodCode}>
+                  <AppSelectTrigger className={cn(FIELD_CLASS, "h-11 w-full")}>
+                    <AppSelectValue placeholder="اختر طريقة الدفع" />
+                  </AppSelectTrigger>
+                  <AppSelectContent>
+                    {topUpEligibleMethods.map((method) => (
+                      <AppSelectItem key={method.code} value={method.code}>
+                        {method.name}
+                      </AppSelectItem>
+                    ))}
+                  </AppSelectContent>
+                </AppSelect>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
             <Button
               className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
-              disabled={toppingUpWallet || !(Number(topUpAmount) > 0)}
+              disabled={toppingUpWallet || !(Number(topUpAmount) > 0) || !topUpPaymentMethodCode}
               onClick={() => void submitWalletTopUp()}
             >
               {toppingUpWallet ? "جارٍ الشحن..." : "شحن المحفظة"}
@@ -2000,7 +2078,11 @@ export default function CashierPage() {
               variant="outline"
               className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
               disabled={toppingUpWallet}
-              onClick={() => setTopUpCustomer(null)}
+              onClick={() => {
+                setTopUpCustomer(null)
+                setTopUpAmount("")
+                setTopUpPaymentMethodCode("")
+              }}
             >
               إلغاء
             </Button>

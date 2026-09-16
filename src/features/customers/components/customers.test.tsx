@@ -1,9 +1,23 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { CustomerDetail, CustomerRecord } from "../types"
-import { CustomerProfile } from "./customer-profile"
+import { ROUTES } from "@/constants/routes"
+
+import type { CustomerRecord } from "../types"
 import { CustomersOverview } from "./customers-overview"
+
+const mockRouterPush = vi.fn()
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}))
+
+const { toastSuccess, toastError } = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}))
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccess, error: toastError },
+}))
 
 const MOCK_CUSTOMERS: CustomerRecord[] = [
   {
@@ -19,8 +33,8 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
     lastPurchaseAt: "2026-08-18T00:00:00.000Z",
     status: "active",
     segment: "VIP",
-    balanceDue: null,
-    walletBalance: null,
+    accountBalance: null,
+    region: null,
   },
   {
     id: "salla:2",
@@ -35,48 +49,61 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
     lastPurchaseAt: "2026-08-01T00:00:00.000Z",
     status: "active",
     segment: "One Time",
-    balanceDue: null,
-    walletBalance: null,
+    accountBalance: null,
+    region: null,
   },
 ]
 
-const MOCK_DETAIL: CustomerDetail = {
-  ...MOCK_CUSTOMERS[0],
-  orders: [
-    {
-      orderId: "ord_1",
-      status: "completed",
-      revenue: 349,
-      currency: "SAR",
-      itemCount: 2,
-      createdAt: "2026-08-18T00:00:00.000Z",
-    },
-  ],
-  productsPurchased: ["Abaya"],
-  averageOrderValue: 349,
-}
-
-const listCustomers = vi.fn()
-const getCustomer = vi.fn()
-
-vi.mock("../services", () => ({
-  customerListService: {
-    listCustomers: (...args: unknown[]) => listCustomers(...args),
-    getCustomer: (...args: unknown[]) => getCustomer(...args),
-  },
+// customers-overview.tsx imports customerListService directly from
+// "../services/customer-list.service" (for createCustomer/updateCustomer/deleteCustomer), while
+// the useCustomers/useCustomer hooks import the same singleton via the "../services" barrel --
+// both module specifiers need mocking so every real call site is actually intercepted. vi.mock
+// factories are hoisted above the file, so the mock fns and the shared object built from them
+// must be created via vi.hoisted rather than as plain top-level consts.
+const { listCustomers, updateCustomer, deleteCustomer, customerListServiceMock } = vi.hoisted(
+  () => {
+    const listCustomers = vi.fn()
+    const updateCustomer = vi.fn()
+    const deleteCustomer = vi.fn()
+    return {
+      listCustomers,
+      updateCustomer,
+      deleteCustomer,
+      customerListServiceMock: {
+        listCustomers: (...args: unknown[]) => listCustomers(...args),
+        updateCustomer: (...args: unknown[]) => updateCustomer(...args),
+        deleteCustomer: (...args: unknown[]) => deleteCustomer(...args),
+      },
+    }
+  }
+)
+vi.mock("../services", () => ({ customerListService: customerListServiceMock }))
+vi.mock("../services/customer-list.service", () => ({
+  customerListService: customerListServiceMock,
 }))
+
+const NATIVE_CUSTOMER: CustomerRecord = {
+  ...MOCK_CUSTOMERS[0],
+  id: "native-1",
+  name: "عميل مدار",
+  platform: "Madar",
+}
 
 beforeEach(() => {
   listCustomers.mockReset()
-  getCustomer.mockReset()
+  updateCustomer.mockReset()
+  deleteCustomer.mockReset()
+  mockRouterPush.mockReset()
+  toastSuccess.mockReset()
+  toastError.mockReset()
 })
 
 describe("CustomersOverview", () => {
-  it("renders the page header and real customer rows once loaded", async () => {
+  it("renders the Arabic page header and real customer rows once loaded", async () => {
     listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
 
     render(<CustomersOverview />)
-    expect(screen.getByText("Customers")).toBeTruthy()
+    expect(screen.getByText("العملاء")).toBeTruthy()
     expect(await screen.findByText("Sara Al-Amri")).toBeTruthy()
     expect(screen.getByRole("table")).toBeTruthy()
   })
@@ -85,7 +112,7 @@ describe("CustomersOverview", () => {
     listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
     render(<CustomersOverview />)
     await screen.findByText("Sara Al-Amri")
-    expect(screen.getAllByText("Status").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("الحالة").length).toBeGreaterThan(0)
   })
 
   it("filters by search query", async () => {
@@ -93,46 +120,61 @@ describe("CustomersOverview", () => {
     render(<CustomersOverview />)
     await screen.findByText("Sara Al-Amri")
 
-    const input = screen.getByRole("textbox", { name: /search customers/i })
+    const input = screen.getByRole("textbox", { name: /البحث عن العملاء/ })
     fireEvent.change(input, { target: { value: "khalid" } })
     expect(screen.getByText("Khalid Al-Rashidi")).toBeTruthy()
     expect(screen.queryByText("Sara Al-Amri")).toBeNull()
   })
 
-  it("shows View 360 links for each customer row", async () => {
+  it("does not navigate anywhere for a synced customer -- no page exists to show them", async () => {
     listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
     render(<CustomersOverview />)
-    await screen.findByText("Sara Al-Amri")
-    const links = screen.getAllByRole("link", { name: /view 360/i })
-    expect(links.length).toBeGreaterThan(0)
+    const row = (await screen.findByText("Sara Al-Amri")).closest("tr")
+    expect(row?.querySelector("a")).toBeNull()
+    fireEvent.click(row as HTMLElement)
+    expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
-  it("shows clear filters button when filters are active", async () => {
-    listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
+  it("opens a native customer's real wallet statement when the row is clicked", async () => {
+    const nativeCustomer: CustomerRecord = {
+      ...MOCK_CUSTOMERS[0],
+      id: "native-1",
+      name: "عميل مدار",
+      platform: "Madar",
+    }
+    listCustomers.mockResolvedValue([nativeCustomer])
     render(<CustomersOverview />)
-    await screen.findByText("Sara Al-Amri")
-
-    const input = screen.getByRole("textbox", { name: /search customers/i })
-    fireEvent.change(input, { target: { value: "khalid" } })
-    expect(screen.getByRole("button", { name: /clear filters/i })).toBeTruthy()
+    const row = (await screen.findByText("عميل مدار")).closest("tr")
+    fireEvent.click(row as HTMLElement)
+    expect(mockRouterPush).toHaveBeenCalledWith(ROUTES.customerStatement("native-1"))
   })
 
-  it("clears search when clear button is clicked", async () => {
+  it("shows a clear-filters button once a filter is active", async () => {
     listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
     render(<CustomersOverview />)
     await screen.findByText("Sara Al-Amri")
 
-    const input = screen.getByRole("textbox", { name: /search customers/i })
+    const input = screen.getByRole("textbox", { name: /البحث عن العملاء/ })
     fireEvent.change(input, { target: { value: "khalid" } })
-    const clearButton = screen.getByRole("button", { name: /clear search/i })
-    fireEvent.click(clearButton)
-    expect((input as HTMLInputElement).value).toBe("")
+    expect(screen.getByRole("button", { name: /مسح الفلاتر/ })).toBeTruthy()
+  })
+
+  it("clears the search when the clear-filters button is clicked", async () => {
+    listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
+    render(<CustomersOverview />)
+    await screen.findByText("Sara Al-Amri")
+
+    const input = screen.getByRole("textbox", { name: /البحث عن العملاء/ }) as HTMLInputElement
+    fireEvent.change(input, { target: { value: "khalid" } })
+    fireEvent.click(screen.getByRole("button", { name: /مسح الفلاتر/ }))
+    expect(input.value).toBe("")
+    expect(screen.getByText("Sara Al-Amri")).toBeTruthy()
   })
 
   it("shows an empty state when no customers have synced yet", async () => {
     listCustomers.mockResolvedValue([])
     render(<CustomersOverview />)
-    expect(await screen.findByText(/no customers synced yet/i)).toBeTruthy()
+    expect(await screen.findByText(/لا يوجد عملاء متزامنون بعد/)).toBeTruthy()
   })
 
   it("shows empty state when no customers match filters", async () => {
@@ -140,9 +182,9 @@ describe("CustomersOverview", () => {
     render(<CustomersOverview />)
     await screen.findByText("Sara Al-Amri")
 
-    const input = screen.getByRole("textbox", { name: /search customers/i })
+    const input = screen.getByRole("textbox", { name: /البحث عن العملاء/ })
     fireEvent.change(input, { target: { value: "zzznomatch99999" } })
-    expect(screen.getByText(/no customers matched/i)).toBeTruthy()
+    expect(screen.getByText(/لا يوجد عملاء مطابقون للفلاتر/)).toBeTruthy()
   })
 
   it("shows a load error message when the request fails", async () => {
@@ -150,48 +192,65 @@ describe("CustomersOverview", () => {
     render(<CustomersOverview />)
     expect(await screen.findByText(/couldn't load customers/i)).toBeTruthy()
   })
-})
 
-describe("CustomerProfile", () => {
-  it("renders the identity section for a real customer", async () => {
-    getCustomer.mockResolvedValue(MOCK_DETAIL)
-    render(<CustomerProfile customerId="salla:1" />)
-    expect((await screen.findAllByText("Sara Al-Amri")).length).toBeGreaterThan(0)
+  it("shows edit and delete icon buttons only for a native customer, never a synced one", async () => {
+    listCustomers.mockResolvedValue([...MOCK_CUSTOMERS, NATIVE_CUSTOMER])
+    render(<CustomersOverview />)
+    await screen.findByText("عميل مدار")
+
+    expect(screen.getByRole("button", { name: "تعديل عميل مدار" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "حذف عميل مدار" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /تعديل Sara Al-Amri/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: /حذف Sara Al-Amri/ })).toBeNull()
   })
 
-  it("renders section headers for real-data-only sections", async () => {
-    getCustomer.mockResolvedValue(MOCK_DETAIL)
-    render(<CustomerProfile customerId="salla:1" />)
-    await screen.findAllByText("Sara Al-Amri")
-    expect(screen.getByText("Identity")).toBeTruthy()
-    expect(screen.getByText("Commerce")).toBeTruthy()
-    expect(screen.queryByText("Attribution")).toBeNull()
-    expect(screen.queryByText("Website Activity")).toBeNull()
-    expect(screen.queryByText("Marketing Activity")).toBeNull()
+  it("edits a native customer's name and sends only the changed field", async () => {
+    listCustomers.mockResolvedValue([NATIVE_CUSTOMER])
+    updateCustomer.mockResolvedValue({ ...NATIVE_CUSTOMER, name: "اسم جديد" })
+    render(<CustomersOverview />)
+    await screen.findByText("عميل مدار")
+
+    fireEvent.click(screen.getByRole("button", { name: "تعديل عميل مدار" }))
+    const nameInput = await screen.findByDisplayValue("عميل مدار")
+    fireEvent.change(nameInput, { target: { value: "اسم جديد" } })
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }))
+
+    await waitFor(() => {
+      expect(updateCustomer).toHaveBeenCalledWith("native-1", { name: "اسم جديد" })
+    })
   })
 
-  it("renders back to customers link", async () => {
-    getCustomer.mockResolvedValue(MOCK_DETAIL)
-    render(<CustomerProfile customerId="salla:1" />)
-    await screen.findAllByText("Sara Al-Amri")
-    expect(screen.getByRole("link", { name: /back to customers/i })).toBeTruthy()
+  it("deletes a native customer after confirming and refetches the list", async () => {
+    listCustomers.mockResolvedValueOnce([NATIVE_CUSTOMER]).mockResolvedValueOnce([])
+    deleteCustomer.mockResolvedValue(undefined)
+    render(<CustomersOverview />)
+    await screen.findByText("عميل مدار")
+
+    fireEvent.click(screen.getByRole("button", { name: "حذف عميل مدار" }))
+    fireEvent.click(await screen.findByRole("button", { name: "حذف" }))
+
+    await waitFor(() => {
+      expect(deleteCustomer).toHaveBeenCalledWith("native-1")
+    })
+    await waitFor(() => {
+      expect(listCustomers).toHaveBeenCalledTimes(2)
+    })
   })
 
-  it("shows not-found state for unknown customer", async () => {
-    getCustomer.mockResolvedValue(null)
-    render(<CustomerProfile customerId="salla:unknown" />)
-    expect(await screen.findByText(/customer not found/i)).toBeTruthy()
-  })
+  it("shows a real error explaining a non-zero balance blocked deletion", async () => {
+    listCustomers.mockResolvedValue([NATIVE_CUSTOMER])
+    deleteCustomer.mockRejectedValue({
+      code: "CUSTOMER_HAS_NONZERO_BALANCE",
+      details: { accountBalance: 75 },
+    })
+    render(<CustomersOverview />)
+    await screen.findByText("عميل مدار")
 
-  it("renders the segment badge for the customer", async () => {
-    getCustomer.mockResolvedValue(MOCK_DETAIL)
-    render(<CustomerProfile customerId="salla:1" />)
-    expect((await screen.findAllByText("VIP")).length).toBeGreaterThan(0)
-  })
+    fireEvent.click(screen.getByRole("button", { name: "حذف عميل مدار" }))
+    fireEvent.click(await screen.findByRole("button", { name: "حذف" }))
 
-  it("renders real order rows in the Commerce section", async () => {
-    getCustomer.mockResolvedValue(MOCK_DETAIL)
-    render(<CustomerProfile customerId="salla:1" />)
-    expect(await screen.findByText("ord_1")).toBeTruthy()
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining("75"))
+    })
   })
 })

@@ -268,8 +268,8 @@ describe("point-of-sale invoices", () => {
     const detailResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}`, {
       headers: authHeaders(token),
     })
-    const detail = (await detailResponse.json()) as { balanceDue: number }
-    expect(detail.balanceDue).toBe(16.8)
+    const detail = (await detailResponse.json()) as { accountBalance: number }
+    expect(detail.accountBalance).toBe(-16.8)
   })
 
   it("rejects a deferred amount with no real customer attached", async () => {
@@ -295,14 +295,14 @@ describe("point-of-sale invoices", () => {
     })
     const customer = (await customerResponse.json()) as { id: string }
 
-    const topUpResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}/wallet-top-ups`, {
+    const receiptResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}/receipt-vouchers`, {
       method: "POST",
       headers: authHeaders(token),
-      body: JSON.stringify({ amount: 100 }),
+      body: JSON.stringify({ amount: 100, paymentMethodCode: "cash" }),
     })
-    expect(topUpResponse.status).toBe(200)
-    const toppedUp = (await topUpResponse.json()) as { walletBalance: number }
-    expect(toppedUp.walletBalance).toBe(100)
+    expect(receiptResponse.status).toBe(201)
+    const receipted = (await receiptResponse.json()) as { accountBalance: number }
+    expect(receipted.accountBalance).toBe(100)
 
     // Total 36.80, all spent from the wallet.
     const created = await createInvoice(token, {
@@ -315,8 +315,8 @@ describe("point-of-sale invoices", () => {
     const detailResponse = await fetch(`${baseUrl}/v1/customers/${customer.id}`, {
       headers: authHeaders(token),
     })
-    const detail = (await detailResponse.json()) as { walletBalance: number }
-    expect(detail.walletBalance).toBe(63.2)
+    const detail = (await detailResponse.json()) as { accountBalance: number }
+    expect(detail.accountBalance).toBe(63.2)
   })
 
   it("rejects a wallet payment larger than the customer's real balance", async () => {

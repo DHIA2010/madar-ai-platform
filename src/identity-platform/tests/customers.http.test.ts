@@ -488,4 +488,621 @@ describe("native customers: authored in Madar rather than synced from a storefro
     })
     expect(response.status).toBe(401)
   })
+
+  it("stores a real region entered at creation", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-region@madar.test",
+      "Region Customers"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001680"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Region" })
+
+    const created = await createCustomer(login, {
+      name: "عميل الرياض",
+      phone: null,
+      email: null,
+      notes: null,
+      region: "الرياض",
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({ region: "الرياض" })
+  })
+})
+
+async function enablePaymentMethod(login: { session: { accessToken: string } }, code: string) {
+  await fetch(`${baseUrl}/v1/pos/payment-methods/${code}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(login), "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, feePercent: 0, merchantId: null, apiKey: null }),
+  })
+}
+
+describe("customer unified account: receipts, payments, sales, and returns on one real balance", () => {
+  it("gives a receipt a real sequential reference and credits the account (also how a wallet top-up now works)", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-receipt@madar.test",
+      "Account Receipt"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001690"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "cash")
+
+    const created = await createCustomer(login, {
+      name: "عميل الحساب",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    const receipt = await fetch(`${baseUrl}/v1/customers/${customerId}/receipt-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 150, paymentMethodCode: "cash" }),
+    })
+    expect(receipt.status).toBe(201)
+    expect(await receipt.json()).toMatchObject({ accountBalance: 150 })
+
+    const statementResponse = await fetch(
+      `${baseUrl}/v1/customers/${customerId}/account-transactions`,
+      { headers: authHeaders(login) }
+    )
+    expect(statementResponse.status).toBe(200)
+    const statement = (await statementResponse.json()) as {
+      transactions: Array<Record<string, unknown>>
+      totalCredits: number
+      totalDebits: number
+      transactionCount: number
+    }
+    expect(statement.transactions).toHaveLength(1)
+    expect(statement.transactions[0]).toMatchObject({
+      type: "receipt",
+      amount: 150,
+      paymentMethodCode: "cash",
+      balanceAfter: 150,
+    })
+    expect(statement.transactions[0].reference).toMatch(/^RCV-\d{5}$/)
+    expect(statement).toMatchObject({ totalCredits: 150, totalDebits: 0, transactionCount: 1 })
+  })
+
+  it("rejects a receipt through a method that isn't real money handed over", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-badreceipt@madar.test",
+      "Account Bad Receipt"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001691"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "customer_credit")
+
+    const created = await createCustomer(login, {
+      name: "عميل آجل",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+
+    const receipt = await fetch(`${baseUrl}/v1/customers/${created.body.id}/receipt-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      // آجل (credit) can't fund a receipt -- it would be circular.
+      body: JSON.stringify({ amount: 50, paymentMethodCode: "customer_credit" }),
+    })
+    expect(receipt.status).toBe(400)
+    expect(await receipt.json()).toMatchObject({ code: "CUSTOMER_ACCOUNT_INVALID_RECEIPT_METHOD" })
+  })
+
+  it("gives a payment voucher a real sequential reference and debits the account", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-payment@madar.test",
+      "Account Payment"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001692"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "bank_transfer")
+
+    const created = await createCustomer(login, {
+      name: "عميل السند",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    const voucher = await fetch(`${baseUrl}/v1/customers/${customerId}/payment-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 500, paymentMethodCode: "bank_transfer" }),
+    })
+    expect(voucher.status).toBe(201)
+    expect(await voucher.json()).toMatchObject({ accountBalance: -500 })
+
+    const detailResponse = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await detailResponse.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: -500,
+    })
+  })
+
+  it("rejects a payment voucher through a method that isn't a real disbursement channel", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-badpayment@madar.test",
+      "Account Bad Payment"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001693"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "customer_wallet")
+
+    const created = await createCustomer(login, {
+      name: "عميل غير صالح",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+
+    const voucher = await fetch(`${baseUrl}/v1/customers/${created.body.id}/payment-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      // "customer_wallet" is a customer-facing collection channel, not something the business
+      // pays out through.
+      body: JSON.stringify({ amount: 50, paymentMethodCode: "customer_wallet" }),
+    })
+    expect(voucher.status).toBe(400)
+    expect(await voucher.json()).toMatchObject({ code: "CUSTOMER_ACCOUNT_INVALID_PAYMENT_METHOD" })
+  })
+
+  it("debits the account with a real 'sale' ledger entry when a POS sale defers to آجل", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-creditsale@madar.test",
+      "Account Credit Sale"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001694"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "customer_credit")
+
+    const created = await createCustomer(login, {
+      name: "عميل بيع آجل",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    // Total (incl. 15% VAT) is 517.50, all deferred -- debits the customer's real account.
+    const invoiceResponse = await fetch(`${baseUrl}/v1/pos/invoices`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({
+        customerName: "عميل بيع آجل",
+        customerId,
+        payments: [{ paymentMethodCode: "customer_credit", amount: 517.5 }],
+        discountAmount: 0,
+        notes: null,
+        items: [{ productId: null, productName: "بضاعة آجلة", unitPrice: 450, quantity: 1 }],
+      }),
+    })
+    expect(invoiceResponse.status).toBe(201)
+    const invoiceNumber = String((await invoiceResponse.json()).invoiceNumber)
+
+    const detailResponse = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await detailResponse.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: -517.5,
+    })
+
+    const statementResponse = await fetch(
+      `${baseUrl}/v1/customers/${customerId}/account-transactions`,
+      { headers: authHeaders(login) }
+    )
+    const statement = (await statementResponse.json()) as {
+      transactions: Array<Record<string, unknown>>
+    }
+    expect(statement.transactions).toHaveLength(1)
+    expect(statement.transactions[0]).toMatchObject({
+      type: "sale",
+      amount: 517.5,
+      balanceAfter: -517.5,
+      reference: invoiceNumber,
+      invoiceNumber,
+    })
+  })
+
+  it("debits the account for a wallet-funded sale and rejects one that exceeds the real balance", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-walletsale@madar.test",
+      "Account Wallet Sale"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001695"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "cash")
+    await enablePaymentMethod(login, "customer_wallet")
+
+    const created = await createCustomer(login, {
+      name: "عميل بيع محفظة",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    await fetch(`${baseUrl}/v1/customers/${customerId}/receipt-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 100, paymentMethodCode: "cash" }),
+    })
+
+    const sale = await fetch(`${baseUrl}/v1/pos/invoices`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({
+        customerName: "عميل بيع محفظة",
+        customerId,
+        payments: [{ paymentMethodCode: "customer_wallet", amount: 11.5 }],
+        discountAmount: 0,
+        notes: null,
+        items: [{ productId: null, productName: "قهوة", unitPrice: 10, quantity: 1 }],
+      }),
+    })
+    expect(sale.status).toBe(201)
+
+    const afterSale = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await afterSale.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: 88.5,
+    })
+
+    // 100 exceeds the real 88.50 remaining -- must be rejected, not silently allowed to go
+    // negative through the wallet-kind method.
+    const tooMuch = await fetch(`${baseUrl}/v1/pos/invoices`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({
+        customerName: "عميل بيع محفظة",
+        customerId,
+        payments: [{ paymentMethodCode: "customer_wallet", amount: 100 }],
+        discountAmount: 0,
+        notes: null,
+        items: [{ productId: null, productName: "غالي", unitPrice: 86.96, quantity: 1 }],
+      }),
+    })
+    expect(tooMuch.status).toBe(400)
+    expect(await tooMuch.json()).toMatchObject({ code: "POS_INVOICE_INSUFFICIENT_WALLET_BALANCE" })
+  })
+
+  it("credits the FULL invoice total back to the account when it is returned, regardless of how it was originally paid", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-return@madar.test",
+      "Account Return"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001696"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "cash")
+
+    const created = await createCustomer(login, {
+      name: "عميل الإرجاع",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    // Paid entirely in cash -- never touches the account at sale time -- but a return still
+    // credits the full total back as real store credit.
+    const invoiceResponse = await fetch(`${baseUrl}/v1/pos/invoices`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({
+        customerName: "عميل الإرجاع",
+        customerId,
+        payments: [{ paymentMethodCode: "cash", amount: 23 }],
+        discountAmount: 0,
+        notes: null,
+        items: [{ productId: null, productName: "منتج", unitPrice: 20, quantity: 1 }],
+      }),
+    })
+    expect(invoiceResponse.status).toBe(201)
+    const invoice = (await invoiceResponse.json()) as { id: string; invoiceNumber: string }
+
+    const beforeReturn = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await beforeReturn.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: 0,
+    })
+
+    const returned = await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/status`, {
+      method: "PATCH",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ status: "returned" }),
+    })
+    expect(returned.status).toBe(200)
+
+    const afterReturn = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await afterReturn.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: 23,
+    })
+
+    const statementResponse = await fetch(
+      `${baseUrl}/v1/customers/${customerId}/account-transactions`,
+      { headers: authHeaders(login) }
+    )
+    const statement = (await statementResponse.json()) as {
+      transactions: Array<Record<string, unknown>>
+    }
+    expect(statement.transactions).toHaveLength(1)
+    expect(statement.transactions[0]).toMatchObject({
+      type: "return",
+      amount: 23,
+      balanceAfter: 23,
+      invoiceNumber: invoice.invoiceNumber,
+    })
+    expect(statement.transactions[0].reference).toMatch(/^RET-\d{5}$/)
+
+    // Returning the same invoice again must not credit the account a second time.
+    await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/status`, {
+      method: "PATCH",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ status: "returned" }),
+    })
+    const afterSecondReturn = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await afterSecondReturn.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: 23,
+    })
+  })
+
+  it("computes a real running balance across a receipt, a payment, a credit sale, and a return", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-account-running@madar.test",
+      "Account Running Balance"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001697"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Account",
+    })
+    await enablePaymentMethod(login, "cash")
+    await enablePaymentMethod(login, "bank_transfer")
+    await enablePaymentMethod(login, "customer_credit")
+
+    const created = await createCustomer(login, {
+      name: "عميل شامل",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    // +300 (receipt) -> balance 300
+    await fetch(`${baseUrl}/v1/customers/${customerId}/receipt-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 300, paymentMethodCode: "cash" }),
+    })
+    // -100 (payment voucher) -> balance 200
+    await fetch(`${baseUrl}/v1/customers/${customerId}/payment-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 100, paymentMethodCode: "bank_transfer" }),
+    })
+    // -57.50 (credit sale, unitPrice 50 incl. 15% VAT) -> balance 142.50
+    const invoiceResponse = await fetch(`${baseUrl}/v1/pos/invoices`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({
+        customerName: "عميل شامل",
+        customerId,
+        payments: [{ paymentMethodCode: "customer_credit", amount: 57.5 }],
+        discountAmount: 0,
+        notes: null,
+        items: [{ productId: null, productName: "غرض", unitPrice: 50, quantity: 1 }],
+      }),
+    })
+    const invoice = (await invoiceResponse.json()) as { id: string }
+    // +57.50 (return of that same sale) -> balance 200
+    await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/status`, {
+      method: "PATCH",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ status: "returned" }),
+    })
+
+    const detailResponse = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect((await detailResponse.json()) as { accountBalance: number }).toMatchObject({
+      accountBalance: 200,
+    })
+
+    const statementResponse = await fetch(
+      `${baseUrl}/v1/customers/${customerId}/account-transactions`,
+      { headers: authHeaders(login) }
+    )
+    const statement = (await statementResponse.json()) as {
+      transactions: Array<Record<string, unknown>>
+      totalCredits: number
+      totalDebits: number
+      transactionCount: number
+    }
+    // Newest first.
+    expect(statement.transactions).toHaveLength(4)
+    expect(statement.transactions[0]).toMatchObject({ type: "return", balanceAfter: 200 })
+    expect(statement.transactions[1]).toMatchObject({ type: "sale", balanceAfter: 142.5 })
+    expect(statement.transactions[2]).toMatchObject({ type: "payment", balanceAfter: 200 })
+    expect(statement.transactions[3]).toMatchObject({ type: "receipt", balanceAfter: 300 })
+    expect(statement).toMatchObject({
+      totalCredits: 357.5,
+      totalDebits: 157.5,
+      transactionCount: 4,
+    })
+  })
+})
+
+describe("editing and deleting a native customer", () => {
+  it("updates only the fields sent, leaving the rest untouched", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-edit@madar.test",
+      "Customer Edit"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001710"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Edit" })
+
+    const created = await createCustomer(login, {
+      name: "قبل التعديل",
+      phone: "0500000001",
+      email: "before@example.com",
+      notes: "ملاحظة أصلية",
+      region: "جدة",
+    })
+    const customerId = String(created.body.id)
+
+    const updated = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      method: "PATCH",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ name: "بعد التعديل", region: "الرياض" }),
+    })
+    expect(updated.status).toBe(200)
+    expect(await updated.json()).toMatchObject({
+      name: "بعد التعديل",
+      region: "الرياض",
+      phone: "0500000001",
+      email: "before@example.com",
+    })
+  })
+
+  it("rejects deleting a customer whose real account balance is not zero", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-delete-blocked@madar.test",
+      "Customer Delete Blocked"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001711"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Delete" })
+    await enablePaymentMethod(login, "cash")
+
+    const created = await createCustomer(login, {
+      name: "عميل برصيد",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    await fetch(`${baseUrl}/v1/customers/${customerId}/receipt-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 75, paymentMethodCode: "cash" }),
+    })
+
+    const deleted = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      method: "DELETE",
+      headers: authHeaders(login),
+    })
+    expect(deleted.status).toBe(409)
+    expect(await deleted.json()).toMatchObject({
+      code: "CUSTOMER_HAS_NONZERO_BALANCE",
+      details: { accountBalance: 75 },
+    })
+
+    // Still there, untouched.
+    const stillThere = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect(stillThere.status).toBe(200)
+  })
+
+  it("deletes a customer once their real balance is settled back to zero", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-delete-settled@madar.test",
+      "Customer Delete Settled"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001712"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Delete" })
+    await enablePaymentMethod(login, "cash")
+    await enablePaymentMethod(login, "bank_transfer")
+
+    const created = await createCustomer(login, {
+      name: "عميل تمت تسويته",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+    const customerId = String(created.body.id)
+
+    await fetch(`${baseUrl}/v1/customers/${customerId}/receipt-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 75, paymentMethodCode: "cash" }),
+    })
+    await fetch(`${baseUrl}/v1/customers/${customerId}/payment-vouchers`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ amount: 75, paymentMethodCode: "bank_transfer" }),
+    })
+
+    const deleted = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      method: "DELETE",
+      headers: authHeaders(login),
+    })
+    expect(deleted.status).toBe(204)
+
+    const goneResponse = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
+      headers: authHeaders(login),
+    })
+    expect(goneResponse.status).toBe(404)
+  })
+
+  it("deletes a customer with zero balance immediately", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-delete-zero@madar.test",
+      "Customer Delete Zero"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001713"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Delete" })
+
+    const created = await createCustomer(login, {
+      name: "عميل بدون رصيد",
+      phone: null,
+      email: null,
+      notes: null,
+    })
+
+    const deleted = await fetch(`${baseUrl}/v1/customers/${created.body.id}`, {
+      method: "DELETE",
+      headers: authHeaders(login),
+    })
+    expect(deleted.status).toBe(204)
+  })
 })

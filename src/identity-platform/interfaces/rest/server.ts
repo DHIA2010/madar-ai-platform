@@ -96,8 +96,9 @@ import {
   closeShiftSchema,
   recordCashMovementSchema,
   createInvoiceSchema,
+  createBalanceVoucherSchema,
   createCustomerSchema,
-  topUpWalletSchema,
+  updateCustomerSchema,
   holdOrderSchema,
   invoiceStatusSchema,
   previewCampaignLinkSchema,
@@ -545,9 +546,10 @@ export function createIdentityApiServer(
   const customersAggregationService = container.infrastructure.database
     ? new CustomersAggregationService(container.infrastructure.database)
     : null
-  const nativeCustomersService = container.infrastructure.database
-    ? new NativeCustomersService(container.infrastructure.database)
-    : null
+  const nativeCustomersService =
+    container.infrastructure.database && posPaymentMethodsService
+      ? new NativeCustomersService(container.infrastructure.database, posPaymentMethodsService)
+      : null
   const ordersAggregationService = container.infrastructure.database
     ? new OrdersAggregationService(container.infrastructure.database)
     : null
@@ -3057,6 +3059,7 @@ export function createIdentityApiServer(
             email: payload.email,
             phone: payload.phone,
             notes: payload.notes,
+            region: payload.region,
           })
           return send(201, toNormalizedCustomer(created))
         }
@@ -3067,11 +3070,13 @@ export function createIdentityApiServer(
         const customerId = decodeURIComponent(customerDetailMatch[1])
 
         // A native customer's id is a plain uuid; a synced customer's id is always
-        // "provider:entityId" -- checked first so a native id never reaches the provider-only
-        // aggregation lookup, which would otherwise reject it as an invalid customer id.
+        // "provider:entityId" -- checked first, and returned as 404 rather than falling through
+        // when not found, so a native id never reaches the provider-only aggregation lookup
+        // below, which would otherwise reject it as an invalid (not merely missing) customer id.
         if (nativeCustomersService && NATIVE_CUSTOMER_ID_PATTERN.test(customerId)) {
           const native = await nativeCustomersService.getById(actor.organizationId, customerId)
           if (native) return send(200, toNormalizedCustomerDetail(native))
+          return send(404, { code: "CUSTOMER_NOT_FOUND", message: "Customer not found." })
         }
 
         if (!customersAggregationService) {
@@ -3089,29 +3094,137 @@ export function createIdentityApiServer(
         return send(200, customer)
       }
 
-      const customerWalletTopUpMatch = url.pathname.match(
-        /^\/v1\/customers\/([^/]+)\/wallet-top-ups$/
-      )
-      if (method === "POST" && customerWalletTopUpMatch) {
+      if (method === "PATCH" && customerDetailMatch) {
         if (!nativeCustomersService) {
           return send(503, {
             code: "CUSTOMERS_UNAVAILABLE",
-            message: "Customer wallet top-ups are unavailable in memory mode.",
+            message: "Customer edits are unavailable in memory mode.",
           })
         }
-        // Same gate as recording a sale (POS_INVOICE routes) -- accepting real money to top up a
-        // wallet is at least as sensitive as completing a checkout.
-        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+        if (!actor.modulePermissions.includes("customers:edit")) throw ERRORS.forbidden()
 
-        const customerId = decodeURIComponent(customerWalletTopUpMatch[1])
-        const payload = topUpWalletSchema.parse(await readJsonBody(request))
-        const updated = await nativeCustomersService.topUpWallet(
+        const customerId = decodeURIComponent(customerDetailMatch[1])
+        const payload = updateCustomerSchema.parse(await readJsonBody(request))
+        const updated = await nativeCustomersService.update(
           actor.organizationId,
           customerId,
-          payload.amount,
-          actor.userId
+          payload
         )
         return send(200, toNormalizedCustomer(updated))
+      }
+
+      if (method === "DELETE" && customerDetailMatch) {
+        if (!nativeCustomersService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer deletion is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("customers:delete")) throw ERRORS.forbidden()
+
+        const customerId = decodeURIComponent(customerDetailMatch[1])
+        await nativeCustomersService.delete(actor.organizationId, customerId)
+        return send(204, null)
+      }
+
+      // A "سند قبض" (receipt -- real money collected, credits the account) or "سند صرف"
+      // (payment voucher -- the business handing money/credit to the customer, debits the
+      // account). A wallet top-up used to be its own separate action; it is the exact same real
+      // event as a receipt (money credited to the account), so it now goes through this same
+      // route instead of a second near-identical one.
+      const customerAccountTransactionMatch = url.pathname.match(
+        /^\/v1\/customers\/([^/]+)\/(receipt|payment)-vouchers$/
+      )
+      if (method === "POST" && customerAccountTransactionMatch) {
+        if (!nativeCustomersService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer account transactions are unavailable in memory mode.",
+          })
+        }
+        // Same gate as recording a sale (POS_INVOICE routes) -- moving real money against a
+        // customer's account is at least as sensitive as completing a checkout.
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        const customerId = decodeURIComponent(customerAccountTransactionMatch[1])
+        const transactionType = customerAccountTransactionMatch[2] as "receipt" | "payment"
+        const payload = createBalanceVoucherSchema.parse(await readJsonBody(request))
+
+        let attachmentUrls: string[] = []
+        if (payload.attachments.length > 0) {
+          if (!container.infrastructure.objectStorage) {
+            return send(503, {
+              code: "VOUCHER_ATTACHMENTS_UNAVAILABLE",
+              message: "Voucher attachment uploads are not available right now.",
+            })
+          }
+          const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+          attachmentUrls = await Promise.all(
+            payload.attachments.map(async (attachment) => {
+              const buffer = Buffer.from(attachment.dataBase64, "base64")
+              if (buffer.length === 0 || buffer.length > MAX_ATTACHMENT_BYTES) {
+                throw ERRORS.validation({
+                  attachments: "Each file must be between 1 byte and 5MB.",
+                })
+              }
+              const extension =
+                attachment.contentType === "application/pdf"
+                  ? "pdf"
+                  : attachment.contentType.split("/")[1] === "jpeg"
+                    ? "jpg"
+                    : attachment.contentType.split("/")[1]
+              const key = `voucher-attachments/${customerId}/${randomUUID()}.${extension}`
+              return container.infrastructure.objectStorage!.uploadPublicObject({
+                key,
+                body: buffer,
+                contentType: attachment.contentType,
+              })
+            })
+          )
+        }
+
+        const updated = await nativeCustomersService.createAccountTransaction(
+          actor.organizationId,
+          actor.workspaceId,
+          customerId,
+          transactionType,
+          payload.amount,
+          payload.taxInclusive,
+          payload.taxAmount,
+          payload.paymentMethodCode,
+          payload.notes,
+          attachmentUrls,
+          actor.userId
+        )
+        return send(201, toNormalizedCustomer(updated))
+      }
+
+      const customerAccountTransactionsListMatch = url.pathname.match(
+        /^\/v1\/customers\/([^/]+)\/account-transactions$/
+      )
+      if (method === "GET" && customerAccountTransactionsListMatch) {
+        if (!nativeCustomersService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer account transactions are unavailable in memory mode.",
+          })
+        }
+
+        const customerId = decodeURIComponent(customerAccountTransactionsListMatch[1])
+        const typeParam = url.searchParams.get("type")
+        const validTypes = ["receipt", "payment", "sale", "return"]
+        const statement = await nativeCustomersService.listAccountTransactions(
+          actor.organizationId,
+          customerId,
+          {
+            from: url.searchParams.get("from"),
+            to: url.searchParams.get("to"),
+            type: validTypes.includes(typeParam ?? "")
+              ? (typeParam as "receipt" | "payment" | "sale" | "return")
+              : null,
+          }
+        )
+        return send(200, statement)
       }
 
       if (method === "GET" && url.pathname === "/v1/orders") {

@@ -25,7 +25,7 @@ import {
   Weight,
 } from "lucide-react"
 
-import type { SelectOption } from "./searchable-select"
+import type { AppSearchableSelectOption } from "@/components/app"
 
 const BLUE = "bg-[#e8f0ff] text-[#2878ff]"
 const GREEN = "bg-[#e4f7ec] text-[#1f9d55]"
@@ -39,7 +39,7 @@ const TEAL = "bg-[#e2f6f4] text-[#12a594]"
 // The hint names the dimension, and the scale where one exists -- that is what decides whether
 // two units can be compared by formula, so it is the useful thing to show rather than a
 // restatement of the label.
-export const BASE_UNIT_OPTIONS: SelectOption[] = [
+export const BASE_UNIT_OPTIONS: AppSearchableSelectOption[] = [
   {
     value: "كجم (KG)",
     label: "كجم",
@@ -78,7 +78,7 @@ export const BASE_UNIT_OPTIONS: SelectOption[] = [
 
 // The recipe/stock units on a bundle component row. These are the raw unit strings the
 // conversion table in the page keys on, so the value is the bare unit with no suffix.
-export const COMPONENT_UNIT_OPTIONS: SelectOption[] = [
+export const COMPONENT_UNIT_OPTIONS: AppSearchableSelectOption[] = [
   { value: "حبة", label: "حبة", hint: "عدد", icon: Box, tint: BLUE, keywords: "pcs piece قطعة" },
   {
     value: "كرتون",
@@ -108,25 +108,25 @@ export const COMPONENT_UNIT_OPTIONS: SelectOption[] = [
   },
 ]
 
-export const PRICING_TYPE_OPTIONS: SelectOption[] = [
+export const PRICING_TYPE_OPTIONS: AppSearchableSelectOption[] = [
   { value: "سعر ثابت", label: "سعر ثابت", hint: "مبلغ واحد لكل طلب", icon: Banknote, tint: GREEN },
   { value: "سعر بالساعة", label: "سعر بالساعة", hint: "يُحتسب حسب المدة", icon: Clock, tint: BLUE },
   { value: "حسب الطلب", label: "حسب الطلب", hint: "يُحدد لكل عميل", icon: Tag, tint: AMBER },
 ]
 
-export const SERVICE_DURATION_UNIT_OPTIONS: SelectOption[] = [
+export const SERVICE_DURATION_UNIT_OPTIONS: AppSearchableSelectOption[] = [
   { value: "دقيقة", label: "دقيقة", icon: Timer, tint: BLUE },
   { value: "ساعة", label: "ساعة", icon: Hourglass, tint: PURPLE },
   { value: "يوم", label: "يوم", icon: CalendarClock, tint: TEAL },
 ]
 
-export const DELIVERY_METHOD_OPTIONS: SelectOption[] = [
+export const DELIVERY_METHOD_OPTIONS: AppSearchableSelectOption[] = [
   { value: "عبر الإنترنت", label: "عبر الإنترنت", icon: Globe, tint: BLUE },
   { value: "في الموقع", label: "في الموقع", icon: Store, tint: PURPLE },
   { value: "لدى العميل", label: "لدى العميل", icon: Handshake, tint: GREEN },
 ]
 
-export const PRODUCT_LANGUAGE_OPTIONS: SelectOption[] = [
+export const PRODUCT_LANGUAGE_OPTIONS: AppSearchableSelectOption[] = [
   { value: "العربية", label: "العربية", icon: Languages, tint: GREEN },
   { value: "الإنجليزية", label: "الإنجليزية", icon: Languages, tint: BLUE },
   { value: "متعدد اللغات", label: "متعدد اللغات", icon: Globe, tint: PURPLE },

@@ -19,8 +19,9 @@ const ERRORS = {
 
 // How a method is settled, which is what decides the icon and what its settings mean. Two kinds
 // never collect money at sale time -- both always require a real customerId (see
-// invoices-service.ts): "credit" adds to the customer's balance_due (they now owe more), and
-// "prepaid" spends down their wallet_balance (money they already gave the store in advance).
+// invoices-service.ts): "credit" and "prepaid" both debit the same unified account_balance,
+// one via an "آجل" deferred amount (no floor -- that is what deferred means), the other via
+// their real prepaid credit (capped at what they actually have).
 export const PAYMENT_KINDS = [
   "cash",
   "card",

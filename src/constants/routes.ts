@@ -18,7 +18,7 @@ export const ROUTES = {
   shiftsDetails: (shiftId: string) => `/shifts/${shiftId}`,
   invoices: "/invoices",
   customers: "/customers",
-  customersDetails: (customerId: string) => `/customers/${customerId}`,
+  customerStatement: (customerId: string) => `/customers/${customerId}/statement`,
   reports: "/reports",
   ai: "/ai",
   integrations: "/integrations",

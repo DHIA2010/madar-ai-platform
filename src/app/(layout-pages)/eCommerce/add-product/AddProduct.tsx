@@ -51,9 +51,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
+import { AppSearchableSelect, type AppSearchableSelectOption } from "@/components/app"
+
 import { PRODUCT_TYPES, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
 import { DateField } from "./date-field"
-import { SearchableSelect, type SelectOption } from "./searchable-select"
 import {
   BASE_UNIT_OPTIONS,
   CATEGORY_ICON,
@@ -488,7 +489,7 @@ export default function AddProduct() {
   // just typed is not among them yet -- it only becomes "known" once a product carrying it is
   // saved -- so it is added here, otherwise the trigger would fall back to the placeholder and
   // the choice would look lost.
-  const categoryOptions = useMemo<SelectOption[]>(() => {
+  const categoryOptions = useMemo<AppSearchableSelectOption[]>(() => {
     const names =
       knownCategories.includes(category) || category.trim() === ""
         ? knownCategories
@@ -515,7 +516,7 @@ export default function AddProduct() {
   // Candidates a carton can package: products this organisation authored that are counted in
   // pieces. A synced storefront product carries no unit, so it cannot be linked -- there is
   // nothing to say how many of it a carton holds.
-  const pieceProductOptions = useMemo<SelectOption[]>(
+  const pieceProductOptions = useMemo<AppSearchableSelectOption[]>(
     () =>
       catalogue
         .filter(
@@ -537,7 +538,7 @@ export default function AddProduct() {
 
   const linkedUnitProduct = catalogue.find((product) => product.id === linkedUnitProductId) ?? null
 
-  const componentOptions = useMemo<SelectOption[]>(
+  const componentOptions = useMemo<AppSearchableSelectOption[]>(
     () =>
       rawMaterials.map((product) => ({
         value: product.id,
@@ -1128,7 +1129,7 @@ export default function AddProduct() {
                       is typed here and joins the list once a product using it is saved. The
                       control handles an empty catalogue on its own -- with nothing to pick
                       from, typing is the only path and the create row is the whole panel. */}
-                  <SearchableSelect
+                  <AppSearchableSelect
                     value={category}
                     options={categoryOptions}
                     onChange={setCategory}
@@ -1247,7 +1248,7 @@ export default function AddProduct() {
                         required
                         error={showErrors ? errors.linkedUnitProduct : null}
                       >
-                        <SearchableSelect
+                        <AppSearchableSelect
                           value={linkedUnitProductId}
                           options={pieceProductOptions}
                           onChange={setLinkedUnitProductId}
@@ -1375,7 +1376,7 @@ export default function AddProduct() {
                         required
                         error={showErrors ? errors.linkedUnitProduct : null}
                       >
-                        <SearchableSelect
+                        <AppSearchableSelect
                           value={linkedUnitProductId}
                           options={pieceProductOptions}
                           onChange={setLinkedUnitProductId}
@@ -1549,7 +1550,7 @@ export default function AddProduct() {
 
                   <div className="mt-4 grid gap-4 md:grid-cols-3">
                     <Field label="نوع التسعير" required>
-                      <SearchableSelect
+                      <AppSearchableSelect
                         value={pricingType}
                         options={PRICING_TYPE_OPTIONS}
                         onChange={setPricingType}
@@ -1574,7 +1575,7 @@ export default function AddProduct() {
                           className={FIELD_CLASS}
                         />
                         <div className="w-[128px] shrink-0">
-                          <SearchableSelect
+                          <AppSearchableSelect
                             value={serviceDurationUnit}
                             options={SERVICE_DURATION_UNIT_OPTIONS}
                             onChange={setServiceDurationUnit}
@@ -2211,7 +2212,7 @@ export default function AddProduct() {
                                     ) : null}
                                   </div>
                                 ) : (
-                                  <SearchableSelect
+                                  <AppSearchableSelect
                                     value={entry.row.productId}
                                     options={componentOptions}
                                     onChange={(next) =>
@@ -2252,7 +2253,7 @@ export default function AddProduct() {
                             </td>
 
                             <td className="px-2 py-3">
-                              <SearchableSelect
+                              <AppSearchableSelect
                                 value={entry.row.requiredUnit}
                                 options={COMPONENT_UNIT_OPTIONS}
                                 onChange={(next) => {
@@ -2315,7 +2316,7 @@ export default function AddProduct() {
                                       {NUMBER_AR.format(entry.product?.availableStock ?? 0)}
                                     </span>
                                   )}
-                                  <SearchableSelect
+                                  <AppSearchableSelect
                                     value={entry.row.stockUnit}
                                     options={COMPONENT_UNIT_OPTIONS}
                                     onChange={(next) =>
@@ -2701,7 +2702,7 @@ export default function AddProduct() {
 
                   {isService ? (
                     <Field label="طريقة تقديم الخدمة">
-                      <SearchableSelect
+                      <AppSearchableSelect
                         value={deliveryMethod}
                         options={DELIVERY_METHOD_OPTIONS}
                         onChange={setDeliveryMethod}
@@ -2725,7 +2726,7 @@ export default function AddProduct() {
                         </p>
                       </Field>
                       <Field label="لغة المنتج (اختياري)">
-                        <SearchableSelect
+                        <AppSearchableSelect
                           value={productLanguage}
                           options={PRODUCT_LANGUAGE_OPTIONS}
                           onChange={setProductLanguage}
@@ -3181,7 +3182,7 @@ function DateInput({ value, onChange }: { value: string; onChange: (next: string
 
 function UnitSelect({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   return (
-    <SearchableSelect
+    <AppSearchableSelect
       value={value}
       options={BASE_UNIT_OPTIONS}
       onChange={onChange}

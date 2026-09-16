@@ -1,25 +1,25 @@
 "use client"
 
-// The dropdown used across the Add Product page: a trigger showing the chosen option with its
-// own icon tile, and a panel that filters as you type and marks the current selection.
-//
-// A plain <Select> was fine for a handful of fixed choices but not for the component picker,
-// where a real catalogue runs to hundreds of rows -- many sharing a name -- and scrolling was
-// the only way to find anything.
+// A searchable dropdown: a trigger showing the chosen option with its own icon tile, and a panel
+// that filters as you type and marks the current selection. Originally built for the Add Product
+// page's category/component pickers (a real catalogue running to hundreds of rows, many sharing a
+// name, where a plain <Select> and scrolling was the only way to find anything) and promoted here
+// so any feature needing the same searchable-combobox look can reuse it instead of rebuilding it.
 
-import { useId, useMemo, useState, type Ref } from "react"
-import { Check, ChevronDown, Plus, Search } from "lucide-react"
+import { type Ref, useId, useMemo, useState } from "react"
 import type { LucideIcon } from "lucide-react"
+import { Check, ChevronDown, Plus, Search } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+
 import { cairo } from "@/components/design/fonts"
 
-export interface SelectOption {
+export interface AppSearchableSelectOption {
   value: string
   label: string
-  // Shown under the label -- a stock figure or category, so options that share a name can be
-  // told apart. The component picker relies on this.
+  // Shown under the label -- lets options that share a name be told apart.
   hint?: string
   icon?: LucideIcon
   // Tailwind classes for the icon tile, written out in full: a class assembled at runtime
@@ -38,11 +38,11 @@ const SEARCH_THRESHOLD = 5
 
 function normalize(value: string) {
   // Arabic text is matched as typed; only case and surrounding space are normalized, since
-  // stripping diacritics would need a transliteration table this page has no use for.
+  // stripping diacritics would need a transliteration table this component has no use for.
   return value.trim().toLowerCase()
 }
 
-export function SearchableSelect({
+export function AppSearchableSelect({
   value,
   options,
   onChange,
@@ -60,7 +60,7 @@ export function SearchableSelect({
   createLabel = (draft: string) => `إضافة "${draft}"`,
 }: {
   value: string
-  options: SelectOption[]
+  options: AppSearchableSelectOption[]
   onChange: (next: string) => void
   placeholder?: string
   searchPlaceholder?: string
@@ -69,18 +69,15 @@ export function SearchableSelect({
   disabled?: boolean
   triggerClassName?: string
   compact?: boolean
-  // Lets a caller focus or open this control from elsewhere -- the bundle row's edit action
-  // opens the picker for that row.
+  // Lets a caller focus or open this control from elsewhere.
   triggerRef?: Ref<HTMLButtonElement>
   // For a row that already shows the selected item's thumbnail beside the control, so the
   // trigger does not repeat it.
   hideTriggerMark?: boolean
-  // Rendered under the list -- used by the component picker to offer a manual entry when the
-  // catalogue has nothing suitable.
+  // Rendered under the list.
   footer?: (close: () => void) => React.ReactNode
-  // Makes the control creatable: whatever is typed can be added as a new option. Used by the
-  // category field, whose list is only ever the set of categories other products already use --
-  // without this the first category could never be created and no new one ever introduced.
+  // Makes the control creatable: whatever is typed can be added as a new option. Without this,
+  // the list is a fixed, closed set of choices.
   onCreate?: (draft: string) => void
   createLabel?: (draft: string) => string
 }) {
@@ -254,7 +251,13 @@ export function SearchableSelect({
   )
 }
 
-function OptionMark({ option, compact }: { option: SelectOption | null; compact: boolean }) {
+function OptionMark({
+  option,
+  compact,
+}: {
+  option: AppSearchableSelectOption | null
+  compact: boolean
+}) {
   if (!option) return null
 
   const size = compact ? "size-6" : "size-8"

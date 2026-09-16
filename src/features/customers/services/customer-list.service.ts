@@ -1,4 +1,10 @@
-import type { CustomerDetail, CustomerRecord } from "../types"
+import type {
+  AccountStatement,
+  AccountTransactionFilter,
+  CreateAccountTransactionInput,
+  CustomerDetail,
+  CustomerRecord,
+} from "../types"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
@@ -40,10 +46,28 @@ function customerDetailEndpoint(customerId: string): string {
   return [CUSTOMERS_ENDPOINT, encodeURIComponent(customerId)].join(String.fromCharCode(47))
 }
 
-function customerWalletTopUpEndpoint(customerId: string): string {
-  return [CUSTOMERS_ENDPOINT, encodeURIComponent(customerId), "wallet-top-ups"].join(
+function customerAccountTransactionEndpoint(
+  customerId: string,
+  type: "receipt" | "payment"
+): string {
+  return [CUSTOMERS_ENDPOINT, encodeURIComponent(customerId), `${type}-vouchers`].join(
     String.fromCharCode(47)
   )
+}
+
+function customerAccountTransactionsListEndpoint(
+  customerId: string,
+  filter: AccountTransactionFilter
+): string {
+  const path = [CUSTOMERS_ENDPOINT, encodeURIComponent(customerId), "account-transactions"].join(
+    String.fromCharCode(47)
+  )
+  const params = new URLSearchParams()
+  if (filter.from) params.set("from", filter.from)
+  if (filter.to) params.set("to", filter.to)
+  if (filter.type) params.set("type", filter.type)
+  const query = params.toString()
+  return query ? `${path}?${query}` : path
 }
 
 const sessionManager = createSessionManager()
@@ -57,6 +81,16 @@ export interface CreateCustomerInput {
   email: string | null
   phone: string | null
   notes: string | null
+  region: string | null
+}
+
+// Every field optional -- an edit only ever sends what actually changed.
+export interface UpdateCustomerInput {
+  name?: string
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  region?: string | null
 }
 
 export const customerListService = {
@@ -82,12 +116,51 @@ export const customerListService = {
     }
   },
 
-  // Records real money collected in advance -- a native ("Madar") customer only, since a synced
-  // storefront customer has no real wallet_balance column to top up.
-  async topUpWallet(customerId: string, amount: number): Promise<CustomerRecord> {
-    return client.post<{ amount: number }, CustomerRecord>(
-      customerWalletTopUpEndpoint(customerId),
-      { amount }
+  // Only ever a native ("Madar") customer's own fields -- a synced storefront customer has no
+  // real row here to edit.
+  async updateCustomer(customerId: string, input: UpdateCustomerInput): Promise<CustomerRecord> {
+    return client.patch<UpdateCustomerInput, CustomerRecord>(
+      customerDetailEndpoint(customerId),
+      input
     )
+  },
+
+  // Refused server-side (a real 409, CUSTOMER_HAS_NONZERO_BALANCE) while the customer's real
+  // unified account balance isn't zero -- see native-customers-service.ts's delete().
+  async deleteCustomer(customerId: string): Promise<void> {
+    await client.delete<void>(customerDetailEndpoint(customerId))
+  },
+
+  // A "سند قبض" (receipt -- real money collected, credits the account; also how a wallet used
+  // to be topped up) or "سند صرف" (payment voucher -- the business handing money/credit to the
+  // customer, debits the account). See native-customers-service.ts's createAccountTransaction.
+  async createReceipt(
+    customerId: string,
+    input: CreateAccountTransactionInput
+  ): Promise<CustomerRecord> {
+    return client.post<CreateAccountTransactionInput, CustomerRecord>(
+      customerAccountTransactionEndpoint(customerId, "receipt"),
+      input
+    )
+  },
+
+  async createPayment(
+    customerId: string,
+    input: CreateAccountTransactionInput
+  ): Promise<CustomerRecord> {
+    return client.post<CreateAccountTransactionInput, CustomerRecord>(
+      customerAccountTransactionEndpoint(customerId, "payment"),
+      input
+    )
+  },
+
+  // The customer's full real unified account ledger -- receipts, payment vouchers,
+  // credit/wallet-funded sales, and returns -- newest first, with a running balance already
+  // computed server-side.
+  async getAccountStatement(
+    customerId: string,
+    filter: AccountTransactionFilter = {}
+  ): Promise<AccountStatement> {
+    return client.get<AccountStatement>(customerAccountTransactionsListEndpoint(customerId, filter))
   },
 }

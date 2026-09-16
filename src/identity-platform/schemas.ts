@@ -535,12 +535,41 @@ export const createCustomerSchema = z.object({
   email: z.string().max(160).nullable().optional().default(null),
   phone: z.string().max(30).nullable().optional().default(null),
   notes: z.string().max(500).nullable().optional().default(null),
+  region: z.string().max(120).nullable().optional().default(null),
 })
 
-// Real money a cashier collected to top up a customer's prepaid wallet -- see
-// migration 063_customer_wallet.sql.
-export const topUpWalletSchema = z.object({
+// A partial edit of a native customer's own fields -- every field optional, since an edit only
+// ever sends what actually changed (see NativeCustomersService.update).
+export const updateCustomerSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  email: z.string().max(160).nullable().optional(),
+  phone: z.string().max(30).nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+  region: z.string().max(120).nullable().optional(),
+})
+
+// A receipt ("سند قبض" -- also how a wallet top-up now works, since both credit the same real
+// account) or payment/disbursement ("سند صرف") against a customer's unified account balance --
+// see migration 066_customer_unified_account.sql and
+// NativeCustomersService.createAccountTransaction. Attachments are optional and uploaded inline
+// with the voucher, same contentType/dataBase64 shape as uploadAvatarSchema, capped at 5MB each
+// to match the mockup's stated limit.
+export const createBalanceVoucherSchema = z.object({
   amount: z.number().positive(),
+  taxInclusive: z.boolean().optional().default(false),
+  taxAmount: z.number().nonnegative().optional().default(0),
+  paymentMethodCode: z.string().min(1).max(60),
+  notes: z.string().max(500).nullable().optional().default(null),
+  attachments: z
+    .array(
+      z.object({
+        contentType: z.enum(["application/pdf", "image/png", "image/jpeg"]),
+        dataBase64: z.string().min(1),
+      })
+    )
+    .max(5)
+    .optional()
+    .default([]),
 })
 
 // Per-device settings. Keyed to deviceType via the discriminated union below, so a printer's

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { customerListService } from "../services"
 import type { CustomerDetail } from "../types"
@@ -10,36 +10,24 @@ export function useCustomer(customerId: string) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
-    async function load() {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const record = await customerListService.getCustomer(customerId)
-        if (!cancelled) {
-          setCustomer(record)
-        }
-      } catch (loadError) {
-        console.error("Failed to load customer", loadError)
-        if (!cancelled) {
-          setError("Couldn't load this customer. Please try again.")
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void load()
-
-    return () => {
-      cancelled = true
+    try {
+      const record = await customerListService.getCustomer(customerId)
+      setCustomer(record)
+    } catch (loadError) {
+      console.error("Failed to load customer", loadError)
+      setError("Couldn't load this customer. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
   }, [customerId])
 
-  return { customer, isLoading, error }
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  return { customer, isLoading, error, refetch: load }
 }

@@ -23,13 +23,57 @@ export interface CustomerRecord {
   lastPurchaseAt: string | null
   status: CustomerStatus
   segment: CustomerSegment
-  // Real running amount owed from deferred ("آجل") POS sales -- only ever set for a "Madar"
-  // (native) customer, since only they have a real account to owe against. Always null for a
-  // synced storefront customer.
-  balanceDue: number | null
-  // Real prepaid balance a sale can spend down via the "customer_wallet" payment method -- same
-  // "Madar"-only scope as balanceDue.
-  walletBalance: number | null
+  // Real unified account balance -- only ever set for a "Madar" (native) customer, since only
+  // they have a real account. Positive means the store owes the customer (prepaid credit);
+  // negative means the customer owes the store (deferred debt). Always null for a synced
+  // storefront customer.
+  accountBalance: number | null
+  // Real region/city entered at creation -- same "Madar"-only scope as accountBalance.
+  region: string | null
+}
+
+export type AccountTransactionType = "receipt" | "payment" | "sale" | "return"
+
+export interface AccountTransaction {
+  id: string
+  reference: string
+  type: AccountTransactionType
+  // Always a positive magnitude -- direction is derived from type.
+  amount: number
+  // Only ever set for a "receipt" or "payment" -- a "sale"/"return" pulls its payment method(s)
+  // from the invoice itself, which can be a split across several methods.
+  paymentMethodCode: string | null
+  taxInclusive: boolean
+  taxAmount: number
+  notes: string | null
+  attachmentUrls: string[]
+  // Only ever set for a "sale" or "return".
+  invoiceId: string | null
+  invoiceNumber: string | null
+  balanceAfter: number
+  createdAt: string
+}
+
+export interface AccountStatement {
+  transactions: AccountTransaction[]
+  totalCredits: number
+  totalDebits: number
+  transactionCount: number
+}
+
+export interface AccountTransactionFilter {
+  from?: string
+  to?: string
+  type?: AccountTransactionType
+}
+
+export interface CreateAccountTransactionInput {
+  amount: number
+  taxInclusive: boolean
+  taxAmount: number
+  paymentMethodCode: string
+  notes: string | null
+  attachments: Array<{ contentType: string; dataBase64: string }>
 }
 
 export interface CustomerOrder {

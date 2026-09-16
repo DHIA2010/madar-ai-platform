@@ -429,18 +429,18 @@ export class PosInvoicesService {
     if (deferredAmount > 0 && !input.customerId) throw INVOICE_ERRORS.deferredRequiresCustomer()
     if (prepaidAmount > 0 && !input.customerId) throw INVOICE_ERRORS.walletRequiresCustomer()
 
-    let customerWalletBalance = 0
+    let customerAccountBalance = 0
     if (input.customerId) {
-      const customer = await this.database.query<{ id: string; wallet_balance: string | number }>(
-        `SELECT id, wallet_balance FROM customers
+      const customer = await this.database.query<{ id: string; account_balance: string | number }>(
+        `SELECT id, account_balance FROM customers
           WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
         [input.customerId, input.organizationId]
       )
       const customerRow = customer.rows[0]
       if (!customerRow) throw INVOICE_ERRORS.customerNotFound()
-      customerWalletBalance = Number(customerRow.wallet_balance) || 0
+      customerAccountBalance = Number(customerRow.account_balance) || 0
     }
-    if (prepaidAmount > customerWalletBalance) throw INVOICE_ERRORS.insufficientWalletBalance()
+    if (prepaidAmount > customerAccountBalance) throw INVOICE_ERRORS.insufficientWalletBalance()
 
     const id = randomUUID()
     const paymentMethodCode =
@@ -501,28 +501,41 @@ export class PosInvoicesService {
         )
       }
 
-      if (deferredAmount > 0) {
-        await this.database.query(
-          `UPDATE customers SET balance_due = balance_due + $2, updated_at = now() WHERE id = $1`,
-          [input.customerId, deferredAmount]
-        )
-      }
+      // A deferred ("آجل") portion and a wallet-funded portion both draw down the SAME unified
+      // account -- one combined ledger entry for the sale, not two. Only the wallet-funded
+      // portion has a solvency floor (deferred has none, that is what deferred means), so the
+      // race-safe re-check below only guards on prepaidAmount even though the whole drawdown is
+      // debited together.
+      const accountDrawdown = Math.round((deferredAmount + prepaidAmount) * 100) / 100
+      if (accountDrawdown > 0) {
+        if (prepaidAmount > 0) {
+          const debited = await this.database.query(
+            `UPDATE customers SET account_balance = account_balance - $2, updated_at = now()
+              WHERE id = $1 AND account_balance >= $3`,
+            [input.customerId, accountDrawdown, prepaidAmount]
+          )
+          if (debited.rowCount === 0) throw INVOICE_ERRORS.insufficientWalletBalance()
+        } else {
+          await this.database.query(
+            `UPDATE customers SET account_balance = account_balance - $2, updated_at = now()
+              WHERE id = $1`,
+            [input.customerId, accountDrawdown]
+          )
+        }
 
-      if (prepaidAmount > 0) {
-        // The `wallet_balance >= $2` guard re-checks solvency at the same moment as the debit,
-        // closing the race the earlier read-then-check above can't rule out on its own (two
-        // concurrent sales both reading a sufficient balance before either writes).
-        const debited = await this.database.query(
-          `UPDATE customers SET wallet_balance = wallet_balance - $2, updated_at = now()
-            WHERE id = $1 AND wallet_balance >= $2`,
-          [input.customerId, prepaidAmount]
-        )
-        if (debited.rowCount === 0) throw INVOICE_ERRORS.insufficientWalletBalance()
-
         await this.database.query(
-          `INSERT INTO customer_wallet_transactions (id, customer_id, type, amount, invoice_id)
-           VALUES ($1, $2, 'purchase', $3, $4)`,
-          [randomUUID(), input.customerId, prepaidAmount, id]
+          `INSERT INTO customer_account_transactions
+             (id, organization_id, workspace_id, customer_id, type, reference, amount, invoice_id)
+           VALUES ($1, $2, $3, $4, 'sale', $5, $6, $7)`,
+          [
+            randomUUID(),
+            input.organizationId,
+            input.workspaceId,
+            input.customerId,
+            invoiceNumber,
+            accountDrawdown,
+            id,
+          ]
         )
       }
     })
@@ -539,12 +552,64 @@ export class PosInvoicesService {
   ): Promise<InvoiceView> {
     if (!UUID_PATTERN.test(id)) throw INVOICE_ERRORS.notFound()
 
-    const result = await this.database.query(
-      `UPDATE pos_invoices SET status = $3, updated_at = now()
+    const existing = await this.database.query<{
+      status: string
+      customer_id: string | null
+      workspace_id: string
+      total_amount: string | number
+    }>(
+      `SELECT status, customer_id, workspace_id, total_amount FROM pos_invoices
         WHERE organization_id = $1 AND id = $2`,
-      [organizationId, id, status]
+      [organizationId, id]
     )
-    if (result.rowCount === 0) throw INVOICE_ERRORS.notFound()
+    const invoiceRow = existing.rows[0]
+    if (!invoiceRow) throw INVOICE_ERRORS.notFound()
+
+    await this.database.withTransaction(async () => {
+      await this.database.query(
+        `UPDATE pos_invoices SET status = $3, updated_at = now()
+          WHERE organization_id = $1 AND id = $2`,
+        [organizationId, id, status]
+      )
+
+      // A return always credits the FULL invoice total back to the customer's account as real
+      // store credit -- regardless of how it was originally paid (cash, card, credit, or
+      // wallet), a refund becomes account balance rather than cash handed back. Only the first
+      // transition into "returned" credits anything -- calling this again on an
+      // already-returned invoice must not credit twice.
+      const totalAmount = Number(invoiceRow.total_amount) || 0
+      if (
+        status === "returned" &&
+        invoiceRow.status !== "returned" &&
+        invoiceRow.customer_id &&
+        totalAmount > 0
+      ) {
+        const returnNumber = await this.database.query<{ nextval: string }>(
+          `SELECT nextval('customer_return_number_seq')`
+        )
+        const reference = `RET-${String(returnNumber.rows[0].nextval).padStart(5, "0")}`
+
+        await this.database.query(
+          `UPDATE customers SET account_balance = account_balance + $2, updated_at = now()
+            WHERE id = $1`,
+          [invoiceRow.customer_id, totalAmount]
+        )
+        await this.database.query(
+          `INSERT INTO customer_account_transactions
+             (id, organization_id, workspace_id, customer_id, type, reference, amount, invoice_id)
+           VALUES ($1, $2, $3, $4, 'return', $5, $6, $7)`,
+          [
+            randomUUID(),
+            organizationId,
+            invoiceRow.workspace_id,
+            invoiceRow.customer_id,
+            reference,
+            totalAmount,
+            id,
+          ]
+        )
+      }
+    })
 
     const updated = await this.findById(organizationId, id)
     if (!updated) throw INVOICE_ERRORS.notFound()
