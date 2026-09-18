@@ -20,6 +20,7 @@ import {
   Loader2,
   Package,
   Pencil,
+  Percent,
   Plus,
   RefreshCcw,
   Save,
@@ -38,12 +39,14 @@ import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { cairo } from "@/components/design/fonts"
 import { useAuth } from "@/features/authentication"
+import { useWorkspace } from "@/features/workspace"
 import {
   productListService,
   type CreateProductInput,
   type ProductDetail,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
+import { taxRatesService, type TaxRate } from "@/features/pos/services/tax-rates.service"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -194,6 +197,13 @@ function generateSku(taken: ReadonlySet<string>) {
   return `SKU-${datePart}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
 }
 
+// Settings -> الضرائب -> "الأسعار تشمل الضريبة" -> "الاختيار يدوي أثناء إضافة المنتج" replaces
+// this form's read-only hint with this actual dropdown.
+const PRICE_TAX_MODE_OPTIONS: AppSearchableSelectOption[] = [
+  { value: "excluded", label: "السعر غير شامل الضريبة" },
+  { value: "included", label: "السعر شامل الضريبة" },
+]
+
 const NUMBER_AR = new Intl.NumberFormat("ar-SA-u-nu-latn")
 const MONEY_AR = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   minimumFractionDigits: 2,
@@ -214,6 +224,7 @@ export default function AddProduct() {
   const componentNameInputs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const { currentUser } = useAuth()
+  const { currentOrganization } = useWorkspace()
   const router = useRouter()
   // The same form serves both jobs: with ?id= it loads that product and saves over it, without
   // it creates a new one. Duplicating this page for editing would mean maintaining seven
@@ -230,6 +241,34 @@ export default function AddProduct() {
   const [sku, setSku] = useState("")
   const [category, setCategory] = useState("")
   const [description, setDescription] = useState("")
+  // Null means "use the organization's default rate" (Settings -> الضرائب). "" is this field's
+  // own not-yet-chosen state on screen -- AppSearchableSelect has no concept of a null value, so
+  // it is translated to/from null only where the payload is built and where an existing product
+  // is loaded (see buildPayload and the load effect below).
+  const [taxRateId, setTaxRateId] = useState("")
+  // Settings -> الضرائب -> "الأسعار تشمل الضريبة" has three modes: a fixed org-wide default (no
+  // picker here -- a brand-new product just follows it, see the effect below), or "manual"
+  // (taxPriceEntryMode === "manual"), which shows the dropdown below instead so a merchant who
+  // genuinely sells some products gross and some net can decide per product. An existing product
+  // being edited keeps its own value regardless of what the organization default is now, since
+  // switching the org-wide setting for "new products only" is explicitly meant to leave
+  // already-created products alone.
+  const [priceIncludesTax, setPriceIncludesTax] = useState(false)
+  const isManualTaxMode = currentOrganization?.settings.taxPriceEntryMode === "manual"
+  // Shown right under every price field when not in manual mode -- the only place a merchant sees
+  // which convention the typed number will actually be saved under.
+  const priceTaxHint = priceIncludesTax ? "السعر شامل الضريبة" : "السعر غير شامل الضريبة"
+  useEffect(() => {
+    if (isEditing) return
+    setPriceIncludesTax(currentOrganization?.settings.taxPricesIncludeTax ?? false)
+  }, [isEditing, currentOrganization])
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([])
+  useEffect(() => {
+    taxRatesService
+      .list()
+      .then(setTaxRates)
+      .catch(() => setTaxRates([]))
+  }, [])
   const [published, setPublished] = useState(true)
   const [images, setImages] = useState<ImageDraft[]>([])
   const [internalNotes, setInternalNotes] = useState("")
@@ -369,6 +408,8 @@ export default function AddProduct() {
         setName(product.name)
         setSku(product.sku ?? "")
         setCategory(product.category)
+        setTaxRateId(product.taxRateId ?? "")
+        setPriceIncludesTax(product.priceIncludesTax)
         setDescription(product.description)
         setPublished(product.status === "active")
         setBaseUnit(product.baseUnit || BASE_UNIT_OPTIONS[0].value)
@@ -502,6 +543,26 @@ export default function AddProduct() {
       tint: CATEGORY_TINT,
     }))
   }, [knownCategories, category])
+
+  // "" (never a real tax_rates id) stands for "use the organization's default rate" -- always
+  // first, and never absent even if the organization has somehow ended up with no rates at all.
+  const taxRateOptions = useMemo<AppSearchableSelectOption[]>(
+    () => [
+      {
+        value: "",
+        label: "استخدام المعدل الافتراضي",
+        icon: Percent,
+        tint: "bg-[#eef4ff] text-[#2878ff]",
+      },
+      ...taxRates.map((rate) => ({
+        value: rate.id,
+        label: `${rate.name} (${rate.ratePercent}%)`,
+        icon: Percent,
+        tint: "bg-[#f3eeff] text-[#8b5cf6]",
+      })),
+    ],
+    [taxRates]
+  )
 
   // A bundle is assembled from raw materials, so the picker offers those alone rather than the
   // whole catalogue. Products synced from a storefront carry no type at all (productType is
@@ -837,6 +898,8 @@ export default function AddProduct() {
     category: category.trim(),
     description: description.trim(),
     status: asDraft ? "draft" : published ? "active" : "draft",
+    taxRateId: taxRateId || null,
+    priceIncludesTax,
     baseUnit: baseUnit || null,
     sellPrice: optionalNumber(sellPrice),
     costPrice: optionalNumber(costPrice),
@@ -1142,6 +1205,20 @@ export default function AddProduct() {
                   />
                 </Field>
 
+                <Field label="الضريبة">
+                  {/* Null (the "" option) means this product follows whatever the organization's
+                      default rate is at the time of each sale -- re-read fresh every time, never
+                      frozen to today's default. Only set this when the product genuinely needs
+                      its own rate (e.g. an exempt or zero-rated item). */}
+                  <AppSearchableSelect
+                    value={taxRateId}
+                    options={taxRateOptions}
+                    onChange={setTaxRateId}
+                    placeholder="استخدام المعدل الافتراضي"
+                    ariaLabel="الضريبة"
+                  />
+                </Field>
+
                 {showsSku ? (
                   <Field label={type.skuLabel} required error={showErrors ? errors.sku : null}>
                     {/* RTL: the field is written first so the generate action sits on its left. */}
@@ -1325,6 +1402,12 @@ export default function AddProduct() {
                 <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   <Field label="سعر البيع" required error={showErrors ? errors.price : null}>
                     <MoneyInput value={sellPrice} onChange={setSellPrice} label="سعر البيع" />
+                    <PriceTaxIndicator
+                      isManualTaxMode={isManualTaxMode}
+                      priceIncludesTax={priceIncludesTax}
+                      setPriceIncludesTax={setPriceIncludesTax}
+                      priceTaxHint={priceTaxHint}
+                    />
                   </Field>
 
                   <Field label="سعر التكلفة">
@@ -1459,6 +1542,12 @@ export default function AddProduct() {
                       error={showErrors ? errors.price : null}
                     >
                       <MoneyInput value={sellPrice} onChange={setSellPrice} label="سعر البيع" />
+                      <PriceTaxIndicator
+                        isManualTaxMode={isManualTaxMode}
+                        priceIncludesTax={priceIncludesTax}
+                        setPriceIncludesTax={setPriceIncludesTax}
+                        priceTaxHint={priceTaxHint}
+                      />
                     </Field>
 
                     <Field label="الحد الأدنى للشراء">
@@ -1560,6 +1649,12 @@ export default function AddProduct() {
 
                     <Field label="السعر" required error={showErrors ? errors.servicePrice : null}>
                       <MoneyInput value={sellPrice} onChange={setSellPrice} label="السعر" />
+                      <PriceTaxIndicator
+                        isManualTaxMode={isManualTaxMode}
+                        priceIncludesTax={priceIncludesTax}
+                        setPriceIncludesTax={setPriceIncludesTax}
+                        priceTaxHint={priceTaxHint}
+                      />
                     </Field>
 
                     <Field label="مدة الخدمة">
@@ -1634,6 +1729,12 @@ export default function AddProduct() {
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <Field label="السعر" required error={showErrors ? errors.price : null}>
                     <MoneyInput value={sellPrice} onChange={setSellPrice} label="السعر" />
+                    <PriceTaxIndicator
+                      isManualTaxMode={isManualTaxMode}
+                      priceIncludesTax={priceIncludesTax}
+                      setPriceIncludesTax={setPriceIncludesTax}
+                      priceTaxHint={priceTaxHint}
+                    />
                   </Field>
 
                   <Field label="سعر العرض (اختياري)">
@@ -3139,6 +3240,37 @@ function MoneyInput({
       </span>
     </div>
   )
+}
+
+// Sits right under every sell-price field. In manual mode (Settings -> الضرائب -> "الأسعار تشمل
+// الضريبة" -> "الاختيار يدوي أثناء إضافة المنتج") this is a real dropdown the merchant picks per
+// product; otherwise it's the same read-only hint text as before, reflecting the org's fixed
+// default.
+function PriceTaxIndicator({
+  isManualTaxMode,
+  priceIncludesTax,
+  setPriceIncludesTax,
+  priceTaxHint,
+}: {
+  isManualTaxMode: boolean
+  priceIncludesTax: boolean
+  setPriceIncludesTax: (next: boolean) => void
+  priceTaxHint: string
+}) {
+  if (isManualTaxMode) {
+    return (
+      <div className="mt-1.5">
+        <AppSearchableSelect
+          value={priceIncludesTax ? "included" : "excluded"}
+          options={PRICE_TAX_MODE_OPTIONS}
+          onChange={(value) => setPriceIncludesTax(value === "included")}
+          ariaLabel="شمول الضريبة"
+          compact
+        />
+      </div>
+    )
+  }
+  return <p className={cn(HINT, MUTED)}>{priceTaxHint}</p>
 }
 
 function SuffixInput({

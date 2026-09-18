@@ -1,6 +1,8 @@
 import type {
   AccountStatement,
   AccountTransactionFilter,
+  BulkImportResult,
+  BulkImportRow,
   CreateAccountTransactionInput,
   CustomerDetail,
   CustomerRecord,
@@ -82,6 +84,16 @@ export interface CreateCustomerInput {
   phone: string | null
   notes: string | null
   region: string | null
+  isBusinessCustomer?: boolean
+  vatNumber?: string | null
+  commercialRegistration?: string | null
+  buildingNumber?: string | null
+  secondaryNumber?: string | null
+  street?: string | null
+  city?: string | null
+  district?: string | null
+  postalCode?: string | null
+  countryCode?: string | null
 }
 
 // Every field optional -- an edit only ever sends what actually changed.
@@ -91,6 +103,16 @@ export interface UpdateCustomerInput {
   phone?: string | null
   notes?: string | null
   region?: string | null
+  isBusinessCustomer?: boolean
+  vatNumber?: string | null
+  commercialRegistration?: string | null
+  buildingNumber?: string | null
+  secondaryNumber?: string | null
+  street?: string | null
+  city?: string | null
+  district?: string | null
+  postalCode?: string | null
+  countryCode?: string | null
 }
 
 export const customerListService = {
@@ -129,6 +151,15 @@ export const customerListService = {
   // unified account balance isn't zero -- see native-customers-service.ts's delete().
   async deleteCustomer(customerId: string): Promise<void> {
     await client.delete<void>(customerDetailEndpoint(customerId))
+  },
+
+  // Creates as many rows as are actually valid -- a name-less row is skipped and reported back
+  // rather than failing the whole file. See native-customers-service.ts's bulkImport.
+  async bulkImportCustomers(rows: BulkImportRow[]): Promise<BulkImportResult> {
+    return client.post<{ customers: BulkImportRow[] }, BulkImportResult>(
+      [CUSTOMERS_ENDPOINT, "bulk-import"].join(String.fromCharCode(47)),
+      { customers: rows }
+    )
   },
 
   // A "سند قبض" (receipt -- real money collected, credits the account; also how a wallet used

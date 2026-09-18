@@ -31,7 +31,7 @@ const SECTIONS: SettingsSection[] = [
   { key: "devices", label: "إعدادات الأجهزة", href: ROUTES.settingsDevices },
   { key: "branches", label: "إدارة الفروع", href: ROUTES.settingsBranches },
   { key: "payments", label: "طرق الدفع", href: ROUTES.settingsPayments },
-  { key: "tax", label: "الضرائب والفوترة", pending: "إعدادات الضرائب والفوترة غير متاحة بعد" },
+  { key: "tax", label: "الضرائب", href: ROUTES.settingsTaxes },
   { key: "backup", label: "النسخ الاحتياطي", pending: "النسخ الاحتياطي غير متاح بعد" },
 ]
 

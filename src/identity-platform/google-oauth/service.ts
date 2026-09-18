@@ -68,7 +68,11 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
       "",
     googleAdsApiBaseUrl:
       process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
-      "https://googleads.googleapis.com/v22",
+      // v22 sunsets October 7, 2026. v25 is current as of the migration (2026-09), sunsets
+      // August 2027. Every GAQL resource/field this integration queries was verified unchanged
+      // v22->v25 via Google's official diff tool, except campaign.start_date/end_date (removed
+      // in v23) -- see GoogleAdsCampaignService.listCampaigns in services.ts for the replacement.
+      "https://googleads.googleapis.com/v25",
     scopes: configuredScopes.length > 0 ? configuredScopes : defaultScopes,
   }
 }

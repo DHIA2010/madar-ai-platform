@@ -27,6 +27,7 @@ export interface HeldOrderItem {
   productName: string
   unitPrice: number
   quantity: number
+  discountAmount?: number
 }
 
 // A cart parked mid-build, kept as a real row (not just a browser tab) so a crash or refresh

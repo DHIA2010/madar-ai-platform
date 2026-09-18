@@ -259,7 +259,7 @@ describe("google oauth service", () => {
     const syncService = new GoogleAdsSyncService(
       database,
       {
-        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        apiBaseUrl: "https://googleads.googleapis.com/v25",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token-test",
@@ -836,7 +836,7 @@ describe("google oauth service", () => {
     const syncService = new GoogleAdsSyncService(
       database,
       {
-        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        apiBaseUrl: "https://googleads.googleapis.com/v25",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
         encryptionKey: "12345678901234567890123456789012",
         developerToken: "developer-token-test",

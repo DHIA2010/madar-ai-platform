@@ -57,6 +57,16 @@ export interface CreateCustomerInput {
   phone: string | null
   notes: string | null
   region: string | null
+  isBusinessCustomer: boolean
+  vatNumber: string | null
+  commercialRegistration: string | null
+  buildingNumber: string | null
+  secondaryNumber: string | null
+  street: string | null
+  city: string | null
+  district: string | null
+  postalCode: string | null
+  countryCode: string | null
 }
 
 // Every field optional -- an edit only ever sends what actually changed.
@@ -66,6 +76,32 @@ export interface UpdateCustomerInput {
   phone?: string | null
   notes?: string | null
   region?: string | null
+  isBusinessCustomer?: boolean
+  vatNumber?: string | null
+  commercialRegistration?: string | null
+  buildingNumber?: string | null
+  secondaryNumber?: string | null
+  street?: string | null
+  city?: string | null
+  district?: string | null
+  postalCode?: string | null
+  countryCode?: string | null
+}
+
+// One parsed CSV row -- name is not required here (unlike CreateCustomerInput) because an
+// invalid row is skipped and reported back, not a request-wide validation failure.
+export interface BulkImportRow {
+  name: string
+  email: string | null
+  phone: string | null
+  region: string | null
+}
+
+export interface BulkImportResult {
+  created: number
+  // 1-indexed against the `customers` array actually sent (the caller adds the header-row
+  // offset back when displaying these against the original CSV file).
+  skipped: Array<{ row: number; reason: string }>
 }
 
 export interface NativeCustomerView {
@@ -83,6 +119,17 @@ export interface NativeCustomerView {
   // store (deferred debt). Moved by createAccountTransaction() below and by invoices-service.ts
   // at sale/return time.
   accountBalance: number
+  // B2B identity + Saudi National Address -- see migration 075_customer_business_info.sql.
+  isBusinessCustomer: boolean
+  vatNumber: string | null
+  commercialRegistration: string | null
+  buildingNumber: string | null
+  secondaryNumber: string | null
+  street: string | null
+  city: string | null
+  district: string | null
+  postalCode: string | null
+  countryCode: string | null
 }
 
 export type AccountTransactionType = "receipt" | "payment" | "sale" | "return"
@@ -135,6 +182,16 @@ interface CustomerRow {
   created_at: Date | string
   updated_at: Date | string
   account_balance: string | number
+  is_business_customer: boolean
+  vat_number: string | null
+  commercial_registration: string | null
+  building_number: string | null
+  secondary_number: string | null
+  street: string | null
+  city: string | null
+  district: string | null
+  postal_code: string | null
+  country_code: string | null
   [key: string]: unknown
 }
 
@@ -170,12 +227,23 @@ function mapRow(row: CustomerRow): NativeCustomerView {
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
     accountBalance: Number(row.account_balance) || 0,
+    isBusinessCustomer: row.is_business_customer,
+    vatNumber: row.vat_number,
+    commercialRegistration: row.commercial_registration,
+    buildingNumber: row.building_number,
+    secondaryNumber: row.secondary_number,
+    street: row.street,
+    city: row.city,
+    district: row.district,
+    postalCode: row.postal_code,
+    countryCode: row.country_code,
   }
 }
 
 const CUSTOMER_SELECT = `
   SELECT id, workspace_id, name, email, phone, notes, region, created_at, updated_at,
-         account_balance
+         account_balance, is_business_customer, vat_number, commercial_registration,
+         building_number, secondary_number, street, city, district, postal_code, country_code
     FROM customers
    WHERE deleted_at IS NULL
 `
@@ -201,6 +269,16 @@ export function toNormalizedCustomer(customer: NativeCustomerView): CustomerSumm
     segment: "New",
     accountBalance: customer.accountBalance,
     region: customer.region,
+    isBusinessCustomer: customer.isBusinessCustomer,
+    vatNumber: customer.vatNumber,
+    commercialRegistration: customer.commercialRegistration,
+    buildingNumber: customer.buildingNumber,
+    secondaryNumber: customer.secondaryNumber,
+    street: customer.street,
+    city: customer.city,
+    district: customer.district,
+    postalCode: customer.postalCode,
+    countryCode: customer.countryCode,
   }
 }
 
@@ -244,8 +322,10 @@ export class NativeCustomersService {
     await this.database.query(
       `INSERT INTO customers
          (id, organization_id, workspace_id, name, email, phone, notes, region, created_by,
-          account_balance)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0)`,
+          account_balance, is_business_customer, vat_number, commercial_registration,
+          building_number, secondary_number, street, city, district, postal_code, country_code)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+               $19)`,
       [
         id,
         input.organizationId,
@@ -256,12 +336,74 @@ export class NativeCustomersService {
         input.notes,
         input.region,
         input.createdBy,
+        input.isBusinessCustomer,
+        input.vatNumber,
+        input.commercialRegistration,
+        input.buildingNumber,
+        input.secondaryNumber,
+        input.street,
+        input.city,
+        input.district,
+        input.postalCode,
+        input.countryCode ?? "SA",
       ]
     )
 
     const created = await this.getById(input.organizationId, id)
     if (!created) throw CUSTOMER_ERRORS.notFound()
     return created
+  }
+
+  // Creates as many rows as are actually valid rather than rejecting the whole file over one
+  // bad row -- a name-less row is the only thing checked here (create() itself has no other way
+  // to fail for a well-formed row), so a name-less row is skipped and every other real error
+  // (a database hiccup on one specific row) is caught per-row too, so 999 good rows still land
+  // even if row 37 somehow fails.
+  async bulkImport(
+    organizationId: string,
+    workspaceId: string | null,
+    createdBy: string | null,
+    rows: BulkImportRow[]
+  ): Promise<BulkImportResult> {
+    let created = 0
+    const skipped: BulkImportResult["skipped"] = []
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index]
+      const name = row.name.trim()
+      if (!name) {
+        skipped.push({ row: index + 1, reason: "الاسم مطلوب" })
+        continue
+      }
+
+      try {
+        await this.create({
+          organizationId,
+          workspaceId,
+          createdBy,
+          name,
+          email: row.email?.trim() || null,
+          phone: row.phone?.trim() || null,
+          notes: null,
+          region: row.region?.trim() || null,
+          isBusinessCustomer: false,
+          vatNumber: null,
+          commercialRegistration: null,
+          buildingNumber: null,
+          secondaryNumber: null,
+          street: null,
+          city: null,
+          district: null,
+          postalCode: null,
+          countryCode: "SA",
+        })
+        created += 1
+      } catch {
+        skipped.push({ row: index + 1, reason: "تعذر إنشاء هذا العميل" })
+      }
+    }
+
+    return { created, skipped }
   }
 
   async getById(organizationId: string, id: string): Promise<NativeCustomerView | null> {
@@ -292,6 +434,18 @@ export class NativeCustomersService {
     if (input.phone !== undefined) set("phone", input.phone)
     if (input.notes !== undefined) set("notes", input.notes)
     if (input.region !== undefined) set("region", input.region)
+    if (input.isBusinessCustomer !== undefined)
+      set("is_business_customer", input.isBusinessCustomer)
+    if (input.vatNumber !== undefined) set("vat_number", input.vatNumber)
+    if (input.commercialRegistration !== undefined)
+      set("commercial_registration", input.commercialRegistration)
+    if (input.buildingNumber !== undefined) set("building_number", input.buildingNumber)
+    if (input.secondaryNumber !== undefined) set("secondary_number", input.secondaryNumber)
+    if (input.street !== undefined) set("street", input.street)
+    if (input.city !== undefined) set("city", input.city)
+    if (input.district !== undefined) set("district", input.district)
+    if (input.postalCode !== undefined) set("postal_code", input.postalCode)
+    if (input.countryCode !== undefined) set("country_code", input.countryCode)
 
     if (assignments.length > 0) {
       await this.database.query(

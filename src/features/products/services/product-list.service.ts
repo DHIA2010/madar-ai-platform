@@ -62,6 +62,14 @@ export interface ProductRecord {
   platform: ProductPlatform
   productType: ProductKind | null
   baseUnit: string | null
+  // Null for a synced product, or a native one that uses the organization's default rate. Lets
+  // a live cart preview (see CashierPage.tsx) compute tax per line the same way the backend
+  // actually charges it, instead of one blanket rate for the whole cart.
+  taxRateId: string | null
+  // Whether sellingPrice already includes VAT (Settings -> الضرائب -> "الأسعار تشمل الضريبة", or a
+  // per-product conversion). Lets a live cart preview split the same shown price into net/tax the
+  // same way the backend actually charges it, instead of always adding tax on top.
+  priceIncludesTax: boolean
   image: string | null
   activityDate: string
 }
@@ -122,6 +130,11 @@ export interface CreateProductInput {
   components: CreateProductComponent[]
   variantOptions: CreateProductVariantOption[]
   variants: CreateProductVariant[]
+  // Null means "use the organization's default rate" (Settings -> الضرائب) -- re-read fresh at
+  // the time of each sale. Set only when this specific product needs its own rate.
+  taxRateId: string | null
+  // Whether sellPrice is already tax-inclusive or tax-exclusive -- see ProductRecord above.
+  priceIncludesTax: boolean
 }
 
 export interface CreatedProduct {
@@ -130,6 +143,8 @@ export interface CreatedProduct {
   sku: string | null
   productType: ProductKind
   status: "draft" | "active" | "archived"
+  taxRateId: string | null
+  priceIncludesTax: boolean
 }
 
 // What GET /v1/products/:id returns: the stored product with its children, which is what the
@@ -142,6 +157,30 @@ export interface ProductDetail extends CreateProductInput {
   variants: Array<CreateProductVariant & { id: string; position: number }>
   createdAt: string
   updatedAt: string
+}
+
+// A CSV import of native products -- every value is a plain string (or null), exactly like a
+// spreadsheet cell. Only covers "raw"/"simple"/"weighted"/"service"/"digital": a bundle needs
+// component references to other products and a variable product needs a variant matrix, neither
+// of which fits one flat row, so ProductCatalogService.bulkImport() skips (and reports) either
+// with a reason rather than forcing them into a shape that would only confuse the sheet's author.
+export interface BulkImportProductRow {
+  name: string
+  sku: string | null
+  category: string | null
+  productType: string | null
+  status: string | null
+  costPrice: string | null
+  sellPrice: string | null
+  stockQuantity: string | null
+  minStock: string | null
+  baseUnit: string | null
+  description: string | null
+}
+
+export interface BulkImportProductResult {
+  created: number
+  skipped: Array<{ row: number; reason: string }>
 }
 
 export const productListService = {
@@ -189,5 +228,24 @@ export const productListService = {
   // ours to remove and the next sync would bring it back, so the caller must not offer it.
   async deleteProduct(id: string): Promise<void> {
     await client.delete<void>([PRODUCTS_ENDPOINT, encodeURIComponent(id)].join(PATH_SEPARATOR))
+  },
+
+  // Creates as many rows as are actually valid -- a bad row is skipped and reported back rather
+  // than failing the whole file. See catalog-service.ts's bulkImport.
+  async bulkImportProducts(rows: BulkImportProductRow[]): Promise<BulkImportProductResult> {
+    return client.post<{ products: BulkImportProductRow[] }, BulkImportProductResult>(
+      [PRODUCTS_ENDPOINT, "bulk-import"].join(PATH_SEPARATOR),
+      { products: rows }
+    )
+  },
+
+  // Settings -> الضرائب -> "الأسعار تشمل الضريبة" applied to every existing priced product at
+  // once -- see ProductCatalogService.applyPriceTaxConvention. "المنتجات الجديدة فقط" never calls
+  // this; it only changes what a newly created product defaults to.
+  async applyTaxConvention(includeTax: boolean): Promise<{ updated: number }> {
+    return client.post<{ includeTax: boolean }, { updated: number }>(
+      [PRODUCTS_ENDPOINT, "apply-tax-convention"].join(PATH_SEPARATOR),
+      { includeTax }
+    )
   },
 }

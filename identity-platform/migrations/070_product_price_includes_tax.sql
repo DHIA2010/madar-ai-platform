@@ -1,0 +1,12 @@
+-- Whether a product's own sell_price is already tax-inclusive (gross, what the customer actually
+-- pays) or tax-exclusive (net, VAT added on top at sale time). Defaults to false so every
+-- existing product keeps meaning exactly what it always has -- net -- and nothing about an
+-- existing sale's math changes until a merchant deliberately opts a product into the other
+-- convention (see catalog-service.ts's applyPriceTaxConvention, which both flips this flag and
+-- converts the stored price so the same real shelf price keeps being charged either way).
+--
+-- Per-product, not a single organization-wide switch: "طريقة احتساب أسعار المنتجات" -> "تطبيق على
+-- المنتجات الجديدة فقط" deliberately leaves existing products on whatever convention they were
+-- already using while only new products start on the new one, so two conventions can genuinely
+-- coexist in the same catalogue at once.
+alter table products add column if not exists price_includes_tax boolean not null default false;

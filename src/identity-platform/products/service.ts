@@ -27,6 +27,16 @@ export interface NormalizedProduct {
   // Also null for a synced product: the storefronts do not expose a unit of measure, and it is
   // what lets a carton product be linked to the piece product it packages.
   baseUnit: string | null
+  // Also null for a synced product -- only a native product can carry its own tax_rate_id
+  // override (Settings -> المنتجات -> الضريبة); everything else uses the organization's default
+  // rate. Lets the POS cart compute its live preview per line instead of one blanket rate,
+  // matching invoices-service.ts's own real per-line calculation.
+  taxRateId: string | null
+  // Also false for a synced product -- a storefront's own price is whatever the storefront says
+  // it is, with no Madar-side gross/net convention to track. Only a native product can be
+  // switched between tax-inclusive and tax-exclusive pricing (Settings -> الضرائب -> "الأسعار
+  // تشمل الضريبة").
+  priceIncludesTax: boolean
   image: string | null
   activityDate: string
 }
@@ -87,6 +97,8 @@ function normalizeSallaProduct(row: CommerceRecordRow): NormalizedProduct {
     platform: "Salla",
     productType: null,
     baseUnit: null,
+    taxRateId: null,
+    priceIncludesTax: false,
     image: payload.main_image ?? payload.thumbnail ?? payload.images?.[0]?.url ?? null,
     activityDate: toIsoDate(row.updated_at),
   }
@@ -126,6 +138,8 @@ function normalizeShopifyProduct(row: CommerceRecordRow): NormalizedProduct {
     platform: "Shopify",
     productType: null,
     baseUnit: null,
+    taxRateId: null,
+    priceIncludesTax: false,
     image: payload.image?.src ?? payload.images?.[0]?.src ?? null,
     activityDate: toIsoDate(row.updated_at),
   }
@@ -173,6 +187,8 @@ function normalizeZidProduct(row: CommerceRecordRow): NormalizedProduct {
     platform: "Zid",
     productType: null,
     baseUnit: null,
+    taxRateId: null,
+    priceIncludesTax: false,
     image: payload.images?.[0]?.image?.large ?? payload.images?.[0]?.image?.thumbnail ?? null,
     activityDate: toIsoDate(row.updated_at),
   }

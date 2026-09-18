@@ -35,6 +35,16 @@ export interface OrganizationSettingsDto {
   city?: string
   // Stored preference only -- see the notifications section in SettingsDashboard.
   notifyEmail?: boolean
+  // Settings -> الضرائب's "إعدادات الفاتورة الضريبية" toggles -- see TaxesSettings.tsx. The real
+  // rate/percentage lives in the separate tax_rates table, not here. There is no "show tax on
+  // invoice" toggle -- a real tax invoice is legally required to show its VAT breakdown.
+  taxAutoApplyToProducts?: boolean
+  taxPricesIncludeTax?: boolean
+  // "auto" (default, absent means auto too) applies taxPricesIncludeTax as every new product's
+  // convention. "manual" instead shows a per-product dropdown on the Add Product form (see
+  // AddProduct.tsx) so a merchant who genuinely sells some products gross and some net can decide
+  // case by case, rather than being forced into one blanket rule for every new product.
+  taxPriceEntryMode?: "auto" | "manual"
 }
 
 export interface OrganizationDto {

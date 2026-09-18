@@ -807,6 +807,12 @@ describe("customer unified account: receipts, payments, sales, and returns on on
       label: "Account",
     })
     await enablePaymentMethod(login, "cash")
+    // The refund itself is given back as real store credit -- see createReturn() on the backend,
+    // which only credits account_balance when the CHOSEN REFUND method is a credit/prepaid kind
+    // (cash/card/etc. are assumed already handled outside the system). This is what the test
+    // title's "regardless of how it was originally paid" is about: the sale itself was paid in
+    // plain cash, yet the refund can still be settled as account credit.
+    await enablePaymentMethod(login, "customer_credit")
 
     const created = await createCustomer(login, {
       name: "عميل الإرجاع",
@@ -831,7 +837,11 @@ describe("customer unified account: receipts, payments, sales, and returns on on
       }),
     })
     expect(invoiceResponse.status).toBe(201)
-    const invoice = (await invoiceResponse.json()) as { id: string; invoiceNumber: string }
+    const invoice = (await invoiceResponse.json()) as {
+      id: string
+      invoiceNumber: string
+      items: Array<{ id: string; quantity: number }>
+    }
 
     const beforeReturn = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
       headers: authHeaders(login),
@@ -840,12 +850,18 @@ describe("customer unified account: receipts, payments, sales, and returns on on
       accountBalance: 0,
     })
 
-    const returned = await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/status`, {
-      method: "PATCH",
+    // A real, itemized return event (see PosInvoicesService.createReturn()) -- returning the
+    // line's own full quantity, same as the old blunt "mark the whole invoice returned" used to.
+    const returned = await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/returns`, {
+      method: "POST",
       headers: { ...authHeaders(login), "content-type": "application/json" },
-      body: JSON.stringify({ status: "returned" }),
+      body: JSON.stringify({
+        items: [{ invoiceItemId: invoice.items[0].id, quantity: invoice.items[0].quantity }],
+        paymentMethodCode: "customer_credit",
+        notes: null,
+      }),
     })
-    expect(returned.status).toBe(200)
+    expect(returned.status).toBe(201)
 
     const afterReturn = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
       headers: authHeaders(login),
@@ -870,11 +886,16 @@ describe("customer unified account: receipts, payments, sales, and returns on on
     })
     expect(statement.transactions[0].reference).toMatch(/^RET-\d{5}$/)
 
-    // Returning the same invoice again must not credit the account a second time.
-    await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/status`, {
-      method: "PATCH",
+    // Returning the same (now fully-returned) line again is rejected outright -- there is
+    // nothing left on it to return -- so the account is never credited a second time.
+    await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/returns`, {
+      method: "POST",
       headers: { ...authHeaders(login), "content-type": "application/json" },
-      body: JSON.stringify({ status: "returned" }),
+      body: JSON.stringify({
+        items: [{ invoiceItemId: invoice.items[0].id, quantity: invoice.items[0].quantity }],
+        paymentMethodCode: "customer_credit",
+        notes: null,
+      }),
     })
     const afterSecondReturn = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
       headers: authHeaders(login),
@@ -932,12 +953,19 @@ describe("customer unified account: receipts, payments, sales, and returns on on
         items: [{ productId: null, productName: "غرض", unitPrice: 50, quantity: 1 }],
       }),
     })
-    const invoice = (await invoiceResponse.json()) as { id: string }
-    // +57.50 (return of that same sale) -> balance 200
-    await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/status`, {
-      method: "PATCH",
+    const invoice = (await invoiceResponse.json()) as {
+      id: string
+      items: Array<{ id: string; quantity: number }>
+    }
+    // +57.50 (return of that same sale, refunded as store credit) -> balance 200
+    await fetch(`${baseUrl}/v1/pos/invoices/${invoice.id}/returns`, {
+      method: "POST",
       headers: { ...authHeaders(login), "content-type": "application/json" },
-      body: JSON.stringify({ status: "returned" }),
+      body: JSON.stringify({
+        items: [{ invoiceItemId: invoice.items[0].id, quantity: invoice.items[0].quantity }],
+        paymentMethodCode: "customer_credit",
+        notes: null,
+      }),
     })
 
     const detailResponse = await fetch(`${baseUrl}/v1/customers/${customerId}`, {
@@ -1104,5 +1132,65 @@ describe("editing and deleting a native customer", () => {
       headers: authHeaders(login),
     })
     expect(deleted.status).toBe(204)
+  })
+})
+
+describe("bulk-importing native customers from a CSV", () => {
+  it("creates every valid row and skips name-less rows, reporting exactly why", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-import@madar.test",
+      "Customer Import"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001720"
+    await provisionWorkspace({ organizationId: actor.organizationId, workspaceId, label: "Import" })
+
+    const response = await fetch(`${baseUrl}/v1/customers/bulk-import`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({
+        customers: [
+          {
+            name: "أحمد العتيبي",
+            phone: "0501234567",
+            email: "ahmed@example.com",
+            region: "الرياض",
+          },
+          { name: "", phone: null, email: null, region: null },
+          { name: "  ", phone: null, email: null, region: null },
+          { name: "سارة القحطاني", phone: null, email: null, region: null },
+        ],
+      }),
+    })
+    expect(response.status).toBe(200)
+    const result = (await response.json()) as {
+      created: number
+      skipped: Array<{ row: number; reason: string }>
+    }
+    expect(result.created).toBe(2)
+    expect(result.skipped).toEqual([
+      { row: 2, reason: "الاسم مطلوب" },
+      { row: 3, reason: "الاسم مطلوب" },
+    ])
+
+    const listResponse = await fetch(`${baseUrl}/v1/customers`, { headers: authHeaders(login) })
+    const listBody = (await listResponse.json()) as { items: Array<{ name: string }> }
+    expect(listBody.items.map((item) => item.name).sort()).toEqual([
+      "أحمد العتيبي",
+      "سارة القحطاني",
+    ])
+  })
+
+  it("rejects an empty import", async () => {
+    const { login } = await registerAndProvisionOrg(
+      "customers-import-empty@madar.test",
+      "Customer Import Empty"
+    )
+
+    const response = await fetch(`${baseUrl}/v1/customers/bulk-import`, {
+      method: "POST",
+      headers: { ...authHeaders(login), "content-type": "application/json" },
+      body: JSON.stringify({ customers: [] }),
+    })
+    expect(response.status).toBe(400)
   })
 })

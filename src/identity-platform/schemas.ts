@@ -5,6 +5,7 @@ import { z } from "zod"
 // adding a product type in one place and forgetting the other would be silently accepted.
 import { PRODUCT_STATUSES, PRODUCT_TYPES, PRODUCT_UNITS } from "./products/catalog-types"
 import { PAYMENT_KINDS } from "./pos/payment-methods-service"
+import { TAX_RATE_TYPES } from "./tax/tax-rates-service"
 import {
   BAUD_RATES,
   DEVICE_CONNECTIONS,
@@ -526,6 +527,60 @@ export const createProductSchema = z.object({
   components: z.array(productComponentSchema).max(100).default([]),
   variantOptions: z.array(productVariantOptionSchema).max(8).default([]),
   variants: z.array(productVariantSchema).max(200).default([]),
+  // Null means "use the organization's default rate" -- see catalog-types.ts's CreateProductInput.
+  taxRateId: z.string().uuid().nullable().optional().default(null),
+  priceIncludesTax: z.boolean().default(false),
+})
+
+// A bulk CSV import of native products -- every field is a plain string (or null), exactly like a
+// spreadsheet cell, since ProductCatalogService.bulkImport() does the real type coercion and
+// per-row validation (the same rules createProductSchema/create() already enforce for one
+// product). name is deliberately not required at the schema level -- an invalid row is skipped
+// and reported back, not one bad row failing the whole file.
+export const bulkImportProductsSchema = z.object({
+  products: z
+    .array(
+      z.object({
+        name: z.string().max(200),
+        sku: z.string().max(120).nullable().optional().default(null),
+        category: z.string().max(200).nullable().optional().default(null),
+        productType: z.string().max(40).nullable().optional().default(null),
+        status: z.string().max(40).nullable().optional().default(null),
+        costPrice: z.string().max(40).nullable().optional().default(null),
+        sellPrice: z.string().max(40).nullable().optional().default(null),
+        stockQuantity: z.string().max(40).nullable().optional().default(null),
+        minStock: z.string().max(40).nullable().optional().default(null),
+        baseUnit: z.string().max(60).nullable().optional().default(null),
+        description: z.string().max(2000).nullable().optional().default(null),
+      })
+    )
+    .min(1)
+    .max(1000),
+})
+
+// A per-organization named tax rate -- see tax-rates-service.ts and migration 068_tax_rates.sql.
+export const createTaxRateSchema = z.object({
+  name: z.string().min(1).max(120),
+  type: z.enum(TAX_RATE_TYPES),
+  ratePercent: z.number().min(0).max(100),
+  isDefault: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+})
+
+// Every field optional -- an edit only ever sends what actually changed, same convention as
+// updateCustomerSchema below.
+export const updateTaxRateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  type: z.enum(TAX_RATE_TYPES).optional(),
+  ratePercent: z.number().min(0).max(100).optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+})
+
+// Settings -> الضرائب -> "الأسعار تشمل الضريبة", applied to every existing priced product at once
+// -- see ProductCatalogService.applyPriceTaxConvention.
+export const applyProductsTaxConventionSchema = z.object({
+  includeTax: z.boolean(),
 })
 
 // A native (Madar-authored) customer -- see native-customers-service.ts and migration
@@ -536,6 +591,20 @@ export const createCustomerSchema = z.object({
   phone: z.string().max(30).nullable().optional().default(null),
   notes: z.string().max(500).nullable().optional().default(null),
   region: z.string().max(120).nullable().optional().default(null),
+  // B2B identity + Saudi National Address, for a VAT-registered business customer -- lets a sale
+  // to them carry the BUYER's own VAT number/address on the invoice, the same way the seller's
+  // own already does (see migration 067_pos_invoice_zatca.sql). All optional -- a walk-in
+  // customer never fills any of this in.
+  isBusinessCustomer: z.boolean().optional().default(false),
+  vatNumber: z.string().max(30).nullable().optional().default(null),
+  commercialRegistration: z.string().max(30).nullable().optional().default(null),
+  buildingNumber: z.string().max(10).nullable().optional().default(null),
+  secondaryNumber: z.string().max(10).nullable().optional().default(null),
+  street: z.string().max(160).nullable().optional().default(null),
+  city: z.string().max(120).nullable().optional().default(null),
+  district: z.string().max(120).nullable().optional().default(null),
+  postalCode: z.string().max(10).nullable().optional().default(null),
+  countryCode: z.string().max(3).nullable().optional().default("SA"),
 })
 
 // A partial edit of a native customer's own fields -- every field optional, since an edit only
@@ -546,6 +615,33 @@ export const updateCustomerSchema = z.object({
   phone: z.string().max(30).nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   region: z.string().max(120).nullable().optional(),
+  isBusinessCustomer: z.boolean().optional(),
+  vatNumber: z.string().max(30).nullable().optional(),
+  commercialRegistration: z.string().max(30).nullable().optional(),
+  buildingNumber: z.string().max(10).nullable().optional(),
+  secondaryNumber: z.string().max(10).nullable().optional(),
+  street: z.string().max(160).nullable().optional(),
+  city: z.string().max(120).nullable().optional(),
+  district: z.string().max(120).nullable().optional(),
+  postalCode: z.string().max(10).nullable().optional(),
+  countryCode: z.string().max(3).nullable().optional(),
+})
+
+// A bulk CSV import of native customers -- name is deliberately not required at the schema
+// level (unlike createCustomerSchema) because an invalid row should be skipped and reported
+// back, not fail the whole request; NativeCustomersService.bulkImport does that per-row check.
+export const bulkImportCustomersSchema = z.object({
+  customers: z
+    .array(
+      z.object({
+        name: z.string().max(120),
+        email: z.string().max(160).nullable().optional().default(null),
+        phone: z.string().max(30).nullable().optional().default(null),
+        region: z.string().max(120).nullable().optional().default(null),
+      })
+    )
+    .min(1)
+    .max(1000),
 })
 
 // A receipt ("سند قبض" -- also how a wallet top-up now works, since both credit the same real
@@ -687,6 +783,9 @@ export const createInvoiceItemSchema = z.object({
   productName: z.string().min(1).max(200),
   unitPrice: z.number().min(0),
   quantity: z.number().positive(),
+  // A discount applied to just this line, distinct from the invoice's own order-wide
+  // discountAmount below -- see migration 071_pos_invoice_item_discount.sql.
+  discountAmount: z.number().min(0).optional().default(0),
 })
 
 // One settling line -- an invoice can be paid across more than one of these (see
@@ -722,8 +821,29 @@ export const holdOrderSchema = z.object({
   items: z.array(createInvoiceItemSchema).min(1),
 })
 
+// "returned" is no longer a valid value here -- a return is now its own real, itemized event
+// (see createInvoiceReturnSchema below and PosInvoicesService.createReturn()), not a blunt
+// whole-invoice status flip.
 export const invoiceStatusSchema = z.object({
-  status: z.enum(["cancelled", "returned"]),
+  status: z.enum(["cancelled"]),
+})
+
+// One line of a return -- invoiceItemId names the exact pos_invoice_items row (not just a
+// product), since two lines on the same invoice could share a product, and quantity is only ever
+// what's actually being returned THIS event (createReturn() itself enforces it can't exceed
+// what's still left on that line).
+export const createInvoiceReturnItemSchema = z.object({
+  invoiceItemId: z.string().uuid(),
+  quantity: z.number().positive(),
+})
+
+export const createInvoiceReturnSchema = z.object({
+  items: z.array(createInvoiceReturnItemSchema).min(1),
+  // Which method the refund was actually given back through -- must be one this branch has
+  // enabled, the same rule create() already enforces for a sale's own payments (see
+  // PosInvoicesService.createReturn()).
+  paymentMethodCode: z.string().min(1).max(60),
+  notes: z.string().max(500).nullable().optional().default(null),
 })
 
 export const paymentMethodUpdateSchema = z.object({

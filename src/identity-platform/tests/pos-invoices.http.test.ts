@@ -155,6 +155,51 @@ async function setStatus(token: string, id: string, status: string) {
   return { status: response.status, body: (await response.json()) as Record<string, unknown> }
 }
 
+async function createReturn(
+  token: string,
+  invoiceId: string,
+  items: Array<{ invoiceItemId: string; quantity: number }>,
+  notes: string | null = null,
+  paymentMethodCode = "cash"
+) {
+  const response = await fetch(`${baseUrl}/v1/pos/invoices/${invoiceId}/returns`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ items, paymentMethodCode, notes }),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+async function listReturns(token: string, query = "") {
+  const response = await fetch(`${baseUrl}/v1/pos/invoices/returns${query}`, {
+    headers: authHeaders(token),
+  })
+  return {
+    status: response.status,
+    body: (await response.json()) as { items: Array<Record<string, unknown>> },
+  }
+}
+
+async function createProduct(token: string, body: Record<string, unknown>) {
+  const response = await fetch(`${baseUrl}/v1/products`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({
+      productType: "simple",
+      category: "عام",
+      description: "",
+      status: "active",
+      costPrice: null,
+      minStock: 0,
+      baseUnit: null,
+      taxRateId: null,
+      priceIncludesTax: false,
+      ...body,
+    }),
+  })
+  return (await response.json()) as { id: string }
+}
+
 // Subtotal 32 (24 + 8), no discount, 15% VAT -> tax 4.80, total 36.80.
 const COFFEE_SALE = {
   customerName: null,
@@ -205,6 +250,111 @@ describe("point-of-sale invoices", () => {
       taxAmount: 3.6,
       totalAmount: 27.6,
     })
+  })
+
+  it("applies a per-item discount, reporting the combined total as the invoice's discountAmount", async () => {
+    const { token } = await signIn("invoice-item-discount@example.com", "Invoice Item Discount")
+
+    // Subtotal 32 (24 + 8), a 3 SAR discount on just the coffee line, no order-wide discount ->
+    // taxable 29, VAT 4.35, total 33.35. subtotalAmount stays the raw pre-discount 32, and
+    // discountAmount (order 0 + item 3) is what actually brings it down to the real taxable base.
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [{ paymentMethodCode: "cash", amount: 33.35 }],
+      items: [
+        {
+          productId: null,
+          productName: "قهوة مختصة",
+          unitPrice: 12,
+          quantity: 2,
+          discountAmount: 3,
+        },
+        { productId: null, productName: "كرواسون", unitPrice: 8, quantity: 1 },
+      ],
+    })
+
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      subtotalAmount: 32,
+      discountAmount: 3,
+      taxAmount: 4.35,
+      totalAmount: 33.35,
+    })
+    expect(created.body.items).toMatchObject([
+      { productName: "قهوة مختصة", lineTotal: 24, discountAmount: 3 },
+      { productName: "كرواسون", lineTotal: 8, discountAmount: 0 },
+    ])
+  })
+
+  it("stacks a per-item discount with the order-wide discount on the same sale", async () => {
+    const { token } = await signIn(
+      "invoice-stacked-discount@example.com",
+      "Invoice Stacked Discount"
+    )
+
+    // Item discount 3 on the coffee line first (net 24 -> 21, net 32 -> 29 overall), then the
+    // order-wide 4 SAR discount spread across what's left by share -> taxable 25, VAT 3.75,
+    // total 28.75. discountAmount is the sum of both: 4 + 3 = 7.
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      discountAmount: 4,
+      payments: [{ paymentMethodCode: "cash", amount: 28.75 }],
+      items: [
+        {
+          productId: null,
+          productName: "قهوة مختصة",
+          unitPrice: 12,
+          quantity: 2,
+          discountAmount: 3,
+        },
+        { productId: null, productName: "كرواسون", unitPrice: 8, quantity: 1 },
+      ],
+    })
+
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      subtotalAmount: 32,
+      discountAmount: 7,
+      taxAmount: 3.75,
+      totalAmount: 28.75,
+    })
+  })
+
+  it("clamps a per-item discount so it can never exceed what that one line is worth", async () => {
+    const { token } = await signIn(
+      "invoice-clamped-discount@example.com",
+      "Invoice Clamped Discount"
+    )
+
+    // A 100 SAR "discount" on a 24 SAR line is clamped to 24 -- that line's taxable drops to 0,
+    // not negative, and the invoice's own discountAmount reflects the real 24 actually applied,
+    // not the 100 that was sent.
+    const created = await createInvoice(token, {
+      ...COFFEE_SALE,
+      payments: [{ paymentMethodCode: "cash", amount: 9.2 }],
+      items: [
+        {
+          productId: null,
+          productName: "قهوة مختصة",
+          unitPrice: 12,
+          quantity: 2,
+          discountAmount: 100,
+        },
+        { productId: null, productName: "كرواسون", unitPrice: 8, quantity: 1 },
+      ],
+    })
+
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      subtotalAmount: 32,
+      discountAmount: 24,
+      taxAmount: 1.2,
+      totalAmount: 9.2,
+    })
+    expect(created.body.items).toMatchObject([
+      { productName: "قهوة مختصة", discountAmount: 24 },
+      { productName: "كرواسون", discountAmount: 0 },
+    ])
   })
 
   it("splits a sale across more than one payment method", async () => {
@@ -360,17 +510,13 @@ describe("point-of-sale invoices", () => {
     expect(created.body).toMatchObject({ code: "VALIDATION_ERROR" })
   })
 
-  it("cancels and returns an invoice", async () => {
+  it("cancels an invoice", async () => {
     const { token } = await signIn("invoice-status@example.com", "Invoice Status")
 
     const created = await createInvoice(token, COFFEE_SALE)
     const cancelled = await setStatus(token, String(created.body.id), "cancelled")
     expect(cancelled.status).toBe(200)
     expect(cancelled.body).toMatchObject({ status: "cancelled" })
-
-    const second = await createInvoice(token, COFFEE_SALE)
-    const returned = await setStatus(token, String(second.body.id), "returned")
-    expect(returned.body).toMatchObject({ status: "returned" })
   })
 
   it("lists invoices filtered by status, and summarizes counts and average value", async () => {
@@ -443,6 +589,204 @@ describe("point-of-sale invoices", () => {
 
   it("refuses an unauthenticated read", async () => {
     expect((await fetch(`${baseUrl}/v1/pos/invoices`)).status).toBe(401)
+  })
+
+  it("rejects re-finalizing an invoice that already left completed", async () => {
+    const { token } = await signIn("invoice-immutable@example.com", "Invoice Immutable")
+
+    const created = await createInvoice(token, COFFEE_SALE)
+    expect((await setStatus(token, String(created.body.id), "cancelled")).status).toBe(200)
+
+    const secondCancel = await setStatus(token, String(created.body.id), "cancelled")
+    expect(secondCancel.status).toBe(409)
+    expect(secondCancel.body).toMatchObject({ code: "POS_INVOICE_ALREADY_FINALIZED" })
+
+    const items = created.body.items as Array<{ id: string }>
+    const returnAfterCancel = await createReturn(token, String(created.body.id), [
+      { invoiceItemId: items[0].id, quantity: 1 },
+    ])
+    expect(returnAfterCancel.status).toBe(409)
+    expect(returnAfterCancel.body).toMatchObject({ code: "POS_INVOICE_NOT_RETURNABLE" })
+  })
+
+  it("returns part of one line, crediting the customer and restoring real stock", async () => {
+    const { token } = await signIn("invoice-partial-return@example.com", "Invoice Partial Return")
+    // The refund itself is settled as real store credit -- createReturn() only credits
+    // account_balance when the CHOSEN REFUND method is a credit/prepaid kind, so this test's
+    // returns are explicitly refunded through "customer_credit" rather than the default "cash".
+    await enablePaymentMethod(token, "customer_credit")
+
+    const customer = (await (
+      await fetch(`${baseUrl}/v1/customers`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ name: "سارة", email: null, phone: null, notes: null }),
+      })
+    ).json()) as { id: string }
+
+    const product = await createProduct(token, {
+      name: "كوب قهوة",
+      sku: "RETURN-CUP-1",
+      stockQuantity: 10,
+      sellPrice: 12,
+    })
+
+    // 3 units at 12 (net, 15% VAT) -> subtotal 36, tax 5.40, total 41.40.
+    const created = await createInvoice(token, {
+      customerName: null,
+      customerId: customer.id,
+      payments: [{ paymentMethodCode: "cash", amount: 41.4 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "كوب قهوة", unitPrice: 12, quantity: 3 }],
+    })
+    expect(created.status).toBe(201)
+    const line = (created.body.items as Array<{ id: string; quantity: number }>)[0]
+    expect(line.quantity).toBe(3)
+
+    // Return 1 of the 3 cups -- exactly a third: 12 net, 1.80 tax, 13.80 total.
+    const returned = await createReturn(
+      token,
+      String(created.body.id),
+      [{ invoiceItemId: line.id, quantity: 1 }],
+      null,
+      "customer_credit"
+    )
+    expect(returned.status).toBe(201)
+    expect(returned.body).toMatchObject({
+      invoiceNumber: created.body.invoiceNumber,
+      subtotalAmount: 12,
+      discountAmount: 0,
+      taxAmount: 1.8,
+      totalAmount: 13.8,
+    })
+    expect(returned.body.returnNumber).toMatch(/^RTN-\d{6}$/)
+
+    // The invoice itself is now "partially_returned", not "returned" -- 2 of the 3 cups are
+    // still with the customer.
+    const invoiceAfter = await listInvoices(token, `?search=${created.body.invoiceNumber}`)
+    expect(invoiceAfter.body.items[0]).toMatchObject({ status: "partially_returned" })
+
+    // Real store credit landed on the customer's account for exactly the returned amount.
+    const customerDetail = (await (
+      await fetch(`${baseUrl}/v1/customers/${customer.id}`, { headers: authHeaders(token) })
+    ).json()) as { accountBalance: number }
+    expect(customerDetail.accountBalance).toBe(13.8)
+
+    // A sale never decrements stock in this app today (a separate, pre-existing gap this return
+    // feature does not touch) -- so the one returned cup lands on top of the untouched 10: 11.
+    const productDetail = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(productDetail.stockQuantity).toBe(11)
+
+    // Returning the other 2 finishes the job -- the invoice is now fully "returned".
+    const secondReturn = await createReturn(
+      token,
+      String(created.body.id),
+      [{ invoiceItemId: line.id, quantity: 2 }],
+      null,
+      "customer_credit"
+    )
+    expect(secondReturn.status).toBe(201)
+    const invoiceAfterSecond = await listInvoices(token, `?search=${created.body.invoiceNumber}`)
+    expect(invoiceAfterSecond.body.items[0]).toMatchObject({ status: "returned" })
+
+    // Both return events show up on the real returns list, each its own document.
+    const returns = await listReturns(token)
+    expect(returns.body.items).toHaveLength(2)
+  })
+
+  it("rejects returning more than what is actually left on a line", async () => {
+    const { token } = await signIn("invoice-over-return@example.com", "Invoice Over Return")
+
+    const created = await createInvoice(token, COFFEE_SALE)
+    const line = (created.body.items as Array<{ id: string; quantity: number }>)[0]
+
+    const tooMany = await createReturn(token, String(created.body.id), [
+      { invoiceItemId: line.id, quantity: 99 },
+    ])
+    expect(tooMany.status).toBe(400)
+    expect(tooMany.body).toMatchObject({ code: "POS_INVOICE_RETURN_QUANTITY_EXCEEDS_REMAINING" })
+
+    // Return the real quantity once, then trying to return any more of the same line fails too.
+    expect(
+      (
+        await createReturn(token, String(created.body.id), [
+          { invoiceItemId: line.id, quantity: line.quantity },
+        ])
+      ).status
+    ).toBe(201)
+    const overAfterFull = await createReturn(token, String(created.body.id), [
+      { invoiceItemId: line.id, quantity: 1 },
+    ])
+    expect(overAfterFull.status).toBe(400)
+    expect(overAfterFull.body).toMatchObject({
+      code: "POS_INVOICE_RETURN_QUANTITY_EXCEEDS_REMAINING",
+    })
+  })
+
+  it("numbers invoices sequentially per workspace with no gaps", async () => {
+    const { token } = await signIn("invoice-numbering@example.com", "Invoice Numbering")
+
+    const first = await createInvoice(token, COFFEE_SALE)
+    const second = await createInvoice(token, COFFEE_SALE)
+    expect(first.body.invoiceNumber).toBe("INV-000001")
+    expect(second.body.invoiceNumber).toBe("INV-000002")
+  })
+
+  it("still generates a real QR with an empty VAT tag when the organization has no tax profile set", async () => {
+    const { token } = await signIn("invoice-no-tax@example.com", "Invoice No Tax")
+
+    const created = await createInvoice(token, COFFEE_SALE)
+    expect(created.status).toBe(201)
+    expect(created.body.sellerVatNumber).toBeNull()
+    expect(typeof created.body.qrCode).toBe("string")
+
+    // Decode the TLV payload: tag 1 (seller name) is real, tag 2 (VAT number) is present but
+    // empty -- never blocked on, never fabricated.
+    const buffer = Buffer.from(created.body.qrCode as string, "base64")
+    let offset = 0
+    const tags: Record<number, string> = {}
+    while (offset < buffer.length) {
+      const tag = buffer[offset]
+      const length = buffer[offset + 1]
+      tags[tag] = buffer.subarray(offset + 2, offset + 2 + length).toString("utf8")
+      offset += 2 + length
+    }
+    expect(tags[1].length).toBeGreaterThan(0)
+    expect(tags[2]).toBe("")
+  })
+
+  it("snapshots the seller's tax profile onto the invoice and generates a real ZATCA QR", async () => {
+    const { token, actor } = await signIn("invoice-tax@example.com", "Invoice Tax Co")
+
+    await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
+      actor.organizationId,
+      JSON.stringify({
+        storeName: "مطعم الاختبار",
+        taxNumber: "300000000000003",
+        addressShort: "الرياض 1234 5678",
+      }),
+    ])
+
+    const created = await createInvoice(token, COFFEE_SALE)
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      sellerName: "مطعم الاختبار",
+      sellerVatNumber: "300000000000003",
+      sellerAddress: "الرياض 1234 5678",
+    })
+    expect(typeof created.body.qrCode).toBe("string")
+    expect((created.body.qrCode as string).length).toBeGreaterThan(0)
+
+    // Editing the org's tax profile afterwards must never rewrite an already-issued invoice's
+    // snapshot -- only the NEXT invoice reflects the change.
+    await database.query(`UPDATE organizations SET settings = $2 WHERE id = $1`, [
+      actor.organizationId,
+      JSON.stringify({ storeName: "اسم جديد", taxNumber: "300000000000003" }),
+    ])
+    const reread = await listInvoices(token)
+    expect(reread.body.items[0]).toMatchObject({ sellerName: "مطعم الاختبار" })
   })
 })
 

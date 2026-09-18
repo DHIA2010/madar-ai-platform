@@ -30,6 +30,19 @@ export interface CustomerRecord {
   accountBalance: number | null
   // Real region/city entered at creation -- same "Madar"-only scope as accountBalance.
   region: string | null
+  // B2B identity + Saudi National Address -- same "Madar"-only scope as accountBalance/region:
+  // isBusinessCustomer is always false and every other field always null for a synced storefront
+  // customer.
+  isBusinessCustomer: boolean
+  vatNumber: string | null
+  commercialRegistration: string | null
+  buildingNumber: string | null
+  secondaryNumber: string | null
+  street: string | null
+  city: string | null
+  district: string | null
+  postalCode: string | null
+  countryCode: string | null
 }
 
 export type AccountTransactionType = "receipt" | "payment" | "sale" | "return"
@@ -74,6 +87,18 @@ export interface CreateAccountTransactionInput {
   paymentMethodCode: string
   notes: string | null
   attachments: Array<{ contentType: string; dataBase64: string }>
+}
+
+export interface BulkImportRow {
+  name: string
+  phone: string | null
+  email: string | null
+  region: string | null
+}
+
+export interface BulkImportResult {
+  created: number
+  skipped: Array<{ row: number; reason: string }>
 }
 
 export interface CustomerOrder {

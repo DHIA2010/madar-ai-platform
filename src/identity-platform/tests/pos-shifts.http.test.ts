@@ -387,10 +387,18 @@ describe("point-of-sale cashier shifts", () => {
       discountAmount: 0,
       items: [{ productId: null, productName: "شاي", unitPrice: 40, quantity: 1 }],
     })
-    await fetch(`${baseUrl}/v1/pos/invoices/${toReturn.body.id}/status`, {
-      method: "PATCH",
+    // A real, itemized return event (see PosInvoicesService.createReturn()) -- returning the
+    // line's own full quantity is what makes the invoice end up "returned" exactly the way the
+    // old blunt status PATCH used to, so this shift-detail math is otherwise unaffected.
+    const toReturnItem = (toReturn.body.items as Array<{ id: string; quantity: number }>)[0]
+    await fetch(`${baseUrl}/v1/pos/invoices/${toReturn.body.id}/returns`, {
+      method: "POST",
       headers: authHeaders(token),
-      body: JSON.stringify({ status: "returned" }),
+      body: JSON.stringify({
+        items: [{ invoiceItemId: toReturnItem.id, quantity: toReturnItem.quantity }],
+        paymentMethodCode: "cash",
+        notes: null,
+      }),
     })
 
     await recordCashMovement(token, shiftId, { type: "withdrawal", amount: 25, note: null })

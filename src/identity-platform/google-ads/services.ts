@@ -113,25 +113,34 @@ export class GoogleAdsCampaignService {
           campaign.name,
           campaign.status,
           campaign.advertising_channel_type,
-          campaign.start_date,
-          campaign.end_date,
+          campaign.start_date_time,
+          campaign.end_date_time,
           campaign_budget.amount_micros,
           campaign.bidding_strategy_type
         FROM campaign
       `,
     })
 
-    return rows.map((row) => ({
-      id: asString(rowValue(row, "campaign.id")),
-      customerId: input.customerId,
-      name: asString(rowValue(row, "campaign.name"), "Unnamed Campaign"),
-      status: asString(rowValue(row, "campaign.status"), "UNKNOWN"),
-      budgetMicros: asNumber(rowValue(row, "campaignBudget.amountMicros")) || null,
-      biddingStrategyType: asString(rowValue(row, "campaign.biddingStrategyType"), "") || null,
-      channelType: asString(rowValue(row, "campaign.advertising_channel_type"), "") || null,
-      startDate: asString(rowValue(row, "campaign.start_date"), "") || null,
-      endDate: asString(rowValue(row, "campaign.end_date"), "") || null,
-    }))
+    // campaign.start_date/end_date (plain YYYY-MM-DD) were removed in API v23, replaced by
+    // start_date_time/end_date_time ("yyyy-MM-dd HH:mm:ss" in the customer's time zone) -- sliced
+    // back to the first 10 characters here so Campaign.startDate/endDate keeps meaning exactly
+    // what it always has (a plain date) for every existing caller and the marketing_campaigns
+    // table's date columns.
+    return rows.map((row) => {
+      const startDateTime = asString(rowValue(row, "campaign.startDateTime"), "")
+      const endDateTime = asString(rowValue(row, "campaign.endDateTime"), "")
+      return {
+        id: asString(rowValue(row, "campaign.id")),
+        customerId: input.customerId,
+        name: asString(rowValue(row, "campaign.name"), "Unnamed Campaign"),
+        status: asString(rowValue(row, "campaign.status"), "UNKNOWN"),
+        budgetMicros: asNumber(rowValue(row, "campaignBudget.amountMicros")) || null,
+        biddingStrategyType: asString(rowValue(row, "campaign.biddingStrategyType"), "") || null,
+        channelType: asString(rowValue(row, "campaign.advertising_channel_type"), "") || null,
+        startDate: startDateTime.slice(0, 10) || null,
+        endDate: endDateTime.slice(0, 10) || null,
+      }
+    })
   }
 
   async listCampaignMetrics(input: {

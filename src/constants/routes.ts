@@ -17,6 +17,7 @@ export const ROUTES = {
   shifts: "/shifts",
   shiftsDetails: (shiftId: string) => `/shifts/${shiftId}`,
   invoices: "/invoices",
+  invoicesReturns: "/invoices/returns",
   customers: "/customers",
   customerStatement: (customerId: string) => `/customers/${customerId}/statement`,
   reports: "/reports",
@@ -38,6 +39,7 @@ export const ROUTES = {
   settingsDeviceNew: "/settings/devices/new",
   settingsBranches: "/settings/branches",
   settingsPayments: "/settings/payments",
+  settingsTaxes: "/settings/taxes",
   auth: {
     basic: {
       login: "/auth/basic/login",

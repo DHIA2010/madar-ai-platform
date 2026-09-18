@@ -1,14 +1,22 @@
 import { IdentityError } from "../application/errors/IdentityError"
 
 import type { NormalizedProduct, NormalizedProductStatus } from "./service"
+import type { TaxRatesService } from "../tax/tax-rates-service"
 import type { ProductCatalogRepository } from "./catalog-repository"
 import {
+  FLAT_IMPORTABLE_TYPES,
   isProductUnit,
+  PRODUCT_STATUSES,
+  PRODUCT_TYPES,
   TYPES_REQUIRING_SELL_PRICE,
   TYPES_REQUIRING_STOCK,
   TYPES_WITHOUT_SKU,
   unitsShareDimension,
+  type BulkImportProductResult,
+  type BulkImportProductRow,
   type CreateProductInput,
+  type ProductStatus,
+  type ProductType,
   type ProductView,
 } from "./catalog-types"
 
@@ -27,10 +35,31 @@ const PRODUCT_ERRORS = {
     new IdentityError("PRODUCT_VALIDATION_FAILED", 422, "validation", "Product is not valid.", {
       fields,
     }),
+  unknownTaxRate: () =>
+    new IdentityError(
+      "PRODUCT_UNKNOWN_TAX_RATE",
+      422,
+      "validation",
+      "The selected tax rate does not exist in this organization."
+    ),
 }
 
 export class ProductCatalogService {
-  constructor(private readonly repository: ProductCatalogRepository) {}
+  constructor(
+    private readonly repository: ProductCatalogRepository,
+    private readonly taxRatesService: TaxRatesService
+  ) {}
+
+  // A product's own tax_rate_id has to be a real rate this organization owns -- otherwise a sale
+  // of this product would silently resolve to "no rate found" at checkout time instead of
+  // failing loudly here, when the product is actually saved.
+  private async assertTaxRateExists(organizationId: string, taxRateId: string | null) {
+    if (!taxRateId) return
+    const rates = await this.taxRatesService.list(organizationId)
+    if (!rates.some((rate) => rate.id === taxRateId)) {
+      throw PRODUCT_ERRORS.unknownTaxRate()
+    }
+  }
 
   async list(organizationId: string, workspaceId: string | null): Promise<ProductView[]> {
     return this.repository.list(organizationId, workspaceId)
@@ -75,6 +104,8 @@ export class ProductCatalogService {
       }
     }
 
+    await this.assertTaxRateExists(input.organizationId, normalized.taxRateId)
+
     const updated = await this.repository.update({ ...input, product: normalized })
     if (!updated) throw PRODUCT_ERRORS.notFound()
     return updated
@@ -111,8 +142,173 @@ export class ProductCatalogService {
       if (existing) throw PRODUCT_ERRORS.duplicateSku(normalized.sku)
     }
 
+    await this.assertTaxRateExists(input.organizationId, normalized.taxRateId)
+
     return this.repository.create({ ...input, product: normalized })
   }
+
+  // A CSV import -- every row goes through the exact same create() above (numbering, validation,
+  // SKU-conflict check included), so a bulk-imported product can never be valid by different
+  // rules than one typed into the Add Product form. Only bad rows are skipped and reported back;
+  // one row's problem never fails the rest of the file. See catalog-types.ts's
+  // BulkImportProductRow for why bundle/variable rows can't be represented here at all.
+  async bulkImport(input: {
+    organizationId: string
+    workspaceId: string | null
+    createdBy: string | null
+    rows: BulkImportProductRow[]
+  }): Promise<BulkImportProductResult> {
+    let created = 0
+    const skipped: BulkImportProductResult["skipped"] = []
+
+    for (let index = 0; index < input.rows.length; index += 1) {
+      const row = input.rows[index]
+      const name = row.name.trim()
+      if (!name) {
+        skipped.push({ row: index + 1, reason: "الاسم مطلوب" })
+        continue
+      }
+
+      const rawType = (row.productType ?? "").trim().toLowerCase()
+      const productType = (rawType || "simple") as ProductType
+      if (!(PRODUCT_TYPES as readonly string[]).includes(productType)) {
+        skipped.push({ row: index + 1, reason: `نوع المنتج "${rawType}" غير معروف` })
+        continue
+      }
+      if (!FLAT_IMPORTABLE_TYPES.includes(productType)) {
+        skipped.push({
+          row: index + 1,
+          reason:
+            "منتجات الحزم والمنتجات متعددة الخيارات لا يمكن استيرادها من ملف -- أضفها يدوياً من صفحة إضافة منتج",
+        })
+        continue
+      }
+
+      const rawStatus = (row.status ?? "").trim().toLowerCase()
+      const status = (rawStatus || "draft") as ProductStatus
+      if (!(PRODUCT_STATUSES as readonly string[]).includes(status)) {
+        skipped.push({ row: index + 1, reason: `حالة غير معروفة "${rawStatus}"` })
+        continue
+      }
+
+      try {
+        await this.create({
+          organizationId: input.organizationId,
+          workspaceId: input.workspaceId,
+          createdBy: input.createdBy,
+          product: {
+            productType,
+            name,
+            sku: row.sku?.trim() || null,
+            // Unlike every other optional column, create() requires a category unconditionally
+            // (validateProduct below) regardless of product type -- a blank cell defaults to
+            // "عام" (general) rather than skipping the whole row over what is, for a quick bulk
+            // import, a genuinely cosmetic field.
+            category: row.category?.trim() || "عام",
+            description: row.description?.trim() || "",
+            status,
+            currency: "SAR",
+            baseUnit: row.baseUnit?.trim() || null,
+            sellPrice: parseImportNumber(row.sellPrice),
+            costPrice: parseImportNumber(row.costPrice),
+            stockQuantity: parseImportNumber(row.stockQuantity),
+            minStock: parseImportNumber(row.minStock),
+            imageUrls: [],
+            attributes: {},
+            components: [],
+            variantOptions: [],
+            variants: [],
+            // Bulk-imported rows always use the organization's default rate -- there is no CSV
+            // column for a per-product override yet; assign one afterwards from the product's own
+            // edit form if it needs one.
+            taxRateId: null,
+            // Bulk-imported prices are treated as tax-exclusive (net), the same default a manually
+            // created product gets -- there is no CSV column to say otherwise.
+            priceIncludesTax: false,
+          },
+        })
+        created += 1
+      } catch (error) {
+        skipped.push({ row: index + 1, reason: describeImportError(error) })
+      }
+    }
+
+    return { created, skipped }
+  }
+
+  // Bulk-flips every priced native product between tax-inclusive and tax-exclusive pricing, in
+  // response to Settings -> الضرائب -> "الأسعار تشمل الضريبة" being applied to "جميع المنتجات
+  // الحالية" (as opposed to "المنتجات الجديدة فقط", which only changes what new products default
+  // to and never calls this method). Converts each product's own stored sell_price by its own
+  // effective rate (its own tax_rate_id override, or the organization's default) so the same real
+  // shelf price keeps being charged either way -- a 115 SAR tax-inclusive product at 15% VAT
+  // becomes a 100 SAR tax-exclusive product, not a 115 SAR one that would now also have 15% added
+  // on top.
+  async applyPriceTaxConvention(
+    organizationId: string,
+    includeTax: boolean
+  ): Promise<{ updated: number }> {
+    const products = await this.repository.listPriceable(organizationId)
+    const toConvert = products.filter((product) => product.priceIncludesTax !== includeTax)
+    if (toConvert.length === 0) return { updated: 0 }
+
+    const defaultRatePercent = await this.taxRatesService.getDefaultRatePercent(organizationId)
+    const overrideIds = [
+      ...new Set(
+        toConvert.map((product) => product.taxRateId).filter((id): id is string => id !== null)
+      ),
+    ]
+    const overrideRates =
+      overrideIds.length > 0
+        ? await this.taxRatesService.getRatePercentsByIds(organizationId, overrideIds)
+        : new Map<string, number>()
+
+    const updates = toConvert.map((product) => {
+      const rate = product.taxRateId
+        ? (overrideRates.get(product.taxRateId) ?? defaultRatePercent)
+        : defaultRatePercent
+      const sellPrice = includeTax
+        ? Math.round(product.sellPrice * (1 + rate) * 100) / 100
+        : Math.round((product.sellPrice / (1 + rate)) * 100) / 100
+      return { id: product.id, sellPrice, priceIncludesTax: includeTax }
+    })
+
+    await this.repository.applyPriceTaxConversion(organizationId, updates)
+    return { updated: updates.length }
+  }
+}
+
+function parseImportNumber(value: string | null | undefined): number | null {
+  if (value === null || value === undefined || value.trim() === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const IMPORT_FIELD_LABEL_AR: Record<string, string> = {
+  name: "الاسم",
+  category: "الفئة",
+  sku: "رمز المخزون (SKU)",
+  sellPrice: "سعر البيع",
+  stockQuantity: "الكمية بالمخزون",
+  description: "الوصف",
+}
+
+// Reuses create()'s own real validation/conflict errors rather than re-deriving a reason, so the
+// message a user sees for a skipped row can never disagree with why it was actually rejected.
+function describeImportError(error: unknown): string {
+  if (error instanceof IdentityError) {
+    if (error.code === "PRODUCT_SKU_TAKEN") {
+      return "رمز المخزون (SKU) مستخدم بالفعل"
+    }
+    if (error.code === "PRODUCT_VALIDATION_FAILED") {
+      const fields = Object.keys((error.details?.fields as Record<string, string>) ?? {})
+      const labels = fields.map((field) => IMPORT_FIELD_LABEL_AR[field] ?? field)
+      if (labels.length > 0) {
+        return `حقول ناقصة أو غير صحيحة لهذا النوع من المنتجات: ${labels.join("، ")}`
+      }
+    }
+  }
+  return "تعذر إنشاء هذا المنتج"
 }
 
 const STATUS_TO_NORMALIZED: Record<ProductView["status"], NormalizedProductStatus> = {
@@ -157,6 +353,8 @@ export function toNormalizedProduct(product: ProductView): NormalizedProduct {
     platform: "Madar",
     productType: product.productType,
     baseUnit: product.baseUnit,
+    taxRateId: product.taxRateId,
+    priceIncludesTax: product.priceIncludesTax,
     image: product.imageUrls[0] ?? null,
     activityDate: product.updatedAt,
   }

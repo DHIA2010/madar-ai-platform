@@ -263,6 +263,24 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
   const [transactionType, setTransactionType] = useState<AccountTransactionType | "all">("all")
   const [page, setPage] = useState(1)
 
+  // The organization's real configured tax rate (Settings -> الضرائب), not the hardcoded 15%
+  // VAT_RATE fallback below -- a manually-recorded receipt/payment voucher's own tax breakdown
+  // should match the same rate a real POS sale would use. Dynamic import, same as the
+  // payment-methods fetch above, to avoid a static cross-feature import into @/features/pos.
+  const [vatRate, setVatRate] = useState(VAT_RATE)
+  useEffect(() => {
+    let cancelled = false
+    import("@/features/pos/services/tax-rates.service")
+      .then(({ taxRatesService }) => taxRatesService.getDefaultRate())
+      .then((rate) => {
+        if (!cancelled) setVatRate(rate)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const refetchStatement = useCallback(() => {
     setIsStatementLoading(true)
     setStatementError(null)
@@ -362,7 +380,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
     try {
       const uploadedAttachments = await Promise.all(attachments.map(fileToAttachment))
       const taxAmount = taxInclusive
-        ? Math.round((numericAmount - numericAmount / (1 + VAT_RATE)) * 100) / 100
+        ? Math.round((numericAmount - numericAmount / (1 + vatRate)) * 100) / 100
         : 0
       const input: CreateAccountTransactionInput = {
         amount: numericAmount,
@@ -738,6 +756,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
         <AccountTransactionDialog
           type={dialogType}
           customerName={customer.name}
+          vatRate={vatRate}
           amount={amount}
           onAmountChange={setAmount}
           taxInclusive={taxInclusive}
@@ -764,6 +783,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
 function AccountTransactionDialog({
   type,
   customerName,
+  vatRate,
   amount,
   onAmountChange,
   taxInclusive,
@@ -782,6 +802,7 @@ function AccountTransactionDialog({
 }: {
   type: "receipt" | "payment"
   customerName: string
+  vatRate: number
   amount: string
   onAmountChange: (value: string) => void
   taxInclusive: boolean
@@ -802,7 +823,7 @@ function AccountTransactionDialog({
   const Icon = meta.icon
   const numericAmount = Math.round((Number(amount) || 0) * 100) / 100
   const taxAmount = taxInclusive
-    ? Math.round((numericAmount - numericAmount / (1 + VAT_RATE)) * 100) / 100
+    ? Math.round((numericAmount - numericAmount / (1 + vatRate)) * 100) / 100
     : 0
   const subtitle =
     type === "receipt"

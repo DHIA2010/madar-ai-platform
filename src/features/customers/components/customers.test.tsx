@@ -35,6 +35,16 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
     segment: "VIP",
     accountBalance: null,
     region: null,
+    isBusinessCustomer: false,
+    vatNumber: null,
+    commercialRegistration: null,
+    buildingNumber: null,
+    secondaryNumber: null,
+    street: null,
+    city: null,
+    district: null,
+    postalCode: null,
+    countryCode: null,
   },
   {
     id: "salla:2",
@@ -51,6 +61,16 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
     segment: "One Time",
     accountBalance: null,
     region: null,
+    isBusinessCustomer: false,
+    vatNumber: null,
+    commercialRegistration: null,
+    buildingNumber: null,
+    secondaryNumber: null,
+    street: null,
+    city: null,
+    district: null,
+    postalCode: null,
+    countryCode: null,
   },
 ]
 
@@ -60,23 +80,30 @@ const MOCK_CUSTOMERS: CustomerRecord[] = [
 // both module specifiers need mocking so every real call site is actually intercepted. vi.mock
 // factories are hoisted above the file, so the mock fns and the shared object built from them
 // must be created via vi.hoisted rather than as plain top-level consts.
-const { listCustomers, updateCustomer, deleteCustomer, customerListServiceMock } = vi.hoisted(
-  () => {
-    const listCustomers = vi.fn()
-    const updateCustomer = vi.fn()
-    const deleteCustomer = vi.fn()
-    return {
-      listCustomers,
-      updateCustomer,
-      deleteCustomer,
-      customerListServiceMock: {
-        listCustomers: (...args: unknown[]) => listCustomers(...args),
-        updateCustomer: (...args: unknown[]) => updateCustomer(...args),
-        deleteCustomer: (...args: unknown[]) => deleteCustomer(...args),
-      },
-    }
+const {
+  listCustomers,
+  updateCustomer,
+  deleteCustomer,
+  bulkImportCustomers,
+  customerListServiceMock,
+} = vi.hoisted(() => {
+  const listCustomers = vi.fn()
+  const updateCustomer = vi.fn()
+  const deleteCustomer = vi.fn()
+  const bulkImportCustomers = vi.fn()
+  return {
+    listCustomers,
+    updateCustomer,
+    deleteCustomer,
+    bulkImportCustomers,
+    customerListServiceMock: {
+      listCustomers: (...args: unknown[]) => listCustomers(...args),
+      updateCustomer: (...args: unknown[]) => updateCustomer(...args),
+      deleteCustomer: (...args: unknown[]) => deleteCustomer(...args),
+      bulkImportCustomers: (...args: unknown[]) => bulkImportCustomers(...args),
+    },
   }
-)
+})
 vi.mock("../services", () => ({ customerListService: customerListServiceMock }))
 vi.mock("../services/customer-list.service", () => ({
   customerListService: customerListServiceMock,
@@ -93,6 +120,7 @@ beforeEach(() => {
   listCustomers.mockReset()
   updateCustomer.mockReset()
   deleteCustomer.mockReset()
+  bulkImportCustomers.mockReset()
   mockRouterPush.mockReset()
   toastSuccess.mockReset()
   toastError.mockReset()
@@ -252,5 +280,69 @@ describe("CustomersOverview", () => {
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith(expect.stringContaining("75"))
     })
+  })
+
+  it("exports the currently filtered customers as a real CSV download", async () => {
+    // jsdom doesn't implement the Blob-URL APIs at all -- patched directly on the real URL
+    // constructor (rather than replacing the global) so anything else relying on `new URL()`
+    // keeps working, and restored after the assertion either way.
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    const createObjectURL = vi.fn().mockReturnValue("blob:mock")
+    const revokeObjectURL = vi.fn()
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = revokeObjectURL
+
+    try {
+      listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
+      render(<CustomersOverview />)
+      await screen.findByText("Sara Al-Amri")
+
+      fireEvent.click(screen.getByRole("button", { name: "تصدير" }))
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+      const blob = createObjectURL.mock.calls[0][0] as Blob
+      expect(blob.type).toContain("text/csv")
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL
+      URL.revokeObjectURL = originalRevokeObjectURL
+    }
+  })
+
+  it("imports a real CSV, creates the valid rows, and shows what was skipped", async () => {
+    listCustomers.mockResolvedValue(MOCK_CUSTOMERS)
+    bulkImportCustomers.mockResolvedValue({
+      created: 1,
+      skipped: [{ row: 1, reason: "الاسم مطلوب" }],
+    })
+    render(<CustomersOverview />)
+    await screen.findByText("Sara Al-Amri")
+
+    fireEvent.click(screen.getByRole("button", { name: "استيراد" }))
+    const fileInput = (await screen.findByText("اضغط لاختيار ملف CSV"))
+      .closest("label")
+      ?.querySelector("input[type=file]") as HTMLInputElement
+    // The second row has no name but a real phone -- csvToImportRows only drops a line that is
+    // entirely blank, so this one survives parsing and reaches the backend as a real
+    // name-required row for it to skip.
+    const csv = "name,phone,email,region\n,0500000000,,\nمحمد العنزي,0511111111,,جدة\n"
+    const file = new File([csv], "customers.csv", { type: "text/csv" })
+    // This project's jsdom version doesn't implement Blob.prototype.text() -- polyfilled on
+    // just this instance rather than globally, since the component's real File.text() call is
+    // a standard, widely-supported API that only this test environment is missing.
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(csv) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await screen.findByText("تم العثور على 2 صف")
+    fireEvent.click(screen.getByRole("button", { name: /استيراد \(2\)/ }))
+
+    await waitFor(() => {
+      expect(bulkImportCustomers).toHaveBeenCalledWith([
+        { name: "", phone: "0500000000", email: null, region: null },
+        { name: "محمد العنزي", phone: "0511111111", email: null, region: "جدة" },
+      ])
+    })
+    expect(await screen.findByText(/تم إضافة 1 عميل.*وتخطي 1 صف/)).toBeTruthy()
+    expect(toastSuccess).toHaveBeenCalledWith("تم إضافة 1 عميل.")
   })
 })

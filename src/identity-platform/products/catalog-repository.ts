@@ -32,6 +32,8 @@ interface ProductRow {
   min_stock: string | number | null
   image_urls: unknown
   attributes: unknown
+  tax_rate_id: string | null
+  price_includes_tax: boolean
   created_by: string | null
   created_at: Date | string
   updated_at: Date | string
@@ -129,7 +131,7 @@ const MAX_PRODUCTS = 500
 const PRODUCT_SELECT = `
   SELECT id, organization_id, workspace_id, product_type, name, sku, category, description,
     status, currency, base_unit, sell_price, cost_price, stock_quantity, min_stock,
-    image_urls, attributes, created_by, created_at, updated_at
+    image_urls, attributes, tax_rate_id, price_includes_tax, created_by, created_at, updated_at
   FROM products
 `
 
@@ -190,6 +192,52 @@ export class ProductCatalogRepository {
       [organizationId, sku]
     )
     return result.rows[0] ?? null
+  }
+
+  // Every priced, non-deleted native product -- the candidate set for
+  // ProductCatalogService.applyPriceTaxConvention's bulk gross/net conversion. A product with no
+  // sell_price (a bundle, a raw material) has nothing to convert and is left out.
+  async listPriceable(
+    organizationId: string
+  ): Promise<
+    Array<{ id: string; sellPrice: number; taxRateId: string | null; priceIncludesTax: boolean }>
+  > {
+    const result = await this.database.query<{
+      id: string
+      sell_price: string | number
+      tax_rate_id: string | null
+      price_includes_tax: boolean
+    }>(
+      `SELECT id, sell_price, tax_rate_id, price_includes_tax FROM products
+        WHERE organization_id = $1 AND deleted_at IS NULL AND sell_price IS NOT NULL`,
+      [organizationId]
+    )
+    return result.rows.map((row) => ({
+      id: row.id,
+      sellPrice: Number(row.sell_price),
+      taxRateId: row.tax_rate_id,
+      priceIncludesTax: row.price_includes_tax,
+    }))
+  }
+
+  // Applies a bulk gross/net conversion (each entry's freshly-computed sell_price and the new
+  // price_includes_tax flag) as one transaction -- either every product in the batch moves to the
+  // new convention or none do, since a partial conversion would leave the catalogue in a state no
+  // merchant asked for.
+  async applyPriceTaxConversion(
+    organizationId: string,
+    updates: Array<{ id: string; sellPrice: number; priceIncludesTax: boolean }>
+  ): Promise<void> {
+    if (updates.length === 0) return
+    await this.database.withTransaction(async () => {
+      for (const update of updates) {
+        await this.database.query(
+          `UPDATE products SET sell_price = $3, price_includes_tax = $4, updated_at = now()
+            WHERE organization_id = $1 AND id = $2`,
+          [organizationId, update.id, update.sellPrice, update.priceIncludesTax]
+        )
+      }
+    })
   }
 
   async list(organizationId: string, workspaceId: string | null): Promise<ProductView[]> {
@@ -287,6 +335,8 @@ export class ProductCatalogRepository {
       components: componentsByProduct.get(row.id) ?? [],
       variantOptions: optionsByProduct.get(row.id) ?? [],
       variants: variantsByProduct.get(row.id) ?? [],
+      taxRateId: row.tax_rate_id,
+      priceIncludesTax: row.price_includes_tax,
       createdBy: row.created_by,
       createdAt: toIso(row.created_at),
       updatedAt: toIso(row.updated_at),
@@ -309,7 +359,7 @@ export class ProductCatalogRepository {
            product_type = $3, name = $4, sku = $5, category = $6, description = $7,
            status = $8, currency = $9, base_unit = $10, sell_price = $11, cost_price = $12,
            stock_quantity = $13, min_stock = $14, image_urls = $15::jsonb,
-           attributes = $16::jsonb, updated_at = now()
+           attributes = $16::jsonb, tax_rate_id = $17, price_includes_tax = $18, updated_at = now()
          WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`,
         [
           input.organizationId,
@@ -328,6 +378,8 @@ export class ProductCatalogRepository {
           input.product.minStock,
           JSON.stringify(input.product.imageUrls),
           JSON.stringify(input.product.attributes),
+          input.product.taxRateId,
+          input.product.priceIncludesTax,
         ]
       )
 
@@ -362,9 +414,9 @@ export class ProductCatalogRepository {
         `INSERT INTO products (
            id, organization_id, workspace_id, product_type, name, sku, category, description,
            status, currency, base_unit, sell_price, cost_price, stock_quantity, min_stock,
-           image_urls, attributes, created_by
+           image_urls, attributes, tax_rate_id, price_includes_tax, created_by
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-           $16::jsonb, $17::jsonb, $18)`,
+           $16::jsonb, $17::jsonb, $18, $19, $20)`,
         [
           productId,
           input.organizationId,
@@ -383,6 +435,8 @@ export class ProductCatalogRepository {
           input.product.minStock,
           JSON.stringify(input.product.imageUrls),
           JSON.stringify(input.product.attributes),
+          input.product.taxRateId,
+          input.product.priceIncludesTax,
           input.createdBy,
         ]
       )

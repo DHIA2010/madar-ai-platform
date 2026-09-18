@@ -38,6 +38,21 @@ const SETTINGS_TEXT_KEYS = [
   "district",
   "postalCode",
   "city",
+  "taxPriceEntryMode",
+] as const
+
+// Booleans get their own list rather than folding into SETTINGS_TEXT_KEYS above (a `typeof ===
+// "string"` check would always drop them) -- every boolean settings field the UI reads has to be
+// named here, same allow-list discipline as the text keys. taxAutoApplyToProducts/
+// taxPricesIncludeTax were missing here even though TaxesSettings.tsx reads them: harmless for a
+// fresh GET /v1/organizations (that response bypasses this mapper entirely, see getOrganizations
+// below), but updateOrganization()'s PATCH response DOES go through it -- so flipping either
+// toggle wiped it back to undefined in the freshly-updated in-memory organization until the next
+// full reload re-fetched via GET, even though the write itself had already persisted correctly.
+const SETTINGS_BOOLEAN_KEYS = [
+  "notifyEmail",
+  "taxAutoApplyToProducts",
+  "taxPricesIncludeTax",
 ] as const
 
 function toOrganizationSettingsDto(
@@ -48,7 +63,9 @@ function toOrganizationSettingsDto(
   for (const key of SETTINGS_TEXT_KEYS) {
     mapped[key] = typeof settings[key] === "string" ? (settings[key] as string) : undefined
   }
-  mapped.notifyEmail = typeof settings.notifyEmail === "boolean" ? settings.notifyEmail : undefined
+  for (const key of SETTINGS_BOOLEAN_KEYS) {
+    mapped[key] = typeof settings[key] === "boolean" ? (settings[key] as boolean) : undefined
+  }
   return mapped as OrganizationSettingsDto
 }
 

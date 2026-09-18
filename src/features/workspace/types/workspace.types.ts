@@ -43,6 +43,18 @@ export interface OrganizationSettings {
   postalCode?: string
   city?: string
   notifyEmail?: boolean
+  // Settings -> الضرائب's "إعدادات الفاتورة الضريبية" toggles. Persisted the same opaque way as
+  // every other field here (organizations.settings jsonb, no dedicated backend column). The real
+  // tax rate/percentage itself lives in the separate tax_rates table (see
+  // features/pos/services/tax-rates.service.ts), not here. There is no "show tax on invoice"
+  // toggle -- a real tax invoice is legally required to show its VAT breakdown, so that was never
+  // a real merchant preference to begin with.
+  taxAutoApplyToProducts?: boolean
+  taxPricesIncludeTax?: boolean
+  // "auto" (default, absent means auto too) applies taxPricesIncludeTax as every new product's
+  // convention. "manual" shows a per-product dropdown on the Add Product form instead, so a
+  // merchant who genuinely sells some products gross and some net can decide case by case.
+  taxPriceEntryMode?: "auto" | "manual"
 }
 
 export interface Organization {

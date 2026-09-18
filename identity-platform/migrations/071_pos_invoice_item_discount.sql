@@ -1,0 +1,11 @@
+-- A discount applied to one specific cart line, distinct from pos_invoices.discount_amount (the
+-- whole-order discount already stored there since migration 055). Both can now apply to the same
+-- sale at once -- see invoices-service.ts's create(), which folds this line's own discount into
+-- its net amount BEFORE the order-level discount is distributed across lines, then reports the
+-- SUM of every line discount plus the order discount as the invoice's single discount_amount, so
+-- the printed receipt's one "الخصم" row stays a true total of everything actually discounted.
+--
+-- Never touches unit_price or line_total -- both keep meaning exactly what they always have (the
+-- price actually charged per unit, and unit_price*quantity), so a discounted line still shows the
+-- real price the customer saw on the shelf.
+alter table pos_invoice_items add column if not exists discount_amount numeric(12, 2) not null default 0;

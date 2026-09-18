@@ -42,6 +42,7 @@ import {
   List,
   MoreHorizontal,
   Plus,
+  Upload,
   type LucideIcon,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -57,10 +58,13 @@ import { ROUTES } from "@/constants/routes"
 import { cairo } from "@/components/design/fonts"
 import {
   productListService,
+  type BulkImportProductResult,
+  type BulkImportProductRow,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
 
 import { Button } from "@/components/ui/button"
+import { AppSearchableSelect } from "@/components/app"
 import { Can } from "@/features/authentication/components"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
@@ -669,6 +673,272 @@ function DateRangeFilter({
   )
 }
 
+// The 5 product types a single flat CSV row can fully describe -- mirrors
+// catalog-types.ts's FLAT_IMPORTABLE_TYPES. A bundle needs component references to other
+// products and a variable product needs a variant matrix, neither of which fits one row, so
+// ProductCatalogService.bulkImport() skips (and reports) either with a reason instead.
+const IMPORTABLE_PRODUCT_TYPES = ["simple", "raw", "weighted", "service", "digital"] as const
+
+function toImportCsvCell(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+}
+
+function downloadImportCsv(filename: string, rows: string[][]) {
+  const csv = rows.map((row) => row.map(toImportCsvCell).join(",")).join("\n")
+  // A leading BOM so Excel (the realistic destination for this file) opens Arabic text as UTF-8
+  // instead of guessing a legacy codepage and mangling it.
+  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+// One example row per importable type, so opening the template teaches the format instead of
+// just naming its columns -- a blank sku/stock/description cell only being wrong for SOME types
+// is much easier to grasp from a working example than from a rule written out in prose.
+function downloadProductsImportTemplateCsv() {
+  downloadImportCsv("نموذج-استيراد-المنتجات.csv", [
+    [
+      "name",
+      "sku",
+      "category",
+      "type",
+      "status",
+      "cost_price",
+      "sell_price",
+      "stock",
+      "min_stock",
+      "unit",
+      "description",
+    ],
+    ["قميص قطن", "SKU-1001", "ملابس", "simple", "active", "40", "89.9", "25", "5", "حبة", ""],
+    ["دقيق فاخر", "", "مواد خام", "raw", "active", "", "", "100", "10", "كجم", ""],
+    ["استشارة تسويقية", "SKU-2002", "خدمات", "service", "active", "", "250", "", "", "", ""],
+  ])
+}
+
+// A small RFC4180-ish parser -- handles quoted fields (so a name containing a comma still reads
+// as one cell) without pulling in a CSV library. Same approach as customers-overview.tsx's own
+// parseCsv -- each feature keeps its own rather than sharing one for four-to-eleven columns.
+function parseImportCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i += 1
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+    } else if (char === ",") {
+      row.push(field)
+      field = ""
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && text[i + 1] === "\n") i += 1
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ""
+    } else {
+      field += char
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+
+  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""))
+}
+
+// Maps by header name (case-insensitive) rather than fixed column order, so a file with the
+// columns in a different order -- or missing optional ones entirely -- still imports correctly.
+function csvToProductImportRows(text: string): BulkImportProductRow[] {
+  const rows = parseImportCsv(text)
+  if (rows.length === 0) return []
+
+  const header = rows[0].map((cell) => cell.trim().toLowerCase())
+  const columnIndex = (name: string) => header.indexOf(name)
+  const cellAt = (cells: string[], name: string) => {
+    const index = columnIndex(name)
+    return index >= 0 ? (cells[index] ?? "").trim() || null : null
+  }
+
+  return rows.slice(1).map((cells) => ({
+    name: cellAt(cells, "name") ?? "",
+    sku: cellAt(cells, "sku"),
+    category: cellAt(cells, "category"),
+    productType: cellAt(cells, "type"),
+    status: cellAt(cells, "status"),
+    costPrice: cellAt(cells, "cost_price"),
+    sellPrice: cellAt(cells, "sell_price"),
+    stockQuantity: cellAt(cells, "stock"),
+    minStock: cellAt(cells, "min_stock"),
+    baseUnit: cellAt(cells, "unit"),
+    description: cellAt(cells, "description"),
+  }))
+}
+
+function ImportProductsDialog({
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onImported: () => void
+}) {
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [rows, setRows] = useState<BulkImportProductRow[]>([])
+  const [isImporting, setIsImporting] = useState(false)
+  const [result, setResult] = useState<BulkImportProductResult | null>(null)
+
+  const reset = () => {
+    setFileName(null)
+    setRows([])
+    setResult(null)
+  }
+
+  const handleFile = async (file: File) => {
+    setFileName(file.name)
+    setResult(null)
+    const text = await file.text()
+    setRows(csvToProductImportRows(text))
+  }
+
+  const submit = async () => {
+    if (rows.length === 0) {
+      toast.error("اختر ملف CSV يحتوي على منتجات أولاً.")
+      return
+    }
+    setIsImporting(true)
+    try {
+      const outcome = await productListService.bulkImportProducts(rows)
+      setResult(outcome)
+      if (outcome.created > 0) {
+        toast.success(`تم إضافة ${outcome.created} منتج.`)
+        onImported()
+      }
+    } catch {
+      toast.error("تعذر استيراد الملف.")
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (isImporting) return
+        if (!next) reset()
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent className={cn(cairo.className, "sm:max-w-[28rem] [direction:rtl]")}>
+        <DialogHeader className="text-right">
+          <DialogTitle className="text-[15px] font-extrabold text-[#0b1738]">
+            استيراد منتجات
+          </DialogTitle>
+          <DialogDescription className="text-[12.5px] leading-6 text-[#6b7b96]">
+            ارفع ملف CSV لإضافة عدة منتجات دفعة واحدة. يدعم الاستيراد أنواع المنتجات:{" "}
+            {IMPORTABLE_PRODUCT_TYPES.join("، ")} -- أما الحزم والمنتجات متعددة الخيارات فتُضاف
+            يدوياً من صفحة إضافة منتج، لأنها تحتاج اختيار مكونات أو متغيرات لا تتسع لها خانة واحدة
+            في الجدول.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-3 pt-1">
+          <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border border-dashed border-[#c7d3e3] bg-[#fafbfd] px-4 py-6 text-center hover:border-[#93a6c9]">
+            <Upload className="size-5 text-[#2878ff]" />
+            <span className="text-[12px] font-semibold text-[#0b1738]">
+              {fileName ?? "اضغط لاختيار ملف CSV"}
+            </span>
+            <span className="text-[10.5px] text-[#6b7b96]">
+              {rows.length > 0
+                ? `تم العثور على ${rows.length} صف`
+                : "الأعمدة: name, sku, category, type, status, cost_price, sell_price, stock, min_stock, unit, description"}
+            </span>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) void handleFile(file)
+                event.target.value = ""
+              }}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={downloadProductsImportTemplateCsv}
+            className="self-start text-[11.5px] font-semibold text-[#2878ff] hover:underline"
+          >
+            تحميل نموذج CSV
+          </button>
+
+          {result ? (
+            <div className="rounded-[10px] border border-[#e1e7f0] p-3">
+              <p className="text-[12.5px] font-bold text-[#0b1738]">
+                تم إضافة {result.created} منتج
+                {result.skipped.length > 0 ? `، وتخطي ${result.skipped.length} صف` : ""}
+              </p>
+              {result.skipped.length > 0 ? (
+                <ul className="mt-1.5 flex max-h-[180px] flex-col gap-0.5 overflow-y-auto">
+                  {result.skipped.map((entry) => (
+                    <li key={entry.row} className="text-[11px] text-[#6b7b96]">
+                      السطر {entry.row + 1} في الملف: {entry.reason}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            className="h-10 gap-2 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
+            disabled={isImporting || rows.length === 0}
+            onClick={() => void submit()}
+          >
+            {isImporting
+              ? "جارٍ الاستيراد..."
+              : `استيراد ${rows.length > 0 ? `(${rows.length})` : ""}`}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-10 rounded-[10px] px-5 text-[13px] font-semibold"
+            disabled={isImporting}
+            onClick={() => onOpenChange(false)}
+          >
+            إغلاق
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -687,6 +957,7 @@ export default function ProductsPage() {
   const [detailProduct, setDetailProduct] = useState<ProductRow | null>(null)
   const [pendingDelete, setPendingDelete] = useState<ProductRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isImportOpen, setIsImportOpen] = useState(false)
 
   // Hoisted out of the effect so a delete can refresh the same way the first load does,
   // instead of the two drifting into separate fetch paths.
@@ -943,8 +1214,17 @@ export default function ProductsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* The export pairs this with an import action. There is no product import in the
-                app, so the button offers only what exists. */}
+            <Can permission="products:import">
+              <Button
+                variant="outline"
+                className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+                onClick={() => setIsImportOpen(true)}
+              >
+                استيراد
+                <Upload className="size-4" />
+              </Button>
+            </Can>
+
             <Can permission="products:export">
               <Button
                 variant="outline"
@@ -987,25 +1267,19 @@ export default function ProductsPage() {
             />
 
             {filterSelects.map((filter, index) => (
-              <Select
+              <AppSearchableSelect
                 key={index}
                 value={filter.value}
-                onValueChange={(next) => {
+                onChange={(next) => {
                   filter.onChange(next)
                   setPage(1)
                 }}
-              >
-                <SelectTrigger className={FILTER_TRIGGER_CLASS}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {filter.options.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {FILTER_LABEL_AR[option] ?? option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={filter.options.map((option) => ({
+                  value: option,
+                  label: FILTER_LABEL_AR[option] ?? option,
+                }))}
+                triggerClassName={FILTER_TRIGGER_CLASS}
+              />
             ))}
 
             <div className="relative ms-auto w-full md:w-[225px]">
@@ -1600,6 +1874,12 @@ export default function ProductsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportProductsDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImported={() => void loadProducts()}
+      />
     </div>
   )
 }

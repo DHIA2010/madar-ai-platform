@@ -42,6 +42,20 @@ export interface CustomerSummary {
   // Real region/city entered at creation -- "Madar"-only scope, same as accountBalance
   // (a synced storefront customer's address isn't normalized into a single region here).
   region: string | null
+  // B2B identity + Saudi National Address -- see migration 075_customer_business_info.sql and
+  // NativeCustomersService. Same "Madar-only" scope as accountBalance/region: a synced storefront
+  // customer has no real row here to carry any of this on, so isBusinessCustomer is always false
+  // and every other field always null for one.
+  isBusinessCustomer: boolean
+  vatNumber: string | null
+  commercialRegistration: string | null
+  buildingNumber: string | null
+  secondaryNumber: string | null
+  street: string | null
+  city: string | null
+  district: string | null
+  postalCode: string | null
+  countryCode: string | null
 }
 
 export interface CustomerDetail extends CustomerSummary {
@@ -161,6 +175,16 @@ function normalizeSallaCustomer(row: CustomerRecordRow): CustomerSummary {
     segment: computeSegment({ totalOrders, lifetimeValue: totalRevenue }),
     accountBalance: null,
     region: null,
+    isBusinessCustomer: false,
+    vatNumber: null,
+    commercialRegistration: null,
+    buildingNumber: null,
+    secondaryNumber: null,
+    street: null,
+    city: null,
+    district: null,
+    postalCode: null,
+    countryCode: null,
   }
 }
 
@@ -194,6 +218,16 @@ function normalizeShopifyCustomer(row: CustomerRecordRow): CustomerSummary {
     segment: computeSegment({ totalOrders, lifetimeValue: totalRevenue }),
     accountBalance: null,
     region: null,
+    isBusinessCustomer: false,
+    vatNumber: null,
+    commercialRegistration: null,
+    buildingNumber: null,
+    secondaryNumber: null,
+    street: null,
+    city: null,
+    district: null,
+    postalCode: null,
+    countryCode: null,
   }
 }
 
@@ -225,6 +259,16 @@ function normalizeZidCustomer(row: CustomerRecordRow): CustomerSummary {
     segment: computeSegment({ totalOrders, lifetimeValue: totalRevenue }),
     accountBalance: null,
     region: null,
+    isBusinessCustomer: false,
+    vatNumber: null,
+    commercialRegistration: null,
+    buildingNumber: null,
+    secondaryNumber: null,
+    street: null,
+    city: null,
+    district: null,
+    postalCode: null,
+    countryCode: null,
   }
 }
 

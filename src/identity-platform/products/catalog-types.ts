@@ -136,6 +136,14 @@ export interface CreateProductInput {
   components: ProductComponentInput[]
   variantOptions: ProductVariantOptionInput[]
   variants: ProductVariantInput[]
+  // Null means "use the organization's default rate" (Settings -> الضرائب), re-read fresh at the
+  // time of each sale -- never frozen to whatever the default was when this product was created.
+  // Set only when this specific product needs its own rate (e.g. exempt, zero-rated).
+  taxRateId: string | null
+  // Whether sellPrice is already tax-inclusive (what the customer actually pays) or tax-exclusive
+  // (VAT added on top at sale time) -- see catalog-service.ts's applyPriceTaxConvention for how a
+  // merchant switches an existing product (or every product) between the two.
+  priceIncludesTax: boolean
 }
 
 export interface ProductComponentView extends ProductComponentInput {
@@ -174,7 +182,46 @@ export interface ProductView {
   components: ProductComponentView[]
   variantOptions: ProductVariantOptionView[]
   variants: ProductVariantView[]
+  taxRateId: string | null
+  priceIncludesTax: boolean
   createdBy: string | null
   createdAt: string
   updatedAt: string
 }
+
+// A CSV import of native products -- every value arrives as a plain string (or null), the same
+// way a spreadsheet cell does, and ProductCatalogService.bulkImport() does all the type coercion
+// and per-row validation a single POST /v1/products call already does for one product. Only
+// covers the product types a flat spreadsheet row can actually describe (see
+// FLAT_IMPORTABLE_TYPES below) -- a bundle needs component references to other products and a
+// variable product needs a variant matrix, neither of which fits one row, so a row naming either
+// is skipped with a reason rather than forced into a shape that would only confuse whoever filled
+// out the sheet.
+export interface BulkImportProductRow {
+  name: string
+  sku: string | null
+  category: string | null
+  productType: string | null
+  status: string | null
+  costPrice: string | null
+  sellPrice: string | null
+  stockQuantity: string | null
+  minStock: string | null
+  baseUnit: string | null
+  description: string | null
+}
+
+export interface BulkImportProductResult {
+  created: number
+  skipped: Array<{ row: number; reason: string }>
+}
+
+// The only types a single flat CSV row can fully describe -- a bundle's components and a
+// variable product's option/variant matrix both need more structure than one row has room for.
+export const FLAT_IMPORTABLE_TYPES: ProductType[] = [
+  "raw",
+  "simple",
+  "weighted",
+  "service",
+  "digital",
+]

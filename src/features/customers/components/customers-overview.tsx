@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Download,
   FileText,
   Loader2,
   Pencil,
@@ -15,6 +16,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react"
@@ -25,6 +27,7 @@ import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
+  AppCheckbox,
   AppConfirmDialog,
   AppDialog,
   AppInput,
@@ -33,7 +36,13 @@ import {
 
 import { useCustomers } from "../hooks"
 import { customerListService } from "../services/customer-list.service"
-import type { CustomerPlatform, CustomerRecord, CustomerSegment, CustomerStatus } from "../types"
+import type {
+  BulkImportRow,
+  CustomerPlatform,
+  CustomerRecord,
+  CustomerSegment,
+  CustomerStatus,
+} from "../types"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -77,6 +86,126 @@ const PLATFORM_LABEL: Record<CustomerPlatform, string> = {
   Shopify: "Shopify",
   Zid: "زد",
   Madar: "مدار",
+}
+
+function toCsvCell(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+}
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows.map((row) => row.map(toCsvCell).join(",")).join("\n")
+  // A leading BOM so Excel (the realistic destination for this file) opens Arabic text as UTF-8
+  // instead of guessing a legacy codepage and mangling it.
+  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportCustomersCsv(records: CustomerRecord[]) {
+  const header = [
+    "الاسم",
+    "البريد الإلكتروني",
+    "رقم الجوال",
+    "المنصة",
+    "الحالة",
+    "الشريحة",
+    "قيمة العميل (LTV)",
+    "عدد الطلبات",
+    "آخر عملية شراء",
+    "رصيد الحساب",
+  ]
+  const rows = records.map((record) => [
+    record.name,
+    record.email,
+    record.phone ?? "",
+    PLATFORM_LABEL[record.platform],
+    STATUS_META[record.status].label,
+    SEGMENT_META[record.segment].label,
+    String(record.lifetimeValue),
+    String(record.totalOrders),
+    formatDate(record.lastPurchaseAt),
+    record.accountBalance !== null ? String(record.accountBalance) : "",
+  ])
+  downloadCsv("العملاء.csv", [header, ...rows])
+}
+
+function downloadImportTemplateCsv() {
+  downloadCsv("نموذج-استيراد-العملاء.csv", [
+    ["name", "phone", "email", "region"],
+    ["أحمد العتيبي", "0501234567", "ahmed@example.com", "الرياض"],
+  ])
+}
+
+// A small RFC4180-ish parser -- handles quoted fields (so a name containing a comma still reads
+// as one cell) without pulling in a CSV library for four columns.
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i += 1
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+    } else if (char === ",") {
+      row.push(field)
+      field = ""
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && text[i + 1] === "\n") i += 1
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ""
+    } else {
+      field += char
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+
+  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""))
+}
+
+// Maps by header name (case-insensitive) rather than fixed column order, so a file with the
+// columns in a different order still imports correctly.
+function csvToImportRows(text: string): BulkImportRow[] {
+  const rows = parseCsv(text)
+  if (rows.length === 0) return []
+
+  const header = rows[0].map((cell) => cell.trim().toLowerCase())
+  const columnIndex = (name: string) => header.indexOf(name)
+  const nameIndex = columnIndex("name")
+  const phoneIndex = columnIndex("phone")
+  const emailIndex = columnIndex("email")
+  const regionIndex = columnIndex("region")
+
+  return rows.slice(1).map((cells) => ({
+    name: nameIndex >= 0 ? (cells[nameIndex] ?? "").trim() : "",
+    phone: phoneIndex >= 0 ? cells[phoneIndex]?.trim() || null : null,
+    email: emailIndex >= 0 ? cells[emailIndex]?.trim() || null : null,
+    region: regionIndex >= 0 ? cells[regionIndex]?.trim() || null : null,
+  }))
 }
 
 const PAGE_SIZE = 10
@@ -237,6 +366,7 @@ export function CustomersOverview() {
   const [platform, setPlatform] = useState<CustomerPlatform | "all">("all")
   const [page, setPage] = useState(1)
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<CustomerRecord | null>(null)
   const [deletingCustomer, setDeletingCustomer] = useState<CustomerRecord | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -396,13 +526,32 @@ export function CustomersOverview() {
             <p className={cn("text-[12.5px]", MUTED)}>سجلات العملاء الفعلية من متاجرك المتصلة</p>
           </div>
         </div>
-        <AppButton
-          icon={<Plus className="size-4" />}
-          className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
-          onClick={() => setIsAddOpen(true)}
-        >
-          إضافة عميل
-        </AppButton>
+        <div className="flex items-center gap-2">
+          <AppButton
+            variant="outline"
+            icon={<Download className="size-4" />}
+            className="h-10 gap-1.5 rounded-[10px] border-[#e8edf3] px-3.5 text-[12.5px] font-semibold text-[#5b6b85]"
+            disabled={filteredRecords.length === 0}
+            onClick={() => exportCustomersCsv(filteredRecords)}
+          >
+            تصدير
+          </AppButton>
+          <AppButton
+            variant="outline"
+            icon={<Upload className="size-4" />}
+            className="h-10 gap-1.5 rounded-[10px] border-[#e8edf3] px-3.5 text-[12.5px] font-semibold text-[#5b6b85]"
+            onClick={() => setIsImportOpen(true)}
+          >
+            استيراد
+          </AppButton>
+          <AppButton
+            icon={<Plus className="size-4" />}
+            className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+            onClick={() => setIsAddOpen(true)}
+          >
+            إضافة عميل
+          </AppButton>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -627,6 +776,12 @@ export function CustomersOverview() {
         }}
       />
 
+      <ImportCustomersDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImported={() => void refetch()}
+      />
+
       {editingCustomer ? (
         <EditCustomerDialog
           customer={editingCustomer}
@@ -789,6 +944,220 @@ function CustomerRow({
   )
 }
 
+// B2B identity + Saudi National Address -- same fields AddCustomerDialog and EditCustomerDialog
+// both need, kept as plain strings here (empty string, not null) since that's what a controlled
+// <input> wants; trimToBusinessInfoInput() below converts back to the null-when-blank shape the
+// API expects.
+interface BusinessInfoDraft {
+  isBusinessCustomer: boolean
+  vatNumber: string
+  commercialRegistration: string
+  buildingNumber: string
+  secondaryNumber: string
+  street: string
+  city: string
+  district: string
+  postalCode: string
+  countryCode: string
+}
+
+const EMPTY_BUSINESS_INFO: BusinessInfoDraft = {
+  isBusinessCustomer: false,
+  vatNumber: "",
+  commercialRegistration: "",
+  buildingNumber: "",
+  secondaryNumber: "",
+  street: "",
+  city: "",
+  district: "",
+  postalCode: "",
+  countryCode: "SA",
+}
+
+function businessInfoFromCustomer(customer: CustomerRecord): BusinessInfoDraft {
+  return {
+    isBusinessCustomer: customer.isBusinessCustomer,
+    vatNumber: customer.vatNumber ?? "",
+    commercialRegistration: customer.commercialRegistration ?? "",
+    buildingNumber: customer.buildingNumber ?? "",
+    secondaryNumber: customer.secondaryNumber ?? "",
+    street: customer.street ?? "",
+    city: customer.city ?? "",
+    district: customer.district ?? "",
+    postalCode: customer.postalCode ?? "",
+    countryCode: customer.countryCode ?? "SA",
+  }
+}
+
+function trimBusinessInfoInput(draft: BusinessInfoDraft) {
+  return {
+    isBusinessCustomer: draft.isBusinessCustomer,
+    vatNumber: draft.vatNumber.trim() || null,
+    commercialRegistration: draft.commercialRegistration.trim() || null,
+    buildingNumber: draft.buildingNumber.trim() || null,
+    secondaryNumber: draft.secondaryNumber.trim() || null,
+    street: draft.street.trim() || null,
+    city: draft.city.trim() || null,
+    district: draft.district.trim() || null,
+    postalCode: draft.postalCode.trim() || null,
+    countryCode: draft.countryCode.trim() || null,
+  }
+}
+
+function BusinessInfoFields({
+  value,
+  onChange,
+}: {
+  value: BusinessInfoDraft
+  onChange: (next: BusinessInfoDraft) => void
+}) {
+  const setField = (field: keyof BusinessInfoDraft) => (event: { target: { value: string } }) =>
+    onChange({ ...value, [field]: event.target.value })
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-[#eef1f6] pt-3">
+      {/* A big, clearly-clickable toggle panel -- not a bare checkbox next to a label -- so it
+          reads as a real on/off switch for "does this customer need B2B/tax fields at all",
+          rather than one more form field easy to miss. */}
+      <label
+        className={cn(
+          "flex cursor-pointer items-center justify-between gap-3 rounded-[10px] border px-3.5 py-3 transition-colors",
+          value.isBusinessCustomer
+            ? "border-[#2563eb] bg-[#eff6ff]"
+            : "border-[#e8edf3] bg-[#fafbfd] hover:border-[#c7d3e3]"
+        )}
+      >
+        <span className="flex flex-col gap-0.5">
+          <span className={cn("text-[13px] font-bold", HEADING)}>عميل تجاري (B2B)</span>
+          <span className={cn("text-[11px]", MUTED)}>
+            فعّل هذا الخيار لإضافة السجل التجاري والرقم الضريبي والعنوان الوطني
+          </span>
+        </span>
+        <AppCheckbox
+          className="size-5"
+          checked={value.isBusinessCustomer}
+          onCheckedChange={(checked) =>
+            onChange({ ...value, isBusinessCustomer: checked === true })
+          }
+        />
+      </label>
+
+      {value.isBusinessCustomer ? (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                السجل التجاري
+              </label>
+              <AppInput
+                value={value.commercialRegistration}
+                onChange={setField("commercialRegistration")}
+                placeholder="0000000000"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                الرقم الضريبي
+              </label>
+              <AppInput
+                value={value.vatNumber}
+                onChange={setField("vatNumber")}
+                placeholder="300000000000003"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                رقم المبنى
+              </label>
+              <AppInput
+                value={value.buildingNumber}
+                onChange={setField("buildingNumber")}
+                placeholder="0000"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                الرقم الإضافي
+              </label>
+              <AppInput
+                value={value.secondaryNumber}
+                onChange={setField("secondaryNumber")}
+                placeholder="0000"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                اسم الشارع
+              </label>
+              <AppInput
+                value={value.street}
+                onChange={setField("street")}
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                المدينة
+              </label>
+              <AppInput
+                value={value.city}
+                onChange={setField("city")}
+                placeholder="الرياض"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>الحي</label>
+              <AppInput
+                value={value.district}
+                onChange={setField("district")}
+                placeholder="العليا"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                الرمز البريدي
+              </label>
+              <AppInput
+                value={value.postalCode}
+                onChange={setField("postalCode")}
+                placeholder="00000"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
+          </div>
+
+          <div className="w-1/2 pe-1.5">
+            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+              رمز البلد
+            </label>
+            <AppInput
+              value={value.countryCode}
+              onChange={setField("countryCode")}
+              placeholder="SA"
+              className={cn(FIELD_CLASS, "h-11 w-full")}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function AddCustomerDialog({
   open,
   onOpenChange,
@@ -803,6 +1172,7 @@ function AddCustomerDialog({
   const [email, setEmail] = useState("")
   const [region, setRegion] = useState("")
   const [notes, setNotes] = useState("")
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfoDraft>(EMPTY_BUSINESS_INFO)
   const [isSaving, setIsSaving] = useState(false)
 
   const reset = () => {
@@ -811,6 +1181,7 @@ function AddCustomerDialog({
     setEmail("")
     setRegion("")
     setNotes("")
+    setBusinessInfo(EMPTY_BUSINESS_INFO)
   }
 
   const submit = async () => {
@@ -826,6 +1197,7 @@ function AddCustomerDialog({
         email: email.trim() || null,
         notes: notes.trim() || null,
         region: region.trim() || null,
+        ...trimBusinessInfoInput(businessInfo),
       })
       toast.success("تم إضافة العميل.")
       reset()
@@ -843,7 +1215,7 @@ function AddCustomerDialog({
       onOpenChange={(next) => {
         if (!isSaving) onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[28rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName="w-[92vw] max-w-[32rem] rounded-[16px] p-5 [direction:rtl]"
       title={<span className={cn("text-[16px] font-extrabold", HEADING)}>إضافة عميل</span>}
       description={
         <span className={cn("text-[12px]", MUTED)}>عميل حقيقي يُضاف مباشرة إلى منصة مدار</span>
@@ -907,7 +1279,7 @@ function AddCustomerDialog({
           </div>
         </div>
         <div>
-          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>المنطقة</label>
+          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>العنوان</label>
           <AppInput
             value={region}
             onChange={(event) => setRegion(event.target.value)}
@@ -929,6 +1301,148 @@ function AddCustomerDialog({
             )}
           />
         </div>
+
+        <BusinessInfoFields value={businessInfo} onChange={setBusinessInfo} />
+      </div>
+    </AppDialog>
+  )
+}
+
+function ImportCustomersDialog({
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onImported: () => void
+}) {
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [rows, setRows] = useState<BulkImportRow[]>([])
+  const [isImporting, setIsImporting] = useState(false)
+  const [result, setResult] = useState<{
+    created: number
+    skipped: Array<{ row: number; reason: string }>
+  } | null>(null)
+
+  const reset = () => {
+    setFileName(null)
+    setRows([])
+    setResult(null)
+  }
+
+  const handleFile = async (file: File) => {
+    setFileName(file.name)
+    setResult(null)
+    const text = await file.text()
+    setRows(csvToImportRows(text))
+  }
+
+  const submit = async () => {
+    if (rows.length === 0) {
+      toast.error("اختر ملف CSV يحتوي على عملاء أولاً.")
+      return
+    }
+    setIsImporting(true)
+    try {
+      const outcome = await customerListService.bulkImportCustomers(rows)
+      setResult(outcome)
+      if (outcome.created > 0) {
+        toast.success(`تم إضافة ${outcome.created} عميل.`)
+        onImported()
+      }
+    } catch {
+      toast.error("تعذر استيراد الملف.")
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  return (
+    <AppDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (isImporting) return
+        if (!next) reset()
+        onOpenChange(next)
+      }}
+      contentClassName="w-[92vw] max-w-[30rem] rounded-[16px] p-5 [direction:rtl]"
+      title={<span className={cn("text-[16px] font-extrabold", HEADING)}>استيراد عملاء</span>}
+      description={
+        <span className={cn("text-[12px]", MUTED)}>
+          ارفع ملف CSV بالأعمدة name وphone وemail وregion لإضافة عدة عملاء دفعة واحدة
+        </span>
+      }
+      footer={
+        <>
+          <AppButton
+            className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+            disabled={isImporting || rows.length === 0}
+            onClick={() => void submit()}
+          >
+            {isImporting
+              ? "جارٍ الاستيراد..."
+              : `استيراد ${rows.length > 0 ? `(${rows.length})` : ""}`}
+          </AppButton>
+          <AppButton
+            variant="outline"
+            className="h-10 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
+            disabled={isImporting}
+            onClick={() => onOpenChange(false)}
+          >
+            إغلاق
+          </AppButton>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 pt-1">
+        <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border border-dashed border-[#c7d3e3] bg-[#fafbfd] px-4 py-6 text-center hover:border-[#93a6c9]">
+          <Upload className="size-5 text-[#2563eb]" />
+          <span className={cn("text-[12px] font-semibold", HEADING)}>
+            {fileName ?? "اضغط لاختيار ملف CSV"}
+          </span>
+          <span className={cn("text-[10.5px]", MUTED)}>
+            {rows.length > 0
+              ? `تم العثور على ${rows.length} صف`
+              : "الأعمدة: name, phone, email, region"}
+          </span>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) void handleFile(file)
+              event.target.value = ""
+            }}
+          />
+        </label>
+
+        <button
+          type="button"
+          onClick={downloadImportTemplateCsv}
+          className="self-start text-[11.5px] font-semibold text-[#2563eb] hover:underline"
+        >
+          تحميل نموذج CSV
+        </button>
+
+        {result ? (
+          <div className="rounded-[10px] border border-[#e8edf3] p-3">
+            <p className={cn("text-[12.5px] font-bold", HEADING)}>
+              تم إضافة {result.created} عميل
+              {result.skipped.length > 0 ? `، وتخطي ${result.skipped.length} صف` : ""}
+            </p>
+            {result.skipped.length > 0 ? (
+              <ul className="mt-1.5 flex flex-col gap-0.5">
+                {result.skipped.map((entry) => (
+                  <li key={entry.row} className={cn("text-[11px]", MUTED)}>
+                    السطر {entry.row + 1} في الملف: {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </AppDialog>
   )
@@ -947,6 +1461,9 @@ function EditCustomerDialog({
   const [phone, setPhone] = useState(customer.phone ?? "")
   const [email, setEmail] = useState(customer.email)
   const [region, setRegion] = useState(customer.region ?? "")
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfoDraft>(
+    businessInfoFromCustomer(customer)
+  )
   const [isSaving, setIsSaving] = useState(false)
 
   const submit = async () => {
@@ -957,7 +1474,7 @@ function EditCustomerDialog({
     setIsSaving(true)
     try {
       // Only what actually changed -- an edit is a partial PATCH, not a full re-create.
-      const input: Record<string, string | null> = {}
+      const input: Record<string, string | null | boolean> = {}
       const trimmedName = name.trim()
       if (trimmedName !== customer.name) input.name = trimmedName
       const trimmedPhone = phone.trim() || null
@@ -966,6 +1483,12 @@ function EditCustomerDialog({
       if (trimmedEmail !== (customer.email || null)) input.email = trimmedEmail
       const trimmedRegion = region.trim() || null
       if (trimmedRegion !== customer.region) input.region = trimmedRegion
+
+      const nextBusinessInfo = trimBusinessInfoInput(businessInfo)
+      const previousBusinessInfo = trimBusinessInfoInput(businessInfoFromCustomer(customer))
+      for (const key of Object.keys(nextBusinessInfo) as Array<keyof typeof nextBusinessInfo>) {
+        if (nextBusinessInfo[key] !== previousBusinessInfo[key]) input[key] = nextBusinessInfo[key]
+      }
 
       await customerListService.updateCustomer(customer.id, input)
       toast.success("تم حفظ التعديلات.")
@@ -983,7 +1506,7 @@ function EditCustomerDialog({
       onOpenChange={(next) => {
         if (!isSaving) onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[28rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName="w-[92vw] max-w-[32rem] rounded-[16px] p-5 [direction:rtl]"
       title={<span className={cn("text-[16px] font-extrabold", HEADING)}>تعديل بيانات العميل</span>}
       description={<span className={cn("text-[12px]", MUTED)}>{customer.name}</span>}
       footer={
@@ -1045,7 +1568,7 @@ function EditCustomerDialog({
           </div>
         </div>
         <div>
-          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>المنطقة</label>
+          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>العنوان</label>
           <AppInput
             value={region}
             onChange={(event) => setRegion(event.target.value)}
@@ -1053,6 +1576,8 @@ function EditCustomerDialog({
             className={cn(FIELD_CLASS, "h-11 w-full")}
           />
         </div>
+
+        <BusinessInfoFields value={businessInfo} onChange={setBusinessInfo} />
       </div>
     </AppDialog>
   )

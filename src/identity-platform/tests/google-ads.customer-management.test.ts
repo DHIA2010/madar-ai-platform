@@ -122,7 +122,7 @@ describe("GoogleAdsCustomerManagementService: real currency capture", () => {
         },
       },
       {
-        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        apiBaseUrl: "https://googleads.googleapis.com/v25",
         developerToken: "dev-token",
         maxRetries: 0,
         minRequestIntervalMs: 0,
@@ -152,7 +152,7 @@ describe("GoogleAdsCustomerManagementService: real currency capture", () => {
         },
       },
       {
-        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        apiBaseUrl: "https://googleads.googleapis.com/v25",
         developerToken: "dev-token",
         maxRetries: 0,
         minRequestIntervalMs: 0,
@@ -174,7 +174,7 @@ describe("GoogleAdsCustomerManagementService: real currency capture", () => {
         },
       },
       {
-        apiBaseUrl: "https://googleads.googleapis.com/v17",
+        apiBaseUrl: "https://googleads.googleapis.com/v25",
         developerToken: "dev-token",
         maxRetries: 0,
         minRequestIntervalMs: 0,

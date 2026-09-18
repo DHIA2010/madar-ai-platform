@@ -175,7 +175,9 @@ export function createIdentityPlatformContainer(
       new GoogleAdsSyncService(database, {
         apiBaseUrl:
           process.env.IDENTITY_PLATFORM_GOOGLE_ADS_API_BASE_URL ??
-          "https://googleads.googleapis.com/v22",
+          // v22 sunsets October 7, 2026 -- see google-oauth/service.ts's own copy of this default
+          // for the full migration note.
+          "https://googleads.googleapis.com/v25",
         tokenEndpoint:
           process.env.IDENTITY_PLATFORM_GOOGLE_ADS_TOKEN_ENDPOINT ??
           "https://oauth2.googleapis.com/token",

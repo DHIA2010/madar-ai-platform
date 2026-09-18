@@ -13,6 +13,10 @@ export interface HeldOrderItem {
   productName: string
   unitPrice: number
   quantity: number
+  // Round-trips a line's own discount through a hold/resume cycle -- see
+  // migration 071_pos_invoice_item_discount.sql. Stored as-is inside the items jsonb blob, same
+  // as every other item field here.
+  discountAmount?: number
 }
 
 export interface HoldOrderInput {

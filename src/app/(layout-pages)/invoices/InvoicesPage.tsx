@@ -8,13 +8,31 @@
 // cashier-entered override, not a rule looked up from a table.
 //
 // "Send invoice" stays honestly disabled: there is no email/SMS/WhatsApp channel wired to an
-// invoice anywhere in the platform. "Print" is real -- printing a web page is something a
-// browser can actually do, unlike opening a COM port, so it calls window.print() rather than
-// pretending and disabling it too.
+// invoice anywhere in the platform. "Print" is real -- it calls window.print() against the same
+// ThermalInvoiceReceipt the cashier's own post-checkout print uses (see the hidden portal target
+// near the bottom of this file), not the page itself, so printing an already-completed invoice
+// from here produces the same real 80mm receipt a customer would have gotten at the till.
 
 import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
+import Link from "next/link"
+import QRCode from "qrcode"
+import {
+  addMonths,
+  endOfMonth,
+  format,
+  getMonth,
+  getYear,
+  setMonth,
+  setYear,
+  startOfMonth,
+  subDays,
+  subMonths,
+} from "date-fns"
+import type { DateRange } from "react-day-picker"
 import {
   Calculator,
+  CalendarIcon,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -34,30 +52,37 @@ import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 import { useWorkspace } from "@/features/workspace"
-import { DateField } from "@/app/(layout-pages)/eCommerce/add-product/date-field"
+import { ThermalInvoiceReceipt } from "@/app/(layout-pages)/pos/ThermalInvoiceReceipt"
+import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
 import {
   posInvoicesService,
   VAT_RATE,
   type CreateInvoiceItemInput,
   type Invoice,
+  type InvoiceReturn,
   type InvoiceStatus,
   type InvoiceSummary,
 } from "@/features/pos/services/pos-invoices.service"
 import { posPaymentMethodsService } from "@/features/pos/services/pos-payment-methods.service"
+import { taxRatesService } from "@/features/pos/services/tax-rates.service"
 import {
   productListService,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
 
 import {
+  AppSearchableSelect,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
   AppSelectTrigger,
   AppSelectValue,
+  type AppSearchableSelectOption,
 } from "@/components/app"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import {
   Dialog,
   DialogContent,
@@ -74,6 +99,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 
 const PANEL =
   "rounded-2xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
@@ -81,7 +109,19 @@ const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#8098b4]"
 const FIELD_CLASS =
   "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
+// Matches ProductsPage.tsx's own FILTER_TRIGGER_CLASS -- same searchable-combobox filter look,
+// reused here so the two pages' filter bars read as the same control, not two different ones.
+const FILTER_TRIGGER_CLASS =
+  "h-10 w-[150px] rounded-[10px] border-[#e8edf3] bg-white text-[12.5px] text-[#0d1b3e]"
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
+
+const STATUS_FILTER_OPTIONS: AppSearchableSelectOption[] = [
+  { value: "all", label: "جميع الحالات" },
+  { value: "completed", label: "مكتملة" },
+  { value: "cancelled", label: "ملغاة" },
+  { value: "returned", label: "مرتجعة" },
+  { value: "partially_returned", label: "مرتجعة جزئياً" },
+]
 
 const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   minimumFractionDigits: 2,
@@ -104,6 +144,290 @@ function formatDateTime(value: string): string {
   return DATE_TIME_FORMAT.format(new Date(value))
 }
 
+// The rest of this section (ARABIC_DATE through DateRangeFilter) is the same calendar-popover
+// date-range control ProductsPage.tsx built for its own filter bar -- reproduced here rather than
+// imported from a shared module so this page's filters can be redesigned to match it without
+// touching that already-shipped page at all.
+const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+})
+
+const MONTH_OPTIONS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+]
+const YEAR_OPTIONS = Array.from({ length: 21 }, (_, index) => 2018 + index)
+
+function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
+  const today = new Date()
+  const lastMonth = subMonths(today, 1)
+
+  return [
+    { label: "Yesterday", range: { from: subDays(today, 1), to: subDays(today, 1) } },
+    { label: "Last 7 Days", range: { from: subDays(today, 6), to: today } },
+    { label: "Last 30 Days", range: { from: subDays(today, 29), to: today } },
+    { label: "This Month", range: { from: startOfMonth(today), to: endOfMonth(today) } },
+    { label: "Last Month", range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) } },
+  ]
+}
+
+function formatDateRangeLabel(range: DateRange | undefined) {
+  if (!range?.from) return "الفترة الزمنية"
+  if (!range.to) return ARABIC_DATE.format(range.from)
+  return `${ARABIC_DATE.format(range.from)} - ${ARABIC_DATE.format(range.to)}`
+}
+
+function DateRangeFilter({
+  value,
+  onChange,
+}: {
+  value: DateRange | undefined
+  onChange: (next: DateRange | undefined) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [displayMonth, setDisplayMonth] = useState<Date>(value?.from ?? new Date())
+  const [rangeAnchor, setRangeAnchor] = useState<Date | undefined>(undefined)
+  const monthIndex = getMonth(displayMonth)
+  const yearValue = getYear(displayMonth)
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (nextOpen) {
+          setDisplayMonth(value?.from ?? new Date())
+          setRangeAnchor(value?.from && !value?.to ? value.from : undefined)
+        } else {
+          setRangeAnchor(undefined)
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-10 w-[205px] justify-between gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-3.5 text-[12.5px] font-normal text-[#0b1738] hover:border-[#c4d5f0] hover:bg-white"
+        >
+          <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
+          <span className="truncate">{formatDateRangeLabel(value)}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={10}
+        dir="ltr"
+        collisionPadding={16}
+        className="max-h-[var(--radix-popover-content-available-height)] w-[min(23rem,calc(100vw-2rem))] overflow-y-auto rounded-[20px] border border-sky-400/15 bg-card p-3.5 text-foreground shadow-[0_28px_90px_-38px_rgba(14,165,233,0.55)] ring-1 ring-sky-400/10 backdrop-blur-2xl"
+      >
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
+            onClick={() => setDisplayMonth((current) => addMonths(current, -1))}
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
+            <Select
+              value={String(monthIndex)}
+              onValueChange={(next) => {
+                setDisplayMonth((current) => setMonth(current, Number(next)))
+              }}
+            >
+              <SelectTrigger className="h-9 w-[7.75rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
+                <span>{MONTH_OPTIONS[monthIndex]}</span>
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                className="rounded-2xl border border-border bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
+                align="center"
+                sideOffset={4}
+              >
+                {MONTH_OPTIONS.map((monthLabel, index) => (
+                  <SelectItem
+                    key={monthLabel}
+                    value={String(index)}
+                    className="rounded-xl px-3 py-2 text-sm text-foreground focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
+                  >
+                    {monthLabel}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={String(yearValue)}
+              onValueChange={(next) => {
+                setDisplayMonth((current) => setYear(current, Number(next)))
+              }}
+            >
+              <SelectTrigger className="h-9 w-[6rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
+                <span>{yearValue}</span>
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                className="max-h-56 rounded-2xl border border-border bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
+                align="center"
+                sideOffset={4}
+              >
+                {YEAR_OPTIONS.map((yearOption) => (
+                  <SelectItem
+                    key={yearOption}
+                    value={String(yearOption)}
+                    className="rounded-xl px-3 py-2 text-sm text-foreground focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
+                  >
+                    {yearOption}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
+            onClick={() => setDisplayMonth((current) => addMonths(current, 1))}
+            aria-label="Next month"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+
+        <Calendar
+          mode="range"
+          animate
+          month={displayMonth}
+          onMonthChange={setDisplayMonth}
+          selected={value}
+          onSelect={(next, selectedDay) => {
+            if (!selectedDay) {
+              onChange(next)
+              return
+            }
+
+            if (!rangeAnchor) {
+              onChange({ from: selectedDay, to: undefined })
+              setRangeAnchor(selectedDay)
+              return
+            }
+
+            const from = selectedDay < rangeAnchor ? selectedDay : rangeAnchor
+            const to = selectedDay < rangeAnchor ? rangeAnchor : selectedDay
+
+            onChange({ from, to })
+            setRangeAnchor(undefined)
+            setOpen(false)
+          }}
+          numberOfMonths={1}
+          startMonth={new Date(2018, 0)}
+          endMonth={new Date(2038, 11)}
+          captionLayout="label"
+          formatters={{
+            formatWeekdayName: (date) => format(date, "EEE"),
+          }}
+          className="rounded-[18px] bg-transparent p-0 [--cell-size:32px]"
+          classNames={{
+            root: "w-full",
+            months: "w-full",
+            month: "w-full gap-2",
+            nav: "hidden",
+            button_previous:
+              "size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
+            button_next:
+              "size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
+            month_caption: "hidden",
+            caption_label: "text-base font-semibold text-foreground",
+            weekdays: "mb-1.5 grid grid-cols-7 gap-1.5",
+            weekday:
+              "h-6 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground",
+            week: "mt-1.5 grid grid-cols-7 gap-1.5",
+            day: "rounded-full text-foreground",
+            day_button:
+              "size-8 rounded-full border border-transparent bg-transparent text-xs font-medium text-foreground transition-all duration-200 ease-out hover:border-sky-300/40 hover:bg-sky-500/14 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
+            today:
+              "rounded-full border border-sky-400/60 bg-transparent text-foreground shadow-none",
+            selected:
+              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)] hover:bg-sky-300 hover:text-foreground",
+            range_middle: "rounded-full border border-transparent bg-sky-500/14 text-foreground",
+            range_start:
+              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)]",
+            range_end:
+              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)]",
+            outside: "text-muted-foreground opacity-40",
+            disabled: "text-muted-foreground opacity-35",
+          }}
+        />
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+          {getDateRangePresets().map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
+              onClick={() => {
+                onChange(preset.range)
+                setRangeAnchor(undefined)
+                setDisplayMonth(preset.range.from ?? new Date())
+                setOpen(false)
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-9 rounded-xl border-border bg-muted/60 px-3.5 text-sm font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
+            onClick={() => {
+              onChange(undefined)
+              setRangeAnchor(undefined)
+              setOpen(false)
+            }}
+          >
+            Clear Date
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 rounded-xl bg-sky-500 px-3.5 text-sm font-medium text-white hover:bg-sky-400"
+            onClick={() => {
+              const today = new Date()
+              onChange({ from: today, to: today })
+              setRangeAnchor(undefined)
+              setDisplayMonth(today)
+              setOpen(false)
+            }}
+          >
+            Today
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 const STATUS_META: Record<
   InvoiceStatus,
   { label: string; tint: string; dot: string; Icon: typeof CheckCircle2 }
@@ -121,9 +445,15 @@ const STATUS_META: Record<
     Icon: XCircle,
   },
   returned: {
-    label: "مردودة",
+    label: "مرتجعة",
     tint: "bg-[#fffbeb] text-[#b45309]",
     dot: "bg-[#f59e0b]",
+    Icon: RotateCcw,
+  },
+  partially_returned: {
+    label: "مرتجعة جزئياً",
+    tint: "bg-[#fff7ed] text-[#c2410c]",
+    dot: "bg-[#fb923c]",
     Icon: RotateCcw,
   },
 }
@@ -131,7 +461,7 @@ const STATUS_META: Record<
 type StatusFilter = "all" | InvoiceStatus
 
 export default function InvoicesPage() {
-  const { availableWorkspaces } = useWorkspace()
+  const { availableWorkspaces, currentOrganization } = useWorkspace()
 
   const workspaceName = useMemo(() => {
     const map = new Map(availableWorkspaces.map((workspace) => [workspace.id, workspace.name]))
@@ -146,19 +476,20 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [workspaceFilter, setWorkspaceFilter] = useState<string>("all")
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all")
-  const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState("")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [search, setSearch] = useState("")
 
+  // The list endpoint still takes plain YYYY-MM-DD strings (unchanged) -- only the control that
+  // produces them changed, from two separate date fields to one calendar-popover range.
   const backendFilter = useMemo(
     () => ({
       workspaceId: workspaceFilter === "all" ? undefined : workspaceFilter,
       status: statusFilter === "all" ? undefined : statusFilter,
       paymentMethodCode: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
-      from: fromDate || undefined,
-      to: toDate || undefined,
+      from: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+      to: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     }),
-    [workspaceFilter, statusFilter, paymentMethodFilter, fromDate, toDate]
+    [workspaceFilter, statusFilter, paymentMethodFilter, dateRange]
   )
 
   const load = async () => {
@@ -221,22 +552,115 @@ export default function InvoicesPage() {
     const map = new Map(paymentMethods.map((method) => [method.code, method.name]))
     return (code: string) => map.get(code) ?? code
   }, [paymentMethods])
+  // Localized display name per code, for the printed receipt -- ThermalInvoiceReceipt shows one
+  // name per real payment line (an invoice can be split across more than one method), unlike the
+  // detail panel's own paymentMethodName() above which only ever resolves the invoice's single
+  // summary code.
+  const paymentMethodNameByCode = useMemo(
+    () => Object.fromEntries(paymentMethods.map((method) => [method.code, method.name])),
+    [paymentMethods]
+  )
+  // The table/detail-panel label -- an invoice settled by more than one method really did use
+  // more than one (pos_invoice_payments has one real row per method with its own real amount, not
+  // a single flattened code), so this reads that same array instead of showing the backend's own
+  // internal "split" sentinel code, which is only ever meant to mark the case, not to be shown to
+  // anyone. Two methods print as "مدى، نقدي" -- their real names, not the raw code string.
+  function paymentMethodLabel(invoice: Invoice): string {
+    if (invoice.payments.length > 1) {
+      return invoice.payments
+        .map((payment) => paymentMethodName(payment.paymentMethodCode))
+        .join("، ")
+    }
+    return paymentMethodName(invoice.paymentMethodCode)
+  }
 
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
-  const [statusBusyId, setStatusBusyId] = useState<string | null>(null)
 
-  const changeStatus = async (invoice: Invoice, status: "cancelled" | "returned") => {
-    setStatusBusyId(invoice.id)
+  // A real, itemized return (إشعار دائن) -- see PosInvoicesService.createReturn(). Replaces what
+  // used to be a single "mark the whole invoice returned" click: the dialog lets the cashier name
+  // exactly which lines, and how many units of each, are actually being returned, defaulting
+  // every line's quantity to nothing so an accidental full return can never happen by mistake.
+  const [returnTarget, setReturnTarget] = useState<Invoice | null>(null)
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({})
+  const [returnNotes, setReturnNotes] = useState("")
+  // Which method the refund is actually being given back through -- required by createReturn()
+  // on the backend, and what decides whether a linked customer's account balance gets credited
+  // (only for a credit/prepaid-kind method; cash/card/transfer/bnpl are assumed already handled
+  // outside the system).
+  const [returnPaymentMethodCode, setReturnPaymentMethodCode] = useState("")
+  const [submittingReturn, setSubmittingReturn] = useState(false)
+  // The just-created credit note, printed once immediately after submitting a return -- same
+  // "straight to print, no confirmation screen" pattern CashierPage's own checkout uses. Cleared
+  // right after that one print so the shared print target (see the bottom of this file) reverts
+  // to printing whichever invoice is selected, same as before.
+  const [lastReturn, setLastReturn] = useState<InvoiceReturn | null>(null)
+  const [lastReturnQrDataUrl, setLastReturnQrDataUrl] = useState<string | null>(null)
+
+  function openReturnDialog(invoice: Invoice) {
+    setReturnTarget(invoice)
+    // Default every line to its own full remaining quantity -- returning the whole invoice is
+    // then just "open and submit"; a partial return is still one edit away by typing over a
+    // line's own number.
+    setReturnQuantities(
+      Object.fromEntries(
+        invoice.items
+          .filter((item) => item.quantity - item.returnedQuantity > 0)
+          .map((item) => [item.id, String(item.quantity - item.returnedQuantity)])
+      )
+    )
+    setReturnNotes("")
+    const enabledMethods = paymentMethods.filter((method) => method.enabled)
+    const sameAsOriginal = enabledMethods.find(
+      (method) => method.code === invoice.paymentMethodCode
+    )
+    setReturnPaymentMethodCode(sameAsOriginal?.code ?? enabledMethods[0]?.code ?? "")
+  }
+
+  const submitReturn = async () => {
+    if (!returnTarget) return
+    const items = returnTarget.items
+      .map((item) => ({
+        invoiceItemId: item.id,
+        quantity: Math.trunc(Number(returnQuantities[item.id]) || 0),
+      }))
+      .filter((entry) => entry.quantity > 0)
+    if (items.length === 0) {
+      toast.error("حدد كمية عنصر واحد على الأقل لإرجاعه.")
+      return
+    }
+    if (!returnPaymentMethodCode) {
+      toast.error("حدد طريقة الدفع المستخدمة لإعادة المبلغ.")
+      return
+    }
+
+    setSubmittingReturn(true)
     try {
-      const updated = await posInvoicesService.setStatus(invoice.id, status)
-      toast.success(status === "cancelled" ? "تم إلغاء الفاتورة." : "تم تسجيل الإرجاع.")
-      setInvoices((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-      setSelectedInvoice((current) => (current?.id === updated.id ? updated : current))
+      const created = await posInvoicesService.createReturn(returnTarget.id, {
+        items,
+        paymentMethodCode: returnPaymentMethodCode,
+        notes: returnNotes.trim() || null,
+      })
+      toast.success(`تم تسجيل إشعار الإرجاع ${created.returnNumber}.`)
+      void load()
       void posInvoicesService.summary(backendFilter).then(setSummary)
+      setSelectedInvoice(null)
+      setReturnTarget(null)
+
+      // Same QR-ready-before-print discipline CashierPage's own checkout uses -- generate the
+      // image up front so window.print() never fires onto a still-loading QR.
+      const qrDataUrl = created.qrCode
+        ? await QRCode.toDataURL(created.qrCode, { margin: 0, width: 180 }).catch(() => null)
+        : null
+      setLastReturnQrDataUrl(qrDataUrl)
+      setLastReturn(created)
+      window.setTimeout(() => {
+        window.print()
+        setLastReturn(null)
+      }, 150)
     } catch {
-      toast.error("تعذر تحديث حالة الفاتورة.")
+      toast.error("تعذر تسجيل الإرجاع.")
     } finally {
-      setStatusBusyId(null)
+      setSubmittingReturn(false)
     }
   }
 
@@ -301,13 +725,25 @@ export default function InvoicesPage() {
           <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الفواتير</h1>
           <p className={cn("mt-1 text-[13px]", MUTED)}>إدارة ومراجعة جميع فواتير المبيعات.</p>
         </div>
-        <Button
-          className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
-          onClick={() => setIsCreateOpen(true)}
-        >
-          <Plus className="size-4" />
-          فاتورة جديدة
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 gap-2 rounded-[10px] border-[#e8edf3] px-4 text-[13px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
+          >
+            <Link href={ROUTES.invoicesReturns}>
+              <RotateCcw className="size-4" />
+              الفواتير المرتجعة
+            </Link>
+          </Button>
+          <Button
+            className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+            onClick={() => setIsCreateOpen(true)}
+          >
+            <Plus className="size-4" />
+            فاتورة جديدة
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -344,70 +780,40 @@ export default function InvoicesPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <DateField
-                value={fromDate}
-                onChange={setFromDate}
-                placeholder="من تاريخ"
-                ariaLabel="من تاريخ"
-              />
-              <span className={cn("text-[12px]", MUTED)}>-</span>
-              <DateField
-                value={toDate}
-                onChange={setToDate}
-                placeholder="إلى تاريخ"
-                ariaLabel="إلى تاريخ"
-              />
-            </div>
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
-            <div className="w-[150px]">
-              <AppSelect
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as StatusFilter)}
-              >
-                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue />
-                </AppSelectTrigger>
-                <AppSelectContent>
-                  <AppSelectItem value="all">جميع الحالات</AppSelectItem>
-                  <AppSelectItem value="completed">مكتملة</AppSelectItem>
-                  <AppSelectItem value="cancelled">ملغاة</AppSelectItem>
-                  <AppSelectItem value="returned">مردودة</AppSelectItem>
-                </AppSelectContent>
-              </AppSelect>
-            </div>
+            <AppSearchableSelect
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as StatusFilter)}
+              options={STATUS_FILTER_OPTIONS}
+              ariaLabel="الحالة"
+              triggerClassName={FILTER_TRIGGER_CLASS}
+            />
 
-            <div className="w-[150px]">
-              <AppSelect value={workspaceFilter} onValueChange={setWorkspaceFilter}>
-                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue />
-                </AppSelectTrigger>
-                <AppSelectContent>
-                  <AppSelectItem value="all">جميع الفروع</AppSelectItem>
-                  {availableWorkspaces.map((workspace) => (
-                    <AppSelectItem key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </AppSelectItem>
-                  ))}
-                </AppSelectContent>
-              </AppSelect>
-            </div>
+            <AppSearchableSelect
+              value={workspaceFilter}
+              onChange={setWorkspaceFilter}
+              options={[
+                { value: "all", label: "جميع الفروع" },
+                ...availableWorkspaces.map((workspace) => ({
+                  value: workspace.id,
+                  label: workspace.name,
+                })),
+              ]}
+              ariaLabel="الفرع"
+              triggerClassName={FILTER_TRIGGER_CLASS}
+            />
 
-            <div className="w-[160px]">
-              <AppSelect value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-                <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue />
-                </AppSelectTrigger>
-                <AppSelectContent>
-                  <AppSelectItem value="all">جميع طرق الدفع</AppSelectItem>
-                  {paymentMethods.map((method) => (
-                    <AppSelectItem key={method.code} value={method.code}>
-                      {method.name}
-                    </AppSelectItem>
-                  ))}
-                </AppSelectContent>
-              </AppSelect>
-            </div>
+            <AppSearchableSelect
+              value={paymentMethodFilter}
+              onChange={setPaymentMethodFilter}
+              options={[
+                { value: "all", label: "جميع طرق الدفع" },
+                ...paymentMethods.map((method) => ({ value: method.code, label: method.name })),
+              ]}
+              ariaLabel="طريقة الدفع"
+              triggerClassName={FILTER_TRIGGER_CLASS}
+            />
           </div>
 
           {invoices.length === 0 ? (
@@ -472,17 +878,17 @@ export default function InvoicesPage() {
                           >
                             {invoice.invoiceNumber}
                           </td>
-                          <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
+                          <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                             {formatDateTime(invoice.createdAt)}
                           </td>
-                          <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
+                          <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                             {invoice.customerName ?? "عميل نقدي"}
                           </td>
-                          <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
+                          <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                             {workspaceName(invoice.workspaceId)}
                           </td>
-                          <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
-                            {paymentMethodName(invoice.paymentMethodCode)}
+                          <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
+                            {paymentMethodLabel(invoice)}
                           </td>
                           <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
                             {formatAmount(invoice.totalAmount)}
@@ -504,14 +910,9 @@ export default function InvoicesPage() {
                                 <button
                                   type="button"
                                   aria-label="إجراءات الفاتورة"
-                                  disabled={statusBusyId === invoice.id}
                                   className="mx-auto flex size-8 items-center justify-center rounded-lg text-[#8098b4] transition-colors hover:bg-[#f2f5fa] hover:text-[#0d1b3e]"
                                 >
-                                  {statusBusyId === invoice.id ? (
-                                    <Loader2 className="size-4 animate-spin" />
-                                  ) : (
-                                    "···"
-                                  )}
+                                  ···
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
@@ -524,21 +925,22 @@ export default function InvoicesPage() {
                                 >
                                   عرض التفاصيل
                                 </DropdownMenuItem>
-                                {invoice.status === "completed" ? (
-                                  <>
-                                    <DropdownMenuItem
-                                      className="cursor-pointer text-[12.5px] text-[#b45309]"
-                                      onSelect={() => void changeStatus(invoice, "returned")}
-                                    >
-                                      تسجيل إرجاع
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="cursor-pointer text-[12.5px] text-[#dc2626]"
-                                      onSelect={() => void changeStatus(invoice, "cancelled")}
-                                    >
-                                      إلغاء الفاتورة
-                                    </DropdownMenuItem>
-                                  </>
+                                {invoice.status === "completed" ||
+                                invoice.status === "partially_returned" ? (
+                                  <DropdownMenuItem
+                                    className="cursor-pointer text-[12.5px] text-[#b45309]"
+                                    // Radix locks pointer events on <body> while the dropdown
+                                    // menu is open and only releases them once it finishes
+                                    // closing. Opening a real Dialog (ReturnDialog) in that same
+                                    // synchronous tick mounts it under that still-active lock, so
+                                    // the whole page stops responding to any click until a
+                                    // refresh -- deferring by one tick lets the menu's own close
+                                    // finish first. Same fix ProductsPage.tsx's own row actions
+                                    // menu already uses for exactly this reason.
+                                    onSelect={() => setTimeout(() => openReturnDialog(invoice), 0)}
+                                  >
+                                    تسجيل إرجاع
+                                  </DropdownMenuItem>
                                 ) : null}
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -607,7 +1009,7 @@ export default function InvoicesPage() {
           <InvoiceDetailPanel
             invoice={selectedInvoice}
             workspaceName={workspaceName(selectedInvoice.workspaceId)}
-            paymentMethodName={paymentMethodName(selectedInvoice.paymentMethodCode)}
+            paymentMethodName={paymentMethodLabel(selectedInvoice)}
             onClose={() => setSelectedInvoice(null)}
           />
         ) : null}
@@ -624,6 +1026,61 @@ export default function InvoicesPage() {
           toast.success(`تم إنشاء الفاتورة ${invoice.invoiceNumber}.`)
         }}
       />
+
+      <ReturnDialog
+        invoice={returnTarget}
+        quantities={returnQuantities}
+        onQuantitiesChange={setReturnQuantities}
+        notes={returnNotes}
+        onNotesChange={setReturnNotes}
+        paymentMethods={paymentMethods.filter((method) => method.enabled)}
+        paymentMethodCode={returnPaymentMethodCode}
+        onPaymentMethodCodeChange={setReturnPaymentMethodCode}
+        submitting={submittingReturn}
+        onSubmit={() => void submitReturn()}
+        onClose={() => setReturnTarget(null)}
+      />
+
+      {/* "طباعة" in the detail panel below just calls window.print() -- what actually makes that
+          print the real thermal receipt instead of this whole page (sidebar, filters, table and
+          all) is this hidden target plus the @media print rule collapsing every other direct
+          child of <body>. Same pattern CashierPage's own post-checkout print uses; portaled
+          straight to <body> (not rendered in place) for the same reason -- a fixed/hidden element
+          left inside the page's own layout still repeats across however many pages the FULL
+          (uncollapsed) document would paginate into. Kept mounted for as long as an invoice is
+          selected, not just at print time, so ThermalInvoiceReceipt's own QR generation has
+          already finished by the time anyone actually clicks طباعة.
+          One shared target, not two -- lastReturn (set only for the one auto-print right after
+          submitReturn, then cleared) takes priority over selectedInvoice, so a just-created
+          credit note prints instead of whatever invoice happens to still be selected underneath
+          it; the rest of the time this is simply the selected invoice's own receipt. */}
+      {(lastReturn || selectedInvoice) &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div id="invoice-print-target" className="hidden print:block">
+            {lastReturn ? (
+              <CreditNoteReceipt
+                creditNote={lastReturn}
+                qrDataUrl={lastReturnQrDataUrl}
+                sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+              />
+            ) : selectedInvoice ? (
+              <ThermalInvoiceReceipt
+                invoice={selectedInvoice}
+                paymentMethodNames={paymentMethodNameByCode}
+                sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+              />
+            ) : null}
+          </div>,
+          document.body
+        )}
+      <style>{`
+        @media print {
+          body > *:not(#invoice-print-target) { display: none !important; }
+          #invoice-print-target { width: 72mm; }
+        }
+        @page { size: 80mm auto; margin: 0; }
+      `}</style>
     </div>
   )
 }
@@ -640,6 +1097,15 @@ function InvoiceDetailPanel({
   onClose: () => void
 }) {
   const meta = STATUS_META[invoice.status]
+  // Derived from this invoice's own stored numbers, not the organization's CURRENT default rate
+  // -- a real sale keeps the rate it was actually charged at forever, even after the org's
+  // configured default later changes (Settings -> الضرائب). Falls back to VAT_RATE's own 15%
+  // only for the (should-be-impossible) case of a taxable amount of exactly zero.
+  const taxableForInvoice = invoice.subtotalAmount - invoice.discountAmount
+  const effectiveRatePercent =
+    taxableForInvoice > 0
+      ? Math.round((invoice.taxAmount / taxableForInvoice) * 100)
+      : Math.round(VAT_RATE * 100)
 
   return (
     <section className={cn(PANEL, "flex h-fit flex-col gap-4 p-5")}>
@@ -712,7 +1178,7 @@ function InvoiceDetailPanel({
           <span className={HEADING}>-{formatAmount(invoice.discountAmount)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className={MUTED}>الضريبة ({Math.round(VAT_RATE * 100)}٪)</span>
+          <span className={MUTED}>الضريبة ({effectiveRatePercent}٪)</span>
           <span className={HEADING}>{formatAmount(invoice.taxAmount)}</span>
         </div>
         <div className="mt-1 flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5 text-[14px] font-extrabold">
@@ -743,6 +1209,146 @@ function InvoiceDetailPanel({
   )
 }
 
+// A per-line quantity picker, not a single "return everything" click -- see createReturn() on
+// the backend, which validates every requested quantity against what that specific line still
+// actually has left (quantity - returnedQuantity), across however many separate return events
+// have already touched it.
+function ReturnDialog({
+  invoice,
+  quantities,
+  onQuantitiesChange,
+  notes,
+  onNotesChange,
+  paymentMethods,
+  paymentMethodCode,
+  onPaymentMethodCodeChange,
+  submitting,
+  onSubmit,
+  onClose,
+}: {
+  invoice: Invoice | null
+  quantities: Record<string, string>
+  onQuantitiesChange: (next: Record<string, string>) => void
+  notes: string
+  onNotesChange: (next: string) => void
+  paymentMethods: Array<{ code: string; name: string }>
+  paymentMethodCode: string
+  onPaymentMethodCodeChange: (next: string) => void
+  submitting: boolean
+  onSubmit: () => void
+  onClose: () => void
+}) {
+  const returnableItems = (invoice?.items ?? []).filter(
+    (item) => item.quantity - item.returnedQuantity > 0
+  )
+
+  return (
+    <Dialog open={invoice !== null} onOpenChange={(open) => !open && !submitting && onClose()}>
+      <DialogContent className="sm:max-w-[32rem] [direction:rtl]">
+        <DialogHeader className="text-right">
+          <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
+            تسجيل إرجاع
+          </DialogTitle>
+          <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
+            {invoice ? `الفاتورة #${invoice.invoiceNumber}` : ""} -- حدد كمية كل صنف يُرجعه العميل
+            فعلياً. الأصناف المُرجعة بالكامل من قبل لا تظهر هنا.
+          </DialogDescription>
+        </DialogHeader>
+
+        {returnableItems.length === 0 ? (
+          <p className={cn("py-6 text-center text-[12.5px]", MUTED)}>
+            لا توجد أصناف متبقية لإرجاعها على هذه الفاتورة.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {returnableItems.map((item) => {
+              const remaining = item.quantity - item.returnedQuantity
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-[10px] border border-[#e8edf3] p-3"
+                >
+                  <div className="min-w-0">
+                    <p className={cn("truncate text-[12.5px] font-semibold", HEADING)}>
+                      {item.productName}
+                    </p>
+                    <p className={cn("text-[11px]", MUTED)}>
+                      المتبقي القابل للإرجاع: {remaining} من {item.quantity}
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={remaining}
+                    step="1"
+                    value={quantities[item.id] ?? ""}
+                    onChange={(event) =>
+                      onQuantitiesChange({ ...quantities, [item.id]: event.target.value })
+                    }
+                    placeholder="0"
+                    className="h-10 w-20 rounded-[8px] border-[#e8edf3] text-center text-[13px]"
+                  />
+                </div>
+              )
+            })}
+
+            <div>
+              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                طريقة استرداد المبلغ <span className="text-[#e0484d]">*</span>
+              </Label>
+              <AppSelect value={paymentMethodCode} onValueChange={onPaymentMethodCodeChange}>
+                <AppSelectTrigger className="h-10 w-full rounded-[8px] border-[#e8edf3] text-[13px]">
+                  <AppSelectValue placeholder="اختر طريقة الدفع" />
+                </AppSelectTrigger>
+                <AppSelectContent>
+                  {paymentMethods.map((method) => (
+                    <AppSelectItem key={method.code} value={method.code}>
+                      {method.name}
+                    </AppSelectItem>
+                  ))}
+                </AppSelectContent>
+              </AppSelect>
+            </div>
+
+            <div>
+              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                ملاحظة (اختياري)
+              </Label>
+              <Textarea
+                value={notes}
+                onChange={(event) => onNotesChange(event.target.value)}
+                rows={2}
+                placeholder="سبب الإرجاع، مثلاً..."
+                className="resize-none text-[13px]"
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          {returnableItems.length > 0 ? (
+            <Button
+              className="h-11 gap-2 rounded-[10px] bg-[#b45309] px-6 text-[13px] font-semibold text-white hover:bg-[#92400e]"
+              disabled={submitting}
+              onClick={onSubmit}
+            >
+              {submitting ? "جارٍ التسجيل..." : "تسجيل الإرجاع"}
+            </Button>
+          ) : null}
+          <Button
+            variant="outline"
+            className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
+            disabled={submitting}
+            onClick={onClose}
+          >
+            إلغاء
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 interface DraftLine extends CreateInvoiceItemInput {
   key: string
 }
@@ -758,6 +1364,8 @@ function CreateInvoiceDialog({
   paymentMethods: Array<{ code: string; name: string }>
   onCreated: (invoice: Invoice) => void
 }) {
+  const { currentOrganization } = useWorkspace()
+
   const [products, setProducts] = useState<ProductRecord[]>([])
   useEffect(() => {
     if (!open) return
@@ -766,6 +1374,21 @@ function CreateInvoiceDialog({
       .catch(() => [])
       .then((list) => setProducts(list ?? []))
   }, [open])
+
+  // The organization's real configured tax rate (Settings -> الضرائب), not the hardcoded 15%
+  // VAT_RATE fallback -- see CashierPage.tsx's own identical fix for why: this dialog's own
+  // preview total has to match what POST /v1/pos/invoices will actually charge, or a payment
+  // amount that looked correct here gets rejected as a mismatch by the real backend calculation.
+  const [vatRate, setVatRate] = useState(VAT_RATE)
+  useEffect(() => {
+    if (!open) return
+    taxRatesService
+      .getDefaultRate()
+      .then((rate) =>
+        setVatRate(currentOrganization?.settings.taxAutoApplyToProducts === false ? 0 : rate)
+      )
+      .catch(() => {})
+  }, [open, currentOrganization?.settings.taxAutoApplyToProducts])
 
   const [productQuery, setProductQuery] = useState("")
   const [lines, setLines] = useState<DraftLine[]>([])
@@ -834,7 +1457,7 @@ function CreateInvoiceDialog({
   const subtotal = lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0)
   const discount = Number(discountAmount) || 0
   const taxable = Math.max(0, subtotal - discount)
-  const tax = Math.round(taxable * VAT_RATE * 100) / 100
+  const tax = Math.round(taxable * vatRate * 100) / 100
   const total = Math.round((taxable + tax) * 100) / 100
 
   const errors = {
@@ -1037,7 +1660,7 @@ function CreateInvoiceDialog({
               <span className={HEADING}>-{formatAmount(discount)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={MUTED}>الضريبة ({Math.round(VAT_RATE * 100)}٪)</span>
+              <span className={MUTED}>الضريبة ({Math.round(vatRate * 100)}٪)</span>
               <span className={HEADING}>{formatAmount(tax)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-[14px] font-extrabold">

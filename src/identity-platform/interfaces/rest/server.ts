@@ -34,6 +34,7 @@ import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
+import { TaxRatesService } from "../../tax/tax-rates-service"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -89,6 +90,10 @@ import {
   createNativeCampaignSchema,
   createCampaignLinkSchema,
   createProductSchema,
+  bulkImportProductsSchema,
+  createTaxRateSchema,
+  updateTaxRateSchema,
+  applyProductsTaxConventionSchema,
   customPaymentMethodSchema,
   paymentMethodUpdateSchema,
   posDeviceSchema,
@@ -97,10 +102,12 @@ import {
   recordCashMovementSchema,
   createInvoiceSchema,
   createBalanceVoucherSchema,
+  bulkImportCustomersSchema,
   createCustomerSchema,
   updateCustomerSchema,
   holdOrderSchema,
   invoiceStatusSchema,
+  createInvoiceReturnSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
   importCampaignsSchema,
@@ -525,9 +532,16 @@ export function createIdentityApiServer(
   const posPaymentMethodsService = container.infrastructure.database
     ? new PosPaymentMethodsService(container.infrastructure.database)
     : null
+  const taxRatesService = container.infrastructure.database
+    ? new TaxRatesService(container.infrastructure.database)
+    : null
   const posInvoicesService =
-    container.infrastructure.database && posPaymentMethodsService
-      ? new PosInvoicesService(container.infrastructure.database, posPaymentMethodsService)
+    container.infrastructure.database && posPaymentMethodsService && taxRatesService
+      ? new PosInvoicesService(
+          container.infrastructure.database,
+          posPaymentMethodsService,
+          taxRatesService
+        )
       : null
   const posShiftsService =
     container.infrastructure.database && posInvoicesService && posPaymentMethodsService
@@ -540,9 +554,13 @@ export function createIdentityApiServer(
   const posHeldOrdersService = container.infrastructure.database
     ? new PosHeldOrdersService(container.infrastructure.database)
     : null
-  const productCatalogService = container.infrastructure.database
-    ? new ProductCatalogService(new ProductCatalogRepository(container.infrastructure.database))
-    : null
+  const productCatalogService =
+    container.infrastructure.database && taxRatesService
+      ? new ProductCatalogService(
+          new ProductCatalogRepository(container.infrastructure.database),
+          taxRatesService
+        )
+      : null
   const customersAggregationService = container.infrastructure.database
     ? new CustomersAggregationService(container.infrastructure.database)
     : null
@@ -2827,7 +2845,54 @@ export function createIdentityApiServer(
           await posInvoicesService.setStatus(
             actor.organizationId,
             invoiceStatusMatch[1],
-            payload.status
+            payload.status,
+            actor.userId
+          )
+        )
+      }
+
+      // Checked before the /v1/pos/invoices/:id/returns POST block below, same defensive
+      // ordering as "summary" above -- "returns" must never be read as an invoice id.
+      if (method === "GET" && url.pathname === "/v1/pos/invoices/returns") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+
+        return send(200, {
+          items: await posInvoicesService.listReturns(actor.organizationId, {
+            workspaceId: url.searchParams.get("workspaceId"),
+            from: url.searchParams.get("from"),
+            to: url.searchParams.get("to"),
+          }),
+        })
+      }
+
+      const invoiceReturnsMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/returns$/)
+      if (invoiceReturnsMatch && method === "POST") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        const payload = createInvoiceReturnSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await posInvoicesService.createReturn(
+            actor.organizationId,
+            invoiceReturnsMatch[1],
+            {
+              items: payload.items,
+              paymentMethodCode: payload.paymentMethodCode,
+              notes: payload.notes,
+            },
+            actor.userId
           )
         )
       }
@@ -2924,6 +2989,100 @@ export function createIdentityApiServer(
               product: payload,
             })
           )
+        }
+      }
+
+      // A CSV import -- parsed client-side into plain rows, so this only ever validates shape
+      // (schemas.ts) and per-row business rules (see ProductCatalogService.bulkImport for why a
+      // bad row is skipped and reported, not rejected outright). "products:import" is a real,
+      // already-defined permission distinct from "products:create" (see system-roles.ts) -- an
+      // owner has both by default, but a custom role could reasonably grant one without the other.
+      if (method === "POST" && url.pathname === "/v1/products/bulk-import") {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product import is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:import")) {
+          throw ERRORS.forbidden()
+        }
+
+        const payload = bulkImportProductsSchema.parse(await readJsonBody(request))
+        const result = await productCatalogService.bulkImport({
+          organizationId: actor.organizationId,
+          workspaceId: actor.workspaceId,
+          createdBy: actor.userId,
+          rows: payload.products,
+        })
+        return send(200, result)
+      }
+
+      // Settings -> الضرائب -> "الأسعار تشمل الضريبة" applied to every existing priced product at
+      // once (the dialog's "جميع المنتجات الحالية" choice) -- "المنتجات الجديدة فقط" never calls
+      // this route, it only changes the organization's own default going forward. Gated the same
+      // as every other tax-configuration write (tax:manage), not products:create/update, since
+      // this isn't editing one product -- it's a catalogue-wide pricing policy change.
+      if (method === "POST" && url.pathname === "/v1/products/apply-tax-convention") {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Products are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("tax:manage")) throw ERRORS.forbidden()
+
+        const payload = applyProductsTaxConventionSchema.parse(await readJsonBody(request))
+        const result = await productCatalogService.applyPriceTaxConvention(
+          actor.organizationId,
+          payload.includeTax
+        )
+        return send(200, result)
+      }
+
+      // Configurable tax rates -- what invoices-service.ts's create() actually charges (see
+      // TaxRatesService.getDefaultRatePercent), replacing the old hardcoded 15% VAT_RATE constant.
+      if (url.pathname === "/v1/tax-rates") {
+        if (!taxRatesService) {
+          return send(503, {
+            code: "TAX_RATES_UNAVAILABLE",
+            message: "Tax rates are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("tax:view")) throw ERRORS.forbidden()
+          return send(200, { items: await taxRatesService.list(actor.organizationId) })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("tax:manage")) throw ERRORS.forbidden()
+          const payload = createTaxRateSchema.parse(await readJsonBody(request))
+          return send(201, await taxRatesService.create(actor.organizationId, payload))
+        }
+      }
+
+      const taxRateItemMatch = url.pathname.match(/^\/v1\/tax-rates\/([^/]+)$/)
+      if (taxRateItemMatch) {
+        if (!taxRatesService) {
+          return send(503, {
+            code: "TAX_RATES_UNAVAILABLE",
+            message: "Tax rates are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("tax:manage")) throw ERRORS.forbidden()
+
+        if (method === "PATCH") {
+          const payload = updateTaxRateSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await taxRatesService.update(actor.organizationId, taxRateItemMatch[1], payload)
+          )
+        }
+
+        if (method === "DELETE") {
+          await taxRatesService.delete(actor.organizationId, taxRateItemMatch[1])
+          return send(200, { ok: true })
         }
       }
 
@@ -3060,9 +3219,41 @@ export function createIdentityApiServer(
             phone: payload.phone,
             notes: payload.notes,
             region: payload.region,
+            isBusinessCustomer: payload.isBusinessCustomer,
+            vatNumber: payload.vatNumber,
+            commercialRegistration: payload.commercialRegistration,
+            buildingNumber: payload.buildingNumber,
+            secondaryNumber: payload.secondaryNumber,
+            street: payload.street,
+            city: payload.city,
+            district: payload.district,
+            postalCode: payload.postalCode,
+            countryCode: payload.countryCode,
           })
           return send(201, toNormalizedCustomer(created))
         }
+      }
+
+      // A CSV import -- parsed client-side into plain rows, so this only ever validates shape
+      // (schemas.ts) and per-row business rules (a name-less row is skipped, not rejected
+      // outright); see NativeCustomersService.bulkImport for why the whole file never fails
+      // over one bad row.
+      if (method === "POST" && url.pathname === "/v1/customers/bulk-import") {
+        if (!nativeCustomersService) {
+          return send(503, {
+            code: "CUSTOMERS_UNAVAILABLE",
+            message: "Customer import is unavailable in memory mode.",
+          })
+        }
+
+        const payload = bulkImportCustomersSchema.parse(await readJsonBody(request))
+        const result = await nativeCustomersService.bulkImport(
+          actor.organizationId,
+          actor.workspaceId,
+          actor.userId,
+          payload.customers
+        )
+        return send(200, result)
       }
 
       const customerDetailMatch = url.pathname.match(/^\/v1\/customers\/([^/]+)$/)
