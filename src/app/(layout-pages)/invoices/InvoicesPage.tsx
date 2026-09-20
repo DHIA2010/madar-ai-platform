@@ -44,6 +44,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  ShieldCheck,
   Trash2,
   Wallet,
   XCircle,
@@ -576,6 +577,38 @@ export default function InvoicesPage() {
 
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
 
+  // "الإبلاغ إلى الهيئة" -- see PosInvoicesService.reportToZatca(). Never automatic at checkout;
+  // only ever offered once an invoice was actually signed by a ZATCA production device
+  // (zatcaSigned) and hasn't been reported yet. Updates both the selected-detail copy and the
+  // list row in place, so the panel reflects the new status without a full reload.
+  const [reportingZatcaId, setReportingZatcaId] = useState<string | null>(null)
+  async function reportInvoiceToZatca(invoice: Invoice) {
+    setReportingZatcaId(invoice.id)
+    try {
+      const result = await posInvoicesService.reportToZatca(invoice.id)
+      const reportedAt = new Date().toISOString()
+      const patch = { zatcaStatus: result.status, zatcaReportedAt: reportedAt }
+      setInvoices((current) =>
+        current.map((item) => (item.id === invoice.id ? { ...item, ...patch } : item))
+      )
+      setSelectedInvoice((current) =>
+        current && current.id === invoice.id ? { ...current, ...patch } : current
+      )
+      toast.success(`تم إبلاغ الفاتورة إلى الهيئة (${result.status}).`)
+    } catch (error) {
+      const code = error instanceof AppError ? error.code : undefined
+      toast.error(
+        code === "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA"
+          ? "تم إبلاغ هذه الفاتورة مسبقاً."
+          : code === "POS_INVOICE_NOT_ZATCA_SIGNED"
+            ? "لم تُوقَّع هذه الفاتورة عبر جهاز إنتاج تابع للهيئة."
+            : "تعذر إبلاغ الفاتورة إلى الهيئة."
+      )
+    } finally {
+      setReportingZatcaId(null)
+    }
+  }
+
   // A real, itemized return (إشعار دائن) -- see PosInvoicesService.createReturn(). Replaces what
   // used to be a single "mark the whole invoice returned" click: the dialog lets the cashier name
   // exactly which lines, and how many units of each, are actually being returned, defaulting
@@ -583,11 +616,12 @@ export default function InvoicesPage() {
   const [returnTarget, setReturnTarget] = useState<Invoice | null>(null)
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({})
   const [returnNotes, setReturnNotes] = useState("")
-  // Which method the refund is actually being given back through -- required by createReturn()
-  // on the backend, and what decides whether a linked customer's account balance gets credited
-  // (only for a credit/prepaid-kind method; cash/card/transfer/bnpl are assumed already handled
-  // outside the system).
-  const [returnPaymentMethodCode, setReturnPaymentMethodCode] = useState("")
+  // One entry per method the refund is actually being given back through, keyed by code -- a
+  // refund can now be split across more than one, the same way a sale's own checkout can (see
+  // CashierPage's own paymentAmounts). Only a credit/prepaid-kind method's own share ever credits
+  // a linked customer's real account balance; cash/card/transfer/bnpl are assumed already handled
+  // outside the system.
+  const [returnPaymentAmounts, setReturnPaymentAmounts] = useState<Record<string, string>>({})
   const [submittingReturn, setSubmittingReturn] = useState(false)
   // The just-created credit note, printed once immediately after submitting a return -- same
   // "straight to print, no confirmation screen" pattern CashierPage's own checkout uses. Cleared
@@ -596,24 +630,62 @@ export default function InvoicesPage() {
   const [lastReturn, setLastReturn] = useState<InvoiceReturn | null>(null)
   const [lastReturnQrDataUrl, setLastReturnQrDataUrl] = useState<string | null>(null)
 
+  // A live estimate of what this return will actually total, from the same per-unit net/tax rate
+  // createReturn() itself prorates from (item.netAmount + item.taxAmount, divided by the line's
+  // own full quantity) -- close enough to size the payment tiles below by; the backend re-derives
+  // the real figure from line_net_amount and is what actually gets charged.
+  const returnPreviewTotal = useMemo(() => {
+    if (!returnTarget) return 0
+    const raw = returnTarget.items.reduce((sum, item) => {
+      const quantity = Math.trunc(Number(returnQuantities[item.id]) || 0)
+      if (quantity <= 0 || item.quantity <= 0) return sum
+      const perUnit = (item.netAmount + item.taxAmount) / item.quantity
+      return sum + perUnit * quantity
+    }, 0)
+    return Math.round(raw * 100) / 100
+  }, [returnTarget, returnQuantities])
+
+  const returnPaymentEntries = useMemo(
+    () =>
+      Object.entries(returnPaymentAmounts)
+        .map(([code, value]) => ({ code, amount: Math.round((Number(value) || 0) * 100) / 100 }))
+        .filter((entry) => entry.amount > 0),
+    [returnPaymentAmounts]
+  )
+  const returnPaymentTotal = useMemo(
+    () =>
+      Math.round(returnPaymentEntries.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100,
+    [returnPaymentEntries]
+  )
+
   function openReturnDialog(invoice: Invoice) {
     setReturnTarget(invoice)
     // Default every line to its own full remaining quantity -- returning the whole invoice is
     // then just "open and submit"; a partial return is still one edit away by typing over a
     // line's own number.
-    setReturnQuantities(
-      Object.fromEntries(
-        invoice.items
-          .filter((item) => item.quantity - item.returnedQuantity > 0)
-          .map((item) => [item.id, String(item.quantity - item.returnedQuantity)])
-      )
+    const fullQuantities = Object.fromEntries(
+      invoice.items
+        .filter((item) => item.quantity - item.returnedQuantity > 0)
+        .map((item) => [item.id, String(item.quantity - item.returnedQuantity)])
     )
+    setReturnQuantities(fullQuantities)
     setReturnNotes("")
+    // Pre-selects the invoice's own original method for the full (currently full-remaining)
+    // total, so a straight full return is still just "open and submit" -- tapping a different
+    // tile, or editing quantities and re-tapping one, replaces this.
     const enabledMethods = paymentMethods.filter((method) => method.enabled)
     const sameAsOriginal = enabledMethods.find(
       (method) => method.code === invoice.paymentMethodCode
     )
-    setReturnPaymentMethodCode(sameAsOriginal?.code ?? enabledMethods[0]?.code ?? "")
+    const defaultCode = sameAsOriginal?.code ?? enabledMethods[0]?.code
+    const previewTotal = invoice.items.reduce((sum, item) => {
+      const quantity = Math.trunc(Number(fullQuantities[item.id]) || 0)
+      if (quantity <= 0 || item.quantity <= 0) return sum
+      return sum + ((item.netAmount + item.taxAmount) / item.quantity) * quantity
+    }, 0)
+    setReturnPaymentAmounts(
+      defaultCode ? { [defaultCode]: (Math.round(previewTotal * 100) / 100).toFixed(2) } : {}
+    )
   }
 
   const submitReturn = async () => {
@@ -628,8 +700,12 @@ export default function InvoicesPage() {
       toast.error("حدد كمية عنصر واحد على الأقل لإرجاعه.")
       return
     }
-    if (!returnPaymentMethodCode) {
+    if (returnPaymentEntries.length === 0) {
       toast.error("حدد طريقة الدفع المستخدمة لإعادة المبلغ.")
+      return
+    }
+    if (Math.abs(returnPaymentTotal - returnPreviewTotal) > 0.01) {
+      toast.error(`المبلغ المُدخل (${formatAmount(returnPaymentTotal)}) لا يساوي إجمالي الإرجاع.`)
       return
     }
 
@@ -637,7 +713,10 @@ export default function InvoicesPage() {
     try {
       const created = await posInvoicesService.createReturn(returnTarget.id, {
         items,
-        paymentMethodCode: returnPaymentMethodCode,
+        payments: returnPaymentEntries.map((entry) => ({
+          paymentMethodCode: entry.code,
+          amount: entry.amount,
+        })),
         notes: returnNotes.trim() || null,
       })
       toast.success(`تم تسجيل إشعار الإرجاع ${created.returnNumber}.`)
@@ -1010,6 +1089,8 @@ export default function InvoicesPage() {
             invoice={selectedInvoice}
             workspaceName={workspaceName(selectedInvoice.workspaceId)}
             paymentMethodName={paymentMethodLabel(selectedInvoice)}
+            reportingZatca={reportingZatcaId === selectedInvoice.id}
+            onReportZatca={() => void reportInvoiceToZatca(selectedInvoice)}
             onClose={() => setSelectedInvoice(null)}
           />
         ) : null}
@@ -1034,8 +1115,9 @@ export default function InvoicesPage() {
         notes={returnNotes}
         onNotesChange={setReturnNotes}
         paymentMethods={paymentMethods.filter((method) => method.enabled)}
-        paymentMethodCode={returnPaymentMethodCode}
-        onPaymentMethodCodeChange={setReturnPaymentMethodCode}
+        paymentAmounts={returnPaymentAmounts}
+        onPaymentAmountsChange={setReturnPaymentAmounts}
+        previewTotal={returnPreviewTotal}
         submitting={submittingReturn}
         onSubmit={() => void submitReturn()}
         onClose={() => setReturnTarget(null)}
@@ -1063,6 +1145,7 @@ export default function InvoicesPage() {
                 creditNote={lastReturn}
                 qrDataUrl={lastReturnQrDataUrl}
                 sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+                paymentMethodNames={paymentMethodNameByCode}
               />
             ) : selectedInvoice ? (
               <ThermalInvoiceReceipt
@@ -1089,11 +1172,15 @@ function InvoiceDetailPanel({
   invoice,
   workspaceName,
   paymentMethodName,
+  reportingZatca,
+  onReportZatca,
   onClose,
 }: {
   invoice: Invoice
   workspaceName: string
   paymentMethodName: string
+  reportingZatca: boolean
+  onReportZatca: () => void
   onClose: () => void
 }) {
   const meta = STATUS_META[invoice.status]
@@ -1147,6 +1234,16 @@ function InvoiceDetailPanel({
         <dd className={cn("text-right font-semibold", HEADING)}>{workspaceName}</dd>
         <dt className={MUTED}>طريقة الدفع</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{paymentMethodName}</dd>
+        {invoice.zatcaSigned ? (
+          <>
+            <dt className={MUTED}>حالة الهيئة (ZATCA)</dt>
+            <dd className={cn("text-right font-semibold", HEADING)}>
+              {invoice.zatcaReportedAt
+                ? `تم الإبلاغ (${invoice.zatcaStatus ?? "—"})`
+                : "موقّعة -- بانتظار الإبلاغ"}
+            </dd>
+          </>
+        ) : null}
       </dl>
 
       <div className="border-t border-[#eef2f8] pt-3">
@@ -1187,6 +1284,21 @@ function InvoiceDetailPanel({
         </div>
       </div>
 
+      {invoice.zatcaSigned && !invoice.zatcaReportedAt ? (
+        <Button
+          className="h-10 w-full gap-2 rounded-[10px] bg-[#1f9d55] text-[12.5px] font-bold text-white hover:bg-[#188045]"
+          disabled={reportingZatca}
+          onClick={onReportZatca}
+        >
+          {reportingZatca ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ShieldCheck className="size-4" />
+          )}
+          الإبلاغ إلى الهيئة (ZATCA)
+        </Button>
+      ) : null}
+
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -1213,6 +1325,61 @@ function InvoiceDetailPanel({
 // the backend, which validates every requested quantity against what that specific line still
 // actually has left (quantity - returnedQuantity), across however many separate return events
 // have already touched it.
+// One refund method tile -- tapping the card makes it the sole method for the whole return total
+// (clearing any other tile), typing directly into the field builds a deliberate split across more
+// than one. Same interaction CashierPage's own checkout payment tiles already use.
+function ReturnPaymentTile({
+  name,
+  amount,
+  selected,
+  onAmountChange,
+  onSelectFull,
+}: {
+  name: string
+  amount: string
+  selected: boolean
+  onAmountChange: (value: string) => void
+  onSelectFull: () => void
+}) {
+  return (
+    <div
+      onClick={onSelectFull}
+      className={cn(
+        "flex min-w-0 cursor-pointer flex-col gap-2 rounded-[12px] border bg-white p-3 transition-colors",
+        selected ? "border-black" : "border-[#e5e9f0]"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center rounded-full border-2",
+            selected ? "border-black bg-black" : "border-[#c7d2e0] bg-white"
+          )}
+        >
+          {selected ? <span className="size-1.5 rounded-full bg-white" /> : null}
+        </span>
+        <span className={cn("truncate text-[13px] font-bold", HEADING)}>{name}</span>
+      </div>
+      <div dir="ltr" className="relative">
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={amount}
+          onChange={(event) => onAmountChange(event.target.value)}
+          onFocus={(event) => event.target.select()}
+          onClick={(event) => event.stopPropagation()}
+          placeholder="0.00"
+          className="h-10 rounded-[8px] border-[#e8edf3] pe-9 text-left text-[13px]"
+        />
+        <span className="pointer-events-none absolute inset-y-0 end-3 my-auto h-fit text-[11px] font-semibold text-[#8098b4]">
+          ر.س
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function ReturnDialog({
   invoice,
   quantities,
@@ -1220,8 +1387,9 @@ function ReturnDialog({
   notes,
   onNotesChange,
   paymentMethods,
-  paymentMethodCode,
-  onPaymentMethodCodeChange,
+  paymentAmounts,
+  onPaymentAmountsChange,
+  previewTotal,
   submitting,
   onSubmit,
   onClose,
@@ -1232,8 +1400,9 @@ function ReturnDialog({
   notes: string
   onNotesChange: (next: string) => void
   paymentMethods: Array<{ code: string; name: string }>
-  paymentMethodCode: string
-  onPaymentMethodCodeChange: (next: string) => void
+  paymentAmounts: Record<string, string>
+  onPaymentAmountsChange: (next: Record<string, string>) => void
+  previewTotal: number
   submitting: boolean
   onSubmit: () => void
   onClose: () => void
@@ -1244,7 +1413,7 @@ function ReturnDialog({
 
   return (
     <Dialog open={invoice !== null} onOpenChange={(open) => !open && !submitting && onClose()}>
-      <DialogContent className="sm:max-w-[32rem] [direction:rtl]">
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-[50rem] [direction:rtl]">
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
             تسجيل إرجاع
@@ -1260,7 +1429,7 @@ function ReturnDialog({
             لا توجد أصناف متبقية لإرجاعها على هذه الفاتورة.
           </p>
         ) : (
-          <div className="flex flex-col gap-2.5">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pe-1">
             {returnableItems.map((item) => {
               const remaining = item.quantity - item.returnedQuantity
               return (
@@ -1272,7 +1441,7 @@ function ReturnDialog({
                     <p className={cn("truncate text-[12.5px] font-semibold", HEADING)}>
                       {item.productName}
                     </p>
-                    <p className={cn("text-[11px]", MUTED)}>
+                    <p className="text-[11px] text-[#e0484d]">
                       المتبقي القابل للإرجاع: {remaining} من {item.quantity}
                     </p>
                   </div>
@@ -1292,22 +1461,33 @@ function ReturnDialog({
               )
             })}
 
+            <div className="flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5">
+              <span className={cn("text-[13px] font-extrabold", HEADING)}>الاجمالي</span>
+              <span className={cn("text-[14px] font-extrabold", HEADING)}>
+                {formatAmount(previewTotal)}
+              </span>
+            </div>
+
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
                 طريقة استرداد المبلغ <span className="text-[#e0484d]">*</span>
               </Label>
-              <AppSelect value={paymentMethodCode} onValueChange={onPaymentMethodCodeChange}>
-                <AppSelectTrigger className="h-10 w-full rounded-[8px] border-[#e8edf3] text-[13px]">
-                  <AppSelectValue placeholder="اختر طريقة الدفع" />
-                </AppSelectTrigger>
-                <AppSelectContent>
-                  {paymentMethods.map((method) => (
-                    <AppSelectItem key={method.code} value={method.code}>
-                      {method.name}
-                    </AppSelectItem>
-                  ))}
-                </AppSelectContent>
-              </AppSelect>
+              <div className="grid grid-cols-3 gap-2.5">
+                {paymentMethods.map((method) => (
+                  <ReturnPaymentTile
+                    key={method.code}
+                    name={method.name}
+                    amount={paymentAmounts[method.code] ?? ""}
+                    selected={(Number(paymentAmounts[method.code]) || 0) > 0}
+                    onAmountChange={(value) =>
+                      onPaymentAmountsChange({ ...paymentAmounts, [method.code]: value })
+                    }
+                    onSelectFull={() =>
+                      onPaymentAmountsChange({ [method.code]: previewTotal.toFixed(2) })
+                    }
+                  />
+                ))}
+              </div>
             </div>
 
             <div>
@@ -1319,7 +1499,7 @@ function ReturnDialog({
                 onChange={(event) => onNotesChange(event.target.value)}
                 rows={2}
                 placeholder="سبب الإرجاع، مثلاً..."
-                className="resize-none text-[13px]"
+                className="resize-none rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
               />
             </div>
           </div>
@@ -1328,7 +1508,7 @@ function ReturnDialog({
         <DialogFooter className="gap-2">
           {returnableItems.length > 0 ? (
             <Button
-              className="h-11 gap-2 rounded-[10px] bg-[#b45309] px-6 text-[13px] font-semibold text-white hover:bg-[#92400e]"
+              className="h-11 gap-2 rounded-[10px] bg-black px-6 text-[13px] font-semibold text-white hover:bg-[#1a1a1a]"
               disabled={submitting}
               onClick={onSubmit}
             >

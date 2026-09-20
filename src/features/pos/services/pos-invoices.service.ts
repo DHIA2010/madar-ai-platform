@@ -29,6 +29,11 @@ export interface InvoiceItem {
   // and how much of it, is being returned.
   id: string
   productId: string | null
+  // Which specific combination of a "variable" product (size/color etc.) was actually sold --
+  // null for every other product type. See invoices-service.ts's computeStockConsumption, which
+  // decrements this exact variant's own stock rather than the parent product's (a variable
+  // product never carries stock of its own).
+  variantId: string | null
   productName: string
   unitPrice: number
   quantity: number
@@ -90,6 +95,16 @@ export interface Invoice {
   sellerName: string | null
   sellerVatNumber: string | null
   sellerAddress: string | null
+  // The linked customer's own VAT number, snapshotted at sale time -- only ever set when
+  // customerId pointed at a real native customer who had one on file at the moment of sale.
+  customerVatNumber: string | null
+  // ZATCA Phase 2 (Integration Phase) -- set only once the organization has an onboarded
+  // production device (Settings -> الفوترة الإلكترونية); every sale before that stays
+  // zatcaSigned: false and shows only the Phase 1 QR above. zatcaStatus/zatcaReportedAt stay null
+  // until the manual "الإبلاغ إلى الهيئة" action (reportToZatca below) actually reports it.
+  zatcaSigned: boolean
+  zatcaStatus: string | null
+  zatcaReportedAt: string | null
 }
 
 export interface InvoiceSummary {
@@ -140,10 +155,14 @@ export interface InvoiceReturn {
   discountAmount: number
   taxAmount: number
   totalAmount: number
-  // The method the refund was actually given back through -- purely informational for cash/card/
-  // transfer/bnpl; for credit/prepaid it's what decided whether this return also credited the
-  // customer's real account balance (see createReturn on the backend).
+  // The single method's code, or "split" once more than one line was used -- the real per-method
+  // breakdown always lives in payments. Purely informational for cash/card/transfer/bnpl; for
+  // credit/prepaid it's what decided whether this return also credited the customer's real
+  // account balance (see createReturn on the backend).
   refundPaymentMethodCode: string | null
+  // The refund's own real payment lines -- can be split across more than one method, the same
+  // way a sale's own payments[] can.
+  payments: InvoicePayment[]
   notes: string | null
   createdAt: string
   items: InvoiceReturnItem[]
@@ -158,11 +177,18 @@ export interface CreateInvoiceReturnItemInput {
   quantity: number
 }
 
+export interface CreateInvoiceReturnPaymentInput {
+  paymentMethodCode: string
+  // Only required once there's more than one payment line -- a single-method refund always
+  // refunds the return's own computed total, so the caller doesn't have to know it in advance.
+  amount?: number
+}
+
 export interface CreateInvoiceReturnInput {
   items: CreateInvoiceReturnItemInput[]
-  // Which method the refund was actually given back through -- must be an enabled method code,
-  // same rule a sale's own payments already follow.
-  paymentMethodCode: string
+  // The refund can be split across more than one method -- every method used must be an enabled
+  // method code, same rule a sale's own payments already follow.
+  payments: CreateInvoiceReturnPaymentInput[]
   notes: string | null
 }
 
@@ -174,6 +200,7 @@ export interface InvoiceReturnListFilter {
 
 export interface CreateInvoiceItemInput {
   productId: string | null
+  variantId?: string | null
   productName: string
   unitPrice: number
   quantity: number
@@ -256,5 +283,14 @@ export const posInvoicesService = {
       [INVOICES_ENDPOINT, "returns"].join(PATH_SEPARATOR) + buildReturnsQuery(filter)
     )
     return response.items
+  },
+
+  // Manual "الإبلاغ إلى الهيئة" -- never automatic at checkout. Only valid once the invoice was
+  // actually signed by a ZATCA production device (zatcaSigned: true) and hasn't been reported yet.
+  async reportToZatca(invoiceId: string): Promise<{ status: string }> {
+    return client.post<undefined, { status: string }>(
+      [INVOICES_ENDPOINT, encodeURIComponent(invoiceId), "zatca-report"].join(PATH_SEPARATOR),
+      undefined
+    )
   },
 }

@@ -10,6 +10,11 @@ const HELD_ORDER_ERRORS = {
 
 export interface HeldOrderItem {
   productId: string | null
+  // Which specific combination of a "variable" product (size/color etc.) this line is -- see
+  // PosInvoicesService.computeStockConsumption. Round-trips through the items jsonb blob as-is,
+  // same as every other item field here.
+  variantId?: string | null
+  variantLabel?: string | null
   productName: string
   unitPrice: number
   quantity: number

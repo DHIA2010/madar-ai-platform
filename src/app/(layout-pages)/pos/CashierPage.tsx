@@ -79,6 +79,7 @@ import {
 } from "@/features/pos/services/pos-payment-methods.service"
 import {
   productListService,
+  type ProductDetail,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
 import { customerListService } from "@/features/customers/services/customer-list.service"
@@ -150,6 +151,15 @@ const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
 
 interface CartLine {
   productId: string
+  // Set only for a "variable" product (size/color etc.) -- which specific combination was
+  // picked, so its OWN stock (product_variants.stock, not the parent product's, which a variable
+  // product never carries any of) is what actually gets decremented at checkout. Two different
+  // variants of the same product are two different cart lines -- see lineKey below, the identity
+  // every cart lookup/update uses instead of productId alone.
+  variantId: string | null
+  // Display only (e.g. "L / أحمر") -- the picked combination's own option values joined the same
+  // way the Add Product page's variants table already does.
+  variantLabel: string | null
   productName: string
   unitPrice: number
   quantity: number
@@ -608,7 +618,14 @@ export default function CashierPage() {
     if (!match) return
 
     event.preventDefault()
-    addToCart(match)
+    // A variable product's own SKU is its PARENT's -- each real combination has its own SKU the
+    // aggregated product list here doesn't carry, so an exact match on the parent can never mean
+    // "this one specific combination" was scanned. Ask which one, same as clicking its tile would.
+    if (match.productType === "variable") {
+      void openVariantPicker(match)
+    } else {
+      addToCart(match)
+    }
     setSearch("")
   }
 
@@ -623,7 +640,11 @@ export default function CashierPage() {
   )
 
   function selectSearchSuggestion(product: ProductRecord) {
-    addToCart(product)
+    if (product.productType === "variable") {
+      void openVariantPicker(product)
+    } else {
+      addToCart(product)
+    }
     setSearch("")
     searchInputRef.current?.focus()
   }
@@ -752,24 +773,24 @@ export default function CashierPage() {
   // cashier finishes typing.
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({})
 
-  function handleQuantityInputChange(productId: string, raw: string) {
+  function handleQuantityInputChange(key: string, raw: string) {
     const parsed = Number(raw)
     if (raw.trim() !== "" && Number.isInteger(parsed) && parsed >= 1) {
-      updateQuantity(productId, parsed)
+      updateQuantity(key, parsed)
       setQuantityDrafts((current) => {
         const next = { ...current }
-        delete next[productId]
+        delete next[key]
         return next
       })
     } else {
-      setQuantityDrafts((current) => ({ ...current, [productId]: raw }))
+      setQuantityDrafts((current) => ({ ...current, [key]: raw }))
     }
   }
 
-  function handleQuantityInputBlur(productId: string) {
+  function handleQuantityInputBlur(key: string) {
     setQuantityDrafts((current) => {
       const next = { ...current }
-      delete next[productId]
+      delete next[key]
       return next
     })
   }
@@ -778,20 +799,35 @@ export default function CashierPage() {
 
   const [cart, setCart] = useState<CartLine[]>([])
 
-  function addToCart(product: ProductRecord) {
+  // A variable product's own id is never a unique cart-line identity by itself -- two different
+  // variants (Red/L and Blue/M) must stay two separate lines with their own quantities, not
+  // collapse into one. Every cart lookup/update below (and every JSX call site that used to key
+  // directly off line.productId) uses this instead.
+  function lineKey(line: Pick<CartLine, "productId" | "variantId">): string {
+    return line.variantId ? `${line.productId}::${line.variantId}` : line.productId
+  }
+
+  function addToCart(
+    product: ProductRecord,
+    variant?: { id: string; label: string; unitPrice: number | null }
+  ) {
+    const variantId = variant?.id ?? null
+    const key = variantId ? `${product.id}::${variantId}` : product.id
     setCart((current) => {
-      const existing = current.find((line) => line.productId === product.id)
+      const existing = current.find((line) => lineKey(line) === key)
       if (existing) {
         return current.map((line) =>
-          line.productId === product.id ? { ...line, quantity: line.quantity + 1 } : line
+          lineKey(line) === key ? { ...line, quantity: line.quantity + 1 } : line
         )
       }
       return [
         ...current,
         {
           productId: product.id,
+          variantId,
+          variantLabel: variant?.label ?? null,
           productName: product.name,
-          unitPrice: product.sellingPrice,
+          unitPrice: variant?.unitPrice ?? product.sellingPrice,
           quantity: 1,
           taxRateId: product.taxRateId,
           priceIncludesTax: product.priceIncludesTax,
@@ -803,18 +839,53 @@ export default function CashierPage() {
     })
   }
 
-  function updateQuantity(productId: string, quantity: number) {
+  function updateQuantity(key: string, quantity: number) {
     if (quantity <= 0) {
-      setCart((current) => current.filter((line) => line.productId !== productId))
+      setCart((current) => current.filter((line) => lineKey(line) !== key))
       return
     }
     setCart((current) =>
-      current.map((line) => (line.productId === productId ? { ...line, quantity } : line))
+      current.map((line) => (lineKey(line) === key ? { ...line, quantity } : line))
     )
   }
 
   function clearCart() {
     setCart([])
+  }
+
+  // A "variable" product (size/color etc.) carries no stock and no single price of its own --
+  // GET /v1/products (the list this whole grid is built from) deliberately collapses it down to
+  // an aggregate stock/price, so which exact combination is being sold has to be asked for
+  // separately, right before it's added to the cart. Fetched fresh on every open (not cached
+  // alongside `products`) since a variant's own stock/price can change between page load and the
+  // moment a cashier actually picks one.
+  const [variantPickerProduct, setVariantPickerProduct] = useState<ProductRecord | null>(null)
+  const [variantPickerDetail, setVariantPickerDetail] = useState<ProductDetail | null>(null)
+  const [loadingVariantPicker, setLoadingVariantPicker] = useState(false)
+
+  async function openVariantPicker(product: ProductRecord) {
+    setVariantPickerProduct(product)
+    setVariantPickerDetail(null)
+    setLoadingVariantPicker(true)
+    try {
+      setVariantPickerDetail(await productListService.getProduct(product.id))
+    } catch {
+      toast.error("تعذر تحميل أنواع هذا المنتج.")
+      setVariantPickerProduct(null)
+    } finally {
+      setLoadingVariantPicker(false)
+    }
+  }
+
+  function pickVariant(variant: ProductDetail["variants"][number]) {
+    if (!variantPickerProduct) return
+    addToCart(variantPickerProduct, {
+      id: variant.id,
+      label: variant.optionValues.join(" / "),
+      unitPrice: variant.price,
+    })
+    setVariantPickerProduct(null)
+    setVariantPickerDetail(null)
   }
 
   const subtotal = cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0)
@@ -853,7 +924,7 @@ export default function CashierPage() {
   const [draftLineDiscountIncludesTax, setDraftLineDiscountIncludesTax] = useState(true)
 
   function openLineDiscountDialog(line: CartLine) {
-    setLineDiscountTargetId(line.productId)
+    setLineDiscountTargetId(lineKey(line))
     setDraftLineDiscountType(line.discountType)
     setDraftLineDiscountValue(line.discountValue)
     setDraftLineDiscountIncludesTax(line.discountIncludesTax)
@@ -863,7 +934,7 @@ export default function CashierPage() {
     if (!lineDiscountTargetId) return
     setCart((current) =>
       current.map((line) =>
-        line.productId === lineDiscountTargetId
+        lineKey(line) === lineDiscountTargetId
           ? {
               ...line,
               discountType: draftLineDiscountType,
@@ -876,9 +947,9 @@ export default function CashierPage() {
     setLineDiscountTargetId(null)
   }
 
-  function removeLineDiscount(productId: string) {
+  function removeLineDiscount(key: string) {
     setCart((current) =>
-      current.map((line) => (line.productId === productId ? { ...line, discountValue: "" } : line))
+      current.map((line) => (lineKey(line) === key ? { ...line, discountValue: "" } : line))
     )
   }
 
@@ -890,7 +961,7 @@ export default function CashierPage() {
   const [draftSellPrice, setDraftSellPrice] = useState("")
 
   function openPriceEditDialog(line: CartLine) {
-    setPriceEditTargetId(line.productId)
+    setPriceEditTargetId(lineKey(line))
     setDraftSellPrice(String(line.unitPrice))
   }
 
@@ -903,7 +974,7 @@ export default function CashierPage() {
     }
     setCart((current) =>
       current.map((line) =>
-        line.productId === priceEditTargetId
+        lineKey(line) === priceEditTargetId
           ? { ...line, unitPrice: Math.round(price * 100) / 100 }
           : line
       )
@@ -1132,6 +1203,7 @@ export default function CashierPage() {
         notes: orderNotes.trim() || null,
         items: cart.map((line) => ({
           productId: line.productId,
+          variantId: line.variantId,
           productName: line.productName,
           unitPrice: line.unitPrice,
           quantity: line.quantity,
@@ -1350,8 +1422,8 @@ export default function CashierPage() {
         })),
         // This quick action has no dedicated method picker (unlike InvoicesPage's itemized
         // return dialog) -- default to refunding through whatever the sale was originally paid
-        // with.
-        paymentMethodCode: invoice.paymentMethodCode,
+        // with. Single line, so amount is inferred as the return's own full computed total.
+        payments: [{ paymentMethodCode: invoice.paymentMethodCode }],
         notes: null,
       })
       toast.success(`تم تسجيل إرجاع الفاتورة ${invoice.invoiceNumber}`)
@@ -1397,6 +1469,7 @@ export default function CashierPage() {
         notes: orderNotes.trim() || null,
         items: cart.map((line) => ({
           productId: line.productId,
+          variantId: line.variantId,
           productName: line.productName,
           unitPrice: line.unitPrice,
           quantity: line.quantity,
@@ -1430,6 +1503,8 @@ export default function CashierPage() {
           .filter((item): item is typeof item & { productId: string } => item.productId !== null)
           .map((item) => ({
             productId: item.productId,
+            variantId: item.variantId ?? null,
+            variantLabel: item.variantLabel ?? null,
             productName: item.productName,
             unitPrice: item.unitPrice,
             quantity: item.quantity,
@@ -1761,12 +1836,15 @@ export default function CashierPage() {
                 <div className="flex flex-col gap-2">
                   {cart.map((line) => (
                     <div
-                      key={line.productId}
+                      key={lineKey(line)}
                       className="flex items-center gap-3 rounded-2xl border border-[#e8edf3] bg-white p-3"
                     >
                       <div className="min-w-0 flex-1">
                         <p className={cn("truncate text-[12.5px] font-semibold", HEADING)}>
                           {line.productName}
+                          {line.variantLabel ? (
+                            <span className={cn("font-normal", MUTED)}> · {line.variantLabel}</span>
+                          ) : null}
                         </p>
                         <p className={cn("text-[10.5px]", MUTED)}>{formatAmount(line.unitPrice)}</p>
                       </div>
@@ -1774,7 +1852,7 @@ export default function CashierPage() {
                         <button
                           type="button"
                           aria-label="إنقاص الكمية"
-                          onClick={() => updateQuantity(line.productId, line.quantity - 1)}
+                          onClick={() => updateQuantity(lineKey(line), line.quantity - 1)}
                           className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                         >
                           <Minus className="size-3.5" />
@@ -1784,11 +1862,11 @@ export default function CashierPage() {
                           min={1}
                           inputMode="numeric"
                           aria-label="الكمية"
-                          value={quantityDrafts[line.productId] ?? String(line.quantity)}
+                          value={quantityDrafts[lineKey(line)] ?? String(line.quantity)}
                           onChange={(event) =>
-                            handleQuantityInputChange(line.productId, event.target.value)
+                            handleQuantityInputChange(lineKey(line), event.target.value)
                           }
-                          onBlur={() => handleQuantityInputBlur(line.productId)}
+                          onBlur={() => handleQuantityInputBlur(lineKey(line))}
                           onFocus={(event) => event.target.select()}
                           className={cn(
                             "h-10 min-w-12 max-w-20 rounded-md border border-[#e8edf3] px-1.5 text-center text-[14px] font-semibold [appearance:textfield] [field-sizing:content] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
@@ -1798,7 +1876,7 @@ export default function CashierPage() {
                         <button
                           type="button"
                           aria-label="زيادة الكمية"
-                          onClick={() => updateQuantity(line.productId, line.quantity + 1)}
+                          onClick={() => updateQuantity(lineKey(line), line.quantity + 1)}
                           className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                         >
                           <Plus className="size-3.5" />
@@ -1816,7 +1894,7 @@ export default function CashierPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => updateQuantity(line.productId, 0)}
+                        onClick={() => updateQuantity(lineKey(line), 0)}
                         aria-label="حذف"
                         className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#dc2626] hover:bg-[#fef2f2]"
                       >
@@ -1856,7 +1934,11 @@ export default function CashierPage() {
                   <button
                     key={product.id}
                     type="button"
-                    onClick={() => addToCart(product)}
+                    onClick={() =>
+                      product.productType === "variable"
+                        ? void openVariantPicker(product)
+                        : addToCart(product)
+                    }
                     className="flex flex-col items-start gap-2 rounded-2xl border border-[#e8edf3] bg-white p-3 text-right transition-colors hover:border-[#c7d9ff]"
                   >
                     <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-[10px] bg-[#f4f7fc]">
@@ -1971,11 +2053,16 @@ export default function CashierPage() {
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               {cart.map((line) => (
                 <div
-                  key={line.productId}
+                  key={lineKey(line)}
                   className="flex items-center gap-2 rounded-[10px] border border-[#e8edf3] p-2"
                 >
                   <div className="flex-1">
-                    <p className={cn("text-[12px] font-semibold", HEADING)}>{line.productName}</p>
+                    <p className={cn("text-[12px] font-semibold", HEADING)}>
+                      {line.productName}
+                      {line.variantLabel ? (
+                        <span className={cn("font-normal", MUTED)}> · {line.variantLabel}</span>
+                      ) : null}
+                    </p>
                     <p className={cn("text-[10.5px]", MUTED)}>
                       {formatAmount(line.unitPrice)}
                       {resolveLineDiscount(line) > 0 ? (
@@ -1989,7 +2076,7 @@ export default function CashierPage() {
                     <button
                       type="button"
                       aria-label="إنقاص الكمية"
-                      onClick={() => updateQuantity(line.productId, line.quantity - 1)}
+                      onClick={() => updateQuantity(lineKey(line), line.quantity - 1)}
                       className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                     >
                       <Minus className="size-3" />
@@ -1999,11 +2086,11 @@ export default function CashierPage() {
                       min={1}
                       inputMode="numeric"
                       aria-label="الكمية"
-                      value={quantityDrafts[line.productId] ?? String(line.quantity)}
+                      value={quantityDrafts[lineKey(line)] ?? String(line.quantity)}
                       onChange={(event) =>
-                        handleQuantityInputChange(line.productId, event.target.value)
+                        handleQuantityInputChange(lineKey(line), event.target.value)
                       }
-                      onBlur={() => handleQuantityInputBlur(line.productId)}
+                      onBlur={() => handleQuantityInputBlur(lineKey(line))}
                       onFocus={(event) => event.target.select()}
                       className={cn(
                         "h-10 min-w-9 max-w-16 rounded-md border border-[#e8edf3] px-1.5 text-center text-[13px] font-semibold [appearance:textfield] [field-sizing:content] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
@@ -2013,7 +2100,7 @@ export default function CashierPage() {
                     <button
                       type="button"
                       aria-label="زيادة الكمية"
-                      onClick={() => updateQuantity(line.productId, line.quantity + 1)}
+                      onClick={() => updateQuantity(lineKey(line), line.quantity + 1)}
                       className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                     >
                       <Plus className="size-3" />
@@ -2021,7 +2108,7 @@ export default function CashierPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => updateQuantity(line.productId, 0)}
+                    onClick={() => updateQuantity(lineKey(line), 0)}
                     aria-label="حذف"
                     className="flex size-6 items-center justify-center rounded-md text-[#dc2626] hover:bg-[#fef2f2]"
                   >
@@ -2652,7 +2739,7 @@ export default function CashierPage() {
                 خصم على الصنف
               </DialogTitle>
               <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-                {cart.find((line) => line.productId === lineDiscountTargetId)?.productName ?? ""}
+                {cart.find((line) => lineKey(line) === lineDiscountTargetId)?.productName ?? ""}
               </DialogDescription>
             </div>
           </DialogHeader>
@@ -2746,7 +2833,7 @@ export default function CashierPage() {
               <Check className="size-4" />
             </Button>
             {lineDiscountTargetId &&
-            cart.find((line) => line.productId === lineDiscountTargetId)?.discountValue ? (
+            cart.find((line) => lineKey(line) === lineDiscountTargetId)?.discountValue ? (
               <Button
                 variant="outline"
                 className="h-11 rounded-[10px] border-[#fecaca] px-5 text-[13px] font-semibold text-[#dc2626] hover:bg-[#fef2f2]"
@@ -2786,7 +2873,7 @@ export default function CashierPage() {
                 تعديل سعر البيع
               </DialogTitle>
               <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-                {cart.find((line) => line.productId === priceEditTargetId)?.productName ?? ""}
+                {cart.find((line) => lineKey(line) === priceEditTargetId)?.productName ?? ""}
               </DialogDescription>
             </div>
           </DialogHeader>
@@ -2835,6 +2922,69 @@ export default function CashierPage() {
               إلغاء
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Which combination of a "variable" product (size/color etc.) is actually being sold --
+          see openVariantPicker/pickVariant above. Not every combination the author defined is
+          necessarily sellable ("the page lets a combination be excluded" per the schema), so this
+          lists only the real, stored rows -- never the full cartesian product. */}
+      <Dialog
+        open={variantPickerProduct !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setVariantPickerProduct(null)
+            setVariantPickerDetail(null)
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-[26rem] [direction:rtl]">
+          <DialogHeader className="text-right">
+            <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
+              اختر النوع
+            </DialogTitle>
+            <DialogDescription className={cn("text-[12.5px]", MUTED)}>
+              {variantPickerProduct?.name ?? ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            {loadingVariantPicker ? (
+              <div className={cn("flex items-center gap-2 p-6 text-[13px]", MUTED)}>
+                <Loader2 className="size-4 animate-spin" />
+                جارٍ التحميل...
+              </div>
+            ) : variantPickerDetail && variantPickerDetail.variants.length > 0 ? (
+              variantPickerDetail.variants.map((variant) => {
+                const stock = variant.stock ?? 0
+                const outOfStock = stock <= 0
+                return (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => pickVariant(variant)}
+                    className="flex items-center justify-between rounded-[10px] border border-[#e8edf3] p-3 text-right transition-colors hover:border-[#c7d9ff] hover:bg-[#f7f9fc]"
+                  >
+                    <div>
+                      <p className={cn("text-[13px] font-semibold", HEADING)}>
+                        {variant.optionValues.join(" / ")}
+                      </p>
+                      <p className={cn("text-[11px]", outOfStock ? "text-[#dc2626]" : MUTED)}>
+                        {outOfStock ? "نفدت الكمية" : `المتوفر: ${stock}`}
+                      </p>
+                    </div>
+                    <span className={cn("text-[13px] font-extrabold", HEADING)}>
+                      {formatAmount(variant.price ?? variantPickerProduct?.sellingPrice ?? 0)}
+                    </span>
+                  </button>
+                )
+              })
+            ) : (
+              <p className={cn("p-6 text-center text-[12.5px]", MUTED)}>
+                لا توجد أنواع متاحة لهذا المنتج.
+              </p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

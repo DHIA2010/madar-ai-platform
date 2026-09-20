@@ -40,6 +40,7 @@ export const ROUTES = {
   settingsBranches: "/settings/branches",
   settingsPayments: "/settings/payments",
   settingsTaxes: "/settings/taxes",
+  settingsZatca: "/settings/zatca",
   auth: {
     basic: {
       login: "/auth/basic/login",

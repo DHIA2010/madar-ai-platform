@@ -240,3 +240,38 @@ export const connectionActionPolicy = {
       .filter((action) => action.visible)
   },
 }
+
+// Arabic labels for the action menu/confirm dialog -- the catalog above stays English since it's
+// also consumed by places asserting on the literal label, but every surface a user sees
+// (connections list cards/table, connection detail page) renders through this localizer so the
+// menu never mixes an Arabic page with English action text.
+const ACTION_LABEL_AR: Record<ConnectionActionId, string> = {
+  [CONNECTION_ACTION_IDS.RUN_SYNC]: "مزامنة الآن",
+  [CONNECTION_ACTION_IDS.RECONNECT]: "إعادة الاتصال",
+  [CONNECTION_ACTION_IDS.PAUSE_SYNC]: "إيقاف المزامنة مؤقتًا",
+  [CONNECTION_ACTION_IDS.RESUME_SYNC]: "استئناف المزامنة",
+  [CONNECTION_ACTION_IDS.RETRY]: "إعادة المحاولة",
+  [CONNECTION_ACTION_IDS.DISCONNECT]: "قطع الاتصال",
+  [CONNECTION_ACTION_IDS.DELETE_CONNECTION]: "حذف الاتصال",
+}
+
+const ACTION_CONFIRMATION_AR: Partial<Record<ConnectionActionId, ConnectionActionConfirmation>> = {
+  [CONNECTION_ACTION_IDS.DELETE_CONNECTION]: {
+    title: "حذف الاتصال",
+    description:
+      "سيؤدي هذا إلى حذف الاتصال ورموز المصادقة والبيانات المتزامنة والسجل نهائيًا.\nلا يمكن التراجع عن هذا الإجراء.",
+    confirmLabel: "حذف",
+  },
+}
+
+export function localizeConnectionAction(
+  action: ConnectionActionDefinition
+): ConnectionActionDefinition {
+  return {
+    ...action,
+    label: ACTION_LABEL_AR[action.id] ?? action.label,
+    confirmation: action.confirmation
+      ? (ACTION_CONFIRMATION_AR[action.id] ?? action.confirmation)
+      : action.confirmation,
+  }
+}

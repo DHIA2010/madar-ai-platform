@@ -38,6 +38,7 @@ import {
   CONNECTION_ACTION_IDS,
   type ConnectionActionDefinition,
   connectionActionPolicy,
+  localizeConnectionAction,
 } from "../services"
 import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
@@ -474,13 +475,15 @@ export function ConnectionsOverview() {
               >
                 <div className="mb-3 flex items-center justify-between">
                   <ConnectionActionsMenu
-                    actions={connectionActionPolicy.getAvailableActions({
-                      connection: record.connection,
-                      integrationStatus: record.integrationStatus,
-                      workspaceStatus: availableWorkspaces.find(
-                        (workspace) => workspace.id === record.connection.workspaceId
-                      )?.status,
-                    })}
+                    actions={connectionActionPolicy
+                      .getAvailableActions({
+                        connection: record.connection,
+                        integrationStatus: record.integrationStatus,
+                        workspaceStatus: availableWorkspaces.find(
+                          (workspace) => workspace.id === record.connection.workspaceId
+                        )?.status,
+                      })
+                      .map(localizeConnectionAction)}
                     menuLabel={UI_TEXT.overflow.moreActions}
                     onActionSelect={(action) => {
                       void handleConnectionAction(record, action)
@@ -635,11 +638,13 @@ export function ConnectionsOverview() {
                   const workspaceStatus = availableWorkspaces.find(
                     (workspace) => workspace.id === record.connection.workspaceId
                   )?.status
-                  const availableActions = connectionActionPolicy.getAvailableActions({
-                    connection: record.connection,
-                    integrationStatus: record.integrationStatus,
-                    workspaceStatus,
-                  })
+                  const availableActions = connectionActionPolicy
+                    .getAvailableActions({
+                      connection: record.connection,
+                      integrationStatus: record.integrationStatus,
+                      workspaceStatus,
+                    })
+                    .map(localizeConnectionAction)
                   const syncState = syncProgress[record.connection.connectionId]
 
                   return (

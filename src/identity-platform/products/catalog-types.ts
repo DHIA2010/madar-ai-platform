@@ -20,14 +20,16 @@ export type ProductStatus = (typeof PRODUCT_STATUSES)[number]
 // neither carries a stock code. Mirrors TYPES_WITHOUT_SKU on the Add Product page.
 export const TYPES_WITHOUT_SKU: ProductType[] = ["raw", "bundle"]
 
-// Types that must carry their own selling price. A bundle is priced from its components, a
-// variable product prices each variant in its own row, and a raw material may be bought but
-// never sold -- none of the three has a single price of its own.
+// Types that must carry their own selling price -- a bundle is sold at its own set combo price
+// (not derived from its components' cost), same as any other sellable product. A variable
+// product prices each variant in its own row instead, and a raw material may be bought but never
+// sold, so neither of those two has a single price of its own.
 export const TYPES_REQUIRING_SELL_PRICE: ProductType[] = [
   "simple",
   "weighted",
   "service",
   "digital",
+  "bundle",
 ]
 
 // Types that hold stock directly. A bundle's availability is derived from its components, a
@@ -62,6 +64,30 @@ export function isProductUnit(value: string): value is ProductUnit {
 
 export function unitsShareDimension(left: ProductUnit, right: ProductUnit): boolean {
   return UNIT_BASE[left].dimension === UNIT_BASE[right].dimension
+}
+
+// How many of a component's own stock units a bundle recipe's required quantity actually
+// consumes -- a same-dimension pair (جرام required against كجم stock) converts by the unit
+// table's own factor ratio; a cross-dimension pair (validated at authoring time, see
+// validateBundle in catalog-service.ts) has no formula to bridge it, so it uses the recipe's own
+// conversionFactor instead, which is authored as "how many stock units make one recipe unit."
+// Used both when a sale consumes a bundle's components and when a return gives them back (see
+// PosInvoicesService.computeStockConsumption).
+export function convertRequiredQuantityToStock(
+  component: {
+    requiredUnit: ProductUnit
+    stockUnit: ProductUnit
+    conversionFactor: number | null
+  },
+  requiredQuantity: number
+): number {
+  if (unitsShareDimension(component.requiredUnit, component.stockUnit)) {
+    return (
+      (requiredQuantity * UNIT_BASE[component.requiredUnit].factor) /
+      UNIT_BASE[component.stockUnit].factor
+    )
+  }
+  return requiredQuantity * (component.conversionFactor ?? 0)
 }
 
 export interface ProductComponentInput {

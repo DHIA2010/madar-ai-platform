@@ -321,6 +321,7 @@ describe("native product catalogue", () => {
       name: "وجبة دجاج",
       category: "وجبات",
       status: "active",
+      sellPrice: 45,
     }
 
     it("stores components and drops the stock code", async () => {
@@ -349,6 +350,8 @@ describe("native product catalogue", () => {
 
       expect(created.status).toBe(201)
       expect(created.body.sku).toBeNull()
+      // A bundle is sold at its own combo price -- not derived from its components' cost.
+      expect(created.body.sellPrice).toBe(45)
 
       const components = created.body.components as Array<Record<string, unknown>>
       expect(components).toHaveLength(2)
@@ -607,6 +610,7 @@ describe("native product catalogue", () => {
         productType: "bundle",
         name: "وجبة",
         category: "وجبات",
+        sellPrice: 45,
         components: [
           {
             customName: "أرز",
@@ -630,6 +634,7 @@ describe("native product catalogue", () => {
         productType: "bundle",
         name: "وجبة",
         category: "وجبات",
+        sellPrice: 45,
         components: [
           {
             customName: "أرز",
@@ -765,6 +770,88 @@ describe("native product catalogue", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(SIMPLE_PRODUCT),
+    })
+    expect(response.status).toBe(401)
+  })
+})
+
+describe("PATCH /v1/products/status", () => {
+  it("changes only the requested products' status, leaving every other field untouched", async () => {
+    const { token } = await signIn("catalog-bulk-status@example.com", "Catalog Bulk Status")
+
+    const first = await createProduct(token, { ...SIMPLE_PRODUCT, sku: "BULK-1" })
+    const second = await createProduct(token, { ...SIMPLE_PRODUCT, sku: "BULK-2" })
+    const untouched = await createProduct(token, { ...SIMPLE_PRODUCT, sku: "BULK-3" })
+
+    const response = await fetch(`${baseUrl}/v1/products/status`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ids: [first.body.id, second.body.id], status: "archived" }),
+    })
+    expect(response.status).toBe(200)
+    expect((await response.json()) as { updated: number }).toEqual({ updated: 2 })
+
+    const firstRead = await fetch(`${baseUrl}/v1/products/${first.body.id}`, {
+      headers: authHeaders(token),
+    })
+    const secondRead = await fetch(`${baseUrl}/v1/products/${second.body.id}`, {
+      headers: authHeaders(token),
+    })
+    const untouchedRead = await fetch(`${baseUrl}/v1/products/${untouched.body.id}`, {
+      headers: authHeaders(token),
+    })
+    const firstBody = (await firstRead.json()) as Record<string, unknown>
+    expect(firstBody.status).toBe("archived")
+    // Nothing else about the product moved -- this is a status-only write, not a round-trip
+    // through the full-replace update() contract.
+    expect(firstBody).toMatchObject({ name: SIMPLE_PRODUCT.name, sku: "BULK-1" })
+    expect(((await secondRead.json()) as { status: string }).status).toBe("archived")
+    expect(((await untouchedRead.json()) as { status: string }).status).toBe("active")
+  })
+
+  it("never changes another organization's product, even if its id is named explicitly", async () => {
+    const orgA = await signIn("catalog-bulk-status-a@example.com", "Bulk Status Org A")
+    const orgB = await signIn("catalog-bulk-status-b@example.com", "Bulk Status Org B")
+    const theirs = await createProduct(orgB.token, { ...SIMPLE_PRODUCT, sku: "BULK-OTHER-ORG" })
+
+    const response = await fetch(`${baseUrl}/v1/products/status`, {
+      method: "PATCH",
+      headers: authHeaders(orgA.token),
+      body: JSON.stringify({ ids: [theirs.body.id], status: "archived" }),
+    })
+    expect(response.status).toBe(200)
+    expect((await response.json()) as { updated: number }).toEqual({ updated: 0 })
+
+    const stillTheirs = await fetch(`${baseUrl}/v1/products/${theirs.body.id}`, {
+      headers: authHeaders(orgB.token),
+    })
+    expect(((await stillTheirs.json()) as { status: string }).status).toBe("active")
+  })
+
+  it("rejects an unknown status and an empty id list at the request boundary", async () => {
+    const { token } = await signIn("catalog-bulk-status-invalid@example.com", "Bulk Status Invalid")
+    const product = await createProduct(token, SIMPLE_PRODUCT)
+
+    const badStatus = await fetch(`${baseUrl}/v1/products/status`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ids: [product.body.id], status: "deleted" }),
+    })
+    expect(badStatus.status).toBe(400)
+
+    const emptyIds = await fetch(`${baseUrl}/v1/products/status`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ids: [], status: "archived" }),
+    })
+    expect(emptyIds.status).toBe(400)
+  })
+
+  it("refuses an unauthenticated request", async () => {
+    const response = await fetch(`${baseUrl}/v1/products/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: ["11111111-1111-1111-1111-111111111111"], status: "archived" }),
     })
     expect(response.status).toBe(401)
   })

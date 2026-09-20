@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   CalendarIcon,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -100,7 +101,7 @@ const PANEL = "rounded-[14px] border border-[#e1e7f0] bg-white"
 const HEADING = "text-[#0b1738]"
 const MUTED = "text-[#6b7b96]"
 const FILTER_TRIGGER_CLASS =
-  "h-10 w-[146px] rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738]"
+  "h-10 w-[184px] rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738]"
 const PAGER_BUTTON_CLASS =
   "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
 
@@ -120,6 +121,14 @@ const FILTER_LABEL_AR: Record<string, string> = {
   Active: "نشط",
   Draft: "مسودة",
   Archived: "مؤرشف",
+  "All Product Types": "جميع أنواع المنتجات",
+  simple: "منتج عادي",
+  variable: "منتج متغير",
+  weighted: "منتج موزون",
+  bundle: "منتج مجمع",
+  raw: "مادة خام",
+  digital: "منتج رقمي",
+  service: "خدمة",
 }
 
 const STATUS_PILL_AR: Record<ProductStatus, { label: string; className: string }> = {
@@ -146,6 +155,18 @@ const FALLBACK_PRODUCT_IMAGE = "/products/01.png"
 const platformOptions = ["All Platforms", "Shopify", "Salla", "Zid", "Madar"]
 const inventoryStatusOptions = ["All Inventory Status", "In Stock", "Low Stock", "Out of Stock"]
 const statusOptions = ["All Status", "Active", "Draft", "Archived"]
+// Only a native (Madar) product ever carries one of these -- a synced storefront product's
+// productType is always null, so it simply never matches any option here but "all".
+const productTypeOptions = [
+  "All Product Types",
+  "simple",
+  "variable",
+  "weighted",
+  "bundle",
+  "raw",
+  "digital",
+  "service",
+]
 const monthOptions = [
   "Jan",
   "Feb",
@@ -952,6 +973,7 @@ export default function ProductsPage() {
   const [platform, setPlatform] = useState("All Platforms")
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState("All Inventory Status")
   const [statusFilter, setStatusFilter] = useState("All Status")
+  const [productTypeFilter, setProductTypeFilter] = useState("All Product Types")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const router = useRouter()
   const [detailProduct, setDetailProduct] = useState<ProductRow | null>(null)
@@ -1000,6 +1022,8 @@ export default function ProductsPage() {
         inventoryStatusFilter === "All Inventory Status" ||
         getInventoryStatus(product.availableStock) === inventoryStatusFilter
       const matchesStatus = statusFilter === "All Status" || product.status === statusFilter
+      const matchesProductType =
+        productTypeFilter === "All Product Types" || product.productType === productTypeFilter
       // Presets and single-day calendar picks land on a specific instant (e.g. "now" for the
       // Today preset, midnight for a plain day click), not a full-day span -- widening to
       // startOfDay/endOfDay here is what makes a same-day product actually match instead of
@@ -1017,10 +1041,20 @@ export default function ProductsPage() {
         matchesPlatform &&
         matchesInventoryStatus &&
         matchesStatus &&
+        matchesProductType &&
         matchesDateRange
       )
     })
-  }, [category, dateRange, inventoryStatusFilter, platform, products, search, statusFilter])
+  }, [
+    category,
+    dateRange,
+    inventoryStatusFilter,
+    platform,
+    productTypeFilter,
+    products,
+    search,
+    statusFilter,
+  ])
 
   const productKpiCards = useMemo<ProductKpiCardData[]>(() => {
     const activeCount = filteredProducts.filter((product) => product.status === "Active").length
@@ -1103,6 +1137,48 @@ export default function ProductsPage() {
       }
       return next
     })
+
+  const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
+
+  // Products list -- "select several, change their status" quick action. Only a native (Madar)
+  // product can actually be changed here -- a synced storefront product is managed from the
+  // store itself (same isNative rule the per-row edit/delete actions already enforce), so a
+  // selection mixing both silently changes just the native ones and says so.
+  const applyBulkStatus = async (nextStatus: "draft" | "active" | "archived") => {
+    const nativeSelected = selectedProducts.filter((product) => product.platform === "Madar")
+    if (nativeSelected.length === 0) {
+      toast.error("لا يمكن تغيير حالة المنتجات المستوردة من المتجر من هنا.")
+      return
+    }
+
+    setBulkStatusUpdating(true)
+    try {
+      const result = await productListService.bulkUpdateStatus(
+        nativeSelected.map((product) => product.id),
+        nextStatus
+      )
+      const skipped = selectedProducts.length - nativeSelected.length
+      toast.success(`تم تحديث حالة ${result.updated} منتج.`, {
+        description:
+          skipped > 0
+            ? `تم تجاوز ${skipped} منتج مستورد من المتجر -- يُدار من المتجر نفسه.`
+            : undefined,
+      })
+      setSelectedIds(new Set())
+      await loadProducts()
+    } catch (error) {
+      const errorStatus = error instanceof AppError ? error.status : undefined
+      toast.error(
+        errorStatus === 403 ? "لا تملك صلاحية تعديل المنتجات." : "تعذر تحديث حالة المنتجات.",
+        {
+          description:
+            errorStatus === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية products:edit." : undefined,
+        }
+      )
+    } finally {
+      setBulkStatusUpdating(false)
+    }
+  }
 
   const copyToClipboard = async (value: string, label: string) => {
     if (!value) {
@@ -1198,6 +1274,7 @@ export default function ProductsPage() {
       onChange: setInventoryStatusFilter,
       options: inventoryStatusOptions,
     },
+    { value: productTypeFilter, onChange: setProductTypeFilter, options: productTypeOptions },
     { value: platform, onChange: setPlatform, options: platformOptions },
   ]
 
@@ -1328,7 +1405,51 @@ export default function ProductsPage() {
             </span>
 
             {selectedProducts.length > 0 ? (
-              <span className={cn("text-[12px]", MUTED)}>{selectedProducts.length} محدد</span>
+              <>
+                <span className={cn("text-[12px]", MUTED)}>{selectedProducts.length} محدد</span>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={bulkStatusUpdating}
+                      className="flex items-center gap-1.5 rounded-[8px] border border-[#e1e7f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0b1738] transition-colors hover:border-[#c4d5f0] hover:bg-[#f4f7fc] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {bulkStatusUpdating ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <ChevronDown className="size-3.5" />
+                      )}
+                      تغيير الحالة
+                    </button>
+                  </DropdownMenuTrigger>
+
+                  {/* Radix portals this to document.body, which does not inherit the page's dir. */}
+                  <DropdownMenuContent
+                    align="end"
+                    className={cn(cairo.className, "w-44 rounded-[12px] [direction:rtl]")}
+                  >
+                    <DropdownMenuItem
+                      className="cursor-pointer gap-2 text-[12.5px]"
+                      onSelect={() => void applyBulkStatus("active")}
+                    >
+                      {STATUS_PILL_AR.Active.label}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer gap-2 text-[12.5px]"
+                      onSelect={() => void applyBulkStatus("draft")}
+                    >
+                      {STATUS_PILL_AR.Draft.label}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer gap-2 text-[12.5px]"
+                      onSelect={() => void applyBulkStatus("archived")}
+                    >
+                      {STATUS_PILL_AR.Archived.label}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
             ) : null}
           </div>
 

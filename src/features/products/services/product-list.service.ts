@@ -248,4 +248,21 @@ export const productListService = {
       { includeTax }
     )
   },
+
+  // Products list -- "select several, change their status" quick action. Status-only, not a
+  // round-trip through updateProduct()'s full-replace contract, so a bulk change can never
+  // accidentally wipe a product's own components/variants. Silently skips any selected id that
+  // isn't actually a native (Madar) product this organization owns -- see ProductsPage.tsx's own
+  // isNative check, which is why only native ids are ever sent here in the first place. Takes the
+  // same lowercase status CreateProductInput uses (the backend's own vocabulary), not the
+  // capitalized ProductStatus a list row displays.
+  async bulkUpdateStatus(
+    ids: string[],
+    status: "draft" | "active" | "archived"
+  ): Promise<{ updated: number }> {
+    return client.patch<
+      { ids: string[]; status: "draft" | "active" | "archived" },
+      { updated: number }
+    >([PRODUCTS_ENDPOINT, "status"].join(PATH_SEPARATOR), { ids, status })
+  },
 }

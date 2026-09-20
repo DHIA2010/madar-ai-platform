@@ -864,7 +864,7 @@ export default function AddProduct() {
         ? null
         : "حدد سعراً لكل متغير قبل الحفظ",
     price:
-      productType === "raw" || isBundle || isVariable || isService || sellPrice.trim() !== ""
+      productType === "raw" || isVariable || isService || sellPrice.trim() !== ""
         ? null
         : "السعر مطلوب",
     servicePrice: !isService || sellPrice.trim() !== "" ? null : "السعر مطلوب",
@@ -2195,6 +2195,26 @@ export default function AddProduct() {
             {/* ------------------------------------------------- منتج مجمع */}
             {isBundle ? (
               <>
+                <section className={cn(PANEL, "p-4 md:p-5")}>
+                  <SectionHeading
+                    icon={Layers}
+                    title="السعر"
+                    subtitle="حدد السعر الذي يُباع به هذا المنتج المجمع (لا يُحتسب تلقائياً من تكلفة المكونات)"
+                  />
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <Field label="سعر البيع" required error={showErrors ? errors.price : null}>
+                      <MoneyInput value={sellPrice} onChange={setSellPrice} label="سعر البيع" />
+                      <PriceTaxIndicator
+                        isManualTaxMode={isManualTaxMode}
+                        priceIncludesTax={priceIncludesTax}
+                        setPriceIncludesTax={setPriceIncludesTax}
+                        priceTaxHint={priceTaxHint}
+                      />
+                    </Field>
+                  </div>
+                </section>
+
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   {/* RTL: the heading is written first so it lands right, the action left. */}
                   <div className="flex flex-wrap items-start justify-between gap-3">

@@ -1069,7 +1069,7 @@ function BusinessInfoFields({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
                 رقم المبنى
@@ -1092,9 +1092,20 @@ function BusinessInfoFields({
                 className={cn(FIELD_CLASS, "h-11 w-full")}
               />
             </div>
+            <div>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                الرمز البريدي
+              </label>
+              <AppInput
+                value={value.postalCode}
+                onChange={setField("postalCode")}
+                placeholder="00000"
+                className={cn(FIELD_CLASS, "h-11 w-full")}
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
                 اسم الشارع
@@ -1116,9 +1127,6 @@ function BusinessInfoFields({
                 className={cn(FIELD_CLASS, "h-11 w-full")}
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>الحي</label>
               <AppInput
@@ -1128,20 +1136,9 @@ function BusinessInfoFields({
                 className={cn(FIELD_CLASS, "h-11 w-full")}
               />
             </div>
-            <div>
-              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الرمز البريدي
-              </label>
-              <AppInput
-                value={value.postalCode}
-                onChange={setField("postalCode")}
-                placeholder="00000"
-                className={cn(FIELD_CLASS, "h-11 w-full")}
-              />
-            </div>
           </div>
 
-          <div className="w-1/2 pe-1.5">
+          <div className="w-1/3 pe-1.5">
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
               رمز البلد
             </label>
@@ -1215,7 +1212,7 @@ function AddCustomerDialog({
       onOpenChange={(next) => {
         if (!isSaving) onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[32rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName="w-[92vw] max-w-[45rem] rounded-[16px] p-5 [direction:rtl]"
       title={<span className={cn("text-[16px] font-extrabold", HEADING)}>إضافة عميل</span>}
       description={
         <span className={cn("text-[12px]", MUTED)}>عميل حقيقي يُضاف مباشرة إلى منصة مدار</span>
@@ -1506,7 +1503,7 @@ function EditCustomerDialog({
       onOpenChange={(next) => {
         if (!isSaving) onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[32rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName="w-[92vw] max-w-[45rem] rounded-[16px] p-5 [direction:rtl]"
       title={<span className={cn("text-[16px] font-extrabold", HEADING)}>تعديل بيانات العميل</span>}
       description={<span className={cn("text-[12px]", MUTED)}>{customer.name}</span>}
       footer={

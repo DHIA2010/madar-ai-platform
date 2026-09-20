@@ -239,6 +239,9 @@ describe("GET /v1/orders: real order aggregation", () => {
         totalSales: number
         completedOrders: number
         processingOrders: number
+        processingOrdersChangePct: number | null
+        cancelledOrders: number
+        cancelledOrdersChangePct: number | null
         totalOrdersChangePct: number | null
       }
     }
@@ -265,8 +268,13 @@ describe("GET /v1/orders: real order aggregation", () => {
     expect(body.summary.totalSales).toBe(469)
     expect(body.summary.completedOrders).toBe(1)
     expect(body.summary.processingOrders).toBe(1)
+    expect(body.summary.cancelledOrders).toBe(0)
     // previous window had 1 order, current window has 2 -- a real, non-null percent change.
     expect(body.summary.totalOrdersChangePct).toBe(100)
+    // The previous window had zero processing/cancelled orders -- computeChangePct's own
+    // divide-by-zero guard returns null rather than an infinite/fabricated percentage.
+    expect(body.summary.processingOrdersChangePct).toBeNull()
+    expect(body.summary.cancelledOrdersChangePct).toBeNull()
   })
 
   it("returns an order's items for the 'view products' action", async () => {

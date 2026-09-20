@@ -184,6 +184,24 @@ export class ProductCatalogRepository {
     return result.rowCount > 0
   }
 
+  // Status-only, not a full update() -- a bulk "select several products, set them all to
+  // draft/active" action from the products list has no reason to touch (or risk clobbering) a
+  // product's name/price/components/variants, which update()'s full-replace contract would
+  // otherwise require sending back untouched.
+  async bulkUpdateStatus(
+    organizationId: string,
+    ids: string[],
+    status: ProductStatus
+  ): Promise<number> {
+    const placeholders = ids.map((_, index) => `$${index + 3}`).join(", ")
+    const result = await this.database.query(
+      `UPDATE products SET status = $1, updated_at = now()
+       WHERE organization_id = $2 AND deleted_at IS NULL AND id IN (${placeholders})`,
+      [status, organizationId, ...ids]
+    )
+    return result.rowCount
+  }
+
   async findBySku(organizationId: string, sku: string): Promise<{ id: string } | null> {
     const result = await this.database.query<{ id: string }>(
       `SELECT id FROM products

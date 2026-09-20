@@ -24,6 +24,11 @@ function getWorkspaceIdFromStorage(): string | null {
 
 export interface HeldOrderItem {
   productId: string | null
+  // Which specific combination of a "variable" product (size/color etc.) this line is -- see
+  // CashierPage.tsx's CartLine. Round-trips through the held-cart's jsonb blob as-is, same as
+  // every other item field here.
+  variantId?: string | null
+  variantLabel?: string | null
   productName: string
   unitPrice: number
   quantity: number

@@ -3,9 +3,18 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import { writeAuditLog } from "../infrastructure/postgres/audit-log-writer"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import {
+  convertRequiredQuantityToStock,
+  isProductUnit,
+  TYPES_REQUIRING_STOCK,
+  type ProductType,
+} from "../products/catalog-types"
 import type { TaxRatesService } from "../tax/tax-rates-service"
+import type { ZatcaDevicesService } from "../zatca/zatca-devices-service"
+import { submitZatcaReporting } from "../zatca/zatca-api-client"
+import type { ZatcaUblAddress } from "../zatca/zatca-ubl-invoice"
 import type { PosPaymentMethodsService } from "./payment-methods-service"
-import { generateZatcaQrCode } from "./zatca-qr-code"
+import { appendZatcaStampTag, generateZatcaQrCode } from "./zatca-qr-code"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -106,12 +115,31 @@ const INVOICE_ERRORS = {
       "validation",
       "A return must include at least one item."
     ),
+  notZatcaSigned: () =>
+    new IdentityError(
+      "POS_INVOICE_NOT_ZATCA_SIGNED",
+      409,
+      "business",
+      "This invoice wasn't signed by a ZATCA production device -- there is nothing to report."
+    ),
+  alreadyReportedToZatca: () =>
+    new IdentityError(
+      "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA",
+      409,
+      "business",
+      "This invoice has already been reported to ZATCA."
+    ),
 }
 
 export type InvoiceStatus = "completed" | "cancelled" | "returned" | "partially_returned"
 
 export interface InvoiceItemInput {
   productId: string | null
+  // Which specific combination of a "variable" product (size/color etc.) this line actually is --
+  // null for every other product type. See computeStockConsumption, which decrements this exact
+  // variant's own stock (product_variants.stock) rather than the parent product's, which a
+  // variable product never carries any of.
+  variantId?: string | null
   productName: string
   unitPrice: number
   quantity: number
@@ -193,6 +221,17 @@ export interface InvoiceView {
   sellerName: string | null
   sellerVatNumber: string | null
   sellerAddress: string | null
+  // The linked customer's own VAT number, snapshotted at sale time -- see migration
+  // 076_pos_invoice_customer_vat_number.sql. Only ever set when customerId pointed at a real
+  // native customer who had one on file at the moment of sale.
+  customerVatNumber: string | null
+  // ZATCA Phase 2 -- only ever set when a production device actually signed this invoice at sale
+  // time (see PosInvoicesService.create() and zatca-devices-service.ts). zatcaReportedAt is set
+  // once reportToZatca() has actually reported it; zatcaStatus is whatever that call's own
+  // response said (only meaningful once zatcaReportedAt is set).
+  zatcaSigned: boolean
+  zatcaStatus: string | null
+  zatcaReportedAt: string | null
 }
 
 export interface InvoiceSummary {
@@ -230,6 +269,10 @@ export interface InvoiceReturnItemView {
   taxAmount: number
 }
 
+// One real refund payment line -- a return's refund can be split across more than one method
+// (see migration 077_pos_invoice_return_payments.sql), the same way a sale's own payments[] can.
+export type InvoiceReturnPaymentView = InvoicePaymentInput
+
 // A real credit note (إشعار دائن) -- see createReturn(). Mirrors InvoiceView's own real-money
 // shape (subtotal/discount/tax/total, seller snapshot, QR) for the same reason an invoice has
 // them: this is a real, independently-issued fiscal document, not just a note attached to the
@@ -247,10 +290,12 @@ export interface InvoiceReturnView {
   discountAmount: number
   taxAmount: number
   totalAmount: number
-  // The method the refund was actually given back through -- see createReturn(). Purely
-  // informational for cash/card/transfer/bnpl; for 'credit'/'prepaid' it is what decided whether
-  // this return also credited the customer's real account balance.
+  // The single method's code, or "split" once more than one line was used -- the real per-method
+  // breakdown always lives in payments. Purely informational for cash/card/transfer/bnpl; for
+  // 'credit'/'prepaid' it is what decided whether this return also credited the customer's real
+  // account balance (see createReturn()).
   refundPaymentMethodCode: string | null
+  payments: InvoiceReturnPaymentView[]
   notes: string | null
   createdAt: string
   items: InvoiceReturnItemView[]
@@ -286,6 +331,10 @@ interface InvoiceRow {
   seller_name: string | null
   seller_vat_number: string | null
   seller_address: string | null
+  customer_vat_number: string | null
+  zatca_signed_xml: string | null
+  zatca_status: string | null
+  zatca_reported_at: Date | string | null
   [key: string]: unknown
 }
 
@@ -293,6 +342,7 @@ interface InvoiceItemRow {
   id: string
   invoice_id: string
   product_id: string | null
+  variant_id: string | null
   product_name: string
   unit_price: string | number
   quantity: string | number
@@ -319,6 +369,7 @@ function mapItem(row: InvoiceItemRow): InvoiceItemView {
   return {
     id: row.id,
     productId: row.product_id,
+    variantId: row.variant_id,
     productName: row.product_name,
     unitPrice: Number(row.unit_price),
     quantity: Number(row.quantity),
@@ -364,6 +415,10 @@ function mapInvoice(
     sellerName: row.seller_name,
     sellerVatNumber: row.seller_vat_number,
     sellerAddress: row.seller_address,
+    customerVatNumber: row.customer_vat_number,
+    zatcaSigned: row.zatca_signed_xml !== null,
+    zatcaStatus: row.zatca_status,
+    zatcaReportedAt: row.zatca_reported_at ? toIso(row.zatca_reported_at) : null,
   }
 }
 
@@ -413,10 +468,25 @@ function mapReturnItem(row: InvoiceReturnItemRow): InvoiceReturnItemView {
   }
 }
 
+interface InvoiceReturnPaymentRow {
+  return_id: string
+  payment_method_code: string
+  amount: string | number
+  [key: string]: unknown
+}
+
+function mapReturnPayment(row: InvoiceReturnPaymentRow): InvoiceReturnPaymentView {
+  return {
+    paymentMethodCode: row.payment_method_code,
+    amount: Number(row.amount),
+  }
+}
+
 function mapReturn(
   row: InvoiceReturnRow,
   invoiceNumber: string,
-  items: InvoiceReturnItemView[]
+  items: InvoiceReturnItemView[],
+  payments: InvoiceReturnPaymentView[]
 ): InvoiceReturnView {
   return {
     id: row.id,
@@ -430,6 +500,7 @@ function mapReturn(
     taxAmount: Number(row.tax_amount),
     totalAmount: Number(row.total_amount),
     refundPaymentMethodCode: row.refund_payment_method_code,
+    payments,
     notes: row.notes,
     createdAt: toIso(row.created_at),
     items,
@@ -443,7 +514,8 @@ function mapReturn(
 const INVOICE_SELECT = `
   SELECT id, workspace_id, invoice_number, status, customer_name, customer_phone, customer_id,
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
-         total_amount, notes, created_at, qr_code, seller_name, seller_vat_number, seller_address
+         total_amount, notes, created_at, qr_code, seller_name, seller_vat_number, seller_address,
+         customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at
     FROM pos_invoices
 `
 
@@ -451,7 +523,11 @@ export class PosInvoicesService {
   constructor(
     private readonly database: PostgresDatabase,
     private readonly paymentMethodsService: PosPaymentMethodsService,
-    private readonly taxRatesService: TaxRatesService
+    private readonly taxRatesService: TaxRatesService,
+    // Optional -- ZATCA Phase 2 signing only actually happens once an organization has onboarded
+    // a production device (see zatca-devices-service.ts); every sale still works exactly as
+    // before when this is null (memory-mode/no infra) or when no production device exists yet.
+    private readonly zatcaDevicesService: ZatcaDevicesService | null = null
   ) {}
 
   async list(organizationId: string, filter: InvoiceListFilter): Promise<InvoiceView[]> {
@@ -499,8 +575,8 @@ export class PosInvoicesService {
     const idPlaceholders = invoiceIds.map((_, index) => `$${index + 1}`).join(", ")
     const [itemRows, paymentRows] = await Promise.all([
       this.database.query<InvoiceItemRow>(
-        `SELECT id, invoice_id, product_id, product_name, unit_price, quantity, line_total,
-                 discount_amount, net_amount, tax_amount, returned_quantity
+        `SELECT id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
+                 line_total, discount_amount, net_amount, tax_amount, returned_quantity
            FROM pos_invoice_items
           WHERE invoice_id IN (${idPlaceholders})`,
         invoiceIds
@@ -760,15 +836,24 @@ export class PosInvoicesService {
     if (prepaidAmount > 0 && !input.customerId) throw INVOICE_ERRORS.walletRequiresCustomer()
 
     let customerAccountBalance = 0
+    // Snapshotted onto the invoice below, same "frozen at issuance" reasoning as the seller's own
+    // VAT number -- a later edit to the customer's tax profile must never rewrite what an
+    // already-issued invoice says about the buyer.
+    let customerVatNumber: string | null = null
     if (input.customerId) {
-      const customer = await this.database.query<{ id: string; account_balance: string | number }>(
-        `SELECT id, account_balance FROM customers
+      const customer = await this.database.query<{
+        id: string
+        account_balance: string | number
+        vat_number: string | null
+      }>(
+        `SELECT id, account_balance, vat_number FROM customers
           WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
         [input.customerId, input.organizationId]
       )
       const customerRow = customer.rows[0]
       if (!customerRow) throw INVOICE_ERRORS.customerNotFound()
       customerAccountBalance = Number(customerRow.account_balance) || 0
+      customerVatNumber = customerRow.vat_number
     }
     if (prepaidAmount > customerAccountBalance) throw INVOICE_ERRORS.insufficientWalletBalance()
 
@@ -777,6 +862,17 @@ export class PosInvoicesService {
       input.payments.length === 1 ? input.payments[0].paymentMethodCode : SPLIT_PAYMENT_CODE
 
     const issuedAt = new Date()
+
+    // What this sale actually consumes from stock -- computed once, up front, so the write side
+    // below is a plain map-driven set of UPDATEs (see applyStockConsumption).
+    const stockConsumption = await this.computeStockConsumption(
+      input.organizationId,
+      input.items.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+      }))
+    )
 
     let invoiceNumber = ""
     await this.database.withTransaction(async () => {
@@ -796,10 +892,10 @@ export class PosInvoicesService {
       )
       invoiceNumber = `INV-${String(counterResult.rows[0].next_number).padStart(6, "0")}`
 
-      // Always generate a QR -- a merchant who hasn't finished their tax profile in Settings yet
-      // still gets one on every sale, just with an empty VAT-number tag rather than a fabricated
-      // value, instead of no QR at all until they do (see loadSellerSnapshot above).
-      const qrCode = generateZatcaQrCode({
+      // Always generate the Phase 1 QR -- a merchant who hasn't finished their tax profile in
+      // Settings yet still gets one on every sale, just with an empty VAT-number tag rather than
+      // a fabricated value, instead of no QR at all until they do (see loadSellerSnapshot above).
+      let qrCode = generateZatcaQrCode({
         sellerName: seller.name,
         vatRegistrationNumber: seller.vatNumber ?? "",
         timestamp: issuedAt.toISOString(),
@@ -807,14 +903,73 @@ export class PosInvoicesService {
         vatTotal: taxAmount,
       })
 
+      // Phase 2: only once this organization has actually onboarded a production device (see
+      // zatca-devices-service.ts) -- every sale before that point behaves exactly as it always
+      // has. A signing failure here fails the whole sale rather than silently producing an
+      // invoice with a broken/skipped hash chain -- the same all-or-nothing guarantee the rest of
+      // this transaction already gives every other part of the sale.
+      let zatcaDeviceId: string | null = null
+      let zatcaIcv: number | null = null
+      let zatcaPreviousInvoiceHash: string | null = null
+      let zatcaInvoiceHash: string | null = null
+      let zatcaCryptographicStamp: string | null = null
+      let zatcaSignedXml: string | null = null
+      let zatcaUuid: string | null = null
+      const device = this.zatcaDevicesService
+        ? await this.zatcaDevicesService.findProductionDevice(
+            input.organizationId,
+            input.workspaceId
+          )
+        : null
+      if (device) {
+        const signed = await this.zatcaDevicesService!.signInvoice(
+          input.organizationId,
+          device.id,
+          {
+            invoiceNumber,
+            issuedAt,
+            sellerName: seller.name,
+            sellerVatNumber: seller.vatNumber ?? "",
+            sellerAddress: seller.structuredAddress,
+            customerName: input.customerName,
+            customerVatNumber: customerVatNumber,
+            subtotalAmount,
+            discountAmount,
+            taxAmount,
+            totalAmount,
+            taxRatePercent: Math.round((lineComputations[0]?.lineRate ?? 0) * 100),
+            lines: input.items.map((item, index) => ({
+              id: String(index + 1),
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              netAmount: lineTaxDetails[index].netAmount,
+              taxAmount: lineTaxDetails[index].taxAmount,
+              taxRatePercent: Math.round(lineComputations[index].lineRate * 100),
+            })),
+            notes: input.notes,
+            advanceChain: true,
+          }
+        )
+        qrCode = signed.qrCodeBase64
+        zatcaDeviceId = device.id
+        zatcaIcv = signed.icv
+        zatcaPreviousInvoiceHash = signed.previousInvoiceHashBase64
+        zatcaInvoiceHash = signed.invoiceHash.toString("base64")
+        zatcaCryptographicStamp = signed.digitalSignature.toString("base64")
+        zatcaSignedXml = Buffer.from(signed.signedXmlBase64, "base64").toString("utf8")
+        zatcaUuid = signed.uuid
+      }
+
       await this.database.query(
         `INSERT INTO pos_invoices
            (id, organization_id, workspace_id, invoice_number, status, customer_name,
             customer_phone, customer_id, cashier_user_id, payment_method_code, subtotal_amount,
             discount_amount, tax_amount, total_amount, notes, created_at, qr_code, seller_name,
-            seller_vat_number, seller_address)
+            seller_vat_number, seller_address, customer_vat_number, zatca_device_id, icv,
+            previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml, zatca_uuid)
          VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                 $16, $17, $18, $19)`,
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
         [
           id,
           input.organizationId,
@@ -835,19 +990,28 @@ export class PosInvoicesService {
           seller.name || null,
           seller.vatNumber,
           seller.address,
+          customerVatNumber,
+          zatcaDeviceId,
+          zatcaIcv,
+          zatcaPreviousInvoiceHash,
+          zatcaInvoiceHash,
+          zatcaCryptographicStamp,
+          zatcaSignedXml,
+          zatcaUuid,
         ]
       )
 
       for (const [index, item] of input.items.entries()) {
         await this.database.query(
           `INSERT INTO pos_invoice_items
-             (id, invoice_id, product_id, product_name, unit_price, quantity, line_total,
-              discount_amount, net_amount, tax_amount, line_net_amount)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+             (id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
+              line_total, discount_amount, net_amount, tax_amount, line_net_amount)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             randomUUID(),
             id,
             item.productId,
+            item.variantId ?? null,
             item.productName,
             item.unitPrice,
             item.quantity,
@@ -868,6 +1032,8 @@ export class PosInvoicesService {
           [randomUUID(), id, payment.paymentMethodCode, payment.amount]
         )
       }
+
+      await this.applyStockConsumption(stockConsumption, -1)
 
       // A deferred ("آجل") portion and a wallet-funded portion both draw down the SAME unified
       // account -- one combined ledger entry for the sale, not two. Only the wallet-funded
@@ -974,6 +1140,60 @@ export class PosInvoicesService {
     return updated
   }
 
+  // Manual "الإبلاغ إلى الهيئة" action -- deliberately never automatic at checkout (see the plan
+  // doc). Only meaningful for an invoice a production device actually signed at sale time
+  // (zatca_signed_xml/invoice_hash/zatca_uuid all set); reports it to ZATCA's Reporting API
+  // exactly once, and appends QR tag 9 (ZATCA's own stamp) if the response actually returns one.
+  async reportToZatca(organizationId: string, invoiceId: string): Promise<{ status: string }> {
+    if (!this.zatcaDevicesService) throw new Error("ZATCA_DEVICES_SERVICE_UNAVAILABLE")
+    const result = await this.database.query<{
+      zatca_device_id: string | null
+      zatca_signed_xml: string | null
+      invoice_hash: string | null
+      zatca_uuid: string | null
+      zatca_reported_at: Date | string | null
+      qr_code: string | null
+    }>(
+      `SELECT zatca_device_id, zatca_signed_xml, invoice_hash, zatca_uuid, zatca_reported_at,
+              qr_code
+         FROM pos_invoices
+        WHERE organization_id = $1 AND id = $2`,
+      [organizationId, invoiceId]
+    )
+    const row = result.rows[0]
+    if (!row) throw INVOICE_ERRORS.notFound()
+    if (!row.zatca_device_id || !row.zatca_signed_xml || !row.invoice_hash || !row.zatca_uuid) {
+      throw INVOICE_ERRORS.notZatcaSigned()
+    }
+    if (row.zatca_reported_at) throw INVOICE_ERRORS.alreadyReportedToZatca()
+
+    const credentials = await this.zatcaDevicesService.getProductionCredentials(
+      organizationId,
+      row.zatca_device_id
+    )
+    const signedXmlBase64 = Buffer.from(row.zatca_signed_xml, "utf8").toString("base64")
+    const reportResult = await submitZatcaReporting(
+      row.invoice_hash,
+      row.zatca_uuid,
+      signedXmlBase64,
+      credentials
+    )
+
+    let qrCode = row.qr_code
+    if (reportResult.stampSignatureBase64 && qrCode) {
+      qrCode = appendZatcaStampTag(qrCode, Buffer.from(reportResult.stampSignatureBase64, "base64"))
+    }
+
+    await this.database.query(
+      `UPDATE pos_invoices
+          SET zatca_status = $2, zatca_response = $3, zatca_reported_at = now(), qr_code = $4
+        WHERE id = $1`,
+      [invoiceId, reportResult.status, JSON.stringify(reportResult.raw), qrCode]
+    )
+
+    return { status: reportResult.status }
+  }
+
   // A real, itemized return event -- an إشعار دائن (credit note) with its own sequential number,
   // its own totals, and a real line per returned item/quantity, distinct from (and referencing)
   // the original invoice. Supports a PARTIAL return: input.items only needs to name the lines and
@@ -990,7 +1210,9 @@ export class PosInvoicesService {
     invoiceId: string,
     input: {
       items: Array<{ invoiceItemId: string; quantity: number }>
-      paymentMethodCode: string
+      // amount is only required once there's more than one line -- a single-method refund always
+      // refunds the return's own computed total (see resolvedPayments below).
+      payments: Array<{ paymentMethodCode: string; amount?: number }>
       notes: string | null
     },
     actorUserId: string | null
@@ -1016,24 +1238,22 @@ export class PosInvoicesService {
     }
 
     // Same rule create() already enforces for a sale's own payments -- a refund can only be
-    // attributed to a method this branch has actually turned on.
+    // attributed to a method this branch has actually turned on. The refund can be split across
+    // more than one (see migration 077_pos_invoice_return_payments.sql), so every line is checked.
     const paymentMethods = await this.paymentMethodsService.list(
       organizationId,
       invoiceRow.workspace_id
     )
-    const refundMethod = paymentMethods.find(
-      (candidate) => candidate.code === input.paymentMethodCode
-    )
-    if (!refundMethod || !refundMethod.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
-    // A "credit"/"prepaid" refund settles against the customer's own real account (see below);
-    // any other kind (cash, card, transfer, bnpl) means the refund was already handled outside
-    // this system -- cash physically handed back, a card reversal run separately -- so crediting
-    // account balance too would double-refund the same return.
-    const creditsAccountBalance = refundMethod.kind === "credit" || refundMethod.kind === "prepaid"
+    const methodByCode = new Map(paymentMethods.map((method) => [method.code, method]))
+    for (const payment of input.payments) {
+      const method = methodByCode.get(payment.paymentMethodCode)
+      if (!method || !method.enabled) throw INVOICE_ERRORS.invalidPaymentMethod()
+    }
 
     const itemsResult = await this.database.query<{
       id: string
       product_id: string | null
+      variant_id: string | null
       product_name: string
       unit_price: string | number
       quantity: string | number
@@ -1042,8 +1262,8 @@ export class PosInvoicesService {
       tax_amount: string | number
       line_net_amount: string | number
     }>(
-      `SELECT id, product_id, product_name, unit_price, quantity, returned_quantity, net_amount,
-              tax_amount, line_net_amount
+      `SELECT id, product_id, variant_id, product_name, unit_price, quantity, returned_quantity,
+              net_amount, tax_amount, line_net_amount
          FROM pos_invoice_items
         WHERE invoice_id = $1`,
       [invoiceId]
@@ -1056,6 +1276,7 @@ export class PosInvoicesService {
     const returnLines: Array<{
       invoiceItemId: string
       productId: string | null
+      variantId: string | null
       productName: string
       unitPrice: number
       quantity: number
@@ -1094,6 +1315,7 @@ export class PosInvoicesService {
       returnLines.push({
         invoiceItemId: line.id,
         productId: line.product_id,
+        variantId: line.variant_id,
         productName: line.product_name,
         unitPrice: Number(line.unit_price),
         quantity: requested.quantity,
@@ -1108,11 +1330,58 @@ export class PosInvoicesService {
     taxAmount = Math.round(taxAmount * 100) / 100
     const totalAmount = Math.round((subtotalAmount - discountAmount + taxAmount) * 100) / 100
 
+    // A single-method refund always refunds the whole return -- the caller doesn't have to
+    // already know totalAmount (it's only computable after prorating every returned line above)
+    // just to ask for it. More than one line means a real split, so every one of them must name
+    // its own amount and they must sum to exactly totalAmount -- same tolerance/error create()
+    // already uses to validate a sale's own split payments against its total.
+    let resolvedPayments: Array<{ paymentMethodCode: string; amount: number }>
+    if (input.payments.length === 1) {
+      resolvedPayments = [
+        { paymentMethodCode: input.payments[0].paymentMethodCode, amount: totalAmount },
+      ]
+    } else {
+      resolvedPayments = input.payments.map((payment) => {
+        if (payment.amount === undefined) throw INVOICE_ERRORS.paymentAmountMismatch()
+        return { paymentMethodCode: payment.paymentMethodCode, amount: payment.amount }
+      })
+      const paidAmount =
+        Math.round(resolvedPayments.reduce((sum, payment) => sum + payment.amount, 0) * 100) / 100
+      if (Math.abs(paidAmount - totalAmount) > 0.01) throw INVOICE_ERRORS.paymentAmountMismatch()
+    }
+    // Real store credit lands only for whatever share of the refund actually used a
+    // "credit"/"prepaid" method (see below) -- any other kind (cash, card, transfer, bnpl) means
+    // that share of the refund was already handled outside this system (cash physically handed
+    // back, a card reversal run separately), so crediting account balance for it too would
+    // double-refund that part of the return. A split refund (part cash, part store credit) is
+    // therefore only ever credited for its own credit/prepaid share, not the whole total.
+    const creditAmount =
+      Math.round(
+        resolvedPayments
+          .filter((payment) => {
+            const kind = methodByCode.get(payment.paymentMethodCode)?.kind
+            return kind === "credit" || kind === "prepaid"
+          })
+          .reduce((sum, payment) => sum + payment.amount, 0) * 100
+      ) / 100
+
     // Read fresh, same as create() does for the original invoice -- an org's tax profile can
     // change between the original sale and a later return, and this credit note is its own real
     // document, not a copy of what the invoice happened to say at sale time.
     const seller = await this.loadSellerSnapshot(organizationId)
     const issuedAt = new Date()
+
+    // What this return actually gives back to stock -- same bundle-aware resolution create()
+    // uses to consume it, so a returned bundle restocks its components exactly as it consumed
+    // them, not just the bundle itself (which never carried its own stock to begin with).
+    const stockRestoration = await this.computeStockConsumption(
+      organizationId,
+      returnLines.map((line) => ({
+        productId: line.productId,
+        variantId: line.variantId,
+        quantity: line.quantity,
+      }))
+    )
 
     const returnId = randomUUID()
     let returnNumber = ""
@@ -1157,7 +1426,9 @@ export class PosInvoicesService {
           discountAmount,
           taxAmount,
           totalAmount,
-          input.paymentMethodCode,
+          resolvedPayments.length === 1
+            ? resolvedPayments[0].paymentMethodCode
+            : SPLIT_PAYMENT_CODE,
           input.notes,
           actorUserId,
           issuedAt,
@@ -1168,17 +1439,26 @@ export class PosInvoicesService {
         ]
       )
 
+      for (const payment of resolvedPayments) {
+        await this.database.query(
+          `INSERT INTO pos_invoice_return_payments (id, return_id, payment_method_code, amount)
+           VALUES ($1, $2, $3, $4)`,
+          [randomUUID(), returnId, payment.paymentMethodCode, payment.amount]
+        )
+      }
+
       for (const line of returnLines) {
         await this.database.query(
           `INSERT INTO pos_invoice_return_items
-             (id, return_id, invoice_item_id, product_id, product_name, unit_price, quantity,
-              net_amount, tax_amount)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+             (id, return_id, invoice_item_id, product_id, variant_id, product_name, unit_price,
+              quantity, net_amount, tax_amount)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             randomUUID(),
             returnId,
             line.invoiceItemId,
             line.productId,
+            line.variantId,
             line.productName,
             line.unitPrice,
             line.quantity,
@@ -1191,17 +1471,14 @@ export class PosInvoicesService {
             WHERE id = $1`,
           [line.invoiceItemId, line.quantity]
         )
-        // A returned unit goes back on the shelf -- only for a real, still-tracked native
-        // product (a synced product has no product_id we own, and a null stock_quantity means
-        // this product's stock isn't tracked at all, e.g. a service).
-        if (line.productId) {
-          await this.database.query(
-            `UPDATE products SET stock_quantity = stock_quantity + $2, updated_at = now()
-              WHERE id = $1 AND stock_quantity IS NOT NULL`,
-            [line.productId, line.quantity]
-          )
-        }
       }
+
+      // A returned unit goes back on the shelf -- directly for a real, still-tracked native
+      // product, and per-component for a returned bundle (see stockRestoration above). A synced
+      // product has no product_id we own, and a null stock_quantity means this product's stock
+      // isn't tracked at all (e.g. a service) -- both are already excluded by
+      // computeStockConsumption/applyStockConsumption.
+      await this.applyStockConsumption(stockRestoration, 1)
 
       // Every line on the invoice fully back -> "returned"; some but not all ->
       // "partially_returned". Read back from the rows themselves (not just this call's own
@@ -1217,11 +1494,10 @@ export class PosInvoicesService {
         [invoiceId, nextStatus]
       )
 
-      // Real store credit for the returned amount -- only when the cashier actually chose a
-      // "credit"/"prepaid" refund method (see creditsAccountBalance above); cash/card/transfer/
-      // bnpl means the refund already happened outside this system, so crediting the account too
-      // would double-refund the same return.
-      if (creditsAccountBalance && invoiceRow.customer_id && totalAmount > 0) {
+      // Real store credit for whatever share of the refund actually used a "credit"/"prepaid"
+      // method (see creditAmount above) -- a split refund only credits its own credit/prepaid
+      // share, never the whole return total.
+      if (invoiceRow.customer_id && creditAmount > 0) {
         const referenceResult = await this.database.query<{ nextval: string }>(
           `SELECT nextval('customer_return_number_seq')`
         )
@@ -1230,7 +1506,7 @@ export class PosInvoicesService {
         await this.database.query(
           `UPDATE customers SET account_balance = account_balance + $2, updated_at = now()
             WHERE id = $1`,
-          [invoiceRow.customer_id, totalAmount]
+          [invoiceRow.customer_id, creditAmount]
         )
         await this.database.query(
           `INSERT INTO customer_account_transactions
@@ -1242,7 +1518,7 @@ export class PosInvoicesService {
             invoiceRow.workspace_id,
             invoiceRow.customer_id,
             reference,
-            totalAmount,
+            creditAmount,
             invoiceId,
           ]
         )
@@ -1314,8 +1590,26 @@ export class PosInvoicesService {
       itemsByReturn.set(row.return_id, list)
     }
 
+    const paymentsResult = await this.database.query<InvoiceReturnPaymentRow>(
+      `SELECT return_id, payment_method_code, amount
+         FROM pos_invoice_return_payments
+        WHERE return_id IN (${idPlaceholders})`,
+      returnIds
+    )
+    const paymentsByReturn = new Map<string, InvoiceReturnPaymentView[]>()
+    for (const row of paymentsResult.rows) {
+      const list = paymentsByReturn.get(row.return_id) ?? []
+      list.push(mapReturnPayment(row))
+      paymentsByReturn.set(row.return_id, list)
+    }
+
     return result.rows.map((row) =>
-      mapReturn(row, row.invoice_number, itemsByReturn.get(row.id) ?? [])
+      mapReturn(
+        row,
+        row.invoice_number,
+        itemsByReturn.get(row.id) ?? [],
+        paymentsByReturn.get(row.id) ?? []
+      )
     )
   }
 
@@ -1343,7 +1637,176 @@ export class PosInvoicesService {
         WHERE return_id = $1`,
       [returnId]
     )
-    return mapReturn(row, row.invoice_number, itemsResult.rows.map(mapReturnItem))
+    const paymentsResult = await this.database.query<InvoiceReturnPaymentRow>(
+      `SELECT return_id, payment_method_code, amount
+         FROM pos_invoice_return_payments
+        WHERE return_id = $1`,
+      [returnId]
+    )
+    return mapReturn(
+      row,
+      row.invoice_number,
+      itemsResult.rows.map(mapReturnItem),
+      paymentsResult.rows.map(mapReturnPayment)
+    )
+  }
+
+  // How much of each REAL, tracked native product (and each real variant) a set of sale (or
+  // return) lines actually consumes -- a stock-tracked product (raw/simple/weighted) consumes
+  // itself directly, one unit per unit sold; a bundle consumes each of its own native components
+  // by the recipe's required_quantity converted into that component's own stock unit (see
+  // catalog-types.ts's convertRequiredQuantityToStock); a line carrying a variantId (a "variable"
+  // product's specific size/color combination) consumes that exact variant's own stock
+  // (product_variants.stock) directly, one unit per unit sold -- a variable product's own row
+  // never carries any stock to touch instead. A synced/storefront product, a free-text line, a
+  // service, and a component named by hand (no catalogue reference) can never appear here -- there
+  // is no products/product_variants row this organization owns to touch stock on for any of them.
+  // Shared by create() (subtracts the result) and createReturn() (adds it back) so a bundle's or
+  // variant's return restocks it exactly the same way its sale consumed it.
+  private async computeStockConsumption(
+    organizationId: string,
+    lines: Array<{ productId: string | null; variantId?: string | null; quantity: number }>
+  ): Promise<{ products: Map<string, number>; variants: Map<string, number> }> {
+    const products = new Map<string, number>()
+    const variants = new Map<string, number>()
+
+    // Confirmed against this organization's own products before touching anything -- a
+    // variantId is entirely client-supplied, so without this check a line could name another
+    // organization's variant and have its stock silently adjusted.
+    const variantIds = [
+      ...new Set(
+        lines
+          .map((line) => line.variantId)
+          .filter((id): id is string => !!id && UUID_PATTERN.test(id))
+      ),
+    ]
+    if (variantIds.length > 0) {
+      const variantPlaceholders = variantIds.map((_, index) => `$${index + 2}`).join(", ")
+      const ownedVariants = await this.database.query<{ id: string }>(
+        `SELECT pv.id FROM product_variants pv
+           JOIN products p ON p.id = pv.product_id
+          WHERE p.organization_id = $1 AND pv.id IN (${variantPlaceholders})`,
+        [organizationId, ...variantIds]
+      )
+      const ownedVariantIds = new Set(ownedVariants.rows.map((row) => row.id))
+      for (const line of lines) {
+        if (line.variantId && ownedVariantIds.has(line.variantId)) {
+          variants.set(line.variantId, (variants.get(line.variantId) ?? 0) + line.quantity)
+        }
+      }
+    }
+
+    const nativeIds = [
+      ...new Set(
+        lines
+          .map((line) => line.productId)
+          .filter((id): id is string => id !== null && UUID_PATTERN.test(id))
+      ),
+    ]
+    if (nativeIds.length === 0) return { products, variants }
+
+    const placeholders = nativeIds.map((_, index) => `$${index + 2}`).join(", ")
+    const productRows = await this.database.query<{ id: string; product_type: string }>(
+      `SELECT id, product_type FROM products WHERE organization_id = $1 AND id IN (${placeholders})`,
+      [organizationId, ...nativeIds]
+    )
+    const typeById = new Map(productRows.rows.map((row) => [row.id, row.product_type]))
+
+    const bundleIds = nativeIds.filter((id) => typeById.get(id) === "bundle")
+    const componentsByBundle = new Map<
+      string,
+      Array<{
+        component_ref: string | null
+        required_quantity: string | number
+        required_unit: string
+        stock_unit: string
+        conversion_factor: string | number | null
+      }>
+    >()
+    if (bundleIds.length > 0) {
+      const bundlePlaceholders = bundleIds.map((_, index) => `$${index + 1}`).join(", ")
+      const componentRows = await this.database.query<{
+        product_id: string
+        component_ref: string | null
+        required_quantity: string | number
+        required_unit: string
+        stock_unit: string
+        conversion_factor: string | number | null
+      }>(
+        `SELECT product_id, component_ref, required_quantity, required_unit, stock_unit,
+                conversion_factor
+           FROM product_components WHERE product_id IN (${bundlePlaceholders})`,
+        bundleIds
+      )
+      for (const row of componentRows.rows) {
+        const list = componentsByBundle.get(row.product_id) ?? []
+        list.push(row)
+        componentsByBundle.set(row.product_id, list)
+      }
+    }
+
+    const addConsumption = (productId: string, amount: number) => {
+      products.set(productId, (products.get(productId) ?? 0) + amount)
+    }
+
+    for (const line of lines) {
+      // A variant line's own productId is the PARENT variable product -- it never carries stock
+      // of its own (not in TYPES_REQUIRING_STOCK, and never "bundle"), so it naturally falls
+      // through here with no effect; only the variants map above touches it, via variantId.
+      if (!line.productId || !UUID_PATTERN.test(line.productId)) continue
+      const type = typeById.get(line.productId)
+      if (!type) continue
+
+      if (TYPES_REQUIRING_STOCK.includes(type as ProductType)) {
+        addConsumption(line.productId, line.quantity)
+        continue
+      }
+
+      if (type === "bundle") {
+        for (const component of componentsByBundle.get(line.productId) ?? []) {
+          if (!component.component_ref || !UUID_PATTERN.test(component.component_ref)) continue
+          if (!isProductUnit(component.required_unit) || !isProductUnit(component.stock_unit))
+            continue
+          const perUnit = convertRequiredQuantityToStock(
+            {
+              requiredUnit: component.required_unit,
+              stockUnit: component.stock_unit,
+              conversionFactor:
+                component.conversion_factor === null ? null : Number(component.conversion_factor),
+            },
+            Number(component.required_quantity)
+          )
+          addConsumption(component.component_ref, perUnit * line.quantity)
+        }
+      }
+    }
+
+    return { products, variants }
+  }
+
+  // Applies a computeStockConsumption() result -- sign -1 for a sale (subtracts), +1 for a return
+  // (adds back). Deliberately allows stock_quantity/stock to go negative (see migration 079):
+  // checkout must never be blocked by a stale/undercounted stock figure, so a negative number is
+  // treated as purely informational rather than an error state.
+  private async applyStockConsumption(
+    consumption: { products: Map<string, number>; variants: Map<string, number> },
+    sign: 1 | -1
+  ): Promise<void> {
+    for (const [productId, amount] of consumption.products) {
+      if (amount === 0) continue
+      await this.database.query(
+        `UPDATE products SET stock_quantity = stock_quantity + $2, updated_at = now()
+          WHERE id = $1 AND stock_quantity IS NOT NULL`,
+        [productId, sign * amount]
+      )
+    }
+    for (const [variantId, amount] of consumption.variants) {
+      if (amount === 0) continue
+      await this.database.query(
+        `UPDATE product_variants SET stock = stock + $2 WHERE id = $1 AND stock IS NOT NULL`,
+        [variantId, sign * amount]
+      )
+    }
   }
 
   // Seller identity as of right now, read straight from organizations.settings -- the same jsonb
@@ -1356,6 +1819,12 @@ export class PosInvoicesService {
     name: string
     vatNumber: string | null
     address: string | null
+    // The Saudi "national address," individually -- Settings -> الإعدادات العامة (see
+    // OrganizationSettings.buildingNumber/street/secondaryNumber/district/postalCode/city on the
+    // frontend). Only ever consumed by the ZATCA Phase 2 invoice XML's structured PostalAddress
+    // (see zatca-ubl-invoice.ts) -- `address` above stays the short free-text snapshot everything
+    // else (the DB column, the printed receipt) already used before Phase 2 existed.
+    structuredAddress: ZatcaUblAddress | null
     // Settings -> الضرائب's "تطبيق الضريبة تلقائياً على المنتجات" toggle -- false means this
     // organization has deliberately chosen not to charge tax at all (e.g. not yet VAT-registered),
     // so create() charges 0% instead of the configured default rate. Defaults to true (the
@@ -1373,11 +1842,36 @@ export class PosInvoicesService {
     const taxNumber = typeof settings.taxNumber === "string" ? settings.taxNumber.trim() : ""
     const addressShort =
       typeof settings.addressShort === "string" ? settings.addressShort.trim() : ""
+    const asTrimmedString = (value: unknown): string | null =>
+      typeof value === "string" && value.trim() ? value.trim() : null
+    const streetName = asTrimmedString(settings.street)
+    const buildingNumber = asTrimmedString(settings.buildingNumber)
+    const plotIdentification = asTrimmedString(settings.secondaryNumber)
+    const citySubdivisionName = asTrimmedString(settings.district)
+    const cityName = asTrimmedString(settings.city)
+    const postalZone = asTrimmedString(settings.postalCode)
+    const hasAnyStructuredField =
+      streetName ||
+      buildingNumber ||
+      plotIdentification ||
+      citySubdivisionName ||
+      cityName ||
+      postalZone
 
     return {
       name: storeName || row?.name || "",
       vatNumber: taxNumber || null,
       address: addressShort || null,
+      structuredAddress: hasAnyStructuredField
+        ? {
+            streetName,
+            buildingNumber,
+            plotIdentification,
+            citySubdivisionName,
+            cityName,
+            postalZone,
+          }
+        : null,
       autoApplyTax: settings.taxAutoApplyToProducts !== false,
     }
   }
@@ -1392,8 +1886,8 @@ export class PosInvoicesService {
 
     const [itemRows, paymentRows] = await Promise.all([
       this.database.query<InvoiceItemRow>(
-        `SELECT id, invoice_id, product_id, product_name, unit_price, quantity, line_total,
-                 discount_amount, net_amount, tax_amount, returned_quantity
+        `SELECT id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
+                 line_total, discount_amount, net_amount, tax_amount, returned_quantity
            FROM pos_invoice_items
           WHERE invoice_id = $1`,
         [id]

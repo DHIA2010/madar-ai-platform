@@ -107,12 +107,12 @@ describe("ConnectionDetails", () => {
       </QueryClientProvider>
     )
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete Connection" }))
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+    fireEvent.click(await screen.findByRole("button", { name: "حذف الاتصال" }))
+    fireEvent.click(screen.getByRole("button", { name: "حذف" }))
 
     await waitFor(() => {
       expect(deleteConnection).toHaveBeenCalledWith("conn_delete_1")
-      expect(toastSuccess).toHaveBeenCalledWith("Connection deleted successfully.")
+      expect(toastSuccess).toHaveBeenCalledWith("تم حذف الاتصال بنجاح.")
       expect(mockRouterPush).toHaveBeenCalledWith(ROUTES.integrations)
     })
   })

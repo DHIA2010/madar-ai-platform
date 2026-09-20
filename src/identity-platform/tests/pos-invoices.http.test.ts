@@ -165,7 +165,8 @@ async function createReturn(
   const response = await fetch(`${baseUrl}/v1/pos/invoices/${invoiceId}/returns`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ items, paymentMethodCode, notes }),
+    // Single line, no amount -- the backend infers it as the return's own full computed total.
+    body: JSON.stringify({ items, payments: [{ paymentMethodCode }], notes }),
   })
   return { status: response.status, body: (await response.json()) as Record<string, unknown> }
 }
@@ -672,12 +673,12 @@ describe("point-of-sale invoices", () => {
     ).json()) as { accountBalance: number }
     expect(customerDetail.accountBalance).toBe(13.8)
 
-    // A sale never decrements stock in this app today (a separate, pre-existing gap this return
-    // feature does not touch) -- so the one returned cup lands on top of the untouched 10: 11.
+    // The sale itself took the stock down to 10 - 3 = 7; this one-unit return gives back exactly
+    // what it took, landing at 8.
     const productDetail = (await (
       await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
     ).json()) as { stockQuantity: number }
-    expect(productDetail.stockQuantity).toBe(11)
+    expect(productDetail.stockQuantity).toBe(8)
 
     // Returning the other 2 finishes the job -- the invoice is now fully "returned".
     const secondReturn = await createReturn(
@@ -690,6 +691,12 @@ describe("point-of-sale invoices", () => {
     expect(secondReturn.status).toBe(201)
     const invoiceAfterSecond = await listInvoices(token, `?search=${created.body.invoiceNumber}`)
     expect(invoiceAfterSecond.body.items[0]).toMatchObject({ status: "returned" })
+
+    // Every unit sold is now back -- stock is exactly what it started at.
+    const productDetailFinal = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(productDetailFinal.stockQuantity).toBe(10)
 
     // Both return events show up on the real returns list, each its own document.
     const returns = await listReturns(token)
@@ -787,6 +794,174 @@ describe("point-of-sale invoices", () => {
     ])
     const reread = await listInvoices(token)
     expect(reread.body.items[0]).toMatchObject({ sellerName: "مطعم الاختبار" })
+  })
+
+  it("decrements a simple product's stock on sale, and allows it to go negative", async () => {
+    const { token } = await signIn("invoice-stock-simple@example.com", "Invoice Stock Simple")
+
+    const product = await createProduct(token, {
+      name: "كيس أرز",
+      sku: "STOCK-SIMPLE-1",
+      stockQuantity: 5,
+      sellPrice: 20,
+    })
+
+    const firstSale = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 20 * 3 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "كيس أرز", unitPrice: 20, quantity: 3 }],
+    })
+    expect(firstSale.status).toBe(201)
+
+    const afterFirstSale = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(afterFirstSale.stockQuantity).toBe(2)
+
+    // Only 2 left, but selling 5 more still succeeds -- checkout is never blocked by stock, so
+    // the count is left to go negative rather than the sale being rejected.
+    const secondSale = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 20 * 5 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "كيس أرز", unitPrice: 20, quantity: 5 }],
+    })
+    expect(secondSale.status).toBe(201)
+
+    const afterSecondSale = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(afterSecondSale.stockQuantity).toBe(-3)
+  })
+
+  it("decrements a bundle's own components (by their recipe, unit-converted) on sale, and restores them on return", async () => {
+    const { token } = await signIn("invoice-stock-bundle@example.com", "Invoice Stock Bundle")
+
+    // Stock tracked in كجم; the recipe asks for 200 جرام per bundle -- same mass dimension, so
+    // this converts by the unit table's own factor ratio (200 / 1000 = 0.2 كجم per bundle).
+    const flour = await createProduct(token, {
+      productType: "raw",
+      name: "دقيق",
+      stockQuantity: 10,
+    })
+    // Stock and recipe both in حبة -- same unit, factor 1, no conversion needed.
+    const cheese = await createProduct(token, {
+      productType: "raw",
+      name: "جبنة",
+      stockQuantity: 20,
+    })
+    const bundle = await createProduct(token, {
+      productType: "bundle",
+      name: "وجبة كومبو",
+      sellPrice: 30,
+      components: [
+        {
+          componentRef: flour.id,
+          requiredQuantity: 200,
+          requiredUnit: "جرام",
+          stockUnit: "كجم",
+        },
+        {
+          componentRef: cheese.id,
+          requiredQuantity: 2,
+          requiredUnit: "حبة",
+          stockUnit: "حبة",
+        },
+      ],
+    })
+
+    const sale = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 30 * 3 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: bundle.id, productName: "وجبة كومبو", unitPrice: 30, quantity: 3 }],
+    })
+    expect(sale.status).toBe(201)
+
+    // 3 bundles -> flour: 10 - 3*0.2 = 9.4 كجم, cheese: 20 - 3*2 = 14 حبة. The bundle itself
+    // never carried its own stock (a bundle's availability is derived from its components).
+    const flourAfterSale = (await (
+      await fetch(`${baseUrl}/v1/products/${flour.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    const cheeseAfterSale = (await (
+      await fetch(`${baseUrl}/v1/products/${cheese.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(flourAfterSale.stockQuantity).toBe(9.4)
+    expect(cheeseAfterSale.stockQuantity).toBe(14)
+
+    const line = (sale.body.items as Array<{ id: string }>)[0]
+    const returned = await createReturn(token, String(sale.body.id), [
+      { invoiceItemId: line.id, quantity: 1 },
+    ])
+    expect(returned.status).toBe(201)
+
+    // Returning 1 of the 3 bundles gives back exactly what it took: flour +0.2 -> 9.6, cheese
+    // +2 -> 16.
+    const flourAfterReturn = (await (
+      await fetch(`${baseUrl}/v1/products/${flour.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    const cheeseAfterReturn = (await (
+      await fetch(`${baseUrl}/v1/products/${cheese.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(flourAfterReturn.stockQuantity).toBe(9.6)
+    expect(cheeseAfterReturn.stockQuantity).toBe(16)
+  })
+
+  it("decrements the exact variant sold (not the parent product, which holds no stock of its own), and restores it on return", async () => {
+    const { token } = await signIn("invoice-stock-variant@example.com", "Invoice Stock Variant")
+
+    const product = (await createProduct(token, {
+      productType: "variable",
+      name: "قميص",
+      sku: "SHIRT-VARIANT-1",
+      sellPrice: null,
+      variantOptions: [{ name: "المقاس", values: ["S", "M"] }],
+      variants: [
+        { sku: "SHIRT-S", price: 50, stock: 5, optionValues: ["S"] },
+        { sku: "SHIRT-M", price: 55, stock: 8, optionValues: ["M"] },
+      ],
+    })) as { id: string; variants: Array<{ id: string; optionValues: string[]; stock: number }> }
+    const variantS = product.variants.find((variant) => variant.optionValues[0] === "S")!
+    const variantM = product.variants.find((variant) => variant.optionValues[0] === "M")!
+
+    const sale = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 55 * 3 * 1.15 }],
+      discountAmount: 0,
+      items: [
+        {
+          productId: product.id,
+          variantId: variantM.id,
+          productName: "قميص - M",
+          unitPrice: 55,
+          quantity: 3,
+        },
+      ],
+    })
+    expect(sale.status).toBe(201)
+
+    // Only the M variant moves -- S (and the parent product, which never carries stock for a
+    // variable type) stay untouched.
+    const productAfterSale = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { variants: Array<{ id: string; stock: number }> }
+    const sAfterSale = productAfterSale.variants.find((v) => v.id === variantS.id)!
+    const mAfterSale = productAfterSale.variants.find((v) => v.id === variantM.id)!
+    expect(sAfterSale.stock).toBe(5)
+    expect(mAfterSale.stock).toBe(5)
+
+    const line = (sale.body.items as Array<{ id: string }>)[0]
+    const returned = await createReturn(token, String(sale.body.id), [
+      { invoiceItemId: line.id, quantity: 1 },
+    ])
+    expect(returned.status).toBe(201)
+
+    const productAfterReturn = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { variants: Array<{ id: string; stock: number }> }
+    const mAfterReturn = productAfterReturn.variants.find((v) => v.id === variantM.id)!
+    expect(mAfterReturn.stock).toBe(6)
   })
 })
 

@@ -35,6 +35,7 @@ import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
+import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -91,6 +92,7 @@ import {
   createCampaignLinkSchema,
   createProductSchema,
   bulkImportProductsSchema,
+  bulkUpdateProductStatusSchema,
   createTaxRateSchema,
   updateTaxRateSchema,
   applyProductsTaxConventionSchema,
@@ -108,6 +110,8 @@ import {
   holdOrderSchema,
   invoiceStatusSchema,
   createInvoiceReturnSchema,
+  createZatcaDeviceSchema,
+  submitZatcaComplianceOtpSchema,
   previewCampaignLinkSchema,
   updateCampaignLinkSchema,
   importCampaignsSchema,
@@ -535,12 +539,16 @@ export function createIdentityApiServer(
   const taxRatesService = container.infrastructure.database
     ? new TaxRatesService(container.infrastructure.database)
     : null
+  const zatcaDevicesService = container.infrastructure.database
+    ? new ZatcaDevicesService(container.infrastructure.database)
+    : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
       ? new PosInvoicesService(
           container.infrastructure.database,
           posPaymentMethodsService,
-          taxRatesService
+          taxRatesService,
+          zatcaDevicesService
         )
       : null
   const posShiftsService =
@@ -2889,12 +2897,97 @@ export function createIdentityApiServer(
             invoiceReturnsMatch[1],
             {
               items: payload.items,
-              paymentMethodCode: payload.paymentMethodCode,
+              payments: payload.payments,
               notes: payload.notes,
             },
             actor.userId
           )
         )
+      }
+
+      // Manual "الإبلاغ إلى الهيئة" -- see PosInvoicesService.reportToZatca(). Deliberately never
+      // automatic at checkout.
+      const zatcaReportMatch = url.pathname.match(/^\/v1\/pos\/invoices\/([^/]+)\/zatca-report$/)
+      if (zatcaReportMatch && method === "POST") {
+        if (!posInvoicesService) {
+          return send(503, {
+            code: "POS_INVOICES_UNAVAILABLE",
+            message: "Point-of-sale invoices are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        return send(
+          200,
+          await posInvoicesService.reportToZatca(actor.organizationId, zatcaReportMatch[1])
+        )
+      }
+
+      // ZATCA Phase 2 device onboarding -- see zatca-devices-service.ts.
+      if (url.pathname === "/v1/zatca/devices") {
+        if (!zatcaDevicesService) {
+          return send(503, {
+            code: "ZATCA_DEVICES_UNAVAILABLE",
+            message: "ZATCA device management is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        if (method === "GET") {
+          return send(200, { items: await zatcaDevicesService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          const payload = createZatcaDeviceSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await zatcaDevicesService.createDevice(actor.organizationId, {
+              workspaceId: payload.workspaceId,
+              commonName: payload.commonName,
+              environment: payload.environment,
+              vatNumber: payload.vatNumber,
+              organizationName: payload.organizationName,
+              organizationUnit: payload.organizationUnit,
+              egsSerialNumber: payload.egsSerialNumber,
+              // Simplified-only for this app today -- see the plan doc.
+              invoiceTypeBitmask: "0100",
+              location: payload.location,
+              industry: payload.industry,
+            })
+          )
+        }
+      }
+
+      const zatcaDeviceActionMatch = url.pathname.match(
+        /^\/v1\/zatca\/devices\/([^/]+)\/(compliance|compliance-checks|production)$/
+      )
+      if (zatcaDeviceActionMatch && method === "POST") {
+        if (!zatcaDevicesService) {
+          return send(503, {
+            code: "ZATCA_DEVICES_UNAVAILABLE",
+            message: "ZATCA device management is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        const [, deviceId, action] = zatcaDeviceActionMatch
+        if (action === "compliance") {
+          const payload = submitZatcaComplianceOtpSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await zatcaDevicesService.submitCompliance(actor.organizationId, deviceId, payload.otp)
+          )
+        }
+        if (action === "compliance-checks") {
+          return send(200, {
+            results: await zatcaDevicesService.runComplianceChecks(actor.organizationId, deviceId),
+          })
+        }
+        if (action === "production") {
+          return send(
+            200,
+            await zatcaDevicesService.exchangeProduction(actor.organizationId, deviceId)
+          )
+        }
       }
 
       if (url.pathname === "/v1/pos/held-orders") {
@@ -3016,6 +3109,28 @@ export function createIdentityApiServer(
           rows: payload.products,
         })
         return send(200, result)
+      }
+
+      // Products list -- "select several, change their status" quick action (see
+      // ProductCatalogService.bulkUpdateStatus). Same permission as a single edit; a synced
+      // storefront product's id never matches any row this organization owns here, so it is
+      // silently skipped rather than erroring the whole batch.
+      if (method === "PATCH" && url.pathname === "/v1/products/status") {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Products are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+
+        const payload = bulkUpdateProductStatusSchema.parse(await readJsonBody(request))
+        const updated = await productCatalogService.bulkUpdateStatus(
+          actor.organizationId,
+          payload.ids,
+          payload.status
+        )
+        return send(200, { updated })
       }
 
       // Settings -> الضرائب -> "الأسعار تشمل الضريبة" applied to every existing priced product at

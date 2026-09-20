@@ -396,7 +396,7 @@ describe("point-of-sale cashier shifts", () => {
       headers: authHeaders(token),
       body: JSON.stringify({
         items: [{ invoiceItemId: toReturnItem.id, quantity: toReturnItem.quantity }],
-        paymentMethodCode: "cash",
+        payments: [{ paymentMethodCode: "cash" }],
         notes: null,
       }),
     })

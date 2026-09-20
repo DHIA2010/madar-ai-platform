@@ -532,6 +532,13 @@ export const createProductSchema = z.object({
   priceIncludesTax: z.boolean().default(false),
 })
 
+// A products-list "select several, change their status" quick action -- see
+// ProductCatalogService.bulkUpdateStatus.
+export const bulkUpdateProductStatusSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  status: z.enum(PRODUCT_STATUSES),
+})
+
 // A bulk CSV import of native products -- every field is a plain string (or null), exactly like a
 // spreadsheet cell, since ProductCatalogService.bulkImport() does the real type coercion and
 // per-row validation (the same rules createProductSchema/create() already enforce for one
@@ -780,6 +787,10 @@ export const recordCashMovementSchema = z.object({
 // reads, so a later price change or product deletion never rewrites history.
 export const createInvoiceItemSchema = z.object({
   productId: z.string().max(120).nullable().optional().default(null),
+  // Which specific combination of a "variable" product (size/color etc.) this line actually is --
+  // see PosInvoicesService.computeStockConsumption, which decrements this exact variant's own
+  // stock rather than the parent product's.
+  variantId: z.string().uuid().nullable().optional().default(null),
   productName: z.string().min(1).max(200),
   unitPrice: z.number().min(0),
   quantity: z.number().positive(),
@@ -837,12 +848,22 @@ export const createInvoiceReturnItemSchema = z.object({
   quantity: z.number().positive(),
 })
 
+// Unlike a sale's own payment lines, amount is optional here -- a single-method refund (the
+// common case) always refunds the return's own computed total, so the caller doesn't have to
+// already know that total just to ask for it. It becomes required the moment there's more than
+// one line (see PosInvoicesService.createReturn()), since a split can't be inferred.
+export const createInvoiceReturnPaymentSchema = z.object({
+  paymentMethodCode: z.string().min(1).max(60),
+  amount: z.number().positive().optional(),
+})
+
 export const createInvoiceReturnSchema = z.object({
   items: z.array(createInvoiceReturnItemSchema).min(1),
-  // Which method the refund was actually given back through -- must be one this branch has
-  // enabled, the same rule create() already enforces for a sale's own payments (see
+  // The refund can be split across more than one method (half cash, half store credit, etc.) --
+  // every method used must be one this branch has enabled, and once there's more than one line
+  // their amounts must sum to exactly what this return actually totals (see
   // PosInvoicesService.createReturn()).
-  paymentMethodCode: z.string().min(1).max(60),
+  payments: z.array(createInvoiceReturnPaymentSchema).min(1),
   notes: z.string().max(500).nullable().optional().default(null),
 })
 
@@ -869,4 +890,23 @@ export const customPaymentMethodSchema = paymentMethodUpdateSchema.extend({
   name: z.string().min(1).max(120),
   subtitle: z.string().max(200).nullable().default(null),
   kind: z.enum(PAYMENT_KINDS),
+})
+
+// ZATCA Phase 2 device onboarding -- see zatca-devices-service.ts. Step 1 (no live ZATCA
+// dependency): generates a real CSR from these fields.
+export const createZatcaDeviceSchema = z.object({
+  workspaceId: z.string().uuid().nullable().optional().default(null),
+  commonName: z.string().min(1).max(120),
+  environment: z.enum(["sandbox", "simulation", "production"]),
+  vatNumber: z.string().min(15).max(15),
+  organizationName: z.string().min(1).max(200),
+  organizationUnit: z.string().min(1).max(120),
+  egsSerialNumber: z.string().min(1).max(200),
+  location: z.string().min(1).max(200),
+  industry: z.string().min(1).max(120),
+})
+
+// Step 2 -- the one call gated on a real Fatoora-portal OTP the taxpayer supplies themselves.
+export const submitZatcaComplianceOtpSchema = z.object({
+  otp: z.string().min(1).max(20),
 })

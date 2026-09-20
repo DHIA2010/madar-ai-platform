@@ -111,8 +111,20 @@ export function ThermalInvoiceReceipt({
       )}
       {invoice.customerName && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">العميل</span>
+          <span className="text-[#5b6b85]">اسم العميل</span>
           <span>{invoice.customerName}</span>
+        </div>
+      )}
+      {invoice.customerPhone && (
+        <div className="flex justify-between text-[11px]">
+          <span className="text-[#5b6b85]">جوال العميل</span>
+          <span>{invoice.customerPhone}</span>
+        </div>
+      )}
+      {invoice.customerVatNumber && (
+        <div className="flex justify-between text-[11px]">
+          <span className="text-[#5b6b85]">الرقم الضريبي للعميل</span>
+          <span>{invoice.customerVatNumber}</span>
         </div>
       )}
 
@@ -140,13 +152,11 @@ export function ThermalInvoiceReceipt({
           className="grid items-start gap-x-1 py-1 text-[9px]"
           style={{ gridTemplateColumns: "30% 12% 18% 19% 21%" }}
         >
-          {/* truncate keeps this to a single line regardless of name length -- a wider name
-              column (see gridTemplateColumns above) means truncation rarely kicks in for a
-              typical name, but a genuinely long one still gets an ellipsis instead of wrapping
-              and pushing the row's other columns out of vertical alignment again. */}
-          <span className="truncate px-1 text-start" title={item.productName}>
-            {item.productName}
-          </span>
+          {/* Wraps onto as many lines as the full name needs rather than an ellipsis -- the
+              row's own items-start (see gridTemplateColumns above) keeps the other columns
+              flush with the row's top regardless of how many lines this takes. text-right (not
+              text-start) so a wrapped line stays pinned to the right edge, not centered. */}
+          <span className="px-1 text-right break-words">{item.productName}</span>
           <span className="px-1 text-center">{item.quantity}</span>
           {/* This line's own net (tax-exclusive) unit price -- item.netAmount already accounts
               for gross/net product pricing and every discount, so dividing by quantity gives the

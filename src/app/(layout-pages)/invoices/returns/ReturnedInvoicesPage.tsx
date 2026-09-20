@@ -83,8 +83,16 @@ export default function ReturnedInvoicesPage() {
   }, [])
   const paymentMethodName = useMemo(() => {
     const map = new Map(paymentMethods.map((method) => [method.code, method.name]))
-    return (code: string | null) => (code ? (map.get(code) ?? code) : "—")
+    return (code: string) => map.get(code) ?? code
   }, [paymentMethods])
+  // A split refund shows every real method it actually used ("نقدي، شبكة"), not the backend's own
+  // internal "split" sentinel code -- same reasoning as InvoicesPage.tsx's own paymentMethodLabel.
+  function refundPaymentLabel(item: InvoiceReturn): string {
+    if (item.payments.length > 1) {
+      return item.payments.map((payment) => paymentMethodName(payment.paymentMethodCode)).join("، ")
+    }
+    return item.refundPaymentMethodCode ? paymentMethodName(item.refundPaymentMethodCode) : "—"
+  }
 
   const load = async () => {
     setLoading(true)
@@ -248,7 +256,7 @@ export default function ReturnedInvoicesPage() {
                         {item.items.reduce((sum, line) => sum + line.quantity, 0)}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
-                        {paymentMethodName(item.refundPaymentMethodCode)}
+                        {refundPaymentLabel(item)}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
                         {formatAmount(item.totalAmount)}
@@ -290,6 +298,10 @@ export default function ReturnedInvoicesPage() {
               <dt className={MUTED}>الفرع</dt>
               <dd className={cn("text-right font-semibold", HEADING)}>
                 {workspaceName(selectedReturn.workspaceId)}
+              </dd>
+              <dt className={MUTED}>طريقة الدفع</dt>
+              <dd className={cn("text-right font-semibold", HEADING)}>
+                {refundPaymentLabel(selectedReturn)}
               </dd>
             </dl>
 
@@ -355,6 +367,9 @@ export default function ReturnedInvoicesPage() {
             <CreditNoteReceipt
               creditNote={selectedReturn}
               sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+              paymentMethodNames={Object.fromEntries(
+                paymentMethods.map((method) => [method.code, method.name])
+              )}
             />
           </div>,
           document.body

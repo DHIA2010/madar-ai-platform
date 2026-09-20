@@ -32,6 +32,7 @@ const SECTIONS: SettingsSection[] = [
   { key: "branches", label: "إدارة الفروع", href: ROUTES.settingsBranches },
   { key: "payments", label: "طرق الدفع", href: ROUTES.settingsPayments },
   { key: "tax", label: "الضرائب", href: ROUTES.settingsTaxes },
+  { key: "zatca", label: "الفوترة الإلكترونية (هيئة الزكاة)", href: ROUTES.settingsZatca },
   { key: "backup", label: "النسخ الاحتياطي", pending: "النسخ الاحتياطي غير متاح بعد" },
 ]
 

@@ -63,7 +63,9 @@ export interface OrdersSummary {
   completedOrders: number
   completedOrdersChangePct: number | null
   processingOrders: number
+  processingOrdersChangePct: number | null
   cancelledOrders: number
+  cancelledOrdersChangePct: number | null
 }
 
 export interface OrdersListResponse {

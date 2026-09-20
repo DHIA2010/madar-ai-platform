@@ -857,7 +857,7 @@ describe("customer unified account: receipts, payments, sales, and returns on on
       headers: { ...authHeaders(login), "content-type": "application/json" },
       body: JSON.stringify({
         items: [{ invoiceItemId: invoice.items[0].id, quantity: invoice.items[0].quantity }],
-        paymentMethodCode: "customer_credit",
+        payments: [{ paymentMethodCode: "customer_credit" }],
         notes: null,
       }),
     })
@@ -893,7 +893,7 @@ describe("customer unified account: receipts, payments, sales, and returns on on
       headers: { ...authHeaders(login), "content-type": "application/json" },
       body: JSON.stringify({
         items: [{ invoiceItemId: invoice.items[0].id, quantity: invoice.items[0].quantity }],
-        paymentMethodCode: "customer_credit",
+        payments: [{ paymentMethodCode: "customer_credit" }],
         notes: null,
       }),
     })
@@ -963,7 +963,7 @@ describe("customer unified account: receipts, payments, sales, and returns on on
       headers: { ...authHeaders(login), "content-type": "application/json" },
       body: JSON.stringify({
         items: [{ invoiceItemId: invoice.items[0].id, quantity: invoice.items[0].quantity }],
-        paymentMethodCode: "customer_credit",
+        payments: [{ paymentMethodCode: "customer_credit" }],
         notes: null,
       }),
     })

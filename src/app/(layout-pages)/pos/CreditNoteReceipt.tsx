@@ -4,8 +4,9 @@
 // PosInvoicesService.createReturn(). Same 80mm ZATCA-style layout and items-table format as
 // ThermalInvoiceReceipt.tsx (kept as two separate components rather than one branching on a
 // "mode" prop -- an invoice and a credit note have real, different header fields: a credit note
-// names the ORIGINAL sale it corrects, and has no payment-method breakdown of its own since it
-// settles as account credit, not a new tender).
+// names the ORIGINAL sale it corrects). The refund's own real payment lines print the same way an
+// invoice's own do -- a refund can be split across more than one method, not just settled as
+// account credit.
 
 import { useEffect, useState } from "react"
 import QRCode from "qrcode"
@@ -31,12 +32,17 @@ interface CreditNoteReceiptProps {
   // not an image, either way) -- same contract as ThermalInvoiceReceipt's own qrDataUrl prop.
   qrDataUrl?: string | null
   sellerLogoUrl?: string | null
+  // Localized display name per payment method code -- creditNote.payments only ever carries the
+  // code, same contract as ThermalInvoiceReceipt's own paymentMethodNames prop. Optional since a
+  // caller that never resolved any names still gets a legible fallback (the raw code itself).
+  paymentMethodNames?: Record<string, string>
 }
 
 export function CreditNoteReceipt({
   creditNote,
   qrDataUrl: providedQrDataUrl,
   sellerLogoUrl,
+  paymentMethodNames = {},
 }: CreditNoteReceiptProps) {
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string | null>(null)
 
@@ -123,9 +129,11 @@ export function CreditNoteReceipt({
           className="grid items-start gap-x-1 py-1 text-[9px]"
           style={{ gridTemplateColumns: "30% 12% 18% 19% 21%" }}
         >
-          <span className="truncate px-1 text-start" title={item.productName}>
-            {item.productName}
-          </span>
+          {/* Wraps onto as many lines as the full name needs rather than an ellipsis -- the
+              row's own items-start keeps the other columns flush with the row's top regardless
+              of how many lines this takes. text-right (not text-start) so a wrapped line stays
+              pinned to the right edge, not centered. */}
+          <span className="px-1 text-right break-words">{item.productName}</span>
           <span className="px-1 text-center">{item.quantity}</span>
           <span className="px-1 text-center">
             {AMOUNT_FORMAT.format(item.quantity > 0 ? item.netAmount / item.quantity : 0)}
@@ -166,10 +174,15 @@ export function CreditNoteReceipt({
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
-      {/* No payment-method breakdown here (unlike the invoice receipt) -- a credit note never
-          settles through a NEW tender; it lands as real store credit on the customer's own
-          account (see createReturn()). "المدفوع" here just labels the QR below it. */}
       <p className="text-[12px] font-bold">المدفوع</p>
+      {creditNote.payments.map((payment, index) => (
+        <div key={index} className="flex justify-between text-[11px]">
+          <span className="text-[#5b6b85]">
+            {paymentMethodNames[payment.paymentMethodCode] ?? payment.paymentMethodCode}
+          </span>
+          <span>{AMOUNT_FORMAT.format(payment.amount)}</span>
+        </div>
+      ))}
 
       <div className="my-3 flex flex-col items-center">
         {qrDataUrl ? (

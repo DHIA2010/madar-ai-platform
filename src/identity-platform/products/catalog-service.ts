@@ -111,6 +111,20 @@ export class ProductCatalogService {
     return updated
   }
 
+  // A products-list "select several, change their status" quick action -- see
+  // catalog-repository.ts's bulkUpdateStatus for why this never touches update()'s full-replace
+  // path. Silently ignores any id this organization doesn't actually own rather than failing the
+  // whole batch over one bad id -- the caller (server.ts) reports back how many actually changed.
+  async bulkUpdateStatus(
+    organizationId: string,
+    ids: string[],
+    status: ProductStatus
+  ): Promise<number> {
+    const uniqueIds = [...new Set(ids)].filter((id) => UUID_PATTERN.test(id))
+    if (uniqueIds.length === 0) return 0
+    return this.repository.bulkUpdateStatus(organizationId, uniqueIds, status)
+  }
+
   async delete(organizationId: string, id: string): Promise<void> {
     if (!UUID_PATTERN.test(id)) throw PRODUCT_ERRORS.notFound()
 
@@ -376,9 +390,10 @@ function normalizeProduct(input: CreateProductInput): CreateProductInput {
     category: input.category.trim(),
     description: input.description.trim(),
     baseUnit: input.baseUnit?.trim() || null,
-    // A variable product's prices live on its variants, and a bundle is priced from its
-    // components -- neither carries one of its own.
-    sellPrice: isVariable || isBundle ? null : input.sellPrice,
+    // A variable product's prices live on its variants, not a single value here -- a bundle DOES
+    // carry its own real sell price, same as any other sellable type (see
+    // TYPES_REQUIRING_SELL_PRICE).
+    sellPrice: isVariable ? null : input.sellPrice,
     stockQuantity: holdsStock ? input.stockQuantity : null,
     minStock: holdsStock ? input.minStock : null,
     components: isBundle

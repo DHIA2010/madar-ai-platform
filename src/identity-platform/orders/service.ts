@@ -41,7 +41,9 @@ export interface OrdersSummaryStats {
   completedOrders: number
   completedOrdersChangePct: number | null
   processingOrders: number
+  processingOrdersChangePct: number | null
   cancelledOrders: number
+  cancelledOrdersChangePct: number | null
 }
 
 function toIsoDate(value: Date | string): string {
@@ -384,6 +386,10 @@ export class OrdersAggregationService {
     const previousSales = previous.reduce((sum, o) => sum + o.amount, 0)
     const currentCompleted = current.filter((o) => o.orderStatus === "Completed").length
     const previousCompleted = previous.filter((o) => o.orderStatus === "Completed").length
+    const currentProcessing = current.filter((o) => o.orderStatus === "Processing").length
+    const previousProcessing = previous.filter((o) => o.orderStatus === "Processing").length
+    const currentCancelled = current.filter((o) => o.orderStatus === "Cancelled").length
+    const previousCancelled = previous.filter((o) => o.orderStatus === "Cancelled").length
     const currentAov = current.length > 0 ? currentSales / current.length : 0
     const previousAov = previous.length > 0 ? previousSales / previous.length : 0
 
@@ -396,8 +402,10 @@ export class OrdersAggregationService {
       averageOrderValueChangePct: computeChangePct(currentAov, previousAov),
       completedOrders: currentCompleted,
       completedOrdersChangePct: computeChangePct(currentCompleted, previousCompleted),
-      processingOrders: current.filter((o) => o.orderStatus === "Processing").length,
-      cancelledOrders: current.filter((o) => o.orderStatus === "Cancelled").length,
+      processingOrders: currentProcessing,
+      processingOrdersChangePct: computeChangePct(currentProcessing, previousProcessing),
+      cancelledOrders: currentCancelled,
+      cancelledOrdersChangePct: computeChangePct(currentCancelled, previousCancelled),
     }
   }
 }
