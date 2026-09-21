@@ -4,6 +4,7 @@ import type {
   IntegrationProviderSyncInput,
 } from "../integrations/provider-contracts"
 import { IntegrationProviderError } from "../integrations/provider-error"
+import { currentLocalDateParts, localMidnightUtc } from "../shared/timezone"
 
 import type { SnapchatOAuthRepository } from "./repository"
 import type { SnapchatOAuthService } from "./service"
@@ -41,46 +42,6 @@ const STATS_WINDOW_MAX_RETRIES = 4
 // account-wide total. Snapchat has no literal "clicks"/"ctr" fields; "swipes" is the
 // swipe-up equivalent of a click, and "swipe_up_percent" is its pre-computed CTR equivalent.
 const STATS_FIELDS = "spend,impressions,swipes,swipe_up_percent"
-
-// Computes the UTC offset (in minutes, local = UTC + offset) that `timeZone` observes at
-// `date` -- needed because Snapchat's DAY-granularity Stats API requires start_time/end_time
-// to fall exactly on local-midnight boundaries in the ad account's own timezone, not UTC
-// (confirmed against the live API: "must have a start time that is the start of day (00:00:00)
-// for the account's timezone").
-function getUtcOffsetMinutes(timeZone: string, date: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(date)
-  const map: Record<string, string> = {}
-  for (const part of parts) map[part.type] = part.value
-  const asUtc = Date.UTC(+map.year, +map.month - 1, +map.day, +map.hour, +map.minute, +map.second)
-  return (asUtc - date.getTime()) / 60000
-}
-
-function localMidnightUtc(timeZone: string, year: number, month: number, day: number): Date {
-  const guess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0))
-  const offsetMinutes = getUtcOffsetMinutes(timeZone, guess)
-  return new Date(guess.getTime() - offsetMinutes * 60000)
-}
-
-function currentLocalDateParts(timeZone: string, date: Date) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date)
-  const map: Record<string, string> = {}
-  for (const part of parts) map[part.type] = part.value
-  return { year: +map.year, month: +map.month, day: +map.day }
-}
 
 interface SnapchatCampaignApiRow {
   id: string
@@ -193,15 +154,28 @@ async function fetchAllPagesByNextLink<T>(input: {
   return results
 }
 
-function buildStatsWindows(timeZone: string): Array<{ start: Date; end: Date }> {
+// `sinceDate` (a stored cursor's last-synced day, exclusive) overrides the fixed
+// STATS_HISTORY_START_* range when given -- this is what makes a scheduled sync incremental:
+// it only re-walks days since the last successful run instead of the whole fixed history
+// every time. Falls back to the fixed start when there's no cursor yet (first sync) or the
+// cursor predates it.
+function buildStatsWindows(
+  timeZone: string,
+  sinceDate?: { year: number; month: number; day: number }
+): Array<{ start: Date; end: Date }> {
   const todayParts = currentLocalDateParts(timeZone, new Date())
   const rangeEnd = localMidnightUtc(timeZone, todayParts.year, todayParts.month, todayParts.day)
-  const rangeStart = localMidnightUtc(
+  const fixedRangeStart = localMidnightUtc(
     timeZone,
     STATS_HISTORY_START_YEAR,
     STATS_HISTORY_START_MONTH,
     STATS_HISTORY_START_DAY
   )
+  const cursorRangeStart = sinceDate
+    ? localMidnightUtc(timeZone, sinceDate.year, sinceDate.month, sinceDate.day)
+    : null
+  const rangeStart =
+    cursorRangeStart && cursorRangeStart > fixedRangeStart ? cursorRangeStart : fixedRangeStart
 
   const windows: Array<{ start: Date; end: Date }> = []
   let windowStart = rangeStart
@@ -383,8 +357,9 @@ async function fetchDailyStatsAllWindows(input: {
   timeZone: string
   fields: string
   breakdown: "campaign" | "ad"
+  sinceDate?: { year: number; month: number; day: number }
 }): Promise<SnapchatBreakdownDailyStat[]> {
-  const windows = buildStatsWindows(input.timeZone)
+  const windows = buildStatsWindows(input.timeZone, input.sinceDate)
   const results: SnapchatBreakdownDailyStat[] = []
   let cursor = 0
 
@@ -564,6 +539,27 @@ export class SnapchatSyncService {
         }),
       ])
 
+      // Incremental by default: a full sync (mode: "full", used for the connector's very
+      // first sync and any manual re-backfill) always walks the fixed STATS_HISTORY_START_*
+      // range; every other sync -- in particular every scheduled one -- only re-walks days
+      // after the last run's cursor, so a recurring schedule doesn't re-fetch ~9 months of
+      // daily stats on every tick.
+      const statsCursor =
+        input.mode === "full"
+          ? null
+          : await this.syncRepository.loadSyncCursor(connection.id, accountId, "stats")
+      const statsSinceDate = statsCursor?.lastRecordDate
+        ? (() => {
+            const next = new Date(`${statsCursor.lastRecordDate}T00:00:00Z`)
+            next.setUTCDate(next.getUTCDate() + 1)
+            return {
+              year: next.getUTCFullYear(),
+              month: next.getUTCMonth() + 1,
+              day: next.getUTCDate(),
+            }
+          })()
+        : undefined
+
       // Campaign- and ad-level daily stats are each a single windowed series at the account
       // level (breakdown=campaign / breakdown=ad); ad-squad-level is derived from the ad-level
       // rows below rather than fetched directly (see deriveAdSquadDailyStats).
@@ -575,6 +571,7 @@ export class SnapchatSyncService {
           timeZone,
           fields: STATS_FIELDS,
           breakdown: "campaign",
+          sinceDate: statsSinceDate,
         }),
         fetchDailyStatsAllWindows({
           apiBaseUrl: base,
@@ -583,6 +580,7 @@ export class SnapchatSyncService {
           timeZone,
           fields: STATS_FIELDS,
           breakdown: "ad",
+          sinceDate: statsSinceDate,
         }),
       ])
 
@@ -648,6 +646,20 @@ export class SnapchatSyncService {
         stats: campaignDailyStats.length + adSquadDailyStats.length + adDailyStats.length,
         totalRecords: totalWritten,
       }
+
+      // buildStatsWindows always walks up to (but excludes) today's local midnight -- today's
+      // own stats are still accumulating in Snapchat's system and would be incomplete if
+      // fetched now, so the cursor advances only through yesterday. The next incremental sync
+      // then starts at today, picking up whatever wasn't complete yet at this run's time.
+      const todayParts = currentLocalDateParts(timeZone, new Date())
+      const yesterday = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day))
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+      await this.syncRepository.saveSyncCursor({
+        connectionId: connection.id,
+        customerId: accountId,
+        entityType: "stats",
+        lastRecordDate: yesterday.toISOString().slice(0, 10),
+      })
 
       await this.syncRepository.markSyncRunCompleted(syncRun.id, actor.userId, metrics)
 

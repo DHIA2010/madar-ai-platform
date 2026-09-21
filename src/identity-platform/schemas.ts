@@ -253,7 +253,7 @@ export const googleAdsSyncSchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   idempotencyKey: z.string().min(8).max(200),
   mode: z.enum(["full", "incremental"]).default("incremental"),
-  trigger: z.enum(["manual", "retry"]).default("manual"),
+  trigger: z.enum(["manual", "retry", "scheduled"]).default("manual"),
 })
 
 export const integrationSyncSchema = googleAdsSyncSchema
@@ -324,6 +324,26 @@ export const integrationDisconnectSchema = z.object({
 export const integrationEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 })
+
+const TIME_LOCAL_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
+
+export const saveConnectionSyncScheduleSchema = z
+  .object({
+    enabled: z.boolean(),
+    frequencyMinutes: z
+      .union([z.literal(15), z.literal(30), z.literal(60), z.literal(360), z.literal(1440)])
+      .nullable(),
+    customCron: z.string().trim().min(9).max(100).nullable(),
+    activeDays: z.array(z.number().int().min(0).max(6)).max(7),
+    startTimeLocal: z.string().regex(TIME_LOCAL_PATTERN, "Expected HH:MM"),
+    timezone: z.string().min(1).max(64),
+    retryOnConnectionFailure: z.boolean(),
+    retryMaxAttempts: z.number().int().min(0).max(10),
+    notifyOnFailure: z.boolean(),
+  })
+  .refine((value) => (value.frequencyMinutes === null) !== (value.customCron === null), {
+    message: "Exactly one of frequencyMinutes or customCron must be set.",
+  })
 
 const CAMPAIGN_PLATFORM_VALUES = ["google_ads", "meta_ads", "snapchat_ads", "tiktok_ads"] as const
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")

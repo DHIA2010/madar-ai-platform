@@ -254,4 +254,55 @@ export class SnapchatSyncRepository {
 
     return result.rows.map(mapRecord)
   }
+
+  // Incremental cursor for the daily-stats fetch (see sync-service.ts's buildStatsWindows) --
+  // `lastRecordDate` is the last local day that was successfully fetched, so a later
+  // incremental run only re-walks days after it instead of the fixed full-history start.
+  async loadSyncCursor(connectionId: string, customerId: string, entityType: string) {
+    const result = await this.db.query<Record<string, unknown>>(
+      `
+      select last_record_date, last_synced_at
+      from snapchat_sync_cursors
+      where connection_id = $1 and customer_id = $2 and entity_type = $3
+      limit 1
+      `,
+      [connectionId, customerId, entityType]
+    )
+
+    const row = result.rows[0]
+    if (!row) {
+      return null
+    }
+
+    return {
+      lastRecordDate:
+        row.last_record_date instanceof Date
+          ? row.last_record_date.toISOString().slice(0, 10)
+          : ((row.last_record_date as string | null) ?? null),
+      lastSyncedAt: toJsonDate(row.last_synced_at) ?? new Date().toISOString(),
+    }
+  }
+
+  async saveSyncCursor(input: {
+    connectionId: string
+    customerId: string
+    entityType: string
+    lastRecordDate: string
+  }) {
+    await this.db.query(
+      `
+      insert into snapchat_sync_cursors (
+        id, connection_id, customer_id, entity_type, last_record_date, last_synced_at, created_at, updated_at
+      ) values (
+        $1,$2,$3,$4,$5::date,now(),now(),now()
+      )
+      on conflict (connection_id, customer_id, entity_type)
+      do update set
+        last_record_date = excluded.last_record_date,
+        last_synced_at = now(),
+        updated_at = now()
+      `,
+      [randomUUID(), input.connectionId, input.customerId, input.entityType, input.lastRecordDate]
+    )
+  }
 }

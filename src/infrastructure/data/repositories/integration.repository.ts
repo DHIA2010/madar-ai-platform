@@ -424,6 +424,14 @@ function resolveProviderProfileByDefinition(connectorDefinitionId: string) {
   return PROVIDER_PROFILES_BY_DEFINITION[connectorDefinitionId] ?? null
 }
 
+// The backend's route-level provider id (e.g. "snapchat-ads", hyphenated) differs from the
+// frontend catalog's own connectorId (e.g. "snapchat_ads", underscored) -- this is the single
+// place that mapping lives, so anything that needs to build a `/v1/integrations/{providerId}/...`
+// URL (sync-schedule.service.ts included) resolves it from here instead of re-deriving it.
+export function resolveBackendProviderId(connectorDefinitionId: string): string | null {
+  return PROVIDER_PROFILES_BY_DEFINITION[connectorDefinitionId]?.providerId ?? null
+}
+
 function resolveProviderProfileByConnection(connection: Connection) {
   return resolveProviderProfileByDefinition(connection.connectorDefinitionId)
 }

@@ -36,6 +36,8 @@ import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
+import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
+import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -128,6 +130,7 @@ import {
   integrationRecordsQuerySchema,
   integrationSyncSchema,
   inviteOrganizationMemberSchema,
+  saveConnectionSyncScheduleSchema,
   loginSchema,
   removeMemberSchema,
   refreshSchema,
@@ -393,7 +396,7 @@ function getCorsHeaders(request: IncomingMessage): Record<string, string> {
       "access-control-allow-credentials": "true",
       "access-control-allow-headers":
         "content-type, authorization, x-correlation-id, x-request-id, x-workspace-id, x-request-timeout-ms",
-      "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+      "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
       vary: "Origin",
     }
   }
@@ -542,6 +545,13 @@ export function createIdentityApiServer(
   const zatcaDevicesService = container.infrastructure.database
     ? new ZatcaDevicesService(container.infrastructure.database)
     : null
+  const connectionSyncScheduleService =
+    container.infrastructure.database && container.infrastructure.integrations
+      ? new ConnectionSyncScheduleService(
+          new ConnectionSyncScheduleRepository(container.infrastructure.database),
+          container.infrastructure.integrations
+        )
+      : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
       ? new PosInvoicesService(
@@ -1569,6 +1579,39 @@ export function createIdentityApiServer(
         }
 
         return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
+      }
+
+      const connectionScheduleMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/([^/]+)\/schedule$/
+      )
+      if (connectionScheduleMatch) {
+        if (!connectionSyncScheduleService) {
+          return send(503, {
+            code: "SCHEDULE_UNAVAILABLE",
+            message: "Sync scheduling is unavailable in memory mode.",
+          })
+        }
+        const [, providerId, connectionId] = connectionScheduleMatch
+
+        if (method === "GET") {
+          return send(
+            200,
+            await connectionSyncScheduleService.getSchedule(actor, providerId, connectionId)
+          )
+        }
+
+        if (method === "PUT") {
+          const payload = saveConnectionSyncScheduleSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await connectionSyncScheduleService.saveSchedule(
+              actor,
+              providerId,
+              connectionId,
+              payload
+            )
+          )
+        }
       }
 
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)

@@ -25,6 +25,7 @@ export const ROUTES = {
   integrations: "/integrations",
   integrationsNew: "/integrations/new",
   integrationsDetails: (connectionId: string) => `/integrations/${connectionId}`,
+  integrationsSchedule: (connectionId: string) => `/integrations/${connectionId}/schedule`,
   administration: "/administration",
   administrationUsers: "/administration/users",
   administrationRoles: "/administration/roles",

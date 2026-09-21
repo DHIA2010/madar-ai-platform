@@ -31,7 +31,7 @@ export interface IntegrationProviderSyncInput {
   endDate: string
   idempotencyKey: string
   mode?: "full" | "incremental"
-  trigger?: "manual" | "retry"
+  trigger?: "manual" | "retry" | "scheduled"
 }
 
 export interface IntegrationProviderRetryStatus {

@@ -625,6 +625,102 @@ describe("snapchat ads data sync: real campaigns/ads/stats pipeline", () => {
     expect(secondBody.metrics.campaigns).toBe(1)
   })
 
+  it("incremental sync only re-walks stats days since the last cursor, not the fixed full history", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "snapchat-sync-incremental@madar.test",
+      "Snapchat Sync Incremental Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001130"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000001131",
+      label: "Snapchat Sync Incremental",
+    })
+
+    const accountId = "acc-445566"
+    const fetchSpy = mockSnapchatResponses({
+      baseUrl,
+      accessToken: "snap-access-incremental",
+      refreshToken: "snap-refresh-incremental",
+      organizationId: "org-3",
+      organizationName: "Incremental Org",
+      accountId,
+      accountName: "Incremental Account",
+      data: {
+        campaigns: [{ id: "camp-1", updated_at: "2026-01-01T00:00:00Z" }],
+        ads: [],
+        adSquads: [],
+        campaignDailyStats: [],
+        adDailyStats: [],
+      },
+    })
+
+    const started = await connectSnapchat({ login, workspaceId })
+
+    const externalStatsCallCount = () =>
+      fetchSpy.mock.calls.filter(([rawInput]) => {
+        const url = typeof rawInput === "string" ? rawInput : String(rawInput)
+        return url.includes(`/adaccounts/${accountId}/stats`)
+      }).length
+
+    const first = await fetch(`${baseUrl}/v1/integrations/snapchat-ads/sync`, {
+      method: "POST",
+      headers: syncHeaders(login, workspaceId),
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: accountId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-run-incremental-1",
+        mode: "incremental" as const,
+        trigger: "manual" as const,
+      }),
+    })
+    expect(first.status).toBe(200)
+
+    // The very first sync has no cursor yet, so it walks the whole fixed
+    // STATS_HISTORY_START_*-to-now range in <=32-day chunks for both breakdowns -- more than a
+    // couple of stats calls confirms it actually did the full historical walk.
+    const statsCallsAfterFirst = externalStatsCallCount()
+    expect(statsCallsAfterFirst).toBeGreaterThan(2)
+
+    const cursorAfterFirst = await database.query<{ last_record_date: string }>(
+      "select last_record_date from snapchat_sync_cursors where connection_id = $1 and customer_id = $2 and entity_type = 'stats'",
+      [started.connectionId, accountId]
+    )
+    expect(cursorAfterFirst.rows).toHaveLength(1)
+
+    const second = await fetch(`${baseUrl}/v1/integrations/snapchat-ads/sync`, {
+      method: "POST",
+      headers: syncHeaders(login, workspaceId),
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: accountId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-run-incremental-2",
+        mode: "incremental" as const,
+        trigger: "scheduled" as const,
+      }),
+    })
+    expect(second.status).toBe(200)
+
+    // The cursor now covers everything through yesterday, and nothing has "happened" between
+    // the two syncs in test time -- so the second sync's stats range (cursor+1 to today) is
+    // empty and makes zero further stats calls, where the first sync made many.
+    expect(externalStatsCallCount()).toBe(statsCallsAfterFirst)
+
+    const cursorAfterSecond = await database.query<{ last_record_date: string }>(
+      "select last_record_date from snapchat_sync_cursors where connection_id = $1 and customer_id = $2 and entity_type = 'stats'",
+      [started.connectionId, accountId]
+    )
+    expect(cursorAfterSecond.rows[0]?.last_record_date).toEqual(
+      cursorAfterFirst.rows[0]?.last_record_date
+    )
+  })
+
   it("deletes the connection cleanly after a sync has written records (no FK violation)", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "snapchat-sync-delete@madar.test",

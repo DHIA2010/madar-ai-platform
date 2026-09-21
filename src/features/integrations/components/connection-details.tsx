@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ChevronLeft } from "lucide-react"
+import { CalendarClock, ChevronLeft } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -283,13 +283,22 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
               </p>
             </div>
           </div>
-          <ConnectionActionsMenu
-            actions={availableActions}
-            menuLabel="إجراءات الاتصال"
-            onActionSelect={(action) => {
-              void handleConnectionAction(action)
-            }}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={ROUTES.integrationsSchedule(connectionId)}
+              className="flex h-9 items-center gap-1.5 rounded-[10px] border border-[#f3d3d3] bg-[#fdf2f2] px-3.5 text-[12.5px] font-semibold text-[#5b6b85] transition-colors hover:bg-[#fbe6e6]"
+            >
+              <CalendarClock className="size-4" />
+              إعدادات الجدولة
+            </Link>
+            <ConnectionActionsMenu
+              actions={availableActions}
+              menuLabel="إجراءات الاتصال"
+              onActionSelect={(action) => {
+                void handleConnectionAction(action)
+              }}
+            />
+          </div>
         </div>
       </div>
 

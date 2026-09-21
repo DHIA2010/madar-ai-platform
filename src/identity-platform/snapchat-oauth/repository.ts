@@ -585,6 +585,22 @@ export class SnapchatOAuthRepository
     })
 
     await this.db.query({
+      name: "snapchat-sync-delete-cursors",
+      text: "DELETE FROM snapchat_sync_cursors WHERE connection_id = $1",
+      values: [connectionId],
+    })
+
+    // connection_sync_schedules has no FK here (it's a soft (provider_id, connection_id)
+    // reference shared across every connector, not just Snapchat's own tables) -- without this,
+    // a deleted connection's schedule would live on as a zombie row the scheduler tick keeps
+    // trying and failing to run forever.
+    await this.db.query({
+      name: "snapchat-oauth-delete-sync-schedule",
+      text: "DELETE FROM connection_sync_schedules WHERE provider_id = 'snapchat-ads' AND connection_id = $1",
+      values: [connectionId],
+    })
+
+    await this.db.query({
       name: "snapchat-oauth-delete-events",
       text: "DELETE FROM snapchat_oauth_events WHERE connection_id = $1",
       values: [connectionId],
