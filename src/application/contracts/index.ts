@@ -13,6 +13,7 @@ export type {
   AdministrationUserStatus,
   AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
+  AssignUserWorkspacesRequestDto,
   AuditLogEventDto,
   AuditLogListDto,
   CancelInvitationRequestDto,

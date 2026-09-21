@@ -10,6 +10,7 @@ import { useApplicationServices } from "@/application"
 import type {
   AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
+  AssignUserWorkspacesRequestDto,
   ReactivateMemberRequestDto,
   SendMemberPasswordResetRequestDto,
   SetMemberModuleAccessRequestDto,
@@ -133,6 +134,18 @@ export function useUserMutations(organizationId: string | null | undefined) {
     },
   })
 
+  const assignWorkspaces = useMutation({
+    mutationKey: ["administration", "users", "assign-workspaces"],
+    mutationFn: async (request: AssignUserWorkspacesRequestDto) => {
+      try {
+        return await administrationApplicationService.assignUserWorkspaces(request)
+      } catch (error) {
+        throw toAppError(error)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
   return {
     suspendUser,
     reactivateUser,
@@ -143,5 +156,6 @@ export function useUserMutations(organizationId: string | null | undefined) {
     updateIdentity,
     uploadAvatar,
     sendPasswordReset,
+    assignWorkspaces,
   }
 }

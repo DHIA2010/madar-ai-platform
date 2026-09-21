@@ -291,6 +291,15 @@ export interface CreateMemberDirectCommand {
   password: string
 }
 
+// Grants an already-existing organization member access to more workspaces (branches) --
+// distinct from CreateMemberDirectCommand, which always creates a brand-new user. userId must
+// already have at least one real membership in organizationId.
+export interface AssignUserWorkspacesCommand {
+  organizationId: string
+  userId: string
+  workspaceIds: string[]
+}
+
 export interface SwitchWorkspaceCommand {
   workspaceId: string
 }

@@ -314,6 +314,12 @@ class PostgresOrganizationRepository implements OrganizationRepository {
     if (input.status) {
       values.push(input.status)
       where.push(`status = $${values.length}`)
+    } else {
+      // No explicit filter means "every organization a caller would reasonably expect to see" --
+      // active and archived (the switcher's own archive/restore UI still manages those), never a
+      // soft-deleted one. Without this, a deleted organization kept showing up in the workspace
+      // switcher and the org list forever, looking exactly like the delete had silently failed.
+      where.push(`status != 'deleted'`)
     }
 
     const orderBy = (() => {

@@ -286,6 +286,134 @@ describe("Administration: member identity, admin password reset, direct add", ()
     )
   })
 
+  it("grants an existing member access to an additional workspace without touching their first one", async () => {
+    const owner = await registerVerifyLogin("assign-owner@madar.test", "Assign Org")
+    const firstWorkspaceId = owner.login.session.workspaceId
+
+    const memberRes = await fetch(`${baseUrl}/v1/organizations/${owner.organizationId}/members`, {
+      method: "POST",
+      headers: authHeaders(owner.login.session.accessToken),
+      body: JSON.stringify({
+        email: "assign-member@madar.test",
+        fullName: "Assign Member",
+        password: "AssignMemberPass123!",
+      }),
+    })
+    expect(memberRes.status).toBe(201)
+    const member = await memberRes.json()
+    const userId = member.user.id as string
+
+    const secondWorkspaceRes = await fetch(`${baseUrl}/v1/workspaces`, {
+      method: "POST",
+      headers: authHeaders(owner.login.session.accessToken),
+      body: JSON.stringify({ organizationId: owner.organizationId, name: "Second Branch" }),
+    })
+    expect(secondWorkspaceRes.status).toBe(201)
+    const secondWorkspace = await secondWorkspaceRes.json()
+
+    const assignRes = await fetch(
+      `${baseUrl}/v1/organizations/${owner.organizationId}/members/${userId}/workspaces`,
+      {
+        method: "POST",
+        headers: authHeaders(owner.login.session.accessToken),
+        body: JSON.stringify({ workspaceIds: [secondWorkspace.id] }),
+      }
+    )
+    expect(assignRes.status).toBe(200)
+    const assigned = await assignRes.json()
+    expect(assigned.memberships).toHaveLength(1)
+    expect(assigned.memberships[0].workspaceId).toBe(secondWorkspace.id)
+    expect(assigned.memberships[0].userId).toBe(userId)
+
+    const rows = await fetch(`${baseUrl}/v1/organizations/${owner.organizationId}/members`, {
+      headers: authHeaders(owner.login.session.accessToken),
+    })
+    const body = (await rows.json()) as {
+      members: Array<{ userId: string; workspaceId: string | null }>
+    }
+    const memberRows = body.members.filter((m) => m.userId === userId)
+    // Both the original membership (from direct-add) and the newly assigned one are present --
+    // assigning a second branch never removes the first.
+    expect(memberRows.map((m) => m.workspaceId).sort()).toEqual(
+      [firstWorkspaceId, secondWorkspace.id].sort()
+    )
+  })
+
+  it("is idempotent: re-assigning a workspace the user already belongs to does not error or duplicate", async () => {
+    const owner = await registerVerifyLogin("idem-owner@madar.test", "Idem Org")
+    const firstWorkspaceId = owner.login.session.workspaceId
+
+    const memberRes = await fetch(`${baseUrl}/v1/organizations/${owner.organizationId}/members`, {
+      method: "POST",
+      headers: authHeaders(owner.login.session.accessToken),
+      body: JSON.stringify({
+        email: "idem-member@madar.test",
+        fullName: "Idem Member",
+        password: "IdemMemberPass123!",
+      }),
+    })
+    const userId = (await memberRes.json()).user.id as string
+
+    const reassignRes = await fetch(
+      `${baseUrl}/v1/organizations/${owner.organizationId}/members/${userId}/workspaces`,
+      {
+        method: "POST",
+        headers: authHeaders(owner.login.session.accessToken),
+        body: JSON.stringify({ workspaceIds: [firstWorkspaceId] }),
+      }
+    )
+    expect(reassignRes.status).toBe(200)
+    const reassigned = await reassignRes.json()
+    // Already a member of this workspace -- silently skipped, not duplicated or errored.
+    expect(reassigned.memberships).toHaveLength(0)
+
+    const rows = await fetch(`${baseUrl}/v1/organizations/${owner.organizationId}/members`, {
+      headers: authHeaders(owner.login.session.accessToken),
+    })
+    const body = (await rows.json()) as { members: Array<{ userId: string }> }
+    expect(body.members.filter((m) => m.userId === userId)).toHaveLength(1)
+  })
+
+  it("rejects assigning workspaces to a user who is not already a member of this organization", async () => {
+    const owner = await registerVerifyLogin("stranger-owner@madar.test", "Stranger Org")
+    const stranger = await registerVerifyLogin("stranger-user@madar.test", "Stranger Other Org")
+
+    const assignRes = await fetch(
+      `${baseUrl}/v1/organizations/${owner.organizationId}/members/${stranger.login.user.id}/workspaces`,
+      {
+        method: "POST",
+        headers: authHeaders(owner.login.session.accessToken),
+        body: JSON.stringify({ workspaceIds: [owner.login.session.workspaceId] }),
+      }
+    )
+    expect(assignRes.status).toBe(404)
+  })
+
+  it("forbids a member without membership:write (and not owner/admin) from assigning workspaces", async () => {
+    const { owner, analyst } = await setupOwnerAndAnalyst()
+
+    const memberRes = await fetch(`${baseUrl}/v1/organizations/${owner.organizationId}/members`, {
+      method: "POST",
+      headers: authHeaders(owner.login.session.accessToken),
+      body: JSON.stringify({
+        email: "forbidden-target@madar.test",
+        fullName: "Forbidden Target",
+        password: "ForbiddenTargetPass123!",
+      }),
+    })
+    const targetUserId = (await memberRes.json()).user.id as string
+
+    const assignRes = await fetch(
+      `${baseUrl}/v1/organizations/${owner.organizationId}/members/${targetUserId}/workspaces`,
+      {
+        method: "POST",
+        headers: authHeaders(analyst.login.session.accessToken),
+        body: JSON.stringify({ workspaceIds: [owner.login.session.workspaceId] }),
+      }
+    )
+    expect(assignRes.status).toBe(403)
+  })
+
   it("rejects direct-add when the email is already registered", async () => {
     const owner = await registerVerifyLogin("dup-owner@madar.test", "Dup Org")
 

@@ -36,6 +36,7 @@ import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
+import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
 import { CustomersAggregationService } from "../../customers/service"
@@ -120,6 +121,7 @@ import {
   matchOrdersSchema,
   aggregateCampaignLinksSchema,
   captureTrackingEventSchema,
+  assignUserWorkspacesSchema,
   createMemberDirectSchema,
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
@@ -130,6 +132,7 @@ import {
   integrationRecordsQuerySchema,
   integrationSyncSchema,
   inviteOrganizationMemberSchema,
+  posSettingsUpdateSchema,
   saveConnectionSyncScheduleSchema,
   loginSchema,
   removeMemberSchema,
@@ -545,6 +548,9 @@ export function createIdentityApiServer(
   const zatcaDevicesService = container.infrastructure.database
     ? new ZatcaDevicesService(container.infrastructure.database)
     : null
+  const posSettingsService = container.infrastructure.database
+    ? new PosSettingsService(container.infrastructure.database)
+    : null
   const connectionSyncScheduleService =
     container.infrastructure.database && container.infrastructure.integrations
       ? new ConnectionSyncScheduleService(
@@ -558,7 +564,8 @@ export function createIdentityApiServer(
           container.infrastructure.database,
           posPaymentMethodsService,
           taxRatesService,
-          zatcaDevicesService
+          zatcaDevicesService,
+          posSettingsService
         )
       : null
   const posShiftsService =
@@ -1980,6 +1987,25 @@ export function createIdentityApiServer(
         )
       }
 
+      const memberWorkspacesMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/members\/([^/]+)\/workspaces$/
+      )
+      if (method === "POST" && memberWorkspacesMatch) {
+        const payload = assignUserWorkspacesSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await container.commands.assignUserWorkspaces(
+            actor,
+            {
+              organizationId: memberWorkspacesMatch[1],
+              userId: memberWorkspacesMatch[2],
+              workspaceIds: payload.workspaceIds,
+            },
+            context
+          )
+        )
+      }
+
       const organizationSessionsMatch = url.pathname.match(
         /^\/v1\/organizations\/([^/]+)\/sessions$/
       )
@@ -2630,6 +2656,34 @@ export function createIdentityApiServer(
               createdBy: actor.userId,
               device: payload,
             })
+          )
+        }
+      }
+
+      if (url.pathname === "/v1/pos/settings") {
+        if (!posSettingsService) {
+          return send(503, {
+            code: "POS_SETTINGS_UNAVAILABLE",
+            message: "Point-of-sale settings are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, await posSettingsService.get(actor.organizationId, actor.workspaceId))
+        }
+
+        if (method === "PUT") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = posSettingsUpdateSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await posSettingsService.update(
+              actor.organizationId,
+              actor.workspaceId,
+              actor.userId,
+              payload
+            )
           )
         }
       }

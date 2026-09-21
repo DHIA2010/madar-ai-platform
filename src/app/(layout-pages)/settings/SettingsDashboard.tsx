@@ -430,13 +430,16 @@ export default function SettingsDashboard() {
     setIsDeleting(true)
     try {
       await deleteOrganization(currentOrganization.id)
-      setIsDeleteOpen(false)
-      toast.success("تم حذف الحساب")
-      // The organization this session was working in no longer exists; a full reload lets the
-      // workspace provider resolve whatever context remains rather than leaving a dead one.
-      window.setTimeout(() => {
-        window.location.href = "/"
-      }, 1200)
+      // The organization this session was working in no longer exists. A full reload (not a
+      // client-side route change) lets the workspace provider resolve whatever context remains
+      // rather than leaving a dead one -- landing straight on /workspace/select instead of "/"
+      // matters: landing on "/" fires ProtectedRoute's own client-side redirect to
+      // /workspace/select a moment after this fresh page finishes hydrating, and that
+      // immediate cross-route-group redirect right after a hard load reliably crashed the app
+      // (a real "Rendered more hooks than during the previous render" error inside Next's own
+      // Router, confirmed live -- not a hooks bug in this app's own components). Going straight
+      // to the real destination avoids that redirect entirely.
+      window.location.href = ROUTES.workspaceSelect
     } catch {
       toast.error("تعذّر حذف الحساب. حاول مرة أخرى.")
       setIsDeleting(false)

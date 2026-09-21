@@ -1,5 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import { ROUTES } from "@/constants/routes"
 
 import type { Organization, Workspace } from "../types"
 import { WorkspaceSelectorContent } from "./workspace-selector-content"
@@ -8,11 +11,23 @@ const mockUseWorkspace = vi.fn()
 const mockUseWorkspaceSwitcher = vi.fn()
 const switchWorkspace = vi.fn()
 const createOrganization = vi.fn()
-const createWorkspace = vi.fn()
+const updateOrganization = vi.fn()
+const archiveWorkspace = vi.fn()
+const restoreWorkspace = vi.fn()
+const routerPush = vi.fn()
+const getUsers = vi.fn().mockResolvedValue([])
 
 vi.mock("../hooks", () => ({
   useWorkspace: () => mockUseWorkspace(),
   useWorkspaceSwitcher: () => mockUseWorkspaceSwitcher(),
+}))
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush, replace: vi.fn() }),
+}))
+
+vi.mock("@/application/context", () => ({
+  useApplicationServices: () => ({ administrationApplicationService: { getUsers } }),
 }))
 
 const organizations: Organization[] = [
@@ -118,78 +133,111 @@ function setupWorkspaceMocks(
     availableWorkspaces: workspaces,
     switchWorkspace,
     createOrganization,
-    createWorkspace,
+    updateOrganization,
+    archiveWorkspace,
+    restoreWorkspace,
     workspaceStatus: "ready",
   })
+}
+
+function renderWithQueryClient(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
 describe("WorkspaceSelectorContent", () => {
   beforeEach(() => {
     switchWorkspace.mockReset()
     createOrganization.mockReset()
-    createWorkspace.mockReset()
+    updateOrganization.mockReset()
+    archiveWorkspace.mockReset()
+    restoreWorkspace.mockReset()
+    routerPush.mockReset()
+    getUsers.mockReset().mockResolvedValue([])
     mockUseWorkspace.mockReset()
     mockUseWorkspaceSwitcher.mockReset()
     setupWorkspaceMocks()
   })
 
-  it("shows workspaces for the newly selected organization", () => {
-    render(<WorkspaceSelectorContent />)
+  it("shows every workspace across every organization by default", () => {
+    renderWithQueryClient(<WorkspaceSelectorContent />)
 
     expect(screen.getByText("Marketing Ops")).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Select organization Orbit Holdings" }))
+    expect(screen.getByText("Sales Hub")).toBeTruthy()
+    expect(screen.getByText("London Growth Lab")).toBeTruthy()
+  })
+
+  it("narrows to one organization's workspaces when it is selected", () => {
+    renderWithQueryClient(<WorkspaceSelectorContent />)
+
+    fireEvent.click(screen.getByText("Orbit Holdings"))
 
     expect(screen.getByText("London Growth Lab")).toBeTruthy()
     expect(screen.queryByText("Marketing Ops")).toBeNull()
-  })
-
-  it("filters organizations and workspaces from the shared search field", () => {
-    setupWorkspaceMocks({
-      currentOrganization: null,
-      currentWorkspace: null,
-    })
-
-    render(<WorkspaceSelectorContent />)
-
-    fireEvent.change(
-      screen.getByRole("searchbox", { name: "Search organizations and workspaces" }),
-      {
-        target: { value: "london" },
-      }
-    )
-
-    expect(screen.getByRole("button", { name: "Select organization Orbit Holdings" })).toBeTruthy()
-    expect(screen.queryByRole("button", { name: "Select organization Northstar Group" })).toBeNull()
-    expect(
-      screen.getByText("Choose an organization to view its available workspaces.")
-    ).toBeTruthy()
-
-    fireEvent.click(screen.getByRole("button", { name: "Select organization Orbit Holdings" }))
-
-    expect(screen.getByText("London Growth Lab")).toBeTruthy()
     expect(screen.queryByText("Sales Hub")).toBeNull()
   })
 
-  it("keeps keyboard selection active with arrow keys and Enter", async () => {
-    render(<WorkspaceSelectorContent />)
+  it("filters workspaces from the workspace search field", () => {
+    renderWithQueryClient(<WorkspaceSelectorContent />)
 
-    fireEvent.keyDown(
-      screen.getByRole("searchbox", { name: "Search organizations and workspaces" }),
-      {
-        key: "ArrowDown",
-      }
-    )
+    fireEvent.change(screen.getByRole("searchbox", { name: "البحث في مساحات العمل" }), {
+      target: { value: "sales" },
+    })
 
-    fireEvent.keyDown(
-      screen.getByRole("searchbox", { name: "Search organizations and workspaces" }),
-      {
-        key: "Enter",
-      }
-    )
+    expect(screen.getByText("Sales Hub")).toBeTruthy()
+    expect(screen.queryByText("Marketing Ops")).toBeNull()
+    expect(screen.queryByText("London Growth Lab")).toBeNull()
+  })
+
+  it("switches workspace when a card is clicked", () => {
+    renderWithQueryClient(<WorkspaceSelectorContent />)
+
+    fireEvent.click(screen.getByText("Sales Hub"))
 
     expect(switchWorkspace).toHaveBeenCalledWith({
       organizationId: "org-northstar",
       workspaceId: "ws-sales-hub",
     })
+  })
+
+  it("navigates to the real create-workspace page instead of showing an inline form", () => {
+    const onComplete = vi.fn()
+    renderWithQueryClient(<WorkspaceSelectorContent onComplete={onComplete} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "إنشاء مساحة عمل جديدة" }))
+
+    expect(routerPush).toHaveBeenCalledWith(`${ROUTES.settingsWorkspaces}?new=1`)
+    expect(onComplete).toHaveBeenCalled()
+  })
+
+  it("shows real member avatars only once a single organization is selected", async () => {
+    getUsers.mockResolvedValue([
+      {
+        id: "user-1",
+        fullName: "سارة أحمد",
+        email: "sara@example.com",
+        avatarUrl: null,
+        department: "",
+        departments: [],
+        roleId: "viewer",
+        customRoleId: null,
+        moduleAccessRevoked: false,
+        workspaces: ["Sales Hub"],
+        workspaceIds: ["ws-sales-hub"],
+        status: "active",
+        lastLogin: "",
+        teams: [],
+      },
+    ])
+
+    renderWithQueryClient(<WorkspaceSelectorContent />)
+
+    // "all organizations" view: no fetch yet, no member count shown.
+    expect(getUsers).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByText("Northstar Group"))
+
+    await waitFor(() => expect(getUsers).toHaveBeenCalledWith({ organizationId: "org-northstar" }))
+    expect(await screen.findByText("عضو واحد")).toBeTruthy()
   })
 })

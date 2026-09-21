@@ -116,7 +116,9 @@ class InMemoryOrganizationRepository implements OrganizationRepository {
       .filter((organization) =>
         input.ownerUserId ? organization.ownerUserId === input.ownerUserId : true
       )
-      .filter((organization) => (input.status ? organization.status === input.status : true))
+      .filter((organization) =>
+        input.status ? organization.status === input.status : organization.status !== "deleted"
+      )
 
     const sorted = rows.sort((left, right) => {
       const sort = input.sort ?? "createdAt:desc"

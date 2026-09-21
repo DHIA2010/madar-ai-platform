@@ -11,6 +11,7 @@ import {
 } from "../products/catalog-types"
 import type { TaxRatesService } from "../tax/tax-rates-service"
 import type { ZatcaDevicesService } from "../zatca/zatca-devices-service"
+import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "./pos-settings-service"
 import { submitZatcaReporting } from "../zatca/zatca-api-client"
 import type { ZatcaUblAddress } from "../zatca/zatca-ubl-invoice"
 import type { PosPaymentMethodsService } from "./payment-methods-service"
@@ -74,6 +75,20 @@ const INVOICE_ERRORS = {
       404,
       "business",
       "The selected customer was not found."
+    ),
+  belowCostSaleNotAllowed: (productName: string) =>
+    new IdentityError(
+      "POS_INVOICE_BELOW_COST_SALE_NOT_ALLOWED",
+      422,
+      "business",
+      `"${productName}" is priced below its cost, and selling below cost is turned off in POS settings.`
+    ),
+  outOfStockSaleNotAllowed: (productName: string) =>
+    new IdentityError(
+      "POS_INVOICE_OUT_OF_STOCK_SALE_NOT_ALLOWED",
+      409,
+      "business",
+      `"${productName}" does not have enough stock for this sale, and selling out-of-stock items is turned off in POS settings.`
     ),
   // Guards invoice immutability: an issued invoice can only ever move completed -> cancelled or
   // completed -> returned, exactly once. Re-finalizing an invoice that already left "completed"
@@ -527,7 +542,12 @@ export class PosInvoicesService {
     // Optional -- ZATCA Phase 2 signing only actually happens once an organization has onboarded
     // a production device (see zatca-devices-service.ts); every sale still works exactly as
     // before when this is null (memory-mode/no infra) or when no production device exists yet.
-    private readonly zatcaDevicesService: ZatcaDevicesService | null = null
+    private readonly zatcaDevicesService: ZatcaDevicesService | null = null,
+    // Optional -- when null (memory-mode/no infra, or an existing caller that hasn't been
+    // updated), create() falls back to DEFAULT_POS_SETTINGS, which is every one of this
+    // platform's original unconditional behaviors, so nothing changes for a caller that never
+    // passes this.
+    private readonly settingsService: PosSettingsService | null = null
   ) {}
 
   async list(organizationId: string, filter: InvoiceListFilter): Promise<InvoiceView[]> {
@@ -686,6 +706,9 @@ export class PosInvoicesService {
     }
 
     const seller = await this.loadSellerSnapshot(input.organizationId)
+    const settings = this.settingsService
+      ? await this.settingsService.get(input.organizationId, input.workspaceId)
+      : DEFAULT_POS_SETTINGS
 
     // The organization's own configured default rate (Settings -> الضرائب), not the hardcoded
     // 15% VAT_RATE constant -- see TaxRatesService.getDefaultRatePercent for the 15% fallback
@@ -715,14 +738,21 @@ export class PosInvoicesService {
     // gross-priced line still resolves to its real net amount even when VAT itself is off (rate 0
     // makes the gross/net split a no-op, but the lookup itself doesn't depend on that flag).
     const priceIncludesTaxByProduct = new Map<string, boolean>()
+    // Only populated (and only checked below) when the organization hasn't turned "السماح بالبيع
+    // بأقل من التكلفة" on -- reading cost_price for every sale would be wasted work once it's
+    // allowed, which is also the platform's original, unconditional default.
+    const costPriceByProduct = new Map<string, number>()
+    const nameByProduct = new Map<string, string>()
     if (nativeProductIds.length > 0) {
       const placeholders = nativeProductIds.map((_, index) => `$${index + 2}`).join(", ")
       const rows = await this.database.query<{
         id: string
+        name: string
         tax_rate_id: string | null
         price_includes_tax: boolean
+        cost_price: string | number | null
       }>(
-        `SELECT id, tax_rate_id, price_includes_tax FROM products
+        `SELECT id, name, tax_rate_id, price_includes_tax, cost_price FROM products
           WHERE organization_id = $1 AND id IN (${placeholders})`,
         [input.organizationId, ...nativeProductIds]
       )
@@ -730,6 +760,19 @@ export class PosInvoicesService {
         if (seller.autoApplyTax && row.tax_rate_id)
           overrideRateIdByProduct.set(row.id, row.tax_rate_id)
         if (row.price_includes_tax) priceIncludesTaxByProduct.set(row.id, true)
+        nameByProduct.set(row.id, row.name)
+        if (row.cost_price !== null) costPriceByProduct.set(row.id, Number(row.cost_price))
+      }
+    }
+
+    if (!settings.allowBelowCostSale) {
+      for (const item of input.items) {
+        if (!item.productId) continue
+        const costPrice = costPriceByProduct.get(item.productId)
+        if (costPrice === undefined) continue
+        if (item.unitPrice < costPrice) {
+          throw INVOICE_ERRORS.belowCostSaleNotAllowed(nameByProduct.get(item.productId) ?? "")
+        }
       }
     }
     const overrideRatePercentById =
@@ -873,6 +916,9 @@ export class PosInvoicesService {
         quantity: item.quantity,
       }))
     )
+    if (!settings.allowOutOfStockSale) {
+      await this.assertStockAvailability(stockConsumption, nameByProduct)
+    }
 
     let invoiceNumber = ""
     await this.database.withTransaction(async () => {
@@ -1782,6 +1828,53 @@ export class PosInvoicesService {
     }
 
     return { products, variants }
+  }
+
+  // Only called when the organization has turned "السماح بالبيع عند نفاد المخزون" off --
+  // migration 079's platform-wide default is still to allow it unconditionally (never call this
+  // and stock_quantity/stock is free to go negative, exactly as before this setting existed).
+  // Reads current stock fresh right before the transaction rather than trusting anything cached
+  // earlier in create(), so a concurrent sale that already depleted stock is still caught.
+  private async assertStockAvailability(
+    consumption: { products: Map<string, number>; variants: Map<string, number> },
+    nameByProduct: Map<string, string>
+  ): Promise<void> {
+    if (consumption.products.size > 0) {
+      const ids = [...consumption.products.keys()]
+      const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ")
+      const rows = await this.database.query<{
+        id: string
+        stock_quantity: string | number | null
+        name: string
+      }>(`SELECT id, stock_quantity, name FROM products WHERE id IN (${placeholders})`, ids)
+      const stockById = new Map(rows.rows.map((row) => [row.id, row]))
+      for (const [productId, required] of consumption.products) {
+        const row = stockById.get(productId)
+        if (!row || row.stock_quantity === null) continue
+        if (Number(row.stock_quantity) < required) {
+          throw INVOICE_ERRORS.outOfStockSaleNotAllowed(
+            nameByProduct.get(productId) ?? row.name ?? ""
+          )
+        }
+      }
+    }
+
+    if (consumption.variants.size > 0) {
+      const ids = [...consumption.variants.keys()]
+      const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ")
+      const rows = await this.database.query<{ id: string; stock: string | number | null }>(
+        `SELECT id, stock FROM product_variants WHERE id IN (${placeholders})`,
+        ids
+      )
+      const stockById = new Map(rows.rows.map((row) => [row.id, row.stock]))
+      for (const [variantId, required] of consumption.variants) {
+        const stock = stockById.get(variantId)
+        if (stock === null || stock === undefined) continue
+        if (Number(stock) < required) {
+          throw INVOICE_ERRORS.outOfStockSaleNotAllowed("")
+        }
+      }
+    }
   }
 
   // Applies a computeStockConsumption() result -- sign -1 for a sale (subtracts), +1 for a return

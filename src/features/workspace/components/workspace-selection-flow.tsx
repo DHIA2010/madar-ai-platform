@@ -12,11 +12,14 @@ export function WorkspaceSelectionFlow() {
   const router = useRouter()
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-10">
+    <div
+      dir="rtl"
+      className="mx-auto flex min-h-screen w-full max-w-3xl items-center justify-center px-4 py-10"
+    >
       <AppCard
         className="w-full"
-        title="Select your workspace"
-        subtitle="Choose the organization and workspace context required to access the application shell."
+        title="اختر مساحة العمل"
+        subtitle="حدد المنظمة ومساحة العمل التي تريد الدخول إليها."
       >
         <WorkspaceSelectorContent onComplete={() => router.replace(ROUTES.dashboard)} />
       </AppCard>

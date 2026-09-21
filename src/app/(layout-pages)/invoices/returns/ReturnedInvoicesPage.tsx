@@ -168,7 +168,7 @@ export default function ReturnedInvoicesPage() {
                   <AppSelectValue />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  <AppSelectItem value="all">جميع الفروع</AppSelectItem>
+                  <AppSelectItem value="all">جميع مساحات العمل</AppSelectItem>
                   {availableWorkspaces.map((workspace) => (
                     <AppSelectItem key={workspace.id} value={workspace.id}>
                       {workspace.name}
@@ -204,7 +204,7 @@ export default function ReturnedInvoicesPage() {
                       { key: "returnNumber", label: "رقم الإشعار", align: "text-right" },
                       { key: "invoiceNumber", label: "رقم الفاتورة الأصلية" },
                       { key: "date", label: "التاريخ والوقت" },
-                      { key: "branch", label: "الفرع" },
+                      { key: "workspace", label: "مساحة العمل" },
                       { key: "items", label: "عدد الأصناف" },
                       { key: "quantity", label: "الكمية المرتجعة" },
                       { key: "paymentMethod", label: "طريقة الدفع" },
@@ -295,7 +295,7 @@ export default function ReturnedInvoicesPage() {
               <dd className={cn("text-right font-semibold", HEADING)}>
                 {formatDateTime(selectedReturn.createdAt)}
               </dd>
-              <dt className={MUTED}>الفرع</dt>
+              <dt className={MUTED}>مساحة العمل</dt>
               <dd className={cn("text-right font-semibold", HEADING)}>
                 {workspaceName(selectedReturn.workspaceId)}
               </dd>
@@ -379,7 +379,11 @@ export default function ReturnedInvoicesPage() {
           body > *:not(#return-print-target) { display: none !important; }
           #return-print-target { width: 72mm; }
         }
-        @page { size: 80mm auto; margin: 0; }
+        /* "auto" for the height half of this doesn't reliably stay one page in Chrome's real
+           print dialog (confirmed live against CashierPage's own copy of this rule) -- an
+           explicit, generously large height is the established workaround. See
+           CashierPage.tsx's matching rule for the full explanation. */
+        @page { size: 80mm 2000mm; margin: 0; }
       `}</style>
     </div>
   )

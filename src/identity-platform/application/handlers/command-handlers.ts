@@ -10,6 +10,7 @@ import type {
   ArchiveWorkspaceCommand,
   AssignMemberCustomRoleCommand,
   AssignMemberRoleCommand,
+  AssignUserWorkspacesCommand,
   CancelInvitationCommand,
   ChangeEmailCommand,
   ChangePasswordCommand,
@@ -2647,6 +2648,94 @@ export class IdentityCommandHandlers {
       user: this.toProfileDto(user.toState()),
       memberships: membershipEntities.map((entity) => entity.toState()),
     }
+  }
+
+  // Grants an EXISTING organization member access to additional workspaces -- the workspace
+  // creation/edit form's user picker (Settings -> إدارة مساحات العمل) calls this once per save,
+  // for whichever users were checked. Unlike createMemberDirect, this never creates a user --
+  // the target must already be a real member of this organization (any one of its existing
+  // workspaces), otherwise this would be a backdoor to onboard a stranger with no invite/direct-
+  // add audit trail of its own.
+  //
+  // Idempotent by design: a workspaceId the user is already a member of is silently skipped
+  // rather than erroring, since "assign this branch's team" is meant to be safe to re-run after
+  // editing who's on the list, and a user already having access to a workspace they were about
+  // to be re-granted access to isn't a real conflict -- see command-handlers.test.ts for the
+  // exact scenario this was written for (assigning someone to a second branch must never touch
+  // their first branch's membership).
+  async assignUserWorkspaces(
+    actor: AuthenticatedActor,
+    command: AssignUserWorkspacesCommand,
+    context: RequestContext
+  ) {
+    const membership = await this.requireOrganizationMembership(
+      actor.userId,
+      command.organizationId
+    )
+    if (
+      !(
+        hasPermission([membership.role], "membership:write") ||
+        ["owner", "admin"].includes(membership.role)
+      )
+    ) {
+      throw ERRORS.forbidden()
+    }
+
+    const targetMembership = await this.deps.repositories.memberships.findByUserAndOrganization(
+      command.userId,
+      command.organizationId
+    )
+    if (!targetMembership) {
+      throw ERRORS.notFound("User")
+    }
+
+    const requestedWorkspaceIds = [...new Set(command.workspaceIds)]
+    for (const workspaceId of requestedWorkspaceIds) {
+      const workspaceState = await this.deps.repositories.workspaces.findById(workspaceId)
+      if (!workspaceState || workspaceState.organizationId !== command.organizationId) {
+        throw ERRORS.notFound("Workspace")
+      }
+    }
+
+    const timestamp = this.now
+    const createdMemberships = []
+    for (const workspaceId of requestedWorkspaceIds) {
+      const existing = await this.deps.repositories.memberships.findByUserAndWorkspace(
+        command.userId,
+        workspaceId
+      )
+      if (existing) {
+        continue
+      }
+      const membershipEntity = MembershipEntity.create({
+        id: this.deps.uuid.generate(),
+        organizationId: command.organizationId,
+        workspaceId,
+        userId: command.userId,
+        role: "viewer",
+        status: "active",
+        invitedByUserId: actor.userId,
+        acceptedAt: timestamp,
+        now: timestamp,
+      })
+      await this.deps.repositories.memberships.save(membershipEntity.toState())
+      createdMemberships.push(membershipEntity.toState())
+    }
+
+    if (createdMemberships.length > 0) {
+      await this.audit(
+        "membership.workspaces_assigned",
+        context,
+        actor.userId,
+        command.organizationId,
+        requestedWorkspaceIds[0],
+        "membership",
+        command.userId,
+        { userId: command.userId, workspaceIds: createdMemberships.map((m) => m.workspaceId) }
+      )
+    }
+
+    return { memberships: createdMemberships }
   }
 
   async switchWorkspace(

@@ -45,7 +45,12 @@ export interface AdministrationUserDto {
   roleId: string
   customRoleId: string | null
   moduleAccessRevoked: boolean
+  // Display names, for the Users screen's own workspace column/filter -- names are not a stable
+  // identity (two workspaces can share a name), so anything that needs to test "is this member
+  // in workspace X" (a picker's own pre-checked state, an access-grant check...) must use
+  // workspaceIds below instead, never match against this array.
   workspaces: string[]
+  workspaceIds: string[]
   status: AdministrationUserStatus
   lastLogin: string
   teams: string[]
@@ -304,6 +309,15 @@ export interface CreateMemberDirectRequestDto {
   password: string
 }
 
+// Grants an EXISTING organization member access to more workspaces -- distinct from
+// CreateMemberDirectRequestDto, which always creates a brand-new user. Used by the branch
+// (Settings -> إدارة مساحات العمل) create/edit form's user picker.
+export interface AssignUserWorkspacesRequestDto {
+  organizationId: string
+  userId: string
+  workspaceIds: string[]
+}
+
 export interface AdministrationGateway {
   getAuditLogs(request: GetAuditLogsRequestDto): Promise<AuditLogListDto>
   getUsers(request: GetUsersRequestDto): Promise<AdministrationUserDto[]>
@@ -317,6 +331,7 @@ export interface AdministrationGateway {
   uploadMemberAvatar(request: UploadMemberAvatarRequestDto): Promise<{ avatarUrl: string }>
   sendMemberPasswordReset(request: SendMemberPasswordResetRequestDto): Promise<void>
   createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }>
+  assignUserWorkspaces(request: AssignUserWorkspacesRequestDto): Promise<void>
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]>
   sendInvitation(request: SendInvitationRequestDto): Promise<AdministrationInvitationDto>
   cancelInvitation(request: CancelInvitationRequestDto): Promise<void>

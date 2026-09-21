@@ -1,6 +1,6 @@
 import type { AuthenticatedActor } from "../dto/identity-dtos"
 import type { ListAuditLogsQuery, ListInvitationsQuery, ListOrganizationsQuery } from "../queries"
-import type { MembershipState } from "../../domain/entities"
+import type { MembershipState, WorkspaceState } from "../../domain/entities"
 import type {
   CustomRoleListItem,
   CustomRoleRepository,
@@ -113,7 +113,26 @@ export class IdentityQueryHandlers {
           : null,
       }))
     )
-    return items.filter((entry) => Boolean(entry.workspace))
+    const withWorkspace = items.filter(
+      (entry): entry is { role: (typeof items)[number]["role"]; workspace: WorkspaceState } =>
+        Boolean(entry.workspace)
+    )
+    if (withWorkspace.length === 0) return []
+
+    // A workspace row surviving on its own tells nothing about its organization -- deleting an
+    // organization (Settings -> "حذف الحساب") never touches its workspaces, so without this check
+    // every one of them kept appearing here forever, looking exactly like the delete had done
+    // nothing. organizations.list() with no explicit status already excludes "deleted" (kept
+    // "archived", which legitimately stays visible) -- reused here rather than re-deriving it.
+    const organizationIds = [
+      ...new Set(withWorkspace.map((entry) => entry.workspace.organizationId)),
+    ]
+    const organizations = await this.repositories.organizations.list({ ids: organizationIds })
+    const nonDeletedOrganizationIds = new Set(organizations.map((organization) => organization.id))
+
+    return withWorkspace.filter((entry) =>
+      nonDeletedOrganizationIds.has(entry.workspace.organizationId)
+    )
   }
 
   async getWorkspace(actor: AuthenticatedActor, workspaceId: string) {

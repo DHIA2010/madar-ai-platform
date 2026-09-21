@@ -84,6 +84,12 @@ import {
 } from "@/features/products/services/product-list.service"
 import { customerListService } from "@/features/customers/services/customer-list.service"
 import type { CustomerRecord } from "@/features/customers/types"
+import {
+  posSettingsService,
+  DEFAULT_POS_SETTINGS,
+  type PosSettings,
+} from "@/features/pos/services/pos-settings.service"
+import { openCashDrawerIfPaired } from "@/features/pos/services/pos-hardware"
 
 import { ThermalInvoiceReceipt } from "./ThermalInvoiceReceipt"
 
@@ -118,6 +124,32 @@ const MUTED = "text-[#5b6b85]"
 const FIELD_CLASS =
   "h-10 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 
+// A short generated tone (Web Audio API) rather than an external asset file -- there is no real
+// "beep.mp3" anywhere in this app to reuse, and generating one is simpler and lighter than
+// adding a binary asset for a single short sound.
+function playScanBeep() {
+  if (typeof window === "undefined") return
+  try {
+    const AudioContextCtor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) return
+    const context = new AudioContextCtor()
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    oscillator.type = "square"
+    oscillator.frequency.value = 1800
+    gain.gain.value = 0.08
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start()
+    oscillator.stop(context.currentTime + 0.08)
+    oscillator.onended = () => void context.close()
+  } catch {
+    // Best-effort only -- a failed beep must never interrupt a real sale.
+  }
+}
+
 const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -137,6 +169,12 @@ const PAYMENT_KIND_ICON: Record<PaymentKind, typeof Wallet> = {
   credit: UserRound,
   prepaid: PiggyBank,
 }
+
+// Per-browser/till, not a real backend record -- "remember" here means "what this specific
+// till's browser last used," which is what Settings -> الكاشير -> "الاحتفاظ بآخر وسيلة دفع"
+// actually promises (a shared, cross-device "last payment method" isn't a real concept the
+// backend tracks anywhere).
+const LAST_PAYMENT_METHOD_STORAGE_KEY = "pos-last-payment-method"
 
 const TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
   hour: "numeric",
@@ -309,13 +347,23 @@ function CartLineActionsMenu({
   onAddDiscount,
   onEditPrice,
   compact = false,
+  // Both default true so every existing call site keeps working unchanged -- these only go
+  // false when Settings -> الكاشير has turned "تطبيق الخصومات" / "السماح بتعديل السعر يدوياً"
+  // off, matching the platform's original unconditional behavior otherwise.
+  showDiscountOption = true,
+  showPriceEditOption = true,
 }: {
   hasDiscount: boolean
   onAddDiscount: () => void
   onEditPrice: () => void
   compact?: boolean
+  showDiscountOption?: boolean
+  showPriceEditOption?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  if (!showDiscountOption && !showPriceEditOption) {
+    return null
+  }
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -334,34 +382,38 @@ function CartLineActionsMenu({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-48 gap-1 p-1.5 [direction:rtl]">
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false)
-            onAddDiscount()
-          }}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold hover:bg-[#f4f7fc]",
-            HEADING
-          )}
-        >
-          <Percent className="size-4 text-[#5b6b85]" />
-          إضافة خصم على الصنف
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false)
-            onEditPrice()
-          }}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold hover:bg-[#f4f7fc]",
-            HEADING
-          )}
-        >
-          <Pencil className="size-4 text-[#5b6b85]" />
-          تعديل سعر البيع
-        </button>
+        {showDiscountOption ? (
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onAddDiscount()
+            }}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold hover:bg-[#f4f7fc]",
+              HEADING
+            )}
+          >
+            <Percent className="size-4 text-[#5b6b85]" />
+            إضافة خصم على الصنف
+          </button>
+        ) : null}
+        {showPriceEditOption ? (
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onEditPrice()
+            }}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold hover:bg-[#f4f7fc]",
+              HEADING
+            )}
+          >
+            <Pencil className="size-4 text-[#5b6b85]" />
+            تعديل سعر البيع
+          </button>
+        ) : null}
       </PopoverContent>
     </Popover>
   )
@@ -382,8 +434,7 @@ function readStoredCartPreviewOpen(): boolean {
 
 export default function CashierPage() {
   const { currentUser } = useAuth()
-  const { currentOrganization, currentWorkspace, availableWorkspaces, switchWorkspace } =
-    useWorkspace()
+  const { currentOrganization, currentWorkspace } = useWorkspace()
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -456,6 +507,18 @@ export default function CashierPage() {
     },
     [lineTaxRate]
   )
+
+  // Real, persisted POS behavior settings (Settings -> الكاشير) -- see pos-settings-service.ts
+  // on the backend for the exact defaults, every one of which matches this screen's own
+  // hardcoded behavior before this settings page existed, so a workspace that never opens it
+  // sees no change here either.
+  const [posSettings, setPosSettings] = useState<PosSettings>(DEFAULT_POS_SETTINGS)
+  useEffect(() => {
+    posSettingsService
+      .get()
+      .then(setPosSettings)
+      .catch(() => setPosSettings(DEFAULT_POS_SETTINGS))
+  }, [])
 
   // --- Real shift status ---------------------------------------------------------------------
 
@@ -574,6 +637,25 @@ export default function CashierPage() {
       // error over (a private window, blocked site data, etc.).
     }
   }, [])
+
+  // Settings -> الكاشير -> "زر عرض الشبكة" / "زر عرض القائمة" -- when one of the two view
+  // buttons is turned off, force the OTHER view instead of leaving the cashier stuck on a view
+  // whose own switch-back button no longer exists. Both off is a real, if unlikely,
+  // configuration -- there's simply no button to switch either way then, so whichever view is
+  // already active just stays.
+  useEffect(() => {
+    // The `&& posSettings.show*View` guard on the DESTINATION view is what matters here -- with
+    // both off, switching away from whichever view is active would just flip it back next
+    // render (its own condition would then fire), an infinite loop React actually throws on
+    // ("Maximum update depth exceeded"), confirmed live. Only ever switch toward a view that's
+    // still actually enabled.
+    if (!posSettings.showListView && isCartPreviewOpen && posSettings.showGridView) {
+      setIsCartPreviewOpen(false)
+    } else if (!posSettings.showGridView && !isCartPreviewOpen && posSettings.showListView) {
+      setIsCartPreviewOpen(true)
+    }
+  }, [posSettings.showGridView, posSettings.showListView, isCartPreviewOpen, setIsCartPreviewOpen])
+
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Picking a category is a browsing action -- it only makes sense against the products board, so
@@ -611,6 +693,11 @@ export default function CashierPage() {
   // scanned code sitting in the search field as a name/SKU filter.
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return
+    // This exact-SKU-on-Enter fast path is what a real barcode gun's input looks like -- typing
+    // a full SKU by hand and pressing Enter is indistinguishable from it, so "تفعيل قارئ
+    // الباركود" off narrows to just this shortcut rather than the search box itself (which stays
+    // usable for manual lookups either way via the suggestion dropdown below).
+    if (!posSettings.enableBarcodeScanner) return
     const query = search.trim()
     if (!query) return
 
@@ -618,6 +705,7 @@ export default function CashierPage() {
     if (!match) return
 
     event.preventDefault()
+    if (posSettings.playScanSound) playScanBeep()
     // A variable product's own SKU is its PARENT's -- each real combination has its own SKU the
     // aggregated product list here doesn't carry, so an exact match on the parent can never mean
     // "this one specific combination" was scanned. Ask which one, same as clicking its tile would.
@@ -1011,8 +1099,26 @@ export default function CashierPage() {
             kind: method.kind,
           }))
         )
+
+        // Settings -> الكاشير -> "الاحتفاظ بآخر وسيلة دفع" / "إظهار شاشة الدفع السريع" -- both
+        // land here as "pre-fill one method with the full total the moment the dialog opens,"
+        // just from a different source for which method: the last one this browser actually
+        // used (localStorage, per-till, not a real backend record), or simply the first enabled
+        // one when there's no real "last" to remember yet.
+        if (posSettings.rememberLastPaymentMethod) {
+          const lastCode = window.localStorage.getItem(LAST_PAYMENT_METHOD_STORAGE_KEY)
+          const remembered = lastCode ? enabled.find((method) => method.code === lastCode) : null
+          if (remembered) {
+            setPaymentAmounts({ [remembered.code]: total.toFixed(2) })
+            return
+          }
+        }
+        if (posSettings.showQuickPaymentScreen && enabled.length > 0) {
+          setPaymentAmounts({ [enabled[0].code]: total.toFixed(2) })
+        }
       })
       .catch(() => setPaymentMethods([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheckoutOpen])
 
   const discount = useMemo(() => {
@@ -1152,10 +1258,22 @@ export default function CashierPage() {
   const checkoutBlocked =
     !paymentSettled || needsCustomerForDeferred || needsCustomerForPrepaid || insufficientWallet
 
+  // Settings -> الكاشير -> "السماح بأكثر من وسيلة دفع" -- on by default (the platform's
+  // original, unconditional split-payment behavior). Off means typing into one method's field
+  // clears every other one instead of adding to it, so the total can only ever come from a
+  // single method at a time.
   const setPaymentAmount = (code: string, value: string) =>
-    setPaymentAmounts((current) => ({ ...current, [code]: value }))
+    setPaymentAmounts((current) =>
+      posSettings.allowSplitPayment ? { ...current, [code]: value } : { [code]: value }
+    )
 
-  const completeCheckout = async () => {
+  // Settings -> الكاشير -> "تأكيد عملية البيع" -- off by default (the platform's original,
+  // unconditional behavior: straight from the checkout button to the print preview). When on,
+  // completeCheckout() stops here and opens this confirmation instead of calling
+  // performCheckout() directly; the dialog's own confirm button is what actually calls it.
+  const [isConfirmSaleOpen, setIsConfirmSaleOpen] = useState(false)
+
+  const completeCheckout = () => {
     // The checkout button itself is only ever shown when myOpenShift exists (see the cart
     // section below) -- this is a second, defensive check against calling this directly.
     if (!myOpenShift) {
@@ -1182,6 +1300,16 @@ export default function CashierPage() {
       toast.error("رصيد محفظة العميل أقل من المبلغ المطلوب خصمه.")
       return
     }
+
+    if (posSettings.confirmSale) {
+      setIsConfirmSaleOpen(true)
+      return
+    }
+    void performCheckout()
+  }
+
+  const performCheckout = async () => {
+    setIsConfirmSaleOpen(false)
     setCheckingOut(true)
     try {
       const invoice: Invoice = await posInvoicesService.create({
@@ -1211,6 +1339,15 @@ export default function CashierPage() {
         })),
       })
       toast.success(`تمت العملية بنجاح — فاتورة ${invoice.invoiceNumber}`)
+      if (posSettings.rememberLastPaymentMethod) {
+        const usedCode = nonCashEntries[0]?.code ?? cashEntries[0]?.code
+        if (usedCode) window.localStorage.setItem(LAST_PAYMENT_METHOD_STORAGE_KEY, usedCode)
+      }
+      // Fire-and-forget -- silently a no-op when unsupported or nothing was ever paired via
+      // Settings -> الكاشير -> اختبار الطباعة (see pos-hardware.ts), never blocks the sale.
+      if (posSettings.autoOpenCashDrawer) {
+        void openCashDrawerIfPaired()
+      }
       clearCart()
       setCustomerName("")
       setCustomerPhone("")
@@ -1233,12 +1370,17 @@ export default function CashierPage() {
         : null
       setSuccessQrDataUrl(qrDataUrl)
       setSuccessInvoice(invoice)
-      window.setTimeout(() => {
-        window.print()
-        // window.print() blocks until the print dialog closes, so this runs right as the cashier
-        // lands back on the POS screen -- ready for the next barcode scan with no click needed.
+      if (posSettings.autoPrintInvoice) {
+        window.setTimeout(() => {
+          window.print()
+          // window.print() blocks until the print dialog closes, so this runs right as the
+          // cashier lands back on the POS screen -- ready for the next barcode scan with no
+          // click needed.
+          searchInputRef.current?.focus()
+        }, 150)
+      } else {
         searchInputRef.current?.focus()
-      }, 150)
+      }
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
       toast.error(status === 403 ? "لا تملك صلاحية إتمام البيع." : "تعذر إتمام العملية.", {
@@ -1649,28 +1791,6 @@ export default function CashierPage() {
           </button>
         )}
 
-        <div className="w-[170px]">
-          <AppSelect
-            value={currentWorkspace?.id ?? ""}
-            onValueChange={(workspaceId) => {
-              if (currentOrganization)
-                void switchWorkspace({ organizationId: currentOrganization.id, workspaceId })
-            }}
-          >
-            <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-              <Store className="size-3.5 text-[#8098b4]" />
-              <AppSelectValue />
-            </AppSelectTrigger>
-            <AppSelectContent>
-              {availableWorkspaces.map((workspace) => (
-                <AppSelectItem key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </AppSelectItem>
-              ))}
-            </AppSelectContent>
-          </AppSelect>
-        </div>
-
         <div className="mr-auto flex items-center gap-2">
           <Button
             className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1d4ed8]"
@@ -1695,42 +1815,51 @@ export default function CashierPage() {
           height as this row -- itself pinned to lg:flex-1 min-h-0 within the fixed-height wrapper
           above -- so each column can scroll its own overflow independently instead of the page
           growing with however many products or cart lines there are. */}
-      <div className="grid min-h-0 gap-3 lg:flex-1 lg:grid-cols-[200px_minmax(0,1fr)_400px]">
-        <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e8edf3] bg-white p-3">
-          <div className="mb-2 flex shrink-0 items-center gap-1.5 px-1">
-            <Grid2x2 className="size-4 text-[#8098b4]" />
-            <span className={cn("text-[12.5px] font-bold", HEADING)}>الفئات</span>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => selectCategory("all")}
-              className={cn(
-                "rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold",
-                selectedCategory === "all"
-                  ? "bg-[#eff6ff] text-[#2563eb]"
-                  : "text-[#5b6b85] hover:bg-[#f7faff]"
-              )}
-            >
-              الكل
-            </button>
-            {categories.map((category) => (
+      <div
+        className={cn(
+          "grid min-h-0 gap-3 lg:flex-1",
+          posSettings.showCategoryPanel
+            ? "lg:grid-cols-[200px_minmax(0,1fr)_400px]"
+            : "lg:grid-cols-[minmax(0,1fr)_400px]"
+        )}
+      >
+        {posSettings.showCategoryPanel ? (
+          <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e8edf3] bg-white p-3">
+            <div className="mb-2 flex shrink-0 items-center gap-1.5 px-1">
+              <Grid2x2 className="size-4 text-[#8098b4]" />
+              <span className={cn("text-[12.5px] font-bold", HEADING)}>الفئات</span>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
               <button
-                key={category}
                 type="button"
-                onClick={() => selectCategory(category)}
+                onClick={() => selectCategory("all")}
                 className={cn(
                   "rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold",
-                  selectedCategory === category
+                  selectedCategory === "all"
                     ? "bg-[#eff6ff] text-[#2563eb]"
                     : "text-[#5b6b85] hover:bg-[#f7faff]"
                 )}
               >
-                {category}
+                الكل
               </button>
-            ))}
-          </div>
-        </section>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => selectCategory(category)}
+                  className={cn(
+                    "rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold",
+                    selectedCategory === category
+                      ? "bg-[#eff6ff] text-[#2563eb]"
+                      : "text-[#5b6b85] hover:bg-[#f7faff]"
+                  )}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="flex h-full min-h-0 flex-col gap-3">
           <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-[#e8edf3] bg-white p-2.5">
@@ -1792,32 +1921,36 @@ export default function CashierPage() {
                 </div>
               ) : null}
             </div>
-            <button
-              type="button"
-              aria-label="عرض المنتجات"
-              onClick={() => setIsCartPreviewOpen(false)}
-              className={cn(
-                "flex size-10 items-center justify-center rounded-[10px] border",
-                !isCartPreviewOpen
-                  ? "border-[#2563eb] bg-[#eff6ff] text-[#2563eb]"
-                  : "border-[#e8edf3] text-[#5b6b85]"
-              )}
-            >
-              <Grid2x2 className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="عرض عناصر السلة"
-              onClick={() => setIsCartPreviewOpen(true)}
-              className={cn(
-                "flex size-10 items-center justify-center rounded-[10px] border",
-                isCartPreviewOpen
-                  ? "border-[#2563eb] bg-[#eff6ff] text-[#2563eb]"
-                  : "border-[#e8edf3] text-[#5b6b85]"
-              )}
-            >
-              <List className="size-4" />
-            </button>
+            {posSettings.showGridView ? (
+              <button
+                type="button"
+                aria-label="عرض المنتجات"
+                onClick={() => setIsCartPreviewOpen(false)}
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-[10px] border",
+                  !isCartPreviewOpen
+                    ? "border-[#2563eb] bg-[#eff6ff] text-[#2563eb]"
+                    : "border-[#e8edf3] text-[#5b6b85]"
+                )}
+              >
+                <Grid2x2 className="size-4" />
+              </button>
+            ) : null}
+            {posSettings.showListView ? (
+              <button
+                type="button"
+                aria-label="عرض عناصر السلة"
+                onClick={() => setIsCartPreviewOpen(true)}
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-[10px] border",
+                  isCartPreviewOpen
+                    ? "border-[#2563eb] bg-[#eff6ff] text-[#2563eb]"
+                    : "border-[#e8edf3] text-[#5b6b85]"
+                )}
+              >
+                <List className="size-4" />
+              </button>
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1904,6 +2037,8 @@ export default function CashierPage() {
                         hasDiscount={resolveLineDiscount(line) > 0}
                         onAddDiscount={() => openLineDiscountDialog(line)}
                         onEditPrice={() => openPriceEditDialog(line)}
+                        showDiscountOption={posSettings.applyDiscounts}
+                        showPriceEditOption={posSettings.allowManualPriceEdit}
                       />
                     </div>
                   ))}
@@ -1929,7 +2064,17 @@ export default function CashierPage() {
                 ) : null}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              <div
+                className={cn(
+                  "grid",
+                  // Settings -> الكاشير -> "استخدام الوضع المبسط": a genuinely denser grid
+                  // (more columns, tighter gaps/padding, no SKU line) so more products fit on
+                  // screen with less scrolling -- not just a cosmetic relabel of the same layout.
+                  posSettings.useCompactMode
+                    ? "grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-6"
+                    : "grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
+                )}
+              >
                 {filteredProducts.map((product) => (
                   <button
                     key={product.id}
@@ -1939,10 +2084,13 @@ export default function CashierPage() {
                         ? void openVariantPicker(product)
                         : addToCart(product)
                     }
-                    className="flex flex-col items-start gap-2 rounded-2xl border border-[#e8edf3] bg-white p-3 text-right transition-colors hover:border-[#c7d9ff]"
+                    className={cn(
+                      "flex flex-col items-start rounded-2xl border border-[#e8edf3] bg-white text-right transition-colors hover:border-[#c7d9ff]",
+                      posSettings.useCompactMode ? "gap-1 p-1.5" : "gap-2 p-3"
+                    )}
                   >
                     <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-[10px] bg-[#f4f7fc]">
-                      {product.image ? (
+                      {product.image && posSettings.showProductImages ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={product.image}
@@ -1955,20 +2103,31 @@ export default function CashierPage() {
                     </div>
                     <p
                       className={cn(
-                        "line-clamp-2 text-[12px] font-semibold leading-tight",
+                        "line-clamp-2 font-semibold leading-tight",
+                        posSettings.useCompactMode ? "text-[11px]" : "text-[12px]",
                         HEADING
                       )}
                     >
                       {product.name}
                     </p>
-                    <p className={cn("text-[10.5px]", MUTED)}>SKU: {product.sku || "—"}</p>
+                    {posSettings.useCompactMode ? null : (
+                      <p className={cn("text-[10.5px]", MUTED)}>SKU: {product.sku || "—"}</p>
+                    )}
                     <div className="flex w-full items-center justify-between">
-                      <span className={cn("text-[13px] font-extrabold", HEADING)}>
+                      <span
+                        className={cn(
+                          "font-extrabold",
+                          posSettings.useCompactMode ? "text-[11.5px]" : "text-[13px]",
+                          HEADING
+                        )}
+                      >
                         {formatAmount(product.sellingPrice)}
                       </span>
-                      <span className="flex size-7 items-center justify-center rounded-full bg-[#2563eb] text-white">
-                        <Plus className="size-4" />
-                      </span>
+                      {posSettings.useCompactMode ? null : (
+                        <span className="flex size-7 items-center justify-center rounded-full bg-[#2563eb] text-white">
+                          <Plus className="size-4" />
+                        </span>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -2118,6 +2277,8 @@ export default function CashierPage() {
                     hasDiscount={resolveLineDiscount(line) > 0}
                     onAddDiscount={() => openLineDiscountDialog(line)}
                     onEditPrice={() => openPriceEditDialog(line)}
+                    showDiscountOption={posSettings.applyDiscounts}
+                    showPriceEditOption={posSettings.allowManualPriceEdit}
                     compact
                   />
                 </div>
@@ -2140,19 +2301,21 @@ export default function CashierPage() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <span className={cn("font-semibold", HEADING)}>الخصم</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftDiscountType(discountType)
-                    setDraftDiscountValue(discountValue)
-                    setDraftDiscountIncludesTax(discountIncludesTax)
-                    setIsDiscountDialogOpen(true)
-                  }}
-                  aria-label="إضافة خصم"
-                  className="flex size-6 items-center justify-center rounded-full bg-[#eff6ff] text-[#2563eb] hover:bg-[#dbeafe]"
-                >
-                  <Plus className="size-3.5" />
-                </button>
+                {posSettings.applyDiscounts ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftDiscountType(discountType)
+                      setDraftDiscountValue(discountValue)
+                      setDraftDiscountIncludesTax(discountIncludesTax)
+                      setIsDiscountDialogOpen(true)
+                    }}
+                    aria-label="إضافة خصم"
+                    className="flex size-6 items-center justify-center rounded-full bg-[#eff6ff] text-[#2563eb] hover:bg-[#dbeafe]"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                ) : null}
                 {discount > 0 ? (
                   <button
                     type="button"
@@ -2489,7 +2652,7 @@ export default function CashierPage() {
           <div className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto pe-1">
             {paymentMethods.length === 0 ? (
               <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2.5 text-center text-[12px] font-semibold text-[#92400e]">
-                لا توجد طريقة دفع مفعّلة لهذا الفرع. فعّل واحدة من إعدادات طرق الدفع.
+                لا توجد طريقة دفع مفعّلة لمساحة العمل هذه. فعّل واحدة من إعدادات طرق الدفع.
               </p>
             ) : (
               // flex-wrap, not CSS grid: grid's column tracks are shared across every row, so an
@@ -2593,6 +2756,37 @@ export default function CashierPage() {
               className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
               disabled={checkingOut}
               onClick={() => setIsCheckoutOpen(false)}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settings -> الكاشير -> "تأكيد عملية البيع". Only ever opened by completeCheckout() when
+          that setting is on -- the actual sale still happens through performCheckout(), exactly
+          the same call this dialog's own confirm button makes. */}
+      <Dialog open={isConfirmSaleOpen} onOpenChange={setIsConfirmSaleOpen}>
+        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+          <DialogHeader className="text-right">
+            <DialogTitle>تأكيد عملية البيع</DialogTitle>
+            <DialogDescription>
+              سيتم تسجيل عملية بيع بقيمة {formatAmount(total)}. هل تريد المتابعة؟
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              className="h-11 flex-1 rounded-[10px] bg-[#2563eb] text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+              disabled={checkingOut}
+              onClick={() => void performCheckout()}
+            >
+              {checkingOut ? "جارٍ التأكيد..." : "تأكيد البيع"}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
+              disabled={checkingOut}
+              onClick={() => setIsConfirmSaleOpen(false)}
             >
               إلغاء
             </Button>
@@ -3238,7 +3432,7 @@ export default function CashierPage() {
               </Label>
               {topUpEligibleMethods.length === 0 ? (
                 <p className="text-[11px] text-[#e0484d]">
-                  لا توجد طريقة دفع مناسبة مفعّلة لهذا الفرع.
+                  لا توجد طريقة دفع مناسبة مفعّلة لمساحة العمل هذه.
                 </p>
               ) : (
                 <AppSelect value={topUpPaymentMethodCode} onValueChange={setTopUpPaymentMethodCode}>
@@ -3448,7 +3642,15 @@ export default function CashierPage() {
              it's given (w-full, with its own inner padding as a second buffer). */
           #zatca-print-invoice { width: 72mm; }
         }
-        @page { size: 80mm auto; margin: 0; }
+        /* "auto" for the height half of this (size: 80mm auto) is the textbook way to describe a
+           continuous thermal roll, but Chrome's actual print pipeline doesn't reliably honor it --
+           confirmed live: a 13-15 line receipt that easily fits one continuous page still came back
+           as "2 sheets of paper" in the real print dialog. A large explicit height is the
+           established workaround (every real POS web app that prints to a roll printer uses some
+           form of this): comfortably longer than any real receipt will ever be, so it always
+           renders as one physical page/one roll-feed regardless of item count, with the printer
+           driver (or a PDF viewer) simply not using the unprinted remainder. */
+        @page { size: 80mm 2000mm; margin: 0; }
       `}</style>
     </div>
   )

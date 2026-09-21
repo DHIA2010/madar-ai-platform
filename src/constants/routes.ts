@@ -38,10 +38,11 @@ export const ROUTES = {
   settingsGeneral: "/settings",
   settingsDevices: "/settings/devices",
   settingsDeviceNew: "/settings/devices/new",
-  settingsBranches: "/settings/branches",
+  settingsWorkspaces: "/settings/workspaces",
   settingsPayments: "/settings/payments",
   settingsTaxes: "/settings/taxes",
   settingsZatca: "/settings/zatca",
+  settingsCashier: "/settings/cashier",
   auth: {
     basic: {
       login: "/auth/basic/login",

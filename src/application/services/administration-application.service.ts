@@ -10,6 +10,7 @@ import type {
   AdministrationUserDto,
   AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
+  AssignUserWorkspacesRequestDto,
   AuditLogListDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
@@ -88,6 +89,10 @@ export class AdministrationApplicationService {
 
   createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }> {
     return this.gateway.createMemberDirect(request)
+  }
+
+  assignUserWorkspaces(request: AssignUserWorkspacesRequestDto): Promise<void> {
+    return this.gateway.assignUserWorkspaces(request)
   }
 
   getInvitations(request: GetInvitationsRequestDto): Promise<AdministrationInvitationDto[]> {

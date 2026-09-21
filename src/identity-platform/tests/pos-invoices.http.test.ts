@@ -835,6 +835,152 @@ describe("point-of-sale invoices", () => {
     expect(afterSecondSale.stockQuantity).toBe(-3)
   })
 
+  const VALID_POS_SETTINGS_BODY = {
+    allowBelowCostSale: true,
+    allowOutOfStockSale: true,
+    confirmSale: false,
+    autoOpenCashDrawer: false,
+    allowManualPriceEdit: true,
+    applyDiscounts: true,
+    defaultPrinterDeviceId: null,
+    paperWidth: "80mm" as const,
+    autoPrintInvoice: true,
+    printKitchenCopy: false,
+    copiesCount: 1,
+    showQuickPaymentScreen: false,
+    allowSplitPayment: true,
+    rememberLastPaymentMethod: false,
+    requirePaymentMethodSelection: true,
+    showProductImages: true,
+    useCompactMode: false,
+    showCategoryPanel: true,
+    showGridView: true,
+    showListView: true,
+    enableBarcodeScanner: true,
+    playScanSound: false,
+  }
+
+  async function savePosSettings(token: string, overrides: Record<string, unknown>) {
+    return fetch(`${baseUrl}/v1/pos/settings`, {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...VALID_POS_SETTINGS_BODY, ...overrides }),
+    })
+  }
+
+  it("allows a below-cost sale by default, and blocks it once allowBelowCostSale is turned off", async () => {
+    const { token } = await signIn("invoice-below-cost@example.com", "Invoice Below Cost")
+
+    const product = await createProduct(token, {
+      name: "سماعة بلوتوث",
+      sku: "BELOW-COST-1",
+      stockQuantity: 10,
+      sellPrice: 20,
+      costPrice: 25,
+    })
+
+    const soldAtLoss = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 20 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "سماعة بلوتوث", unitPrice: 20, quantity: 1 }],
+    })
+    expect(soldAtLoss.status).toBe(201)
+
+    const settingsResponse = await savePosSettings(token, { allowBelowCostSale: false })
+    expect(settingsResponse.status).toBe(200)
+
+    const blocked = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 20 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "سماعة بلوتوث", unitPrice: 20, quantity: 1 }],
+    })
+    expect(blocked.status).toBe(422)
+    expect((blocked.body as { code: string }).code).toBe("POS_INVOICE_BELOW_COST_SALE_NOT_ALLOWED")
+
+    // Selling at or above cost is still fine even with the setting off.
+    const soldAtCost = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 25 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "سماعة بلوتوث", unitPrice: 25, quantity: 1 }],
+    })
+    expect(soldAtCost.status).toBe(201)
+  })
+
+  it("allows an out-of-stock sale by default, and blocks it once allowOutOfStockSale is turned off", async () => {
+    const { token } = await signIn("invoice-out-of-stock@example.com", "Invoice Out Of Stock")
+
+    const product = await createProduct(token, {
+      name: "علبة شاي",
+      sku: "OUT-OF-STOCK-1",
+      stockQuantity: 2,
+      sellPrice: 10,
+    })
+
+    const settingsResponse = await savePosSettings(token, { allowOutOfStockSale: false })
+    expect(settingsResponse.status).toBe(200)
+
+    // Exactly enough stock -- still allowed.
+    const exactSale = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 10 * 2 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "علبة شاي", unitPrice: 10, quantity: 2 }],
+    })
+    expect(exactSale.status).toBe(201)
+
+    // Now at 0 -- selling one more must be rejected instead of going negative.
+    const blocked = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 10 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "علبة شاي", unitPrice: 10, quantity: 1 }],
+    })
+    expect(blocked.status).toBe(409)
+    expect((blocked.body as { code: string }).code).toBe(
+      "POS_INVOICE_OUT_OF_STOCK_SALE_NOT_ALLOWED"
+    )
+
+    const afterBlocked = (await (
+      await fetch(`${baseUrl}/v1/products/${product.id}`, { headers: authHeaders(token) })
+    ).json()) as { stockQuantity: number }
+    expect(afterBlocked.stockQuantity).toBe(0)
+  })
+
+  it("persists POS settings and returns the platform's original unconditional defaults before anything is saved", async () => {
+    const { token } = await signIn("invoice-pos-settings@example.com", "Invoice Pos Settings")
+
+    const defaultsResponse = await fetch(`${baseUrl}/v1/pos/settings`, {
+      headers: authHeaders(token),
+    })
+    expect(defaultsResponse.status).toBe(200)
+    const defaults = (await defaultsResponse.json()) as Record<string, unknown>
+    expect(defaults.allowBelowCostSale).toBe(true)
+    expect(defaults.allowOutOfStockSale).toBe(true)
+    expect(defaults.confirmSale).toBe(false)
+    expect(defaults.allowSplitPayment).toBe(true)
+    expect(defaults.autoPrintInvoice).toBe(true)
+
+    const saveResponse = await savePosSettings(token, {
+      confirmSale: true,
+      useCompactMode: true,
+      copiesCount: 3,
+    })
+    expect(saveResponse.status).toBe(200)
+    const saved = (await saveResponse.json()) as Record<string, unknown>
+    expect(saved.confirmSale).toBe(true)
+    expect(saved.useCompactMode).toBe(true)
+    expect(saved.copiesCount).toBe(3)
+
+    const refetched = (await (
+      await fetch(`${baseUrl}/v1/pos/settings`, { headers: authHeaders(token) })
+    ).json()) as Record<string, unknown>
+    expect(refetched.confirmSale).toBe(true)
+    expect(refetched.copiesCount).toBe(3)
+  })
+
   it("decrements a bundle's own components (by their recipe, unit-converted) on sale, and restores them on return", async () => {
     const { token } = await signIn("invoice-stock-bundle@example.com", "Invoice Stock Bundle")
 

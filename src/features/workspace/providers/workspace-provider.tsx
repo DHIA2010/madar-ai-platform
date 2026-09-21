@@ -61,6 +61,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const setAvailableOrganizations = useWorkspaceStore((state) => state.setAvailableOrganizations)
   const setAvailableWorkspaces = useWorkspaceStore((state) => state.setAvailableWorkspaces)
   const addCustomOrganization = useWorkspaceStore((state) => state.addCustomOrganization)
+  const removeCustomOrganization = useWorkspaceStore((state) => state.removeCustomOrganization)
   const addCustomWorkspace = useWorkspaceStore((state) => state.addCustomWorkspace)
   const setWorkspaceStatus = useWorkspaceStore((state) => state.setWorkspaceStatus)
 
@@ -310,14 +311,25 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   )
 
   // Soft delete on the backend. The organization stays in the list marked deleted rather than
-  // disappearing, so the caller decides what to show next.
+  // disappearing, so the caller decides what to show next -- but it must also come out of
+  // customOrganizations (the persisted, localStorage-backed optimistic cache added on create):
+  // that cache is unconditionally re-merged into every future bootstrap fetch with no expiry, so
+  // without this a deleted organization (and its workspaces, since the switcher renders whatever
+  // organizations resolve here) kept resurrecting on every fresh load forever, even once the
+  // server had correctly stopped returning it -- looking exactly like the delete had done nothing.
   const deleteOrganization = useCallback(
     async (organizationId: string) => {
       const organization = await workspaceApplicationService.deleteOrganization(organizationId)
+      removeCustomOrganization(organizationId)
       setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
       return organization
     },
-    [availableOrganizations, setAvailableOrganizations, workspaceApplicationService]
+    [
+      availableOrganizations,
+      removeCustomOrganization,
+      setAvailableOrganizations,
+      workspaceApplicationService,
+    ]
   )
 
   const uploadOrganizationLogo = useCallback(

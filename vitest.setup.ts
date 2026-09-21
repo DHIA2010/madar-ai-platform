@@ -8,3 +8,11 @@ import { vi } from "vitest"
 vi.mock("@/components/design/fonts", () => ({
   cairo: { className: "font-cairo", variable: "--font-cairo" },
 }))
+
+// jsdom has no layout engine, so it doesn't implement scrollIntoView at all -- Radix's Select
+// calls it on the highlighted option whenever the dropdown opens, which throws under jsdom and
+// fails any test that opens an AppSelect. A no-op is all a test needs (nothing here asserts on
+// scroll position).
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}

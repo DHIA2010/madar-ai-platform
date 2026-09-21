@@ -202,7 +202,7 @@ export default function ShiftsPage() {
   }
 
   const openErrors = {
-    workspace: openWorkspaceId ? null : "اختر الفرع",
+    workspace: openWorkspaceId ? null : "اختر مساحة العمل",
     cashier: openCashierId ? null : "اختر الكاشير",
     amount: openingCashAmount.trim() && Number(openingCashAmount) >= 0 ? null : "أدخل مبلغا صحيحا",
   }
@@ -272,7 +272,8 @@ export default function ShiftsPage() {
         <div>
           <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الورديات</h1>
           <p className={cn("mt-1 text-[13px]", MUTED)}>
-            إدارة ورديات الكاشير في جميع الفروع: فتح وردية جديدة، إنهاء وردية مفتوحة، ومراجعة السجل.
+            إدارة ورديات الكاشير في جميع مساحات العمل: فتح وردية جديدة، إنهاء وردية مفتوحة، ومراجعة
+            السجل.
           </p>
         </div>
         <span
@@ -300,7 +301,7 @@ export default function ShiftsPage() {
           <div>
             <h2 className={cn("text-[16px] font-bold", HEADING)}>سجل الورديات</h2>
             <p className={cn("mt-1 text-[11.5px]", MUTED)}>
-              كل وردية تم فتحها في المنظمة، عبر جميع الفروع.
+              كل وردية تم فتحها في المنظمة، عبر جميع مساحات العمل.
             </p>
           </div>
           <Button
@@ -331,7 +332,7 @@ export default function ShiftsPage() {
                 <AppSelectValue />
               </AppSelectTrigger>
               <AppSelectContent>
-                <AppSelectItem value="all">جميع الفروع</AppSelectItem>
+                <AppSelectItem value="all">جميع مساحات العمل</AppSelectItem>
                 {availableWorkspaces.map((workspace) => (
                   <AppSelectItem key={workspace.id} value={workspace.id}>
                     {workspace.name}
@@ -383,7 +384,7 @@ export default function ShiftsPage() {
                   <tr>
                     {[
                       { key: "cashier", label: "الكاشير", align: "text-right" },
-                      { key: "workspace", label: "الفرع", align: "text-center" },
+                      { key: "workspace", label: "مساحة العمل", align: "text-center" },
                       { key: "opening", label: "المبلغ الافتتاحي", align: "text-center" },
                       { key: "closing", label: "المبلغ الختامي", align: "text-center" },
                       { key: "duration", label: "المدة", align: "text-center" },
@@ -543,18 +544,18 @@ export default function ShiftsPage() {
               بدء وردية جديدة
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              اختر الكاشير والفرع، ثم أدخل المبلغ النقدي في الدرج عند بداية الوردية.
+              اختر الكاشير ومساحة العمل، ثم أدخل المبلغ النقدي في الدرج عند بداية الوردية.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الفرع <span className="text-[#e0484d]">*</span>
+                مساحة العمل <span className="text-[#e0484d]">*</span>
               </Label>
               <AppSelect value={openWorkspaceId} onValueChange={setOpenWorkspaceId}>
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر الفرع" />
+                  <AppSelectValue placeholder="اختر مساحة العمل" />
                 </AppSelectTrigger>
                 <AppSelectContent>
                   {availableWorkspaces.map((workspace) => (

@@ -873,13 +873,13 @@ export default function InvoicesPage() {
               value={workspaceFilter}
               onChange={setWorkspaceFilter}
               options={[
-                { value: "all", label: "جميع الفروع" },
+                { value: "all", label: "جميع مساحات العمل" },
                 ...availableWorkspaces.map((workspace) => ({
                   value: workspace.id,
                   label: workspace.name,
                 })),
               ]}
-              ariaLabel="الفرع"
+              ariaLabel="مساحة العمل"
               triggerClassName={FILTER_TRIGGER_CLASS}
             />
 
@@ -914,7 +914,7 @@ export default function InvoicesPage() {
                         { key: "number", label: "رقم الفاتورة", align: "text-right" },
                         { key: "date", label: "التاريخ والوقت", align: "text-center" },
                         { key: "customer", label: "العميل", align: "text-center" },
-                        { key: "branch", label: "الفرع", align: "text-center" },
+                        { key: "workspace", label: "مساحة العمل", align: "text-center" },
                         { key: "payment", label: "طريقة الدفع", align: "text-center" },
                         { key: "amount", label: "المبلغ", align: "text-center" },
                         { key: "status", label: "الحالة", align: "text-center" },
@@ -1162,7 +1162,11 @@ export default function InvoicesPage() {
           body > *:not(#invoice-print-target) { display: none !important; }
           #invoice-print-target { width: 72mm; }
         }
-        @page { size: 80mm auto; margin: 0; }
+        /* "auto" for the height half of this doesn't reliably stay one page in Chrome's real
+           print dialog (confirmed live against CashierPage's own copy of this rule) -- an
+           explicit, generously large height is the established workaround. See
+           CashierPage.tsx's matching rule for the full explanation. */
+        @page { size: 80mm 2000mm; margin: 0; }
       `}</style>
     </div>
   )
@@ -1230,7 +1234,7 @@ function InvoiceDetailPanel({
         </dd>
         <dt className={MUTED}>رقم الجوال</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{invoice.customerPhone ?? "—"}</dd>
-        <dt className={MUTED}>الفرع</dt>
+        <dt className={MUTED}>مساحة العمل</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{workspaceName}</dd>
         <dt className={MUTED}>طريقة الدفع</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{paymentMethodName}</dd>

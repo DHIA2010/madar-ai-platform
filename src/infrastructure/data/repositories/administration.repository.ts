@@ -11,6 +11,7 @@ import type {
   AdministrationUserStatus,
   AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
+  AssignUserWorkspacesRequestDto,
   AuditLogEventDto,
   AuditLogListDto,
   CancelInvitationRequestDto,
@@ -152,6 +153,9 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
     const workspaces = Array.from(
       new Set(rows.map((row) => row.workspaceName).filter((name): name is string => Boolean(name)))
     )
+    const workspaceIds = Array.from(
+      new Set(rows.map((row) => row.workspaceId).filter((id): id is string => Boolean(id)))
+    )
     const lastLoginAt = rows
       .map((row) => row.lastLoginAt)
       .filter((value): value is string => Boolean(value))
@@ -185,6 +189,7 @@ function groupMembersIntoUsers(members: OrganizationMemberApiEntry[]): Administr
       customRoleId: first.customRoleId,
       moduleAccessRevoked: first.moduleAccessRevoked,
       workspaces,
+      workspaceIds,
       status: pickAggregateStatus(rows.map((row) => row.status)),
       lastLogin: lastLoginAt ?? "",
       teams: Array.from(new Set(first.teams.map((team) => team.name))),
@@ -622,6 +627,14 @@ export class DataAdministrationRepository implements AdministrationRepository {
   async createMemberDirect(request: CreateMemberDirectRequestDto): Promise<{ userId: string }> {
     try {
       return await this.adapter.createMemberDirect(request)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async assignUserWorkspaces(request: AssignUserWorkspacesRequestDto): Promise<void> {
+    try {
+      await this.adapter.assignUserWorkspaces(request)
     } catch (error) {
       throw mapRepositoryError(error)
     }

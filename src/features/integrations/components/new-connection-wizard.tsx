@@ -2634,7 +2634,6 @@ export function NewConnectionWizard() {
             >
               <div className="pt-2">
                 <WorkspaceSelector
-                  managerMode
                   triggerLabel="Create Workspace"
                   triggerAriaLabel="Create workspace from workspace manager"
                 />
@@ -2659,7 +2658,6 @@ export function NewConnectionWizard() {
             >
               <div className="pt-2">
                 <WorkspaceSelector
-                  managerMode
                   triggerLabel="Manage Workspaces"
                   triggerAriaLabel="Open workspace manager"
                 />

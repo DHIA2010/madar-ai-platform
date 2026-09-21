@@ -21,6 +21,7 @@ interface WorkspaceStoreState {
   setAvailableOrganizations: (organizations: Organization[]) => void
   addCustomWorkspace: (workspace: Workspace) => void
   addCustomOrganization: (organization: Organization) => void
+  removeCustomOrganization: (organizationId: string) => void
   setWorkspaceStatus: (status: WorkspaceStatus) => void
   clearSelection: () => void
 }
@@ -71,6 +72,14 @@ export const useWorkspaceStore = create<WorkspaceStoreState>()(
             ...state.customOrganizations.filter((entry) => entry.id !== organization.id),
             organization,
           ],
+        }))
+      },
+
+      removeCustomOrganization: (organizationId) => {
+        set((state) => ({
+          customOrganizations: state.customOrganizations.filter(
+            (entry) => entry.id !== organizationId
+          ),
         }))
       },
 

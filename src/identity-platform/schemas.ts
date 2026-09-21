@@ -189,6 +189,10 @@ export const createMemberDirectSchema = z.object({
   password: z.string().min(12),
 })
 
+export const assignUserWorkspacesSchema = z.object({
+  workspaceIds: z.array(z.string().uuid()).min(1),
+})
+
 export const updateProfileSchema = z.object({
   fullName: z.string().min(2).optional(),
   avatarUrl: z.string().url().nullable().optional(),
@@ -323,6 +327,31 @@ export const integrationDisconnectSchema = z.object({
 
 export const integrationEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+export const posSettingsUpdateSchema = z.object({
+  allowBelowCostSale: z.boolean(),
+  allowOutOfStockSale: z.boolean(),
+  confirmSale: z.boolean(),
+  autoOpenCashDrawer: z.boolean(),
+  allowManualPriceEdit: z.boolean(),
+  applyDiscounts: z.boolean(),
+  defaultPrinterDeviceId: z.string().uuid().nullable(),
+  paperWidth: z.enum(["58mm", "80mm"]),
+  autoPrintInvoice: z.boolean(),
+  printKitchenCopy: z.boolean(),
+  copiesCount: z.number().int().min(1).max(5),
+  showQuickPaymentScreen: z.boolean(),
+  allowSplitPayment: z.boolean(),
+  rememberLastPaymentMethod: z.boolean(),
+  requirePaymentMethodSelection: z.boolean(),
+  showProductImages: z.boolean(),
+  useCompactMode: z.boolean(),
+  showCategoryPanel: z.boolean(),
+  showGridView: z.boolean(),
+  showListView: z.boolean(),
+  enableBarcodeScanner: z.boolean(),
+  playScanSound: z.boolean(),
 })
 
 const TIME_LOCAL_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/

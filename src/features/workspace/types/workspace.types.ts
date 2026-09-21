@@ -86,7 +86,7 @@ export interface Workspace {
   slug: string
   settings: WorkspaceSettings
   status?: "active" | "archived"
-  // Free-form branch fields (city, address, district, phone, email, code, managerId,
+  // Free-form storefront fields (city, address, district, phone, email, code, managerId,
   // managerName, openedAt) live here -- see WorkspaceDto in @/application/contracts/workspace.contracts.
   metadata?: Record<string, string>
   createdAt?: string
@@ -128,8 +128,8 @@ export interface WorkspaceCreatePayload {
   description: string
   language: string
   timezone: string
-  // Branch-specific fields, packed into the workspace's metadata alongside description --
-  // absent when this payload comes from the plain workspace-switcher "add workspace" flow.
+  // Storefront detail fields, packed into the workspace's metadata alongside description --
+  // absent when this payload comes from the plain header switcher's own "add workspace" flow.
   city?: string
   address?: string
   district?: string

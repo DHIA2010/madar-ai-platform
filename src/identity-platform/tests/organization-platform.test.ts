@@ -138,6 +138,47 @@ describe("organization platform", () => {
     expect(deleted.deletedAt).toBeTruthy()
   })
 
+  // Regression: a deleted organization's membership rows are untouched (only the organization's
+  // own status changes), so listOrganizations's membership-based id filter still included it --
+  // the account settings "حذف الحساب" flow deleted the organization for real, but it kept
+  // reappearing in the org list and the workspace switcher, looking exactly like the delete had
+  // silently failed.
+  it("excludes a deleted organization from the default listing", async () => {
+    const container = createContainer()
+    const owner = await registerAndLogin(container, "owner-deleted-listing@madar.test")
+
+    const organization = await container.commands.createOrganization(
+      owner.actor,
+      { name: "Soon Deleted", timezone: "UTC", locale: "en", currency: "USD", branding: {} },
+      context
+    )
+
+    await container.commands.deleteOrganization(
+      owner.actor,
+      { organizationId: organization.id },
+      context
+    )
+
+    const listed = await container.queries.listOrganizations(owner.actor, {
+      page: 1,
+      pageSize: 50,
+    })
+
+    expect(listed.items.map((item) => item.id)).not.toContain(organization.id)
+    // The caller's original (still-active) organization from registration must still be there --
+    // this isn't a blanket "hide everything" regression.
+    expect(listed.items.map((item) => item.id)).toContain(owner.actor.organizationId)
+
+    // The exclusion is only the *default* -- an explicit status filter still works exactly as
+    // before, for any admin surface that deliberately wants to see deleted organizations.
+    const explicit = await container.queries.listOrganizations(owner.actor, {
+      page: 1,
+      pageSize: 50,
+      status: "deleted",
+    })
+    expect(explicit.items.map((item) => item.id)).toContain(organization.id)
+  })
+
   it("supports invitation idempotency, ownership transfer, and membership lifecycle", async () => {
     const container = createContainer()
     const owner = await registerAndLogin(container, "owner-membership@madar.test")

@@ -29,7 +29,8 @@ interface SettingsSection {
 const SECTIONS: SettingsSection[] = [
   { key: "general", label: "الإعدادات العامة", href: ROUTES.settings },
   { key: "devices", label: "إعدادات الأجهزة", href: ROUTES.settingsDevices },
-  { key: "branches", label: "إدارة الفروع", href: ROUTES.settingsBranches },
+  { key: "cashier", label: "إعدادات الكاشير", href: ROUTES.settingsCashier },
+  { key: "workspaces", label: "إدارة مساحات العمل", href: ROUTES.settingsWorkspaces },
   { key: "payments", label: "طرق الدفع", href: ROUTES.settingsPayments },
   { key: "tax", label: "الضرائب", href: ROUTES.settingsTaxes },
   { key: "zatca", label: "الفوترة الإلكترونية (هيئة الزكاة)", href: ROUTES.settingsZatca },

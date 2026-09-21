@@ -2,6 +2,7 @@ import type {
   AddTeamMemberRequestDto,
   AssignMemberCustomRoleRequestDto,
   AssignMemberRoleRequestDto,
+  AssignUserWorkspacesRequestDto,
   CancelInvitationRequestDto,
   CreateCustomRoleRequestDto,
   CreateMemberDirectRequestDto,
@@ -468,5 +469,14 @@ export class AdministrationApiAdapter {
         password: request.password,
       })
       .then((response) => ({ userId: response.user.id }))
+  }
+
+  assignUserWorkspaces(request: AssignUserWorkspacesRequestDto): Promise<void> {
+    return this.client
+      .post<
+        { workspaceIds: string[] },
+        unknown
+      >(`/v1/organizations/${request.organizationId}/members/${request.userId}/workspaces`, { workspaceIds: request.workspaceIds })
+      .then(() => undefined)
   }
 }

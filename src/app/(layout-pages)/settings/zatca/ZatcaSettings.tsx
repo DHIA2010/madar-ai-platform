@@ -187,8 +187,8 @@ export default function ZatcaSettings() {
     if (!/^\d{15}$/.test(draft.vatNumber.trim()))
       return toast.error("الرقم الضريبي يجب أن يتكون من 15 رقماً.")
     if (!draft.organizationName.trim()) return toast.error("أدخل اسم المنشأة المسجّل.")
-    if (!draft.organizationUnit.trim()) return toast.error("أدخل اسم الفرع أو الوحدة.")
-    if (!draft.location.trim()) return toast.error("أدخل عنوان الجهاز/الفرع.")
+    if (!draft.organizationUnit.trim()) return toast.error("أدخل اسم مساحة العمل أو الوحدة.")
+    if (!draft.location.trim()) return toast.error("أدخل عنوان الجهاز/مساحة العمل.")
     if (!draft.industry.trim()) return toast.error("أدخل النشاط التجاري.")
     if (!currentOrganization) return toast.error("تعذر تحديد المنشأة الحالية.")
 
@@ -476,7 +476,7 @@ export default function ZatcaSettings() {
               </Label>
               <Input
                 value={draft.commonName}
-                placeholder="مثال: نقطة بيع -- الفرع الرئيسي"
+                placeholder="مثال: نقطة بيع -- المساحة الرئيسية"
                 className={FIELD_CLASS}
                 onChange={(event) => setDraft({ ...draft, commonName: event.target.value })}
               />
@@ -535,11 +535,11 @@ export default function ZatcaSettings() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12.5px] font-bold", HEADING)}>
-                الفرع / الوحدة *
+                مساحة العمل / الوحدة *
               </Label>
               <Input
                 value={draft.organizationUnit}
-                placeholder="مثال: الفرع الرئيسي"
+                placeholder="مثال: المساحة الرئيسية"
                 className={FIELD_CLASS}
                 onChange={(event) => setDraft({ ...draft, organizationUnit: event.target.value })}
               />
@@ -547,7 +547,7 @@ export default function ZatcaSettings() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12.5px] font-bold", HEADING)}>
-                عنوان الجهاز/الفرع *
+                عنوان الجهاز/مساحة العمل *
               </Label>
               <Input
                 value={draft.location}
