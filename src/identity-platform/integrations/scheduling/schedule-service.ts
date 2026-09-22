@@ -116,6 +116,17 @@ export class ConnectionSyncScheduleService {
     })
   }
 
+  // Feeds the connections overview list's own "المزامنة التالية" column -- read-only, org-scoped
+  // by the caller's own session (same boundary every other org-wide list in this backend uses),
+  // not gated behind assertActorCanManageSchedule like the settings page's get/save: someone who
+  // can merely view connections should still see when the next real sync is, even if only an
+  // owner/admin can change it.
+  async listSchedulesForOrganization(
+    actor: AuthenticatedActor
+  ): Promise<ConnectionSyncScheduleView[]> {
+    return this.repository.listByOrganization(actor.organizationId)
+  }
+
   async saveSchedule(
     actor: AuthenticatedActor,
     providerId: string,

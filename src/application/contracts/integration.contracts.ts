@@ -190,6 +190,10 @@ export interface IntegrationEvent {
   timestamp: string
   actor: "system" | "user"
   message: string
+  // Real per-entity counts from that completed sync run (e.g. "12 حملة، 40 إعلان") -- only ever
+  // present on a "sync.completed" event, and only for providers that record it (currently Google
+  // Ads). Absent everywhere else, including providers with no such breakdown to report.
+  syncedItems?: string
 }
 
 export interface ConnectorHealth {

@@ -13,6 +13,7 @@ import Link from "next/link"
 import { ArrowRight, Loader2, Printer, Search, X } from "lucide-react"
 
 import { AppError } from "@/lib/errors/app-error"
+import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { useWorkspace } from "@/features/workspace"
@@ -348,7 +349,7 @@ export default function ReturnedInvoicesPage() {
 
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => printThermalReceipt("return-print-target")}
               className="flex h-10 items-center justify-center gap-2 rounded-[10px] border border-[#e8edf3] text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
             >
               <Printer className="size-4" />
@@ -379,11 +380,8 @@ export default function ReturnedInvoicesPage() {
           body > *:not(#return-print-target) { display: none !important; }
           #return-print-target { width: 72mm; }
         }
-        /* "auto" for the height half of this doesn't reliably stay one page in Chrome's real
-           print dialog (confirmed live against CashierPage's own copy of this rule) -- an
-           explicit, generously large height is the established workaround. See
-           CashierPage.tsx's matching rule for the full explanation. */
-        @page { size: 80mm 2000mm; margin: 0; }
+        /* The @page height is set dynamically by printThermalReceipt() right before printing --
+           see src/lib/print-thermal-receipt.ts for why a fixed height doesn't work reliably. */
       `}</style>
     </div>
   )

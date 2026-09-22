@@ -1080,6 +1080,33 @@ export class IdentityCommandHandlers {
     }
   }
 
+  // Keeping role_code = "owner" isn't enough on its own -- a custom role or a revoked module-
+  // access flag can strip an owner down to zero real permissions (settings included) while their
+  // role_code still reads "owner", which is exactly what locked an org out of Settings entirely.
+  // Called before assignMemberCustomRole/setMemberModuleAccess would remove an owner's own full,
+  // unrestricted access, so at least one owner always keeps the system-role defaults intact.
+  private async enforceAtLeastOneFullAccessOwner(
+    organizationId: string,
+    excludeMembershipId: string
+  ) {
+    const memberships = await this.listActiveMembershipsByOrganization(organizationId)
+    const hasFullAccessOwner = memberships.some(
+      (membership) =>
+        membership.id !== excludeMembershipId &&
+        membership.role === "owner" &&
+        !membership.moduleAccessRevoked &&
+        !membership.customRoleId
+    )
+    if (!hasFullAccessOwner) {
+      throw new IdentityError(
+        "ORG_OWNER_REQUIRED",
+        409,
+        "business",
+        "Organization must have at least one owner with full, unrestricted access."
+      )
+    }
+  }
+
   async createOrganization(
     actor: AuthenticatedActor,
     command: CreateOrganizationCommand,
@@ -2355,6 +2382,13 @@ export class IdentityCommandHandlers {
       }
     }
 
+    // A custom role fully replaces the owner's default module permissions rather than merging
+    // with them -- assigning one to the org's last full-access owner would silently strip their
+    // own settings/users access with role_code still reading "owner".
+    if (command.customRoleId && memberState.role === "owner") {
+      await this.enforceAtLeastOneFullAccessOwner(command.organizationId, memberState.id)
+    }
+
     const member = MembershipEntity.rehydrate(memberState)
     member.assignCustomRole(command.customRoleId, this.now, actor.userId)
     await this.deps.repositories.memberships.save(member.toState())
@@ -2383,6 +2417,10 @@ export class IdentityCommandHandlers {
     )
     if (!memberState) {
       throw ERRORS.notFound("Membership")
+    }
+
+    if (command.revoked && memberState.role === "owner") {
+      await this.enforceAtLeastOneFullAccessOwner(command.organizationId, memberState.id)
     }
 
     const member = MembershipEntity.rehydrate(memberState)

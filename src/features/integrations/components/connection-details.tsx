@@ -440,7 +440,7 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
                 <table className="w-full text-right">
                   <thead>
                     <tr>
-                      {["#", "الحدث", "التاريخ", "الوصف"].map((heading) => (
+                      {["#", "الحدث", "التاريخ", "الوصف", "العناصر المتزامنة"].map((heading) => (
                         <th
                           key={heading}
                           className="border-b border-[#eef1f6] px-2.5 py-2 text-[11px] font-semibold text-[#8190a8]"
@@ -467,6 +467,9 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
                         </td>
                         <td className="border-b border-[#eef1f6] px-2.5 py-2 text-[11.5px] text-[#40506d]">
                           {event.message}
+                        </td>
+                        <td className="border-b border-[#eef1f6] px-2.5 py-2 text-[11.5px] text-[#40506d]">
+                          {event.syncedItems ?? "-"}
                         </td>
                       </tr>
                     ))}

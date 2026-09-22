@@ -289,4 +289,68 @@ describe("organization platform", () => {
       )
     ).toBe(true)
   })
+
+  // Regression: role_code staying "owner" was never enough -- a custom role fully replaces the
+  // default module permissions, and the revoked flag zeroes them out, either of which could
+  // strip the organization's only owner down to zero real access (settings included) while
+  // enforceAtLeastOneOwner (which only checks role_code) stayed satisfied. This is exactly what
+  // locked a real user out of Settings.
+  it("refuses to strip the org's last full-access owner down to zero permissions", async () => {
+    const container = createContainer()
+    const owner = await registerAndLogin(container, "sole-owner@madar.test")
+
+    const organization = await container.commands.createOrganization(
+      owner.actor,
+      { name: "Solo Org" },
+      context
+    )
+
+    await expect(
+      container.commands.setMemberModuleAccess(
+        owner.actor,
+        { organizationId: organization.id, memberUserId: owner.actor.userId, revoked: true },
+        context
+      )
+    ).rejects.toMatchObject({ code: "ORG_OWNER_REQUIRED" })
+
+    const restrictiveRole = await container.commands.createCustomRole(
+      owner.actor,
+      { organizationId: organization.id, name: "Locked Down", permissions: [] },
+      context
+    )
+
+    await expect(
+      container.commands.assignMemberCustomRole(
+        owner.actor,
+        {
+          organizationId: organization.id,
+          memberUserId: owner.actor.userId,
+          customRoleId: restrictiveRole.id,
+        },
+        context
+      )
+    ).rejects.toMatchObject({ code: "ORG_OWNER_REQUIRED" })
+
+    // A second full-access owner makes it safe to restrict the first -- the org never drops
+    // below one owner with real, unrestricted access.
+    const second = await registerAndLogin(container, "second-owner@madar.test")
+    const invitation = await container.commands.inviteMember(
+      owner.actor,
+      {
+        organizationId: organization.id,
+        email: "second-owner@madar.test",
+        role: "owner",
+        idempotencyKey: "invite-second-owner",
+      },
+      context
+    )
+    await container.commands.acceptInvitation(second.actor, { token: invitation.token }, context)
+
+    const revoked = await container.commands.setMemberModuleAccess(
+      owner.actor,
+      { organizationId: organization.id, memberUserId: owner.actor.userId, revoked: true },
+      context
+    )
+    expect(revoked.moduleAccessRevoked).toBe(true)
+  })
 })

@@ -90,6 +90,7 @@ interface GoogleTimelineEventApiItem {
   occurredAt: string
   actor: "system" | "user"
   message: string
+  syncedItems?: string
 }
 
 interface GoogleTimelineEventsApiResponse {
@@ -647,6 +648,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
       timestamp: event.occurredAt,
       actor: event.actor,
       message: event.message,
+      syncedItems: event.syncedItems,
     }))
   }
 

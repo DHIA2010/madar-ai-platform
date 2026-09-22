@@ -1028,6 +1028,24 @@ export class GoogleOAuthRepository
     return result.rows[0]?.status === "running"
   }
 
+  // Real per-entity counts a completed sync run already stores (google-ads/repository.ts's own
+  // markSyncRunCompleted writes these) -- read back here so the activity timeline can show what
+  // was actually synced, not just that a sync happened.
+  async findSyncRunMetrics(syncRunId: string): Promise<Record<string, number> | null> {
+    const result = await this.db.query<{ metrics: Record<string, number> | null }>({
+      name: "google-ads-sync-run-metrics",
+      text: `
+        SELECT metrics
+        FROM google_ads_sync_runs
+        WHERE id = $1
+        LIMIT 1
+      `,
+      values: [syncRunId],
+    })
+
+    return result.rows[0]?.metrics ?? null
+  }
+
   async findConnectionByOAuthAccountId(oauthAccountId: string) {
     void oauthAccountId
     return null

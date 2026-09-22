@@ -7,7 +7,7 @@ import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
 
 import { onWorkspaceLifecycleChanged, useWorkspace } from "@/features/workspace"
 
-import type { StoredConnectionReference } from "../services"
+import type { ConnectionSyncSchedule, StoredConnectionReference } from "../services"
 import {
   appendConnectorAccount,
   CONNECTION_ACTION_IDS,
@@ -20,6 +20,7 @@ import {
   removeStoredConnectionReference,
   removeStoredConnectorAccounts,
   storeConnectionReferences,
+  syncScheduleService,
 } from "../services"
 import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 
@@ -161,7 +162,8 @@ export function useConnectionsCenter() {
       statusViewModel: Awaited<
         ReturnType<typeof integrationApplicationService.getIntegrationStatus>
       >,
-      requestId?: number
+      requestId?: number,
+      schedulesByConnectionId?: Map<string, ConnectionSyncSchedule>
     ): Promise<ConnectionCenterRecord | null> => {
       traceFrontendExecution({
         step: "buildConnectionCards()",
@@ -224,9 +226,14 @@ export function useConnectionsCenter() {
         : accountsRegistry[connection.connectorDefinitionId]?.length
           ? accountsRegistry[connection.connectorDefinitionId]
           : [catalogEntry?.connectedAccountLabel ?? "Connected account"]
+      // Falls back to the recent-events timeline only when there's no structured history
+      // record of a failure -- but that fallback must match "sync.failed" specifically, not
+      // any sync-related action. Matching on startsWith("sync.") also caught "sync.completed"
+      // and "sync.started", so the most recent successful sync's own "Sync completed
+      // successfully." message was showing up styled as an error.
       const lastErrorEvent =
         history?.events.find((event) => event.eventType === "sync_failed") ??
-        statusViewModel.payload.recentEvents.find((event) => event.action.startsWith("sync."))
+        statusViewModel.payload.recentEvents.find((event) => event.action === "sync.failed")
 
       return {
         connectorDefinitionId: connection.connectorDefinitionId,
@@ -247,7 +254,16 @@ export function useConnectionsCenter() {
         retryCount: health?.retryCount ?? 0,
         lastError: lastErrorEvent?.message,
         tokenExpiresAt: connection.accessToken?.expiresAt,
-        nextSyncAt: scheduler?.retryQueue[0]?.nextRunAt ?? health?.nextSyncAt,
+        // The real, enabled sync schedule (إعدادات الجدولة) is the actual source of truth for
+        // when this connection will next sync -- it wins over the legacy in-memory
+        // scheduler/health state below, which nothing in the real schedule feature ever
+        // populates (that local state only ever gets set by this same session's own manual
+        // scheduleSync() call, never by a saved schedule), and so always showed "-" here even
+        // for a connection with a real, active 15-minute schedule running.
+        nextSyncAt:
+          schedulesByConnectionId?.get(connection.connectionId)?.nextRunAt ??
+          scheduler?.retryQueue[0]?.nextRunAt ??
+          health?.nextSyncAt,
         lastSyncAt: connection.lastSyncedAt ?? health?.lastSyncAt,
         latestSyncStatus,
         healthScore: connectorHealth.payload.score,
@@ -375,6 +391,14 @@ export function useConnectionsCenter() {
         })
       }
 
+      // One real fetch for every enabled schedule in the organization, rather than one call per
+      // connection -- fails open (no schedules shown as "next sync" rather than blocking the
+      // whole connections list) since this is a display enhancement, not core data.
+      const schedules = await syncScheduleService.listSchedules().catch(() => [])
+      const schedulesByConnectionId = new Map<string, ConnectionSyncSchedule>(
+        schedules.map((schedule) => [schedule.connectionId, schedule])
+      )
+
       const resolvedRefs: StoredConnectionReference[] = []
       const nextRecords: ConnectionCenterRecord[] = []
 
@@ -430,7 +454,7 @@ export function useConnectionsCenter() {
         })
 
         try {
-          const record = await buildRecord(connection, status, requestId)
+          const record = await buildRecord(connection, status, requestId, schedulesByConnectionId)
           if (record) {
             nextRecords.push(record)
           }

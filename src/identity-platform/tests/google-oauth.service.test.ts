@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { randomUUID } from "node:crypto"
+
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -917,5 +919,132 @@ describe("google oauth service", () => {
         "google.oauth.connection.reconnect.started",
       ])
     )
+  })
+
+  it("shows the real per-entity counts a completed sync run recorded, on its own timeline event", async () => {
+    const repository = new GoogleOAuthRepository(database)
+    const service = new GoogleOAuthService(repository, undefined, googleCredentialsProvider)
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString()
+
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "token-access-synced-items",
+            refresh_token: "token-refresh-synced-items",
+            expires_in: 3600,
+            scope:
+              "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email",
+            token_type: "Bearer",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      if (url.includes("www.googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(
+          JSON.stringify({
+            id: "acct-synced-items",
+            email: "ads-synced-items@example.com",
+            name: "Ads Synced Items",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      }
+
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    })
+
+    const started = await service.startAuthorization(ACTOR, {
+      workspaceId: ACTOR.workspaceId,
+      projectId: PROJECT_ID,
+    })
+    await service.completeAuthorization({
+      state: started.state,
+      code: "oauth-code-synced-items",
+    })
+
+    // A real completed sync run's own stored counts (exactly what
+    // GoogleAdsSyncService.sync() writes via markSyncRunCompleted) -- inserted directly rather
+    // than run through the full sync pipeline, since only the read-back and formatting is what
+    // this test is verifying.
+    const syncRunId = randomUUID()
+    await database.query(
+      `
+        insert into google_ads_sync_runs (
+          id, connection_id, organization_id, workspace_id, project_id, customer_id,
+          date_start, date_end, idempotency_key, status, metrics,
+          started_at, completed_at, created_by_user_id, updated_by_user_id
+        )
+        values (
+          $1, $2, $3, $4, $5, '123',
+          '2026-06-01', '2026-06-02', 'sync-synced-items-check', 'completed', $6::jsonb,
+          now(), now(), $7, $7
+        )
+      `,
+      [
+        syncRunId,
+        started.connectionId,
+        ACTOR.organizationId,
+        ACTOR.workspaceId,
+        PROJECT_ID,
+        JSON.stringify({
+          customers: 1,
+          campaigns: 5,
+          campaignMetrics: 140,
+          adGroups: 3,
+          adGroupMetrics: 84,
+          ads: 20,
+          adMetrics: 560,
+          keywords: 50,
+          totalRecords: 863,
+        }),
+        ACTOR.userId,
+      ]
+    )
+
+    // getRecentEvents reads from the generic outbox_events table (appendOutboxEvent), not
+    // google_oauth_events (saveEvent) -- the real sync pipeline's own recordLifecycle() writes
+    // to both, but only the outbox one feeds this timeline.
+    await repository.appendOutboxEvent({
+      eventType: "google.ads.sync.completed",
+      aggregateId: started.connectionId,
+      occurredAt: new Date().toISOString(),
+      metadata: {
+        actorUserId: ACTOR.userId,
+        organizationId: ACTOR.organizationId,
+        workspaceId: ACTOR.workspaceId,
+        projectId: PROJECT_ID,
+      },
+      payload: {
+        syncRunId,
+        customerId: "123",
+        totalRecords: 863,
+        message: "Sync completed successfully.",
+      },
+    })
+
+    const timeline = await service.getRecentEvents(ACTOR, {
+      connectionId: started.connectionId,
+      limit: 10,
+    })
+
+    const syncCompleted = timeline.items.find((item) => item.action === "sync.completed")
+    expect(syncCompleted).toBeDefined()
+    // Only the headline structural entities -- campaigns, adGroups, ads, keywords -- not the
+    // *Metrics daily-performance-row counts, in that fixed priority order.
+    expect(syncCompleted?.syncedItems).toBe("5 حملة، 3 مجموعة إعلانية، 20 إعلان، 50 كلمة مفتاحية")
+
+    // Every other event on the same connection (a real connection.connected from the OAuth
+    // flow above) must not have picked up synced-item data that isn't theirs.
+    const nonSyncEvents = timeline.items.filter((item) => item.action !== "sync.completed")
+    expect(nonSyncEvents.length).toBeGreaterThan(0)
+    for (const event of nonSyncEvents) {
+      expect(event.syncedItems).toBeUndefined()
+    }
   })
 })

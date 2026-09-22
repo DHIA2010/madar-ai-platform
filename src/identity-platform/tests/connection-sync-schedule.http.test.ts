@@ -395,3 +395,89 @@ describe("connection sync schedule: GET/PUT /v1/integrations/:providerId/:connec
     expect(response.status).toBe(400)
   })
 })
+
+// Regression: the connections overview list's own "المزامنة التالية" column read from an
+// unrelated in-memory cache that a real saved schedule never populated, so it always showed
+// "-" even for a connection with a real, active schedule. GET /v1/integrations/schedules is
+// the real data source that column should use instead.
+describe("connection sync schedule: GET /v1/integrations/schedules", () => {
+  it("lists only the caller's own organization's enabled schedules, each with a real nextRunAt", async () => {
+    const orgA = await registerAndProvisionOrg(
+      "schedules-list-org-a@madar.test",
+      "Schedules List Org A"
+    )
+    const workspaceIdA = orgA.actor.workspaceId ?? "00000000-0000-4000-8000-000000002051"
+    await provisionWorkspaceProject({
+      organizationId: orgA.actor.organizationId,
+      ownerUserId: orgA.actor.userId,
+      workspaceId: workspaceIdA,
+      projectId: "00000000-0000-4000-8000-000000002052",
+      label: "Schedules List Org A",
+    })
+    mockSnapchatOAuth({
+      baseUrl,
+      accountId: "acc-list-a",
+      accountName: "List Org A Account",
+      organizationId: "snap-org-list-a",
+      organizationName: "Snap Org List A",
+    })
+    const startedA = await connectSnapchat({ login: orgA.login, workspaceId: workspaceIdA })
+    const putA = await fetch(
+      `${baseUrl}/v1/integrations/snapchat-ads/${startedA.connectionId}/schedule`,
+      {
+        method: "PUT",
+        headers: headers(orgA.login, workspaceIdA),
+        body: JSON.stringify(VALID_SCHEDULE_BODY),
+      }
+    )
+    expect(putA.status).toBe(200)
+
+    // A different organization's schedule -- must never leak into org A's list. Restores the
+    // real fetch first: mockSnapchatOAuth captures "the current global fetch" as its own
+    // fallback, so calling it again without restoring would wrap the previous mock instead of
+    // the native implementation, recursing forever on any unmatched URL.
+    const orgB = await registerAndProvisionOrg(
+      "schedules-list-org-b@madar.test",
+      "Schedules List Org B"
+    )
+    const workspaceIdB = orgB.actor.workspaceId ?? "00000000-0000-4000-8000-000000002061"
+    await provisionWorkspaceProject({
+      organizationId: orgB.actor.organizationId,
+      ownerUserId: orgB.actor.userId,
+      workspaceId: workspaceIdB,
+      projectId: "00000000-0000-4000-8000-000000002062",
+      label: "Schedules List Org B",
+    })
+    vi.restoreAllMocks()
+    mockSnapchatOAuth({
+      baseUrl,
+      accountId: "acc-list-b",
+      accountName: "List Org B Account",
+      organizationId: "snap-org-list-b",
+      organizationName: "Snap Org List B",
+    })
+    const startedB = await connectSnapchat({ login: orgB.login, workspaceId: workspaceIdB })
+    const putB = await fetch(
+      `${baseUrl}/v1/integrations/snapchat-ads/${startedB.connectionId}/schedule`,
+      {
+        method: "PUT",
+        headers: headers(orgB.login, workspaceIdB),
+        body: JSON.stringify(VALID_SCHEDULE_BODY),
+      }
+    )
+    expect(putB.status).toBe(200)
+
+    const response = await fetch(`${baseUrl}/v1/integrations/schedules`, {
+      headers: headers(orgA.login, workspaceIdA),
+    })
+    expect(response.status).toBe(200)
+    const schedules = (await response.json()) as Array<{
+      connectionId: string
+      nextRunAt: string | null
+    }>
+
+    expect(schedules).toHaveLength(1)
+    expect(schedules[0].connectionId).toBe(startedA.connectionId)
+    expect(schedules[0].nextRunAt).not.toBeNull()
+  })
+})

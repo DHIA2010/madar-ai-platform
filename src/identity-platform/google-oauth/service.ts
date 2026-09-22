@@ -211,6 +211,33 @@ function toTimelineMessage(action: string, payload: Record<string, unknown>) {
   }
 }
 
+// The headline structural entities a completed sync actually pulled -- deliberately excludes
+// the *Metrics counts (campaignMetrics, adGroupMetrics, adMetrics, keywordMetrics) and the
+// secondary report rows (searchTerms, geoMetrics, deviceMetrics): those are daily performance
+// data points, not "items" in the sense someone reading this timeline means. Falls back to the
+// real total record count when none of these headline entities changed (an incremental sync
+// that only refreshed metrics, for example).
+const SYNCED_ITEM_LABELS: Array<[key: string, label: string]> = [
+  ["campaigns", "حملة"],
+  ["adGroups", "مجموعة إعلانية"],
+  ["ads", "إعلان"],
+  ["keywords", "كلمة مفتاحية"],
+  ["conversionActions", "إجراء تحويل"],
+]
+
+function summarizeSyncedItems(metrics: Record<string, number> | null): string | undefined {
+  if (!metrics) return undefined
+
+  const parts = SYNCED_ITEM_LABELS.filter(([key]) => (metrics[key] ?? 0) > 0).map(
+    ([key, label]) => `${metrics[key]} ${label}`
+  )
+
+  if (parts.length > 0) return parts.join("، ")
+
+  const totalRecords = metrics.totalRecords ?? 0
+  return totalRecords > 0 ? `${totalRecords} سجل` : undefined
+}
+
 function ensureRequiredScopesGranted(grantedScopes: string[], requiredScopes: string[]) {
   const granted = new Set(grantedScopes)
   const missing = requiredScopes.filter((scope) => !granted.has(scope))
@@ -1060,18 +1087,28 @@ export class GoogleOAuthService {
     }
 
     const events = await this.repository.listRecentOutboxEvents(connection.id, input.limit)
-    const items: GoogleOAuthTimelineEvent[] = events.map((event) => {
-      const payload = event.payload ?? {}
-      const action = toTimelineAction(event.eventType, payload)
-      const actorUserId = String((event.metadata ?? {}).actorUserId ?? "")
-      return {
-        id: event.id,
-        action,
-        occurredAt: event.occurredAt,
-        actor: actorUserId.length > 0 ? "user" : "system",
-        message: toTimelineMessage(action, payload),
-      }
-    })
+    const items: GoogleOAuthTimelineEvent[] = await Promise.all(
+      events.map(async (event) => {
+        const payload = event.payload ?? {}
+        const action = toTimelineAction(event.eventType, payload)
+        const actorUserId = String((event.metadata ?? {}).actorUserId ?? "")
+
+        const syncRunId = typeof payload.syncRunId === "string" ? payload.syncRunId : null
+        const syncedItems =
+          action === "sync.completed" && syncRunId
+            ? summarizeSyncedItems(await this.repository.findSyncRunMetrics(syncRunId))
+            : undefined
+
+        return {
+          id: event.id,
+          action,
+          occurredAt: event.occurredAt,
+          actor: actorUserId.length > 0 ? "user" : "system",
+          message: toTimelineMessage(action, payload),
+          syncedItems,
+        }
+      })
+    )
 
     return {
       connectionId: connection.id,

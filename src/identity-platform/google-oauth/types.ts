@@ -8,15 +8,15 @@ import type {
   IntegrationDiscoveredAccountView,
 } from "../integrations/provider-models"
 
-export interface GoogleOAuthStartInput extends ProviderOAuthStartInputDto {}
+export type GoogleOAuthStartInput = ProviderOAuthStartInputDto
 
-export interface GoogleOAuthStartResult extends ProviderOAuthStartResultDto {}
+export type GoogleOAuthStartResult = ProviderOAuthStartResultDto
 
-export interface GoogleOAuthCallbackResult extends ProviderOAuthCallbackResultDto {}
+export type GoogleOAuthCallbackResult = ProviderOAuthCallbackResultDto
 
-export interface GoogleOAuthConnectionView extends IntegrationConnectionView {}
+export type GoogleOAuthConnectionView = IntegrationConnectionView
 
-export interface GoogleAdsCustomerAccountView extends IntegrationDiscoveredAccountView {}
+export type GoogleAdsCustomerAccountView = IntegrationDiscoveredAccountView
 
 export interface GoogleOAuthRecentEventView {
   id: string
@@ -37,6 +37,10 @@ export interface GoogleOAuthTimelineEvent {
   occurredAt: string
   actor: "system" | "user"
   message: string
+  // Only populated for a "sync.completed" event, resolved from that sync run's own real,
+  // already-stored per-entity counts (google_ads_sync_runs.metrics) -- absent for every other
+  // action, and for a sync run whose metrics row can no longer be found.
+  syncedItems?: string
 }
 
 export interface GoogleOAuthTimelineResult {

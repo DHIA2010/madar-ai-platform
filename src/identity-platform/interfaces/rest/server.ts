@@ -1588,6 +1588,13 @@ export function createIdentityApiServer(
         return send(404, { code: "CONNECTION_NOT_FOUND", message: "Connection not found." })
       }
 
+      if (method === "GET" && url.pathname === "/v1/integrations/schedules") {
+        if (!connectionSyncScheduleService) {
+          return send(200, [])
+        }
+        return send(200, await connectionSyncScheduleService.listSchedulesForOrganization(actor))
+      }
+
       const connectionScheduleMatch = url.pathname.match(
         /^\/v1\/integrations\/([^/]+)\/([^/]+)\/schedule$/
       )

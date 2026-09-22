@@ -52,6 +52,7 @@ import {
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { useWorkspace } from "@/features/workspace"
@@ -733,7 +734,7 @@ export default function InvoicesPage() {
       setLastReturnQrDataUrl(qrDataUrl)
       setLastReturn(created)
       window.setTimeout(() => {
-        window.print()
+        printThermalReceipt("invoice-print-target")
         setLastReturn(null)
       }, 150)
     } catch {
@@ -1162,11 +1163,8 @@ export default function InvoicesPage() {
           body > *:not(#invoice-print-target) { display: none !important; }
           #invoice-print-target { width: 72mm; }
         }
-        /* "auto" for the height half of this doesn't reliably stay one page in Chrome's real
-           print dialog (confirmed live against CashierPage's own copy of this rule) -- an
-           explicit, generously large height is the established workaround. See
-           CashierPage.tsx's matching rule for the full explanation. */
-        @page { size: 80mm 2000mm; margin: 0; }
+        /* The @page height is set dynamically by printThermalReceipt() right before printing --
+           see src/lib/print-thermal-receipt.ts for why a fixed height doesn't work reliably. */
       `}</style>
     </div>
   )
@@ -1307,7 +1305,7 @@ function InvoiceDetailPanel({
         <Button
           variant="outline"
           className="h-10 flex-1 gap-2 rounded-[10px] border-[#e8edf3] text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
-          onClick={() => window.print()}
+          onClick={() => printThermalReceipt("invoice-print-target")}
         >
           <Printer className="size-4" />
           طباعة

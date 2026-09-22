@@ -90,6 +90,24 @@ export class ConnectionSyncScheduleRepository {
     return row ? mapSchedule(row) : null
   }
 
+  // Every real, enabled schedule for the organization, in one query -- lets the connections
+  // overview list show a real "next sync" per row without an N+1 call per connection (the
+  // single-connection findByConnection above stays the settings page's own lookup). Filters by
+  // organization_id alone in SQL and applies enabled/next_run_at in JS afterwards -- combining
+  // those predicates with the partial index on (next_run_at) where enabled = true (see migration
+  // 081) intermittently made pg-mem's test-only query planner return zero rows for a matching
+  // row; a per-organization row count is small enough that filtering after the fetch is cheap
+  // and sidesteps the planner entirely.
+  async listByOrganization(organizationId: string): Promise<ConnectionSyncScheduleView[]> {
+    const result = await this.db.query<Record<string, unknown>>(
+      "select * from connection_sync_schedules where organization_id = $1",
+      [organizationId]
+    )
+    return result.rows
+      .filter((row) => Boolean(row.enabled) && row.next_run_at !== null)
+      .map(mapSchedule)
+  }
+
   async upsert(input: UpsertScheduleInput): Promise<ConnectionSyncScheduleView> {
     const result = await this.db.query<Record<string, unknown>>(
       `

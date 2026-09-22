@@ -56,6 +56,7 @@ import {
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { useAuth } from "@/features/authentication"
@@ -1372,7 +1373,7 @@ export default function CashierPage() {
       setSuccessInvoice(invoice)
       if (posSettings.autoPrintInvoice) {
         window.setTimeout(() => {
-          window.print()
+          printThermalReceipt("zatca-print-invoice")
           // window.print() blocks until the print dialog closes, so this runs right as the
           // cashier lands back on the POS screen -- ready for the next barcode scan with no
           // click needed.
@@ -3642,15 +3643,11 @@ export default function CashierPage() {
              it's given (w-full, with its own inner padding as a second buffer). */
           #zatca-print-invoice { width: 72mm; }
         }
-        /* "auto" for the height half of this (size: 80mm auto) is the textbook way to describe a
-           continuous thermal roll, but Chrome's actual print pipeline doesn't reliably honor it --
-           confirmed live: a 13-15 line receipt that easily fits one continuous page still came back
-           as "2 sheets of paper" in the real print dialog. A large explicit height is the
-           established workaround (every real POS web app that prints to a roll printer uses some
-           form of this): comfortably longer than any real receipt will ever be, so it always
-           renders as one physical page/one roll-feed regardless of item count, with the printer
-           driver (or a PDF viewer) simply not using the unprinted remainder. */
-        @page { size: 80mm 2000mm; margin: 0; }
+        /* The @page height itself is set dynamically by printThermalReceipt() right before
+           calling window.print() -- "auto" doesn't reliably stay one page in Chrome's real print
+           pipeline, and a fixed oversized height (the previous approach here) can get silently
+           clamped by a real printer driver's own advertised max page length, which is exactly
+           what pushed the QR block onto a second sheet on a longer receipt. */
       `}</style>
     </div>
   )

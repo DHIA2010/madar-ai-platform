@@ -16,8 +16,8 @@ export function RouteAccessGuard({
       permission={permission}
       fallback={
         <AppEmpty
-          title="Access restricted"
-          description="You don't have permission to view this section. Contact your administrator if you think this is a mistake."
+          title="الوصول مقيّد"
+          description="ليست لديك صلاحية لعرض هذا القسم. تواصل مع مسؤول النظام إذا كنت تعتقد أن هذا خطأ."
         />
       }
     >

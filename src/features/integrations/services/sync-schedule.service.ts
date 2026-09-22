@@ -74,9 +74,19 @@ function scheduleEndpoint(providerId: string, connectionId: string) {
   )
 }
 
+function schedulesListEndpoint() {
+  return ["", "v1", "integrations", "schedules"].join(String.fromCharCode(47))
+}
+
 export const syncScheduleService = {
   async getSchedule(providerId: string, connectionId: string): Promise<ConnectionSyncSchedule> {
     return client.get<ConnectionSyncSchedule>(scheduleEndpoint(providerId, connectionId))
+  },
+
+  // Every real, enabled schedule for the current organization in one call -- feeds the
+  // connections overview list's own "next sync" column instead of one request per connection.
+  async listSchedules(): Promise<ConnectionSyncSchedule[]> {
+    return client.get<ConnectionSyncSchedule[]>(schedulesListEndpoint())
   },
 
   async saveSchedule(
