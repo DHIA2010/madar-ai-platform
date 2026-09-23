@@ -1,1 +1,5 @@
+export { KpiLibraryPage } from "./kpi-library-page"
+export { KpiWizardPage } from "./kpi-wizard-page"
+export { ReportBuilderPage } from "./report-builder-page"
+export { ReportViewerPage } from "./report-viewer-page"
 export { ReportsOverviewPage } from "./reports-overview-page"

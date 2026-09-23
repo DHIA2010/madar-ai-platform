@@ -39,6 +39,7 @@ import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
+import { ReportsService } from "../../reports/service"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -558,6 +559,9 @@ export function createIdentityApiServer(
           container.infrastructure.integrations
         )
       : null
+  const reportsService = container.infrastructure.database
+    ? new ReportsService(container.infrastructure.database)
+    : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
       ? new PosInvoicesService(
@@ -1625,6 +1629,98 @@ export function createIdentityApiServer(
               payload
             )
           )
+        }
+      }
+
+      if (reportsService) {
+        if (method === "GET" && url.pathname === "/v1/reports/catalog") {
+          return send(200, reportsService.getCatalog())
+        }
+
+        if (method === "GET" && url.pathname === "/v1/reports/kpis") {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          return send(200, await reportsService.listKpis(actor))
+        }
+
+        if (method === "POST" && url.pathname === "/v1/reports/kpis") {
+          if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+          const payload = (await readJsonBody(request)) as Parameters<
+            ReportsService["createKpi"]
+          >[1]
+          return send(201, await reportsService.createKpi(actor, payload))
+        }
+
+        if (method === "POST" && url.pathname === "/v1/reports/kpis/preview") {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          const payload = (await readJsonBody(request)) as Parameters<
+            ReportsService["previewKpi"]
+          >[1]
+          return send(200, await reportsService.previewKpi(actor, payload))
+        }
+
+        const kpiMatch = url.pathname.match(/^\/v1\/reports\/kpis\/([^/]+)$/)
+        if (kpiMatch) {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          const kpiId = decodeURIComponent(kpiMatch[1])
+          if (method === "GET") {
+            return send(200, await reportsService.getKpi(actor, kpiId))
+          }
+          if (method === "PATCH") {
+            if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+            const payload = (await readJsonBody(request)) as Parameters<
+              ReportsService["updateKpi"]
+            >[2]
+            return send(200, await reportsService.updateKpi(actor, kpiId, payload))
+          }
+          if (method === "DELETE") {
+            if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+            await reportsService.deleteKpi(actor, kpiId)
+            return send(200, { deleted: true })
+          }
+        }
+
+        if (method === "GET" && url.pathname === "/v1/reports/custom") {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          const isSystem = url.searchParams.get("isSystem") === "true"
+          return send(200, await reportsService.listCustomReports(actor, isSystem))
+        }
+
+        if (method === "POST" && url.pathname === "/v1/reports/custom") {
+          if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+          const payload = (await readJsonBody(request)) as Parameters<
+            ReportsService["createCustomReport"]
+          >[1]
+          return send(201, await reportsService.createCustomReport(actor, payload))
+        }
+
+        const reportDataMatch = url.pathname.match(/^\/v1\/reports\/custom\/([^/]+)\/data$/)
+        if (method === "GET" && reportDataMatch) {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          return send(
+            200,
+            await reportsService.runCustomReport(actor, decodeURIComponent(reportDataMatch[1]))
+          )
+        }
+
+        const reportMatch = url.pathname.match(/^\/v1\/reports\/custom\/([^/]+)$/)
+        if (reportMatch) {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          const reportId = decodeURIComponent(reportMatch[1])
+          if (method === "GET") {
+            return send(200, await reportsService.getCustomReport(actor, reportId))
+          }
+          if (method === "PATCH") {
+            if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+            const payload = (await readJsonBody(request)) as Parameters<
+              ReportsService["updateCustomReport"]
+            >[2]
+            return send(200, await reportsService.updateCustomReport(actor, reportId, payload))
+          }
+          if (method === "DELETE") {
+            if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+            await reportsService.deleteCustomReport(actor, reportId)
+            return send(200, { deleted: true })
+          }
         }
       }
 
