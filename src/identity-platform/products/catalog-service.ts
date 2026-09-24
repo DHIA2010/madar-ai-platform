@@ -79,6 +79,7 @@ export class ProductCatalogService {
   async update(input: {
     organizationId: string
     id: string
+    updatedBy: string | null
     product: CreateProductInput
   }): Promise<ProductView> {
     if (!UUID_PATTERN.test(input.id)) throw PRODUCT_ERRORS.notFound()
@@ -106,7 +107,13 @@ export class ProductCatalogService {
 
     await this.assertTaxRateExists(input.organizationId, normalized.taxRateId)
 
-    const updated = await this.repository.update({ ...input, product: normalized })
+    const updated = await this.repository.update({
+      organizationId: input.organizationId,
+      id: input.id,
+      workspaceId: current.workspaceId,
+      updatedBy: input.updatedBy,
+      product: normalized,
+    })
     if (!updated) throw PRODUCT_ERRORS.notFound()
     return updated
   }

@@ -39,6 +39,20 @@ export const TYPES_REQUIRING_STOCK: ProductType[] = ["raw", "simple", "weighted"
 export const PRODUCT_UNITS = ["حبة", "كرتون", "جرام", "كجم", "مل", "لتر"] as const
 export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 
+// A product's own baseUnit carries an English abbreviation the Add Product page displays
+// ("حبة (PCS)") -- this is the reverse of that page's own baseUnitShort (baseUnit.split(" ")[0]),
+// used when a bundle component materializes into a real product (see
+// ProductCatalogRepository.materializeCustomComponents) so the new row's baseUnit round-trips
+// back through the same picker instead of showing as an unrecognized value.
+export const BASE_UNIT_BY_COMPONENT_UNIT: Record<ProductUnit, string> = {
+  حبة: "حبة (PCS)",
+  كرتون: "كرتون (CTN)",
+  جرام: "جرام (G)",
+  كجم: "كجم (KG)",
+  مل: "مل (ML)",
+  لتر: "لتر (L)",
+}
+
 // Each unit reduces to a base dimension, so a recipe measured in جرام can be checked against
 // stock counted in كجم. Units in different dimensions never convert by formula -- an item
 // specific pairing (حبة against كجم) needs a conversion factor supplied per component.

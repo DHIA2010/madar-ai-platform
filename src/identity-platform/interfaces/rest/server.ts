@@ -3452,6 +3452,7 @@ export function createIdentityApiServer(
           await productCatalogService.update({
             organizationId: actor.organizationId,
             id: nativeProductMatch[1],
+            updatedBy: actor.userId,
             product: payload,
           })
         )

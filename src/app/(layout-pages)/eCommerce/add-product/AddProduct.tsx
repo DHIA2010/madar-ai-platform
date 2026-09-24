@@ -117,6 +117,18 @@ function convertUnits(quantity: number, from: Unit, to: Unit) {
   return (quantity * source.factor) / target.factor
 }
 
+function isUnit(value: string): value is Unit {
+  return value in UNIT_BASE
+}
+
+// A raw material's own baseUnit ("حبة (PCS)", "كجم (KG)", ...) is the same vocabulary as a
+// component row's units, just with the English abbreviation kept on for the product form's own
+// display (see baseUnitShort below) -- the bare word before the space is the Unit value itself.
+function unitFromBaseUnit(baseUnit: string | null | undefined): Unit | null {
+  const short = baseUnit?.split(" ")[0]
+  return short && isUnit(short) ? short : null
+}
+
 // A component is normally a product picked from inventory. CUSTOM_COMPONENT lets a recipe name
 // one that is not in the catalogue yet, so a bundle can be defined before its raw materials
 // exist -- that row carries its own name and stock figure instead.
@@ -2336,9 +2348,19 @@ export default function AddProduct() {
                                   <AppSearchableSelect
                                     value={entry.row.productId}
                                     options={componentOptions}
-                                    onChange={(next) =>
-                                      updateComponent(entry.row.id, { productId: next })
-                                    }
+                                    onChange={(next) => {
+                                      // A raw material already declares its own unit when it was
+                                      // created -- defaulting the recipe row to that unit means
+                                      // the current-stock figure is labelled correctly from the
+                                      // start (same dimension, no conversion factor needed)
+                                      // instead of always starting at جرام/كجم regardless of
+                                      // what the product actually is.
+                                      const unit = unitFromBaseUnit(productById.get(next)?.baseUnit)
+                                      updateComponent(entry.row.id, {
+                                        productId: next,
+                                        ...(unit ? { requiredUnit: unit, stockUnit: unit } : {}),
+                                      })
+                                    }}
                                     placeholder="اختر المكون"
                                     searchPlaceholder="ابحث في المواد الخام..."
                                     emptyLabel={

@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import {
+  BASE_UNIT_BY_COMPONENT_UNIT,
   convertStockToRequiredUnit,
   TYPES_REQUIRING_STOCK,
   isProductUnit,
   type CreateProductInput,
   type ProductAttributes,
+  type ProductComponentInput,
   type ProductComponentView,
   type ProductStatus,
   type ProductType,
@@ -448,11 +450,65 @@ export class ProductCatalogRepository {
     })
   }
 
+  // A hand-typed component (componentRef null, customName set -- see ProductComponentInput) is
+  // not linked to anything trackable: its "stock" is just a number typed into this one recipe,
+  // gone the moment the row is deleted and invisible everywhere else a real product would show
+  // up (the Products list, POS, other bundles). Materializing it into a real raw-material
+  // product row -- in the same transaction as the bundle itself, so a failure here rolls back
+  // the bundle too -- means it becomes exactly that: independently trackable, and never
+  // recreated on a later save of this same bundle, since by then its componentRef is no longer
+  // null. Runs unconditionally: normalizeProduct already empties `components` for anything that
+  // isn't a bundle, so this is a no-op for every other product type.
+  private async materializeCustomComponents(input: {
+    organizationId: string
+    workspaceId: string | null
+    createdBy: string | null
+    category: string
+    currency: string
+    components: ProductComponentInput[]
+  }): Promise<ProductComponentInput[]> {
+    const resolved: ProductComponentInput[] = []
+
+    for (const component of input.components) {
+      if (component.componentRef !== null || component.customName === null) {
+        resolved.push(component)
+        continue
+      }
+
+      const newId = randomUUID()
+      await this.database.query(
+        `INSERT INTO products (
+           id, organization_id, workspace_id, product_type, name, sku, category, description,
+           status, currency, base_unit, sell_price, cost_price, stock_quantity, min_stock,
+           image_urls, attributes, tax_rate_id, price_includes_tax, created_by
+         ) VALUES ($1, $2, $3, 'raw', $4, NULL, $5, '', 'active', $6, $7, NULL, NULL, $8, NULL,
+           '[]'::jsonb, '{}'::jsonb, NULL, false, $9)`,
+        [
+          newId,
+          input.organizationId,
+          input.workspaceId,
+          component.customName,
+          input.category,
+          input.currency,
+          BASE_UNIT_BY_COMPONENT_UNIT[component.stockUnit],
+          component.customStock ?? 0,
+          input.createdBy,
+        ]
+      )
+
+      resolved.push({ ...component, componentRef: newId, customName: null, customStock: null })
+    }
+
+    return resolved
+  }
+
   // A full replace rather than a field-by-field patch: the form always submits the whole
   // product, and the children (components, options, variants) have no stable client-side
   // identity to diff against, so they are rewritten wholesale inside the same transaction.
   async update(input: {
     organizationId: string
+    workspaceId: string | null
+    updatedBy: string | null
     id: string
     product: CreateProductInput
   }): Promise<ProductView | null> {
@@ -497,7 +553,16 @@ export class ProductCatalogRepository {
       ])
       await this.database.query(`DELETE FROM product_variants WHERE product_id = $1`, [input.id])
 
-      await this.insertChildren(input.id, input.product)
+      const components = await this.materializeCustomComponents({
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        createdBy: input.updatedBy,
+        category: input.product.category,
+        currency: input.product.currency,
+        components: input.product.components,
+      })
+
+      await this.insertChildren(input.id, { ...input.product, components })
     })
 
     return updated ? this.findById(input.organizationId, input.id) : null
@@ -546,7 +611,16 @@ export class ProductCatalogRepository {
         ]
       )
 
-      await this.insertChildren(productId, input.product)
+      const components = await this.materializeCustomComponents({
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        createdBy: input.createdBy,
+        category: input.product.category,
+        currency: input.product.currency,
+        components: input.product.components,
+      })
+
+      await this.insertChildren(productId, { ...input.product, components })
     })
 
     const created = await this.findById(input.organizationId, productId)

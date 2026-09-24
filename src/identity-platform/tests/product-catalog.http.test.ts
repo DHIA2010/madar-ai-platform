@@ -324,7 +324,7 @@ describe("native product catalogue", () => {
       sellPrice: 45,
     }
 
-    it("stores components and drops the stock code", async () => {
+    it("stores an external-catalogue component and drops the stock code", async () => {
       const { token } = await signIn("catalog-bundle@example.com", "Catalog Bundle")
 
       const created = await createProduct(token, {
@@ -338,13 +338,6 @@ describe("native product catalogue", () => {
             stockUnit: "كجم",
             note: "أرز",
           },
-          {
-            customName: "دجاج",
-            customStock: 40,
-            requiredQuantity: 500,
-            requiredUnit: "جرام",
-            stockUnit: "كجم",
-          },
         ],
       })
 
@@ -354,7 +347,7 @@ describe("native product catalogue", () => {
       expect(created.body.sellPrice).toBe(45)
 
       const components = created.body.components as Array<Record<string, unknown>>
-      expect(components).toHaveLength(2)
+      expect(components).toHaveLength(1)
       expect(components[0]).toMatchObject({
         componentRef: "salla:900",
         customName: null,
@@ -363,12 +356,103 @@ describe("native product catalogue", () => {
         stockUnit: "كجم",
         position: 0,
       })
-      expect(components[1]).toMatchObject({
-        componentRef: null,
-        customName: "دجاج",
-        customStock: 40,
-        position: 1,
+    })
+
+    it("materializes a hand-typed component into a real, independently trackable raw material", async () => {
+      const { token } = await signIn(
+        "catalog-bundle-materialize@example.com",
+        "Catalog Materialize"
+      )
+
+      const created = await createProduct(token, {
+        ...BUNDLE_BASE,
+        components: [
+          {
+            customName: "دجاج",
+            customStock: 40,
+            requiredQuantity: 500,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+        ],
       })
+      expect(created.status).toBe(201)
+
+      // No longer a floating name+number scoped to this one recipe -- it is now a real
+      // products row, linked by componentRef exactly like a component picked from inventory.
+      const components = created.body.components as Array<Record<string, unknown>>
+      expect(components).toHaveLength(1)
+      expect(components[0]).toMatchObject({ customName: null, customStock: null })
+      const newComponentRef = components[0].componentRef as string
+      expect(newComponentRef).toMatch(/^[0-9a-f-]{36}$/)
+
+      const found = await fetch(`${baseUrl}/v1/products/${newComponentRef}`, {
+        headers: authHeaders(token),
+      })
+      expect(found.status).toBe(200)
+      expect((await found.json()) as Record<string, unknown>).toMatchObject({
+        productType: "raw",
+        name: "دجاج",
+        // The bundle's own category, since a hand-typed component names no category of its own.
+        category: "وجبات",
+        stockQuantity: 40,
+        // The recipe's stockUnit ("كجم") round-tripped into the product form's own baseUnit
+        // vocabulary, so reopening this new product for editing shows a recognized unit.
+        baseUnit: "كجم (KG)",
+      })
+
+      // It shows up in the ordinary products list too -- not just reachable by id.
+      const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      const list = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+      expect(list.items.some((item) => item.id === newComponentRef && item.name === "دجاج")).toBe(
+        true
+      )
+    })
+
+    it("never re-materializes a component that is already linked to a real product", async () => {
+      const { token } = await signIn("catalog-bundle-no-redup@example.com", "Catalog No Redup")
+
+      const created = await createProduct(token, {
+        ...BUNDLE_BASE,
+        components: [
+          {
+            customName: "أرز",
+            customStock: 10,
+            requiredQuantity: 200,
+            requiredUnit: "جرام",
+            stockUnit: "كجم",
+          },
+        ],
+      })
+      const firstComponentRef = (created.body.components as Array<Record<string, unknown>>)[0]
+        .componentRef as string
+
+      // Saving the bundle again with the now-linked component (exactly what the edit page
+      // submits once it has re-fetched the product) must not create a second "أرز" product.
+      const updateResponse = await fetch(`${baseUrl}/v1/products/${created.body.id}`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          ...BUNDLE_BASE,
+          components: [
+            {
+              componentRef: firstComponentRef,
+              requiredQuantity: 200,
+              requiredUnit: "جرام",
+              stockUnit: "كجم",
+            },
+          ],
+        }),
+      })
+      const updated = (await updateResponse.json()) as Record<string, unknown>
+      expect(updateResponse.status).toBe(200)
+      expect((updated.components as Array<Record<string, unknown>>)[0].componentRef).toBe(
+        firstComponentRef
+      )
+
+      const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      const list = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+      expect(list.items.filter((item) => item.name === "أرز")).toHaveLength(1)
     })
 
     it("rejects a bundle with no components", async () => {
@@ -725,7 +809,10 @@ describe("native product catalogue", () => {
       expect(updated.status).toBe(200)
       const components = updated.body.components as Array<Record<string, unknown>>
       expect(components).toHaveLength(1)
-      expect(components[0]).toMatchObject({ customName: "أرز", requiredQuantity: 250 })
+      // Materialized into a real product again (a fresh customName with no componentRef, same
+      // as on create) -- customName no longer sticks around once it's linked.
+      expect(components[0]).toMatchObject({ customName: null, requiredQuantity: 250 })
+      expect(components[0].componentRef).toMatch(/^[0-9a-f-]{36}$/)
     })
 
     it("applies the same type rules as creation", async () => {
