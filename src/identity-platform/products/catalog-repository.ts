@@ -2,17 +2,22 @@ import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
-import type {
-  CreateProductInput,
-  ProductAttributes,
-  ProductComponentView,
-  ProductStatus,
-  ProductType,
-  ProductUnit,
-  ProductVariantOptionView,
-  ProductVariantView,
-  ProductView,
+import {
+  convertStockToRequiredUnit,
+  TYPES_REQUIRING_STOCK,
+  isProductUnit,
+  type CreateProductInput,
+  type ProductAttributes,
+  type ProductComponentView,
+  type ProductStatus,
+  type ProductType,
+  type ProductUnit,
+  type ProductVariantOptionView,
+  type ProductVariantView,
+  type ProductView,
 } from "./catalog-types"
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface ProductRow {
   id: string
@@ -134,6 +139,48 @@ const PRODUCT_SELECT = `
     image_urls, attributes, tax_rate_id, price_includes_tax, created_by, created_at, updated_at
   FROM products
 `
+
+// How many times a bundle could be produced right now, given each component's current stock --
+// mirrors the Add Product page's own `resolvedComponents`/`limiting` calculation (AddProduct.tsx)
+// so the figure a merchant sees while authoring a recipe and the one shown once it's saved never
+// disagree. A component with no resolvable stock (an external catalogue reference, a hand-named
+// component with no customStock, or a componentRef pointing at a product type that holds no
+// stock of its own) is simply left out of the comparison rather than zeroing the whole bundle --
+// same as the client-side calculation. Returns null when nothing was resolvable at all.
+function computeProducibleQuantity(
+  components: ProductComponentView[],
+  stockByComponentId: Map<string, { stockQuantity: number | null; productType: string }>
+): number | null {
+  let limiting: number | null = null
+
+  for (const component of components) {
+    let stock: number | null = null
+    if (component.customStock !== null) {
+      stock = component.customStock
+    } else if (component.componentRef && UUID_PATTERN.test(component.componentRef)) {
+      const info = stockByComponentId.get(component.componentRef)
+      if (
+        info &&
+        TYPES_REQUIRING_STOCK.includes(info.productType as ProductType) &&
+        info.stockQuantity !== null
+      ) {
+        stock = info.stockQuantity
+      }
+    }
+
+    if (stock === null) continue
+    if (!isProductUnit(component.requiredUnit) || !isProductUnit(component.stockUnit)) continue
+    if (component.requiredQuantity <= 0) continue
+
+    const stockInRequiredUnit = convertStockToRequiredUnit(component, stock)
+    if (stockInRequiredUnit === null) continue
+
+    const producible = Math.floor(stockInRequiredUnit / component.requiredQuantity)
+    if (limiting === null || producible < limiting) limiting = producible
+  }
+
+  return limiting
+}
 
 function mapComponent(row: ComponentRow): ProductComponentView {
   return {
@@ -268,7 +315,7 @@ export class ProductCatalogRepository {
       [organizationId, workspaceId, MAX_PRODUCTS]
     )
 
-    return this.hydrate(result.rows)
+    return this.hydrate(organizationId, result.rows)
   }
 
   async findById(organizationId: string, id: string): Promise<ProductView | null> {
@@ -277,13 +324,13 @@ export class ProductCatalogRepository {
       [organizationId, id]
     )
     if (!result.rows[0]) return null
-    const [hydrated] = await this.hydrate(result.rows)
+    const [hydrated] = await this.hydrate(organizationId, result.rows)
     return hydrated ?? null
   }
 
   // One round trip per child table for the whole page of products rather than per product --
   // a 200-product list would otherwise issue 600 queries.
-  private async hydrate(rows: ProductRow[]): Promise<ProductView[]> {
+  private async hydrate(organizationId: string, rows: ProductRow[]): Promise<ProductView[]> {
     if (rows.length === 0) return []
 
     const ids = rows.map((row) => row.id)
@@ -332,33 +379,73 @@ export class ProductCatalogRepository {
       variantsByProduct.set(row.product_id, list)
     }
 
-    return rows.map((row) => ({
-      id: row.id,
-      organizationId: row.organization_id,
-      workspaceId: row.workspace_id,
-      productType: row.product_type as ProductType,
-      name: row.name,
-      sku: row.sku,
-      category: row.category,
-      description: row.description,
-      status: row.status as ProductStatus,
-      currency: row.currency,
-      baseUnit: row.base_unit,
-      sellPrice: toNullableNumber(row.sell_price),
-      costPrice: toNullableNumber(row.cost_price),
-      stockQuantity: toNullableNumber(row.stock_quantity),
-      minStock: toNullableNumber(row.min_stock),
-      imageUrls: toStringArray(row.image_urls),
-      attributes: toJsonObject(row.attributes) as ProductAttributes,
-      components: componentsByProduct.get(row.id) ?? [],
-      variantOptions: optionsByProduct.get(row.id) ?? [],
-      variants: variantsByProduct.get(row.id) ?? [],
-      taxRateId: row.tax_rate_id,
-      priceIncludesTax: row.price_includes_tax,
-      createdBy: row.created_by,
-      createdAt: toIso(row.created_at),
-      updatedAt: toIso(row.updated_at),
-    }))
+    // A bundle's producible quantity depends on the current stock of whatever native products
+    // its components reference -- resolved here in one extra batched query (scoped to this same
+    // organization, same as everything else in this file) rather than per bundle.
+    const referencedIds = [
+      ...new Set(
+        components.rows
+          .map((row) => row.component_ref)
+          .filter((ref): ref is string => ref !== null && UUID_PATTERN.test(ref))
+      ),
+    ]
+    const stockByComponentId = new Map<
+      string,
+      { stockQuantity: number | null; productType: string }
+    >()
+    if (referencedIds.length > 0) {
+      const refPlaceholders = referencedIds.map((_, index) => `$${index + 2}`).join(", ")
+      const referenced = await this.database.query<{
+        id: string
+        product_type: string
+        stock_quantity: string | number | null
+      }>(
+        `SELECT id, product_type, stock_quantity FROM products
+         WHERE organization_id = $1 AND id IN (${refPlaceholders})`,
+        [organizationId, ...referencedIds]
+      )
+      for (const row of referenced.rows) {
+        stockByComponentId.set(row.id, {
+          stockQuantity: toNullableNumber(row.stock_quantity),
+          productType: row.product_type,
+        })
+      }
+    }
+
+    return rows.map((row) => {
+      const components = componentsByProduct.get(row.id) ?? []
+      return {
+        id: row.id,
+        organizationId: row.organization_id,
+        workspaceId: row.workspace_id,
+        productType: row.product_type as ProductType,
+        name: row.name,
+        sku: row.sku,
+        category: row.category,
+        description: row.description,
+        status: row.status as ProductStatus,
+        currency: row.currency,
+        baseUnit: row.base_unit,
+        sellPrice: toNullableNumber(row.sell_price),
+        costPrice: toNullableNumber(row.cost_price),
+        stockQuantity: toNullableNumber(row.stock_quantity),
+        minStock: toNullableNumber(row.min_stock),
+        imageUrls: toStringArray(row.image_urls),
+        attributes: toJsonObject(row.attributes) as ProductAttributes,
+        components,
+        variantOptions: optionsByProduct.get(row.id) ?? [],
+        variants: variantsByProduct.get(row.id) ?? [],
+        taxRateId: row.tax_rate_id,
+        priceIncludesTax: row.price_includes_tax,
+        createdBy: row.created_by,
+        createdAt: toIso(row.created_at),
+        updatedAt: toIso(row.updated_at),
+        producibleQuantity:
+          row.product_type === "bundle"
+            ? computeProducibleQuantity(components, stockByComponentId)
+            : null,
+      }
+    })
   }
 
   // A full replace rather than a field-by-field patch: the form always submits the whole

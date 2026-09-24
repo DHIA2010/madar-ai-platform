@@ -455,6 +455,82 @@ describe("native product catalogue", () => {
       })
       expect(sameDimension.status).toBe(201)
     })
+
+    it("reports available quantity as how many times the recipe could be produced from a linked raw material's real stock", async () => {
+      const { token } = await signIn("catalog-bundle-producible@example.com", "Catalog Producible")
+
+      const chicken = await createProduct(token, {
+        productType: "raw",
+        name: "دجاج",
+        category: "مواد خام",
+        stockQuantity: 6,
+        baseUnit: "حبة (PCS)",
+        costPrice: 15,
+      })
+      expect(chicken.status).toBe(201)
+
+      // Each serving uses half a chicken, so 6 in stock should produce 12 servings -- this is
+      // exactly the "linked chicken with كبسة, should produce 12 piece" scenario that used to
+      // always show 0 regardless of the linked raw material's real stock.
+      const kabsa = await createProduct(token, {
+        ...BUNDLE_BASE,
+        name: "كبسة نص",
+        components: [
+          {
+            componentRef: chicken.body.id,
+            requiredQuantity: 0.5,
+            requiredUnit: "حبة",
+            stockUnit: "حبة",
+          },
+        ],
+      })
+      expect(kabsa.status).toBe(201)
+
+      const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      const list = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+      const kabsaItem = list.items.find((item) => item.id === kabsa.body.id)
+
+      expect(kabsaItem).toMatchObject({ availableStock: 12 })
+
+      // Selling down the chicken and re-reading recomputes the figure live -- it is derived at
+      // read time from the component's current stock, never stored on the bundle's own row.
+      await database.query(`UPDATE products SET stock_quantity = 2 WHERE id = $1`, [
+        chicken.body.id,
+      ])
+      const afterSale = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      const afterSaleList = (await afterSale.json()) as { items: Array<Record<string, unknown>> }
+      expect(afterSaleList.items.find((item) => item.id === kabsa.body.id)).toMatchObject({
+        availableStock: 4,
+      })
+    })
+
+    it("reports 0 available quantity when no component resolves to a real stock figure", async () => {
+      const { token } = await signIn(
+        "catalog-bundle-unresolvable@example.com",
+        "Catalog Unresolvable"
+      )
+
+      // An external catalogue reference (a synced Salla product) has no products row in this
+      // organization to read stock from, so it cannot contribute to the producible figure.
+      const created = await createProduct(token, {
+        ...BUNDLE_BASE,
+        components: [
+          {
+            componentRef: "salla:900",
+            requiredQuantity: 1,
+            requiredUnit: "حبة",
+            stockUnit: "حبة",
+          },
+        ],
+      })
+      expect(created.status).toBe(201)
+
+      const listResponse = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(token) })
+      const list = (await listResponse.json()) as { items: Array<Record<string, unknown>> }
+      expect(list.items.find((item) => item.id === created.body.id)).toMatchObject({
+        availableStock: 0,
+      })
+    })
   })
 
   describe("variable products", () => {

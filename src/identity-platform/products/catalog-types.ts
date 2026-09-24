@@ -90,6 +90,32 @@ export function convertRequiredQuantityToStock(
   return requiredQuantity * (component.conversionFactor ?? 0)
 }
 
+// The inverse of convertRequiredQuantityToStock: how much of a component's current stock is
+// worth in the recipe's own required unit -- used to work out how many times a bundle could
+// actually be produced from what its components have on hand right now (see
+// computeProducibleQuantity in catalog-repository.ts, and the same calculation mirrored
+// client-side in the Add Product page's `resolvedComponents`). A cross-dimension pair with no
+// conversion factor has no way to answer this, so it returns null rather than a wrong number --
+// validateBundle already prevents that pairing from being saved with no factor at all, but an
+// existing row's factor is not re-validated as it degrades to something invalid over time.
+export function convertStockToRequiredUnit(
+  component: {
+    requiredUnit: ProductUnit
+    stockUnit: ProductUnit
+    conversionFactor: number | null
+  },
+  stockQuantity: number
+): number | null {
+  if (unitsShareDimension(component.requiredUnit, component.stockUnit)) {
+    return (
+      (stockQuantity * UNIT_BASE[component.stockUnit].factor) /
+      UNIT_BASE[component.requiredUnit].factor
+    )
+  }
+  if (component.conversionFactor === null || component.conversionFactor <= 0) return null
+  return stockQuantity / component.conversionFactor
+}
+
 export interface ProductComponentInput {
   // A catalogue reference ("salla:123", or a native product's uuid as text) or null when the
   // component is named by hand. Exactly one of componentRef / customName is set.
@@ -213,6 +239,13 @@ export interface ProductView {
   createdBy: string | null
   createdAt: string
   updatedAt: string
+  // How many times a bundle could be produced right now from its components' current stock --
+  // computed at read time from product_components + the stock of whichever native products they
+  // reference (see computeProducibleQuantity in catalog-repository.ts). Null for every
+  // non-bundle type, and also null for a bundle none of whose components resolve to a real,
+  // stock-tracked figure (an external catalogue reference, or a hand-named component with no
+  // customStock).
+  producibleQuantity: number | null
 }
 
 // A CSV import of native products -- every value arrives as a plain string (or null), the same

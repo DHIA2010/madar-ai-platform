@@ -336,8 +336,9 @@ const STATUS_TO_NORMALIZED: Record<ProductView["status"], NormalizedProductStatu
 //
 // A variable product has no single stock or price of its own: stock is the sum across its
 // variants (what is actually sellable), and the headline price is the cheapest variant, which is
-// the figure a storefront listing shows. A bundle's availability is derived from component stock
-// held elsewhere, so it reports 0 rather than inventing a number.
+// the figure a storefront listing shows. A bundle's availability is derived from its components'
+// stock (see producibleQuantity, computed in catalog-repository.ts's hydrate()) rather than a
+// stock_quantity of its own, which the row never carries.
 export function toNormalizedProduct(product: ProductView): NormalizedProduct {
   const variantStock = product.variants.reduce((total, variant) => total + (variant.stock ?? 0), 0)
   const variantPrices = product.variants
@@ -345,7 +346,11 @@ export function toNormalizedProduct(product: ProductView): NormalizedProduct {
     .filter((price): price is number => price !== null)
 
   const availableStock =
-    product.productType === "variable" ? variantStock : (product.stockQuantity ?? 0)
+    product.productType === "variable"
+      ? variantStock
+      : product.productType === "bundle"
+        ? (product.producibleQuantity ?? 0)
+        : (product.stockQuantity ?? 0)
 
   const sellingPrice =
     product.productType === "variable"
