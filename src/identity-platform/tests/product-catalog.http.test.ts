@@ -654,6 +654,67 @@ describe("native product catalogue", () => {
       })
     })
 
+    it("resolves a scanned sku to either the parent product or the exact variant it belongs to", async () => {
+      const { token } = await signIn("catalog-lookup-sku@example.com", "Catalog Lookup Sku")
+
+      const created = await createProduct(token, {
+        ...VARIABLE_BASE,
+        variants: [
+          { sku: "TSH-100-S", price: 120, stock: 4, optionValues: ["S"] },
+          { sku: "TSH-100-M", price: 95, stock: 6, optionValues: ["M"] },
+        ],
+      })
+      const variantId = (created.body.variants as Array<Record<string, unknown>>).find(
+        (variant) => variant.sku === "TSH-100-S"
+      )!.id as string
+
+      // The POS scan box's local fast path already covers this (it already has the parent
+      // product loaded) -- this route only needs to exist for the case that one can't handle.
+      const parentLookup = await fetch(
+        `${baseUrl}/v1/products/lookup-by-sku?sku=${encodeURIComponent("TSH-100")}`,
+        { headers: authHeaders(token) }
+      )
+      expect(parentLookup.status).toBe(200)
+      expect(await parentLookup.json()).toEqual({ productId: created.body.id, variantId: null })
+
+      // A variant's own sku isn't in the parent's own sku column at all -- resolving it requires
+      // actually querying product_variants, which is the whole reason this route exists.
+      const variantLookup = await fetch(
+        `${baseUrl}/v1/products/lookup-by-sku?sku=${encodeURIComponent("TSH-100-S")}`,
+        { headers: authHeaders(token) }
+      )
+      expect(variantLookup.status).toBe(200)
+      expect(await variantLookup.json()).toEqual({ productId: created.body.id, variantId })
+
+      const unknown = await fetch(
+        `${baseUrl}/v1/products/lookup-by-sku?sku=${encodeURIComponent("DOES-NOT-EXIST")}`,
+        { headers: authHeaders(token) }
+      )
+      expect(unknown.status).toBe(404)
+    })
+
+    it("never resolves a scanned sku to another organization's product or variant", async () => {
+      const owner = await signIn("catalog-lookup-sku-owner@example.com", "Catalog Lookup Owner")
+      const other = await signIn("catalog-lookup-sku-other@example.com", "Catalog Lookup Other")
+
+      await createProduct(owner.token, {
+        ...VARIABLE_BASE,
+        variants: [{ sku: "TSH-100-S", price: 120, stock: 4, optionValues: ["S"] }],
+      })
+
+      const parentLeak = await fetch(
+        `${baseUrl}/v1/products/lookup-by-sku?sku=${encodeURIComponent("TSH-100")}`,
+        { headers: authHeaders(other.token) }
+      )
+      expect(parentLeak.status).toBe(404)
+
+      const variantLeak = await fetch(
+        `${baseUrl}/v1/products/lookup-by-sku?sku=${encodeURIComponent("TSH-100-S")}`,
+        { headers: authHeaders(other.token) }
+      )
+      expect(variantLeak.status).toBe(404)
+    })
+
     it("requires every variant to be priced", async () => {
       const { token } = await signIn("catalog-variable-price@example.com", "Catalog Var Price")
 

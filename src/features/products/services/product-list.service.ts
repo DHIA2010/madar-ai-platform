@@ -215,6 +215,25 @@ export const productListService = {
     )
   },
 
+  // The POS scan box's own fast path only matches a PARENT sku against the already-loaded
+  // product list -- a variable product's individual combination carries its own sku that list
+  // never includes. This is the fallback for a code that doesn't match anything locally: a real
+  // lookup against both products.sku and product_variants.sku. Resolves to null (not a thrown
+  // error) on no match, since "this code doesn't exist" is an expected, common outcome of a scan
+  // -- not a failure worth surfacing as one.
+  async lookupBySku(sku: string): Promise<{ productId: string; variantId: string | null } | null> {
+    try {
+      return await client.get<{ productId: string; variantId: string | null }>(
+        `${PRODUCTS_ENDPOINT}${String.fromCharCode(47)}lookup-by-sku?sku=${encodeURIComponent(sku)}`
+      )
+    } catch (error) {
+      if (error && typeof error === "object" && "status" in error && error.status === 404) {
+        return null
+      }
+      throw error
+    }
+  },
+
   // A full replace rather than a partial patch: the form holds the whole product, and the
   // children have no client-side identity to diff against.
   async updateProduct(id: string, input: CreateProductInput): Promise<ProductDetail> {

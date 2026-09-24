@@ -76,6 +76,13 @@ export class ProductCatalogService {
     return product
   }
 
+  async lookupBySku(
+    organizationId: string,
+    sku: string
+  ): Promise<{ productId: string; variantId: string | null } | null> {
+    return this.repository.findByAnySku(organizationId, sku)
+  }
+
   async update(input: {
     organizationId: string
     id: string

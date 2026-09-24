@@ -261,6 +261,30 @@ export class ProductCatalogRepository {
     return result.rows[0] ?? null
   }
 
+  // The POS scan box's fast path matches the loaded product list's own (parent) sku entirely
+  // client-side -- this is the fallback for a code that doesn't match any of those: a variable
+  // product's individual combination (product_variants.sku) carries its own code the parent
+  // list never includes, so it can only be resolved with a real query. Checks the parent sku
+  // too (not just variants) so the one round trip this backs covers a stale or not-yet-loaded
+  // client list as well, not only the variant case it was written for.
+  async findByAnySku(
+    organizationId: string,
+    sku: string
+  ): Promise<{ productId: string; variantId: string | null } | null> {
+    const direct = await this.findBySku(organizationId, sku)
+    if (direct) return { productId: direct.id, variantId: null }
+
+    const variant = await this.database.query<{ product_id: string; id: string }>(
+      `SELECT pv.product_id, pv.id FROM product_variants pv
+         JOIN products p ON p.id = pv.product_id
+        WHERE p.organization_id = $1 AND p.deleted_at IS NULL AND pv.sku = $2
+        LIMIT 1`,
+      [organizationId, sku]
+    )
+    const match = variant.rows[0]
+    return match ? { productId: match.product_id, variantId: match.id } : null
+  }
+
   // Every priced, non-deleted native product -- the candidate set for
   // ProductCatalogService.applyPriceTaxConvention's bulk gross/net conversion. A product with no
   // sell_price (a bundle, a raw material) has nothing to convert and is left out.

@@ -689,6 +689,46 @@ export default function CashierPage() {
     })
   }, [products, selectedCategory, search])
 
+  // The local product list only ever carries a variable product's PARENT sku -- each real
+  // combination (product_variants.sku) has its own code the aggregated list never includes, so
+  // a code that doesn't match anything here isn't necessarily unknown; it may just be one of
+  // those. Falls back to a real lookup (productListService.lookupBySku) rather than giving up,
+  // and resolves straight to that exact variant on a hit instead of opening the picker -- the
+  // whole point of scanning that specific code was to skip picking it by hand.
+  async function handleScanFallback(sku: string) {
+    const lookup = await productListService.lookupBySku(sku).catch(() => null)
+    if (!lookup) return
+
+    const parent = products.find((product) => product.id === lookup.productId)
+    if (!parent || parent.status !== "Active") return
+
+    if (posSettings.playScanSound) playScanBeep()
+
+    if (!lookup.variantId) {
+      if (parent.productType === "variable") {
+        void openVariantPicker(parent)
+      } else {
+        addToCart(parent)
+      }
+      setSearch("")
+      return
+    }
+
+    try {
+      const detail = await productListService.getProduct(parent.id)
+      const variant = detail.variants.find((entry) => entry.id === lookup.variantId)
+      if (!variant) return
+      addToCart(parent, {
+        id: variant.id,
+        label: variant.optionValues.join(" / "),
+        unitPrice: variant.price,
+      })
+      setSearch("")
+    } catch {
+      toast.error("تعذر تحميل بيانات هذا المتغير.")
+    }
+  }
+
   // Enter is what a scanner sends right after typing the code -- an exact SKU match adds the
   // product straight to the cart and clears the box for the next scan, instead of leaving the
   // scanned code sitting in the search field as a name/SKU filter.
@@ -703,7 +743,10 @@ export default function CashierPage() {
     if (!query) return
 
     const match = products.find((product) => product.status === "Active" && product.sku === query)
-    if (!match) return
+    if (!match) {
+      void handleScanFallback(query)
+      return
+    }
 
     event.preventDefault()
     if (posSettings.playScanSound) playScanBeep()

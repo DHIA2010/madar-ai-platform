@@ -3226,6 +3226,36 @@ export function createIdentityApiServer(
         }
       }
 
+      // The POS scan box's own fast path only ever matches a PARENT sku against the already-
+      // loaded product list (a variable product's own combinations carry their own sku the list
+      // never includes) -- this is what it falls back to when that local match misses, so
+      // scanning e.g. a specific size/color's own code resolves straight to that exact variant
+      // instead of only ever working for the parent code. Checked ahead of nativeProductMatch's
+      // `/v1/products/:id` regex below, which would otherwise treat "lookup-by-sku" as an id.
+      if (method === "GET" && url.pathname === "/v1/products/lookup-by-sku") {
+        if (!productCatalogService) {
+          return send(503, {
+            code: "PRODUCTS_UNAVAILABLE",
+            message: "Product aggregation is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:view")) {
+          throw ERRORS.forbidden()
+        }
+
+        const sku = url.searchParams.get("sku")?.trim()
+        if (!sku) throw ERRORS.validation({ sku: "sku is required." })
+
+        const match = await productCatalogService.lookupBySku(actor.organizationId, sku)
+        if (!match) {
+          return send(404, {
+            code: "PRODUCT_SKU_NOT_FOUND",
+            message: "No product or variant matches this stock code.",
+          })
+        }
+        return send(200, match)
+      }
+
       const heldOrderMatch = url.pathname.match(/^\/v1\/pos\/held-orders\/([^/]+)$/)
       if (heldOrderMatch && method === "DELETE") {
         if (!posHeldOrdersService) {
