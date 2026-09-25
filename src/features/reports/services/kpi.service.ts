@@ -34,6 +34,13 @@ export interface ReportFilter {
   value: string
 }
 
+// An additional metric computed alongside a KPI's primary field/aggregation -- only table/line
+// display types render these (see kpi-widget-renderer.tsx); other display types ignore them.
+export interface KpiExtraField {
+  field: string
+  aggregation: ReportAggregation
+}
+
 export interface Kpi {
   id: string
   organizationId: string
@@ -44,14 +51,22 @@ export interface Kpi {
   dataSource: string
   field: string
   aggregation: ReportAggregation
+  extraFields: KpiExtraField[]
   filters: ReportFilter[]
   timeGrouping: ReportTimeGrouping
   groupByDimension: string | null
   compareEnabled: boolean
   displayType: ReportDisplayType
+  // A gauge KPI's goal, distinct from compareEnabled (which compares against a prior period's
+  // actuals, not a target). Null = no goal set, gauge falls back to a plain current-value display.
+  target: number | null
+  // How many decimal places this KPI's values/percentages round to when displayed.
+  decimalPlaces: number
   isSystem: boolean
   status: "draft" | "active"
   createdByUserId: string
+  // The creator's real name -- null for a system KPI or a removed user account.
+  createdByName: string | null
   createdAt: string
   updatedAt: string
 }
@@ -63,11 +78,14 @@ export interface SaveKpiInput {
   dataSource: string
   field: string
   aggregation: ReportAggregation
+  extraFields: KpiExtraField[]
   filters: ReportFilter[]
   timeGrouping: ReportTimeGrouping
   groupByDimension: string | null
   compareEnabled: boolean
   displayType: ReportDisplayType
+  target: number | null
+  decimalPlaces: number
   status: "draft" | "active"
   workspaceId: string | null
 }
@@ -76,6 +94,7 @@ export interface KpiPreviewInput {
   dataSource: string
   field: string
   aggregation: ReportAggregation
+  extraFields: KpiExtraField[]
   filters: ReportFilter[]
   timeGrouping: ReportTimeGrouping
   groupByDimension: string | null
@@ -86,6 +105,9 @@ export interface KpiPreviewInput {
 export interface KpiDataPoint {
   label: string
   value: number
+  // This point's value for each of the KPI's extraFields, keyed by field key -- present only when
+  // the KPI has extraFields set.
+  extraValues?: Record<string, number>
 }
 
 export interface KpiResult {

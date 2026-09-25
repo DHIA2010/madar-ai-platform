@@ -21,15 +21,22 @@ function mapKpi(row: Record<string, unknown>): KpiDefinition {
     dataSource: String(row.data_source),
     field: String(row.field),
     aggregation: row.aggregation as KpiDefinition["aggregation"],
+    extraFields: (row.extra_fields as KpiDefinition["extraFields"]) ?? [],
     filters: (row.filters as KpiDefinition["filters"]) ?? [],
     timeGrouping: row.time_grouping as KpiDefinition["timeGrouping"],
     groupByDimension: (row.group_by_dimension as string | null) ?? null,
     compareEnabled: Boolean(row.compare_enabled),
     compareAgainst: "previous_period",
     displayType: row.display_type as KpiDefinition["displayType"],
+    target: row.target === null || row.target === undefined ? null : Number(row.target),
+    decimalPlaces:
+      row.decimal_places === null || row.decimal_places === undefined
+        ? 1
+        : Number(row.decimal_places),
     isSystem: Boolean(row.is_system),
     status: row.status as KpiDefinition["status"],
     createdByUserId: String(row.created_by_user_id),
+    createdByName: (row.creator_name as string | null) ?? null,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   }
@@ -52,6 +59,7 @@ function mapCustomReport(
     isSystem: Boolean(row.is_system),
     status: row.status as CustomReportDefinition["status"],
     createdByUserId: String(row.created_by_user_id),
+    createdByName: (row.creator_name as string | null) ?? null,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
     widgets,
@@ -63,7 +71,11 @@ export class ReportsRepository {
 
   async listKpis(organizationId: string): Promise<KpiDefinition[]> {
     const result = await this.db.query<Record<string, unknown>>(
-      "select * from kpis where organization_id = $1 order by created_at desc",
+      `select k.*, u.full_name as creator_name
+       from kpis k
+       left join users u on u.id = k.created_by_user_id
+       where k.organization_id = $1
+       order by k.created_at desc`,
       [organizationId]
     )
     return result.rows.map(mapKpi)
@@ -71,7 +83,10 @@ export class ReportsRepository {
 
   async findKpi(organizationId: string, id: string): Promise<KpiDefinition | null> {
     const result = await this.db.query<Record<string, unknown>>(
-      "select * from kpis where organization_id = $1 and id = $2",
+      `select k.*, u.full_name as creator_name
+       from kpis k
+       left join users u on u.id = k.created_by_user_id
+       where k.organization_id = $1 and k.id = $2`,
       [organizationId, id]
     )
     const row = result.rows[0]
@@ -85,13 +100,20 @@ export class ReportsRepository {
     isSystem: boolean
   ): Promise<KpiDefinition> {
     const result = await this.db.query<Record<string, unknown>>(
-      `insert into kpis (
-        id, organization_id, workspace_id, name, description, category, data_source, field,
-        aggregation, filters, time_grouping, group_by_dimension, compare_enabled, compare_against,
-        display_type, is_system, status, created_by_user_id, created_at, updated_at
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,'previous_period',$14,$15,$16,$17,now(),now()
-      ) returning *`,
+      `with inserted as (
+        insert into kpis (
+          id, organization_id, workspace_id, name, description, category, data_source, field,
+          aggregation, extra_fields, filters, time_grouping, group_by_dimension, compare_enabled,
+          compare_against, display_type, target, decimal_places, is_system, status,
+          created_by_user_id, created_at, updated_at
+        ) values (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,$13,$14,'previous_period',$15,$16,
+          $17,$18,$19,$20,now(),now()
+        ) returning *
+      )
+      select inserted.*, u.full_name as creator_name
+      from inserted
+      left join users u on u.id = inserted.created_by_user_id`,
       [
         randomUUID(),
         organizationId,
@@ -102,11 +124,14 @@ export class ReportsRepository {
         input.dataSource,
         input.field,
         input.aggregation,
+        JSON.stringify(input.extraFields ?? []),
         JSON.stringify(input.filters),
         input.timeGrouping,
         input.groupByDimension,
         input.compareEnabled,
         input.displayType,
+        input.target ?? null,
+        input.decimalPlaces ?? 1,
         isSystem,
         input.status,
         actorUserId,
@@ -122,13 +147,18 @@ export class ReportsRepository {
     input: SaveKpiInput
   ): Promise<KpiDefinition | null> {
     const result = await this.db.query<Record<string, unknown>>(
-      `update kpis set
-        workspace_id = $3, name = $4, description = $5, category = $6, data_source = $7,
-        field = $8, aggregation = $9, filters = $10::jsonb, time_grouping = $11,
-        group_by_dimension = $12, compare_enabled = $13, display_type = $14, status = $15,
-        updated_at = now()
-      where organization_id = $1 and id = $2
-      returning *`,
+      `with updated as (
+        update kpis set
+          workspace_id = $3, name = $4, description = $5, category = $6, data_source = $7,
+          field = $8, aggregation = $9, extra_fields = $10::jsonb, filters = $11::jsonb,
+          time_grouping = $12, group_by_dimension = $13, compare_enabled = $14, display_type = $15,
+          target = $16, decimal_places = $17, status = $18, updated_at = now()
+        where organization_id = $1 and id = $2
+        returning *
+      )
+      select updated.*, u.full_name as creator_name
+      from updated
+      left join users u on u.id = updated.created_by_user_id`,
       [
         organizationId,
         id,
@@ -139,11 +169,14 @@ export class ReportsRepository {
         input.dataSource,
         input.field,
         input.aggregation,
+        JSON.stringify(input.extraFields ?? []),
         JSON.stringify(input.filters),
         input.timeGrouping,
         input.groupByDimension,
         input.compareEnabled,
         input.displayType,
+        input.target ?? null,
+        input.decimalPlaces ?? 1,
         input.status,
       ]
     )
@@ -162,14 +195,31 @@ export class ReportsRepository {
 
   private async listWidgets(reportId: string): Promise<ReportWidgetRef[]> {
     const result = await this.db.query<Record<string, unknown>>(
-      "select * from report_widgets where report_id = $1 order by (position->>'order')::int asc",
+      // Reading order follows the grid itself (top row first, then left to right within a row)
+      // rather than the stored `order` field -- a widget dragged to a new spot should read back
+      // in its new place, not its original insertion order.
+      `select * from report_widgets where report_id = $1
+       order by (position->>'y')::int asc, (position->>'x')::int asc`,
       [reportId]
     )
-    return result.rows.map((row) => ({
-      id: String(row.id),
-      kpiId: String(row.kpi_id),
-      order: Number((row.position as { order?: number } | null)?.order ?? 0),
-    }))
+    return result.rows.map((row) => {
+      const position = row.position as {
+        order?: number
+        x?: number
+        y?: number
+        w?: number
+        h?: number
+      } | null
+      return {
+        id: String(row.id),
+        kpiId: String(row.kpi_id),
+        order: Number(position?.order ?? 0),
+        x: Number(position?.x ?? 0),
+        y: Number(position?.y ?? 0),
+        w: Number(position?.w ?? 6),
+        h: Number(position?.h ?? 4),
+      }
+    })
   }
 
   async listCustomReports(
@@ -177,7 +227,11 @@ export class ReportsRepository {
     isSystem: boolean
   ): Promise<CustomReportDefinition[]> {
     const result = await this.db.query<Record<string, unknown>>(
-      "select * from custom_reports where organization_id = $1 and is_system = $2 order by created_at desc",
+      `select r.*, u.full_name as creator_name
+       from custom_reports r
+       left join users u on u.id = r.created_by_user_id
+       where r.organization_id = $1 and r.is_system = $2
+       order by r.created_at desc`,
       [organizationId, isSystem]
     )
     const reports = await Promise.all(
@@ -191,7 +245,10 @@ export class ReportsRepository {
     id: string
   ): Promise<CustomReportDefinition | null> {
     const result = await this.db.query<Record<string, unknown>>(
-      "select * from custom_reports where organization_id = $1 and id = $2",
+      `select r.*, u.full_name as creator_name
+       from custom_reports r
+       left join users u on u.id = r.created_by_user_id
+       where r.organization_id = $1 and r.id = $2`,
       [organizationId, id]
     )
     const row = result.rows[0]
@@ -209,12 +266,17 @@ export class ReportsRepository {
   ): Promise<CustomReportDefinition> {
     const id = randomUUID()
     const result = await this.db.query<Record<string, unknown>>(
-      `insert into custom_reports (
-        id, organization_id, workspace_id, name, description, category, default_filters,
-        display_options, sharing, is_system, status, created_by_user_id, created_at, updated_at
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,now(),now()
-      ) returning *`,
+      `with inserted as (
+        insert into custom_reports (
+          id, organization_id, workspace_id, name, description, category, default_filters,
+          display_options, sharing, is_system, status, created_by_user_id, created_at, updated_at
+        ) values (
+          $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,now(),now()
+        ) returning *
+      )
+      select inserted.*, u.full_name as creator_name
+      from inserted
+      left join users u on u.id = inserted.created_by_user_id`,
       [
         id,
         organizationId,
@@ -240,12 +302,17 @@ export class ReportsRepository {
     input: SaveCustomReportInput
   ): Promise<CustomReportDefinition | null> {
     const result = await this.db.query<Record<string, unknown>>(
-      `update custom_reports set
-        workspace_id = $3, name = $4, description = $5, category = $6,
-        default_filters = $7::jsonb, display_options = $8::jsonb, sharing = $9, status = $10,
-        updated_at = now()
-      where organization_id = $1 and id = $2
-      returning *`,
+      `with updated as (
+        update custom_reports set
+          workspace_id = $3, name = $4, description = $5, category = $6,
+          default_filters = $7::jsonb, display_options = $8::jsonb, sharing = $9, status = $10,
+          updated_at = now()
+        where organization_id = $1 and id = $2
+        returning *
+      )
+      select updated.*, u.full_name as creator_name
+      from updated
+      left join users u on u.id = updated.created_by_user_id`,
       [
         organizationId,
         id,
@@ -284,7 +351,18 @@ export class ReportsRepository {
       await this.db.query(
         `insert into report_widgets (id, report_id, kpi_id, position, created_at)
          values ($1, $2, $3, $4::jsonb, now())`,
-        [randomUUID(), reportId, widget.kpiId, JSON.stringify({ order: widget.order })]
+        [
+          randomUUID(),
+          reportId,
+          widget.kpiId,
+          JSON.stringify({
+            order: widget.order,
+            x: widget.x,
+            y: widget.y,
+            w: widget.w,
+            h: widget.h,
+          }),
+        ]
       )
     }
   }

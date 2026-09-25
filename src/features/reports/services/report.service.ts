@@ -1,4 +1,4 @@
-import type { KpiResult } from "./kpi.service"
+import type { KpiResult, ReportFilter } from "./kpi.service"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
@@ -25,10 +25,16 @@ function getWorkspaceIdFromStorage(): string | null {
 export type ReportSharing = "private" | "organization"
 export type CustomReportStatus = "draft" | "active" | "stopped"
 
+// x/y/w/h place the widget on the builder's 12-column drag-and-resize grid (x/w in column
+// units, y/h in row units) -- the same grid the viewer renders the saved report back into.
 export interface ReportWidgetRef {
   id: string
   kpiId: string
   order: number
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 export interface CustomReport {
@@ -38,12 +44,22 @@ export interface CustomReport {
   name: string
   description: string
   category: string
-  defaultFilters: { dateRange?: string; workspaceId?: string | null }
+  // The report author's own saved baseline (set in the builder) -- applied whenever anyone opens
+  // the report, before any session-only adjustment from the viewer's own filter bar.
+  defaultFilters: {
+    dateRange?: string
+    workspaceId?: string | null
+    from?: string
+    to?: string
+    filters?: ReportLevelFilter[]
+  }
   displayOptions: { showFilterBar?: boolean; allowExport?: boolean; showComparison?: boolean }
   sharing: ReportSharing
   isSystem: boolean
   status: CustomReportStatus
   createdByUserId: string
+  // The creator's real name -- null for a system report or a removed user account.
+  createdByName: string | null
   createdAt: string
   updatedAt: string
   widgets: ReportWidgetRef[]
@@ -58,12 +74,25 @@ export interface SaveCustomReportInput {
   sharing: ReportSharing
   status: CustomReportStatus
   workspaceId: string | null
-  widgets: Array<{ kpiId: string; order: number }>
+  widgets: Array<{ kpiId: string; order: number; x: number; y: number; w: number; h: number }>
 }
 
 export interface CustomReportData {
   report: CustomReport
   results: Record<string, KpiResult>
+}
+
+// A filter from the viewer's own filter bar (not one baked into a saved KPI) -- scoped to a
+// `dataSource` since a report's widgets can pull from more than one, and this filter only makes
+// sense applied to the ones that actually have this field.
+export interface ReportLevelFilter extends ReportFilter {
+  dataSource: string
+}
+
+export interface ReportDataOverrides {
+  from?: string
+  to?: string
+  filters?: ReportLevelFilter[]
 }
 
 const sessionManager = createSessionManager()
@@ -97,7 +126,12 @@ export const reportService = {
     await client.delete<void>(reportUrl(id))
   },
 
-  async getData(id: string): Promise<CustomReportData> {
-    return client.get<CustomReportData>(`${reportUrl(id)}/data`)
+  async getData(id: string, overrides?: ReportDataOverrides): Promise<CustomReportData> {
+    const params = new URLSearchParams()
+    if (overrides?.from) params.set("from", overrides.from)
+    if (overrides?.to) params.set("to", overrides.to)
+    if (overrides?.filters?.length) params.set("filters", JSON.stringify(overrides.filters))
+    const query = params.toString()
+    return client.get<CustomReportData>(`${reportUrl(id)}/data${query ? `?${query}` : ""}`)
   },
 }

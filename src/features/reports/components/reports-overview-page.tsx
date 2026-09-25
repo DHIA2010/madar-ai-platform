@@ -18,7 +18,6 @@ import {
   Plus,
   Tag,
   TrendingUp,
-  Upload,
   Users,
   Warehouse,
 } from "lucide-react"
@@ -28,12 +27,10 @@ import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
 import {
-  AppButton,
   AppDropdownMenu,
   AppDropdownMenuContent,
   AppDropdownMenuItem,
   AppDropdownMenuTrigger,
-  AppEmpty,
   AppLoading,
   AppSelect,
   AppSelectContent,
@@ -51,6 +48,13 @@ const MUTED = "text-[#6b7b96]"
 const PAGER_BUTTON_CLASS =
   "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
+// The one action-button shape this page uses everywhere else (the category filters, the tab
+// switcher) -- a full pill, not AppButton's own rounded-lg default, which otherwise sits visually
+// inconsistent right beside these.
+const PILL_PRIMARY_CLASS =
+  "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2878ff] px-4 py-2 text-[12.5px] font-semibold text-white shadow-[0_4px_12px_rgba(40,120,255,0.24)] transition-colors hover:bg-[#1f63d6]"
+const PILL_SECONDARY_CLASS =
+  "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-[#e1e7f0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738]"
 
 interface CategoryMeta {
   label: string
@@ -146,11 +150,19 @@ function ReportsTable({
   loading,
   showOwner,
   onDelete,
+  emptyIcon: EmptyIcon,
+  emptyTitle,
+  emptyDescription,
+  emptyAction,
 }: {
   reports: CustomReport[]
   loading: boolean
   showOwner: boolean
   onDelete?: (report: CustomReport) => void
+  emptyIcon: LucideIcon
+  emptyTitle: string
+  emptyDescription: string
+  emptyAction?: ReactNode
 }) {
   const router = useRouter()
 
@@ -159,7 +171,18 @@ function ReportsTable({
   }
 
   if (reports.length === 0) {
-    return <AppEmpty title="لا توجد تقارير" description="لم يتم إنشاء أي تقارير بعد." />
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-[12px] border border-dashed border-[#dbe4f3] bg-[#fafbfd] px-6 py-14 text-center">
+        <span className="flex size-12 items-center justify-center rounded-[14px] bg-[#eaf1ff] text-[#2878ff]">
+          <EmptyIcon className="size-5" />
+        </span>
+        <div>
+          <p className={cn("text-[13.5px] font-bold", HEADING)}>{emptyTitle}</p>
+          <p className={cn("mx-auto mt-1 max-w-[320px] text-[12px]", MUTED)}>{emptyDescription}</p>
+        </div>
+        {emptyAction}
+      </div>
+    )
   }
 
   return (
@@ -215,13 +238,15 @@ function ReportsTable({
                 </td>
                 {showOwner && (
                   <td className={cn("px-3 py-2 text-[11.5px]", MUTED)}>
-                    {report.createdByUserId.slice(0, 8)}
+                    {report.createdByName ?? report.createdByUserId.slice(0, 8)}
                   </td>
                 )}
                 <td className="px-3 py-2">
                   <p className={cn("text-[12px]", HEADING)}>{formatDate(report.updatedAt)}</p>
                   <p className={cn("text-[10.5px]", MUTED)}>
-                    {report.isSystem ? "بواسطة النظام" : "بواسطة مستخدم"}
+                    {report.isSystem
+                      ? "بواسطة النظام"
+                      : `بواسطة ${report.createdByName ?? "مستخدم"}`}
                   </p>
                 </td>
                 {onDelete && (
@@ -435,6 +460,9 @@ function ReportsTab({
   tileIcon: TileIcon,
   onDelete,
   headerActions,
+  emptyTitle,
+  emptyDescription,
+  emptyAction,
 }: {
   reports: CustomReport[]
   loading: boolean
@@ -444,6 +472,9 @@ function ReportsTab({
   tileIcon: LucideIcon
   onDelete?: (report: CustomReport) => void
   headerActions?: ReactNode
+  emptyTitle: string
+  emptyDescription: string
+  emptyAction?: ReactNode
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -477,17 +508,7 @@ function ReportsTab({
             <p className={cn("mt-0.5 text-[12px]", MUTED)}>{subtitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => toast.info("استيراد التقارير قريباً.")}
-            className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#eaf1ff] px-3.5 py-2 text-[12px] font-semibold text-[#2878ff] transition-colors hover:bg-[#2878ff] hover:text-white"
-          >
-            <Upload className="size-3.5" />
-            استيراد تقرير
-          </button>
-          {headerActions}
-        </div>
+        <div className="flex items-center gap-2">{headerActions}</div>
       </div>
 
       {reports.length > 0 && (
@@ -508,6 +529,10 @@ function ReportsTab({
         loading={loading}
         showOwner={showOwner}
         onDelete={onDelete}
+        emptyIcon={TileIcon}
+        emptyTitle={emptyTitle}
+        emptyDescription={emptyDescription}
+        emptyAction={emptyAction}
       />
 
       {!loading && filtered.length > 0 && (
@@ -568,16 +593,22 @@ export function ReportsOverviewPage() {
   const customTabActions = (
     <>
       <Can permission="reports:manage">
-        <AppButton
-          icon={<Plus className="size-4" />}
+        <button
+          type="button"
+          className={PILL_PRIMARY_CLASS}
           onClick={() => router.push(ROUTES.reportsCustomNew)}
         >
+          <Plus className="size-4" />
           إنشاء تقرير مخصص
-        </AppButton>
+        </button>
       </Can>
-      <AppButton variant="outline" onClick={() => router.push(ROUTES.reportsKpis)}>
+      <button
+        type="button"
+        className={PILL_SECONDARY_CLASS}
+        onClick={() => router.push(ROUTES.reportsKpis)}
+      >
         المؤشرات المحفوظة
-      </AppButton>
+      </button>
     </>
   )
 
@@ -632,6 +663,8 @@ export function ReportsOverviewPage() {
           title="التقارير الجاهزة"
           subtitle="تقارير معدة مسبقاً وجاهزة للاستخدام"
           tileIcon={FileBarChart2}
+          emptyTitle="لا توجد تقارير جاهزة بعد"
+          emptyDescription="سيتم عرض التقارير الجاهزة هنا فور توفرها."
         />
       ) : (
         <ReportsTab
@@ -643,6 +676,20 @@ export function ReportsOverviewPage() {
           tileIcon={BarChart3}
           onDelete={handleDelete}
           headerActions={customTabActions}
+          emptyTitle="لا توجد تقارير مخصصة بعد"
+          emptyDescription="أنشئ أول تقرير مخصص لمتابعة البيانات التي تهمك من مؤشراتك المحفوظة."
+          emptyAction={
+            <Can permission="reports:manage">
+              <button
+                type="button"
+                className={PILL_PRIMARY_CLASS}
+                onClick={() => router.push(ROUTES.reportsCustomNew)}
+              >
+                <Plus className="size-4" />
+                إنشاء تقرير مخصص
+              </button>
+            </Can>
+          }
         />
       )}
     </div>

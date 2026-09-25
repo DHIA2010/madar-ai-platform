@@ -51,8 +51,13 @@ function categoryLabel(category: string) {
   return CATEGORY_LABELS[category] ?? category
 }
 
+// ar-SA formats both digits and dates against locale defaults (Eastern Arabic-Indic numerals,
+// the Hijri calendar) in some ICU builds -- these Unicode extensions force Western digits and the
+// Gregorian calendar so this matches the plain Gregorian timestamps the backend returns.
 function formatDate(iso: string) {
-  return new Intl.DateTimeFormat("ar-SA", { dateStyle: "medium" }).format(new Date(iso))
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { dateStyle: "medium" }).format(
+    new Date(iso)
+  )
 }
 
 export function KpiLibraryPage() {
@@ -101,8 +106,13 @@ export function KpiLibraryPage() {
           actions={
             <Can permission="reports:manage">
               <AppButton
-                icon={<Plus className="size-4" />}
+                icon={
+                  <span className="flex size-5 items-center justify-center rounded-full bg-white/20">
+                    <Plus className="size-3.5" strokeWidth={2.5} />
+                  </span>
+                }
                 onClick={() => router.push(ROUTES.reportsKpisNew)}
+                className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-semibold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
               >
                 إنشاء مؤشر جديد
               </AppButton>

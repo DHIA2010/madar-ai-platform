@@ -579,6 +579,11 @@ export const createProductSchema = z.object({
   // Null means "use the organization's default rate" -- see catalog-types.ts's CreateProductInput.
   taxRateId: z.string().uuid().nullable().optional().default(null),
   priceIncludesTax: z.boolean().default(false),
+  // Which workspace (branch) this product belongs to -- the Add Product form makes this a
+  // required choice, but it's optional here too so a caller that never sends one (bulk import,
+  // an older client) still falls back to the request's own active-workspace context, same as
+  // before this field existed. See server.ts's product create route.
+  workspaceId: z.string().uuid().nullable().optional().default(null),
 })
 
 // A products-list "select several, change their status" quick action -- see
@@ -712,6 +717,10 @@ export const createBalanceVoucherSchema = z.object({
   taxAmount: z.number().nonnegative().optional().default(0),
   paymentMethodCode: z.string().min(1).max(60),
   notes: z.string().max(500).nullable().optional().default(null),
+  // The voucher's own recorded date -- defaults to today in the UI, but stays editable (e.g. to
+  // backdate a receipt collected earlier and only entered now). Omitted or left empty falls back
+  // to the database's own now() default, same as before this field existed.
+  transactionDate: z.string().min(1).optional(),
   attachments: z
     .array(
       z.object({

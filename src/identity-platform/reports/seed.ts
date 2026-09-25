@@ -22,6 +22,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: null,
         compareEnabled: true,
         displayType: "line",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -49,6 +50,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: "product_name",
         compareEnabled: false,
         displayType: "table",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -76,6 +78,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: "category",
         compareEnabled: false,
         displayType: "table",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -103,6 +106,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: "customer_name",
         compareEnabled: false,
         displayType: "table",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -131,6 +135,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: null,
         compareEnabled: true,
         displayType: "line",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -159,6 +164,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: null,
         compareEnabled: true,
         displayType: "bar",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -186,6 +192,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: "branch",
         compareEnabled: false,
         displayType: "bar",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -213,6 +220,7 @@ const SYSTEM_REPORTS: Array<{ kpi: SaveKpiInput; report: Omit<SaveCustomReportIn
         groupByDimension: "category",
         compareEnabled: false,
         displayType: "pie",
+        target: null,
         status: "active",
         workspaceId: null,
       },
@@ -247,7 +255,9 @@ export async function ensureSystemReportsSeeded(
     await repository.createCustomReport(
       organizationId,
       actorUserId,
-      { ...report, widgets: [{ kpiId: savedKpi.id, order: 0 }] },
+      // A single full-width widget on a 12-column grid -- the only sensible default for a
+      // system report that always ships with exactly one KPI.
+      { ...report, widgets: [{ kpiId: savedKpi.id, order: 0, x: 0, y: 0, w: 12, h: 4 }] },
       true
     )
   }

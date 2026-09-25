@@ -3,14 +3,16 @@ import { ERRORS, IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import { findDataSource, findField, REPORT_CATALOG } from "./catalog"
-import { executeKpi } from "./query-builder"
+import { executeKpi, getFilterFieldValues } from "./query-builder"
 import { ReportsRepository } from "./repository"
 import { ensureSystemReportsSeeded } from "./seed"
 import type {
   CustomReportDefinition,
   KpiDefinition,
+  KpiExtraField,
   KpiResult,
   ReportFilter,
+  ReportLevelFilter,
   SaveCustomReportInput,
   SaveKpiInput,
 } from "./types"
@@ -40,16 +42,27 @@ function assertActorCanManageReports(actor: AuthenticatedActor) {
 function validateDefinitionShape(input: {
   dataSource: string
   field: string
+  extraFields?: KpiExtraField[]
   filters: ReportFilter[]
   groupByDimension: string | null
 }) {
   const dataSource = findDataSource(input.dataSource)
   if (!dataSource) {
-    throw new IdentityError("REPORT_DEFINITION_INVALID", 400, "validation", "Unknown data source.")
+    throw new IdentityError(
+      "REPORT_DEFINITION_INVALID",
+      400,
+      "validation",
+      "مصدر بيانات غير معروف."
+    )
   }
   const field = findField(dataSource, input.field)
   if (!field) {
-    throw new IdentityError("REPORT_DEFINITION_INVALID", 400, "validation", "Unknown field.")
+    throw new IdentityError("REPORT_DEFINITION_INVALID", 400, "validation", "حقل غير معروف.")
+  }
+  for (const extra of input.extraFields ?? []) {
+    if (!findField(dataSource, extra.field)) {
+      throw new IdentityError("REPORT_DEFINITION_INVALID", 400, "validation", "حقل غير معروف.")
+    }
   }
 }
 
@@ -116,7 +129,7 @@ export class ReportsService {
         "REPORT_SYSTEM_KPI_READONLY",
         403,
         "business",
-        "System KPIs cannot be edited."
+        "لا يمكن تعديل المؤشرات الأساسية للنظام."
       )
     }
     const updated = await this.repository.updateKpi(actor.organizationId, id, actor.userId, input)
@@ -140,6 +153,7 @@ export class ReportsService {
       dataSource: string
       field: string
       aggregation: SaveKpiInput["aggregation"]
+      extraFields?: KpiExtraField[]
       filters: ReportFilter[]
       timeGrouping: SaveKpiInput["timeGrouping"]
       groupByDimension: string | null
@@ -149,6 +163,15 @@ export class ReportsService {
   ): Promise<KpiResult> {
     validateDefinitionShape(input)
     return executeKpi(this.db, actor.organizationId, input.workspaceId, input, defaultRange())
+  }
+
+  async getFilterFieldValues(
+    actor: AuthenticatedActor,
+    dataSource: string,
+    field: string,
+    workspaceId: string | null
+  ): Promise<string[]> {
+    return getFilterFieldValues(this.db, actor.organizationId, workspaceId, dataSource, field)
   }
 
   async listCustomReports(
@@ -192,7 +215,7 @@ export class ReportsService {
         "REPORT_SYSTEM_REPORT_READONLY",
         403,
         "business",
-        "System reports cannot be edited."
+        "لا يمكن تعديل تقارير النظام."
       )
     }
     const updated = await this.repository.updateCustomReport(actor.organizationId, id, input)
@@ -211,24 +234,60 @@ export class ReportsService {
   }
 
   // Runs every KPI placed on a report's canvas in one call -- what powers both the read-only
-  // viewer and the builder's live canvas preview.
+  // viewer and the builder's live canvas preview. Three layers stack here, closest-wins for the
+  // date range and additive for filters:
+  //   1. The hardcoded last-12-months window, if nothing else is set.
+  //   2. The report author's own saved `defaultFilters` (its permanent baseline, set in the
+  //      builder) -- applied whenever no viewer override says otherwise.
+  //   3. `overrides`, the viewer's own session-only filter bar -- a date range replaces the
+  //      baseline entirely (combining two ranges isn't meaningful), while its filters are ADDED
+  //      on top of the saved ones rather than replacing them, since the saved filters represent
+  //      "always applies to this report" rules.
+  // Every filter (saved or session) is scoped by `dataSource` and merged into a widget's own
+  // filters only when that widget's KPI reads from the same data source, so a filter meaningful to
+  // one data source never leaks onto a KPI from a different one. executeKpi validates every merged
+  // filter against the catalog exactly as it does a KPI's own saved filters, so one naming an
+  // unknown/disallowed field still gets rejected there -- no separate validation needed here.
   async runCustomReport(
     actor: AuthenticatedActor,
-    id: string
+    id: string,
+    overrides?: { from?: string; to?: string; filters?: ReportLevelFilter[] }
   ): Promise<{ report: CustomReportDefinition; results: Record<string, KpiResult> }> {
     const report = await this.getCustomReport(actor, id)
-    const range = defaultRange()
+    const savedFrom = report.defaultFilters.from
+    const savedTo = report.defaultFilters.to
+    const range =
+      overrides?.from && overrides?.to
+        ? { from: overrides.from, to: overrides.to }
+        : savedFrom && savedTo
+          ? { from: savedFrom, to: savedTo }
+          : defaultRange()
+    const combinedFilters = [
+      ...(report.defaultFilters.filters ?? []),
+      ...(overrides?.filters ?? []),
+    ]
     const results: Record<string, KpiResult> = {}
     for (const widget of report.widgets) {
       const kpi = await this.repository.findKpi(actor.organizationId, widget.kpiId)
       if (!kpi) {
         continue
       }
+      const extraFilters = combinedFilters.filter((filter) => filter.dataSource === kpi.dataSource)
+      const definition =
+        extraFilters.length === 0
+          ? kpi
+          : {
+              ...kpi,
+              filters: [
+                ...kpi.filters,
+                ...extraFilters.map(({ field, operator, value }) => ({ field, operator, value })),
+              ],
+            }
       results[widget.kpiId] = await executeKpi(
         this.db,
         actor.organizationId,
         report.workspaceId,
-        kpi,
+        definition,
         range
       )
     }
