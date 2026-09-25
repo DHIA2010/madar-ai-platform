@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { format } from "date-fns"
 import {
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   CreditCard,
   Download,
+  FileDown,
   FileText,
   Landmark,
   Layers,
@@ -28,6 +29,7 @@ import {
   X,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
+import { createPortal } from "react-dom"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -35,11 +37,14 @@ import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
+  AppDateField,
   AppDateRangeFilter,
   AppDialog,
   AppSearchableSelect,
   type AppSearchableSelectOption,
 } from "@/components/app"
+
+import { useWorkspace } from "@/features/workspace"
 
 import { useCustomer } from "../hooks"
 import { customerListService } from "../services/customer-list.service"
@@ -239,7 +244,90 @@ function StatCard({
   )
 }
 
+// The full (unpaginated, currently-filtered) transaction table -- shared by the print-only view
+// and the PDF export tree, since both need the same "every row, no on-screen chrome" rendering
+// rather than the live table's paginated slice. `canvasText` marks every cell with
+// data-canvas-text: only the PDF export rasterizes this via html2canvas (which mis-renders mixed
+// Arabic/Latin-digit content like these amounts and dates unless routed through the manual
+// fillText redraw in handleExportPdf below) -- native browser printing has no such bug, so the
+// print tree renders plain text.
+function StatementTable({
+  transactions,
+  methodNames,
+  canvasText = false,
+}: {
+  transactions: AccountTransaction[]
+  methodNames: MethodNameMap
+  canvasText?: boolean
+}) {
+  return (
+    <table className="w-full text-right" style={{ borderCollapse: "collapse" }}>
+      <thead>
+        <tr className="border-b border-[#e1e7f0] text-[11px] font-semibold text-[#5b6b85]">
+          <th className="px-3 py-2">#</th>
+          <th className="px-3 py-2">المرجع</th>
+          <th className="px-3 py-2">نوع العملية</th>
+          <th className="px-3 py-2">الوصف</th>
+          <th className="px-3 py-2">المبلغ</th>
+          <th className="px-3 py-2">الرصيد بعد العملية</th>
+          <th className="px-3 py-2">التاريخ والوقت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {transactions.map((transaction, index) => {
+          const meta = TRANSACTION_TYPE_META[transaction.type]
+          return (
+            <tr key={transaction.id} className="border-b border-[#f1f4f9] text-[12px]">
+              <td className="px-3 py-2 text-[#5b6b85]">{index + 1}</td>
+              <td
+                {...(canvasText ? { "data-canvas-text": true } : {})}
+                className="px-3 py-2 font-mono text-[11px] text-[#0d1b3e]"
+              >
+                {transaction.reference}
+              </td>
+              <td
+                {...(canvasText ? { "data-canvas-text": true } : {})}
+                className="px-3 py-2"
+                style={{ color: meta.color }}
+              >
+                {meta.verb}
+              </td>
+              <td
+                {...(canvasText ? { "data-canvas-text": true } : {})}
+                className="px-3 py-2 text-[#5b6b85]"
+              >
+                {describeTransaction(transaction, methodNames)}
+              </td>
+              <td
+                {...(canvasText ? { "data-canvas-text": true } : {})}
+                className="px-3 py-2 font-bold"
+                style={{ color: meta.color }}
+              >
+                {meta.direction > 0 ? "+" : "-"}
+                {formatAmount(transaction.amount)}
+              </td>
+              <td
+                {...(canvasText ? { "data-canvas-text": true } : {})}
+                className="px-3 py-2 font-semibold text-[#0d1b3e]"
+              >
+                {formatAmount(transaction.balanceAfter)}
+              </td>
+              <td
+                {...(canvasText ? { "data-canvas-text": true } : {})}
+                className="px-3 py-2 text-[#5b6b85]"
+              >
+                {formatDateTime(transaction.createdAt)}
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
 export function CustomerStatement({ customerId }: { customerId: string }) {
+  const { currentOrganization } = useWorkspace()
   const {
     customer,
     isLoading: isCustomerLoading,
@@ -328,6 +416,9 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
   const [amount, setAmount] = useState("")
   const [taxInclusive, setTaxInclusive] = useState(false)
   const [paymentMethodCode, setPaymentMethodCode] = useState("")
+  // Defaults to today but stays editable -- e.g. to backdate a receipt collected earlier and only
+  // entered into the system now.
+  const [transactionDate, setTransactionDate] = useState(() => format(new Date(), "yyyy-MM-dd"))
   const [notes, setNotes] = useState("")
   const [attachments, setAttachments] = useState<File[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -342,6 +433,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
     setAmount("")
     setTaxInclusive(false)
     setPaymentMethodCode("")
+    setTransactionDate(format(new Date(), "yyyy-MM-dd"))
     setNotes("")
     setAttachments([])
   }
@@ -375,6 +467,10 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
       toast.error("اختر طريقة الدفع.")
       return
     }
+    if (!transactionDate) {
+      toast.error("اختر تاريخ السند.")
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -389,6 +485,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
         paymentMethodCode,
         notes: notes.trim() || null,
         attachments: uploadedAttachments,
+        transactionDate,
       }
       const updated =
         dialogType === "receipt"
@@ -437,6 +534,130 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
     link.download = `كشف-حساب-${customer?.name ?? customerId}.csv`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  // Splits the full transaction list into groups small enough that each one's rasterized table
+  // image always fits within a single PDF page -- mirrors ReportViewerPage's own PDF export
+  // capturing one widget at a time rather than an unbounded grid in one shot, for the same reason
+  // (a single overlong image would just overflow the page instead of flowing onto a new one).
+  const EXPORT_CHUNK_SIZE = 18
+  const exportChunks = useMemo(() => {
+    const chunks: AccountTransaction[][] = []
+    for (let i = 0; i < transactions.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(transactions.slice(i, i + EXPORT_CHUNK_SIZE))
+    }
+    return chunks
+  }, [transactions])
+
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const exportHeaderRef = useRef<HTMLDivElement>(null)
+  const exportChunkRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+  // Rasterizes an off-screen tree (statement header + every transaction, none of the page's own
+  // header/filters/pagination/action buttons -- and none of the app's sidebar/topbar, which this
+  // component never renders in the first place) into a downloadable PDF. Same html2canvas +
+  // manual-fillText-redraw pipeline ReportViewerPage's own PDF export already uses and has been
+  // verified against real Arabic/mixed-content text -- see its handleExportPdf for the full
+  // rationale on every step here.
+  const handleExportPdf = async () => {
+    if (!customer || exportingPdf) return
+    setExportingPdf(true)
+    try {
+      await Promise.all([new Promise((resolve) => setTimeout(resolve, 300)), document.fonts.ready])
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ])
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+      const marginMm = 12
+      const pageWidthMm = pdf.internal.pageSize.getWidth()
+      const pageHeightMm = pdf.internal.pageSize.getHeight()
+      const contentWidthMm = pageWidthMm - marginMm * 2
+      let cursorYMm = marginMm
+      const canvasScale = 2
+
+      const addNode = async (node: HTMLElement) => {
+        const textNodes = Array.from(node.querySelectorAll<HTMLElement>("[data-canvas-text]"))
+        const textCaptures = textNodes.map((el) => {
+          const style = getComputedStyle(el)
+          const range = document.createRange()
+          range.selectNodeContents(el)
+          return {
+            el,
+            text: el.textContent ?? "",
+            color: style.color,
+            font: `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`,
+            previousColor: el.style.color,
+            rect: range.getBoundingClientRect(),
+          }
+        })
+        textCaptures.forEach(({ el }) => {
+          el.style.color = "transparent"
+        })
+
+        const canvas = await html2canvas(node, {
+          scale: canvasScale,
+          backgroundColor: "#ffffff",
+          // The org logo (only external image in this tree) needs this to actually draw instead
+          // of silently tainting the canvas -- everything else here is same-origin/inline.
+          useCORS: true,
+        })
+
+        textCaptures.forEach(({ el, previousColor }) => {
+          el.style.color = previousColor
+        })
+
+        const ctx = canvas.getContext("2d")
+        if (ctx) {
+          const nodeRect = node.getBoundingClientRect()
+          ctx.save()
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.scale(canvasScale, canvasScale)
+          ctx.textAlign = "center"
+          ctx.textBaseline = "middle"
+          ctx.direction = "rtl"
+          for (const capture of textCaptures) {
+            if (!capture.text.trim()) continue
+            ctx.font = capture.font
+            ctx.fillStyle = capture.color
+            ctx.fillText(
+              capture.text,
+              capture.rect.left - nodeRect.left + capture.rect.width / 2,
+              capture.rect.top - nodeRect.top + capture.rect.height / 2
+            )
+          }
+          ctx.restore()
+        }
+
+        const imgHeightMm = (canvas.height * contentWidthMm) / canvas.width
+        if (cursorYMm > marginMm && cursorYMm + imgHeightMm > pageHeightMm - marginMm) {
+          pdf.addPage()
+          cursorYMm = marginMm
+        }
+        pdf.addImage(
+          canvas.toDataURL("image/jpeg", 0.92),
+          "JPEG",
+          marginMm,
+          cursorYMm,
+          contentWidthMm,
+          imgHeightMm
+        )
+        cursorYMm += imgHeightMm + 6
+      }
+
+      if (exportHeaderRef.current) await addNode(exportHeaderRef.current)
+      for (let i = 0; i < exportChunks.length; i++) {
+        const node = exportChunkRefs.current.get(i)
+        if (node) await addNode(node)
+      }
+
+      const safeName = customer.name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "customer"
+      pdf.save(`كشف-حساب-${safeName}.pdf`)
+    } finally {
+      setExportingPdf(false)
+    }
   }
 
   if (isCustomerLoading) {
@@ -646,6 +867,15 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
             >
               طباعة
             </AppButton>
+            <AppButton
+              variant="outline"
+              icon={<FileDown className="size-3.5" />}
+              onClick={() => void handleExportPdf()}
+              disabled={transactions.length === 0 || exportingPdf}
+              className="h-9 gap-1.5 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85]"
+            >
+              {exportingPdf ? "جاري التصدير..." : "تصدير PDF"}
+            </AppButton>
           </div>
         </div>
 
@@ -756,9 +986,12 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
         <AccountTransactionDialog
           type={dialogType}
           customerName={customer.name}
+          customerAccountBalance={customer.accountBalance ?? 0}
           vatRate={vatRate}
           amount={amount}
           onAmountChange={setAmount}
+          transactionDate={transactionDate}
+          onTransactionDateChange={setTransactionDate}
           taxInclusive={taxInclusive}
           onTaxInclusiveChange={setTaxInclusive}
           paymentMethodCode={paymentMethodCode}
@@ -776,6 +1009,151 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
           onSubmit={() => void submitTransaction()}
         />
       ) : null}
+
+      {/* Print-only view of the full (unpaginated, currently-filtered) transaction table -- none
+          of the breadcrumb, سند buttons, customer/stat cards, filter bar, or this section's own
+          download/print buttons and pagination, none of which mean anything on paper. Portaled
+          straight to <body> (same pattern as ReturnedInvoicesPage's own print target) since the
+          print CSS below hides every other top-level element by selector, and this tree needs to
+          be a sibling of them, not nested inside the (hidden) page content. */}
+      {typeof document !== "undefined"
+        ? createPortal(
+            <div id="statement-print-target" className="hidden p-6 print:block" dir="rtl">
+              <div className="mb-4 flex items-center justify-between gap-4 border-b border-[#e1e7f0] pb-3">
+                <div>
+                  <h1 className="text-[16px] font-extrabold text-[#0d1b3e]">كشف حساب العميل</h1>
+                  <p className="mt-0.5 text-[12px] text-[#5b6b85]">{customer.name}</p>
+                  <p className="mt-0.5 text-[11px] text-[#5b6b85]">
+                    تم إنشاؤه في{" "}
+                    {new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+                      dateStyle: "long",
+                      timeStyle: "short",
+                    }).format(new Date())}
+                  </p>
+                </div>
+                {currentOrganization ? (
+                  <div className="flex shrink-0 items-center gap-2.5">
+                    {currentOrganization.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={currentOrganization.logoUrl}
+                        alt=""
+                        className="size-10 shrink-0 rounded-[10px] object-contain"
+                      />
+                    ) : null}
+                    <span className="text-[13px] font-bold text-[#0d1b3e]">
+                      {currentOrganization.name}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              <StatementTable transactions={transactions} methodNames={methodNames} />
+            </div>,
+            document.body
+          )
+        : null}
+      <style>{`
+        @media print {
+          body > *:not(#statement-print-target) { display: none !important; }
+        }
+      `}</style>
+
+      {/* The tree handleExportPdf() rasterizes -- kept off-screen (not display:none, html2canvas
+          needs a real layout to measure and capture), mounted only while exporting. Every color
+          here is a hardcoded hex, never a Tailwind semantic class like bg-card/text-muted-
+          foreground -- those resolve to oklch() custom properties (Tailwind v4's default theme),
+          which html2canvas cannot parse. Same off-screen-at-a-huge-negative-offset setup
+          ReportViewerPage's own PDF export uses -- see its comment for why. */}
+      {exportingPdf ? (
+        <div style={{ position: "fixed", top: 0, left: -99999, width: 760 }} dir="rtl">
+          <div
+            ref={exportHeaderRef}
+            className="flex flex-col gap-4 bg-white p-4"
+            style={{ width: 760 }}
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="mb-1 text-xl font-bold text-[#0d1b3e]">كشف حساب العميل</h1>
+                <p data-canvas-text className="mb-1 text-sm text-[#5b6b85]">
+                  {customer.name}
+                </p>
+                <p data-canvas-text className="text-[11px] text-[#95a4bd]">
+                  تم إنشاؤه في{" "}
+                  {new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+                    dateStyle: "long",
+                    timeStyle: "short",
+                  }).format(new Date())}
+                </p>
+              </div>
+              {currentOrganization ? (
+                <div className="flex shrink-0 items-center gap-2.5">
+                  {currentOrganization.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={currentOrganization.logoUrl}
+                      alt=""
+                      className="size-10 shrink-0 rounded-[10px] object-contain"
+                    />
+                  ) : null}
+                  <span
+                    data-canvas-text
+                    className="overflow-hidden whitespace-nowrap text-[13px] font-bold text-[#0d1b3e]"
+                  >
+                    {currentOrganization.name}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              <div className="rounded-[10px] border border-[#e1e7f0] p-3">
+                <p className="text-[10.5px] text-[#5b6b85]">
+                  {(customer.accountBalance ?? 0) >= 0 ? "رصيد العميل (له)" : "رصيد العميل (عليه)"}
+                </p>
+                <p
+                  data-canvas-text
+                  className="mt-1 text-[15px] font-extrabold"
+                  style={{ color: (customer.accountBalance ?? 0) >= 0 ? "#16a34a" : "#dc2626" }}
+                >
+                  {formatAmount(Math.abs(customer.accountBalance ?? 0))}
+                </p>
+              </div>
+              <div className="rounded-[10px] border border-[#e1e7f0] p-3">
+                <p className="text-[10.5px] text-[#5b6b85]">إجمالي الوارد</p>
+                <p data-canvas-text className="mt-1 text-[15px] font-extrabold text-[#16a34a]">
+                  {formatAmount(statement?.totalCredits ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-[10px] border border-[#e1e7f0] p-3">
+                <p className="text-[10.5px] text-[#5b6b85]">إجمالي الصادر</p>
+                <p data-canvas-text className="mt-1 text-[15px] font-extrabold text-[#dc2626]">
+                  {formatAmount(statement?.totalDebits ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-[10px] border border-[#e1e7f0] p-3">
+                <p className="text-[10.5px] text-[#5b6b85]">عدد العمليات</p>
+                <p data-canvas-text className="mt-1 text-[15px] font-extrabold text-[#0d1b3e]">
+                  {String(statement?.transactionCount ?? 0)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {exportChunks.map((chunk, index) => (
+            <div
+              key={index}
+              ref={(node) => {
+                if (node) exportChunkRefs.current.set(index, node)
+                else exportChunkRefs.current.delete(index)
+              }}
+              className="overflow-hidden rounded-[10px] border border-[#e1e7f0] bg-white"
+              style={{ width: 760, marginTop: 12 }}
+            >
+              <StatementTable transactions={chunk} methodNames={methodNames} canvasText />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -783,9 +1161,12 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
 function AccountTransactionDialog({
   type,
   customerName,
+  customerAccountBalance,
   vatRate,
   amount,
   onAmountChange,
+  transactionDate,
+  onTransactionDateChange,
   taxInclusive,
   onTaxInclusiveChange,
   paymentMethodCode,
@@ -802,9 +1183,12 @@ function AccountTransactionDialog({
 }: {
   type: "receipt" | "payment"
   customerName: string
+  customerAccountBalance: number
   vatRate: number
   amount: string
   onAmountChange: (value: string) => void
+  transactionDate: string
+  onTransactionDateChange: (value: string) => void
   taxInclusive: boolean
   onTaxInclusiveChange: (value: boolean) => void
   paymentMethodCode: string
@@ -825,6 +1209,10 @@ function AccountTransactionDialog({
   const taxAmount = taxInclusive
     ? Math.round((numericAmount - numericAmount / (1 + vatRate)) * 100) / 100
     : 0
+  // Mirrors createAccountTransaction's own balanceDelta (native-customers-service.ts) exactly --
+  // a receipt credits the account, a payment voucher debits it.
+  const balanceAfter =
+    customerAccountBalance + (type === "receipt" ? numericAmount : -numericAmount)
   const subtitle =
     type === "receipt"
       ? "تسجيل مبلغ حقيقي تم استلامه من العميل، يضاف إلى رصيده"
@@ -836,7 +1224,7 @@ function AccountTransactionDialog({
       onOpenChange={(next) => {
         if (!next && !isSaving) onCancel()
       }}
-      contentClassName="w-[92vw] max-w-[30rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName="w-[92vw] max-w-[34rem] rounded-[16px] p-5 [direction:rtl]"
       title={
         <div className="flex items-center gap-2.5">
           <span
@@ -874,11 +1262,7 @@ function AccountTransactionDialog({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>التاريخ</label>
-            <input
-              disabled
-              value={DATE_FORMAT.format(new Date())}
-              className={cn(FIELD_CLASS, "h-11 w-full px-3 text-[#8098b4]")}
-            />
+            <AppDateField value={transactionDate} onChange={onTransactionDateChange} />
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
@@ -1019,6 +1403,37 @@ function AccountTransactionDialog({
               ))}
             </ul>
           ) : null}
+        </div>
+
+        <div className="rounded-[12px] border border-[#e8edf3] bg-[#f8fafc] p-3.5">
+          <p className={cn("mb-2 text-[12px] font-bold", HEADING)}>ملخص العملية</p>
+          <div className="flex flex-col gap-1.5 text-[12px]">
+            <div className="flex items-center justify-between">
+              <span className={MUTED}>المبلغ</span>
+              <span className={cn("font-semibold", HEADING)}>{formatAmount(numericAmount)}</span>
+            </div>
+            {taxInclusive ? (
+              <div className="flex items-center justify-between">
+                <span className={MUTED}>منها ضريبة القيمة المضافة</span>
+                <span className={cn("font-semibold", HEADING)}>{formatAmount(taxAmount)}</span>
+              </div>
+            ) : null}
+            <div className="mt-1 flex items-center justify-between border-t border-[#e8edf3] pt-1.5">
+              <span className={MUTED}>رصيد العميل الحالي</span>
+              <span className={cn("font-semibold", HEADING)}>
+                {formatAmount(customerAccountBalance)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={MUTED}>رصيد العميل بعد العملية</span>
+              <span
+                className="font-bold"
+                style={{ color: balanceAfter >= 0 ? "#16a34a" : "#dc2626" }}
+              >
+                {formatAmount(balanceAfter)}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </AppDialog>

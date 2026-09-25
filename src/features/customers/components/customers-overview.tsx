@@ -701,6 +701,7 @@ export function CustomersOverview() {
                     <th className="px-4 py-3">الشريحة</th>
                     <th className="px-4 py-3">المنصة</th>
                     <th className="px-4 py-3">قيمة العميل (LTV)</th>
+                    <th className="px-4 py-3">رصيد المحفظة</th>
                     <th className="px-4 py-3">عدد الطلبات</th>
                     <th className="px-4 py-3">آخر عملية شراء</th>
                     <th className="px-4 py-3"></th>
@@ -893,6 +894,18 @@ function CustomerRow({
       <td className={cn("px-4 py-3 text-[12px]", MUTED)}>{PLATFORM_LABEL[record.platform]}</td>
       <td className={cn("px-4 py-3 text-[12.5px] font-bold", HEADING)}>
         {formatAmount(record.lifetimeValue)}
+      </td>
+      <td
+        className={cn(
+          "px-4 py-3 text-[12.5px] font-bold",
+          record.accountBalance === null || record.accountBalance === 0
+            ? HEADING
+            : record.accountBalance > 0
+              ? "text-[#16a34a]"
+              : "text-[#dc2626]"
+        )}
+      >
+        {record.accountBalance !== null ? formatAmount(record.accountBalance) : "—"}
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">

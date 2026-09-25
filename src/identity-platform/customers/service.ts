@@ -79,8 +79,11 @@ function daysSince(dateIso: string | null): number | null {
 }
 
 // Heuristic, not synced data: recency-based engagement tiers over real order dates. Documented
-// here so the thresholds are easy to revisit rather than opaque magic numbers in the UI.
-function computeStatus(input: {
+// here so the thresholds are easy to revisit rather than opaque magic numbers in the UI. Exported
+// for native-customers-service.ts to reuse -- a native customer's real orders now come from
+// pos_invoices.customer_id instead of a synced-storefront join, but the same classification rules
+// apply once totalOrders/lastPurchaseAt are real.
+export function computeStatus(input: {
   createdAt: string
   totalOrders: number
   lastPurchaseAt: string | null
@@ -102,7 +105,11 @@ function computeStatus(input: {
 
 // Heuristic value tier over real lifetime value/order count -- deliberately kept independent
 // of computeStatus's engagement-recency signal so the two badges don't just restate each other.
-function computeSegment(input: { totalOrders: number; lifetimeValue: number }): CustomerSegment {
+// Exported for native-customers-service.ts -- see computeStatus's own comment above.
+export function computeSegment(input: {
+  totalOrders: number
+  lifetimeValue: number
+}): CustomerSegment {
   if (input.totalOrders === 0) {
     return "New"
   }

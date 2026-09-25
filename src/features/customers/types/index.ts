@@ -87,6 +87,9 @@ export interface CreateAccountTransactionInput {
   paymentMethodCode: string
   notes: string | null
   attachments: Array<{ contentType: string; dataBase64: string }>
+  // The voucher's own recorded date -- defaults to today in the UI, but stays editable (e.g. to
+  // backdate a receipt collected earlier and only entered now).
+  transactionDate?: string
 }
 
 export interface BulkImportRow {

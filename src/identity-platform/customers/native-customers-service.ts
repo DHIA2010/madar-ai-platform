@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { PaymentKind, PosPaymentMethodsService } from "../pos/payment-methods-service"
-import type { CustomerDetail, CustomerSummary } from "./service"
+
+import { computeSegment, computeStatus, type CustomerDetail, type CustomerSummary } from "./service"
 
 const CUSTOMER_ERRORS = {
   notFound: () => new IdentityError("CUSTOMER_NOT_FOUND", 404, "business", "Customer not found."),
@@ -29,6 +30,8 @@ const CUSTOMER_ERRORS = {
       "This customer's account balance is not zero. Settle it to zero before deleting them.",
       { accountBalance }
     ),
+  invalidTransactionDate: () =>
+    new IdentityError("CUSTOMER_ACCOUNT_INVALID_DATE", 400, "validation", "Invalid voucher date."),
 }
 
 // A receipt covers both a manual "سند قبض" and what used to be a separate "wallet top-up" --
@@ -130,6 +133,13 @@ export interface NativeCustomerView {
   district: string | null
   postalCode: string | null
   countryCode: string | null
+  // Real counts from pos_invoices.customer_id (see migration 062_pos_split_payments.sql), not
+  // fabricated -- a native customer selected at POS checkout gets a real FK on the invoice even
+  // though the invoice's own customer_name/customer_phone stay a separate snapshot (see
+  // invoices-service.ts). Computed fresh by every method below that returns this view.
+  totalOrders: number
+  totalRevenue: number
+  lastPurchaseAt: string | null
 }
 
 export type AccountTransactionType = "receipt" | "payment" | "sale" | "return"
@@ -192,6 +202,9 @@ interface CustomerRow {
   district: string | null
   postal_code: string | null
   country_code: string | null
+  total_orders: string | number
+  total_revenue: string | number | null
+  last_purchase_at: Date | string | null
   [key: string]: unknown
 }
 
@@ -237,22 +250,51 @@ function mapRow(row: CustomerRow): NativeCustomerView {
     district: row.district,
     postalCode: row.postal_code,
     countryCode: row.country_code,
+    totalOrders: Number(row.total_orders) || 0,
+    totalRevenue: Number(row.total_revenue) || 0,
+    lastPurchaseAt: row.last_purchase_at ? toIso(row.last_purchase_at) : null,
   }
 }
 
+// LEFT JOIN + GROUP BY (not a correlated subquery) for the same portability reason
+// customers/service.ts's own fetchProviderCustomers uses: pg-mem, the in-memory Postgres this
+// repo's tests run against, doesn't support a LATERAL subquery correlated to an outer column.
+// pos_invoices.customer_id is a real FK to this table (see migration 062_pos_split_payments.sql)
+// even though the invoice's own customer_name/customer_phone stay a separate snapshot (see
+// invoices-service.ts) -- that snapshot is for what the invoice document itself displays, this
+// join is for what this customer's own profile reports about their real order history. Only
+// status='completed' counts -- a cancelled invoice never really happened as a sale, and a
+// returned one no longer represents money the business actually kept, so neither belongs in a
+// "total invoices" figure. Every caller below appends its own WHERE conditions (qualified with the
+// c. alias, since pos_invoices has its own id column too) and must finish with CUSTOMER_GROUP_BY.
+//
+// GROUP BY lists every non-aggregate selected column explicitly, rather than just c.id, since
+// pg-mem (unlike real Postgres) doesn't support eliding functionally-dependent columns from a
+// GROUP BY just because c.id is customers' primary key -- same reasoning as
+// fetchProviderCustomers's own GROUP BY in service.ts.
 const CUSTOMER_SELECT = `
-  SELECT id, workspace_id, name, email, phone, notes, region, created_at, updated_at,
-         account_balance, is_business_customer, vat_number, commercial_registration,
-         building_number, secondary_number, street, city, district, postal_code, country_code
-    FROM customers
-   WHERE deleted_at IS NULL
+  SELECT c.id, c.workspace_id, c.name, c.email, c.phone, c.notes, c.region, c.created_at,
+         c.updated_at, c.account_balance, c.is_business_customer, c.vat_number,
+         c.commercial_registration, c.building_number, c.secondary_number, c.street, c.city,
+         c.district, c.postal_code, c.country_code,
+         count(i.id) AS total_orders,
+         coalesce(sum(i.total_amount), 0) AS total_revenue,
+         max(i.created_at) AS last_purchase_at
+    FROM customers c
+    LEFT JOIN pos_invoices i ON i.customer_id = c.id AND i.status = 'completed'
+   WHERE c.deleted_at IS NULL
+`
+const CUSTOMER_GROUP_BY = `
+  GROUP BY c.id, c.workspace_id, c.name, c.email, c.phone, c.notes, c.region, c.created_at,
+           c.updated_at, c.account_balance, c.is_business_customer, c.vat_number,
+           c.commercial_registration, c.building_number, c.secondary_number, c.street, c.city,
+           c.district, c.postal_code, c.country_code
 `
 
-// A native customer has no order history of its own here -- a POS sale keeps its customer as a
-// free-text snapshot on pos_invoices (see invoices-service.ts), not a foreign key to this table.
-// So a freshly created native customer always reads as brand new: no real orders yet to compute
-// totalOrders/lifetimeValue/status/segment from, the same numbers computeStatus/computeSegment
-// in service.ts would themselves produce for zero real orders.
+// Real totalOrders/totalRevenue/lastPurchaseAt (see NativeCustomerView's own comment on where
+// these come from), fed through the exact same classification rules customers/service.ts uses
+// for a synced-storefront customer, so a native customer's status/segment badge means the same
+// thing regardless of which side of the aggregation it came from.
 export function toNormalizedCustomer(customer: NativeCustomerView): CustomerSummary {
   return {
     id: customer.id,
@@ -261,12 +303,19 @@ export function toNormalizedCustomer(customer: NativeCustomerView): CustomerSumm
     phone: customer.phone,
     platform: "Madar",
     createdAt: customer.createdAt,
-    totalOrders: 0,
-    totalRevenue: 0,
-    lifetimeValue: 0,
-    lastPurchaseAt: null,
-    status: "new",
-    segment: "New",
+    totalOrders: customer.totalOrders,
+    totalRevenue: customer.totalRevenue,
+    lifetimeValue: customer.totalRevenue,
+    lastPurchaseAt: customer.lastPurchaseAt,
+    status: computeStatus({
+      createdAt: customer.createdAt,
+      totalOrders: customer.totalOrders,
+      lastPurchaseAt: customer.lastPurchaseAt,
+    }),
+    segment: computeSegment({
+      totalOrders: customer.totalOrders,
+      lifetimeValue: customer.totalRevenue,
+    }),
     accountBalance: customer.accountBalance,
     region: customer.region,
     isBusinessCustomer: customer.isBusinessCustomer,
@@ -282,14 +331,16 @@ export function toNormalizedCustomer(customer: NativeCustomerView): CustomerSumm
   }
 }
 
-// Same "nothing real to show yet" reasoning as toNormalizedCustomer -- a native customer has no
-// order history of its own to list, no products purchased, and no average to compute.
+// toNormalizedCustomer above now carries this customer's real aggregate totals, but the
+// per-order breakdown a synced-storefront customer's own detail view shows (orders,
+// productsPurchased) has no native equivalent built yet -- would mean reading pos_invoices'
+// actual line items here, not just count/sum. Left empty rather than guessed at.
 export function toNormalizedCustomerDetail(customer: NativeCustomerView): CustomerDetail {
   return {
     ...toNormalizedCustomer(customer),
     orders: [],
     productsPurchased: [],
-    averageOrderValue: 0,
+    averageOrderValue: customer.totalOrders > 0 ? customer.totalRevenue / customer.totalOrders : 0,
   }
 }
 
@@ -303,15 +354,15 @@ export class NativeCustomersService {
   ) {}
 
   async list(organizationId: string, workspaceId: string | null): Promise<NativeCustomerView[]> {
-    const conditions = ["organization_id = $1"]
+    const conditions = ["c.organization_id = $1"]
     const params: unknown[] = [organizationId]
     if (workspaceId) {
       params.push(workspaceId)
-      conditions.push(`workspace_id = $${params.length}`)
+      conditions.push(`c.workspace_id = $${params.length}`)
     }
 
     const result = await this.database.query<CustomerRow>(
-      `${CUSTOMER_SELECT} AND ${conditions.join(" AND ")} ORDER BY created_at DESC`,
+      `${CUSTOMER_SELECT} AND ${conditions.join(" AND ")} ${CUSTOMER_GROUP_BY} ORDER BY c.created_at DESC`,
       params
     )
     return result.rows.map(mapRow)
@@ -408,7 +459,7 @@ export class NativeCustomersService {
 
   async getById(organizationId: string, id: string): Promise<NativeCustomerView | null> {
     const result = await this.database.query<CustomerRow>(
-      `${CUSTOMER_SELECT} AND organization_id = $1 AND id = $2`,
+      `${CUSTOMER_SELECT} AND c.organization_id = $1 AND c.id = $2 ${CUSTOMER_GROUP_BY}`,
       [organizationId, id]
     )
     const row = result.rows[0]
@@ -492,7 +543,11 @@ export class NativeCustomersService {
     paymentMethodCode: string,
     notes: string | null,
     attachmentUrls: string[],
-    createdBy: string | null
+    createdBy: string | null,
+    // The voucher's own recorded date, editable in the UI (defaults to today there) -- e.g. to
+    // backdate a receipt collected earlier and only entered now. Null/omitted falls back to the
+    // column's own now() default, same as before this parameter existed.
+    transactionDate?: string | null
   ): Promise<NativeCustomerView> {
     const existing = await this.getById(organizationId, customerId)
     if (!existing) throw CUSTOMER_ERRORS.notFound()
@@ -516,6 +571,12 @@ export class NativeCustomersService {
     )
     const reference = `${prefix}-${String(numberResult.rows[0].nextval).padStart(5, "0")}`
 
+    let recordedAt = new Date()
+    if (transactionDate) {
+      recordedAt = new Date(transactionDate)
+      if (Number.isNaN(recordedAt.getTime())) throw CUSTOMER_ERRORS.invalidTransactionDate()
+    }
+
     const balanceDelta = type === "receipt" ? amount : -amount
     await this.database.query(
       `UPDATE customers SET account_balance = account_balance + $2, updated_at = now() WHERE id = $1`,
@@ -524,8 +585,8 @@ export class NativeCustomersService {
     await this.database.query(
       `INSERT INTO customer_account_transactions
          (id, organization_id, workspace_id, customer_id, type, reference, amount, tax_inclusive,
-          tax_amount, payment_method_code, notes, attachment_urls, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          tax_amount, payment_method_code, notes, attachment_urls, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         randomUUID(),
         organizationId,
@@ -540,6 +601,7 @@ export class NativeCustomersService {
         notes,
         attachmentUrls,
         createdBy,
+        recordedAt,
       ]
     )
 
