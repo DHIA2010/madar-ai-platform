@@ -12,6 +12,7 @@ export type Permission =
   | "session:revoke"
   | "identity:read"
   | "identity:write"
+  | "connections:create"
 
 export type UserProfile = import("./domain/entities").UserState
 export type Organization = import("./domain/entities").OrganizationState

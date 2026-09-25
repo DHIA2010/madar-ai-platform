@@ -31,6 +31,7 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     "session:revoke",
     "identity:read",
     "identity:write",
+    "connections:create",
   ],
   admin: [
     "org:read",
@@ -43,6 +44,7 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     "session:revoke",
     "identity:read",
     "identity:write",
+    "connections:create",
   ],
   manager: [
     "org:read",

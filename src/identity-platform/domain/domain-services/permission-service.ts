@@ -13,6 +13,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "session:revoke",
     "identity:read",
     "identity:write",
+    "connections:create",
   ],
   admin: [
     "org:read",
@@ -25,6 +26,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "session:revoke",
     "identity:read",
     "identity:write",
+    "connections:create",
   ],
   manager: [
     "org:read",
