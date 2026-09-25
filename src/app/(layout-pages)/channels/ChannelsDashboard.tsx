@@ -23,7 +23,6 @@ import {
   Layers,
   MousePointerClick,
   Package,
-  ShoppingCart,
   Sparkles,
   Target,
   TrendingUp,
@@ -65,7 +64,6 @@ import {
   type ChannelRow,
   type ChannelsSummary,
   type ChannelsTrendPoint,
-  type StorePlatformRow,
   type TopProductRow,
 } from "@/features/channels/services/channels-performance.service"
 
@@ -273,32 +271,6 @@ function ChannelSparkline({ channel }: { channel: ChannelRow }) {
   )
 }
 
-function TrendSparkline({ values, color }: { values: number[]; color: string }) {
-  const points = values.length > 0 ? values : [0]
-  const max = Math.max(...points)
-  const min = Math.min(...points)
-  const range = Math.max(max - min, 1)
-
-  return (
-    <svg viewBox="0 0 100 30" className="h-8 w-24" preserveAspectRatio="none">
-      <polyline
-        points={points
-          .map((value, index) => {
-            const x = points.length > 1 ? (index / (points.length - 1)) * 100 : 0
-            const y = 28 - ((value - min) / range) * 26
-            return `${x},${y}`
-          })
-          .join(" ")}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 function ProductThumbnail({ src }: { src: string | null }) {
   const [failed, setFailed] = useState(false)
 
@@ -430,7 +402,6 @@ export default function ChannelsDashboard() {
   const [channelRows, setChannelRows] = useState<ChannelRow[]>([])
   const [trendPoints, setTrendPoints] = useState<ChannelsTrendPoint[]>([])
   const [alerts, setAlerts] = useState<ChannelAlert[]>([])
-  const [storeRows, setStoreRows] = useState<StorePlatformRow[]>([])
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([])
 
   useEffect(() => {
@@ -442,27 +413,19 @@ export default function ChannelsDashboard() {
 
       try {
         const params = { startDate: dateRange.startDate, endDate: dateRange.endDate }
-        const [
-          summaryResult,
-          breakdownResult,
-          trendResult,
-          alertsResult,
-          storesResult,
-          productsResult,
-        ] = await Promise.all([
-          channelsPerformanceService.getSummary(params),
-          channelsPerformanceService.getChannelBreakdown(params),
-          channelsPerformanceService.getPerformanceTrend(params),
-          channelsPerformanceService.getAlerts(),
-          channelsPerformanceService.getStoresBreakdown(params),
-          channelsPerformanceService.getTopProducts(params),
-        ])
+        const [summaryResult, breakdownResult, trendResult, alertsResult, productsResult] =
+          await Promise.all([
+            channelsPerformanceService.getSummary(params),
+            channelsPerformanceService.getChannelBreakdown(params),
+            channelsPerformanceService.getPerformanceTrend(params),
+            channelsPerformanceService.getAlerts(),
+            channelsPerformanceService.getTopProducts(params),
+          ])
         if (cancelled) return
         setSummary(summaryResult)
         setChannelRows(breakdownResult.items)
         setTrendPoints(trendResult.items)
         setAlerts(alertsResult.items)
-        setStoreRows(storesResult.items)
         setTopProducts(productsResult.items)
       } catch (error) {
         console.error("Failed to load channel performance", error)
@@ -617,9 +580,7 @@ export default function ChannelsDashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">القنوات</h1>
-          <p className="text-sm text-muted-foreground">
-            نظرة عامة على أداء قنواتك التسويقية ومنصات التجارة الإلكترونية
-          </p>
+          <p className="text-sm text-muted-foreground">نظرة عامة على أداء قنواتك التسويقية</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
@@ -803,108 +764,6 @@ export default function ChannelsDashboard() {
                 </div>
               </AppCard>
             </div>
-          ) : null}
-
-          {storeRows.length > 0 ? (
-            <AppCard
-              title="منصات التجارة الإلكترونية"
-              subtitle="أداء متجرك على مختلف المنصات"
-              icon={<ShoppingCart className="size-4 text-muted-foreground" />}
-              className="rounded-2xl border-border/60 shadow-sm"
-            >
-              <div className="overflow-x-auto">
-                <AppTable>
-                  <AppTableHeader>
-                    <AppTableRow className="border-border hover:bg-transparent">
-                      <AppTableHead className="text-left text-muted-foreground">
-                        المنصة
-                      </AppTableHead>
-                      <AppTableHead className="!text-center text-muted-foreground">
-                        عدد العملاء
-                      </AppTableHead>
-                      <AppTableHead className="!text-center text-muted-foreground">
-                        إجمالي الطلبات
-                      </AppTableHead>
-                      <AppTableHead className="!text-center text-muted-foreground">
-                        الإيرادات
-                      </AppTableHead>
-                      <AppTableHead className="!text-center text-muted-foreground">
-                        متوسط قيمة الطلب
-                      </AppTableHead>
-                      <AppTableHead className="!text-center text-muted-foreground">
-                        اتجاه الإيرادات
-                      </AppTableHead>
-                    </AppTableRow>
-                  </AppTableHeader>
-                  <AppTableBody>
-                    {storeRows.map((store) => {
-                      // Same brand color the sparkline in the ad-channel cards already uses,
-                      // rather than a generic changePct-based green/red -- makes each platform's
-                      // trend line recognizable at a glance across every widget on this page.
-                      const trendColor = PLATFORM_ICON[store.platform]?.hex ?? "#94a3b8"
-                      const ordersDelta = formatChangePct(store.ordersChangePct)
-                      const revenueDelta = formatChangePct(store.revenueChangePct)
-
-                      return (
-                        <AppTableRow key={store.platform} className="border-border">
-                          <AppTableCell className="text-left">
-                            <div className="flex items-center gap-2">
-                              <PlatformBadge platform={store.platform} className="size-8" />
-                              <span className="font-medium text-foreground">{store.platform}</span>
-                            </div>
-                          </AppTableCell>
-                          <AppTableCell className="text-center text-foreground">
-                            {store.customers.toLocaleString()}
-                          </AppTableCell>
-                          <AppTableCell className="text-center">
-                            <div className="font-medium text-foreground">
-                              {store.orders.toLocaleString()}
-                            </div>
-                            {ordersDelta ? (
-                              <div
-                                className={cn(
-                                  "text-xs",
-                                  (store.ordersChangePct ?? 0) >= 0
-                                    ? "text-emerald-600"
-                                    : "text-rose-600"
-                                )}
-                              >
-                                {ordersDelta}
-                              </div>
-                            ) : null}
-                          </AppTableCell>
-                          <AppTableCell className="text-center">
-                            <div className="font-medium text-foreground">
-                              {formatPlainNumber(store.revenue)} SAR
-                            </div>
-                            {revenueDelta ? (
-                              <div
-                                className={cn(
-                                  "text-xs",
-                                  (store.revenueChangePct ?? 0) >= 0
-                                    ? "text-emerald-600"
-                                    : "text-rose-600"
-                                )}
-                              >
-                                {revenueDelta}
-                              </div>
-                            ) : null}
-                          </AppTableCell>
-                          <AppTableCell className="text-center text-foreground">
-                            {formatPlainNumber(store.averageOrderValue)} SAR
-                          </AppTableCell>
-                          <AppTableCell>
-                            <div className="flex justify-center">
-                              <TrendSparkline values={store.trend} color={trendColor} />
-                            </div>
-                          </AppTableCell>
-                        </AppTableRow>
-                      )
-                    })}
-                  </AppTableBody>
-                </AppTable>
-              </div>
-            </AppCard>
           ) : null}
 
           {topProducts.length > 0 ? (

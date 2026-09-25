@@ -13,6 +13,7 @@
 // withdrawal/deposit recorded from the cashier screen mid-shift -- not fabricated.
 
 import { useEffect, useMemo, useState } from "react"
+import { endOfDay, isWithinInterval, startOfDay } from "date-fns"
 import {
   CheckCircle2,
   Clock,
@@ -25,6 +26,7 @@ import {
   Wallet,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
@@ -41,6 +43,7 @@ import {
 import { ShiftCloseDialog } from "./ShiftCloseDialog"
 
 import {
+  AppDateRangeFilter,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
@@ -69,7 +72,7 @@ const FIELD_CLASS =
   "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 const BLUE_TINT = "bg-[#eff6ff] text-[#2563eb]"
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50]
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50]
 
 const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   minimumFractionDigits: 2,
@@ -156,8 +159,12 @@ export default function ShiftsPage() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [workspaceFilter, setWorkspaceFilter] = useState<string>("all")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [search, setSearch] = useState("")
-  const [pageSize, setPageSize] = useState(10)
+  // A short default keeps the whole panel (filters, table, pagination footer) inside one
+  // viewport for a typical shift count -- 10 pushed the footer below the fold, forcing a page
+  // scroll just to page through the list.
+  const [pageSize, setPageSize] = useState(5)
   const [page, setPage] = useState(1)
 
   const filteredShifts = useMemo(() => {
@@ -166,9 +173,15 @@ export default function ShiftsPage() {
       const matchesStatus = statusFilter === "all" || shift.status === statusFilter
       const matchesWorkspace = workspaceFilter === "all" || shift.workspaceId === workspaceFilter
       const matchesQuery = !query || cashierName(shift.cashierUserId).includes(query)
-      return matchesStatus && matchesWorkspace && matchesQuery
+      const matchesDate =
+        !dateRange?.from ||
+        isWithinInterval(new Date(shift.openedAt), {
+          start: startOfDay(dateRange.from),
+          end: endOfDay(dateRange.to ?? dateRange.from),
+        })
+      return matchesStatus && matchesWorkspace && matchesQuery && matchesDate
     })
-  }, [shifts, statusFilter, workspaceFilter, search, cashierName])
+  }, [shifts, statusFilter, workspaceFilter, dateRange, search, cashierName])
 
   const pageCount = Math.max(1, Math.ceil(filteredShifts.length / pageSize))
   const clampedPage = Math.min(page, pageCount)
@@ -176,7 +189,7 @@ export default function ShiftsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [statusFilter, workspaceFilter, search, pageSize])
+  }, [statusFilter, workspaceFilter, dateRange, search, pageSize])
 
   const openShiftsCount = useMemo(
     () => shifts.filter((shift) => shift.status === "open").length,
@@ -266,7 +279,7 @@ export default function ShiftsPage() {
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5 pb-10">
+    <div dir="rtl" className="flex flex-col gap-3">
       {/* RTL: the copy is written first so the icon tile lands on the left. */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -296,8 +309,8 @@ export default function ShiftsPage() {
         </div>
       ) : null}
 
-      <section className={cn(PANEL, "p-5")}>
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <section className={cn(PANEL, "p-4")}>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className={cn("text-[16px] font-bold", HEADING)}>سجل الورديات</h2>
             <p className={cn("mt-1 text-[11.5px]", MUTED)}>
@@ -316,7 +329,7 @@ export default function ShiftsPage() {
           </Button>
         </div>
 
-        <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div className="mb-3 flex flex-col gap-2.5 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
             <Input
@@ -326,6 +339,7 @@ export default function ShiftsPage() {
               className={cn(FIELD_CLASS, "ps-9")}
             />
           </div>
+          <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
           <div className="sm:w-[170px]">
             <AppSelect value={workspaceFilter} onValueChange={setWorkspaceFilter}>
               <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
@@ -414,25 +428,25 @@ export default function ShiftsPage() {
                         index % 2 === 0 ? "bg-white" : "bg-[#fafbfd]"
                       )}
                     >
-                      <td className={cn("px-3 py-3.5 text-right text-[12.5px] font-bold", HEADING)}>
+                      <td className={cn("px-3 py-2.5 text-right text-[12.5px] font-bold", HEADING)}>
                         {cashierName(shift.cashierUserId)}
                         <p className={cn("mt-0.5 text-[11px] font-normal", MUTED)}>
                           فُتحت {formatDateTime(shift.openedAt)}
                         </p>
                       </td>
-                      <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
+                      <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
                         {workspaceName(shift.workspaceId)}
                       </td>
-                      <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
+                      <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
                         {formatAmount(shift.openingCashAmount)}
                       </td>
-                      <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
+                      <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
                         {formatAmount(shift.closingCashAmount)}
                       </td>
-                      <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
+                      <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
                         {formatDuration(shift.openedAt, shift.closedAt)}
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-3 py-2.5">
                         <span
                           className={cn(
                             "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold",
@@ -450,7 +464,7 @@ export default function ShiftsPage() {
                           {STATUS_LABEL[shift.status]}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5" onClick={(event) => event.stopPropagation()}>
+                      <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                         <div className="flex items-center justify-center gap-2">
                           <Button
                             variant="outline"
@@ -477,7 +491,7 @@ export default function ShiftsPage() {
               </table>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#eef2f8] pt-3">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-[#eef2f8] pt-2">
               <div className="flex items-center gap-2.5">
                 <div className="w-[76px]">
                   <AppSelect
@@ -655,7 +669,7 @@ export default function ShiftsPage() {
         }}
       />
 
-      <section className={cn(PANEL, "flex items-start gap-3 p-4")}>
+      <section className={cn(PANEL, "flex items-start gap-3 p-3")}>
         <Lightbulb className="mt-0.5 size-[18px] shrink-0 text-[#e08b00]" />
         <p className={cn("text-[12px] leading-6", MUTED)}>
           إغلاق الوردية يحسب المبيعات والمرتجعات والسحب والإيداع الفعلية لهذه الوردية تلقائيا. سجّل

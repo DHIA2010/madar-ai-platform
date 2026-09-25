@@ -10,7 +10,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
+import { format } from "date-fns"
 import { ArrowRight, Loader2, Printer, Search, X } from "lucide-react"
+import type { DateRange } from "react-day-picker"
 
 import { AppError } from "@/lib/errors/app-error"
 import { printThermalReceipt } from "@/lib/print-thermal-receipt"
@@ -26,6 +28,7 @@ import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
 
 import { Input } from "@/components/ui/input"
 import {
+  AppDateRangeFilter,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
@@ -71,6 +74,7 @@ export default function ReturnedInvoicesPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [workspaceFilter, setWorkspaceFilter] = useState("all")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [search, setSearch] = useState("")
 
   const [paymentMethods, setPaymentMethods] = useState<Array<{ code: string; name: string }>>([])
@@ -102,6 +106,8 @@ export default function ReturnedInvoicesPage() {
       setReturns(
         await posInvoicesService.listReturns({
           workspaceId: workspaceFilter === "all" ? undefined : workspaceFilter,
+          from: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+          to: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
         })
       )
     } catch (error) {
@@ -119,7 +125,7 @@ export default function ReturnedInvoicesPage() {
   useEffect(() => {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceFilter])
+  }, [workspaceFilter, dateRange])
 
   const filteredReturns = useMemo(() => {
     const query = search.trim()
@@ -163,6 +169,7 @@ export default function ReturnedInvoicesPage() {
                 className={cn(FIELD_CLASS, "ps-9")}
               />
             </div>
+            <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
             <div className="w-full sm:w-[160px]">
               <AppSelect value={workspaceFilter} onValueChange={setWorkspaceFilter}>
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>

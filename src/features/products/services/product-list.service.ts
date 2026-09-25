@@ -135,6 +135,10 @@ export interface CreateProductInput {
   taxRateId: string | null
   // Whether sellPrice is already tax-inclusive or tax-exclusive -- see ProductRecord above.
   priceIncludesTax: boolean
+  // Which workspace (branch) this product belongs to and appears in -- a required, explicit
+  // choice on the Add Product form. Fixed at creation; editing an existing product doesn't
+  // change it (see catalog-service.ts's update(), which always keeps a product's own workspace).
+  workspaceId: string | null
 }
 
 export interface CreatedProduct {

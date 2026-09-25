@@ -49,10 +49,10 @@ import { useUserMutations } from "@/features/administration/queries/use-user-mut
 import { useApplicationServices } from "@/application/context"
 import type { AdministrationUserDto } from "@/application/contracts/administration.contracts"
 import { posDevicesService } from "@/features/pos/services/pos-device-settings.service"
-import { DateField } from "@/app/(layout-pages)/eCommerce/add-product/date-field"
 
 import {
   AppCheckbox,
+  AppDateField,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
@@ -1066,9 +1066,9 @@ function WorkspaceFormView({
                 تاريخ الافتتاح
               </Label>
               <div className="ms-auto max-w-[220px]">
-                <DateField
+                <AppDateField
                   value={draft.openedAt}
-                  onChange={(value) => set("openedAt", value)}
+                  onChange={(value: string) => set("openedAt", value)}
                   ariaLabel="تاريخ افتتاح مساحة العمل"
                 />
               </div>

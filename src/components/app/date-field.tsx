@@ -1,25 +1,19 @@
 "use client"
 
-// A single-button date-RANGE filter: a trigger showing the formatted "from - to" label, opening a
-// popover with a month/year jump row, a range calendar, quick presets (أمس, آخر 7 أيام,
-// آخر 30 يومًا, هذا الشهر, الشهر الماضي), and مسح التاريخ/اليوم actions. Originally built for the
-// Products page's activity-date filter and promoted here so any feature needing the same
-// date-range-filter look can reuse it instead of rebuilding it.
+// A single-date control, for any form field that needs one date (not a range -- see
+// date-range-filter.tsx for that). Shares that component's exact popover chrome (pill month/year
+// selects, circular nav buttons, sky-themed calendar grid) minus its quick-presets row, which
+// only makes sense for a range.
+//
+// It replaces a bare <input type="date">, which had three problems on an Arabic RTL form: the
+// picker the browser opens is the browser's own -- English month and weekday names, an English
+// Clear/Today footer, and none of the app's styling; the field showed a Latin "dd/mm/yyyy"
+// placeholder; and it drew its own calendar glyph beside the one the field already had, so the
+// same affordance appeared twice in one control.
 
 import { useState } from "react"
-import {
-  addMonths,
-  endOfMonth,
-  getMonth,
-  getYear,
-  setMonth,
-  setYear,
-  startOfMonth,
-  subDays,
-  subMonths,
-} from "date-fns"
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react"
-import type { DateRange } from "react-day-picker"
+import { addMonths, getMonth, getYear, setMonth, setYear } from "date-fns"
+import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -27,6 +21,23 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
+
+// Callers keep dates as YYYY-MM-DD strings -- what most of this app's APIs take -- parsed as
+// local noon so a timezone shift can never move the date across a day boundary.
+function parseValue(value: string): Date | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const [year, month, day] = value.split("-").map(Number)
+  const parsed = new Date(year, month - 1, day, 12)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed
+}
+
+function toValue(date: Date): string {
+  return [
+    String(date.getFullYear()),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-")
+}
 
 const MONTH_OPTIONS = [
   "يناير",
@@ -44,58 +55,33 @@ const MONTH_OPTIONS = [
 ]
 const YEAR_OPTIONS = Array.from({ length: 21 }, (_, index) => 2018 + index)
 
-const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+// The Arabic weekday names date-fns supplies are full words that do not fit a calendar cell --
+// they render as one run of overlapping text. These are the conventional two-letter forms,
+// matching AppDateRangeFilter's own calendar header so every date picker in the app reads the
+// same way. Indexed by getDay() (0 = Sunday).
+const WEEKDAY_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
+
+// Latin digits inside Arabic month names, matching how every other date in this app reads.
+const DISPLAY = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
   day: "numeric",
   month: "long",
   year: "numeric",
 })
 
-// date-fns's own Arabic locale narrow weekday format (ح ن ث ر خ ج س) is the correct CLDR
-// abbreviation, but reads as unfamiliar single letters at a glance -- these conventional
-// two-letter forms are easier to scan in a calendar cell, and match AppDateField's own weekday
-// header (see components/app/date-field.tsx) so every date picker in the app reads the same way.
-// Indexed by getDay() (0 = Sunday).
-const WEEKDAY_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
-
-function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
-  const today = new Date()
-  const lastMonth = subMonths(today, 1)
-
-  return [
-    { label: "أمس", range: { from: subDays(today, 1), to: subDays(today, 1) } },
-    { label: "آخر 7 أيام", range: { from: subDays(today, 6), to: today } },
-    { label: "آخر 30 يومًا", range: { from: subDays(today, 29), to: today } },
-    { label: "هذا الشهر", range: { from: startOfMonth(today), to: endOfMonth(today) } },
-    { label: "الشهر الماضي", range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) } },
-  ]
-}
-
-function formatDateRangeLabel(range: DateRange | undefined, placeholder: string) {
-  if (!range?.from) {
-    return placeholder
-  }
-
-  if (!range.to) {
-    return ARABIC_DATE.format(range.from)
-  }
-
-  return `${ARABIC_DATE.format(range.from)} - ${ARABIC_DATE.format(range.to)}`
-}
-
-export function AppDateRangeFilter({
+export function AppDateField({
   value,
   onChange,
-  placeholder = "الفترة الزمنية",
-  triggerClassName,
+  placeholder = "اختر التاريخ",
+  ariaLabel = "التاريخ",
 }: {
-  value: DateRange | undefined
-  onChange: (next: DateRange | undefined) => void
+  value: string
+  onChange: (next: string) => void
   placeholder?: string
-  triggerClassName?: string
+  ariaLabel?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [displayMonth, setDisplayMonth] = useState<Date>(value?.from ?? new Date())
-  const [rangeAnchor, setRangeAnchor] = useState<Date | undefined>(undefined)
+  const selected = parseValue(value)
+  const [displayMonth, setDisplayMonth] = useState<Date>(selected ?? new Date())
   const monthIndex = getMonth(displayMonth)
   const yearValue = getYear(displayMonth)
 
@@ -104,33 +90,55 @@ export function AppDateRangeFilter({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen)
-        if (nextOpen) {
-          setDisplayMonth(value?.from ?? new Date())
-          setRangeAnchor(value?.from && !value?.to ? value.from : undefined)
-        } else {
-          setRangeAnchor(undefined)
-        }
+        if (nextOpen) setDisplayMonth(selected ?? new Date())
       }}
     >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className={cn(
-            "h-10 w-[205px] justify-between gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-3.5 text-[12.5px] font-normal text-[#0b1738] hover:border-[#c4d5f0] hover:bg-white",
-            triggerClassName
-          )}
-        >
-          <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
-          <span className="truncate">{formatDateRangeLabel(value, placeholder)}</span>
-        </Button>
-      </PopoverTrigger>
+      <div className="relative">
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={ariaLabel}
+            className={cn(
+              "flex h-11 w-full cursor-pointer items-center gap-2 rounded-[12px] border border-[#e1e7f0] bg-white px-2.5 text-right text-[13px] transition-colors hover:border-[#c4d5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/35",
+              selected ? "text-[#0b1738]" : "text-[#95a4bd]"
+            )}
+          >
+            {/* RTL: the tile is written first so it lands to the right of the label, matching
+                the other marked fields on this page. */}
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-[#eef4ff] text-[#2878ff]">
+              <CalendarDays className="size-4" />
+            </span>
+            <span className={cn("min-w-0 flex-1 truncate", selected && "font-semibold")}>
+              {selected ? DISPLAY.format(selected) : placeholder}
+            </span>
+          </button>
+        </PopoverTrigger>
+
+        {/* Sits outside the trigger: a button inside a button is invalid, and clearing the date
+            must not also open the picker. */}
+        {selected ? (
+          <button
+            type="button"
+            aria-label="مسح التاريخ"
+            className="absolute end-2 top-1/2 flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-[#95a4bd] transition-colors hover:bg-[#f2f5fa] hover:text-[#e0484d]"
+            onClick={() => onChange("")}
+          >
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      {/* Same chrome as AppDateRangeFilter's own popover (see date-range-filter.tsx) -- kept LTR
+          so both shared date pickers' calendar grids start the week on the same day, and so
+          their look reads as one consistent design instead of two different ones. No quick
+          presets here: unlike a range, there's no single "last 7 days"-style shortcut that makes
+          sense for one plain date. */}
       <PopoverContent
         align="start"
         sideOffset={10}
         dir="ltr"
         collisionPadding={16}
-        className="max-h-[var(--radix-popover-content-available-height)] w-[min(23rem,calc(100vw-2rem))] overflow-y-auto rounded-[20px] border border-sky-400/15 bg-card p-3.5 text-foreground shadow-[0_28px_90px_-38px_rgba(14,165,233,0.55)] ring-1 ring-sky-400/10 backdrop-blur-2xl"
+        className="w-[min(23rem,calc(100vw-2rem))] rounded-[20px] border border-sky-400/15 bg-card p-3.5 text-foreground shadow-[0_28px_90px_-38px_rgba(14,165,233,0.55)] ring-1 ring-sky-400/10 backdrop-blur-2xl"
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <Button
@@ -213,34 +221,15 @@ export function AppDateRangeFilter({
         </div>
 
         <Calendar
-          mode="range"
+          mode="single"
           animate
           month={displayMonth}
           onMonthChange={setDisplayMonth}
-          selected={value}
-          onSelect={(next, selectedDay) => {
-            if (!selectedDay) {
-              onChange(next)
-              return
-            }
-
-            if (!rangeAnchor) {
-              onChange({ from: selectedDay, to: undefined })
-              setRangeAnchor(selectedDay)
-              return
-            }
-
-            const from = selectedDay < rangeAnchor ? selectedDay : rangeAnchor
-            const to = selectedDay < rangeAnchor ? rangeAnchor : selectedDay
-
-            onChange({ from, to })
-            setRangeAnchor(undefined)
-            setOpen(false)
-          }}
-          numberOfMonths={1}
+          selected={selected}
+          dir="ltr"
+          captionLayout="label"
           startMonth={new Date(2018, 0)}
           endMonth={new Date(2038, 11)}
-          captionLayout="label"
           formatters={{
             formatWeekdayName: (date) => WEEKDAY_SHORT[date.getDay()],
           }}
@@ -250,10 +239,6 @@ export function AppDateRangeFilter({
             months: "w-full",
             month: "w-full gap-2",
             nav: "hidden",
-            button_previous:
-              "size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
-            button_next:
-              "size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
             month_caption: "hidden",
             caption_label: "text-base font-semibold text-foreground",
             weekdays: "mb-1.5 grid grid-cols-7 gap-1.5",
@@ -267,43 +252,23 @@ export function AppDateRangeFilter({
               "rounded-full border border-sky-400/60 bg-transparent text-foreground shadow-none",
             selected:
               "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)] hover:bg-sky-300 hover:text-foreground",
-            range_middle: "rounded-full border border-transparent bg-sky-500/14 text-foreground",
-            range_start:
-              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)]",
-            range_end:
-              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)]",
             outside: "text-muted-foreground opacity-40",
             disabled: "text-muted-foreground opacity-35",
           }}
+          onSelect={(next) => {
+            onChange(next ? toValue(next) : "")
+            setOpen(false)
+          }}
         />
 
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
-          {getDateRangePresets().map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-              onClick={() => {
-                onChange(preset.range)
-                setRangeAnchor(undefined)
-                setDisplayMonth(preset.range.from ?? new Date())
-                setOpen(false)
-              }}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center justify-end gap-2">
+        <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3">
           <Button
             type="button"
             size="sm"
             variant="outline"
             className="h-9 rounded-xl border-border bg-muted/60 px-3.5 text-sm font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
             onClick={() => {
-              onChange(undefined)
-              setRangeAnchor(undefined)
+              onChange("")
               setDisplayMonth(new Date())
               setOpen(false)
             }}
@@ -316,8 +281,7 @@ export function AppDateRangeFilter({
             className="h-9 rounded-xl bg-sky-400 px-3.5 text-sm font-semibold text-foreground shadow-[0_18px_34px_-18px_rgba(14,165,233,0.8)] transition-all hover:bg-sky-300"
             onClick={() => {
               const today = new Date()
-              onChange({ from: today, to: today })
-              setRangeAnchor(undefined)
+              onChange(toValue(today))
               setDisplayMonth(today)
               setOpen(false)
             }}

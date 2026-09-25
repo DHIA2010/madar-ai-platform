@@ -13,7 +13,11 @@ function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
     <ol
       data-slot="breadcrumb-list"
       className={cn(
-        "flex flex-wrap items-center gap-1.5 text-sm wrap-break-word text-muted-foreground rtl:flex-row-reverse",
+        // A flex row's main-start already sits on the right under dir="rtl" (native browser
+        // behavior from the `direction` property `dir` maps to) -- flex-row-reverse on top of
+        // that double-reverses it, which is what put the current (last) item on the right and
+        // the root (first) item on the left instead of the other way around.
+        "flex flex-wrap items-center gap-1.5 text-sm wrap-break-word text-muted-foreground",
         className
       )}
       {...props}

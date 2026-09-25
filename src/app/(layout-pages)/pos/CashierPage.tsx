@@ -41,6 +41,7 @@ import {
   Percent,
   PiggyBank,
   Plus,
+  Receipt,
   Search,
   ShoppingCart,
   Smartphone,
@@ -864,6 +865,9 @@ export default function CashierPage() {
         variants: [],
         taxRateId: null,
         priceIncludesTax: quickAddPriceIncludesTax,
+        // A walk-in item added mid-sale belongs to whichever branch is actually running this
+        // register -- the same workspace the invoice itself is about to be created under.
+        workspaceId: currentWorkspace?.id ?? null,
       })
       // POST /v1/products only ever echoes back the fields it itself decided (id/status/tax
       // settings) -- sellPrice/category/stock aren't among them, so what was just submitted is
@@ -1266,9 +1270,14 @@ export default function CashierPage() {
   const prepaidAmount = sumByKind("prepaid")
   const needsCustomerForDeferred = deferredAmount > 0 && !customerId
   const needsCustomerForPrepaid = prepaidAmount > 0 && !customerId
+  // The customer's real account balance -- can be negative (they already owe money). Kept
+  // separate from availableBalance below: that one is floored at 0 for validating how much the
+  // wallet-kind payment method can actually deduct, which would wrongly hide a real debt if it
+  // were also used for display (see the "رصيد العميل الحالي" summary panel below).
+  const customerAccountBalance = selectedCustomer?.accountBalance ?? 0
   // A negative account balance (the customer already owes money) has nothing available to spend
   // via the wallet-kind method -- floored at 0 rather than showing a negative "available" figure.
-  const availableBalance = Math.max(0, selectedCustomer?.accountBalance ?? 0)
+  const availableBalance = Math.max(0, customerAccountBalance)
   const insufficientWallet =
     prepaidAmount > 0 && customerId !== null && prepaidAmount > availableBalance
 
@@ -2746,12 +2755,32 @@ export default function CashierPage() {
                 <div className="flex shrink-0 items-center gap-3">
                   <div className="min-w-0 text-right">
                     <p className={cn("text-[11.5px]", MUTED)}>رصيد العميل الحالي</p>
-                    <p className="text-[15px] font-bold text-[#2563eb]">
-                      {formatAmount(availableBalance)}
+                    <p
+                      className={cn(
+                        "text-[15px] font-bold",
+                        customerAccountBalance >= 0 ? "text-[#2563eb]" : "text-[#dc2626]"
+                      )}
+                    >
+                      {formatAmount(customerAccountBalance)}
                     </p>
                   </div>
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-[12px] bg-[#eaf1fe] text-[#2563eb]">
                     <PiggyBank className="size-5" />
+                  </span>
+                </div>
+                <div className="h-10 w-px shrink-0 bg-[#dfe4ec]" />
+                <div className="flex shrink-0 items-center gap-3">
+                  <div className="min-w-0 text-right">
+                    <p className={cn("text-[11.5px]", MUTED)}>إجمالي فواتير العميل</p>
+                    <p className={cn("text-[15px] font-bold", HEADING)}>
+                      {selectedCustomer.totalOrders} فاتورة
+                    </p>
+                    <p className={cn("text-[10.5px]", MUTED)}>
+                      {formatAmount(selectedCustomer.totalRevenue)}
+                    </p>
+                  </div>
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-[12px] bg-[#eaf1fe] text-[#2563eb]">
+                    <Receipt className="size-5" />
                   </span>
                 </div>
               </div>

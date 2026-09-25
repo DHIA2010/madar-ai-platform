@@ -1,10 +1,9 @@
 "use client"
 import { useMemo, useState } from "react"
 import Image from "next/image"
-import { format, isWithinInterval } from "date-fns"
+import { isWithinInterval } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
 import {
   Table,
   TableBody,
@@ -13,7 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -23,9 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { DateRange } from "react-day-picker"
+import { AppDateRangeFilter } from "@/components/app"
 
 import {
-  CalendarIcon,
   Download,
   ShoppingBag,
   Upload,
@@ -186,119 +184,6 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function formatDateRangeLabel(range: DateRange | undefined) {
-  if (!range?.from) {
-    return "Date Range"
-  }
-
-  if (!range.to) {
-    return format(range.from, "MMM d, yyyy")
-  }
-
-  return `${format(range.from, "MMM d, yyyy")} - ${format(range.to, "MMM d, yyyy")}`
-}
-
-function DateRangeFilter({
-  value,
-  onChange,
-}: {
-  value: DateRange | undefined
-  onChange: (next: DateRange | undefined) => void
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className="w-[250px] justify-start rounded-xl border-border/70 bg-background px-3 text-left font-normal text-foreground shadow-none hover:bg-muted/40"
-        >
-          <CalendarIcon className="mr-2 size-4 text-muted-foreground" />
-          <span className="truncate">{formatDateRangeLabel(value)}</span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={8}
-        className="w-[min(24rem,calc(100vw-2rem))] gap-0 rounded-[20px] border border-border/60 bg-card p-5 text-foreground shadow-[0_20px_60px_-24px_rgba(59,130,246,0.35),0_30px_80px_-34px_rgba(2,6,23,0.88)] ring-1 ring-blue-400/15 backdrop-blur-xl duration-200 data-open:fade-in-0 data-open:zoom-in-[98%] data-closed:fade-out-0 data-closed:zoom-out-[98%]"
-      >
-        <Calendar
-          mode="range"
-          animate
-          selected={value}
-          onSelect={(next) => {
-            onChange(next)
-            if (next?.from && next?.to) {
-              setOpen(false)
-            }
-          }}
-          numberOfMonths={1}
-          captionLayout="label"
-          className="rounded-[18px] bg-transparent p-0 [--cell-size:40px]"
-          classNames={{
-            root: "w-full",
-            months: "w-full",
-            month: "w-full gap-3",
-            nav: "top-0",
-            button_previous:
-              "size-10 rounded-full border border-border/60 bg-background/70 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35",
-            button_next:
-              "size-10 rounded-full border border-border/60 bg-background/70 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35",
-            month_caption: "mb-5 flex h-10 items-center justify-center px-12",
-            caption_label: "text-sm font-semibold text-foreground",
-            weekdays: "mb-3 grid grid-cols-7 gap-2",
-            weekday:
-              "h-8 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75",
-            week: "mt-2 grid grid-cols-7 gap-2",
-            day: "rounded-full text-foreground",
-            day_button:
-              "size-10 rounded-full border border-transparent bg-transparent text-sm font-medium text-foreground transition-all duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35",
-            today:
-              "rounded-full border border-primary/60 bg-transparent text-foreground shadow-none",
-            selected:
-              "rounded-full border border-primary bg-primary text-primary-foreground shadow-[0_0_0_1px_hsl(var(--primary)/0.22),0_0_24px_rgba(59,130,246,0.36)] hover:bg-primary/90 hover:text-primary-foreground",
-            range_middle: "rounded-full bg-primary/12 text-foreground",
-            range_start:
-              "rounded-full border border-primary bg-primary text-primary-foreground shadow-[0_0_0_1px_hsl(var(--primary)/0.22),0_0_24px_rgba(59,130,246,0.36)]",
-            range_end:
-              "rounded-full border border-primary bg-primary text-primary-foreground shadow-[0_0_0_1px_hsl(var(--primary)/0.22),0_0_24px_rgba(59,130,246,0.36)]",
-            outside: "text-muted-foreground opacity-30",
-            disabled: "text-muted-foreground opacity-40",
-          }}
-        />
-
-        <div className="mt-5 flex items-center justify-end gap-3 border-t border-border/60 pt-4">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-10 rounded-xl border-border/60 bg-background/50 px-4 text-sm font-medium text-muted-foreground transition-all duration-200 hover:border-primary/35 hover:bg-primary/10 hover:text-foreground"
-            onClick={() => {
-              onChange(undefined)
-              setOpen(false)
-            }}
-          >
-            Clear Date
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-10 rounded-xl px-4 text-sm font-medium shadow-[0_14px_30px_-18px_rgba(59,130,246,0.75)] transition-all duration-200 hover:shadow-[0_18px_34px_-18px_rgba(59,130,246,0.8)]"
-            onClick={() => {
-              const today = new Date()
-              onChange({ from: today, to: today })
-              setOpen(false)
-            }}
-          >
-            Today
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 export default function ProductList() {
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -450,7 +335,7 @@ export default function ProductList() {
                 </SelectContent>
               </Select>
 
-              <DateRangeFilter value={dateRange} onChange={setDateRange} />
+              <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
             </div>
 
             <div className="flex gap-2">

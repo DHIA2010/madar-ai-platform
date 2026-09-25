@@ -54,10 +54,9 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
-import { AppSearchableSelect, type AppSearchableSelectOption } from "@/components/app"
+import { AppDateField, AppSearchableSelect, type AppSearchableSelectOption } from "@/components/app"
 
 import { PRODUCT_TYPES, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
-import { DateField } from "./date-field"
 import {
   BASE_UNIT_OPTIONS,
   CATEGORY_ICON,
@@ -236,7 +235,7 @@ export default function AddProduct() {
   const componentNameInputs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const { currentUser } = useAuth()
-  const { currentOrganization } = useWorkspace()
+  const { currentOrganization, currentWorkspace, availableWorkspaces } = useWorkspace()
   const router = useRouter()
   // The same form serves both jobs: with ?id= it loads that product and saves over it, without
   // it creates a new one. Duplicating this page for editing would mean maintaining seven
@@ -298,7 +297,11 @@ export default function AddProduct() {
   const [sellPrice, setSellPrice] = useState("")
   const [supplier, setSupplier] = useState("")
   const [stockNotes, setStockNotes] = useState("")
-  const [stockLocation, setStockLocation] = useState("")
+  // Which workspace (branch) this product will appear in -- required, on every product type
+  // (even منتج رقمي/خدمة, which have no physical stock but still belong to a workspace).
+  // Defaults to whatever workspace is currently active, but stays a real, explicit choice rather
+  // than a silent assumption.
+  const [productWorkspaceId, setProductWorkspaceId] = useState(() => currentWorkspace?.id ?? "")
   // How many base units make one carton, for this product. Empty until the author says.
   const [unitsPerCarton, setUnitsPerCarton] = useState("")
   // The piece-measured product a carton packages.
@@ -422,6 +425,7 @@ export default function AddProduct() {
         setCategory(product.category)
         setTaxRateId(product.taxRateId ?? "")
         setPriceIncludesTax(product.priceIncludesTax)
+        setProductWorkspaceId(product.workspaceId ?? "")
         setDescription(product.description)
         setPublished(product.status === "active")
         setBaseUnit(product.baseUnit || BASE_UNIT_OPTIONS[0].value)
@@ -436,7 +440,6 @@ export default function AddProduct() {
         setLinkedUnitProductId(text("linkedUnitProductId"))
         setSupplier(text("supplier"))
         setStockNotes(text("stockNotes"))
-        setStockLocation(text("stockLocation"))
         setBatchNumber(text("batchNumber"))
         setBrand(text("brand"))
         setModel(text("model"))
@@ -555,6 +558,19 @@ export default function AddProduct() {
       tint: CATEGORY_TINT,
     }))
   }, [knownCategories, category])
+
+  // Real workspaces only -- unlike الفئة above, a made-up value here wouldn't be a harmless label,
+  // it would be a workspaceId that has to resolve to a real row, so there's no onCreate fallback.
+  const workspaceOptions = useMemo<AppSearchableSelectOption[]>(
+    () =>
+      availableWorkspaces.map((workspace) => ({
+        value: workspace.id,
+        label: workspace.name,
+        icon: LOCATION_ICON,
+        tint: LOCATION_TINT,
+      })),
+    [availableWorkspaces]
+  )
 
   // "" (never a real tax_rates id) stands for "use the organization's default rate" -- always
   // first, and never absent even if the organization has somehow ended up with no rates at all.
@@ -859,6 +875,7 @@ export default function AddProduct() {
   const errors = {
     name: name.trim() ? null : `${type.nameLabel} مطلوب`,
     category: category.trim() ? null : "الفئة مطلوبة",
+    workspaceId: productWorkspaceId ? null : "مساحة العمل مطلوبة",
     sku: !showsSku || sku.trim() ? null : `${type.skuLabel} مطلوب`,
     description: productType !== "digital" || description.trim() ? null : "وصف المنتج مطلوب",
     components:
@@ -912,6 +929,7 @@ export default function AddProduct() {
     status: asDraft ? "draft" : published ? "active" : "draft",
     taxRateId: taxRateId || null,
     priceIncludesTax,
+    workspaceId: productWorkspaceId || null,
     baseUnit: baseUnit || null,
     sellPrice: optionalNumber(sellPrice),
     costPrice: optionalNumber(costPrice),
@@ -923,7 +941,6 @@ export default function AddProduct() {
       linkedUnitProductId: packagingApplies ? linkedUnitProductId || null : null,
       supplier: supplier.trim() || null,
       stockNotes: stockNotes.trim() || null,
-      stockLocation: stockLocation.trim() || null,
       batchNumber: batchNumber.trim() || null,
       brand: brand.trim() || null,
       model: model.trim() || null,
@@ -1217,6 +1234,22 @@ export default function AddProduct() {
                   />
                 </Field>
 
+                <Field label="موقع المخزون" required error={showErrors ? errors.workspaceId : null}>
+                  {/* Which workspace (branch) this product belongs to and will appear in -- every
+                      type, even منتج رقمي/خدمة which have no physical stock, still needs one.
+                      Not creatable (unlike الفئة above): a made-up value here would be a
+                      workspaceId that has to resolve to a real row. */}
+                  <AppSearchableSelect
+                    value={productWorkspaceId}
+                    options={workspaceOptions}
+                    onChange={setProductWorkspaceId}
+                    placeholder="اختر مساحة العمل"
+                    searchPlaceholder="ابحث عن مساحة عمل..."
+                    emptyLabel="لا توجد مساحة عمل مطابقة"
+                    ariaLabel="موقع المخزون"
+                  />
+                </Field>
+
                 <Field label="الضريبة">
                   {/* Null (the "" option) means this product follows whatever the organization's
                       default rate is at the time of each sale -- re-read fresh every time, never
@@ -1507,27 +1540,6 @@ export default function AddProduct() {
 
                   <Field label="وحدة القياس" required>
                     <UnitSelect value={baseUnit} onChange={setBaseUnit} />
-                  </Field>
-
-                  <Field label="موقع المخزون">
-                    {/* RTL: the tile is written first so it lands to the right of the field. */}
-                    <div className="flex items-center gap-2 rounded-[12px] border border-[#e1e7f0] bg-white px-2.5">
-                      <span
-                        className={cn(
-                          "flex size-8 shrink-0 items-center justify-center rounded-[8px]",
-                          LOCATION_TINT
-                        )}
-                      >
-                        <LOCATION_ICON className="size-4" />
-                      </span>
-                      <Input
-                        value={stockLocation}
-                        aria-label="موقع المخزون"
-                        onChange={(event) => setStockLocation(event.target.value)}
-                        placeholder="المستودع الرئيسي"
-                        className="h-11 rounded-none border-0 bg-transparent p-0 text-[13px] focus-visible:ring-0"
-                      />
-                    </div>
                   </Field>
                 </div>
               </section>
@@ -3351,7 +3363,7 @@ function SuffixInput({
 }
 
 function DateInput({ value, onChange }: { value: string; onChange: (next: string) => void }) {
-  return <DateField value={value} onChange={onChange} />
+  return <AppDateField value={value} onChange={onChange} />
 }
 
 function UnitSelect({ value, onChange }: { value: string; onChange: (next: string) => void }) {

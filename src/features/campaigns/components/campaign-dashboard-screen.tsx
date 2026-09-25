@@ -2,23 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import {
-  addMonths,
-  endOfMonth,
-  format,
-  getMonth,
-  getYear,
-  setMonth,
-  setYear,
-  startOfMonth,
-  subDays,
-  subMonths,
-} from "date-fns"
+import { format, subDays } from "date-fns"
 import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
-  CalendarIcon,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -43,10 +31,7 @@ import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
-  AppCalendar,
-  AppPopover,
-  AppPopoverContent,
-  AppPopoverTrigger,
+  AppDateRangeFilter,
   AppSearchInput,
   AppSelect,
   AppSelectContent,
@@ -137,38 +122,6 @@ const objectiveOptions: CampaignTypeFilter[] = [
   "Conversions",
   "Sales",
 ]
-const monthOptions = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-]
-const yearOptions = Array.from({ length: 21 }, (_, index) => 2018 + index)
-
-function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
-  const today = new Date()
-  const lastMonth = subMonths(today, 1)
-
-  return [
-    { label: "Yesterday", range: { from: subDays(today, 1), to: subDays(today, 1) } },
-    { label: "Last 7 Days", range: { from: subDays(today, 6), to: today } },
-    { label: "Last 30 Days", range: { from: subDays(today, 29), to: today } },
-    { label: "This Month", range: { from: startOfMonth(today), to: endOfMonth(today) } },
-    { label: "Last Month", range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) } },
-    // Matches the earliest selectable year in the calendar's year dropdown (see yearOptions
-    // above) -- there's no unbounded "no start date" query on the backend, so "all time" is
-    // expressed as the widest real range the picker allows rather than an empty filter.
-    { label: "All Time", range: { from: new Date(yearOptions[0], 0, 1), to: today } },
-  ]
-}
 
 // Colours and radii below come from the campaigns SVG export rather than the shared
 // dashboard tokens, matching the treatment the integrations surfaces already use.
@@ -333,18 +286,6 @@ function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
   )
 }
 
-const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
-
-function formatDateRangeLabel(range: DateRange | undefined) {
-  if (!range?.from) return "الفترة الزمنية"
-  if (!range.to) return ARABIC_DATE.format(range.from)
-  return `${ARABIC_DATE.format(range.from)} - ${ARABIC_DATE.format(range.to)}`
-}
-
 function getRoasClasses(roas: number) {
   if (roas >= 4) return "text-[#1f9d55]"
   if (roas >= 2.5) return "text-[#2878ff]"
@@ -450,236 +391,6 @@ function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatf
   )
 }
 
-function DateRangeFilter({
-  value,
-  onChange,
-}: {
-  value: DateRange | undefined
-  onChange: (next: DateRange | undefined) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [displayMonth, setDisplayMonth] = useState<Date>(value?.from ?? new Date())
-  const [rangeAnchor, setRangeAnchor] = useState<Date | undefined>(undefined)
-  const monthIndex = getMonth(displayMonth)
-  const yearValue = getYear(displayMonth)
-
-  return (
-    <AppPopover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen)
-        if (nextOpen) {
-          setDisplayMonth(value?.from ?? new Date())
-          setRangeAnchor(value?.from && !value?.to ? value.from : undefined)
-        } else {
-          setRangeAnchor(undefined)
-        }
-      }}
-    >
-      <AppPopoverTrigger asChild>
-        <button
-          type="button"
-          className="flex h-10 w-[250px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border border-[#e1e7f0] bg-white px-3.5 text-[12.5px] text-[#0b1738] transition-colors hover:border-[#c4d5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40"
-        >
-          <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
-          <span className="truncate">{formatDateRangeLabel(value)}</span>
-        </button>
-      </AppPopoverTrigger>
-      <AppPopoverContent
-        align="start"
-        sideOffset={10}
-        dir="ltr"
-        collisionPadding={16}
-        className="max-h-[var(--radix-popover-content-available-height)] w-[min(23rem,calc(100vw-2rem))] overflow-y-auto rounded-[20px] border border-sky-400/15 bg-card p-3.5 text-foreground shadow-[0_28px_90px_-38px_rgba(14,165,233,0.55)] ring-1 ring-sky-400/10 backdrop-blur-2xl"
-      >
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <AppButton
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
-            onClick={() => setDisplayMonth((current) => addMonths(current, -1))}
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="size-4" />
-          </AppButton>
-
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
-            <AppSelect
-              value={String(monthIndex)}
-              onValueChange={(next) =>
-                setDisplayMonth((current) => setMonth(current, Number(next)))
-              }
-            >
-              <AppSelectTrigger className="h-9 w-[7.75rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
-                <span>{monthOptions[monthIndex]}</span>
-              </AppSelectTrigger>
-              <AppSelectContent
-                position="popper"
-                className="rounded-2xl border border-border bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
-                align="center"
-                sideOffset={4}
-              >
-                {monthOptions.map((monthLabel, index) => (
-                  <AppSelectItem
-                    key={monthLabel}
-                    value={String(index)}
-                    className="rounded-xl px-3 py-2 text-sm text-foreground focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
-                  >
-                    {monthLabel}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
-
-            <AppSelect
-              value={String(yearValue)}
-              onValueChange={(next) => setDisplayMonth((current) => setYear(current, Number(next)))}
-            >
-              <AppSelectTrigger className="h-9 w-[6rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
-                <span>{yearValue}</span>
-              </AppSelectTrigger>
-              <AppSelectContent
-                position="popper"
-                className="max-h-56 rounded-2xl border border-border bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
-                align="center"
-                sideOffset={4}
-              >
-                {yearOptions.map((yearOption) => (
-                  <AppSelectItem
-                    key={yearOption}
-                    value={String(yearOption)}
-                    className="rounded-xl px-3 py-2 text-sm text-foreground focus:bg-sky-500/10 data-[state=checked]:bg-sky-500/15"
-                  >
-                    {yearOption}
-                  </AppSelectItem>
-                ))}
-              </AppSelectContent>
-            </AppSelect>
-          </div>
-
-          <AppButton
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
-            onClick={() => setDisplayMonth((current) => addMonths(current, 1))}
-            aria-label="Next month"
-          >
-            <ChevronRight className="size-4" />
-          </AppButton>
-        </div>
-
-        <AppCalendar
-          mode="range"
-          animate
-          month={displayMonth}
-          onMonthChange={setDisplayMonth}
-          selected={value}
-          onSelect={(next, selectedDay) => {
-            if (!selectedDay) {
-              onChange(next)
-              return
-            }
-
-            if (!rangeAnchor) {
-              onChange({ from: selectedDay, to: undefined })
-              setRangeAnchor(selectedDay)
-              return
-            }
-
-            const from = selectedDay < rangeAnchor ? selectedDay : rangeAnchor
-            const to = selectedDay < rangeAnchor ? rangeAnchor : selectedDay
-
-            onChange({ from, to })
-            setRangeAnchor(undefined)
-            setOpen(false)
-          }}
-          numberOfMonths={1}
-          startMonth={new Date(2018, 0)}
-          endMonth={new Date(2038, 11)}
-          captionLayout="label"
-          formatters={{ formatWeekdayName: (date) => format(date, "EEE") }}
-          className="rounded-[18px] bg-transparent p-0 [--cell-size:32px]"
-          classNames={{
-            root: "w-full",
-            months: "w-full",
-            month: "w-full gap-2",
-            nav: "hidden",
-            month_caption: "hidden",
-            caption_label: "text-base font-semibold text-foreground",
-            weekdays: "mb-1.5 grid grid-cols-7 gap-1.5",
-            weekday:
-              "h-6 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground",
-            week: "mt-1.5 grid grid-cols-7 gap-1.5",
-            day: "rounded-full text-foreground",
-            day_button:
-              "size-8 rounded-full border border-transparent bg-transparent text-xs font-medium text-foreground transition-all duration-200 ease-out hover:border-sky-300/40 hover:bg-sky-500/14 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35",
-            today:
-              "rounded-full border border-sky-400/60 bg-transparent text-foreground shadow-none",
-            selected:
-              "rounded-full border border-sky-300 bg-sky-400 text-foreground shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_10px_30px_rgba(14,165,233,0.32)] hover:bg-sky-300 hover:text-foreground",
-            range_middle: "rounded-full border border-transparent bg-sky-500/14 text-foreground",
-            range_start: "rounded-full border border-sky-300 bg-sky-400 text-foreground",
-            range_end: "rounded-full border border-sky-300 bg-sky-400 text-foreground",
-            outside: "text-muted-foreground opacity-40",
-            disabled: "text-muted-foreground opacity-35",
-          }}
-        />
-
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
-          {getDateRangePresets().map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-              onClick={() => {
-                onChange(preset.range)
-                setRangeAnchor(undefined)
-                setDisplayMonth(preset.range.from ?? new Date())
-                setOpen(false)
-              }}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <AppButton
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-9 rounded-xl border-border bg-muted/60 px-3.5 text-sm font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
-            onClick={() => {
-              onChange(undefined)
-              setRangeAnchor(undefined)
-              setDisplayMonth(new Date())
-              setOpen(false)
-            }}
-          >
-            Clear Date
-          </AppButton>
-          <AppButton
-            type="button"
-            size="sm"
-            className="h-9 rounded-xl bg-sky-400 px-3.5 text-sm font-semibold text-foreground shadow-[0_18px_34px_-18px_rgba(14,165,233,0.8)] transition-all hover:bg-sky-300"
-            onClick={() => {
-              const today = new Date()
-              onChange({ from: today, to: today })
-              setRangeAnchor(undefined)
-              setDisplayMonth(today)
-              setOpen(false)
-            }}
-          >
-            Today
-          </AppButton>
-        </div>
-      </AppPopoverContent>
-    </AppPopover>
-  )
-}
-
 export function CampaignDashboardScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -693,7 +404,7 @@ export function CampaignDashboardScreen() {
   // Pre-selected, not left empty -- the backend always scopes to a real date window (defaults
   // to the last 30 days when none is sent), so the picker must show that honestly instead of
   // implying "all data" while secretly filtering to 30 days behind the scenes. Matches the
-  // "Last 30 Days" preset exactly (see getDateRangePresets) so clicking that preset explicitly
+  // "Last 30 Days" preset exactly (see AppDateRangeFilter) so clicking that preset explicitly
   // is a no-op against this initial state.
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date()
@@ -1229,7 +940,7 @@ export function CampaignDashboardScreen() {
             >
               تصدير
             </AppButton>
-            <DateRangeFilter
+            <AppDateRangeFilter
               value={dateRange}
               onChange={(next) => {
                 setDateRange(next)

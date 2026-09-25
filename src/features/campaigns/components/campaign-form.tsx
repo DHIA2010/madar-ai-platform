@@ -181,19 +181,24 @@ const MANUAL_DATE_FORMATS = [
   "yyyy-MM-dd",
 ] as const
 const MONTH_OPTIONS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "يناير",
+  "فبراير",
+  "مارس",
+  "أبريل",
+  "مايو",
+  "يونيو",
+  "يوليو",
+  "أغسطس",
+  "سبتمبر",
+  "أكتوبر",
+  "نوفمبر",
+  "ديسمبر",
 ] as const
+// The conventional two-letter Arabic weekday abbreviations -- matches AppDateField/
+// AppDateRangeFilter's own calendar headers (components/app/date-field.tsx,
+// date-range-filter.tsx) so every date picker in the app reads the same way, rather than
+// date-fns's own narrow single-letter format (ح ن ث ر خ ج س). Indexed by getDay() (0 = Sunday).
+const WEEKDAY_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
 const YEAR_OPTIONS = Array.from({ length: 26 }, (_, index) => 2020 + index)
 
 function parseIsoDate(value: string) {
@@ -575,7 +580,7 @@ function DatePickerField({
           endMonth={new Date(2035, 11)}
           className="rounded-[18px] bg-transparent p-0 [--cell-size:40px]"
           formatters={{
-            formatWeekdayName: (date) => format(date, "EEE"),
+            formatWeekdayName: (date) => WEEKDAY_SHORT[date.getDay()],
           }}
           classNames={{
             nav: "hidden",
@@ -609,7 +614,7 @@ function DatePickerField({
               setOpen(false)
             }}
           >
-            Clear Date
+            مسح التاريخ
           </AppButton>
           <AppButton
             type="button"
@@ -622,7 +627,7 @@ function DatePickerField({
               setOpen(false)
             }}
           >
-            Today
+            اليوم
           </AppButton>
         </div>
       </AppPopoverContent>
