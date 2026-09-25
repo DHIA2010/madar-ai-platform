@@ -231,10 +231,17 @@ describe("Zid marketplace-initiated install (Activate from Zid's App Market)", (
       projectId: string
       status: string
       accountName: string
+      redirectUrl: string
     }
     expect(claimed.organizationId).toBe(actor.organizationId)
     expect(claimed.status).toBe("connected")
     expect(claimed.accountName).toBe("Marketplace Test Store")
+    // Zid's app-activation policy requires continuing straight through to "service ready" --
+    // this must be the exact same success URL a direct (admin-initiated) Zid connect redirects
+    // to, not a generic page, so the frontend can send the merchant there immediately.
+    expect(claimed.redirectUrl).toContain("http://localhost:3000/integrations/new")
+    expect(claimed.redirectUrl).toContain("zid_oauth=connected")
+    expect(claimed.redirectUrl).toContain(`zid_connection_id=${claimed.connectionId}`)
 
     const connectionRows = await database.query(
       `SELECT status, provider_account_id, project_id FROM zid_oauth_connections WHERE id = $1`,

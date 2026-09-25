@@ -40,6 +40,7 @@ import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
 import { ReportsService } from "../../reports/service"
+import type { ReportLevelFilter } from "../../reports/types"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -1276,13 +1277,18 @@ export function createIdentityApiServer(
             message: "Zid marketplace install is unavailable in memory mode.",
           })
         }
-        return send(
-          200,
-          await zidOAuthMarketplaceService.claimInstall(
-            actor,
-            decodeURIComponent(zidInstallClaimMatch[1])
-          )
+        // Zid's app-activation policy requires the merchant to continue straight through to
+        // "service ready" after claiming, not land on a generic page -- redirectUrl reuses the
+        // exact same success-URL builder a direct Zid connect already uses (buildSuccessRedirect),
+        // so a marketplace-claimed install lands on the identical "connection successful" screen.
+        const claimResult = await zidOAuthMarketplaceService.claimInstall(
+          actor,
+          decodeURIComponent(zidInstallClaimMatch[1])
         )
+        return send(200, {
+          ...claimResult,
+          redirectUrl: zidOAuthMarketplaceService.buildSuccessRedirect(claimResult),
+        })
       }
 
       if (method === "GET" && url.pathname === "/v1/auth/session") {
@@ -1658,6 +1664,25 @@ export function createIdentityApiServer(
           return send(200, await reportsService.previewKpi(actor, payload))
         }
 
+        if (method === "GET" && url.pathname === "/v1/reports/catalog/filter-values") {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          const dataSource = url.searchParams.get("dataSource")
+          const field = url.searchParams.get("field")
+          if (!dataSource || !field) {
+            throw new IdentityError(
+              "REPORT_DEFINITION_INVALID",
+              400,
+              "validation",
+              "dataSource and field query params are required"
+            )
+          }
+          const workspaceId = url.searchParams.get("workspaceId")
+          return send(
+            200,
+            await reportsService.getFilterFieldValues(actor, dataSource, field, workspaceId)
+          )
+        }
+
         const kpiMatch = url.pathname.match(/^\/v1\/reports\/kpis\/([^/]+)$/)
         if (kpiMatch) {
           if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
@@ -1696,9 +1721,27 @@ export function createIdentityApiServer(
         const reportDataMatch = url.pathname.match(/^\/v1\/reports\/custom\/([^/]+)\/data$/)
         if (method === "GET" && reportDataMatch) {
           if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          const from = url.searchParams.get("from") ?? undefined
+          const to = url.searchParams.get("to") ?? undefined
+          const filtersParam = url.searchParams.get("filters")
+          let filters: ReportLevelFilter[] | undefined
+          try {
+            filters = filtersParam ? (JSON.parse(filtersParam) as ReportLevelFilter[]) : undefined
+          } catch {
+            throw new IdentityError(
+              "REPORT_DEFINITION_INVALID",
+              400,
+              "validation",
+              "Invalid filters query parameter -- must be JSON."
+            )
+          }
           return send(
             200,
-            await reportsService.runCustomReport(actor, decodeURIComponent(reportDataMatch[1]))
+            await reportsService.runCustomReport(actor, decodeURIComponent(reportDataMatch[1]), {
+              from,
+              to,
+              filters,
+            })
           )
         }
 
@@ -3307,7 +3350,10 @@ export function createIdentityApiServer(
             201,
             await productCatalogService.create({
               organizationId: actor.organizationId,
-              workspaceId: actor.workspaceId,
+              // The Add Product form makes this a required, explicit choice -- actor.workspaceId
+              // (the request's own active-workspace context) only backfills a caller that never
+              // sends one at all (bulk import, an older client).
+              workspaceId: payload.workspaceId ?? actor.workspaceId,
               createdBy: actor.userId,
               product: payload,
             })
@@ -3731,7 +3777,8 @@ export function createIdentityApiServer(
           payload.paymentMethodCode,
           payload.notes,
           attachmentUrls,
-          actor.userId
+          actor.userId,
+          payload.transactionDate
         )
         return send(201, toNormalizedCustomer(updated))
       }

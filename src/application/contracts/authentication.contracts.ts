@@ -79,6 +79,10 @@ export interface AcceptInvitationResponseDto {
 export interface ClaimZidMarketplaceInstallResponseDto {
   connectionId: string
   status: string
+  // Where to send the merchant next so they continue straight through Zid's required activation
+  // journey instead of landing on a generic page -- the same "connection successful" URL a direct
+  // Zid connect already redirects to (see ZidOAuthService.buildSuccessRedirect).
+  redirectUrl: string
 }
 
 export interface ZidMarketplaceInstallSummaryDto {

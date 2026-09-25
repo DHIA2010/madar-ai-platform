@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Lock, Mail } from "lucide-react"
@@ -60,6 +60,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const { authenticationApplicationService } = useApplicationServices()
   const [formError, setFormError] = useState<string | null>(null)
   const t = useTranslations("auth.login")
+  const router = useRouter()
   const searchParams = useSearchParams()
   const invitationToken = searchParams.get("invitation")
   const zidInstallToken = searchParams.get("zidInstall")
@@ -93,12 +94,21 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
     }
 
     if (zidInstallToken) {
+      // GuestRoute skips its own post-auth redirect whenever ?zidInstall is present (see
+      // guest-route.tsx) specifically so this call can finish and send the merchant straight to
+      // "service ready" instead of a generic dashboard -- required by Zid's app-activation
+      // policy. A failed claim still needs an explicit destination since that default redirect
+      // is disabled for this case.
       try {
-        await authenticationApplicationService.claimZidMarketplaceInstall(zidInstallToken)
+        const result =
+          await authenticationApplicationService.claimZidMarketplaceInstall(zidInstallToken)
         toast.success(t("zidInstallClaimed"))
+        router.push(result.redirectUrl)
       } catch {
         toast.error(t("zidInstallClaimError"))
+        router.push(ROUTES.dashboard)
       }
+      return
     }
   })
 

@@ -250,7 +250,11 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
       })
     }
 
-    return { connectionId: "mock_zid_connection", status: "connected" }
+    return {
+      connectionId: "mock_zid_connection",
+      status: "connected",
+      redirectUrl: "/integrations/new?zid_oauth=connected&zid_connection_id=mock_zid_connection",
+    }
   }
 
   async getZidMarketplaceInstallSummary(

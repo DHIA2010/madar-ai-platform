@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { ROUTES } from "@/constants/routes"
 
@@ -16,13 +16,20 @@ interface GuestRouteProps {
 
 export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRouteProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { authStatus } = useAuth()
+  // A Zid marketplace-install claim in progress (?zidInstall=...) owns its own post-auth
+  // navigation once claimZidMarketplaceInstall() resolves (login-form.tsx/signup-form.tsx) --
+  // this default redirect would otherwise race that in-flight call and briefly land the merchant
+  // on the generic dashboard before being sent to the real destination, which is exactly the
+  // "generic homepage" landing Zid's app-activation policy rejects.
+  const hasZidInstall = Boolean(searchParams.get("zidInstall"))
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
+    if (authStatus === "authenticated" && !hasZidInstall) {
       router.replace(redirectTo)
     }
-  }, [authStatus, redirectTo, router])
+  }, [authStatus, hasZidInstall, redirectTo, router])
 
   // "loading" also covers an in-flight login()/register() call from this same page, not just
   // the initial session check (AuthProvider already blocks rendering until that first check

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { CheckCircle2, Link2 } from "lucide-react"
 
@@ -29,6 +30,7 @@ export function ZidMarketplaceInstallClaim({ claimToken }: ZidMarketplaceInstall
   const t = useTranslations("auth.zidClaim")
   const { authenticationApplicationService } = useApplicationServices()
   const { authStatus } = useAuth()
+  const router = useRouter()
 
   const [load, setLoad] = useState<LoadState>({ status: "loading" })
   const [isConfirming, setIsConfirming] = useState(false)
@@ -66,10 +68,14 @@ export function ZidMarketplaceInstallClaim({ claimToken }: ZidMarketplaceInstall
     setIsConfirming(true)
     setConfirmError(null)
     try {
-      await authenticationApplicationService.claimZidMarketplaceInstall(claimToken)
+      const result = await authenticationApplicationService.claimZidMarketplaceInstall(claimToken)
       if (load.status === "ready") {
         setClaimed({ storeName: load.storeName })
       }
+      // Zid's app-activation policy requires continuing straight through to "service ready"
+      // rather than stopping here on a success card with a manual link -- redirectUrl is the
+      // same URL a direct Zid connect already lands on (see server.ts's claim route).
+      router.push(result.redirectUrl)
     } catch {
       setConfirmError(t("errorDescription"))
     } finally {
@@ -78,6 +84,23 @@ export function ZidMarketplaceInstallClaim({ claimToken }: ZidMarketplaceInstall
   }
 
   const isAuthenticated = authStatus === "authenticated"
+
+  // The merchant already had a MADAR session open when Zid redirected them here -- the callback
+  // must process immediately rather than wait on a click (Zid's policy: "must not act only as a
+  // generic homepage or unrelated login page").
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      load.status === "ready" &&
+      !load.alreadyClaimed &&
+      !claimed &&
+      !isConfirming &&
+      !confirmError
+    ) {
+      void handleConfirm()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, load, claimed, isConfirming, confirmError])
 
   return (
     <div className="bg-muted flex min-h-svh w-full items-center justify-center p-6 md:p-10">
