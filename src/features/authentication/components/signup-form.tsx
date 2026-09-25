@@ -28,6 +28,7 @@ import {
 } from "@/components/app"
 
 import { useAuth } from "../hooks"
+import { safeNextPath } from "../utils/safe-next-path"
 import { type SignupFormValues, signupInvitationSchema, signupSchema } from "../validators"
 
 import { useApplicationServices } from "@/application"
@@ -151,6 +152,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   // joining an existing org, they need one created for them same as any normal signup
   // (organizationName field, full 3-step form), just with a claim call appended on success.
   const zidInstallToken = searchParams.get("zidInstall")
+  const nextPath = safeNextPath(searchParams.get("next"))
   // The email only arrives pre-filled when the invite link itself carried it (the normal
   // case). If someone reaches this page via a token-only link (e.g. from the login
   // page's "create account" link), there's no known email to lock in — let them type it;
@@ -265,6 +267,13 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         router.push(ROUTES.dashboard)
       }
       return
+    }
+
+    if (nextPath) {
+      // GuestRoute skips its own post-auth redirect whenever ?next is present (same reasoning
+      // as ?zidInstall above), so this page owns sending the visitor back to whatever protected
+      // page ProtectedRoute originally bounced them from.
+      router.push(nextPath)
     }
   })
 

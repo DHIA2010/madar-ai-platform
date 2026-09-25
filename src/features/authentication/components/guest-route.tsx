@@ -24,12 +24,16 @@ export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRou
   // on the generic dashboard before being sent to the real destination, which is exactly the
   // "generic homepage" landing Zid's app-activation policy rejects.
   const hasZidInstall = Boolean(searchParams.get("zidInstall"))
+  // Same race, general case: ProtectedRoute attaches ?next= when it bounces an unauthenticated
+  // visitor here, and login-form/signup-form push to it once auth resolves -- this default
+  // redirect must not beat that push to the dashboard.
+  const hasNext = Boolean(searchParams.get("next"))
 
   useEffect(() => {
-    if (authStatus === "authenticated" && !hasZidInstall) {
+    if (authStatus === "authenticated" && !hasZidInstall && !hasNext) {
       router.replace(redirectTo)
     }
-  }, [authStatus, hasZidInstall, redirectTo, router])
+  }, [authStatus, hasZidInstall, hasNext, redirectTo, router])
 
   // "loading" also covers an in-flight login()/register() call from this same page, not just
   // the initial session check (AuthProvider already blocks rendering until that first check

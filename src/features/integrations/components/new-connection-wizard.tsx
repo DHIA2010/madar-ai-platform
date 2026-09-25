@@ -45,6 +45,7 @@ import {
   Target,
   Users,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
@@ -1003,6 +1004,19 @@ export function NewConnectionWizard() {
     }
 
     const callbackParams = new URLSearchParams(window.location.search)
+
+    // A provider's own OAuth callback (e.g. ZidOAuthService.buildErrorRedirect) lands here with
+    // its callbackParam set to "error" instead of "connected" on failure -- previously nothing
+    // read this branch at all, so the merchant just saw an empty wizard with no explanation.
+    const erroredProfileEntry = Object.entries(OAUTH_CONNECTOR_PROFILES).find(
+      ([, profile]) => callbackParams.get(profile.callbackParam) === "error"
+    )
+    if (erroredProfileEntry) {
+      const reason = callbackParams.get("reason")
+      toast.error(reason ? `تعذر إتمام الاتصال: ${reason}` : "تعذر إتمام الاتصال. حاول مرة أخرى.")
+      return
+    }
+
     const matchedProfileEntry = Object.entries(OAUTH_CONNECTOR_PROFILES).find(
       ([, profile]) => callbackParams.get(profile.callbackParam) === "connected"
     )

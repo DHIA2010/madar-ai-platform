@@ -17,6 +17,7 @@ import { ROUTES } from "@/constants/routes"
 import { AppButton, AppCheckbox, AppForm, AppInput, AppPasswordInput } from "@/components/app"
 
 import { useAuth } from "../hooks"
+import { safeNextPath } from "../utils/safe-next-path"
 import { type LoginFormValues, loginSchema } from "../validators"
 
 import { useApplicationServices } from "@/application"
@@ -64,6 +65,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const searchParams = useSearchParams()
   const invitationToken = searchParams.get("invitation")
   const zidInstallToken = searchParams.get("zidInstall")
+  const nextPath = safeNextPath(searchParams.get("next"))
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -109,6 +111,14 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         router.push(ROUTES.dashboard)
       }
       return
+    }
+
+    if (nextPath) {
+      // GuestRoute skips its own post-auth redirect whenever ?next is present (same reasoning
+      // as ?zidInstall above), so this page owns sending the visitor back to whatever protected
+      // page ProtectedRoute originally bounced them from -- otherwise the reason they landed on
+      // login (e.g. a Zid OAuth error) is lost the moment the default dashboard redirect fires.
+      router.push(nextPath)
     }
   })
 

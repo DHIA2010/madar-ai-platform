@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { ROUTES } from "@/constants/routes"
 
@@ -23,14 +23,23 @@ export function ProtectedRoute({
   requireWorkspace = false,
 }: ProtectedRouteProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { authStatus, currentUser } = useAuth()
   const { currentWorkspace, workspaceStatus } = useWorkspace()
 
   useEffect(() => {
     if (authStatus === "unauthenticated") {
-      router.replace(redirectTo)
+      // Carry the page the visitor was actually trying to reach through login as ?next= --
+      // without this, a bounce to login silently drops whatever brought them here (query params
+      // included), which is exactly what turned a Zid OAuth error into an unexplained blank
+      // login page: the error redirect landed here first, then this replace wiped it.
+      const query = searchParams.toString()
+      const current = `${pathname}${query ? `?${query}` : ""}`
+      const separator = redirectTo.includes("?") ? "&" : "?"
+      router.replace(`${redirectTo}${separator}next=${encodeURIComponent(current)}`)
     }
-  }, [authStatus, redirectTo, router])
+  }, [authStatus, redirectTo, router, pathname, searchParams])
 
   useEffect(() => {
     if (
