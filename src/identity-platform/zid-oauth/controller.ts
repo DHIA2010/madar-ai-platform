@@ -87,7 +87,7 @@ export class ZidOAuthController {
     return this.service.getRecentEvents(actor, input)
   }
 
-  async callback(_request: IncomingMessage, query: URLSearchParams) {
+  async callback(request: IncomingMessage, query: URLSearchParams) {
     const error = query.get("error")
     const code = query.get("code")
     const state = query.get("state")
@@ -97,6 +97,11 @@ export class ZidOAuthController {
     // other record was a generic 400 from the token endpoint. Recording the shape of what Zid
     // actually sent makes one attempt conclusive instead of a guess. Parameter names, presence
     // and lengths only -- never the code itself, which is a live bearer credential.
+    //
+    // Also records who actually made this request -- a batch of these with zero params turned
+    // out ambiguous without it: no way to tell a real merchant's browser following Zid's OAuth
+    // redirect apart from Zid's own partner-dashboard silently pinging the saved Callback URL
+    // to validate it's reachable (both look identical from query params alone).
     console.error("zid_oauth.callback_received", {
       params: Array.from(query.keys()),
       hasCode: Boolean(code),
@@ -104,6 +109,9 @@ export class ZidOAuthController {
       hasState: Boolean(state),
       error: error ?? null,
       errorDescription: query.get("error_description"),
+      userAgent: request.headers["user-agent"] ?? null,
+      referer: request.headers["referer"] ?? request.headers["referrer"] ?? null,
+      forwardedFor: request.headers["x-forwarded-for"] ?? null,
     })
 
     if (error) {
