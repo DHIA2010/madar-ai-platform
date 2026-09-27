@@ -205,6 +205,12 @@
       "goToIntegrations": "Go to Integrations",
       "errorDescription": "We couldn't connect this store. The link may have expired — try activating from Zid again."
     },
+    "zidAutoLogin": {
+      "loading": "Signing you in…",
+      "errorHeading": "Couldn't sign you in",
+      "errorDescription": "This link may have expired or already been used. Try activating from Zid's App Market again, or sign in manually.",
+      "goToLogin": "Go to sign in"
+    },
     "forgotPassword": {
       "heading": "Forgot password?",
       "description": "Enter the email linked to your account and we'll send you a secure link to reset your password.",

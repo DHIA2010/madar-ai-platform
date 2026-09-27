@@ -5,9 +5,14 @@ import type { AddressInfo } from "node:net"
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { IdentityCommandHandlers } from "../application/handlers/command-handlers"
+import { IdentityQueryHandlers } from "../application/handlers/query-handlers"
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
+import { ConsoleLogger } from "../infrastructure/logger/console-logger"
 import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { createPostgresRepositories } from "../infrastructure/postgres/repositories"
+import { InMemoryEventPublisher } from "../infrastructure/queue/in-memory-event-publisher"
 import { ZidIntegrationProvider } from "../integrations/zid/provider"
 import { createIdentityApiServer } from "../interfaces/rest/server"
 
@@ -29,6 +34,11 @@ function mockZidTokenAndProfile(input: {
     uuid?: string
     url?: string
   }
+  // Omitted in most tests -- exercises fetchStoreInfo's fallback to the claim-token flow
+  // whenever Zid's profile response carries no manager email at all. Set only by the
+  // auto-provisioning tests below.
+  merchantEmail?: string
+  merchantName?: string
 }) {
   const nativeFetch = globalThis.fetch
 
@@ -57,6 +67,8 @@ function mockZidTokenAndProfile(input: {
       return new Response(
         JSON.stringify({
           user: {
+            email: input.merchantEmail,
+            name: input.merchantName,
             store: {
               id: input.store.id,
               // Both real fields of Zid's profile response. The storefront snippet parameter
@@ -99,7 +111,36 @@ beforeEach(async () => {
 
   container = createIdentityPlatform({ mode: "memory" })
   ;(container.infrastructure as { database?: PostgresDatabase }).database = database
-  container.infrastructure.integrations?.register(new ZidIntegrationProvider(database))
+  // Memory mode's own repositories are fake, in-process Maps, not backed by `database` -- but
+  // claimInstall's FK constraints (projects.organization_id, etc.) and the auto-provisioning
+  // tests below need users/organizations/workspaces/memberships to be the SAME real SQL tables
+  // Zid's own repository queries, and container.commands/queries must see those same rows too
+  // (resolveActorFromAccessToken looks users/memberships up there) -- so this rebuilds both on
+  // real Postgres-backed repositories instead of leaving them on the memory-mode fakes.
+  const pgIdentityRepos = createPostgresRepositories({
+    db: database,
+    tokenService: container.zidAutoProvisionDeps!.tokenService,
+    sessions: container.zidAutoProvisionDeps!.sessions,
+  })
+  container.commands = new IdentityCommandHandlers({
+    config: container.config,
+    repositories: pgIdentityRepos,
+    clock: container.zidAutoProvisionDeps!.clock,
+    uuid: container.zidAutoProvisionDeps!.uuid,
+    hasher: container.zidAutoProvisionDeps!.hasher,
+    tokenService: container.zidAutoProvisionDeps!.tokenService,
+    rateLimiter: container.infrastructure.rateLimiter!,
+    emailGateway: container.zidAutoProvisionDeps!.emailGateway,
+    logger: new ConsoleLogger(),
+    eventPublisher: new InMemoryEventPublisher(),
+    featureFlags: container.infrastructure.featureFlags,
+    metrics: container.infrastructure.metrics,
+  })
+  container.queries = new IdentityQueryHandlers(pgIdentityRepos)
+  container.zidAutoProvisionDeps = { ...container.zidAutoProvisionDeps!, ...pgIdentityRepos }
+  container.infrastructure.integrations?.register(
+    new ZidIntegrationProvider(database, container.zidAutoProvisionDeps)
+  )
 
   server = createIdentityApiServer(container)
   await new Promise<void>((resolve) => server.listen(0, resolve))
@@ -187,6 +228,17 @@ async function completeMarketplaceCallback(): Promise<string> {
   expect(response.status).toBe(302)
   const location = response.headers.get("location") ?? ""
   const match = location.match(/\/integrations\/zid\/claim\/([^/?]+)/)
+  expect(match).not.toBeNull()
+  return decodeURIComponent(match![1])
+}
+
+async function completeMarketplaceCallbackExpectingAutoLogin(): Promise<string> {
+  const response = await fetch(`${baseUrl}/v1/integrations/zid/oauth/callback?code=zid-mkt-code`, {
+    redirect: "manual",
+  })
+  expect(response.status).toBe(302)
+  const location = response.headers.get("location") ?? ""
+  const match = location.match(/\/integrations\/zid\/auto-login\/([^/?]+)/)
   expect(match).not.toBeNull()
   return decodeURIComponent(match![1])
 }
@@ -372,5 +424,106 @@ describe("Zid marketplace-initiated install (Activate from Zid's App Market)", (
       `SELECT count(*)::int AS count FROM zid_marketplace_installs`
     )
     expect(installRows.rows[0].count).toBe(0)
+  })
+
+  it("auto-provisions and logs in a brand-new merchant whose email matches no existing user", async () => {
+    mockZidTokenAndProfile({
+      accessToken: "auto-access-token",
+      refreshToken: "auto-refresh-token",
+      store: { id: "998877", title: "Auto Provision Store" },
+      merchantEmail: "brand-new-merchant@zid.test",
+      merchantName: "Brand New Merchant",
+    })
+
+    const handoffToken = await completeMarketplaceCallbackExpectingAutoLogin()
+
+    // The account, org, workspace, membership, and connection must already exist and be fully
+    // wired together immediately after the callback -- consuming the handoff only mints the
+    // session, it doesn't do any more provisioning.
+    const userRows = await database.query(
+      `SELECT id, email, account_status, email_verified_at FROM users WHERE email = $1`,
+      ["brand-new-merchant@zid.test"]
+    )
+    expect(userRows.rows[0]).toMatchObject({ account_status: "active" })
+    expect(userRows.rows[0].email_verified_at).not.toBeNull()
+    const userId = String(userRows.rows[0].id)
+
+    const membershipRows = await database.query(
+      `SELECT role_code, status FROM memberships WHERE user_id = $1`,
+      [userId]
+    )
+    expect(membershipRows.rows[0]).toMatchObject({ role_code: "owner", status: "active" })
+
+    const installRows = await database.query(
+      `SELECT status, auto_provisioned_user_id FROM zid_marketplace_installs`
+    )
+    expect(installRows.rows[0]).toMatchObject({
+      status: "claimed",
+      auto_provisioned_user_id: userId,
+    })
+
+    const consumeResponse = await fetch(
+      `${baseUrl}/v1/integrations/zid/auto-login/${handoffToken}/consume`,
+      { method: "POST" }
+    )
+    expect(consumeResponse.status).toBe(200)
+    const consumed = (await consumeResponse.json()) as {
+      user: { id: string; email: string }
+      session: { accessToken: string }
+      redirectUrl: string
+    }
+    expect(consumed.user.id).toBe(userId)
+    expect(consumed.user.email).toBe("brand-new-merchant@zid.test")
+    expect(consumed.redirectUrl).toContain("http://localhost:3000/integrations/new")
+    expect(consumed.redirectUrl).toContain("zid_oauth=connected")
+
+    // The session actually works for authenticated calls.
+    const sessionResponse = await fetch(`${baseUrl}/v1/auth/session`, {
+      headers: authHeaders(consumed.session.accessToken),
+    })
+    expect(sessionResponse.status).toBe(200)
+
+    // Single-use: replaying the same handoff token must fail, not mint a second session.
+    const replayResponse = await fetch(
+      `${baseUrl}/v1/integrations/zid/auto-login/${handoffToken}/consume`,
+      { method: "POST" }
+    )
+    expect(replayResponse.status).toBe(404)
+  })
+
+  it("falls back to the claim-token flow, unchanged, when the email matches an existing user", async () => {
+    await registerAndProvisionOrg("already-a-madar-user@madar.test", "Pre-existing Org")
+
+    mockZidTokenAndProfile({
+      accessToken: "existing-email-access-token",
+      refreshToken: "existing-email-refresh-token",
+      store: { id: "554433", title: "Existing Email Store" },
+      merchantEmail: "already-a-madar-user@madar.test",
+      merchantName: "Already A Madar User",
+    })
+
+    // Never auto-login -- Zid's own policy warns against attaching a store to an existing
+    // account on an email match alone, so this must be byte-for-byte today's claim-token path.
+    const claimToken = await completeMarketplaceCallback()
+
+    const installRows = await database.query(
+      `SELECT status, auto_provisioned_user_id, auto_login_token_hash FROM zid_marketplace_installs`
+    )
+    expect(installRows.rows[0]).toMatchObject({
+      status: "unclaimed",
+      auto_provisioned_user_id: null,
+      auto_login_token_hash: null,
+    })
+
+    // No second user was created for this email.
+    const userCountRows = await database.query(
+      `SELECT count(*)::int AS count FROM users WHERE email = $1`,
+      ["already-a-madar-user@madar.test"]
+    )
+    expect(userCountRows.rows[0].count).toBe(1)
+
+    const summaryResponse = await fetch(`${baseUrl}/v1/integrations/zid/install/${claimToken}`)
+    expect(summaryResponse.status).toBe(200)
+    expect(((await summaryResponse.json()) as { status: string }).status).toBe("unclaimed")
   })
 })

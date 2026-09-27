@@ -256,6 +256,58 @@ export class ZidOAuthRepository
     return result.rows[0] ?? null
   }
 
+  // Auto-provisioning handoff (see auto-provision-service.ts): a brand-new merchant's account is
+  // created and this install is claimed immediately, but the real session is only minted when
+  // this opaque, single-use, short-lived token is consumed -- these three methods are its entire
+  // lifecycle (set once, read once to consume, and the unique partial index on the hash column
+  // guarantees only one live handoff can ever point at a given hash at a time).
+  async setAutoLoginHandoff(input: {
+    installId: string
+    tokenHash: string
+    expiresAt: string
+    userId: string
+  }) {
+    await this.db.query({
+      name: "zid-marketplace-install-set-auto-login",
+      text: `
+        UPDATE zid_marketplace_installs
+        SET auto_login_token_hash = $2,
+            auto_login_expires_at = $3,
+            auto_provisioned_user_id = $4,
+            updated_at = now()
+        WHERE id = $1
+      `,
+      values: [input.installId, input.tokenHash, input.expiresAt, input.userId],
+    })
+  }
+
+  async findMarketplaceInstallByAutoLoginTokenHash(tokenHash: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "zid-marketplace-install-find-auto-login",
+      text: "SELECT * FROM zid_marketplace_installs WHERE auto_login_token_hash = $1 LIMIT 1",
+      values: [tokenHash],
+    })
+    return result.rows[0] ?? null
+  }
+
+  // Nulls the hash out so the unique index frees up and the token can never be replayed --
+  // returns false (rather than silently no-op'ing) if it was already consumed by a concurrent
+  // request, matching claimInstallRow's single-use CAS pattern.
+  async consumeAutoLoginHandoff(installId: string) {
+    const result = await this.db.query({
+      name: "zid-marketplace-install-consume-auto-login",
+      text: `
+        UPDATE zid_marketplace_installs
+        SET auto_login_token_hash = NULL,
+            updated_at = now()
+        WHERE id = $1
+          AND auto_login_token_hash IS NOT NULL
+      `,
+      values: [installId],
+    })
+    return result.rowCount > 0
+  }
+
   // One atomic UPDATE, not a separate consume-then-update -- unlike zid_oauth_states (which
   // touches two different tables), here it's the same row being both consumed and filled with
   // claim context. Caller must check the returned boolean and treat false as an error (already

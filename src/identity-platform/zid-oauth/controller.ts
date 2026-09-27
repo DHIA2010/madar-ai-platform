@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 
+import type { ZidMarketplaceAutoProvisionService } from "./auto-provision-service"
 import type { ZidOAuthService } from "./service"
 import type { ZidOAuthStartInput } from "./types"
 
@@ -54,7 +55,10 @@ function toSafeCallbackReason(error: unknown) {
 }
 
 export class ZidOAuthController {
-  constructor(private readonly service: ZidOAuthService) {}
+  constructor(
+    private readonly service: ZidOAuthService,
+    private readonly autoProvisionService?: ZidMarketplaceAutoProvisionService
+  ) {}
 
   async start(actor: AuthenticatedActor, input: ZidOAuthStartInput) {
     return this.service.startAuthorization(actor, input)
@@ -136,9 +140,24 @@ export class ZidOAuthController {
     // merchant here directly from its own App Market "Activate" button, not from an admin
     // clicking "Connect Zid" inside MADAR. Distinct flow: exchange the code now, but defer
     // organization attachment to a later claim step (see zid-oauth/service.ts's
-    // completeMarketplaceInstall/claimInstall doc comments).
+    // completeMarketplaceInstall/claimInstall doc comments) -- unless the merchant's email from
+    // Zid doesn't match any existing MADAR account, in which case autoProvisionService creates
+    // one and logs them straight in instead (see ZidMarketplaceAutoProvisionService).
     if (!state) {
       try {
+        if (this.autoProvisionService) {
+          const outcome = await this.autoProvisionService.completeInstall({ code })
+          return {
+            status: 302,
+            headers: {
+              location:
+                outcome.mode === "auto_login"
+                  ? this.service.buildAutoLoginRedirect(outcome.handoffToken)
+                  : this.service.buildInstallClaimRedirect(outcome.claimToken),
+            },
+          }
+        }
+
         const pending = await this.service.completeMarketplaceInstall({ code })
         return {
           status: 302,

@@ -19,4 +19,13 @@ export class InMemoryEmailGateway implements EmailGateway {
   }) {
     this.sent.push({ kind: "invitation", ...input })
   }
+
+  async sendZidWelcomeEmail(input: {
+    email: string
+    password: string
+    loginUrl: string
+    storeName: string
+  }) {
+    this.sent.push({ kind: "zid_welcome", ...input })
+  }
 }

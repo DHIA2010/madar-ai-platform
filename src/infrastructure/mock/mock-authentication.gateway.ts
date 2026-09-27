@@ -5,6 +5,7 @@ import type {
   AuthUserDto,
   ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
+  ConsumeZidAutoLoginResponseDto,
   ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
@@ -268,6 +269,25 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
     }
 
     return { storeName: "Mock Zid Store", currency: "SAR", status: "unclaimed" }
+  }
+
+  async consumeZidAutoLogin(handoffToken: string): Promise<ConsumeZidAutoLoginResponseDto> {
+    if (!handoffToken) {
+      throw new ValidationError({
+        code: "zid_auto_login_token_required",
+        message: "Handoff token is required.",
+      })
+    }
+
+    const user = createMockUser("merchant@zid-store.example")
+    const session = createSession(user, true)
+    this.sessionsByRefreshToken.set(session.refreshToken.token, { session, user })
+
+    return {
+      user,
+      session,
+      redirectUrl: "/integrations/new?zid_oauth=connected&zid_connection_id=mock_zid_connection",
+    }
   }
 
   async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {

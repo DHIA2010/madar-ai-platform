@@ -55,6 +55,12 @@ export interface EmailGateway {
     workspaceName?: string
     fullName?: string
   }): Promise<void>
+  sendZidWelcomeEmail(input: {
+    email: string
+    password: string
+    loginUrl: string
+    storeName: string
+  }): Promise<void>
 }
 
 export interface Logger {

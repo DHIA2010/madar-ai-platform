@@ -154,4 +154,27 @@ export class ResendEmailGateway implements EmailGateway {
       }),
     })
   }
+
+  async sendZidWelcomeEmail(input: {
+    email: string
+    password: string
+    loginUrl: string
+    storeName: string
+  }) {
+    await this.send({
+      to: input.email,
+      subject: `Your MADAR account for ${input.storeName} is ready`,
+      text: `Your MADAR account for ${input.storeName} is ready. Email: ${input.email} / Temporary password: ${input.password}. Sign in: ${input.loginUrl}. You can change this password anytime from Settings.`,
+      html: renderLayout({
+        preheader: `Your MADAR account for ${input.storeName} is ready.`,
+        heading: "Your MADAR account is ready",
+        bodyHtml: `We connected <strong>${escapeHtml(input.storeName)}</strong> and created your MADAR account.<br><br>
+          Email: <strong>${escapeHtml(input.email)}</strong><br>
+          Temporary password: <strong>${escapeHtml(input.password)}</strong><br><br>
+          You can change this password anytime from Settings once you're signed in.`,
+        ctaLabel: "Sign in to MADAR",
+        ctaUrl: input.loginUrl,
+      }),
+    })
+  }
 }

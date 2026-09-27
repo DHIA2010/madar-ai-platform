@@ -86,6 +86,7 @@ import { ERRORS, IdentityError } from "../errors/IdentityError"
 import { hasPermission, resolvePermissions } from "../../domain/domain-services/permission-service"
 import { resolveMembershipModulePermissions } from "../../domain/domain-services/module-permission-service"
 import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
+import { issueSessionForMember } from "../session-issuer"
 
 export interface IdentityCommandHandlerDependencies {
   config: IdentityPlatformConfig
@@ -572,46 +573,7 @@ export class IdentityCommandHandlers {
       throw ERRORS.forbidden()
     }
 
-    const sessionId = this.deps.uuid.generate()
-    const tokens = this.buildTokenPair({
-      userId: user.id,
-      organizationId: membership.organizationId,
-      workspaceId: membership.workspaceId,
-      sessionId,
-      rememberMe: Boolean(command.rememberMe),
-    })
-    const session = SessionEntity.create({
-      id: sessionId,
-      userId: user.id,
-      organizationId: membership.organizationId,
-      workspaceId: membership.workspaceId,
-      refreshTokenHash: this.deps.tokenService.hashOpaqueToken(tokens.refreshToken),
-      refreshTokenFamily: this.deps.uuid.generate(),
-      revokedAt: null,
-      rememberMe: Boolean(command.rememberMe),
-      userAgent: context.userAgent,
-      ipAddress: context.ipAddress,
-      expiresAt: tokens.refreshTokenExpiresAt,
-      createdAt: this.now,
-      updatedAt: this.now,
-    })
-    await this.deps.repositories.sessions.save(session.toState())
-    await this.audit(
-      "auth.login",
-      context,
-      user.id,
-      membership.organizationId,
-      membership.workspaceId,
-      "session",
-      sessionId
-    )
-
-    const modulePermissions = await resolveMembershipModulePermissions(
-      membership,
-      this.deps.repositories.customRoles
-    )
-
-    return {
+    const result = await issueSessionForMember({
       user: {
         id: user.id,
         email: user.email,
@@ -620,19 +582,38 @@ export class IdentityCommandHandlers {
         timezone: user.toState().timezone,
         language: user.toState().language,
         status: user.status,
-        modulePermissions,
       },
-      session: {
-        sessionId,
+      membership: {
         organizationId: membership.organizationId,
         workspaceId: membership.workspaceId,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        accessTokenExpiresAt: tokens.accessTokenExpiresAt,
-        refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-        rememberMe: Boolean(command.rememberMe),
+        role: membership.role,
+        customRoleId: membership.customRoleId,
+        moduleAccessRevoked: membership.moduleAccessRevoked,
       },
-    }
+      context: { ipAddress: context.ipAddress, userAgent: context.userAgent },
+      rememberMe: Boolean(command.rememberMe),
+      now: this.now,
+      deps: {
+        config: this.deps.config,
+        clock: this.deps.clock,
+        uuid: this.deps.uuid,
+        tokenService: this.deps.tokenService,
+        sessions: this.deps.repositories.sessions,
+        customRoles: this.deps.repositories.customRoles,
+      },
+    })
+
+    await this.audit(
+      "auth.login",
+      context,
+      user.id,
+      membership.organizationId,
+      membership.workspaceId,
+      "session",
+      result.session.sessionId
+    )
+
+    return result
   }
 
   async refresh(command: RefreshSessionCommand, context: RequestContext) {

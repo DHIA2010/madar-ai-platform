@@ -64,6 +64,12 @@ function buildAuthorizationHeader(token: ZidTokenResponse): string {
 // handling, matching what Salla's /store/info and Snapchat's account discovery both need.
 interface ZidManagerProfileResponse {
   user?: {
+    // Manager identity fields, confirmed against Zid's documented response for this same
+    // endpoint (docs.zid.sa/get-manager-profile) -- sit right alongside `store` below but were
+    // never read before this was needed for auto-provisioning a MADAR account on install.
+    email?: string
+    name?: string
+    is_email_verified?: boolean
     store?: {
       id?: number | string
       uuid?: string
@@ -437,6 +443,9 @@ async function fetchStoreInfo(config: ZidOAuthServiceConfig, token: ZidTokenResp
     currency: typeof store.currency === "string" ? store.currency : store.currency?.code,
     timezone: store.timezone,
     url: store.url,
+    merchantEmail: body.user?.email ?? null,
+    merchantName: body.user?.name ?? null,
+    merchantEmailVerified: body.user?.is_email_verified ?? false,
   }
 }
 
@@ -722,9 +731,14 @@ export class ZidOAuthService {
   // even have a MADAR account yet). Exchanges the code and stores the result unclaimed; there
   // is no organization to attach a real connection to until the merchant logs in/registers and
   // claims it via claimInstall.
-  async completeMarketplaceInstall(input: {
-    code: string
-  }): Promise<{ claimToken: string; storeName: string }> {
+  async completeMarketplaceInstall(input: { code: string }): Promise<{
+    installId: string
+    claimToken: string
+    storeName: string
+    merchantEmail: string | null
+    merchantName: string | null
+    merchantEmailVerified: boolean
+  }> {
     const config = await this.loadResolvedConfig()
 
     const token = await exchangeAuthorizationCode({ code: input.code, config })
@@ -738,11 +752,12 @@ export class ZidOAuthService {
     const effectiveScopes = scopes.length > 0 ? scopes : config.scopes
     const storeName = store.name ?? "Zid Store"
 
+    const installId = randomUUID()
     const claimToken = createClaimToken()
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
     await this.repository.saveMarketplaceInstall({
-      id: randomUUID(),
+      id: installId,
       claimTokenHash: hashClaimToken(claimToken),
       zidStoreExternalId: String(store.id),
       zidStoreUuid: store.uuid ?? null,
@@ -762,7 +777,14 @@ export class ZidOAuthService {
       expiresAt,
     })
 
-    return { claimToken, storeName }
+    return {
+      installId,
+      claimToken,
+      storeName,
+      merchantEmail: store.merchantEmail,
+      merchantName: store.merchantName,
+      merchantEmailVerified: store.merchantEmailVerified,
+    }
   }
 
   // Public-safe read (no secrets) -- used by the claim page before any MADAR session exists,
@@ -1275,6 +1297,16 @@ export class ZidOAuthService {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
     const redirectUrl = new URL(
       `${appUrl.replace(/\/$/, "")}/integrations/zid/claim/${encodeURIComponent(claimToken)}`
+    )
+    return redirectUrl.toString()
+  }
+
+  // Same appUrl resolution as buildInstallClaimRedirect -- carries only the opaque, single-use
+  // handoff token (see ZidMarketplaceAutoProvisionService), never a real session credential.
+  buildAutoLoginRedirect(handoffToken: string) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+    const redirectUrl = new URL(
+      `${appUrl.replace(/\/$/, "")}/integrations/zid/auto-login/${encodeURIComponent(handoffToken)}`
     )
     return redirectUrl.toString()
   }

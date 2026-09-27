@@ -50,4 +50,18 @@ export class SmtpEmailGateway implements EmailGateway {
       text: `${greeting}Invitation token: ${input.token}\nOrganization: ${input.organizationId}${workspaceInfo}`,
     })
   }
+
+  async sendZidWelcomeEmail(input: {
+    email: string
+    password: string
+    loginUrl: string
+    storeName: string
+  }) {
+    await this.transport.sendMail({
+      from: this.config.emailFrom,
+      to: input.email,
+      subject: `Your MADAR account for ${input.storeName} is ready`,
+      text: `Email: ${input.email}\nTemporary password: ${input.password}\nSign in: ${input.loginUrl}\nYou can change this password anytime from Settings.`,
+    })
+  }
 }

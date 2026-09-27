@@ -1,6 +1,10 @@
 import type { IncomingMessage } from "node:http"
 
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
+import {
+  ZidMarketplaceAutoProvisionService,
+  type ZidAutoProvisionDeps,
+} from "../../zid-oauth/auto-provision-service"
 import { ZidOAuthController } from "../../zid-oauth/controller"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
@@ -27,12 +31,27 @@ export class ZidIntegrationProvider {
   private readonly service?: ZidOAuthService
   private readonly controller?: ZidOAuthController
   private readonly syncService?: ZidSyncService
+  private readonly autoProvisionService?: ZidMarketplaceAutoProvisionService
 
-  constructor(database?: PostgresDatabase) {
+  constructor(
+    database?: PostgresDatabase,
+    // Optional: without it (e.g. a database-backed test that doesn't need auto-provisioning),
+    // the controller falls back to the pre-existing claim-token-only flow untouched.
+    autoProvisionDeps?: Omit<ZidAutoProvisionDeps, "loginUrl">
+  ) {
     if (database) {
       this.repository = new ZidOAuthRepository(database)
       this.service = new ZidOAuthService(this.repository)
-      this.controller = new ZidOAuthController(this.service)
+      if (autoProvisionDeps) {
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+        this.autoProvisionService = new ZidMarketplaceAutoProvisionService(
+          this.repository,
+          this.service,
+          { ...autoProvisionDeps, loginUrl: `${appUrl.replace(/\/$/, "")}/auth/basic/login` }
+        )
+      }
+      this.controller = new ZidOAuthController(this.service, this.autoProvisionService)
       this.syncService = new ZidSyncService(
         this.repository,
         new ZidSyncRepository(database),

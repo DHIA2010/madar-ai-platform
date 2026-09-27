@@ -17,7 +17,13 @@ import type {
   VerifyEmailRequestDto,
 } from "../contracts"
 import { GetCurrentUserQuery } from "../queries"
-import { LoginUseCase, LogoutUseCase, RegisterUseCase, RestoreSessionUseCase } from "../use-cases"
+import {
+  ConsumeZidAutoLoginUseCase,
+  LoginUseCase,
+  LogoutUseCase,
+  RegisterUseCase,
+  RestoreSessionUseCase,
+} from "../use-cases"
 
 export class AuthenticationApplicationService {
   private readonly restoreSessionUseCase: RestoreSessionUseCase
@@ -25,6 +31,7 @@ export class AuthenticationApplicationService {
   private readonly registerUseCase: RegisterUseCase
   private readonly logoutUseCase: LogoutUseCase
   private readonly getCurrentUserQuery: GetCurrentUserQuery
+  private readonly consumeZidAutoLoginUseCase: ConsumeZidAutoLoginUseCase
 
   constructor(
     private readonly gateway: AuthGateway,
@@ -35,6 +42,7 @@ export class AuthenticationApplicationService {
     this.registerUseCase = new RegisterUseCase(gateway, sessionStorage)
     this.logoutUseCase = new LogoutUseCase(gateway, sessionStorage)
     this.getCurrentUserQuery = new GetCurrentUserQuery(gateway)
+    this.consumeZidAutoLoginUseCase = new ConsumeZidAutoLoginUseCase(gateway, sessionStorage)
   }
 
   restoreSession(): Promise<AuthSessionViewModel | null> {
@@ -84,6 +92,10 @@ export class AuthenticationApplicationService {
 
   getZidMarketplaceInstallSummary(claimToken: string): Promise<ZidMarketplaceInstallSummaryDto> {
     return this.gateway.getZidMarketplaceInstallSummary(claimToken)
+  }
+
+  consumeZidAutoLogin(handoffToken: string) {
+    return this.consumeZidAutoLoginUseCase.execute(handoffToken)
   }
 
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {

@@ -44,6 +44,7 @@ import { SallaIntegrationProvider } from "../integrations/salla/provider"
 import { ShopifyIntegrationProvider } from "../integrations/shopify/provider"
 import { GoogleAnalyticsIntegrationProvider } from "../integrations/google-analytics/provider"
 import { ZidIntegrationProvider } from "../integrations/zid/provider"
+import type { ZidAutoProvisionDeps } from "../zid-oauth/auto-provision-service"
 import { TikTokAdsIntegrationProvider } from "../integrations/tiktok-ads/provider"
 import { IntegrationProviderRegistry } from "../integrations/provider-registry"
 
@@ -78,6 +79,11 @@ export interface IdentityPlatformContainer {
     objectStorage?: S3ObjectStorageGateway
     rateLimiter?: RateLimiter
   }
+  // Undefined in memory mode -- lets server.ts construct its own standalone
+  // ZidMarketplaceAutoProvisionService for the auto-login consume route, the same way it already
+  // constructs its own standalone ZidOAuthService for the claim routes, without either of them
+  // reaching into IdentityCommandHandlers' private deps.
+  zidAutoProvisionDeps?: Omit<ZidAutoProvisionDeps, "loginUrl">
 }
 
 export function createIdentityPlatformContainer(
@@ -107,15 +113,17 @@ export function createIdentityPlatformContainer(
     integrations.register(new TikTokAdsIntegrationProvider())
     const repositories = createInMemoryRepositories(options.store)
     const rateLimiter = new InMemoryRateLimiter()
+    const memoryHasher = new ScryptPasswordHasher()
+    const memoryEmailGateway = new InMemoryEmailGateway()
     const commands = new IdentityCommandHandlers({
       config,
       repositories,
       clock,
       uuid,
-      hasher: new ScryptPasswordHasher(),
+      hasher: memoryHasher,
       tokenService,
       rateLimiter,
-      emailGateway: new InMemoryEmailGateway(),
+      emailGateway: memoryEmailGateway,
       logger: new ConsoleLogger(),
       eventPublisher: new InMemoryEventPublisher(),
       featureFlags,
@@ -133,6 +141,24 @@ export function createIdentityPlatformContainer(
         integrations,
         googleIdentityCredentialsProvider: undefined,
         rateLimiter,
+      },
+      // Memory mode's ZidIntegrationProvider is registered above with no database, so it never
+      // actually uses this -- exposed anyway so a test can attach a real database afterwards
+      // (as zid-oauth.marketplace-install.test.ts does) and re-register a fully-wired provider
+      // with these same repositories/hasher/emailGateway rather than constructing its own.
+      zidAutoProvisionDeps: {
+        users: repositories.users,
+        organizations: repositories.organizations,
+        workspaces: repositories.workspaces,
+        memberships: repositories.memberships,
+        sessions: repositories.sessions,
+        customRoles: repositories.customRoles,
+        hasher: memoryHasher,
+        emailGateway: memoryEmailGateway,
+        tokenService,
+        uuid,
+        clock,
+        config,
       },
     }
   }
@@ -154,13 +180,35 @@ export function createIdentityPlatformContainer(
   const googleIdentityCredentialsProvider = new EnvironmentFirstGoogleIdentityCredentialsProvider(
     new AwsSecretsGoogleIdentityCredentialsProvider()
   )
+  // Hoisted above `commands` (which also uses them) so the Zid marketplace auto-provisioning
+  // path -- which needs to hash a generated password and email it, exactly like a normal
+  // signup -- shares the same hasher/emailGateway instances rather than constructing its own.
+  const hasher = new ScryptPasswordHasher()
+  const emailGateway = config.resendApiKey
+    ? new ResendEmailGateway(config)
+    : new SmtpEmailGateway(config)
   const integrations = new IntegrationProviderRegistry()
   integrations.register(new SnapchatAdsIntegrationProvider(database))
   integrations.register(new MetaAdsIntegrationProvider(database))
   integrations.register(new SallaIntegrationProvider(database))
   integrations.register(new ShopifyIntegrationProvider(database))
   integrations.register(new GoogleAnalyticsIntegrationProvider(database))
-  integrations.register(new ZidIntegrationProvider(database))
+  integrations.register(
+    new ZidIntegrationProvider(database, {
+      users: repositories.users,
+      organizations: repositories.organizations,
+      workspaces: repositories.workspaces,
+      memberships: repositories.memberships,
+      sessions: repositories.sessions,
+      customRoles: repositories.customRoles,
+      hasher,
+      emailGateway,
+      tokenService,
+      uuid,
+      clock,
+      config,
+    })
+  )
   integrations.register(new TikTokAdsIntegrationProvider(database))
   const googleOAuthController = new GoogleOAuthController(
     new GoogleOAuthService(
@@ -203,12 +251,10 @@ export function createIdentityPlatformContainer(
     repositories,
     clock,
     uuid,
-    hasher: new ScryptPasswordHasher(),
+    hasher,
     tokenService,
     rateLimiter,
-    emailGateway: config.resendApiKey
-      ? new ResendEmailGateway(config)
-      : new SmtpEmailGateway(config),
+    emailGateway,
     logger: new ConsoleLogger(),
     eventPublisher: new PostgresOutboxEventPublisher(database),
     featureFlags,
@@ -231,6 +277,20 @@ export function createIdentityPlatformContainer(
       googleIdentityCredentialsProvider,
       objectStorage,
       rateLimiter,
+    },
+    zidAutoProvisionDeps: {
+      users: repositories.users,
+      organizations: repositories.organizations,
+      workspaces: repositories.workspaces,
+      memberships: repositories.memberships,
+      sessions: repositories.sessions,
+      customRoles: repositories.customRoles,
+      hasher,
+      emailGateway,
+      tokenService,
+      uuid,
+      clock,
+      config,
     },
   }
 }

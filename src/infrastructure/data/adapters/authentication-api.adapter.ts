@@ -4,6 +4,7 @@ import type {
   AuthUserDto,
   ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
+  ConsumeZidAutoLoginResponseDto,
   ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
@@ -260,6 +261,30 @@ export class AuthenticationApiAdapter {
     return this.client.get<ZidMarketplaceInstallSummaryDto>(
       `/v1/integrations/zid/install/${encodeURIComponent(claimToken)}`
     )
+  }
+
+  // Public backend route -- this handoff token IS the authentication, unlike every other call
+  // here that carries an already-issued bearer token. Same response mapping as login() since the
+  // backend returns the identical LoginResponseDto shape plus redirectUrl.
+  async consumeZidAutoLogin(handoffToken: string): Promise<ConsumeZidAutoLoginResponseDto> {
+    const response = await this.client.post<
+      Record<string, never>,
+      IdentityLoginResponse & { redirectUrl: string }
+    >(`/v1/integrations/zid/auto-login/${encodeURIComponent(handoffToken)}/consume`, {})
+    return {
+      user: {
+        id: response.user.id,
+        email: response.user.email,
+        fullName: response.user.fullName,
+        avatarUrl: response.user.avatarUrl ?? null,
+        emailVerified: true,
+        roles: mapRoles(["owner"]),
+        permissions: mapPermissions(["owner"]),
+        modulePermissions: response.user.modulePermissions ?? [],
+      },
+      session: mapSession(response.session),
+      redirectUrl: response.redirectUrl,
+    }
   }
 
   async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {

@@ -22,6 +22,7 @@ import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-deletion-service"
+import { ZidMarketplaceAutoProvisionService } from "../../zid-oauth/auto-provision-service"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
@@ -530,6 +531,22 @@ export function createIdentityApiServer(
   const zidOAuthMarketplaceService = container.infrastructure.database
     ? new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
     : null
+  // Standalone instance for the auto-login consume route below, mirroring
+  // zidOAuthMarketplaceService's own pattern -- unavailable (and that route 503s) in memory mode,
+  // same as every other database-backed Zid service here.
+  const zidAutoProvisionService =
+    container.infrastructure.database &&
+    container.zidAutoProvisionDeps &&
+    zidOAuthMarketplaceService
+      ? new ZidMarketplaceAutoProvisionService(
+          new ZidOAuthRepository(container.infrastructure.database),
+          zidOAuthMarketplaceService,
+          {
+            ...container.zidAutoProvisionDeps,
+            loginUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/auth/basic/login`,
+          }
+        )
+      : null
   const tiktokAdsOAuthDeletionService = container.infrastructure.database
     ? new TikTokAdsOAuthConnectionDeletionService(
         new TikTokAdsOAuthRepository(container.infrastructure.database)
@@ -846,6 +863,50 @@ export function createIdentityApiServer(
             message: "Install not found or expired.",
           })
         }
+      }
+
+      // Public and unauthenticated on purpose -- this handoff token *is* the login mechanism for
+      // a merchant auto-provisioned during a Zid marketplace install (see
+      // ZidMarketplaceAutoProvisionService). Single-use and short-lived, same threat model as the
+      // claim token above.
+      const zidAutoLoginConsumeMatch = url.pathname.match(
+        /^\/v1\/integrations\/zid\/auto-login\/([^/]+)\/consume$/
+      )
+      if (method === "POST" && zidAutoLoginConsumeMatch) {
+        if (!zidAutoProvisionService) {
+          return send(503, {
+            code: "ZID_AUTO_LOGIN_UNAVAILABLE",
+            message: "Zid auto-login is unavailable in memory mode.",
+          })
+        }
+
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `zid_auto_login_consume:${context.ipAddress}`,
+          20,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, {
+            code: "ZID_AUTO_LOGIN_RATE_LIMITED",
+            message: "Too many requests.",
+          })
+        }
+
+        const outcome = await zidAutoProvisionService.consumeAutoLogin(
+          decodeURIComponent(zidAutoLoginConsumeMatch[1]),
+          { ipAddress: context.ipAddress, userAgent: context.userAgent }
+        )
+        if (outcome.status === "invalid") {
+          return send(404, {
+            code: "ZID_AUTO_LOGIN_INVALID",
+            message: "Auto-login token not found, expired, or already used.",
+          })
+        }
+
+        return send(200, {
+          ...outcome.result,
+          redirectUrl: outcome.redirectUrl,
+        })
       }
 
       const shortLinkRedirectMatch = url.pathname.match(/^\/m\/([^/]+)$/)

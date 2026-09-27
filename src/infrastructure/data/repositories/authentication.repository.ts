@@ -5,6 +5,7 @@ import type {
   AuthUserDto,
   ChangePasswordRequestDto,
   ClaimZidMarketplaceInstallResponseDto,
+  ConsumeZidAutoLoginResponseDto,
   ZidMarketplaceInstallSummaryDto,
   CurrentUserDto,
   ForgotPasswordRequestDto,
@@ -187,6 +188,19 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
       }
 
       return await this.adapter.getZidMarketplaceInstallSummary(claimToken)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
+  async consumeZidAutoLogin(handoffToken: string): Promise<ConsumeZidAutoLoginResponseDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.consumeZidAutoLogin(handoffToken)
+      }
+
+      return await this.adapter.consumeZidAutoLogin(handoffToken)
     } catch (error) {
       throw mapAuthenticationRepositoryError(error)
     }

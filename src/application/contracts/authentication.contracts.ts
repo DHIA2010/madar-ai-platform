@@ -96,6 +96,12 @@ export interface LoginResponseDto {
   session: AuthSessionDto
 }
 
+export interface ConsumeZidAutoLoginResponseDto extends LoginResponseDto {
+  // Where to send the merchant next, same as ClaimZidMarketplaceInstallResponseDto's redirectUrl
+  // -- the "connection successful" screen, since this handoff already attached the connection.
+  redirectUrl: string
+}
+
 export interface CurrentUserDto {
   user: AuthUserDto | null
 }
@@ -116,6 +122,7 @@ export interface AuthenticationRepository {
   acceptInvitation(token: string): Promise<AcceptInvitationResponseDto>
   claimZidMarketplaceInstall(claimToken: string): Promise<ClaimZidMarketplaceInstallResponseDto>
   getZidMarketplaceInstallSummary(claimToken: string): Promise<ZidMarketplaceInstallSummaryDto>
+  consumeZidAutoLogin(handoffToken: string): Promise<ConsumeZidAutoLoginResponseDto>
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto>
   uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto>
   removeAvatar(): Promise<AuthUserDto>

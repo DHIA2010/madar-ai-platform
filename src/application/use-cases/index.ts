@@ -3,6 +3,7 @@ export { GetAIIntelligenceDashboardUseCase } from "./get-ai-intelligence-dashboa
 export { AuthorizeConnectorUseCase } from "./authorize-connector.use-case"
 export { CalculateAttributionUseCase } from "./calculate-attribution.use-case"
 export { CompareAttributionModelsUseCase } from "./compare-attribution-models.use-case"
+export { ConsumeZidAutoLoginUseCase } from "./consume-zid-auto-login.use-case"
 export { CreateConnectionUseCase } from "./create-connection.use-case"
 export { CreateCampaignUseCase } from "./create-campaign.use-case"
 export { DisconnectConnectionUseCase } from "./disconnect-connection.use-case"
