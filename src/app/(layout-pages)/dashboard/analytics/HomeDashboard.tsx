@@ -1,17 +1,19 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Area, AreaChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts"
+import { subDays } from "date-fns"
+import { CartesianGrid, Cell, Label, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts"
+import type { DateRange } from "react-day-picker"
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Award,
   CreditCard,
   Megaphone,
   MousePointerClick,
   Percent,
   Plus,
-  RefreshCw,
+  RefreshCcw,
   Sparkles,
   Target,
   TrendingUp,
@@ -22,8 +24,8 @@ import {
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-import { AppButton, AppCard } from "@/components/app"
-import { PlatformBadge } from "@/components/platform-badge"
+import { AppButton, AppCard, AppDateRangeFilter, RelativeTime } from "@/components/app"
+import { PlatformBadge, PLATFORM_ICON } from "@/components/platform-badge"
 import {
   ChartContainer,
   ChartTooltip,
@@ -31,191 +33,71 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 
-// --- Mock data (first-pass theme build; will be wired to real dashboard data next) ---
+import {
+  campaignPerformanceService,
+  type CampaignPerformancePlatformRow,
+  type CampaignPerformanceRow,
+  type CampaignPerformanceSummary,
+} from "@/features/campaigns/services/campaign-performance.service"
+import {
+  PLATFORM_NODE_CONFIG,
+  type PlatformNodeKey,
+} from "@/features/campaigns/components/campaign-metrics"
+import {
+  channelsPerformanceService,
+  type ChannelsTrendPoint,
+} from "@/features/channels/services/channels-performance.service"
+import { useConnectionsCenter } from "@/features/integrations/hooks/use-connections-center"
 
-const kpis = [
-  {
-    label: "إجمالي الإنفاق",
-    value: "85,000",
-    unit: "SAR",
-    delta: "+18.6%",
-    trend: "up" as const,
-    icon: Wallet,
-    tone: "blue" as const,
-  },
-  {
-    label: "إجمالي الإيرادات",
-    value: "420,000",
-    unit: "SAR",
-    delta: "+24.7%",
-    trend: "up" as const,
-    icon: TrendingUp,
-    tone: "green" as const,
-  },
-  {
-    label: "ROAS",
-    value: "4.94",
-    unit: "",
-    delta: "+12.4%",
-    trend: "up" as const,
-    icon: Target,
-    tone: "violet" as const,
-  },
-  {
-    label: "إجمالي التحويلات",
-    value: "3,421",
-    unit: "",
-    delta: "+16.3%",
-    trend: "up" as const,
-    icon: Users,
-    tone: "orange" as const,
-  },
-  {
-    label: "متوسط CPA",
-    value: "24",
-    unit: "SAR",
-    delta: "-8.7%",
-    trend: "down" as const,
-    icon: MousePointerClick,
-    tone: "rose" as const,
-  },
-  {
-    label: "معدل التحويل",
-    value: "3.2",
-    unit: "%",
-    delta: "+6.1%",
-    trend: "up" as const,
-    icon: Percent,
-    tone: "indigo" as const,
-  },
-]
+// Mirrors connections-overview.tsx's own CONNECTION_STATUS_META -- kept as a small local copy
+// rather than importing from that file, since it isn't exported and this card only needs the
+// label/className, not the rest of that component's surface.
+const CONNECTION_STATUS_META: Record<string, { label: string; className: string }> = {
+  connected: { label: "متصل", className: "bg-emerald-50 text-emerald-600" },
+  valid: { label: "متصل", className: "bg-emerald-50 text-emerald-600" },
+  authorized: { label: "متصل", className: "bg-emerald-50 text-emerald-600" },
+  paused: { label: "متوقف", className: "bg-amber-50 text-amber-600" },
+  disconnected: { label: "خطأ", className: "bg-rose-50 text-rose-600" },
+  error: { label: "خطأ", className: "bg-rose-50 text-rose-600" },
+  draft: { label: "مسودة", className: "bg-slate-50 text-slate-600" },
+  syncing: { label: "قيد المزامنة", className: "bg-blue-50 text-blue-600" },
+}
 
-const KPI_TONE_CLASSNAMES: Record<string, string> = {
+const KPI_TONE_CLASSNAMES = {
   blue: "bg-blue-50 text-blue-600",
   green: "bg-emerald-50 text-emerald-600",
   violet: "bg-violet-50 text-violet-600",
   orange: "bg-orange-50 text-orange-600",
   rose: "bg-rose-50 text-rose-600",
   indigo: "bg-indigo-50 text-indigo-600",
+} as const
+
+type KpiTone = keyof typeof KPI_TONE_CLASSNAMES
+
+interface HomeKpi {
+  label: string
+  value: string
+  unit: string
+  deltaPct: number | null
+  icon: typeof Wallet
+  tone: KpiTone
 }
-
-const performanceTrend = [
-  { date: "30 مايو", revenue: 58000, spend: 22000, conversions: 1800 },
-  { date: "3 يونيو", revenue: 61000, spend: 24500, conversions: 1950 },
-  { date: "7 يونيو", revenue: 55000, spend: 21000, conversions: 1700 },
-  { date: "11 يونيو", revenue: 67000, spend: 26000, conversions: 2100 },
-  { date: "15 يونيو", revenue: 72000, spend: 27500, conversions: 2300 },
-  { date: "19 يونيو", revenue: 69000, spend: 25000, conversions: 2200 },
-  { date: "23 يونيو", revenue: 75000, spend: 28500, conversions: 2450 },
-  { date: "27 يونيو", revenue: 71000, spend: 27000, conversions: 2350 },
-  { date: "30 يونيو", revenue: 74000, spend: 28000, conversions: 2400 },
-]
-
-const performanceChartConfig = {
-  revenue: { label: "الإيرادات", color: "var(--chart-1)" },
-  spend: { label: "الإنفاق", color: "var(--chart-2)" },
-  conversions: { label: "التحويلات", color: "var(--chart-3)" },
-} satisfies ChartConfig
-
-const channelBreakdown = [
-  { channel: "googleAds", label: "Google Ads", value: 36550, share: 43, color: "#2563eb" },
-  { channel: "snapchat", label: "Snapchat", value: 23800, share: 28, color: "#f59e0b" },
-  { channel: "meta", label: "Meta Ads", value: 16150, share: 19, color: "#111c44" },
-  { channel: "tiktok", label: "TikTok Ads", value: 8500, share: 10, color: "#94a3b8" },
-]
-
-const channelChartConfig = {
-  value: { label: "الإنفاق" },
-  googleAds: { label: "Google Ads", color: "#2563eb" },
-  snapchat: { label: "Snapchat", color: "#f59e0b" },
-  meta: { label: "Meta Ads", color: "#111c44" },
-  tiktok: { label: "TikTok Ads", color: "#94a3b8" },
-} satisfies ChartConfig
-
-const totalChannelSpend = channelBreakdown.reduce((sum, item) => sum + item.value, 0)
-
-const topCampaigns = [
-  {
-    name: "حملة الصيف",
-    platform: "Google Ads",
-    revenue: "12,500 SAR",
-    spend: "77,600 SAR",
-    roas: 6.21,
-  },
-  {
-    name: "عرض السبت",
-    platform: "Snapchat",
-    revenue: "8,900 SAR",
-    spend: "37,202 SAR",
-    roas: 4.18,
-  },
-  {
-    name: "إعادة استهداف الزوار",
-    platform: "Meta Ads",
-    revenue: "6,300 SAR",
-    spend: "20,558 SAR",
-    roas: 3.26,
-  },
-  {
-    name: "مهرجان العروض",
-    platform: "TikTok Ads",
-    revenue: "4,200 SAR",
-    spend: "8,862 SAR",
-    roas: 2.11,
-  },
-]
-
-const countryBreakdown = [
-  { country: "المملكة العربية السعودية", orders: 1421 },
-  { country: "الإمارات العربية المتحدة", orders: 842 },
-  { country: "الكويت", orders: 312 },
-  { country: "مصر", orders: 198 },
-  { country: "الأردن", orders: 136 },
-]
-
-const maxCountryOrders = Math.max(...countryBreakdown.map((item) => item.orders))
-
-const aiRecommendations = [
-  {
-    icon: Award,
-    tone: "bg-amber-50 text-amber-600",
-    title: "ROAS تحقق أفضل",
-    description: "بمعدل 5.8 وهو أعلى من متوسط الحساب",
-    cta: "عرض التحليل",
-  },
-  {
-    icon: Sparkles,
-    tone: "bg-blue-50 text-blue-600",
-    title: "فرصة لخفض الإنفاق في Snapchat",
-    description: "يمكنك خفض 15% من إنفاقك وتحقيق نفس النتائج",
-    cta: "عرض التفاصيل",
-  },
-  {
-    icon: TrendingUp,
-    tone: "bg-emerald-50 text-emerald-600",
-    title: "اتجاه إيجابي في التحويلات",
-    description: "التحويلات ارتفعت 16.3% هذا الأسبوع",
-    cta: "عرض التقرير",
-  },
-]
 
 const quickActions = [
   { label: "إنشاء حملة جديدة", icon: Megaphone, href: ROUTES.campaignsCreate },
   { label: "تقرير مخصص", icon: CreditCard, href: ROUTES.reports },
-  { label: "مزامنة جميع القنوات", icon: RefreshCw, href: ROUTES.integrations },
+  { label: "مزامنة جميع القنوات", icon: RefreshCcw, href: ROUTES.integrations },
   { label: "إضافة قناة جديدة", icon: Plus, href: ROUTES.integrationsNew },
 ]
 
-const integrationStatus = [
-  { name: "Google Ads", lastSync: "قبل دقيقتين" },
-  { name: "Snapchat Ads", lastSync: "قبل 5 دقائق" },
-  { name: "Meta Ads", lastSync: "قبل مزامنة: قبل دقيقتين" },
-  { name: "TikTok Ads", lastSync: "قبل مزامنة: قبل 12 ساعة" },
-]
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("ar", { maximumFractionDigits: 0 }).format(value)
+}
 
-function KpiCard({ kpi }: { kpi: (typeof kpis)[number] }) {
+function KpiCard({ kpi }: { kpi: HomeKpi }) {
   const Icon = kpi.icon
-  const TrendIcon = kpi.trend === "up" ? ArrowUpRight : ArrowDownRight
+  const trend = kpi.deltaPct === null ? null : kpi.deltaPct >= 0 ? "up" : "down"
+  const TrendIcon = trend === "down" ? ArrowDownRight : ArrowUpRight
 
   return (
     <AppCard className="rounded-2xl border-border/60 p-5 shadow-sm">
@@ -236,23 +118,265 @@ function KpiCard({ kpi }: { kpi: (typeof kpis)[number] }) {
           <span className="ms-1 text-sm font-medium text-muted-foreground">{kpi.unit}</span>
         ) : null}
       </p>
-      <div className="mt-2 flex items-center gap-1 text-xs">
-        <span
-          className={cn(
-            "inline-flex items-center gap-0.5 font-medium",
-            kpi.trend === "up" ? "text-emerald-600" : "text-rose-600"
-          )}
-        >
-          <TrendIcon className="size-3.5" />
-          {kpi.delta}
-        </span>
-        <span className="text-muted-foreground">عن الفترة السابقة</span>
-      </div>
+      {trend ? (
+        <div className="mt-2 flex items-center gap-1 text-xs">
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 font-medium",
+              trend === "up" ? "text-emerald-600" : "text-rose-600"
+            )}
+          >
+            <TrendIcon className="size-3.5" />
+            {kpi.deltaPct !== null
+              ? `${kpi.deltaPct > 0 ? "+" : ""}${kpi.deltaPct.toFixed(1)}%`
+              : ""}
+          </span>
+          <span className="text-muted-foreground">عن الفترة السابقة</span>
+        </div>
+      ) : null}
     </AppCard>
   )
 }
 
+// Groups the backend's per-CampaignPerformancePlatform rows into one row per PlatformNodeKey
+// (e.g. "Google" combines Search + Display) -- same grouping campaign-dashboard-screen.tsx's own
+// groupPlatformRows() does, reimplemented here rather than imported since that function isn't
+// exported from a shared module.
+function groupPlatformRows(rows: CampaignPerformancePlatformRow[]) {
+  return (Object.keys(PLATFORM_NODE_CONFIG) as PlatformNodeKey[])
+    .map((platformNodeKey) => {
+      const allowed = PLATFORM_NODE_CONFIG[platformNodeKey].campaignPlatforms
+      const subset = rows.filter((row) => allowed.includes(row.platform))
+      const spend = subset.reduce((sum, row) => sum + row.spend, 0)
+      const revenue = subset.reduce((sum, row) => sum + row.revenue, 0)
+      const conversions = subset.reduce((sum, row) => sum + row.conversions, 0)
+      const impressions = subset.reduce((sum, row) => sum + row.impressions, 0)
+      const clicks = subset.reduce((sum, row) => sum + row.clicks, 0)
+      const activeCampaigns = subset.reduce((sum, row) => sum + row.activeCampaigns, 0)
+
+      return {
+        hasCampaigns: subset.length > 0,
+        platformNodeKey,
+        spend,
+        revenue,
+        conversions,
+        impressions,
+        activeCampaigns,
+        roas: spend > 0 ? Number((revenue / spend).toFixed(2)) : 0,
+        ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
+      }
+    })
+    .filter((row) => row.hasCampaigns)
+}
+
 export default function HomeDashboard() {
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date()
+    return { from: subDays(today, 29), to: today }
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<CampaignPerformanceSummary | null>(null)
+  const [platformRows, setPlatformRows] = useState<CampaignPerformancePlatformRow[]>([])
+  const [campaignRows, setCampaignRows] = useState<CampaignPerformanceRow[]>([])
+  const [trendPoints, setTrendPoints] = useState<ChannelsTrendPoint[]>([])
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
+
+  const { records: connectionRecords, isLoading: connectionsLoading } = useConnectionsCenter()
+
+  const startDate = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : undefined
+  const endDate = (dateRange?.to ?? dateRange?.from)?.toISOString().slice(0, 10)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const [summaryResult, platformsResult, campaignsResult, trendResult] = await Promise.all([
+          campaignPerformanceService.getSummary({ startDate, endDate }),
+          campaignPerformanceService.getPlatformBreakdown({ startDate, endDate }),
+          campaignPerformanceService.listCampaigns({ startDate, endDate, pageSize: 100 }),
+          channelsPerformanceService.getPerformanceTrend({ startDate, endDate }),
+        ])
+
+        if (cancelled) return
+        setSummary(summaryResult)
+        setPlatformRows(platformsResult.items)
+        setCampaignRows(campaignsResult.items)
+        setTrendPoints(trendResult.items)
+        setLastUpdatedAt(new Date().toISOString())
+      } catch (error) {
+        if (cancelled) return
+        setLoadError(error instanceof Error ? error.message : "تعذر تحميل بيانات لوحة التحكم.")
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [startDate, endDate])
+
+  const kpis: HomeKpi[] = useMemo(() => {
+    if (!summary) return []
+    return [
+      {
+        label: "إجمالي الإنفاق",
+        value: formatMoney(summary.spend),
+        unit: "SAR",
+        deltaPct: summary.spendChangePct,
+        icon: Wallet,
+        tone: "blue",
+      },
+      {
+        label: "إجمالي الإيرادات",
+        value: formatMoney(summary.revenue),
+        unit: "SAR",
+        deltaPct: summary.revenueChangePct,
+        icon: TrendingUp,
+        tone: "green",
+      },
+      {
+        label: "ROAS",
+        value: summary.roas.toFixed(2),
+        unit: "",
+        deltaPct: summary.roasChangePct,
+        icon: Target,
+        tone: "violet",
+      },
+      {
+        label: "إجمالي التحويلات",
+        value: formatMoney(summary.conversions),
+        unit: "",
+        deltaPct: summary.conversionsChangePct,
+        icon: Users,
+        tone: "orange",
+      },
+      {
+        label: "متوسط CPA",
+        value: formatMoney(summary.cpa),
+        unit: "SAR",
+        deltaPct: summary.cpaChangePct,
+        icon: MousePointerClick,
+        tone: "rose",
+      },
+      {
+        label: "معدل التحويل",
+        value: summary.conversionRate.toFixed(1),
+        unit: "%",
+        deltaPct: summary.conversionRateChangePct,
+        icon: Percent,
+        tone: "indigo",
+      },
+    ]
+  }, [summary])
+
+  const groupedPlatformRows = useMemo(() => groupPlatformRows(platformRows), [platformRows])
+
+  const channelBreakdown = useMemo(() => {
+    const totalSpend = groupedPlatformRows.reduce((sum, row) => sum + row.spend, 0)
+    return groupedPlatformRows
+      .filter((row) => row.spend > 0)
+      .map((row) => ({
+        channel: row.platformNodeKey,
+        label: row.platformNodeKey,
+        value: row.spend,
+        share: totalSpend > 0 ? Math.round((row.spend / totalSpend) * 100) : 0,
+        color: PLATFORM_ICON[row.platformNodeKey]?.hex ?? "#94a3b8",
+      }))
+  }, [groupedPlatformRows])
+  const totalChannelSpend = channelBreakdown.reduce((sum, item) => sum + item.value, 0)
+
+  const channelChartConfig = channelBreakdown.reduce(
+    (config, item) => {
+      config[item.channel] = { label: item.label, color: item.color }
+      return config
+    },
+    { value: { label: "الإنفاق" } } as ChartConfig
+  )
+
+  const trendChartData = useMemo(
+    () =>
+      trendPoints.map((point) => ({
+        date: new Intl.DateTimeFormat("ar", { day: "numeric", month: "short" }).format(
+          new Date(point.bucketStart)
+        ),
+        ...point.spendByChannel,
+      })),
+    [trendPoints]
+  )
+  const trendChannelNames = useMemo(() => {
+    const names = new Set<string>()
+    for (const point of trendPoints) {
+      for (const name of Object.keys(point.spendByChannel)) names.add(name)
+    }
+    return [...names]
+  }, [trendPoints])
+  const trendChartConfig = trendChannelNames.reduce((config, name) => {
+    config[name] = { label: name, color: PLATFORM_ICON[name]?.hex ?? "#94a3b8" }
+    return config
+  }, {} as ChartConfig)
+
+  const topCampaigns = useMemo(
+    () => [...campaignRows].sort((a, b) => b.roas - a.roas).slice(0, 4),
+    [campaignRows]
+  )
+
+  // Every card below states a real number already fetched on this page -- there is no AI
+  // recommendation service wired here (the app's only "AI" service is mock data), so nothing is
+  // predicted or scored. Mirrors campaign-dashboard-screen.tsx's own recommendations pattern.
+  const insights = useMemo(() => {
+    const cards: Array<{
+      icon: typeof TrendingUp
+      tone: string
+      title: string
+      description: string
+    }> = []
+
+    const bestRoas = [...groupedPlatformRows]
+      .filter((row) => row.roas > 0)
+      .sort((a, b) => b.roas - a.roas)[0]
+    if (bestRoas) {
+      cards.push({
+        icon: TrendingUp,
+        tone: "bg-emerald-50 text-emerald-600",
+        title: `${bestRoas.platformNodeKey} يحقق أفضل عائد`,
+        description: `بمعدل ${bestRoas.roas.toFixed(2)}x عائد على الإنفاق في هذه الفترة.`,
+      })
+    }
+
+    const dormant = groupedPlatformRows.find(
+      (row) => row.activeCampaigns === 0 && row.impressions > 0
+    )
+    if (dormant) {
+      cards.push({
+        icon: RefreshCcw,
+        tone: "bg-amber-50 text-amber-600",
+        title: `لا حملات نشطة على ${dormant.platformNodeKey}`,
+        description: `${dormant.impressions.toLocaleString()} ظهور مسجّل دون أي حملة نشطة حالياً.`,
+      })
+    }
+
+    const weakestCtr = [...groupedPlatformRows]
+      .filter((row) => row.impressions > 0)
+      .sort((a, b) => a.ctr - b.ctr)[0]
+    if (weakestCtr) {
+      cards.push({
+        icon: Target,
+        tone: "bg-blue-50 text-blue-600",
+        title: "فرصة لتحسين الاستهداف",
+        description: `${weakestCtr.platformNodeKey} يسجل أدنى معدل نقر (${weakestCtr.ctr.toFixed(2)}%).`,
+      })
+    }
+
+    return cards
+  }, [groupedPlatformRows])
+
   return (
     <div className="space-y-4" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -260,139 +384,148 @@ export default function HomeDashboard() {
           <h1 className="text-2xl font-bold text-foreground">الرئيسية</h1>
           <p className="text-sm text-muted-foreground">نظرة عامة على أداء متجرك التسويقي</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="size-2 rounded-full bg-emerald-500" />
-          آخر تحديث: قبل دقيقتين
+        <div className="flex flex-wrap items-center gap-3">
+          <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            آخر تحديث: <RelativeTime value={lastUpdatedAt} fallback="—" />
+          </div>
         </div>
       </div>
 
+      {loadError ? (
+        <AppCard className="rounded-2xl border-destructive/40 p-5 text-sm text-destructive">
+          {loadError}
+        </AppCard>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        {kpis.map((kpi) => (
-          <KpiCard key={kpi.label} kpi={kpi} />
-        ))}
+        {isLoading && kpis.length === 0
+          ? Array.from({ length: 6 }).map((_, index) => (
+              <AppCard key={index} state="loading" className="rounded-2xl border-border/60 p-5" />
+            ))
+          : kpis.map((kpi) => <KpiCard key={kpi.label} kpi={kpi} />)}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[7fr_3fr]">
-        <AppCard title="الأداء العام" className="rounded-2xl border-border/60 shadow-sm">
-          <ChartContainer config={performanceChartConfig} className="h-72 w-full" dir="ltr">
-            <AreaChart data={performanceTrend} margin={{ left: 4, right: 4 }}>
-              <defs>
-                <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                fontSize={11}
-              />
-              <YAxis tickLine={false} axisLine={false} tickMargin={8} fontSize={11} width={50} />
-              <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
-              <Area
-                dataKey="revenue"
-                type="monotone"
-                stroke="var(--chart-1)"
-                fill="url(#fillRevenue)"
-                strokeWidth={2}
-              />
-              <Area
-                dataKey="spend"
-                type="monotone"
-                stroke="var(--chart-2)"
-                fill="none"
-                strokeWidth={2}
-              />
-              <Area
-                dataKey="conversions"
-                type="monotone"
-                stroke="var(--chart-3)"
-                fill="none"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ChartContainer>
+        <AppCard
+          title="اتجاه الإنفاق حسب القناة"
+          className="rounded-2xl border-border/60 shadow-sm"
+        >
+          {trendChartData.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              لا توجد بيانات كافية لهذه الفترة.
+            </p>
+          ) : (
+            <ChartContainer config={trendChartConfig} className="h-72 w-full" dir="ltr">
+              <LineChart data={trendChartData} margin={{ left: 4, right: 4 }}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  fontSize={11}
+                />
+                <YAxis tickLine={false} axisLine={false} tickMargin={8} fontSize={11} width={50} />
+                <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
+                {trendChannelNames.map((name) => (
+                  <Line
+                    key={name}
+                    dataKey={name}
+                    type="monotone"
+                    stroke={PLATFORM_ICON[name]?.hex ?? "#94a3b8"}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ChartContainer>
+          )}
         </AppCard>
 
         <AppCard title="الأداء حسب القناة" className="rounded-2xl border-border/60 shadow-sm">
-          <div className="flex flex-col items-center gap-4">
-            <ChartContainer
-              config={channelChartConfig}
-              className="mx-auto aspect-square h-48 w-full"
-              dir="ltr"
-            >
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                <Pie
-                  data={channelBreakdown}
-                  dataKey="value"
-                  nameKey="label"
-                  innerRadius={55}
-                  outerRadius={80}
-                  strokeWidth={3}
-                >
-                  {channelBreakdown.map((entry) => (
-                    <Cell key={entry.channel} fill={entry.color} />
-                  ))}
-                  <Label
-                    content={({ viewBox }) => {
-                      if (!viewBox || !("cx" in viewBox)) {
-                        return null
-                      }
-                      return (
-                        <text
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                        >
-                          <tspan
+          {channelBreakdown.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">لا توجد بيانات بعد.</p>
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <ChartContainer
+                config={channelChartConfig}
+                className="mx-auto aspect-square h-48 w-full"
+                dir="ltr"
+              >
+                <PieChart>
+                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                  <Pie
+                    data={channelBreakdown}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius={55}
+                    outerRadius={80}
+                    strokeWidth={3}
+                  >
+                    {channelBreakdown.map((entry) => (
+                      <Cell key={entry.channel} fill={entry.color} />
+                    ))}
+                    <Label
+                      content={({ viewBox }) => {
+                        if (!viewBox || !("cx" in viewBox)) return null
+                        return (
+                          <text
                             x={viewBox.cx}
-                            y={(viewBox.cy ?? 0) - 8}
-                            className="fill-foreground text-xl font-bold"
+                            y={viewBox.cy}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
                           >
-                            {totalChannelSpend.toLocaleString()}
-                          </tspan>
-                          <tspan
-                            x={viewBox.cx}
-                            y={(viewBox.cy ?? 0) + 14}
-                            className="fill-muted-foreground text-xs"
-                          >
-                            SAR إجمالي الإنفاق
-                          </tspan>
-                        </text>
-                      )
-                    }}
-                  />
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-            <div className="w-full space-y-2">
-              {channelBreakdown.map((item) => (
-                <div key={item.channel} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{ backgroundColor: item.color }}
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy ?? 0) - 8}
+                              className="fill-foreground text-xl font-bold"
+                            >
+                              {totalChannelSpend.toLocaleString()}
+                            </tspan>
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy ?? 0) + 14}
+                              className="fill-muted-foreground text-xs"
+                            >
+                              SAR إجمالي الإنفاق
+                            </tspan>
+                          </text>
+                        )
+                      }}
                     />
-                    <span className="text-foreground">{item.label}</span>
+                  </Pie>
+                </PieChart>
+              </ChartContainer>
+              <div className="w-full space-y-2">
+                {channelBreakdown.map((item) => (
+                  <div key={item.channel} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-foreground">{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span>{item.value.toLocaleString()} SAR</span>
+                      <span className="font-medium text-foreground">{item.share}%</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <span>{item.value.toLocaleString()} SAR</span>
-                    <span className="font-medium text-foreground">{item.share}%</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </AppCard>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
-        <AppCard title="أفضل الحملات أداءً" className="rounded-2xl border-border/60 shadow-sm">
+      <AppCard title="أفضل الحملات أداءً" className="rounded-2xl border-border/60 shadow-sm">
+        {topCampaigns.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            لا توجد حملات لهذه الفترة.
+          </p>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -406,17 +539,18 @@ export default function HomeDashboard() {
               <tbody className="divide-y divide-border/60">
                 {topCampaigns.map((campaign) => {
                   const progress = Math.min(100, (campaign.roas / 7) * 100)
-
                   return (
-                    <tr key={campaign.name}>
+                    <tr key={campaign.id}>
                       <td className="py-3">
                         <div className="flex items-center gap-2.5">
                           <PlatformBadge platform={campaign.platform} className="size-8" />
                           <span className="font-medium text-foreground">{campaign.name}</span>
                         </div>
                       </td>
-                      <td className="py-3 text-foreground">{campaign.revenue}</td>
-                      <td className="py-3 text-muted-foreground">{campaign.spend}</td>
+                      <td className="py-3 text-foreground">{formatMoney(campaign.revenue)} SAR</td>
+                      <td className="py-3 text-muted-foreground">
+                        {formatMoney(campaign.spend)} SAR
+                      </td>
                       <td className="py-3">
                         <div className="flex items-center gap-2">
                           <span className="w-10 font-medium text-foreground">
@@ -436,29 +570,8 @@ export default function HomeDashboard() {
               </tbody>
             </table>
           </div>
-        </AppCard>
-
-        <AppCard title="الطلبات حسب الدولة" className="rounded-2xl border-border/60 shadow-sm">
-          <div className="space-y-3">
-            {countryBreakdown.map((item) => (
-              <div key={item.country} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">{item.country}</span>
-                  <span className="font-medium text-muted-foreground">
-                    {item.orders.toLocaleString()}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-emerald-500/70"
-                    style={{ width: `${(item.orders / maxCountryOrders) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </AppCard>
-      </div>
+        )}
+      </AppCard>
 
       <AppCard className="rounded-2xl border-border/60 shadow-sm">
         <div className="flex items-center justify-between">
@@ -467,39 +580,42 @@ export default function HomeDashboard() {
               <Sparkles className="size-5" />
             </div>
             <div>
-              <p className="font-semibold text-foreground">الذكي مدار</p>
-              <p className="text-sm text-muted-foreground">تحليلات وتوصيات مخصصة لمتجرك</p>
+              <p className="font-semibold text-foreground">ملاحظات على أدائك</p>
+              <p className="text-sm text-muted-foreground">
+                نقاط محسوبة مباشرة من أرقام حسابك الحالية
+              </p>
             </div>
           </div>
-          <AppButton variant="ghost" size="sm">
-            عرض جميع التوصيات
+          <AppButton variant="ghost" size="sm" asChild>
+            <Link href={ROUTES.campaigns}>عرض الحملات</Link>
           </AppButton>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {aiRecommendations.map((item) => {
-            const Icon = item.icon
-            return (
-              <div
-                key={item.title}
-                className="rounded-xl border border-border/60 bg-background/60 p-4"
-              >
-                <div className="flex items-start justify-between">
+        {insights.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            لا توجد بيانات كافية لعرض ملاحظات لهذه الفترة.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {insights.map((item) => {
+              const Icon = item.icon
+              return (
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-border/60 bg-background/60 p-4"
+                >
                   <span
                     className={cn("flex size-9 items-center justify-center rounded-lg", item.tone)}
                   >
                     <Icon className="size-4" />
                   </span>
+                  <p className="mt-3 text-sm font-semibold text-foreground">{item.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
                 </div>
-                <p className="mt-3 text-sm font-semibold text-foreground">{item.title}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
-                <AppButton variant="link" size="sm" className="mt-2 h-auto p-0 text-xs">
-                  {item.cta}
-                </AppButton>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </AppCard>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -524,24 +640,46 @@ export default function HomeDashboard() {
         </AppCard>
 
         <AppCard title="حالة التكاملات" className="rounded-2xl border-border/60 shadow-sm">
-          <div className="space-y-3">
-            {integrationStatus.map((item) => {
-              return (
-                <div key={item.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <PlatformBadge platform={item.name} className="size-8" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.lastSync}</p>
+          {connectionsLoading && connectionRecords.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+          ) : connectionRecords.length === 0 ? (
+            <div className="space-y-3 text-center">
+              <p className="text-sm text-muted-foreground">لا توجد تكاملات متصلة بعد.</p>
+              <AppButton size="sm" asChild>
+                <Link href={ROUTES.integrationsNew}>إضافة تكامل</Link>
+              </AppButton>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {connectionRecords.slice(0, 5).map((record) => {
+                const statusMeta = CONNECTION_STATUS_META[record.connection.status] ?? {
+                  label: record.connection.status,
+                  className: "bg-slate-50 text-slate-600",
+                }
+                return (
+                  <div key={record.connectorId} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <PlatformBadge platform={record.platformName} className="size-8" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{record.platformName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          <RelativeTime value={record.lastSyncAt} fallback="لم تتم المزامنة بعد" />
+                        </p>
+                      </div>
                     </div>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
+                        statusMeta.className
+                      )}
+                    >
+                      {statusMeta.label}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600">
-                    متصل
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </AppCard>
       </div>
     </div>
