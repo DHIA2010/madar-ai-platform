@@ -208,9 +208,15 @@ describe("AdministrationRolesScreen", () => {
     // mockRoles[2] is "RevOps", the one editable (custom) role.
     fireEvent.click(screen.getAllByRole("button", { name: "عرض التفاصيل" })[2])
     expect(screen.getByRole("dialog", { name: "تعديل الدور" })).toBeTruthy()
-    expect((screen.getByLabelText("اسم الدور") as HTMLInputElement).value).toBe("RevOps")
+    // Exact match fails now that the label carries a required-field "*" (aria-hidden, but still
+    // part of the label's text content as far as getByLabelText is concerned).
+    expect((screen.getByLabelText(/^اسم الدور/) as HTMLInputElement).value).toBe("RevOps")
 
-    fireEvent.change(screen.getByLabelText("اسم الدور"), { target: { value: "RevOps Updated" } })
+    fireEvent.change(screen.getByLabelText(/^اسم الدور/), { target: { value: "RevOps Updated" } })
+    // The save button only appears on the wizard's 3rd step -- advance past permissions (step 2)
+    // and the review step (step 3) first.
+    fireEvent.click(screen.getByRole("button", { name: "التالي" }))
+    fireEvent.click(screen.getByRole("button", { name: "التالي" }))
     fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }))
 
     await vi.waitFor(() => {
@@ -228,8 +234,12 @@ describe("AdministrationRolesScreen", () => {
     fireEvent.click(cloneButtons[0])
 
     expect(screen.getByRole("dialog", { name: "إنشاء دور من نسخة" })).toBeTruthy()
-    expect((screen.getByLabelText("اسم الدور") as HTMLInputElement).value).toBe("Owner (نسخة)")
+    expect((screen.getByLabelText(/^اسم الدور/) as HTMLInputElement).value).toBe("Owner (نسخة)")
 
+    // The save button only appears on the wizard's 3rd step -- advance past permissions (step 2)
+    // and the review step (step 3) first.
+    fireEvent.click(screen.getByRole("button", { name: "التالي" }))
+    fireEvent.click(screen.getByRole("button", { name: "التالي" }))
     fireEvent.click(screen.getByRole("button", { name: "إنشاء الدور" }))
 
     await vi.waitFor(() => {
