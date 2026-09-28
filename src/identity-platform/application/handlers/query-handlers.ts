@@ -18,16 +18,20 @@ import {
 // Resolved fresh per target organization -- `actor.modulePermissions` is
 // computed against the session's active org and would be wrong to reuse here
 // since these handlers take an explicit `organizationId` that can differ
-// (a member of several orgs querying one that isn't their active org).
-async function requireMembersViewAccess(
+// (a member of several orgs querying one that isn't their active org). Takes
+// the specific module:action to check rather than hardcoding "users:view" --
+// the Administration section's sub-pages (roles/teams/invitations) each have
+// their own distinct permission now, not one shared gate.
+async function requireModuleViewAccess(
   membership: MembershipState | null,
-  customRoles: CustomRoleRepository
+  customRoles: CustomRoleRepository,
+  permission: string
 ) {
   if (!membership) {
     throw ERRORS.forbidden()
   }
   const modulePermissions = await resolveMembershipModulePermissions(membership, customRoles)
-  if (!modulePermissions.includes("users:view")) {
+  if (!modulePermissions.includes(permission)) {
     throw ERRORS.forbidden()
   }
 }
@@ -199,7 +203,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    await requireMembersViewAccess(membership, this.repositories.customRoles)
+    await requireModuleViewAccess(membership, this.repositories.customRoles, "users:view")
     const rows = await this.repositories.memberships.listByOrganizationId(organizationId)
     const lastLoginTimestamps =
       await this.repositories.auditLogs.getLastLoginTimestamps(organizationId)
@@ -248,7 +252,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    await requireMembersViewAccess(membership, this.repositories.customRoles)
+    await requireModuleViewAccess(membership, this.repositories.customRoles, "invitations:view")
 
     const rows = await this.repositories.invitations.listByOrganizationId(organizationId, {
       page: query.page,
@@ -275,7 +279,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    await requireMembersViewAccess(membership, this.repositories.customRoles)
+    await requireModuleViewAccess(membership, this.repositories.customRoles, "teams:view")
     const items = await this.repositories.teams.listByOrganizationId(organizationId)
     if (items.length === 0) {
       return { organizationId, items: [] }
@@ -302,7 +306,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       teamState.organizationId
     )
-    await requireMembersViewAccess(membership, this.repositories.customRoles)
+    await requireModuleViewAccess(membership, this.repositories.customRoles, "teams:view")
     const items = await this.repositories.teams.listMembers(teamId)
     return { teamId, items }
   }
@@ -312,7 +316,7 @@ export class IdentityQueryHandlers {
       actor.userId,
       organizationId
     )
-    await requireMembersViewAccess(membership, this.repositories.customRoles)
+    await requireModuleViewAccess(membership, this.repositories.customRoles, "roles:view")
 
     const orgMemberships = await this.repositories.memberships.listByOrganizationId(organizationId)
     const activeCountByRole = new Map<string, number>()
@@ -388,7 +392,7 @@ export class IdentityQueryHandlers {
   }
 
   async getAuditLogs(actor: AuthenticatedActor, query: ListAuditLogsQuery) {
-    if (!hasPermission(actor.roles, "org:read")) {
+    if (!actor.modulePermissions.includes("auditLog:view")) {
       throw ERRORS.forbidden()
     }
     return {
@@ -410,7 +414,10 @@ export class IdentityQueryHandlers {
   // from two already-real primitives (org memberships + per-user session listing) rather than a
   // new session-store index.
   async getOrganizationSessions(actor: AuthenticatedActor, organizationId: string) {
-    if (organizationId !== actor.organizationId || !hasPermission(actor.roles, "session:revoke")) {
+    if (
+      organizationId !== actor.organizationId ||
+      !actor.modulePermissions.includes("sessions:view")
+    ) {
       throw ERRORS.forbidden()
     }
 

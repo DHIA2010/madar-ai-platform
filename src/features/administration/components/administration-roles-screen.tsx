@@ -2,24 +2,24 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { Copy, Crown, Loader2, Search, ShieldCheck, Trash2, Users } from "lucide-react"
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Crown,
+  FileCheck2,
+  Loader2,
+  Search,
+  ShieldCheck,
+  Trash2,
+  Users,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-import {
-  AppButton,
-  AppConfirmDialog,
-  AppDialog,
-  AppInput,
-  AppSelect,
-  AppSelectContent,
-  AppSelectItem,
-  AppSelectTrigger,
-  AppSelectValue,
-  AppTextarea,
-} from "@/components/app"
+import { AppButton, AppConfirmDialog, AppDialog, AppInput, AppTextarea } from "@/components/app"
 
 import { useWorkspace } from "@/features/workspace"
 
@@ -27,7 +27,11 @@ import { useRoleMutations } from "../queries/use-role-mutations"
 import { useRolesQuery } from "../queries/use-roles-query"
 import { IAM_PERMISSION_GROUPS } from "../services"
 import { AdministrationModuleNav } from "./administration-module-nav"
-import { PermissionMatrix } from "./permission-matrix"
+import {
+  PERMISSION_ACTION_META,
+  PERMISSION_MODULE_META,
+  PermissionMatrix,
+} from "./permission-matrix"
 
 import { useApplicationServices } from "@/application"
 import type { AdministrationRoleDto, RolePermissionDto } from "@/application/contracts"
@@ -43,6 +47,14 @@ type CustomRoleDraft = {
   cloneFrom: string
   permissions: Record<string, string[]>
 }
+
+type WizardStep = 1 | 2 | 3
+
+const WIZARD_STEPS: Array<{ step: WizardStep; title: string; subtitle: string }> = [
+  { step: 1, title: "معلومات الدور", subtitle: "الاسم والوصف" },
+  { step: 2, title: "الصلاحيات", subtitle: "تحديد صلاحيات الوصول" },
+  { step: 3, title: "مراجعة وحفظ", subtitle: "مراجعة الإعدادات" },
+]
 
 function clonePermissions(permissions: Record<string, string[]>): Record<string, string[]> {
   return Object.fromEntries(
@@ -62,6 +74,21 @@ function emptyDraft(): CustomRoleDraft {
 
 function grantCount(role: AdministrationRoleDto) {
   return Object.values(role.permissions).reduce((total, list) => total + list.length, 0)
+}
+
+// A role's stored permissions can include module keys outside the static taxonomy shown in the
+// create/edit matrix (e.g. legacy grants) -- falls back to the raw key/action string rather than
+// hiding the row, so nothing granted on a role is ever silently dropped from view.
+function moduleLabel(module: string) {
+  return PERMISSION_MODULE_META[module as keyof typeof PERMISSION_MODULE_META]?.label ?? module
+}
+function actionLabels(actions: string[]) {
+  return actions
+    .map(
+      (action) =>
+        PERMISSION_ACTION_META[action as keyof typeof PERMISSION_ACTION_META]?.label ?? action
+    )
+    .join("، ")
 }
 
 function StatCard({
@@ -100,6 +127,7 @@ export function AdministrationRolesScreen() {
 
   const [search, setSearch] = useState("")
   const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<WizardStep>(1)
   const [draft, setDraft] = useState<CustomRoleDraft>(emptyDraft())
   const [selectedRole, setSelectedRole] = useState<AdministrationRoleDto | null>(null)
   const [deletingRole, setDeletingRole] = useState<AdministrationRoleDto | null>(null)
@@ -124,21 +152,12 @@ export function AdministrationRolesScreen() {
     [draft.permissions]
   )
 
-  function syncPermissionsFromRole(roleId: string) {
-    const sourceRole = roles.find((role) => role.id === roleId)
-    if (!sourceRole) return
-    setDraft((current) => ({
-      ...current,
-      cloneFrom: roleId,
-      permissions: clonePermissions(sourceRole.permissions),
-    }))
-  }
-
   function resetDialogState() {
     setSelectedRole(null)
     setEditingRole(false)
     setCloningRole(false)
     setDraft(emptyDraft())
+    setStep(1)
   }
 
   function openCreateDialog() {
@@ -165,6 +184,7 @@ export function AdministrationRolesScreen() {
       cloneFrom: role.id,
       permissions: clonePermissions(role.permissions),
     })
+    setStep(1)
     setOpen(true)
   }
 
@@ -178,6 +198,7 @@ export function AdministrationRolesScreen() {
       cloneFrom: role.id,
       permissions: clonePermissions(role.permissions),
     })
+    setStep(1)
     setOpen(true)
   }
 
@@ -237,7 +258,7 @@ export function AdministrationRolesScreen() {
     ? "هذا دور افتراضي في النظام ولا يمكن تعديله."
     : editingRole
       ? "تحديث بيانات الدور مع الحفاظ على المستخدمين المرتبطين به."
-      : "عرّف دوراً قابلاً لإعادة الاستخدام بصلاحيات مستنسخة كنقطة بداية."
+      : "عرّف دوراً مخصصاً وحدد صلاحياته."
   const saveLabel = editingRole ? "حفظ التعديلات" : "إنشاء الدور"
   const isSaving = createRole.isPending || updateRole.isPending
 
@@ -389,30 +410,54 @@ export function AdministrationRolesScreen() {
         }}
         title={<span dir="rtl">{dialogTitle}</span>}
         description={<span dir="rtl">{dialogDescription}</span>}
-        contentClassName="max-w-4xl [direction:rtl]"
+        contentClassName="w-[95vw] max-w-6xl [direction:rtl]"
         footer={
           isReadOnly ? (
-            <AppButton variant="outline" onClick={closeDialog}>
+            <AppButton
+              variant="outline"
+              onClick={closeDialog}
+              className="h-11 rounded-[10px] px-6 text-[13px] font-semibold"
+            >
               إغلاق
             </AppButton>
           ) : (
             <>
-              <AppButton variant="outline" onClick={closeDialog}>
-                إلغاء
-              </AppButton>
               <AppButton
-                onClick={() => void saveRole()}
-                disabled={isSaving || draft.name.trim().length === 0}
+                variant="outline"
+                onClick={
+                  step === 1 ? closeDialog : () => setStep((current) => (current - 1) as WizardStep)
+                }
+                className="h-11 rounded-[10px] border-[#dbe3ef] px-6 text-[13px] font-semibold text-[#5b6b85]"
               >
-                {saveLabel}
+                {step === 1 ? "إلغاء" : "رجوع"}
               </AppButton>
+              {step < 3 ? (
+                <AppButton
+                  icon={<ArrowLeft className="size-4" />}
+                  iconPosition="end"
+                  onClick={() => setStep((current) => (current + 1) as WizardStep)}
+                  disabled={step === 1 && draft.name.trim().length === 0}
+                  className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+                >
+                  التالي
+                </AppButton>
+              ) : (
+                <AppButton
+                  icon={isSaving ? <Loader2 className="size-4 animate-spin" /> : undefined}
+                  onClick={() => void saveRole()}
+                  disabled={isSaving || draft.name.trim().length === 0}
+                  className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+                >
+                  {saveLabel}
+                </AppButton>
+              )}
             </>
           )
         }
       >
-        <div dir="rtl" className="grid gap-4">
+        <div dir="rtl">
           {isReadOnly ? (
-            <>
+            <div className="grid gap-4">
               <div>
                 <h3 className={cn("text-[14px] font-extrabold", HEADING)}>{draft.name}</h3>
                 <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>{draft.description}</p>
@@ -422,57 +467,198 @@ export function AdministrationRolesScreen() {
                   .filter(([, actions]) => actions.length > 0)
                   .map(([module, actions]) => (
                     <div key={module} className="rounded-lg border border-[#e8edf3] p-3">
-                      <p className={cn("text-[12.5px] font-bold", HEADING)}>{module}</p>
-                      <p className={cn("mt-1 text-[11.5px]", MUTED)}>{actions.join("، ")}</p>
+                      <p className={cn("text-[12.5px] font-bold", HEADING)}>
+                        {moduleLabel(module)}
+                      </p>
+                      <p className={cn("mt-1 text-[11.5px]", MUTED)}>{actionLabels(actions)}</p>
                     </div>
                   ))}
               </div>
-            </>
+            </div>
           ) : (
-            <>
-              <div className="grid gap-3 md:grid-cols-2">
-                <AppInput
-                  label="اسم الدور"
-                  value={draft.name}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, name: event.target.value }))
-                  }
-                />
-                <AppSelect value={draft.cloneFrom} onValueChange={syncPermissionsFromRole}>
-                  <AppSelectTrigger className="h-10">
-                    <AppSelectValue placeholder="ابدأ من دور (اختياري)" />
-                  </AppSelectTrigger>
-                  <AppSelectContent>
-                    {roles.map((role) => (
-                      <AppSelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </AppSelectItem>
-                    ))}
-                  </AppSelectContent>
-                </AppSelect>
-              </div>
-              <AppTextarea
-                label="الوصف"
-                className="min-h-[70px]"
-                value={draft.description}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, description: event.target.value }))
-                }
-              />
+            <div className="flex gap-5">
+              {/* First in DOM = rightmost under dir="rtl", matching the reference layout
+                  (stepper on the right, step content on the left). */}
+              <div className="w-[210px] shrink-0 space-y-4">
+                <ol className="space-y-1">
+                  {WIZARD_STEPS.map((item) => {
+                    const isDone = item.step < step
+                    const isCurrent = item.step === step
+                    return (
+                      <li
+                        key={item.step}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-[10px] p-2.5",
+                          isCurrent && "bg-[#eff6ff]"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-7 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold",
+                            isDone
+                              ? "bg-[#2563eb] text-white"
+                              : isCurrent
+                                ? "border-2 border-[#2563eb] text-[#2563eb]"
+                                : "border border-[#dbe3ef] text-[#8098b4]"
+                          )}
+                        >
+                          {isDone ? <Check className="size-3.5" /> : item.step}
+                        </span>
+                        <div>
+                          <p
+                            className={cn(
+                              "text-[12.5px] font-bold",
+                              isCurrent || isDone ? HEADING : "text-[#8098b4]"
+                            )}
+                          >
+                            {item.title}
+                          </p>
+                          <p className="text-[11px] text-[#8098b4]">{item.subtitle}</p>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
 
-              <div className="rounded-lg border border-[#e8edf3] p-3 text-[12.5px] text-[#5b6b85]">
-                تم اختيار {permissionGrantCount} صلاحية
-                {selectedClone ? ` (بدءاً من ${selectedClone.name})` : ""}
+                {step === 2 ? (
+                  <div className="flex gap-2 rounded-[10px] border border-[#e8edf3] bg-[#fafbfd] p-3">
+                    <ShieldCheck className="size-4 shrink-0 text-[#8098b4]" />
+                    <div>
+                      <p className={cn("text-[11.5px] font-bold", HEADING)}>ملاحظة</p>
+                      <p className="mt-0.5 text-[11px] leading-5 text-[#8098b4]">
+                        يمكنك تحديد صلاحيات متعددة لكل وحدة. وسيتم تطبيق هذه الصلاحيات على جميع
+                        العناصر التابعة للوحدة.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
-              <PermissionMatrix
-                groups={IAM_PERMISSION_GROUPS}
-                value={draft.permissions}
-                onChange={(next) => setDraft((current) => ({ ...current, permissions: next }))}
-                title="الصلاحيات"
-                subtitle="حدد بالضبط ما يمكن لهذا الدور القيام به -- استخدم قالباً كنقطة بداية ثم عدّله."
-              />
-            </>
+              <div className="min-w-0 flex-1 space-y-4">
+                {step === 1 ? (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <AppInput
+                        label="اسم الدور"
+                        labelClassName="text-[13px] font-semibold text-[#0d1b3e]"
+                        required
+                        placeholder="مثال: مدير الحملات"
+                        value={draft.name}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, name: event.target.value }))
+                        }
+                        className="h-11 rounded-[10px] border-[#e8edf3] bg-white px-3.5 text-[13.5px]"
+                      />
+                      <AppTextarea
+                        label="الوصف"
+                        labelClassName="text-[13px] font-semibold text-[#0d1b3e]"
+                        placeholder="وصف مختصر لمهام هذا الدور ونطاقه"
+                        value={draft.description}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, description: event.target.value }))
+                        }
+                        className="h-11 min-h-11 resize-none rounded-[10px] border-[#e8edf3] bg-white px-3.5 py-2.5 text-[13.5px]"
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                {step === 2 ? (
+                  <>
+                    <div className="rounded-lg border border-[#e8edf3] p-3 text-[12.5px] text-[#5b6b85]">
+                      تم اختيار {permissionGrantCount} صلاحية
+                      {selectedClone ? ` (بدءاً من ${selectedClone.name})` : ""}
+                    </div>
+                    <PermissionMatrix
+                      groups={IAM_PERMISSION_GROUPS}
+                      value={draft.permissions}
+                      onChange={(next) =>
+                        setDraft((current) => ({ ...current, permissions: next }))
+                      }
+                      subtitle="حدد بالضبط ما يمكن لهذا الدور القيام به -- استخدم قالباً كنقطة بداية ثم عدّله."
+                    />
+                  </>
+                ) : null}
+
+                {step === 3 ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3.5 rounded-[12px] border border-[#e8edf3] bg-[#fafbfd] p-4">
+                      <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
+                        <FileCheck2 className="size-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h3 className={cn("text-[14.5px] font-extrabold", HEADING)}>
+                          {draft.name || "بدون اسم"}
+                        </h3>
+                        {draft.description ? (
+                          <p className={cn("mt-0.5 truncate text-[12px] leading-5", MUTED)}>
+                            {draft.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-center rounded-[10px] bg-[#2563eb] px-4 py-2 text-white">
+                        <span className="text-[18px] font-extrabold leading-none">
+                          {permissionGrantCount}
+                        </span>
+                        <span className="mt-1 text-[10px] font-semibold opacity-90">
+                          صلاحية محددة
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid h-[620px] content-start gap-2.5 overflow-y-auto pe-1">
+                      {Object.entries(draft.permissions)
+                        .filter(([, actions]) => actions.length > 0)
+                        .map(([module, actions]) => {
+                          const meta =
+                            PERMISSION_MODULE_META[module as keyof typeof PERMISSION_MODULE_META]
+                          const ModuleIcon = meta?.icon ?? ShieldCheck
+                          return (
+                            <div
+                              key={module}
+                              className="flex items-start gap-2.5 rounded-[10px] border border-[#e8edf3] p-3"
+                            >
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-[#eff6ff] text-[#2563eb]">
+                                <ModuleIcon className="size-[15px]" />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className={cn("text-[12.5px] font-bold", HEADING)}>
+                                  {moduleLabel(module)}
+                                </p>
+                                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                  {actions.map((action) => {
+                                    const actionMeta =
+                                      PERMISSION_ACTION_META[
+                                        action as keyof typeof PERMISSION_ACTION_META
+                                      ]
+                                    return (
+                                      <span
+                                        key={action}
+                                        className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                                        style={{
+                                          color: actionMeta?.color ?? MUTED,
+                                          backgroundColor: `${actionMeta?.color ?? "#8098b4"}1a`,
+                                        }}
+                                      >
+                                        {actionMeta?.label ?? action}
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      {permissionGrantCount === 0 ? (
+                        <p className="p-3 text-center text-[12.5px] text-[#8098b4]">
+                          لم يتم تحديد أي صلاحيات بعد.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           )}
         </div>
       </AppDialog>

@@ -68,9 +68,9 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <Radio />,
       // Same permission the underlying GET /v1/tracking/live-dashboard enforces -- hiding the
       // nav entry from someone the API would reject anyway.
-      permission: "campaigns:view",
+      permission: "liveVisitors:view",
     },
-    { title: t("channels"), url: "/channels", icon: <Tv /> },
+    { title: t("channels"), url: "/channels", icon: <Tv />, permission: "campaigns:view" },
     { title: t("campaigns"), url: "/campaigns", icon: <SendIcon />, permission: "campaigns:view" },
     {
       title: t("linkBuilder"),
@@ -78,7 +78,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <Link2 />,
       permission: "campaigns:view",
     },
-    { title: t("stores"), url: "/stores", icon: <ShoppingBag /> },
+    { title: t("stores"), url: "/stores", icon: <ShoppingBag />, permission: "stores:view" },
     { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
     { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
     { title: t("pos"), url: ROUTES.pos, icon: <CreditCard />, permission: "pos:view" },

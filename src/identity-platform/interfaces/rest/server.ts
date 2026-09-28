@@ -3924,6 +3924,9 @@ export function createIdentityApiServer(
             message: "Store aggregation is unavailable in memory mode.",
           })
         }
+        if (!actor.modulePermissions.includes("stores:view")) {
+          throw ERRORS.forbidden()
+        }
 
         return send(200, { items: await storesAggregationService.listStores(actor) })
       }
@@ -4338,11 +4341,7 @@ export function createIdentityApiServer(
             message: "Tracking capture is unavailable in memory mode.",
           })
         }
-        // Reuses campaigns:view rather than a dedicated tracking permission -- matches
-        // /v1/tracking/site-key immediately above; this codebase has no separate "tracking"
-        // module in its permission registry (src/identity-platform/domain/domain-services/
-        // system-roles.ts), and adding one is a larger, separate change to that matrix.
-        if (!actor.modulePermissions.includes("campaigns:view")) {
+        if (!actor.modulePermissions.includes("liveVisitors:view")) {
           throw ERRORS.forbidden()
         }
         const visitors = await trackingService.getLiveVisitors(actor.organizationId)
@@ -4356,9 +4355,9 @@ export function createIdentityApiServer(
             message: "Tracking capture is unavailable in memory mode.",
           })
         }
-        // Same permission as /v1/tracking/live-visitors above, for the same reason -- this is a
-        // wider read of the identical data, not a new class of access.
-        if (!actor.modulePermissions.includes("campaigns:view")) {
+        // Same permission as /v1/tracking/live-visitors above -- a wider read of the identical
+        // data, not a new class of access.
+        if (!actor.modulePermissions.includes("liveVisitors:view")) {
           throw ERRORS.forbidden()
         }
         return send(200, await trackingService.getLiveDashboard(actor.organizationId))

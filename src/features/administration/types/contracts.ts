@@ -13,19 +13,25 @@ export type IamPermissionAction =
 
 export type IamPermissionModule =
   | "dashboard"
+  | "liveVisitors"
   | "campaigns"
-  | "customers"
-  | "products"
-  | "reports"
   | "connections"
-  | "creativeLibrary"
+  | "stores"
+  | "products"
+  | "orders"
+  | "pos"
+  | "customers"
+  | "reports"
   | "ai"
+  | "users"
+  | "roles"
+  | "teams"
+  | "invitations"
+  | "auditLog"
+  | "sessions"
   | "settings"
   | "workspace"
-  | "users"
-  | "billing"
-  | "notifications"
-  | "api"
+  | "tax"
 
 export interface IamPermissionGroup {
   module: IamPermissionModule
