@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   Ban,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -26,12 +27,16 @@ import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
+  AppCheckbox,
   AppConfirmDialog,
   AppDropdownMenu,
   AppDropdownMenuContent,
   AppDropdownMenuItem,
   AppDropdownMenuTrigger,
   AppInput,
+  AppPopover,
+  AppPopoverContent,
+  AppPopoverTrigger,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
@@ -39,7 +44,7 @@ import {
   AppSelectValue,
 } from "@/components/app"
 
-import { useAuth } from "@/features/authentication"
+import { useAuth, useAuthStore } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
 import { formatRelativeArabic } from "../lib/format-arabic-time"
@@ -120,7 +125,7 @@ function StatCard({
 
 export function AdministrationUsersScreen() {
   const { administrationApplicationService } = useApplicationServices()
-  const { currentOrganization } = useWorkspace()
+  const { currentOrganization, availableWorkspaces } = useWorkspace()
   const { currentUser } = useAuth()
   const { data, isLoading, isError } = useUsersQuery(
     administrationApplicationService,
@@ -136,10 +141,10 @@ export function AdministrationUsersScreen() {
     assignRole,
     assignCustomRole,
     setModuleAccess,
-    updateProfile,
     updateIdentity,
     uploadAvatar,
     sendPasswordReset,
+    assignWorkspaces,
   } = useUserMutations(currentOrganization?.id)
   const allUsers = useMemo(() => data ?? [], [data])
   const assignableRoles = useMemo(
@@ -167,19 +172,28 @@ export function AdministrationUsersScreen() {
   const [editFullName, setEditFullName] = useState("")
   const [editAvatarUrl, setEditAvatarUrl] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
-  // Keyed by workspaceId (department lives per-membership) -- "" is a fallback key used only for
-  // the edge case where a member has no real workspace membership rows to key on.
-  const [editDepartments, setEditDepartments] = useState<Record<string, string>>({})
+  const [editWorkspaceIds, setEditWorkspaceIds] = useState<string[]>([])
   const [bulkRoleValue, setBulkRoleValue] = useState("")
   const [assigningBulkRole, setAssigningBulkRole] = useState(false)
 
-  const availableWorkspaces = useMemo(() => {
+  const workspaceFilterOptions = useMemo(() => {
     const names = new Set<string>()
     for (const user of allUsers) {
       for (const workspace of user.workspaces) names.add(workspace)
     }
     return Array.from(names).sort()
   }, [allUsers])
+
+  const orgWorkspaces = useMemo(
+    () =>
+      currentOrganization
+        ? availableWorkspaces.filter(
+            (workspace) =>
+              workspace.organizationId === currentOrganization.id && workspace.status !== "archived"
+          )
+        : [],
+    [availableWorkspaces, currentOrganization]
+  )
 
   const counts = useMemo(
     () => ({
@@ -219,11 +233,10 @@ export function AdministrationUsersScreen() {
   }
 
   function exportCsv() {
-    const header = ["الاسم", "البريد الإلكتروني", "القسم", "الدور", "الحالة", "آخر تسجيل دخول"]
+    const header = ["الاسم", "البريد الإلكتروني", "الدور", "الحالة", "آخر تسجيل دخول"]
     const rows = filteredUsers.map((user) => [
       user.fullName,
       user.email,
-      user.department,
       user.roleId,
       STATUS_LABEL[user.status],
       user.lastLogin,
@@ -260,18 +273,16 @@ export function AdministrationUsersScreen() {
 
   async function handleEditUser() {
     if (!editingUser || !currentOrganization) return
-    const targets =
-      editingUser.departments.length > 0
-        ? editingUser.departments
-        : [{ workspaceId: "", workspaceName: "", department: "" }]
-    const changedDepartments = targets.filter(
-      (entry) => (editDepartments[entry.workspaceId] ?? "").trim() !== entry.department
-    )
     const trimmedName = editFullName.trim()
     const nameChanged = trimmedName.length > 0 && trimmedName !== editingUser.fullName
-    if (changedDepartments.length === 0 && !nameChanged) {
+    // assignUserWorkspaces is additive-only (silently skips ids the member already has), so it's
+    // safe to send the newly-checked ones without diffing against what's already assigned.
+    const newlyGrantedWorkspaceIds = editWorkspaceIds.filter(
+      (id) => !editingUser.workspaceIds.includes(id)
+    )
+    if (newlyGrantedWorkspaceIds.length === 0 && !nameChanged) {
       setEditingUser(null)
-      setEditDepartments({})
+      setEditWorkspaceIds([])
       setEditFullName("")
       return
     }
@@ -286,18 +297,26 @@ export function AdministrationUsersScreen() {
               }),
             ]
           : []),
-        ...changedDepartments.map((entry) =>
-          updateProfile.mutateAsync({
-            organizationId: currentOrganization.id,
-            memberUserId: editingUser.id,
-            workspaceId: entry.workspaceId || undefined,
-            profile: { department: (editDepartments[entry.workspaceId] ?? "").trim() },
-          })
-        ),
+        ...(newlyGrantedWorkspaceIds.length > 0
+          ? [
+              assignWorkspaces.mutateAsync({
+                organizationId: currentOrganization.id,
+                userId: editingUser.id,
+                workspaceIds: newlyGrantedWorkspaceIds,
+              }),
+            ]
+          : []),
       ])
+      // Editing yourself here goes through the admin-on-behalf-of-member mutation, not the
+      // account-settings one -- it never touches the Zustand auth store the header avatar/name
+      // read from, so without this the header stays stale until a full reload.
+      if (nameChanged && editingUser.id === currentUser?.id) {
+        const authUser = useAuthStore.getState().user
+        if (authUser) useAuthStore.getState().setUser({ ...authUser, fullName: trimmedName })
+      }
       toast.success(`تم تحديث ${editingUser.fullName}.`)
       setEditingUser(null)
-      setEditDepartments({})
+      setEditWorkspaceIds([])
       setEditFullName("")
     } catch {
       toast.error("تعذر تحديث المستخدم.")
@@ -330,6 +349,10 @@ export function AdministrationUsersScreen() {
         dataBase64,
       })
       setEditAvatarUrl(result.avatarUrl)
+      if (editingUser.id === currentUser?.id) {
+        const authUser = useAuthStore.getState().user
+        if (authUser) useAuthStore.getState().setUser({ ...authUser, avatarUrl: result.avatarUrl })
+      }
       toast.success("تم تحديث الصورة الشخصية.")
     } catch {
       toast.error("تعذر رفع الصورة.")
@@ -546,7 +569,7 @@ export function AdministrationUsersScreen() {
             </AppSelectTrigger>
             <AppSelectContent>
               <AppSelectItem value="all">جميع أماكن العمل</AppSelectItem>
-              {availableWorkspaces.map((workspace) => (
+              {workspaceFilterOptions.map((workspace) => (
                 <AppSelectItem key={workspace} value={workspace}>
                   {workspace}
                 </AppSelectItem>
@@ -612,7 +635,6 @@ export function AdministrationUsersScreen() {
                     {[
                       { key: "select", label: "" },
                       { key: "user", label: "المستخدم" },
-                      { key: "department", label: "القسم" },
                       { key: "role", label: "الدور" },
                       { key: "teams", label: "الفرق" },
                       { key: "workspace", label: "مكان العمل" },
@@ -671,9 +693,6 @@ export function AdministrationUsersScreen() {
                             <p className={cn("text-[10.5px]", MUTED)}>{user.email}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className={cn("px-3 py-3 text-[12px] font-semibold", HEADING)}>
-                        {user.department || "—"}
                       </td>
                       <td className="px-3 py-3">
                         <AppSelect
@@ -780,16 +799,7 @@ export function AdministrationUsersScreen() {
                                 setEditingUser(user)
                                 setEditFullName(user.fullName)
                                 setEditAvatarUrl(user.avatarUrl)
-                                setEditDepartments(
-                                  user.departments.length > 0
-                                    ? Object.fromEntries(
-                                        user.departments.map((entry) => [
-                                          entry.workspaceId,
-                                          entry.department,
-                                        ])
-                                      )
-                                    : { "": "" }
-                                )
+                                setEditWorkspaceIds(user.workspaceIds)
                               }}
                               className="gap-2 text-[12.5px] font-semibold text-[#5b6b85]"
                             >
@@ -940,28 +950,22 @@ export function AdministrationUsersScreen() {
         onOpenChange={(open) => {
           if (!open) {
             setEditingUser(null)
-            setEditDepartments({})
+            setEditWorkspaceIds([])
             setEditFullName("")
             setEditAvatarUrl(null)
           }
         }}
         title={<span dir="rtl">تعديل المستخدم</span>}
         description={
-          <span dir="rtl">
-            {editingUser
-              ? editingUser.departments.length > 1
-                ? `القسم يُحفظ لكل مساحة عمل على حدة لدى ${editingUser.fullName}.`
-                : `تحديث بيانات ${editingUser.fullName}.`
-              : null}
-          </span>
+          <span dir="rtl">{editingUser ? `تحديث بيانات ${editingUser.fullName}.` : null}</span>
         }
         confirmLabel="حفظ"
         cancelLabel="إلغاء"
-        loading={updateProfile.isPending || updateIdentity.isPending}
+        loading={assignWorkspaces.isPending || updateIdentity.isPending}
         onConfirm={handleEditUser}
         onCancel={() => {
           setEditingUser(null)
-          setEditDepartments({})
+          setEditWorkspaceIds([])
           setEditFullName("")
           setEditAvatarUrl(null)
         }}
@@ -1009,37 +1013,76 @@ export function AdministrationUsersScreen() {
             </div>
           </div>
 
-          {editingUser && editingUser.departments.length > 0 ? (
-            <div className={cn(PANEL, "flex flex-col divide-y divide-[#eef2f8] p-1")}>
-              {editingUser.departments.map((entry) => (
-                <div key={entry.workspaceId} className="flex items-center gap-2.5 px-2.5 py-1.5">
-                  <span className={cn("w-28 shrink-0 truncate text-[11.5px] font-semibold", MUTED)}>
-                    {entry.workspaceName}
+          <div className="flex flex-col gap-1.5">
+            <span className={cn("text-[11.5px] font-semibold", MUTED)}>أماكن العمل</span>
+            <AppPopover>
+              <AppPopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    FIELD_CLASS,
+                    "flex w-full items-center justify-between px-3 [&>svg]:transition-transform data-[state=open]:[&>svg]:rotate-180"
+                  )}
+                >
+                  <span className="truncate">
+                    {editWorkspaceIds.length > 0
+                      ? orgWorkspaces
+                          .filter((workspace) => editWorkspaceIds.includes(workspace.id))
+                          .map((workspace) => workspace.name)
+                          .join("، ")
+                      : "لا يوجد أماكن عمل"}
                   </span>
-                  <input
-                    value={editDepartments[entry.workspaceId] ?? ""}
-                    onChange={(event) =>
-                      setEditDepartments((current) => ({
-                        ...current,
-                        [entry.workspaceId]: event.target.value,
-                      }))
-                    }
-                    placeholder="القسم"
-                    className="h-8 min-w-0 flex-1 rounded-[8px] border border-[#e8edf3] bg-white px-2.5 text-[12px] text-[#0d1b3e] placeholder:text-[#8098b4]"
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <input
-              value={editDepartments[""] ?? ""}
-              onChange={(event) =>
-                setEditDepartments((current) => ({ ...current, "": event.target.value }))
-              }
-              placeholder="القسم"
-              className="h-9 min-w-0 rounded-[9px] border border-[#e8edf3] bg-white px-3 text-[12.5px] text-[#0d1b3e] placeholder:text-[#8098b4]"
-            />
-          )}
+                  <ChevronDown className="size-4 shrink-0 text-[#8098b4]" />
+                </button>
+              </AppPopoverTrigger>
+              <AppPopoverContent
+                align="start"
+                sideOffset={6}
+                className="w-[var(--radix-popover-trigger-width)] flex-col gap-0 rounded-[10px] border-[#e8edf3] p-1"
+              >
+                {orgWorkspaces.length === 0 ? (
+                  <p className={cn("p-2.5 text-[12px]", MUTED)}>لا توجد أماكن عمل متاحة.</p>
+                ) : (
+                  orgWorkspaces.map((workspace) => {
+                    const alreadyAssigned =
+                      editingUser?.workspaceIds.includes(workspace.id) ?? false
+                    return (
+                      <label
+                        key={workspace.id}
+                        htmlFor={`edit-user-workspace-${workspace.id}`}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-[8px] px-2.5 py-2",
+                          alreadyAssigned ? "cursor-default" : "cursor-pointer hover:bg-[#f4f7fc]"
+                        )}
+                      >
+                        <AppCheckbox
+                          id={`edit-user-workspace-${workspace.id}`}
+                          checked={editWorkspaceIds.includes(workspace.id)}
+                          disabled={alreadyAssigned}
+                          onCheckedChange={(checked) =>
+                            setEditWorkspaceIds((current) =>
+                              checked === true
+                                ? [...current, workspace.id]
+                                : current.filter((id) => id !== workspace.id)
+                            )
+                          }
+                        />
+                        <span className="flex-1 text-[12.5px] text-[#0d1b3e]">
+                          {workspace.name}
+                        </span>
+                        {alreadyAssigned ? (
+                          <span className={cn("text-[10.5px]", MUTED)}>لديه وصول بالفعل</span>
+                        ) : null}
+                      </label>
+                    )
+                  })
+                )}
+              </AppPopoverContent>
+            </AppPopover>
+            <p className={cn("text-[10.5px]", MUTED)}>
+              إضافة مكان عمل هنا دائمة ولا يمكن التراجع عنها من هذه النافذة.
+            </p>
+          </div>
 
           <div className={cn(PANEL, "flex items-center justify-between gap-3 p-3.5")}>
             <div>
