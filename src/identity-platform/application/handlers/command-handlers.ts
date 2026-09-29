@@ -1049,9 +1049,54 @@ export class IdentityCommandHandlers {
     )
   }
 
+  // A member can hold several memberships in one org (one per workspace). Role, custom role, and
+  // module-access-revoked are all meant to be one consistent fact about that member across the
+  // whole org -- the admin UI shows one row with one role dropdown for them, not one per
+  // workspace -- but assignMemberRole/assignMemberCustomRole/setMemberModuleAccess each used to
+  // target a single membership picked by findByUserAndOrganization's unqualified "LIMIT 1".
+  // Whichever workspace happened to come back first got updated; any others silently kept their
+  // old value, and since the users list's own display reads a *different* arbitrary row, an
+  // admin could change a role, see it "succeed", and then see the old value again after a
+  // refresh -- not a caching issue, the two reads and the one write just didn't agree on which
+  // row was authoritative. Applying the change to every membership row keeps them consistent.
+  private async findAllMembershipsForUserAndOrganization(userId: string, organizationId: string) {
+    const memberships = (await this.deps.repositories.memberships.listByUserId(userId)).filter(
+      (membership) =>
+        membership.organizationId === organizationId &&
+        !membership.deletedAt &&
+        membership.status === "active"
+    )
+    if (memberships.length === 0) {
+      throw ERRORS.notFound("Membership")
+    }
+    return memberships
+  }
+
   private async requireOrganizationWriteAccess(actor: AuthenticatedActor, organizationId: string) {
     const membership = await this.requireOrganizationMembership(actor.userId, organizationId)
     if (!hasPermission([membership.role], "org:write")) {
+      throw ERRORS.forbidden()
+    }
+    return membership
+  }
+
+  // Real, matrix-driven module-permission check for a command that targets an explicit
+  // organizationId param -- actor.modulePermissions is a snapshot for the org the actor's
+  // session was issued against, which is wrong here: an actor can own/belong to more than one
+  // organization (e.g. via createOrganization), and command params like updateOrganization's own
+  // organizationId can legitimately point at a *different* one than actor.organizationId. This
+  // resolves real permissions for the specific target org's own membership instead.
+  private async requireModuleAccess(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    permission: string
+  ) {
+    const membership = await this.requireOrganizationMembership(actor.userId, organizationId)
+    const modulePermissions = await resolveMembershipModulePermissions(
+      membership,
+      this.deps.repositories.customRoles
+    )
+    if (!modulePermissions.includes(permission)) {
       throw ERRORS.forbidden()
     }
     return membership
@@ -1084,12 +1129,15 @@ export class IdentityCommandHandlers {
   // unrestricted access, so at least one owner always keeps the system-role defaults intact.
   private async enforceAtLeastOneFullAccessOwner(
     organizationId: string,
-    excludeMembershipId: string
+    excludeMembershipIds: string | string[]
   ) {
+    const excluded = new Set(
+      Array.isArray(excludeMembershipIds) ? excludeMembershipIds : [excludeMembershipIds]
+    )
     const memberships = await this.listActiveMembershipsByOrganization(organizationId)
     const hasFullAccessOwner = memberships.some(
       (membership) =>
-        membership.id !== excludeMembershipId &&
+        !excluded.has(membership.id) &&
         membership.role === "owner" &&
         !membership.moduleAccessRevoked &&
         !membership.customRoleId
@@ -1184,7 +1232,13 @@ export class IdentityCommandHandlers {
     command: UpdateOrganizationCommand,
     context: RequestContext
   ) {
-    await this.requireOrganizationWriteAccess(actor, organizationId)
+    // Was requireOrganizationWriteAccess (role_code owner/admin only) -- that check ignores
+    // customRoleId entirely, so a member given a restrictive custom role that denies
+    // "settings:edit" could still save org settings as long as their underlying legacy role_code
+    // happened to read "admin" (e.g. left over from before the custom role was assigned, since
+    // assignMemberCustomRole never touches role_code). This is the real, matrix-driven check the
+    // Roles screen's "الإعدادات العامة" permission is actually supposed to enforce.
+    await this.requireModuleAccess(actor, organizationId, "settings:edit")
     const organizationState = await this.deps.repositories.organizations.findById(organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
@@ -1290,7 +1344,11 @@ export class IdentityCommandHandlers {
     command: DeleteOrganizationCommand,
     context: RequestContext
   ) {
-    await this.requireOrganizationWriteAccess(actor, command.organizationId)
+    // Same migration as updateOrganization above, and more important to get right here: deleting
+    // the whole organization is the single most destructive settings action, so it's gated on
+    // "settings:manage" (the highest-privilege settings action in the taxonomy) rather than the
+    // legacy role_code check a restrictive custom role could never actually override.
+    await this.requireModuleAccess(actor, command.organizationId, "settings:manage")
     const organizationState = await this.deps.repositories.organizations.findById(
       command.organizationId
     )
@@ -2303,26 +2361,33 @@ export class IdentityCommandHandlers {
     context: RequestContext
   ) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+    // See findAllMembershipsForUserAndOrganization's own comment: this member may hold more than
+    // one membership in this org (one per workspace), and the role is applied to all of them so
+    // the admin UI's single role dropdown for this member stays consistent with what actually got
+    // saved, rather than an arbitrary one of several rows.
+    const memberStates = await this.findAllMembershipsForUserAndOrganization(
       command.memberUserId,
       command.organizationId
     )
-    if (!memberState) {
-      throw ERRORS.notFound("Membership")
+    const primaryState = memberStates[0]
+    const previousRole = primaryState.role
+    const savedStates = []
+    for (const memberState of memberStates) {
+      const member = MembershipEntity.rehydrate(memberState)
+      member.assignRole(command.role, this.now, actor.userId)
+      const saved = member.toState()
+      await this.deps.repositories.memberships.save(saved)
+      savedStates.push(saved)
     }
-    const member = MembershipEntity.rehydrate(memberState)
-    const previousRole = member.role
-    member.assignRole(command.role, this.now, actor.userId)
-    await this.deps.repositories.memberships.save(member.toState())
     await this.enforceAtLeastOneOwner(command.organizationId)
     await this.audit(
       "membership.role_assigned",
       context,
       actor.userId,
       command.organizationId,
-      memberState.workspaceId,
+      primaryState.workspaceId,
       "membership",
-      memberState.id,
+      primaryState.id,
       {
         role: command.role,
       }
@@ -2334,7 +2399,7 @@ export class IdentityCommandHandlers {
             this.createEvent({
               eventType: "RoleRevoked",
               aggregateType: "membership",
-              aggregateId: memberState.id,
+              aggregateId: primaryState.id,
               context,
               payload: {
                 organizationId: command.organizationId,
@@ -2346,7 +2411,7 @@ export class IdentityCommandHandlers {
       this.createEvent({
         eventType: "RoleAssigned",
         aggregateType: "membership",
-        aggregateId: memberState.id,
+        aggregateId: primaryState.id,
         context,
         payload: {
           organizationId: command.organizationId,
@@ -2359,7 +2424,7 @@ export class IdentityCommandHandlers {
       organizationId: command.organizationId,
       role: command.role,
     })
-    return member.toState()
+    return savedStates[0]
   }
 
   async assignMemberCustomRole(
@@ -2368,13 +2433,13 @@ export class IdentityCommandHandlers {
     context: RequestContext
   ) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+    // See findAllMembershipsForUserAndOrganization's own comment: applied to every one of this
+    // member's memberships in the org, not just an arbitrarily-picked one.
+    const memberStates = await this.findAllMembershipsForUserAndOrganization(
       command.memberUserId,
       command.organizationId
     )
-    if (!memberState) {
-      throw ERRORS.notFound("Membership")
-    }
+    const primaryState = memberStates[0]
 
     if (command.customRoleId) {
       const customRole = await this.deps.repositories.customRoles.findById(command.customRoleId)
@@ -2386,24 +2451,32 @@ export class IdentityCommandHandlers {
     // A custom role fully replaces the owner's default module permissions rather than merging
     // with them -- assigning one to the org's last full-access owner would silently strip their
     // own settings/users access with role_code still reading "owner".
-    if (command.customRoleId && memberState.role === "owner") {
-      await this.enforceAtLeastOneFullAccessOwner(command.organizationId, memberState.id)
+    if (command.customRoleId && memberStates.some((membership) => membership.role === "owner")) {
+      await this.enforceAtLeastOneFullAccessOwner(
+        command.organizationId,
+        memberStates.map((membership) => membership.id)
+      )
     }
 
-    const member = MembershipEntity.rehydrate(memberState)
-    member.assignCustomRole(command.customRoleId, this.now, actor.userId)
-    await this.deps.repositories.memberships.save(member.toState())
+    const savedStates = []
+    for (const memberState of memberStates) {
+      const member = MembershipEntity.rehydrate(memberState)
+      member.assignCustomRole(command.customRoleId, this.now, actor.userId)
+      const saved = member.toState()
+      await this.deps.repositories.memberships.save(saved)
+      savedStates.push(saved)
+    }
     await this.audit(
       "membership.custom_role_assigned",
       context,
       actor.userId,
       command.organizationId,
-      memberState.workspaceId,
+      primaryState.workspaceId,
       "membership",
-      memberState.id,
+      primaryState.id,
       { customRoleId: command.customRoleId ?? "" }
     )
-    return member.toState()
+    return savedStates[0]
   }
 
   async setMemberModuleAccess(
@@ -2412,31 +2485,39 @@ export class IdentityCommandHandlers {
     context: RequestContext
   ) {
     await this.requireOrganizationWriteAccess(actor, command.organizationId)
-    const memberState = await this.deps.repositories.memberships.findByUserAndOrganization(
+    // See findAllMembershipsForUserAndOrganization's own comment: applied to every one of this
+    // member's memberships in the org, not just an arbitrarily-picked one.
+    const memberStates = await this.findAllMembershipsForUserAndOrganization(
       command.memberUserId,
       command.organizationId
     )
-    if (!memberState) {
-      throw ERRORS.notFound("Membership")
+    const primaryState = memberStates[0]
+
+    if (command.revoked && memberStates.some((membership) => membership.role === "owner")) {
+      await this.enforceAtLeastOneFullAccessOwner(
+        command.organizationId,
+        memberStates.map((membership) => membership.id)
+      )
     }
 
-    if (command.revoked && memberState.role === "owner") {
-      await this.enforceAtLeastOneFullAccessOwner(command.organizationId, memberState.id)
+    const savedStates = []
+    for (const memberState of memberStates) {
+      const member = MembershipEntity.rehydrate(memberState)
+      member.setModuleAccessRevoked(command.revoked, this.now, actor.userId)
+      const saved = member.toState()
+      await this.deps.repositories.memberships.save(saved)
+      savedStates.push(saved)
     }
-
-    const member = MembershipEntity.rehydrate(memberState)
-    member.setModuleAccessRevoked(command.revoked, this.now, actor.userId)
-    await this.deps.repositories.memberships.save(member.toState())
     await this.audit(
       command.revoked ? "membership.module_access_revoked" : "membership.module_access_restored",
       context,
       actor.userId,
       command.organizationId,
-      memberState.workspaceId,
+      primaryState.workspaceId,
       "membership",
-      memberState.id
+      primaryState.id
     )
-    return member.toState()
+    return savedStates[0]
   }
 
   async updateMemberProfile(
