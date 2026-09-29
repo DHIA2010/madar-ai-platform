@@ -83,7 +83,11 @@ import {
 import type { UserState } from "../../domain/entities"
 import type { DomainEvent } from "../../domain/events"
 import { ERRORS, IdentityError } from "../errors/IdentityError"
-import { hasPermission, resolvePermissions } from "../../domain/domain-services/permission-service"
+import {
+  hasPermission,
+  resolvePermissions,
+  ROLE_PERMISSIONS,
+} from "../../domain/domain-services/permission-service"
 import { resolveMembershipModulePermissions } from "../../domain/domain-services/module-permission-service"
 import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 import { issueSessionForMember } from "../session-issuer"
@@ -1022,15 +1026,27 @@ export class IdentityCommandHandlers {
     return record
   }
 
+  // A user can hold several memberships in one org (one per workspace, e.g. created via
+  // assignUserWorkspaces or a fresh workspace's own owner seed), each with its own role.
+  // findByUserAndOrganization's unqualified "LIMIT 1" would return whichever one Postgres
+  // happens to return first, silently downgrading an org owner to whatever role their first-
+  // returned membership carries -- every caller here only ever reads `.role` off the result to
+  // decide if the actor is privileged enough, so resolving to their single best role across all
+  // active memberships in the org is correct and doesn't change what any caller does with it.
   private async requireOrganizationMembership(userId: string, organizationId: string) {
-    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
-      userId,
-      organizationId
+    const rolePriority = Object.keys(ROLE_PERMISSIONS) as Role[]
+    const memberships = (await this.deps.repositories.memberships.listByUserId(userId)).filter(
+      (membership) =>
+        membership.organizationId === organizationId &&
+        !membership.deletedAt &&
+        membership.status === "active"
     )
-    if (!membership || membership.deletedAt || membership.status !== "active") {
+    if (memberships.length === 0) {
       throw ERRORS.forbidden()
     }
-    return membership
+    return memberships.reduce((best, current) =>
+      rolePriority.indexOf(current.role) < rolePriority.indexOf(best.role) ? current : best
+    )
   }
 
   private async requireOrganizationWriteAccess(actor: AuthenticatedActor, organizationId: string) {
@@ -1310,11 +1326,15 @@ export class IdentityCommandHandlers {
     command: CreateWorkspaceCommand,
     context: RequestContext
   ) {
-    const membership = await this.deps.repositories.memberships.findByUserAndOrganization(
+    // Resolves the actor's best role across all their memberships in this org, not an arbitrary
+    // one -- the new workspace's own membership below inherits this role, so picking the wrong
+    // one wouldn't just misauthorize this call, it would permanently seed the new workspace with
+    // a too-low role for an actual owner/admin.
+    const membership = await this.requireOrganizationMembership(
       actor.userId,
       command.organizationId
     )
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!["owner", "admin"].includes(membership.role)) {
       throw ERRORS.forbidden()
     }
     const organizationState = await this.deps.repositories.organizations.findById(
