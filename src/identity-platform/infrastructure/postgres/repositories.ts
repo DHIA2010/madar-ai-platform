@@ -344,7 +344,12 @@ class PostgresOrganizationRepository implements OrganizationRepository {
       ORDER BY ${orderBy}
       LIMIT $${values.length - 1} OFFSET $${values.length}
     `
-    const result = await this.db.query({ name: "identity-orgs-list", text: query, values })
+    // No `name` here -- the WHERE/ORDER BY/param count above varies per call (owner filter, id
+    // allow-list, status, sort), so a fixed prepared-statement name causes a real production
+    // outage: pg errors with "prepared statement ... was used for a different statement" the
+    // moment two differently-shaped calls land on the same pooled connection, and that
+    // connection then fails every subsequent call reusing the name until the pool recycles it.
+    const result = await this.db.query({ text: query, values })
     return result.rows.map(mapOrganization)
   }
   async save(organization: OrganizationState) {
