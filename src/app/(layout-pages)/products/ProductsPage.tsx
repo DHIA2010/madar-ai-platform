@@ -338,15 +338,17 @@ function ProductRowActions({
           عرض التفاصيل
         </DropdownMenuItem>
 
-        <DropdownMenuItem
-          className="cursor-pointer gap-2 text-[12.5px]"
-          disabled={!isNative}
-          title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
-          onSelect={afterClose(onEdit)}
-        >
-          <Pencil className="size-4" />
-          تعديل المنتج
-        </DropdownMenuItem>
+        <Can permission="products:edit">
+          <DropdownMenuItem
+            className="cursor-pointer gap-2 text-[12.5px]"
+            disabled={!isNative}
+            title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
+            onSelect={afterClose(onEdit)}
+          >
+            <Pencil className="size-4" />
+            تعديل المنتج
+          </DropdownMenuItem>
+        </Can>
 
         <DropdownMenuItem
           className="cursor-pointer gap-2 text-[12.5px]"
@@ -367,15 +369,17 @@ function ProductRowActions({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem
-          className="cursor-pointer gap-2 text-[12.5px] text-[#e0484d] focus:text-[#e0484d]"
-          disabled={!isNative}
-          title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
-          onSelect={afterClose(onDelete)}
-        >
-          <Trash2 className="size-4" />
-          حذف المنتج
-        </DropdownMenuItem>
+        <Can permission="products:delete">
+          <DropdownMenuItem
+            className="cursor-pointer gap-2 text-[12.5px] text-[#e0484d] focus:text-[#e0484d]"
+            disabled={!isNative}
+            title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
+            onSelect={afterClose(onDelete)}
+          >
+            <Trash2 className="size-4" />
+            حذف المنتج
+          </DropdownMenuItem>
+        </Can>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -1017,15 +1021,17 @@ export default function ProductsPage() {
               </Button>
             </Can>
 
-            <Button
-              asChild
-              className="h-11 gap-2 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
-            >
-              <Link href={ROUTES.productsAdd}>
-                إضافة منتج
-                <Plus className="size-4" />
-              </Link>
-            </Button>
+            <Can permission="products:create">
+              <Button
+                asChild
+                className="h-11 gap-2 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
+              >
+                <Link href={ROUTES.productsAdd}>
+                  إضافة منتج
+                  <Plus className="size-4" />
+                </Link>
+              </Button>
+            </Can>
           </div>
         </div>
 
@@ -1111,47 +1117,49 @@ export default function ProductsPage() {
               <>
                 <span className={cn("text-[12px]", MUTED)}>{selectedProducts.length} محدد</span>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      disabled={bulkStatusUpdating}
-                      className="flex items-center gap-1.5 rounded-[8px] border border-[#e1e7f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0b1738] transition-colors hover:border-[#c4d5f0] hover:bg-[#f4f7fc] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {bulkStatusUpdating ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <ChevronDown className="size-3.5" />
-                      )}
-                      تغيير الحالة
-                    </button>
-                  </DropdownMenuTrigger>
+                <Can permission="products:edit">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={bulkStatusUpdating}
+                        className="flex items-center gap-1.5 rounded-[8px] border border-[#e1e7f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0b1738] transition-colors hover:border-[#c4d5f0] hover:bg-[#f4f7fc] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {bulkStatusUpdating ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <ChevronDown className="size-3.5" />
+                        )}
+                        تغيير الحالة
+                      </button>
+                    </DropdownMenuTrigger>
 
-                  {/* Radix portals this to document.body, which does not inherit the page's dir. */}
-                  <DropdownMenuContent
-                    align="end"
-                    className={cn(cairo.className, "w-44 rounded-[12px] [direction:rtl]")}
-                  >
-                    <DropdownMenuItem
-                      className="cursor-pointer gap-2 text-[12.5px]"
-                      onSelect={() => void applyBulkStatus("active")}
+                    {/* Radix portals this to document.body, which does not inherit the page's dir. */}
+                    <DropdownMenuContent
+                      align="end"
+                      className={cn(cairo.className, "w-44 rounded-[12px] [direction:rtl]")}
                     >
-                      {STATUS_PILL_AR.Active.label}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer gap-2 text-[12.5px]"
-                      onSelect={() => void applyBulkStatus("draft")}
-                    >
-                      {STATUS_PILL_AR.Draft.label}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer gap-2 text-[12.5px]"
-                      onSelect={() => void applyBulkStatus("archived")}
-                    >
-                      {STATUS_PILL_AR.Archived.label}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <DropdownMenuItem
+                        className="cursor-pointer gap-2 text-[12.5px]"
+                        onSelect={() => void applyBulkStatus("active")}
+                      >
+                        {STATUS_PILL_AR.Active.label}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer gap-2 text-[12.5px]"
+                        onSelect={() => void applyBulkStatus("draft")}
+                      >
+                        {STATUS_PILL_AR.Draft.label}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer gap-2 text-[12.5px]"
+                        onSelect={() => void applyBulkStatus("archived")}
+                      >
+                        {STATUS_PILL_AR.Archived.label}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </Can>
               </>
             ) : null}
           </div>
@@ -1621,29 +1629,33 @@ export default function ProductsPage() {
               <DialogFooter className="mx-0 mb-0 flex-row items-center gap-2 rounded-b-[18px] border-t border-[#eef2f8] bg-[#fafbfe] p-4 sm:justify-start">
                 {detailProduct.platform === "Madar" ? (
                   <>
-                    <Button
-                      className="h-10 gap-2 rounded-[10px] bg-[#2878ff] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1f66e0]"
-                      onClick={() => {
-                        const id = detailProduct.id
-                        setDetailProduct(null)
-                        router.push(`${ROUTES.productsAdd}?id=${encodeURIComponent(id)}`)
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                      تعديل المنتج
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-10 gap-2 rounded-[10px] border-[#f7c9ca] px-4 text-[12.5px] font-semibold text-[#e0484d] hover:bg-[#fdeeee]"
-                      onClick={() => {
-                        const target = detailProduct
-                        setDetailProduct(null)
-                        setTimeout(() => setPendingDelete(target), 0)
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                      حذف
-                    </Button>
+                    <Can permission="products:edit">
+                      <Button
+                        className="h-10 gap-2 rounded-[10px] bg-[#2878ff] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1f66e0]"
+                        onClick={() => {
+                          const id = detailProduct.id
+                          setDetailProduct(null)
+                          router.push(`${ROUTES.productsAdd}?id=${encodeURIComponent(id)}`)
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        تعديل المنتج
+                      </Button>
+                    </Can>
+                    <Can permission="products:delete">
+                      <Button
+                        variant="outline"
+                        className="h-10 gap-2 rounded-[10px] border-[#f7c9ca] px-4 text-[12.5px] font-semibold text-[#e0484d] hover:bg-[#fdeeee]"
+                        onClick={() => {
+                          const target = detailProduct
+                          setDetailProduct(null)
+                          setTimeout(() => setPendingDelete(target), 0)
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                        حذف
+                      </Button>
+                    </Can>
                   </>
                 ) : (
                   <p className="text-[11.5px] text-[#6b7b96]">

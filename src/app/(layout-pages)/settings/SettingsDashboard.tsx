@@ -43,7 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-import { useAuth } from "@/features/authentication"
+import { Can, useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import type { OrganizationSettings } from "@/features/workspace"
 import { ROUTES } from "@/constants/routes"
@@ -495,22 +495,24 @@ export default function SettingsDashboard() {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => logoInputRef.current?.click()}
-              disabled={isUploadingLogo}
-              className="flex w-full items-center justify-center gap-1.5 rounded-[8px] border border-[#e8edf3] bg-white py-2 text-[12px] font-semibold text-[#334155] transition-colors hover:border-[#c7d9ff] hover:text-[#2563eb] disabled:opacity-50"
-            >
-              {isUploadingLogo ? "جارٍ الرفع…" : "تغيير الشعار"}
-              <Upload className="size-3" />
-            </button>
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={handleLogoChange}
-            />
+            <Can permission="settings:edit">
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={isUploadingLogo}
+                className="flex w-full items-center justify-center gap-1.5 rounded-[8px] border border-[#e8edf3] bg-white py-2 text-[12px] font-semibold text-[#334155] transition-colors hover:border-[#c7d9ff] hover:text-[#2563eb] disabled:opacity-50"
+              >
+                {isUploadingLogo ? "جارٍ الرفع…" : "تغيير الشعار"}
+                <Upload className="size-3" />
+              </button>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleLogoChange}
+              />
+            </Can>
           </div>
 
           <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -709,33 +711,37 @@ export default function SettingsDashboard() {
       {/* RTL: the danger card is written first so it lands on the right and the save action on
           the left, as in the design. */}
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-        <button
-          type="button"
-          onClick={() => {
-            setDeleteConfirmation("")
-            setIsDeleteOpen(true)
-          }}
-          className="flex flex-1 items-center gap-3 rounded-[12px] border border-[#f7d4d4] bg-[#fef4f4] px-5 py-3.5 text-start transition-colors hover:border-[#f0b4b4] hover:bg-[#fdecec]"
-        >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-[#fde2e2] text-[#dc2626]">
-            <Trash2 className="size-[18px]" />
-          </span>
-          <span className="flex flex-col">
-            <span className="text-[14px] font-bold text-[#dc2626]">حذف الحساب</span>
-            <span className="mt-0.5 text-[12.5px] text-[#b06a6a]">
-              سيتم حذف جميع البيانات بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
+        <Can permission="settings:manage">
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteConfirmation("")
+              setIsDeleteOpen(true)
+            }}
+            className="flex flex-1 items-center gap-3 rounded-[12px] border border-[#f7d4d4] bg-[#fef4f4] px-5 py-3.5 text-start transition-colors hover:border-[#f0b4b4] hover:bg-[#fdecec]"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-[#fde2e2] text-[#dc2626]">
+              <Trash2 className="size-[18px]" />
             </span>
-          </span>
-        </button>
+            <span className="flex flex-col">
+              <span className="text-[14px] font-bold text-[#dc2626]">حذف الحساب</span>
+              <span className="mt-0.5 text-[12.5px] text-[#b06a6a]">
+                سيتم حذف جميع البيانات بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
+              </span>
+            </span>
+          </button>
+        </Can>
 
-        <AppButton
-          type="button"
-          onClick={handleSave}
-          disabled={!isDirty || isSaving}
-          className="h-[74px] shrink-0 rounded-[12px] px-10 text-[15px] font-bold sm:w-[190px]"
-        >
-          {isSaving ? "جارٍ الحفظ…" : "حفظ التغييرات"}
-        </AppButton>
+        <Can permission="settings:edit">
+          <AppButton
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || isSaving}
+            className="h-[74px] shrink-0 rounded-[12px] px-10 text-[15px] font-bold sm:w-[190px]"
+          >
+            {isSaving ? "جارٍ الحفظ…" : "حفظ التغييرات"}
+          </AppButton>
+        </Can>
       </div>
 
       <p className={cn("text-center text-[12px]", MUTED)}>

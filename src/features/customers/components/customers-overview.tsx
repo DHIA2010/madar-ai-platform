@@ -34,6 +34,8 @@ import {
   AppSearchableSelect,
 } from "@/components/app"
 
+import { Can } from "@/features/authentication"
+
 import { useCustomers } from "../hooks"
 import { customerListService } from "../services/customer-list.service"
 import type {
@@ -544,13 +546,15 @@ export function CustomersOverview() {
           >
             استيراد
           </AppButton>
-          <AppButton
-            icon={<Plus className="size-4" />}
-            className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
-            onClick={() => setIsAddOpen(true)}
-          >
-            إضافة عميل
-          </AppButton>
+          <Can permission="customers:create">
+            <AppButton
+              icon={<Plus className="size-4" />}
+              className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+              onClick={() => setIsAddOpen(true)}
+            >
+              إضافة عميل
+            </AppButton>
+          </Can>
         </div>
       </div>
 
@@ -928,28 +932,32 @@ function CustomerRow({
             >
               كشف الحساب
             </AppButton>
-            <AppButton
-              variant="outline"
-              aria-label={`تعديل ${record.name}`}
-              className="size-8 shrink-0 rounded-[8px] border-[#e8edf3] p-0 text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#2563eb]"
-              onClick={(event) => {
-                event.stopPropagation()
-                onEdit(record)
-              }}
-            >
-              <Pencil className="size-3.5" />
-            </AppButton>
-            <AppButton
-              variant="outline"
-              aria-label={`حذف ${record.name}`}
-              className="size-8 shrink-0 rounded-[8px] border-[#e8edf3] p-0 text-[#5b6b85] hover:border-[#fecaca] hover:text-[#dc2626]"
-              onClick={(event) => {
-                event.stopPropagation()
-                onDelete(record)
-              }}
-            >
-              <Trash2 className="size-3.5" />
-            </AppButton>
+            <Can permission="customers:edit">
+              <AppButton
+                variant="outline"
+                aria-label={`تعديل ${record.name}`}
+                className="size-8 shrink-0 rounded-[8px] border-[#e8edf3] p-0 text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#2563eb]"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEdit(record)
+                }}
+              >
+                <Pencil className="size-3.5" />
+              </AppButton>
+            </Can>
+            <Can permission="customers:delete">
+              <AppButton
+                variant="outline"
+                aria-label={`حذف ${record.name}`}
+                className="size-8 shrink-0 rounded-[8px] border-[#e8edf3] p-0 text-[#5b6b85] hover:border-[#fecaca] hover:text-[#dc2626]"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onDelete(record)
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </AppButton>
+            </Can>
           </div>
         ) : null}
       </td>

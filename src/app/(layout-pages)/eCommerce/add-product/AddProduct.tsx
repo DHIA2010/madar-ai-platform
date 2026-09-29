@@ -38,7 +38,7 @@ import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { cairo } from "@/components/design/fonts"
-import { useAuth } from "@/features/authentication"
+import { useAuth, usePermissions } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import {
   productListService,
@@ -235,6 +235,7 @@ export default function AddProduct() {
   const componentNameInputs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const { currentUser } = useAuth()
+  const { can } = usePermissions()
   const { currentOrganization, currentWorkspace, availableWorkspaces } = useWorkspace()
   const router = useRouter()
   // The same form serves both jobs: with ?id= it loads that product and saves over it, without
@@ -242,6 +243,18 @@ export default function AddProduct() {
   // type-specific layouts twice.
   const editingId = useSearchParams().get("id")
   const isEditing = editingId !== null
+  // This page has no route-level guard (unlike every other feature module), since a single
+  // component serves both /add-product and /add-product?id=... with different permissions each
+  // -- checked here instead, redirecting immediately on load rather than letting someone fill out
+  // the whole form only to be rejected on save.
+  const hasFormAccess = isEditing ? can("products:edit") : can("products:create")
+  useEffect(() => {
+    if (hasFormAccess) return
+    toast.error(isEditing ? "لا تملك صلاحية تعديل المنتجات." : "لا تملك صلاحية إنشاء المنتجات.", {
+      description: `تواصل مع مالك الحساب لمنحك صلاحية products:${isEditing ? "edit" : "create"}.`,
+    })
+    router.replace(ROUTES.products)
+  }, [hasFormAccess, isEditing, router])
 
   // The ordinary product is the common case and the first card in the row, so the page opens on
   // it rather than on a bundle.
