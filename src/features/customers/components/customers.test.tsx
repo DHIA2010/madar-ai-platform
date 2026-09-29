@@ -11,6 +11,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }))
 
+// This screen's create/edit/delete controls are now permission-gated (see
+// customers-overview.tsx's <Can> usage); these tests exercise the screen's own data/interaction
+// behavior, not the permission system, so <Can> always renders its children here rather than
+// requiring a real PermissionProvider in the tree.
+vi.mock("@/features/authentication", () => ({
+  Can: ({ children }: { children: import("react").ReactNode }) => children,
+}))
+
 const { toastSuccess, toastError } = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
