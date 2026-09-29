@@ -129,6 +129,7 @@ import {
   forgotPasswordSchema,
   integrationAccountSelectionSchema,
   integrationAccountsQuerySchema,
+  integrationDirectConnectSchema,
   integrationDisconnectSchema,
   integrationEventsQuerySchema,
   integrationOAuthStartSchema,
@@ -1475,6 +1476,19 @@ export function createIdentityApiServer(
 
         const payload = integrationOAuthStartSchema.parse(await readJsonBody(request))
         return send(200, await provider.oauthStart(actor, payload))
+      }
+
+      const providerDirectConnectMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/direct-connect$/
+      )
+      if (method === "POST" && providerDirectConnectMatch) {
+        const provider = container.infrastructure.integrations?.find(providerDirectConnectMatch[1])
+        if (!provider || !provider.connectDirect) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        const payload = integrationDirectConnectSchema.parse(await readJsonBody(request))
+        return send(200, await provider.connectDirect(actor, payload))
       }
 
       if (method === "GET" && url.pathname === "/v1/integrations/google/connection") {

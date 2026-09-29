@@ -4,6 +4,7 @@ import type {
   Connection,
   ConnectorHealth,
   ConnectorLifecycleAction,
+  ConnectProviderDirectRequestDto,
   CreateConnectionRequestDto,
   DisconnectConnectionRequestDto,
   GetConnectorHealthRequestDto,
@@ -770,6 +771,48 @@ export class RestIntegrationRepository implements IntegrationRepository {
       }
 
       this.upsertConnection(connection)
+      return connection
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async connectProviderDirect(input: ConnectProviderDirectRequestDto): Promise<Connection> {
+    try {
+      const providerProfile = resolveProviderProfileByDefinition(input.connectorDefinitionId)
+      if (!providerProfile) {
+        throw new ValidationError({
+          code: "connector_not_supported",
+          message: "This connector is not available in production integration runtime.",
+        })
+      }
+
+      await this.client.post<
+        {
+          workspaceId: string
+          storeId: string
+          accessToken: string
+          connectionName: string | null
+        },
+        unknown
+      >(`/v1/integrations/${providerProfile.providerId}/direct-connect`, {
+        workspaceId: input.workspaceId,
+        storeId: input.storeId,
+        accessToken: input.accessToken,
+        connectionName: input.connectionName ?? null,
+      })
+
+      // The backend already persisted a fully "connected" row -- re-fetch it the same way
+      // recoverConnections does on app load, rather than hand-building a Connection from the
+      // direct-connect response, so both paths stay in sync with exactly one mapping.
+      const connection = await this.recoverConnectionForProvider(providerProfile)
+      if (!connection) {
+        throw new ValidationError({
+          code: "connection_not_found_after_connect",
+          message: "Connected, but the connection couldn't be loaded back.",
+        })
+      }
+
       return connection
     } catch (error) {
       throw mapRepositoryError(error)

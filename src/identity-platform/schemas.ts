@@ -250,6 +250,14 @@ export const googleOAuthStartSchema = z.object({
 
 export const integrationOAuthStartSchema = googleOAuthStartSchema
 
+export const integrationDirectConnectSchema = z.object({
+  workspaceId: z.string().uuid().nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  connectionName: z.string().min(1).max(200).nullable().optional(),
+  storeId: z.string().min(1).max(100),
+  accessToken: z.string().min(10).max(4000),
+})
+
 export const googleAdsSyncSchema = z.object({
   connectionId: z.string().uuid(),
   customerId: z.string().min(1).max(64),

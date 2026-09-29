@@ -216,6 +216,7 @@ export type {
   ConnectorHealthReadModel,
   ConnectorHealthViewModel,
   ConnectorLifecycleAction,
+  ConnectProviderDirectRequestDto,
   CreateConnectionRequestDto,
   Credential,
   CredentialStoragePort,

@@ -1141,6 +1141,70 @@ export function NewConnectionWizard() {
     setRetryTarget("connect")
     setFlowStatus("connecting")
 
+    // Zid's Direct API Integration: a merchant-issued store id + access token from their own
+    // Zid dashboard, no OAuth redirect at all -- useful before MADAR's Zid app is approved for
+    // public OAuth installs. This never goes through createConnection/connect (there's no draft
+    // or provider redirect step); the backend validates the token against Zid's own API and
+    // returns an already-connected connection in one call.
+    if (selectedConnector.connectorId === "zid" && setupMode === "manual") {
+      if (apiKey.trim().length === 0 || clientSecret.trim().length === 0) {
+        setErrorState({
+          kind: "generic",
+          title: "بيانات ناقصة",
+          description: "أدخل معرّف المتجر ورمز الوصول من إعدادات زد قبل المتابعة.",
+        })
+        setRetryTarget("connect")
+        setFlowStatus("idle")
+        return
+      }
+
+      try {
+        const references = loadStoredConnectionReferences()
+        const connected = await connectionManager.connectProviderDirect({
+          workspaceId,
+          connectorDefinitionId: selectedConnector.connectorDefinitionId,
+          storeId: apiKey.trim(),
+          accessToken: clientSecret.trim(),
+          connectionName,
+        })
+
+        storeConnectionReferences([
+          ...references.filter(
+            (entry) => entry.connectorDefinitionId !== selectedConnector.connectorDefinitionId
+          ),
+          {
+            connectorDefinitionId: selectedConnector.connectorDefinitionId,
+            connectionId: connected.connectionId,
+          },
+        ])
+
+        setDraftConnectionId(connected.connectionId)
+        appendConnectorAccount(selectedConnector.connectorDefinitionId, selectedAccount.label)
+        setStepIndex(2)
+        setFlowStatus("idle")
+      } catch (error) {
+        // The generic inferErrorKind()/errorMeta() classification below reads "token" in almost
+        // any message as an expired OAuth token and tells the merchant to "reconnect" -- wrong
+        // and confusing for a rejected Direct API token, whose only real fix is re-copying it
+        // from Zid's dashboard. Check for this backend-specific code first.
+        const code = (error as { code?: string } | null)?.code
+        if (code === "ZID_DIRECT_TOKEN_INVALID" || code === "ZID_DIRECT_TOKEN_MISSING") {
+          setErrorState({
+            kind: "generic",
+            title: "رمز الوصول غير صالح",
+            description:
+              "رفض زد رمز الوصول هذا. تحقق من نسخه بالكامل من إعدادات متجرك في زد (التكاملات البرمجية).",
+          })
+        } else {
+          const message = error instanceof Error ? error.message : String(error)
+          setErrorState(errorMeta(inferErrorKind(message)))
+        }
+        setRetryTarget("connect")
+        setFlowStatus("idle")
+      }
+      return
+    }
+
     try {
       const references = loadStoredConnectionReferences()
       const created = await connectionManager.createConnection({
@@ -1913,24 +1977,48 @@ export function NewConnectionWizard() {
             <ChevronRight className="size-4 text-[#95a4bd] transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:-rotate-90" />
           </summary>
           <div className="mt-4 space-y-3">
-            <AppInput
-              label="مفتاح API"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
-            />
-            <AppInput
-              label="المفتاح السري"
-              value={clientSecret}
-              onChange={(event) => setClientSecret(event.target.value)}
-              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
-            />
-            <AppInput
-              label="بيانات اعتماد يدوية"
-              value={manualCredentials}
-              onChange={(event) => setManualCredentials(event.target.value)}
-              className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
-            />
+            {selectedConnector.connectorId === "zid" ? (
+              <>
+                <AppInput
+                  label="معرّف المتجر"
+                  placeholder="مثال: 3058261"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+                />
+                <AppInput
+                  label="رمز الوصول"
+                  value={clientSecret}
+                  onChange={(event) => setClientSecret(event.target.value)}
+                  className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+                />
+                <p className={cn("text-[11px] leading-5", MUTED_TEXT)}>
+                  احصل على القيمتين من متجرك في زد: الإعدادات ← التكاملات البرمجية (API) ← بيانات
+                  الربط المباشر.
+                </p>
+              </>
+            ) : (
+              <>
+                <AppInput
+                  label="مفتاح API"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+                />
+                <AppInput
+                  label="المفتاح السري"
+                  value={clientSecret}
+                  onChange={(event) => setClientSecret(event.target.value)}
+                  className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+                />
+                <AppInput
+                  label="بيانات اعتماد يدوية"
+                  value={manualCredentials}
+                  onChange={(event) => setManualCredentials(event.target.value)}
+                  className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+                />
+              </>
+            )}
             <button
               type="button"
               className={cn(

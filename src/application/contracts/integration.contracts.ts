@@ -219,6 +219,18 @@ export interface ValidateConnectionRequestDto {
   connectionId: string
 }
 
+// A merchant-supplied credential (store id + a pre-issued access token from the provider's own
+// dashboard) instead of the OAuth authorization-code redirect -- currently only Zid's "Direct
+// API Integration" supports this, useful before an OAuth app has been approved for public
+// installs.
+export interface ConnectProviderDirectRequestDto {
+  workspaceId: string
+  connectorDefinitionId: string
+  storeId: string
+  accessToken: string
+  connectionName?: string
+}
+
 export interface SelectAccountRequestDto {
   connectionId: string
   customerId: string
@@ -365,6 +377,9 @@ export interface IntegrationRepository {
   validateConnection(input: ValidateConnectionRequestDto): Promise<Connection>
   selectAccount(input: SelectAccountRequestDto): Promise<void>
   authorizeConnector(input: AuthorizeConnectorRequestDto): Promise<Connection>
+  // Optional: only providers with a non-OAuth direct-credential path (currently Zid) implement
+  // this.
+  connectProviderDirect?(input: ConnectProviderDirectRequestDto): Promise<Connection>
   refreshConnection(input: RefreshConnectionRequestDto): Promise<Connection>
   disconnectConnection(input: DisconnectConnectionRequestDto): Promise<Connection>
   deleteConnection(input: DeleteConnectionRequestDto): Promise<void>

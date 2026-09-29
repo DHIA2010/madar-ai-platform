@@ -17,6 +17,7 @@ import { IntegrationProviderError } from "../provider-error"
 import type {
   IntegrationProviderAccountSelectionInput,
   IntegrationProviderAccountsQuery,
+  IntegrationProviderDirectConnectInput,
   IntegrationProviderOAuthControllerResult,
   IntegrationProviderOAuthStartInput,
   IntegrationProviderRecordQuery,
@@ -137,6 +138,38 @@ export class ZidIntegrationProvider {
 
   async oauthStart(actor: AuthenticatedActor, input: IntegrationProviderOAuthStartInput) {
     return this.requireController().start(actor, input)
+  }
+
+  // Translates the service's plain Error codes into IntegrationProviderError so the generic
+  // error mapper (which only special-cases IdentityError/IntegrationProviderError, everything
+  // else becomes a bare 500) gives the wizard something actionable instead of "Unexpected error"
+  // when a pasted access token is missing or Zid rejects it.
+  async connectDirect(actor: AuthenticatedActor, input: IntegrationProviderDirectConnectInput) {
+    try {
+      return await this.requireController().connectDirect(actor, input)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message === "ZID_DIRECT_TOKEN_MISSING") {
+        throw new IntegrationProviderError("Access token is required.", message, false, 400)
+      }
+      if (message === "ZID_DIRECT_TOKEN_INVALID") {
+        throw new IntegrationProviderError(
+          "Zid rejected this access token -- check it was copied correctly from your Zid dashboard.",
+          message,
+          false,
+          400
+        )
+      }
+      if (message === "ZID_OAUTH_FORBIDDEN") {
+        throw new IntegrationProviderError(
+          "You don't have permission to manage integrations.",
+          message,
+          false,
+          403
+        )
+      }
+      throw error
+    }
   }
 
   async oauthCallback(

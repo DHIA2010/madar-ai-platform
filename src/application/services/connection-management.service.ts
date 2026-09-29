@@ -1,6 +1,7 @@
 import type {
   AuthorizeConnectorRequestDto,
   Connection,
+  ConnectProviderDirectRequestDto,
   DeleteConnectionRequestDto,
   CreateConnectionRequestDto,
   DisconnectConnectionRequestDto,
@@ -343,6 +344,29 @@ export class ConnectionManager {
 
     this.setState(validated, "connected")
     return validated
+  }
+
+  // Combines createConnection + connect into one call for providers that support a direct
+  // (non-OAuth) credential -- there's no draft/redirect step, the backend validates the
+  // credential against the provider's own API and persists it already "connected" in one round
+  // trip, so this goes straight to the same bookkeeping createConnection+connect would leave
+  // behind.
+  async connectProviderDirect(input: ConnectProviderDirectRequestDto): Promise<Connection> {
+    if (!this.integrationGateway.connectProviderDirect) {
+      throw new Error("This connector doesn't support direct credential connections.")
+    }
+
+    const connection = await this.integrationGateway.connectProviderDirect(input)
+
+    this.registerConnector(connection)
+    this.setState(connection, "connected")
+    this.ensureHealth(connection.connectionId)
+    this.ensureScheduler(connection.connectionId)
+
+    this.pushHistory(connection.connectionId, "connection_created", "Connection created")
+    this.pushHistory(connection.connectionId, "connected", "Connection authorized and connected")
+
+    return connection
   }
 
   async selectAccount(input: SelectAccountRequestDto): Promise<void> {

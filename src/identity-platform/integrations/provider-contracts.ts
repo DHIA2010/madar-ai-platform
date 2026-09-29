@@ -87,6 +87,18 @@ export interface IntegrationProviderOAuthCallbackInput {
   code: string
 }
 
+// Merchant-supplied credential (a store id + a pre-issued access token from the provider's own
+// dashboard), for providers that support connecting without going through the OAuth
+// authorization-code redirect -- e.g. Zid's "Direct API Integration", useful before an OAuth
+// app has been approved for public installs.
+export interface IntegrationProviderDirectConnectInput {
+  workspaceId?: string | null
+  projectId?: string | null
+  connectionName?: string | null
+  storeId: string
+  accessToken: string
+}
+
 export interface IntegrationProviderOAuthControllerResult {
   status: number
   headers: Record<string, string>
@@ -153,6 +165,10 @@ export interface IntegrationProvider {
   oauthStart?(
     actor: AuthenticatedActor,
     input: IntegrationProviderOAuthStartInput
+  ): Promise<unknown>
+  connectDirect?(
+    actor: AuthenticatedActor,
+    input: IntegrationProviderDirectConnectInput
   ): Promise<unknown>
   oauthCallback?(
     request: IncomingMessage,

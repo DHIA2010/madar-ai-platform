@@ -64,6 +64,19 @@ export class ZidOAuthController {
     return this.service.startAuthorization(actor, input)
   }
 
+  async connectDirect(
+    actor: AuthenticatedActor,
+    input: {
+      workspaceId?: string | null
+      projectId?: string | null
+      connectionName?: string | null
+      storeId: string
+      accessToken: string
+    }
+  ) {
+    return this.service.connectDirect(actor, input)
+  }
+
   async getActiveConnection(actor: AuthenticatedActor) {
     return this.service.getActiveConnection(actor)
   }

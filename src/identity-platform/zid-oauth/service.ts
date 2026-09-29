@@ -726,6 +726,134 @@ export class ZidOAuthService {
     }
   }
 
+  // Connects a store using a merchant-supplied access token (Zid's "Direct API Integration",
+  // issued from the merchant's own Zid dashboard) instead of the OAuth authorization-code
+  // redirect -- useful before MADAR's Zid app has been approved for public OAuth installs, since
+  // a merchant can issue this token for their own store without any app review. There is no
+  // refresh token for this credential (upsertConnection below stores encryptedRefreshToken as
+  // null); resolveAccessToken's direct-token branch returns it as-is rather than attempting a
+  // refresh_token grant that this credential was never issued for.
+  async connectDirect(
+    actor: AuthenticatedActor,
+    input: {
+      workspaceId?: string | null
+      projectId?: string | null
+      connectionName?: string | null
+      storeId: string
+      accessToken: string
+    }
+  ): Promise<ZidOAuthCallbackResult> {
+    assertActorCanManageIntegrations(actor)
+    const config = await this.loadResolvedConfig()
+
+    const accessToken = input.accessToken.trim()
+    if (accessToken.length === 0) {
+      throw new Error("ZID_DIRECT_TOKEN_MISSING")
+    }
+
+    let store: Awaited<ReturnType<typeof fetchStoreInfo>>
+    try {
+      store = await fetchStoreInfo(config, { access_token: accessToken })
+    } catch {
+      // fetchStoreInfo already logs the real status/body -- surface a distinct, actionable
+      // reason here rather than the OAuth-flow's generic account-discovery error code, since the
+      // fix for this one is "check the token pasted in from Zid's dashboard", not "reconnect".
+      throw new Error("ZID_DIRECT_TOKEN_INVALID")
+    }
+
+    const resolvedProject = await this.repository.resolveProject({
+      organizationId: actor.organizationId,
+      workspaceId: input.workspaceId ?? actor.workspaceId ?? null,
+      projectId: input.projectId ?? null,
+    })
+
+    const existingConnection = await this.repository.findConnectionByProject(
+      actor.organizationId,
+      resolvedProject.projectId
+    )
+    const connectionId = existingConnection?.id ?? randomUUID()
+    const now = new Date().toISOString()
+
+    const discoveredAccounts = [
+      {
+        customerId: String(store.id),
+        displayName: store.name ?? null,
+        currencyCode: store.currency ?? null,
+        timeZone: store.timezone ?? null,
+        organizationId: null,
+        organizationName: null,
+        status: "active" as const,
+      },
+    ]
+    const primaryAccount = discoveredAccounts[0]
+
+    await this.repository.withTransaction(async () => {
+      await this.repository.upsertConnection({
+        id: connectionId,
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        dataSourceId: null,
+        providerAccountId: primaryAccount.customerId,
+        providerAccountName: primaryAccount.displayName ?? "Zid Store",
+        providerAccountEmail: null,
+        storeDomain: normalizeDomain(store.url),
+        storeUuid: store.uuid ?? null,
+        // No refresh token for a directly-issued access token -- this is the signal
+        // resolveAccessToken uses to skip the refresh_token grant entirely for this connection.
+        encryptedRefreshToken: null,
+        encryptedAccessToken: encryptSecret(accessToken, config.tokenEncryptionKey),
+        encryptedAuthorizationToken: null,
+        scopes: config.scopes,
+        // Zid's Direct API Integration token carries no expiry info -- treated as long-lived
+        // until the merchant rotates or revokes it from their own dashboard.
+        tokenExpiresAt: null,
+        status: "connected",
+        connectionReference: input.connectionName ?? primaryAccount.displayName ?? null,
+        lastConnectedAt: now,
+        lastDisconnectedAt: null,
+        actorUserId: actor.userId,
+        nowIso: now,
+      })
+
+      await this.repository.replaceAccessibleCustomerAccounts({
+        connectionId,
+        actorUserId: actor.userId,
+        selectedCustomerId: primaryAccount.customerId,
+        accounts: discoveredAccounts,
+      })
+
+      await this.recordLifecycle(
+        {
+          eventType: "zid.oauth.authorization.completed",
+          aggregateId: connectionId,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: resolvedProject.workspaceId,
+          projectId: resolvedProject.projectId,
+          occurredAt: now,
+          payload: {
+            accountId: primaryAccount.customerId,
+            accountName: primaryAccount.displayName,
+            source: "direct_token",
+          },
+        },
+        "integration.zid_oauth.connected"
+      )
+    })
+
+    return {
+      connectionId,
+      projectId: resolvedProject.projectId,
+      workspaceId: resolvedProject.workspaceId,
+      organizationId: actor.organizationId,
+      accountName: primaryAccount.displayName ?? "Zid Store",
+      accountEmail: null,
+      connectedAt: now,
+      status: "connected",
+    }
+  }
+
   // Marketplace-initiated install: Zid redirected a merchant here directly from its own App
   // Market (no `state`, since MADAR never called startAuthorization -- the merchant may not
   // even have a MADAR account yet). Exchanges the code and stores the result unclaimed; there
@@ -990,12 +1118,23 @@ export class ZidOAuthService {
     const config = await this.loadResolvedConfig()
 
     const tokenMaterial = await this.repository.getRawTokenMaterial(connectionId)
-    if (
-      !tokenMaterial ||
-      !tokenMaterial.encryptedAccessToken ||
-      !tokenMaterial.encryptedRefreshToken
-    ) {
+    if (!tokenMaterial || !tokenMaterial.encryptedAccessToken) {
       throw new Error("ZID_OAUTH_CONNECTION_NOT_READY")
+    }
+
+    // A direct connection (connectDirect, Zid's Direct API Integration) has no refresh token by
+    // design -- it's a single merchant-issued credential with no OAuth refresh_token grant behind
+    // it, so there's nothing to refresh and no expiry to check against. Decrypt and return it
+    // as-is, same shape as the pre-expiry OAuth branch below.
+    if (!tokenMaterial.encryptedRefreshToken) {
+      const accessToken = decryptSecret(
+        tokenMaterial.encryptedAccessToken,
+        config.tokenEncryptionKey
+      )
+      return {
+        accessToken,
+        authorizationHeader: buildAuthorizationHeader({ access_token: accessToken }),
+      }
     }
 
     if (tokenMaterial.tokenExpiresAt) {
