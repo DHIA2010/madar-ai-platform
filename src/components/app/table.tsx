@@ -98,6 +98,8 @@ export interface AppTablePaginationProps {
   className?: string
   pageLabel?: (page: number, isActive: boolean) => React.ReactNode
   siblingCount?: number
+  previousLabel?: React.ReactNode
+  nextLabel?: React.ReactNode
 }
 
 function getVisiblePages(page: number, totalPages: number, siblingCount: number) {
@@ -121,6 +123,8 @@ export function AppTablePagination({
   className,
   pageLabel,
   siblingCount = 1,
+  previousLabel = "Previous",
+  nextLabel = "Next",
 }: AppTablePaginationProps) {
   const pages = getVisiblePages(page, totalPages, siblingCount)
 
@@ -140,7 +144,7 @@ export function AppTablePagination({
             icon={<ChevronLeft className="size-4 rtl:rotate-180" />}
             iconPosition="start"
           >
-            Previous
+            {previousLabel}
           </AppButton>
         </PaginationItem>
 
@@ -180,7 +184,7 @@ export function AppTablePagination({
             icon={<ChevronRight className="size-4 rtl:rotate-180" />}
             iconPosition="end"
           >
-            Next
+            {nextLabel}
           </AppButton>
         </PaginationItem>
       </PaginationContent>
