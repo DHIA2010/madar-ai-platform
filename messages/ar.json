@@ -30,6 +30,7 @@
   "sidebar": {
     "nav": {
       "home": "الرئيسية",
+      "applications": "التطبيقات",
       "channels": "القنوات",
       "campaigns": "الحملات",
       "linkBuilder": "منشئ الروابط",

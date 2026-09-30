@@ -30,6 +30,7 @@
   "sidebar": {
     "nav": {
       "home": "Home",
+      "applications": "Applications",
       "channels": "Channels",
       "campaigns": "Campaigns",
       "linkBuilder": "Link Builder",

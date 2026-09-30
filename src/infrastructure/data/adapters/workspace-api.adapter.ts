@@ -55,6 +55,17 @@ const SETTINGS_BOOLEAN_KEYS = [
   "taxPricesIncludeTax",
 ] as const
 
+// Application-activation flags default to `false` (not `undefined` like the boolean keys above)
+// when absent from organizations.settings -- every organization starts with every application
+// inactive, and the sidebar/Integrations filtering logic needs a real boolean to check, not a
+// possibly-missing one.
+const APPLICATION_BOOLEAN_KEYS = [
+  "advertisingEnabled",
+  "ecommerceEnabled",
+  "posEnabled",
+  "madarAppsEnabled",
+] as const
+
 function toOrganizationSettingsDto(
   raw: Record<string, unknown> | undefined
 ): OrganizationSettingsDto {
@@ -65,6 +76,9 @@ function toOrganizationSettingsDto(
   }
   for (const key of SETTINGS_BOOLEAN_KEYS) {
     mapped[key] = typeof settings[key] === "boolean" ? (settings[key] as boolean) : undefined
+  }
+  for (const key of APPLICATION_BOOLEAN_KEYS) {
+    mapped[key] = typeof settings[key] === "boolean" ? (settings[key] as boolean) : false
   }
   return mapped as OrganizationSettingsDto
 }

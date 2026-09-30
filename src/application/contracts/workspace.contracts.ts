@@ -45,6 +45,14 @@ export interface OrganizationSettingsDto {
   // AddProduct.tsx) so a merchant who genuinely sells some products gross and some net can decide
   // case by case, rather than being forced into one blanket rule for every new product.
   taxPriceEntryMode?: "auto" | "manual"
+  // Which of the 4 top-level applications (see src/features/applications) this organization has
+  // activated -- drives which sidebar nav items show and which Integrations categories appear.
+  // Same opaque organizations.settings jsonb storage as everything else here; absent means
+  // inactive (a brand-new organization starts with none of these set).
+  advertisingEnabled?: boolean
+  ecommerceEnabled?: boolean
+  posEnabled?: boolean
+  madarAppsEnabled?: boolean
 }
 
 export interface OrganizationDto {

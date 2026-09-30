@@ -60,6 +60,13 @@ vi.mock("@/features/workspace", () => ({
         dateFormat: "dd/MM/yyyy",
       },
     },
+    // Both applications active so this suite -- which exercises both the "متاجر إلكترونية"
+    // (Salla/Zid) and Marketing (Google Ads/TikTok Ads) connectors -- keeps seeing every category
+    // regardless of the new application-activation gating in new-connection-wizard.tsx.
+    currentOrganization: {
+      id: "org_1",
+      settings: { advertisingEnabled: true, ecommerceEnabled: true },
+    },
   }),
   WorkspaceSelector: () => null,
 }))

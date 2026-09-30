@@ -353,4 +353,72 @@ describe("organization platform", () => {
     )
     expect(revoked.moduleAccessRevoked).toBe(true)
   })
+
+  // Application activation (src/features/applications) has no dedicated command -- it's just
+  // updateOrganization's free-form settings, gated the same way every other settings:edit change
+  // is. This confirms the merge behavior new frontend code depends on (flipping one application
+  // flag doesn't clobber an unrelated settings key set earlier) and that the existing
+  // settings:edit gate really does block a member with no permissions from flipping it.
+  it("persists application-activation flags through updateOrganization's settings, merged with existing keys and gated on settings:edit", async () => {
+    const container = createContainer()
+    const owner = await registerAndLogin(container, "app-activation-owner@madar.test")
+    const organization = await container.commands.createOrganization(
+      owner.actor,
+      { name: "Activation Org" },
+      context
+    )
+
+    const restrictiveRole = await container.commands.createCustomRole(
+      owner.actor,
+      { organizationId: organization.id, name: "No Access", permissions: [] },
+      context
+    )
+    const member = await registerAndLogin(container, "app-activation-member@madar.test")
+    const invitation = await container.commands.inviteMember(
+      owner.actor,
+      {
+        organizationId: organization.id,
+        email: "app-activation-member@madar.test",
+        role: "viewer",
+        idempotencyKey: "invite-activation-member",
+      },
+      context
+    )
+    await container.commands.acceptInvitation(member.actor, { token: invitation.token }, context)
+    await container.commands.assignMemberCustomRole(
+      owner.actor,
+      {
+        organizationId: organization.id,
+        memberUserId: member.actor.userId,
+        customRoleId: restrictiveRole.id,
+      },
+      context
+    )
+
+    await expect(
+      container.commands.updateOrganization(
+        member.actor,
+        organization.id,
+        { settings: { ecommerceEnabled: true } },
+        context
+      )
+    ).rejects.toThrow()
+
+    await container.commands.updateOrganization(
+      owner.actor,
+      organization.id,
+      { settings: { storeName: "متجر الاختبار" } },
+      context
+    )
+    const updated = await container.commands.updateOrganization(
+      owner.actor,
+      organization.id,
+      { settings: { ecommerceEnabled: true, posEnabled: true } },
+      context
+    )
+
+    expect(updated.settings.ecommerceEnabled).toBe(true)
+    expect(updated.settings.posEnabled).toBe(true)
+    expect(updated.settings.storeName).toBe("متجر الاختبار")
+  })
 })

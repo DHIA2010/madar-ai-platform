@@ -53,6 +53,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton, AppCard, AppContainer, AppInput, AppPage, AppSection } from "@/components/app"
 
+import { APPLICATION_SETTINGS_KEY } from "@/features/applications"
 import { useWorkspace, WorkspaceSelector } from "@/features/workspace"
 
 import { useConnectionsCenter } from "../hooks"
@@ -878,7 +879,7 @@ export function NewConnectionWizard() {
   const router = useRouter()
   const { refetch } = useConnectionsCenter()
   const { connectionManager, integrationApplicationService } = useApplicationServices()
-  const { currentWorkspace } = useWorkspace()
+  const { currentWorkspace, currentOrganization } = useWorkspace()
 
   const [stepIndex, setStepIndex] = useState<WizardStep>(0)
   const [selectedCategory, setSelectedCategory] = useState<PlatformCategory>("All")
@@ -925,13 +926,37 @@ export function NewConnectionWizard() {
     ? PLATFORM_DETAILS[selectedConnector.displayName]
     : undefined
 
+  // "Ecommerce"/"Marketing" only show once the matching application is active; "All"/"Analytics"
+  // have no 1:1 application mapping (no `pos` category exists here today) and stay always
+  // available. Mirrors the sidebar's own application-gating in app-sidebar.tsx.
+  const visibleCategories = useMemo(() => {
+    const settings = currentOrganization?.settings
+    const advertisingActive = Boolean(settings?.[APPLICATION_SETTINGS_KEY.advertising])
+    const ecommerceActive = Boolean(settings?.[APPLICATION_SETTINGS_KEY.ecommerce])
+    return PLATFORM_CATEGORIES.filter((category) => {
+      if (category === "Ecommerce") return ecommerceActive
+      if (category === "Marketing") return advertisingActive
+      return true
+    })
+  }, [currentOrganization?.settings])
+
+  // If the active application backing the currently-selected category gets deactivated while the
+  // wizard is open, fall back to "All" rather than leaving the pill row on a hidden category.
+  useEffect(() => {
+    if (!visibleCategories.includes(selectedCategory)) {
+      setSelectedCategory("All")
+    }
+  }, [visibleCategories, selectedCategory])
+
   const filteredConnectors = useMemo(() => {
     const query = platformSearch.trim().toLowerCase()
 
     return CONNECTOR_CATALOG.filter((connector) => {
+      const connectorCategory = getCategoryForConnector(connector.displayName)
       const matchesCategory =
-        selectedCategory === "All" ||
-        getCategoryForConnector(connector.displayName) === selectedCategory
+        selectedCategory === "All"
+          ? visibleCategories.includes(connectorCategory)
+          : connectorCategory === selectedCategory
 
       if (!matchesCategory) {
         return false
@@ -948,7 +973,7 @@ export function NewConnectionWizard() {
         connector.displayName.toLowerCase().includes(query) || arabicDescription.includes(query)
       )
     })
-  }, [platformSearch, selectedCategory])
+  }, [platformSearch, selectedCategory, visibleCategories])
 
   const availableAccounts = useMemo(() => {
     if (!selectedConnector) {
@@ -1703,7 +1728,7 @@ export function NewConnectionWizard() {
       {/* RTL: the chips are written first so they land on the right, search on the left. */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap gap-2">
-          {PLATFORM_CATEGORIES.map((category) => (
+          {visibleCategories.map((category) => (
             <button
               key={category}
               type="button"

@@ -55,6 +55,13 @@ export interface OrganizationSettings {
   // convention. "manual" shows a per-product dropdown on the Add Product form instead, so a
   // merchant who genuinely sells some products gross and some net can decide case by case.
   taxPriceEntryMode?: "auto" | "manual"
+  // Which of the 4 top-level applications (see src/features/applications) this organization has
+  // activated -- see OrganizationSettingsDto in @/application/contracts/workspace.contracts for
+  // the backend-facing equivalent. Absent means inactive.
+  advertisingEnabled?: boolean
+  ecommerceEnabled?: boolean
+  posEnabled?: boolean
+  madarAppsEnabled?: boolean
 }
 
 export interface Organization {

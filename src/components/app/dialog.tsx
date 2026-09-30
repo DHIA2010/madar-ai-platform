@@ -85,6 +85,11 @@ export interface AppConfirmDialogProps extends Omit<
   onConfirm: () => void | Promise<void>
   onCancel?: () => void
   children?: React.ReactNode
+  // Lets a caller apply a one-off accent (e.g. a specific app's brand color) to the confirm
+  // button without inventing a new confirmTone per accent -- twMerge resolves the overlap with
+  // the variant's own bg/text classes.
+  confirmButtonClassName?: string
+  cancelButtonClassName?: string
 }
 
 export function AppConfirmDialog({
@@ -97,6 +102,8 @@ export function AppConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  confirmButtonClassName,
+  cancelButtonClassName,
   ...props
 }: AppConfirmDialogProps) {
   return (
@@ -105,13 +112,19 @@ export function AppConfirmDialog({
       description={description}
       footer={
         <>
-          <AppButton variant="outline" onClick={onCancel} disabled={loading}>
+          <AppButton
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+            className={cancelButtonClassName}
+          >
             {cancelLabel}
           </AppButton>
           <AppButton
             variant={confirmTone === "destructive" ? "destructive" : "default"}
             loading={loading}
             onClick={onConfirm}
+            className={confirmButtonClassName}
           >
             {confirmLabel}
           </AppButton>

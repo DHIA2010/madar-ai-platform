@@ -10,7 +10,9 @@ import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { NavMain } from "@/components/nav-main"
 import { SettingsHelpCard } from "@/components/settings-help-card"
+import { APPLICATION_SETTINGS_KEY, type ApplicationCategoryId } from "@/features/applications"
 import { usePermissions } from "@/features/authentication"
+import { useWorkspace } from "@/features/workspace"
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +23,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import {
+  Blocks,
   ChartNoAxesCombined,
   CircleUserRound,
   ClipboardList,
@@ -53,6 +56,14 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const dir = localeDirection(locale)
   const t = useTranslations("sidebar.nav")
   const { can } = usePermissions()
+  const { currentOrganization } = useWorkspace()
+
+  // Which of the 4 applications (see src/features/applications) this organization has activated
+  // -- a brand-new org has none active, so only items with no `applications` field (core/platform
+  // pages) show until something is activated from /marketplace.
+  const activeApplications = (
+    Object.keys(APPLICATION_SETTINGS_KEY) as ApplicationCategoryId[]
+  ).filter((app) => Boolean(currentOrganization?.settings?.[APPLICATION_SETTINGS_KEY[app]]))
 
   const navMain = [
     {
@@ -62,6 +73,10 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       isActive: true,
       permission: "dashboard:view",
     },
+    // No permission key: unlike every other module here, there's no real "applications:view"
+    // entry in the IAM permission taxonomy yet. Always visible, same as "settings" below -- it's
+    // the page you go to in order to activate everything else.
+    { title: t("applications"), url: ROUTES.marketplace, icon: <Blocks /> },
     {
       title: t("liveVisitors"),
       url: ROUTES.liveVisitors,
@@ -69,39 +84,103 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       // Same permission the underlying GET /v1/tracking/live-dashboard enforces -- hiding the
       // nav entry from someone the API would reject anyway.
       permission: "liveVisitors:view",
+      applications: ["ecommerce"],
     },
-    { title: t("channels"), url: "/channels", icon: <Tv />, permission: "campaigns:view" },
-    { title: t("campaigns"), url: "/campaigns", icon: <SendIcon />, permission: "campaigns:view" },
+    {
+      title: t("channels"),
+      url: "/channels",
+      icon: <Tv />,
+      permission: "campaigns:view",
+      applications: ["advertising"],
+    },
+    {
+      title: t("campaigns"),
+      url: "/campaigns",
+      icon: <SendIcon />,
+      permission: "campaigns:view",
+      applications: ["advertising"],
+    },
     {
       title: t("linkBuilder"),
       url: ROUTES.campaignLinks,
       icon: <Link2 />,
       permission: "campaigns:view",
+      applications: ["advertising"],
     },
-    { title: t("stores"), url: "/stores", icon: <ShoppingBag />, permission: "stores:view" },
-    { title: t("products"), url: "/products", icon: <Grid2x2 />, permission: "products:view" },
-    { title: t("orders"), url: ROUTES.orders, icon: <ClipboardList />, permission: "orders:view" },
-    { title: t("pos"), url: ROUTES.pos, icon: <CreditCard />, permission: "pos:view" },
-    { title: t("invoices"), url: ROUTES.invoices, icon: <FileText />, permission: "pos:view" },
-    { title: t("shifts"), url: ROUTES.shifts, icon: <Clock />, permission: "pos:view" },
+    {
+      title: t("stores"),
+      url: "/stores",
+      icon: <ShoppingBag />,
+      permission: "stores:view",
+      applications: ["ecommerce"],
+    },
+    // Shared: a merchant running only POS (no online store) still needs Products, and an
+    // ecommerce-only merchant needs Invoices too -- neither belongs to exactly one application.
+    {
+      title: t("products"),
+      url: "/products",
+      icon: <Grid2x2 />,
+      permission: "products:view",
+      applications: ["ecommerce", "pos"],
+    },
+    {
+      title: t("orders"),
+      url: ROUTES.orders,
+      icon: <ClipboardList />,
+      permission: "orders:view",
+      applications: ["ecommerce"],
+    },
+    {
+      title: t("pos"),
+      url: ROUTES.pos,
+      icon: <CreditCard />,
+      permission: "pos:view",
+      applications: ["pos"],
+    },
+    {
+      title: t("invoices"),
+      url: ROUTES.invoices,
+      icon: <FileText />,
+      permission: "pos:view",
+      applications: ["ecommerce", "pos"],
+    },
+    {
+      title: t("shifts"),
+      url: ROUTES.shifts,
+      icon: <Clock />,
+      permission: "pos:view",
+      applications: ["pos"],
+    },
     {
       title: t("customers"),
       url: "/customers",
       icon: <CircleUserRound />,
       permission: "customers:view",
+      applications: ["ecommerce", "pos"],
     },
+    // Reports/AI/Integrations are cross-cutting utility pages, not owned by a single application
+    // -- visible once ANY application is active (the `.some()` filter below naturally treats a
+    // 4-item `applications` list as "any of these").
     {
       title: t("reports"),
       url: "/reports",
       icon: <ChartNoAxesCombined />,
       permission: "reports:view",
+      applications: ["advertising", "ecommerce", "pos", "madarApps"],
     },
-    { title: t("ai"), url: "/ai", icon: <Gauge />, permission: "ai:view" },
+    {
+      title: t("ai"),
+      url: "/ai",
+      icon: <Gauge />,
+      permission: "ai:view",
+      applications: ["advertising", "ecommerce", "pos", "madarApps"],
+    },
     {
       title: t("integrations"),
       url: "/integrations",
       icon: <LayoutGrid />,
       permission: "connections:view",
+      applications: ["advertising", "ecommerce", "pos", "madarApps"],
     },
     {
       title: t("administration"),
@@ -112,7 +191,13 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     // No sub-items: the settings screens carry their own section rail beside the content, and
     // duplicating it here gave two navigations for the same set of pages.
     { title: t("settings"), url: ROUTES.settings, icon: <Settings2 /> },
-  ].filter((item) => !item.permission || can(item.permission))
+  ]
+    .filter((item) => !item.permission || can(item.permission))
+    .filter(
+      (item) =>
+        !item.applications ||
+        item.applications.some((app) => activeApplications.includes(app as ApplicationCategoryId))
+    )
 
   return (
     <div onMouseEnter={() => onHoverChange?.(true)} onMouseLeave={() => onHoverChange?.(false)}>
