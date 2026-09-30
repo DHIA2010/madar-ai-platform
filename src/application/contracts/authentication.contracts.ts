@@ -11,6 +11,9 @@ export interface AuthUserDto {
   }>
   permissions: string[]
   modulePermissions: string[]
+  // Madar's own staff (see platformAdminEmails backend config) -- gates the internal Madar Admin
+  // console, unrelated to any organization's own permission taxonomy above.
+  isPlatformAdmin: boolean
 }
 
 export interface UpdateProfileRequestDto {

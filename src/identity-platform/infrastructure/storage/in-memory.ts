@@ -12,6 +12,7 @@ import type {
   OrganizationRepository,
   PasswordResetRepository,
   SessionRepository,
+  SubscriptionActivationRequestRepository,
   TeamListItem,
   TeamMemberListItem,
   TeamRepository,
@@ -27,6 +28,7 @@ import type {
   OrganizationState,
   PasswordResetState,
   SessionState,
+  SubscriptionActivationRequestState,
   TeamMemberState,
   TeamState,
   UserState,
@@ -43,6 +45,7 @@ export interface InMemoryIdentityDataStore {
   emailVerifications: Map<string, EmailVerificationState>
   passwordResets: Map<string, PasswordResetState>
   invitations: Map<string, InvitationState>
+  subscriptionActivationRequests: Map<string, SubscriptionActivationRequestState>
   auditLogs: AuditLogState[]
   teams: Map<string, TeamState>
   teamMembers: TeamMemberState[]
@@ -61,6 +64,7 @@ export function createInMemoryIdentityDataStore(): InMemoryIdentityDataStore {
     emailVerifications: new Map(),
     passwordResets: new Map(),
     invitations: new Map(),
+    subscriptionActivationRequests: new Map(),
     auditLogs: [],
     teams: new Map(),
     teamMembers: [],
@@ -299,6 +303,38 @@ class InMemoryInvitationRepository implements InvitationRepository {
   }
 }
 
+class InMemorySubscriptionActivationRequestRepository implements SubscriptionActivationRequestRepository {
+  constructor(private readonly store: InMemoryIdentityDataStore) {}
+  async findById(id: string) {
+    return this.store.subscriptionActivationRequests.get(id) ?? null
+  }
+  async findPendingByOrganizationAndApplication(organizationId: string, application: string) {
+    for (const request of this.store.subscriptionActivationRequests.values()) {
+      if (
+        request.organizationId === organizationId &&
+        request.application === application &&
+        request.status === "pending"
+      ) {
+        return request
+      }
+    }
+    return null
+  }
+  async listByOrganizationId(organizationId: string) {
+    return [...this.store.subscriptionActivationRequests.values()]
+      .filter((request) => request.organizationId === organizationId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  }
+  async listAll(input: { status?: SubscriptionActivationRequestState["status"] } = {}) {
+    return [...this.store.subscriptionActivationRequests.values()]
+      .filter((request) => (input.status ? request.status === input.status : true))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  }
+  async save(entry: SubscriptionActivationRequestState) {
+    this.store.subscriptionActivationRequests.set(entry.id, { ...entry })
+  }
+}
+
 class InMemoryAuditLogRepository implements AuditLogRepository {
   constructor(private readonly store: InMemoryIdentityDataStore) {}
   async append(entry: AuditLogState) {
@@ -469,6 +505,7 @@ export function createInMemoryRepositories(
     emailVerifications: new InMemoryEmailVerificationRepository(store),
     passwordResets: new InMemoryPasswordResetRepository(store),
     invitations: new InMemoryInvitationRepository(store),
+    subscriptionActivationRequests: new InMemorySubscriptionActivationRequestRepository(store),
     auditLogs: new InMemoryAuditLogRepository(store),
     teams: new InMemoryTeamRepository(store),
     customRoles: new InMemoryCustomRoleRepository(store),

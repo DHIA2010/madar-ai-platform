@@ -2,6 +2,8 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  SubscriptionActivationRequestDto,
+  SubscriptionRequestStatus,
   WorkspaceContextViewModel,
   WorkspaceDto,
   WorkspaceGateway,
@@ -76,6 +78,43 @@ export class WorkspaceApplicationService {
 
   getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto> {
     return this.gateway.getConnectedPlatformsCount(organizationId)
+  }
+
+  requestApplicationActivation(
+    organizationId: string,
+    payload: {
+      application: SubscriptionActivationRequestDto["application"]
+      planTier: SubscriptionActivationRequestDto["planTier"]
+      attachmentContentType: string
+      attachmentDataBase64: string
+    }
+  ): Promise<SubscriptionActivationRequestDto> {
+    return this.gateway.requestApplicationActivation(organizationId, payload)
+  }
+
+  listMyOrganizationSubscriptionRequests(
+    organizationId: string
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    return this.gateway.listMyOrganizationSubscriptionRequests(organizationId)
+  }
+
+  listAllSubscriptionActivationRequests(
+    status?: SubscriptionRequestStatus
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    return this.gateway.listAllSubscriptionActivationRequests(status)
+  }
+
+  approveSubscriptionActivationRequest(
+    requestId: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    return this.gateway.approveSubscriptionActivationRequest(requestId)
+  }
+
+  rejectSubscriptionActivationRequest(
+    requestId: string,
+    reason: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    return this.gateway.rejectSubscriptionActivationRequest(requestId, reason)
   }
 
   archiveOrganization(organizationId: string): Promise<OrganizationDto> {

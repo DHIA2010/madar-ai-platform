@@ -11,6 +11,7 @@ import {
   HeartPulse,
   History,
   House,
+  Inbox,
   Layers,
   LayoutGrid,
   Settings2,
@@ -49,6 +50,7 @@ type MadarAdminSidebarProps = React.ComponentProps<typeof Sidebar> & {
 export function MadarAdminSidebar({ onHoverChange, ...props }: MadarAdminSidebarProps) {
   const groupOne = [
     { title: "الرئيسية", url: ROUTES.madarAdmin, icon: <House /> },
+    { title: "طلبات الاشتراك", url: ROUTES.madarAdminRequests, icon: <Inbox /> },
     { title: "العملاء", url: ROUTES.madarAdminCustomers, icon: <Users /> },
     { title: "المتاجر", url: ROUTES.madarAdminStores, icon: <ShoppingBag /> },
     { title: "الاشتراكات", url: ROUTES.madarAdminSubscriptions, icon: <CalendarClock /> },

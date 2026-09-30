@@ -95,7 +95,7 @@ export function ActivationConfirmDialog({
       confirmButtonClassName={cn(
         "h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm",
         isDeactivate
-          ? "border border-[#e1e7f0] bg-white text-[#c2410c] hover:bg-[#fff2e8]"
+          ? "border border-[#e1e7f0] bg-white text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
           : target?.confirmButtonClassName
       )}
       cancelButtonClassName="h-12 flex-1 rounded-[10px] border-[#e1e7f0] text-[14px] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"

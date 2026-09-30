@@ -32,6 +32,10 @@ export interface IdentityPlatformConfig {
   objectStorageAccessKeyId?: string
   objectStorageSecretAccessKey?: string
   objectStorageRegion?: string
+  // Madar's own staff, identified by email -- checked once per request in
+  // resolveActorFromAccessToken and cached on the resolved actor as isPlatformAdmin. No
+  // per-user DB flag or admin UI yet; add/remove staff by redeploying with a new value.
+  platformAdminEmails: string[]
 }
 
 const configSchema = z.object({
@@ -66,6 +70,7 @@ const configSchema = z.object({
   objectStorageAccessKeyId: z.string().optional(),
   objectStorageSecretAccessKey: z.string().optional(),
   objectStorageRegion: z.string().optional(),
+  platformAdminEmails: z.array(z.string().email()),
 })
 
 export function loadIdentityPlatformConfig(
@@ -157,5 +162,12 @@ export function loadIdentityPlatformConfig(
     objectStorageSecretAccessKey:
       overrides.objectStorageSecretAccessKey ?? process.env.MINIO_SECRET_KEY,
     objectStorageRegion: overrides.objectStorageRegion ?? process.env.MINIO_REGION,
+    platformAdminEmails:
+      overrides.platformAdminEmails ??
+      (process.env.PLATFORM_ADMIN_EMAILS
+        ? process.env.PLATFORM_ADMIN_EMAILS.split(",")
+            .map((email) => email.trim().toLowerCase())
+            .filter(Boolean)
+        : []),
   })
 }

@@ -4,6 +4,8 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  SubscriptionActivationRequestDto,
+  SubscriptionRequestStatus,
   WorkspaceDto,
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
@@ -222,6 +224,88 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
       }
 
       return await this.adapter.getConnectedPlatformsCount(organizationId)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async requestApplicationActivation(
+    organizationId: string,
+    payload: {
+      application: SubscriptionActivationRequestDto["application"]
+      planTier: SubscriptionActivationRequestDto["planTier"]
+      attachmentContentType: string
+      attachmentDataBase64: string
+    }
+  ): Promise<SubscriptionActivationRequestDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        return await mockGateway.requestApplicationActivation(organizationId, payload)
+      }
+
+      return await this.adapter.requestApplicationActivation(organizationId, payload)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async listMyOrganizationSubscriptionRequests(
+    organizationId: string
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        return await mockGateway.listMyOrganizationSubscriptionRequests(organizationId)
+      }
+
+      return await this.adapter.listMyOrganizationSubscriptionRequests(organizationId)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async listAllSubscriptionActivationRequests(
+    status?: SubscriptionRequestStatus
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        return await mockGateway.listAllSubscriptionActivationRequests(status)
+      }
+
+      return await this.adapter.listAllSubscriptionActivationRequests(status)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async approveSubscriptionActivationRequest(
+    requestId: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        return await mockGateway.approveSubscriptionActivationRequest(requestId)
+      }
+
+      return await this.adapter.approveSubscriptionActivationRequest(requestId)
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async rejectSubscriptionActivationRequest(
+    requestId: string,
+    reason: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        return await mockGateway.rejectSubscriptionActivationRequest(requestId, reason)
+      }
+
+      return await this.adapter.rejectSubscriptionActivationRequest(requestId, reason)
     } catch (error) {
       throw mapRepositoryError(error)
     }

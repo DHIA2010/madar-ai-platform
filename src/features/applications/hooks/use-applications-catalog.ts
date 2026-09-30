@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useWorkspace } from "@/features/workspace"
 
@@ -15,6 +15,11 @@ import type {
   ApplicationDefinition,
   ApplicationSubscriptionStatus,
 } from "../types"
+
+import type {
+  SubscriptionActivationRequestDto,
+  SubscriptionPlanTier,
+} from "@/application/contracts"
 
 export interface ApplicationCategoryTab {
   id: ApplicationCategoryId | "all"
@@ -31,25 +36,48 @@ const CATEGORY_LABELS: Record<ApplicationCategoryId, string> = {
 
 const CATEGORY_ORDER: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
 
-// Activation now persists on the organization (organizations.settings.<app>Enabled, see
-// APPLICATION_SETTINGS_KEY) instead of living in local component state -- every
-// activate/deactivate call below is a real updateOrganization request, and reloading the page
-// reflects the same state because it's read straight from useWorkspace().currentOrganization.
+// Activating a paid application now submits a SubscriptionActivationRequestDto (tier + receipt)
+// instead of flipping organizations.settings directly -- only a Madar staff approval in the
+// internal admin console does that (see submitActivationRequest below). Deactivation stays
+// instant/self-service, same as before -- no approval needed to turn something off.
 export function useApplicationsCatalog() {
-  const { currentOrganization, updateOrganization } = useWorkspace()
+  const {
+    currentOrganization,
+    updateOrganization,
+    requestApplicationActivation,
+    listMyOrganizationSubscriptionRequests,
+  } = useWorkspace()
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState<ApplicationCategoryId | "all">("all")
   const [activatingId, setActivatingId] = useState<string | null>(null)
+  const [pendingRequests, setPendingRequests] = useState<SubscriptionActivationRequestDto[]>([])
+
+  const organizationId = currentOrganization?.id ?? null
+
+  const refetchPendingRequests = useCallback(async () => {
+    if (!organizationId) return
+    const requests = await listMyOrganizationSubscriptionRequests(organizationId)
+    setPendingRequests(requests.filter((request) => request.status === "pending"))
+  }, [organizationId, listMyOrganizationSubscriptionRequests])
+
+  useEffect(() => {
+    refetchPendingRequests()
+  }, [refetchPendingRequests])
+
+  const pendingApplications = useMemo(
+    () => new Set(pendingRequests.map((request) => request.application)),
+    [pendingRequests]
+  )
 
   const statusById = useMemo<Record<string, ApplicationSubscriptionStatus>>(() => {
     const settings = currentOrganization?.settings
     return Object.fromEntries(
       APPLICATION_CATALOG.map((application) => [
         application.id,
-        resolveApplicationStatus(application, settings),
+        resolveApplicationStatus(application, settings, pendingApplications),
       ])
     )
-  }, [currentOrganization?.settings])
+  }, [currentOrganization?.settings, pendingApplications])
 
   const searchMatchedApplications = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -91,7 +119,7 @@ export function useApplicationsCatalog() {
     )
   }, [activeCategory, searchMatchedApplications])
 
-  async function setApplicationActive(id: string, active: boolean) {
+  async function deactivateApplication(id: string) {
     if (!currentOrganization) return
     const application = APPLICATION_CATALOG.find((entry) => entry.id === id)
     if (!application) return
@@ -99,21 +127,40 @@ export function useApplicationsCatalog() {
     setActivatingId(id)
     try {
       await updateOrganization(currentOrganization.id, {
-        settings: { [APPLICATION_SETTINGS_KEY[application.category]]: active },
+        settings: { [APPLICATION_SETTINGS_KEY[application.category]]: false },
       })
     } finally {
       setActivatingId(null)
     }
   }
 
-  async function activateApplication(id: string) {
-    await setApplicationActive(id, true)
+  async function submitActivationRequest(input: {
+    applicationId: string
+    planTier: SubscriptionPlanTier
+    attachmentContentType: string
+    attachmentDataBase64: string
+  }) {
+    if (!currentOrganization) return
+    const application = APPLICATION_CATALOG.find((entry) => entry.id === input.applicationId)
+    if (!application) return
+
+    setActivatingId(input.applicationId)
+    try {
+      await requestApplicationActivation(currentOrganization.id, {
+        application: application.category,
+        planTier: input.planTier,
+        attachmentContentType: input.attachmentContentType,
+        attachmentDataBase64: input.attachmentDataBase64,
+      })
+      await refetchPendingRequests()
+    } finally {
+      setActivatingId(null)
+    }
   }
 
-  async function deactivateApplication(id: string) {
-    await setApplicationActive(id, false)
-  }
-
+  // مدار الكامل still activates all 4 instantly -- it's a distinct "buy everything" fast path
+  // that doesn't carry its own plan-tier concept the way an individual application's request
+  // does. Aligning it with the same request/approval flow is a follow-up, not part of this pass.
   async function activateAllApplications() {
     if (!currentOrganization) return
     setActivatingId(MADAR_COMPLETE_BUNDLE.id)
@@ -138,9 +185,12 @@ export function useApplicationsCatalog() {
     setActiveCategory,
     categoryTabs,
     visibleApplications,
+    // Exposed so a single-application view (the [appId] detail page) can resolve one
+    // application's live status without duplicating the settings+pending-request logic above.
+    statusById,
     bundle: MADAR_COMPLETE_BUNDLE,
-    activateApplication,
     deactivateApplication,
+    submitActivationRequest,
     activateAllApplications,
     activatingId,
   }

@@ -88,6 +88,7 @@ interface IdentitySessionResponse {
     status?: string
     emailVerifiedAt?: string | null
     modulePermissions?: string[]
+    isPlatformAdmin?: boolean
   }
   roles?: string[]
 }
@@ -99,6 +100,7 @@ interface IdentityProfileResponse {
   avatarUrl: string | null
   emailVerifiedAt?: string | null
   modulePermissions?: string[]
+  isPlatformAdmin?: boolean
 }
 
 function mapRoles(roles: string[] | undefined) {
@@ -125,6 +127,7 @@ function mapProfileResponse(response: IdentityProfileResponse): AuthUserDto {
     roles: [],
     permissions: [],
     modulePermissions: response.modulePermissions ?? [],
+    isPlatformAdmin: response.isPlatformAdmin ?? false,
   }
 }
 
@@ -163,6 +166,11 @@ export class AuthenticationApiAdapter {
         roles: mapRoles(["owner"]),
         permissions: mapPermissions(["owner"]),
         modulePermissions: response.user.modulePermissions ?? [],
+        // login() goes through issueSessionForMember, not getProfile -- it doesn't resolve the
+        // platformAdminEmails allowlist. Fine in practice: the very next session check (currentUser
+        // / getSession, which DOES go through getProfile) picks up the real value before anyone
+        // could reach a platform-admin-gated page anyway.
+        isPlatformAdmin: false,
       },
       session: mapSession(response.session),
     }
@@ -216,6 +224,10 @@ export class AuthenticationApiAdapter {
             roles: mapRoles(response.roles),
             permissions: mapPermissions(response.roles),
             modulePermissions: response.user.modulePermissions ?? [],
+            // getSession's `user` field is literally getProfile's own return value on the
+            // backend, so this DOES carry the real platformAdminEmails-resolved flag -- the
+            // primary hydration path (called on every app load), unlike login()/register() above.
+            isPlatformAdmin: response.user.isPlatformAdmin ?? false,
           }
         : null,
     }
@@ -281,6 +293,8 @@ export class AuthenticationApiAdapter {
         roles: mapRoles(["owner"]),
         permissions: mapPermissions(["owner"]),
         modulePermissions: response.user.modulePermissions ?? [],
+        // Same issueSessionForMember caveat as login() above.
+        isPlatformAdmin: false,
       },
       session: mapSession(response.session),
       redirectUrl: response.redirectUrl,

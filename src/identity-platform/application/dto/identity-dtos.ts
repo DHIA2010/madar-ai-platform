@@ -15,6 +15,12 @@ export interface AuthenticatedActor {
   workspaceId: string | null
   roles: Role[]
   modulePermissions: string[]
+  // Madar's own staff (see platformAdminEmails config), resolved once per request -- lets any
+  // command check cross-tenant authorization without re-querying an allowlist. Optional (not
+  // required) so the many existing test fixtures that construct an AuthenticatedActor literal
+  // without it don't all need updating -- absent is treated the same as false everywhere it's
+  // checked.
+  isPlatformAdmin?: boolean
 }
 
 export interface TokenPair {

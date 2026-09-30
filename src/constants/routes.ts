@@ -52,6 +52,7 @@ export const ROUTES = {
   settingsZatca: "/settings/zatca",
   settingsCashier: "/settings/cashier",
   madarAdmin: "/madar-admin",
+  madarAdminRequests: "/madar-admin/requests",
   madarAdminCustomers: "/madar-admin/customers",
   madarAdminSubscriptions: "/madar-admin/subscriptions",
   madarAdminPackages: "/madar-admin/packages",

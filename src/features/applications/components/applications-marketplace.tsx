@@ -10,6 +10,7 @@ import { AppInput } from "@/components/app"
 import { useApplicationsCatalog } from "../hooks"
 import type { ApplicationDefinition } from "../types"
 import { ActivationConfirmDialog, type ActivationTarget } from "./activation-confirm-dialog"
+import { ActivationRequestDialog, type ActivationRequestTarget } from "./activation-request-dialog"
 import { ApplicationCard } from "./application-card"
 import { ApplicationCategoryTabs } from "./application-category-tabs"
 import { MadarCompleteCard } from "./madar-complete-card"
@@ -25,24 +26,22 @@ export function ApplicationsMarketplace() {
     categoryTabs,
     visibleApplications,
     bundle,
-    activateApplication,
+    submitActivationRequest,
     deactivateApplication,
     activateAllApplications,
     activatingId,
   } = useApplicationsCatalog()
 
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
+  const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
 
   function requestApplicationActivation(application: ApplicationDefinition) {
     if (!application.primaryCta.label) return
-    setPendingActivation({
-      id: application.id,
+    setPendingRequest({
+      applicationId: application.id,
       name: application.name,
-      priceLabel: application.priceLabel,
-      confirmLabel: application.primaryCta.label,
       icon: application.icon,
       iconWrapperClassName: application.accent.iconWrapperClassName,
-      confirmButtonClassName: application.accent.primaryButtonClassName,
     })
   }
 
@@ -150,12 +149,16 @@ export function ApplicationsMarketplace() {
             await activateAllApplications()
             return
           }
-          if (target.intent === "deactivate") {
-            await deactivateApplication(target.id)
-            return
-          }
-          await activateApplication(target.id)
+          await deactivateApplication(target.id)
         }}
+      />
+
+      <ActivationRequestDialog
+        target={pendingRequest}
+        onOpenChange={(open) => {
+          if (!open) setPendingRequest(null)
+        }}
+        onSubmit={submitActivationRequest}
       />
     </div>
   )

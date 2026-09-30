@@ -21,6 +21,7 @@ const mockUser: AuthContextValue["currentUser"] = {
   roles: [],
   permissions: ["dashboard:view"],
   modulePermissions: ["dashboard:view"],
+  isPlatformAdmin: false,
 }
 
 const authValue: AuthContextValue = {

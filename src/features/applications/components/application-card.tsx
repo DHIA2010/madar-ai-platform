@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Check } from "lucide-react"
+import { Check, Clock } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -36,6 +36,7 @@ export function ApplicationCard({
 }) {
   const Icon = application.icon
   const isSubscribed = application.subscriptionStatus === "subscribed"
+  const isPendingReview = application.subscriptionStatus === "pending_review"
 
   return (
     <div className="flex h-full flex-col rounded-[14px] border border-[#e1e7f0] bg-white p-4 transition-shadow duration-200 hover:shadow-[0_8px_20px_rgba(11,23,56,0.07)]">
@@ -107,7 +108,12 @@ export function ApplicationCard({
             معرفة المزيد
           </AppButton>
         </Link>
-        {application.primaryCta.label ? (
+        {isPendingReview ? (
+          <span className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] text-[12.5px] font-semibold text-[#b45309]">
+            <Clock className="size-3.5" />
+            قيد المراجعة
+          </span>
+        ) : application.primaryCta.label ? (
           <AppButton
             variant={isSubscribed ? "outline" : "default"}
             className={cn(

@@ -2,6 +2,8 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  SubscriptionActivationRequestDto,
+  SubscriptionRequestStatus,
   WorkspaceDto,
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
@@ -39,6 +41,7 @@ const SETTINGS_TEXT_KEYS = [
   "postalCode",
   "city",
   "taxPriceEntryMode",
+  "currentPlanTier",
 ] as const
 
 // Booleans get their own list rather than folding into SETTINGS_TEXT_KEYS above (a `typeof ===
@@ -262,6 +265,59 @@ export class WorkspaceApiAdapter {
   getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto> {
     return this.client.get<ConnectedPlatformsCountDto>(
       `/v1/organizations/${organizationId}/connected-platforms`
+    )
+  }
+
+  // The backend returns its domain entity state as-is (already camelCase, no raw-row shaping
+  // needed the way toOrganizationDto's allow-list mapping is) -- these are plain typed passthrough
+  // calls, unlike the organization methods above.
+  requestApplicationActivation(
+    organizationId: string,
+    payload: {
+      application: SubscriptionActivationRequestDto["application"]
+      planTier: SubscriptionActivationRequestDto["planTier"]
+      attachmentContentType: string
+      attachmentDataBase64: string
+    }
+  ): Promise<SubscriptionActivationRequestDto> {
+    return this.client.post<typeof payload, SubscriptionActivationRequestDto>(
+      `/v1/organizations/${organizationId}/subscription-requests`,
+      payload
+    )
+  }
+
+  listMyOrganizationSubscriptionRequests(
+    organizationId: string
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    return this.client.get<SubscriptionActivationRequestDto[]>(
+      `/v1/organizations/${organizationId}/subscription-requests`
+    )
+  }
+
+  listAllSubscriptionActivationRequests(
+    status?: SubscriptionRequestStatus
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    return this.client.get<SubscriptionActivationRequestDto[]>("/v1/subscription-requests", {
+      query: status ? { status } : undefined,
+    })
+  }
+
+  approveSubscriptionActivationRequest(
+    requestId: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    return this.client.post<Record<string, never>, SubscriptionActivationRequestDto>(
+      `/v1/subscription-requests/${requestId}/approve`,
+      {}
+    )
+  }
+
+  rejectSubscriptionActivationRequest(
+    requestId: string,
+    reason: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    return this.client.post<{ reason: string }, SubscriptionActivationRequestDto>(
+      `/v1/subscription-requests/${requestId}/reject`,
+      { reason }
     )
   }
 

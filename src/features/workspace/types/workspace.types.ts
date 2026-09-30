@@ -62,6 +62,9 @@ export interface OrganizationSettings {
   ecommerceEnabled?: boolean
   posEnabled?: boolean
   madarAppsEnabled?: boolean
+  // Set on approval of a subscription activation request -- the account-wide tier chosen at
+  // request time.
+  currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
 }
 
 export interface Organization {

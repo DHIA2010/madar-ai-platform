@@ -15,12 +15,16 @@ interface ProtectedRouteProps {
   children: React.ReactNode
   redirectTo?: string
   requireWorkspace?: boolean
+  // Madar Admin console gate (see src/app/(madar-admin)/layout.tsx) -- unrelated to any
+  // organization's own permission taxonomy, so it doesn't fit <RouteAccessGuard>/<Can>.
+  requirePlatformAdmin?: boolean
 }
 
 export function ProtectedRoute({
   children,
   redirectTo = ROUTES.login,
   requireWorkspace = false,
+  requirePlatformAdmin = false,
 }: ProtectedRouteProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -53,6 +57,12 @@ export function ProtectedRoute({
     }
   }, [authStatus, currentWorkspace, requireWorkspace, router, workspaceStatus])
 
+  useEffect(() => {
+    if (authStatus === "authenticated" && requirePlatformAdmin && !currentUser?.isPlatformAdmin) {
+      router.replace(ROUTES.dashboard)
+    }
+  }, [authStatus, currentUser?.isPlatformAdmin, requirePlatformAdmin, router])
+
   // Pre-compute all conditional states
   const isLoading = useMemo(() => authStatus === "idle" || authStatus === "loading", [authStatus])
 
@@ -70,10 +80,19 @@ export function ProtectedRoute({
 
   const hasNoUser = useMemo(() => !currentUser, [currentUser])
 
+  // True the whole time a non-staff visitor is authenticated-but-not-platform-admin -- keeps
+  // showLoading covering this case too, so children never flash before the redirect effect above
+  // fires (there's nothing to "wait for" the way workspace loading has a real pending state, but
+  // the shape is the same: don't render children on the way out).
+  const isForbiddenPlatformAdmin = useMemo(
+    () => requirePlatformAdmin && authStatus === "authenticated" && !currentUser?.isPlatformAdmin,
+    [authStatus, currentUser?.isPlatformAdmin, requirePlatformAdmin]
+  )
+
   // Determine what to show - always evaluate ALL conditions
   const showLoading = useMemo(
-    () => isLoading || isWorkspaceLoading || isWorkspaceMissing,
-    [isLoading, isWorkspaceLoading, isWorkspaceMissing]
+    () => isLoading || isWorkspaceLoading || isWorkspaceMissing || isForbiddenPlatformAdmin,
+    [isForbiddenPlatformAdmin, isLoading, isWorkspaceLoading, isWorkspaceMissing]
   )
 
   const showError = useMemo(

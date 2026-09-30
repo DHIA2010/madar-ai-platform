@@ -1,4 +1,5 @@
 export * from "./activation-confirm-dialog"
+export * from "./activation-request-dialog"
 export * from "./application-card"
 export * from "./application-category-tabs"
 export * from "./application-detail-screen"

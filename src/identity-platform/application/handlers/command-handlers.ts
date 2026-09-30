@@ -29,7 +29,9 @@ import type {
   LogoutCommand,
   ReactivateMemberCommand,
   RefreshSessionCommand,
+  RejectSubscriptionActivationRequestCommand,
   RemoveMemberCommand,
+  RequestApplicationActivationCommand,
   ResendInvitationCommand,
   RestoreOrganizationCommand,
   RestoreWorkspaceCommand,
@@ -76,6 +78,7 @@ import {
   OrganizationEntity,
   PasswordResetEntity,
   SessionEntity,
+  SubscriptionActivationRequestEntity,
   TeamEntity,
   UserEntity,
   WorkspaceEntity,
@@ -1102,6 +1105,15 @@ export class IdentityCommandHandlers {
     return membership
   }
 
+  // Cross-tenant by definition -- no organizationId param, unlike every other guard here. Backs
+  // Madar's own internal admin console (subscription-request review), never a customer-facing
+  // command.
+  private requirePlatformAdmin(actor: AuthenticatedActor) {
+    if (!actor.isPlatformAdmin) {
+      throw ERRORS.forbidden()
+    }
+  }
+
   private async listActiveMembershipsByOrganization(organizationId: string) {
     return (await this.deps.repositories.memberships.listByOrganizationId(organizationId)).filter(
       (membership) => !membership.deletedAt && membership.status === "active"
@@ -1265,6 +1277,164 @@ export class IdentityCommandHandlers {
       }),
     ])
     return organization.toState()
+  }
+
+  // Which organizations.settings boolean each application maps to -- mirrors the frontend's
+  // APPLICATION_SETTINGS_KEY (src/features/applications/services/applications-catalog.service.ts)
+  // but kept as its own backend-local constant since command-handlers.ts must not import
+  // frontend feature code.
+  private static readonly APPLICATION_SETTINGS_KEY: Record<
+    RequestApplicationActivationCommand["application"],
+    string
+  > = {
+    advertising: "advertisingEnabled",
+    ecommerce: "ecommerceEnabled",
+    pos: "posEnabled",
+    madarApps: "madarAppsEnabled",
+  }
+
+  async requestApplicationActivation(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    command: RequestApplicationActivationCommand,
+    context: RequestContext
+  ) {
+    // Same permission the old instant-toggle used -- requesting activation is still "editing this
+    // organization's settings," just no longer taking effect immediately.
+    await this.requireModuleAccess(actor, organizationId, "settings:edit")
+
+    const organizationState = await this.deps.repositories.organizations.findById(organizationId)
+    if (!organizationState) {
+      throw ERRORS.notFound("Organization")
+    }
+
+    const existingPending =
+      await this.deps.repositories.subscriptionActivationRequests.findPendingByOrganizationAndApplication(
+        organizationId,
+        command.application
+      )
+    if (existingPending) {
+      throw ERRORS.validation({
+        application: "There is already a pending activation request for this application.",
+      })
+    }
+
+    const now = this.now
+    const request = SubscriptionActivationRequestEntity.create({
+      id: this.deps.uuid.generate(),
+      organizationId,
+      organizationName: organizationState.name,
+      requestedByUserId: actor.userId,
+      application: command.application,
+      planTier: command.planTier,
+      attachmentUrl: command.attachmentUrl,
+      attachmentContentType: command.attachmentContentType,
+      status: "pending",
+      reviewedByUserId: null,
+      reviewedAt: null,
+      rejectionReason: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await this.deps.repositories.subscriptionActivationRequests.save(request.toState())
+    await this.audit(
+      "subscription_request.created",
+      context,
+      actor.userId,
+      organizationId,
+      null,
+      "subscription_activation_request",
+      request.id,
+      { application: command.application, planTier: command.planTier }
+    )
+    return request.toState()
+  }
+
+  async approveSubscriptionActivationRequest(
+    actor: AuthenticatedActor,
+    requestId: string,
+    context: RequestContext
+  ) {
+    this.requirePlatformAdmin(actor)
+
+    const requestState =
+      await this.deps.repositories.subscriptionActivationRequests.findById(requestId)
+    if (!requestState) {
+      throw ERRORS.notFound("SubscriptionActivationRequest")
+    }
+    const request = SubscriptionActivationRequestEntity.rehydrate(requestState)
+    const now = this.now
+    request.approve(actor.userId, now)
+    await this.deps.repositories.subscriptionActivationRequests.save(request.toState())
+
+    const organizationState = await this.deps.repositories.organizations.findById(
+      request.organizationId
+    )
+    if (!organizationState) {
+      throw ERRORS.notFound("Organization")
+    }
+    const organization = OrganizationEntity.rehydrate(organizationState)
+    organization.update(
+      {
+        settings: {
+          [IdentityCommandHandlers.APPLICATION_SETTINGS_KEY[request.application]]: true,
+          currentPlanTier: request.planTier,
+        },
+      },
+      now
+    )
+    await this.deps.repositories.organizations.save(organization.toState())
+
+    await this.audit(
+      "subscription_request.approved",
+      context,
+      actor.userId,
+      request.organizationId,
+      null,
+      "subscription_activation_request",
+      request.id,
+      { application: request.application, planTier: request.planTier }
+    )
+    await this.publishEvents(context, [
+      this.createEvent({
+        eventType: "OrganizationUpdated",
+        aggregateType: "organization",
+        aggregateId: organization.id,
+        context,
+        payload: { organizationId: organization.id },
+      }),
+    ])
+    return request.toState()
+  }
+
+  async rejectSubscriptionActivationRequest(
+    actor: AuthenticatedActor,
+    requestId: string,
+    command: RejectSubscriptionActivationRequestCommand,
+    context: RequestContext
+  ) {
+    this.requirePlatformAdmin(actor)
+
+    const requestState =
+      await this.deps.repositories.subscriptionActivationRequests.findById(requestId)
+    if (!requestState) {
+      throw ERRORS.notFound("SubscriptionActivationRequest")
+    }
+    const request = SubscriptionActivationRequestEntity.rehydrate(requestState)
+    request.reject(actor.userId, command.reason, this.now)
+    await this.deps.repositories.subscriptionActivationRequests.save(request.toState())
+
+    await this.audit(
+      "subscription_request.rejected",
+      context,
+      actor.userId,
+      request.organizationId,
+      null,
+      "subscription_activation_request",
+      request.id,
+      { application: request.application, reason: command.reason }
+    )
+    return request.toState()
   }
 
   async archiveOrganization(
@@ -2939,6 +3109,10 @@ export class IdentityCommandHandlers {
       this.deps.repositories.customRoles
     )
 
+    const isPlatformAdmin = this.deps.config.platformAdminEmails.includes(
+      userState.email.toLowerCase()
+    )
+
     return {
       userId: payload.sub,
       sessionId: payload.sid,
@@ -2946,6 +3120,7 @@ export class IdentityCommandHandlers {
       workspaceId,
       roles,
       modulePermissions,
+      isPlatformAdmin,
     }
   }
 

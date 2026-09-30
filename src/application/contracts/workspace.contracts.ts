@@ -53,6 +53,30 @@ export interface OrganizationSettingsDto {
   ecommerceEnabled?: boolean
   posEnabled?: boolean
   madarAppsEnabled?: boolean
+  // Set on approval of a subscription activation request (see SubscriptionActivationRequestDto
+  // below) -- the account-wide tier chosen at request time.
+  currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
+}
+
+export type SubscriptionApplication = "advertising" | "ecommerce" | "pos" | "madarApps"
+export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
+export type SubscriptionRequestStatus = "pending" | "approved" | "rejected"
+
+export interface SubscriptionActivationRequestDto {
+  id: string
+  organizationId: string
+  organizationName: string
+  requestedByUserId: string
+  application: SubscriptionApplication
+  planTier: SubscriptionPlanTier
+  attachmentUrl: string
+  attachmentContentType: string
+  status: SubscriptionRequestStatus
+  reviewedByUserId: string | null
+  reviewedAt: string | null
+  rejectionReason: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface OrganizationDto {
@@ -131,6 +155,28 @@ export interface WorkspaceRepository {
     payload: { contentType: string; dataBase64: string }
   ): Promise<OrganizationDto>
   getConnectedPlatformsCount(organizationId: string): Promise<ConnectedPlatformsCountDto>
+  requestApplicationActivation(
+    organizationId: string,
+    payload: {
+      application: SubscriptionApplication
+      planTier: SubscriptionPlanTier
+      attachmentContentType: string
+      attachmentDataBase64: string
+    }
+  ): Promise<SubscriptionActivationRequestDto>
+  listMyOrganizationSubscriptionRequests(
+    organizationId: string
+  ): Promise<SubscriptionActivationRequestDto[]>
+  // Cross-tenant, platform-admin only -- backs the Madar Admin review console. Reuses this same
+  // authenticated repository/adapter rather than standing up a second DI subsystem for 3 methods.
+  listAllSubscriptionActivationRequests(
+    status?: SubscriptionRequestStatus
+  ): Promise<SubscriptionActivationRequestDto[]>
+  approveSubscriptionActivationRequest(requestId: string): Promise<SubscriptionActivationRequestDto>
+  rejectSubscriptionActivationRequest(
+    requestId: string,
+    reason: string
+  ): Promise<SubscriptionActivationRequestDto>
   archiveOrganization(organizationId: string): Promise<OrganizationDto>
   restoreOrganization(organizationId: string): Promise<OrganizationDto>
   // Soft delete (POST /v1/organizations/:id/delete): the record is marked deleted and becomes

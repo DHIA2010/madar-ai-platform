@@ -160,6 +160,8 @@ import {
   uploadProductImageSchema,
   changePasswordSchema,
   verifyEmailSchema,
+  requestApplicationActivationSchema,
+  rejectSubscriptionActivationRequestSchema,
 } from "../../schemas"
 
 function json(
@@ -2539,6 +2541,98 @@ export function createIdentityApiServer(
         return send(
           200,
           await container.commands.updateOrganization(actor, organizationId, { logoUrl }, context)
+        )
+      }
+
+      // Cross-tenant, platform-admin only -- must be checked before the org-scoped
+      // subscription-requests routes below, since this segment isn't an organizationId.
+      if (url.pathname === "/v1/subscription-requests" && method === "GET") {
+        const status = url.searchParams.get("status") as "pending" | "approved" | "rejected" | null
+        return send(
+          200,
+          await container.queries.listSubscriptionActivationRequests(
+            actor,
+            status ? { status } : {}
+          )
+        )
+      }
+
+      const subscriptionRequestActionMatch = url.pathname.match(
+        /^\/v1\/subscription-requests\/([^/]+)\/(approve|reject)$/
+      )
+      if (subscriptionRequestActionMatch && method === "POST") {
+        const requestId = subscriptionRequestActionMatch[1]
+        const action = subscriptionRequestActionMatch[2]
+        if (action === "approve") {
+          return send(
+            200,
+            await container.commands.approveSubscriptionActivationRequest(actor, requestId, context)
+          )
+        }
+        return send(
+          200,
+          await container.commands.rejectSubscriptionActivationRequest(
+            actor,
+            requestId,
+            rejectSubscriptionActivationRequestSchema.parse(await readJsonBody(request)),
+            context
+          )
+        )
+      }
+
+      const organizationSubscriptionRequestsMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/subscription-requests$/
+      )
+      if (organizationSubscriptionRequestsMatch && method === "GET") {
+        return send(
+          200,
+          await container.queries.listMyOrganizationSubscriptionRequests(
+            actor,
+            organizationSubscriptionRequestsMatch[1]
+          )
+        )
+      }
+      if (organizationSubscriptionRequestsMatch && method === "POST") {
+        if (!container.infrastructure.objectStorage) {
+          return send(503, {
+            code: "SUBSCRIPTION_REQUEST_ATTACHMENT_UNAVAILABLE",
+            message: "Attachment uploads are not available right now.",
+          })
+        }
+        const organizationId = organizationSubscriptionRequestsMatch[1]
+        const payload = requestApplicationActivationSchema.parse(await readJsonBody(request))
+        const buffer = Buffer.from(payload.attachmentDataBase64, "base64")
+        const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+        if (buffer.length === 0 || buffer.length > MAX_ATTACHMENT_BYTES) {
+          throw ERRORS.validation({
+            attachment: "The receipt must be between 1 byte and 5MB.",
+          })
+        }
+        const extension =
+          payload.attachmentContentType === "application/pdf"
+            ? "pdf"
+            : payload.attachmentContentType.split("/")[1] === "jpeg"
+              ? "jpg"
+              : payload.attachmentContentType.split("/")[1]
+        const key = `subscription-receipts/${organizationId}/${randomUUID()}.${extension}`
+        const attachmentUrl = await container.infrastructure.objectStorage.uploadPublicObject({
+          key,
+          body: buffer,
+          contentType: payload.attachmentContentType,
+        })
+        return send(
+          201,
+          await container.commands.requestApplicationActivation(
+            actor,
+            organizationId,
+            {
+              application: payload.application,
+              planTier: payload.planTier,
+              attachmentUrl,
+              attachmentContentType: payload.attachmentContentType,
+            },
+            context
+          )
         )
       }
 

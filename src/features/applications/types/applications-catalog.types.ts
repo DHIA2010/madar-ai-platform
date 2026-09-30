@@ -4,9 +4,14 @@ export type ApplicationCategoryId = "advertising" | "ecommerce" | "pos" | "madar
 
 export type ApplicationPricingModel = "free" | "paid"
 
-// Local-only for this UI-only pass -- shaped so a future real subscription response can be
-// mapped onto it 1:1 without reshaping the components that read it.
-export type ApplicationSubscriptionStatus = "not_subscribed" | "subscribed" | "trial"
+// "pending_review" is a real backend state now (a SubscriptionActivationRequestDto with
+// status "pending") -- the app has submitted a request and a Madar staff member hasn't
+// approved/rejected it yet.
+export type ApplicationSubscriptionStatus =
+  | "not_subscribed"
+  | "pending_review"
+  | "subscribed"
+  | "trial"
 
 export type ApplicationFeaturesDisplay = "checklist" | "iconGrid"
 

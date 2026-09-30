@@ -19,6 +19,7 @@ export interface User {
   roles: Role[]
   permissions: string[]
   modulePermissions: string[]
+  isPlatformAdmin: boolean
 }
 
 export interface UpdateProfileRequest {

@@ -1,5 +1,7 @@
 import { BarChart3, Crown, Star, Zap } from "lucide-react"
 
+import { PLAN_TIER_META } from "@/features/applications"
+
 import type {
   Coupon,
   MadarAdminCustomer,
@@ -31,15 +33,14 @@ function pick<T>(pool: T[]): T {
   return pool[Math.floor(rand() * pool.length)]
 }
 
+// name/priceLabel/monthlyPrice/billingSuffix come from the shared PLAN_TIER_META (see
+// src/features/applications/services/plan-tiers.ts) -- only the icon/badge/feature-list
+// presentation stays local to this admin-only page.
 export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
   enterprise: {
-    tier: "enterprise",
-    name: "Enterprise",
+    ...PLAN_TIER_META.enterprise,
     icon: Crown,
     badgeLabel: "مخصصة",
-    priceLabel: "تواصل معنا",
-    monthlyPrice: null,
-    billingSuffix: "سعر مخصص",
     isActive: true,
     features: [
       { label: "متاجر غير محدودة" },
@@ -49,12 +50,8 @@ export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
     ],
   },
   pro: {
-    tier: "pro",
-    name: "Pro",
+    ...PLAN_TIER_META.pro,
     icon: Star,
-    priceLabel: "SAR 499",
-    monthlyPrice: 499,
-    billingSuffix: "شهرياً",
     isActive: true,
     features: [
       { label: "10 متاجر" },
@@ -64,12 +61,8 @@ export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
     ],
   },
   growth: {
-    tier: "growth",
-    name: "Growth",
+    ...PLAN_TIER_META.growth,
     icon: BarChart3,
-    priceLabel: "SAR 299",
-    monthlyPrice: 299,
-    billingSuffix: "شهرياً",
     isActive: true,
     features: [
       { label: "3 متاجر" },
@@ -79,12 +72,8 @@ export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
     ],
   },
   starter: {
-    tier: "starter",
-    name: "Starter",
+    ...PLAN_TIER_META.starter,
     icon: Zap,
-    priceLabel: "SAR 99",
-    monthlyPrice: 99,
-    billingSuffix: "شهرياً",
     isActive: true,
     features: [
       { label: "متجر واحد" },

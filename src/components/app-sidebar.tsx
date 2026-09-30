@@ -50,6 +50,12 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onHoverChange?: (value: boolean) => void
 }
 
+// Home/Reports/AI/Integrations/Administration/Settings aren't owned by any one application, but
+// they're not core-platform-always-on either -- a brand-new organization with nothing activated
+// sees ONLY "التطبيقات" in the sidebar (the page that lets it activate its first application);
+// these six reappear together the moment any single application goes active.
+const ANY_APPLICATION: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
+
 // The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const locale = useLocale() as Locale
@@ -59,8 +65,8 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const { currentOrganization } = useWorkspace()
 
   // Which of the 4 applications (see src/features/applications) this organization has activated
-  // -- a brand-new org has none active, so only items with no `applications` field (core/platform
-  // pages) show until something is activated from /marketplace.
+  // -- a brand-new org has none active, so only "التطبيقات" (the one item with no `applications`
+  // gate at all) shows until something is activated from /marketplace.
   const activeApplications = (
     Object.keys(APPLICATION_SETTINGS_KEY) as ApplicationCategoryId[]
   ).filter((app) => Boolean(currentOrganization?.settings?.[APPLICATION_SETTINGS_KEY[app]]))
@@ -72,10 +78,11 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <House />,
       isActive: true,
       permission: "dashboard:view",
+      applications: ANY_APPLICATION,
     },
-    // No permission key: unlike every other module here, there's no real "applications:view"
-    // entry in the IAM permission taxonomy yet. Always visible, same as "settings" below -- it's
-    // the page you go to in order to activate everything else.
+    // No permission key and no `applications` gate: unlike every other item here, this is the ONE
+    // item that must always be reachable, since it's the page a brand-new organization (with
+    // nothing activated yet) uses to activate its first application.
     { title: t("applications"), url: ROUTES.marketplace, icon: <Blocks /> },
     {
       title: t("liveVisitors"),
@@ -158,39 +165,42 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       permission: "customers:view",
       applications: ["ecommerce", "pos"],
     },
-    // Reports/AI/Integrations are cross-cutting utility pages, not owned by a single application
-    // -- visible once ANY application is active (the `.some()` filter below naturally treats a
-    // 4-item `applications` list as "any of these").
     {
       title: t("reports"),
       url: "/reports",
       icon: <ChartNoAxesCombined />,
       permission: "reports:view",
-      applications: ["advertising", "ecommerce", "pos", "madarApps"],
+      applications: ANY_APPLICATION,
     },
     {
       title: t("ai"),
       url: "/ai",
       icon: <Gauge />,
       permission: "ai:view",
-      applications: ["advertising", "ecommerce", "pos", "madarApps"],
+      applications: ANY_APPLICATION,
     },
     {
       title: t("integrations"),
       url: "/integrations",
       icon: <LayoutGrid />,
       permission: "connections:view",
-      applications: ["advertising", "ecommerce", "pos", "madarApps"],
+      applications: ANY_APPLICATION,
     },
     {
       title: t("administration"),
       url: ROUTES.administration,
       icon: <ShieldCheck />,
       permission: "users:view",
+      applications: ANY_APPLICATION,
     },
     // No sub-items: the settings screens carry their own section rail beside the content, and
     // duplicating it here gave two navigations for the same set of pages.
-    { title: t("settings"), url: ROUTES.settings, icon: <Settings2 /> },
+    {
+      title: t("settings"),
+      url: ROUTES.settings,
+      icon: <Settings2 />,
+      applications: ANY_APPLICATION,
+    },
   ]
     .filter((item) => !item.permission || can(item.permission))
     .filter(

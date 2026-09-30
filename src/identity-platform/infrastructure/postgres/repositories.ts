@@ -12,6 +12,7 @@ import type {
   MembershipRepository,
   OrganizationRepository,
   PasswordResetRepository,
+  SubscriptionActivationRequestRepository,
   TeamListItem,
   TeamMemberListItem,
   TeamRepository,
@@ -26,6 +27,7 @@ import type {
   MembershipState,
   OrganizationState,
   PasswordResetState,
+  SubscriptionActivationRequestState,
   TeamMemberState,
   TeamState,
   UserState,
@@ -196,6 +198,127 @@ function mapInvitation(row: Record<string, unknown>, token: string): InvitationS
     lastSentAt: toIsoString(row.last_sent_at) ?? toIsoString(row.created_at) ?? "",
     resendCount: Number((row.resend_count as number | null) ?? 0),
     createdAt: toIsoString(row.created_at) ?? "",
+  }
+}
+
+function mapSubscriptionActivationRequest(
+  row: Record<string, unknown>
+): SubscriptionActivationRequestState {
+  const toIsoString = (value: unknown): string | null => {
+    if (!value) return null
+    if (value instanceof Date) return value.toISOString()
+    return String(value)
+  }
+
+  return {
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    organizationName: String(row.organization_name),
+    requestedByUserId: String(row.requested_by_user_id),
+    application: row.application as SubscriptionActivationRequestState["application"],
+    planTier: row.plan_tier as SubscriptionActivationRequestState["planTier"],
+    attachmentUrl: String(row.attachment_url),
+    attachmentContentType: String(row.attachment_content_type),
+    status: (row.status as SubscriptionActivationRequestState["status"]) ?? "pending",
+    reviewedByUserId: (row.reviewed_by_user_id as string | null) ?? null,
+    reviewedAt: toIsoString(row.reviewed_at),
+    rejectionReason: (row.rejection_reason as string | null) ?? null,
+    createdAt: toIsoString(row.created_at) ?? "",
+    updatedAt: toIsoString(row.updated_at) ?? "",
+  }
+}
+
+class PostgresSubscriptionActivationRequestRepository implements SubscriptionActivationRequestRepository {
+  constructor(private readonly db: PostgresDatabase) {}
+
+  async findById(id: string) {
+    const result = await this.db.query({
+      name: "identity-subscription-requests-find-by-id",
+      text: "SELECT * FROM subscription_activation_requests WHERE id = $1 AND deleted_at IS NULL LIMIT 1",
+      values: [id],
+    })
+    return result.rows[0] ? mapSubscriptionActivationRequest(result.rows[0]) : null
+  }
+
+  async findPendingByOrganizationAndApplication(organizationId: string, application: string) {
+    const result = await this.db.query({
+      name: "identity-subscription-requests-find-pending",
+      text: `
+        SELECT *
+        FROM subscription_activation_requests
+        WHERE organization_id = $1 AND application = $2 AND status = 'pending' AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [organizationId, application],
+    })
+    return result.rows[0] ? mapSubscriptionActivationRequest(result.rows[0]) : null
+  }
+
+  async listByOrganizationId(organizationId: string) {
+    const result = await this.db.query({
+      name: "identity-subscription-requests-list-org",
+      text: `
+        SELECT * FROM subscription_activation_requests
+        WHERE organization_id = $1 AND deleted_at IS NULL
+        ORDER BY created_at DESC
+      `,
+      values: [organizationId],
+    })
+    return result.rows.map(mapSubscriptionActivationRequest)
+  }
+
+  async listAll(input: { status?: SubscriptionActivationRequestState["status"] } = {}) {
+    const values: unknown[] = []
+    const where = ["deleted_at IS NULL"]
+    if (input.status) {
+      values.push(input.status)
+      where.push(`status = $${values.length}`)
+    }
+    const result = await this.db.query({
+      text: `
+        SELECT * FROM subscription_activation_requests
+        WHERE ${where.join(" AND ")}
+        ORDER BY created_at DESC
+      `,
+      values,
+    })
+    return result.rows.map(mapSubscriptionActivationRequest)
+  }
+
+  async save(entry: SubscriptionActivationRequestState) {
+    await this.db.query({
+      name: "identity-subscription-requests-upsert",
+      text: `
+        INSERT INTO subscription_activation_requests (
+          id, organization_id, organization_name, requested_by_user_id, application, plan_tier,
+          attachment_url, attachment_content_type, status,
+          reviewed_by_user_id, reviewed_at, rejection_reason, created_at, updated_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          reviewed_by_user_id = EXCLUDED.reviewed_by_user_id,
+          reviewed_at = EXCLUDED.reviewed_at,
+          rejection_reason = EXCLUDED.rejection_reason,
+          updated_at = EXCLUDED.updated_at
+      `,
+      values: [
+        entry.id,
+        entry.organizationId,
+        entry.organizationName,
+        entry.requestedByUserId,
+        entry.application,
+        entry.planTier,
+        entry.attachmentUrl,
+        entry.attachmentContentType,
+        entry.status,
+        entry.reviewedByUserId,
+        entry.reviewedAt,
+        entry.rejectionReason,
+        entry.createdAt,
+        entry.updatedAt,
+      ],
+    })
   }
 }
 
@@ -1203,6 +1326,7 @@ export function createPostgresRepositories(input: {
     emailVerifications: new PostgresEmailVerificationRepository(input.db),
     passwordResets: new PostgresPasswordResetRepository(input.db),
     invitations: new PostgresInvitationRepository(input.db, input.tokenService),
+    subscriptionActivationRequests: new PostgresSubscriptionActivationRequestRepository(input.db),
     auditLogs: new PostgresAuditLogRepository(input.db),
     teams: new PostgresTeamRepository(input.db),
     customRoles: new PostgresCustomRoleRepository(input.db),

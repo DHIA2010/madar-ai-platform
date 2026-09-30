@@ -228,6 +228,19 @@ export const uploadProductImageSchema = z.object({
   dataBase64: z.string().min(1),
 })
 
+// Bank-transfer receipts are frequently scanned PDFs, not just images -- unlike every other
+// upload schema above (logo/avatar/product image), which is image-only.
+export const requestApplicationActivationSchema = z.object({
+  application: z.enum(["advertising", "ecommerce", "pos", "madarApps"]),
+  planTier: z.enum(["starter", "growth", "pro", "enterprise"]),
+  attachmentContentType: z.enum(["image/png", "image/jpeg", "image/webp", "application/pdf"]),
+  attachmentDataBase64: z.string().min(1),
+})
+
+export const rejectSubscriptionActivationRequestSchema = z.object({
+  reason: z.string().min(1).max(1000),
+})
+
 // 12-char minimum matches registerSchema's own password rule, for consistency across the app.
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),

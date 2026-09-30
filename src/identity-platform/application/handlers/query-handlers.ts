@@ -78,6 +78,7 @@ export class IdentityQueryHandlers {
       primaryOrganizationId: user.primaryOrganizationId,
       emailVerifiedAt: user.emailVerifiedAt,
       modulePermissions: actor.modulePermissions,
+      isPlatformAdmin: actor.isPlatformAdmin ?? false,
     }
   }
 
@@ -167,6 +168,31 @@ export class IdentityQueryHandlers {
       throw ERRORS.notFound("Organization")
     }
     return organization
+  }
+
+  // Customer-facing -- the Applications marketplace's own "قيد المراجعة" state. Scoped by normal
+  // membership, not platform-admin.
+  async listMyOrganizationSubscriptionRequests(actor: AuthenticatedActor, organizationId: string) {
+    const membership = await this.repositories.memberships.findByUserAndOrganization(
+      actor.userId,
+      organizationId
+    )
+    if (!membership) {
+      throw ERRORS.forbidden()
+    }
+    return this.repositories.subscriptionActivationRequests.listByOrganizationId(organizationId)
+  }
+
+  // Cross-tenant -- backs the Madar Admin review console. The only query in this codebase that
+  // isn't scoped to the actor's own membership.
+  async listSubscriptionActivationRequests(
+    actor: AuthenticatedActor,
+    query: { status?: "pending" | "approved" | "rejected" } = {}
+  ) {
+    if (!actor.isPlatformAdmin) {
+      throw ERRORS.forbidden()
+    }
+    return this.repositories.subscriptionActivationRequests.listAll(query)
   }
 
   async listOrganizations(actor: AuthenticatedActor, query: ListOrganizationsQuery) {

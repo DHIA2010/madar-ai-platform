@@ -159,14 +159,21 @@ export function getApplicationById(id: string): ApplicationCatalogEntry | undefi
   return APPLICATION_CATALOG.find((application) => application.id === id)
 }
 
-// The single place that turns the organization's persisted activation flags into a per-application
-// status -- used by both the list hook and the detail page so they can never disagree about
-// whether a given application is currently active.
+// The single place that turns the organization's persisted activation flags (+ any pending
+// subscription request) into a per-application status -- used by both the list hook and the
+// detail page so they can never disagree about whether a given application is active, pending
+// review, or neither. `pendingApplications` is the set of application ids with an unresolved
+// (status "pending") SubscriptionActivationRequestDto for this organization.
 export function resolveApplicationStatus(
   application: ApplicationDefinition,
-  settings: OrganizationSettings | undefined
+  settings: OrganizationSettings | undefined,
+  pendingApplications?: ReadonlySet<ApplicationCategoryId>
 ): ApplicationSubscriptionStatus {
-  return settings?.[APPLICATION_SETTINGS_KEY[application.category]]
-    ? "subscribed"
-    : "not_subscribed"
+  if (settings?.[APPLICATION_SETTINGS_KEY[application.category]]) {
+    return "subscribed"
+  }
+  if (pendingApplications?.has(application.category)) {
+    return "pending_review"
+  }
+  return "not_subscribed"
 }

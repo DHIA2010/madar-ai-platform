@@ -12,6 +12,7 @@ const mockUser: User = {
   roles: [{ id: "role-1", name: "Admin", permissions: ["dashboard:view"] }],
   permissions: ["dashboard:view"],
   modulePermissions: ["dashboard:view"],
+  isPlatformAdmin: false,
 }
 
 const mockSession: Session = {

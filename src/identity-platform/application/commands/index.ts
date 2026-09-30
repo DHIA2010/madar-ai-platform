@@ -207,6 +207,20 @@ export interface ResendInvitationCommand {
   invitationId: string
 }
 
+export interface RequestApplicationActivationCommand {
+  application: "advertising" | "ecommerce" | "pos" | "madarApps"
+  planTier: "starter" | "growth" | "pro" | "enterprise"
+  // Already uploaded by the REST route before this command runs (same convention as
+  // UpdateOrganizationCommand.logoUrl / voucher attachments) -- the command layer never handles
+  // raw base64.
+  attachmentUrl: string
+  attachmentContentType: string
+}
+
+export interface RejectSubscriptionActivationRequestCommand {
+  reason: string
+}
+
 export interface RemoveMemberCommand {
   organizationId: string
   memberUserId: string

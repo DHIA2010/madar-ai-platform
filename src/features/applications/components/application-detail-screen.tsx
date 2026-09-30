@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ArrowRight, Check, Crown } from "lucide-react"
+import { ArrowRight, Check, Clock, Crown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -12,6 +12,11 @@ import { AppButton } from "@/components/app"
 import type { ApplicationCatalogEntry } from "../types"
 import { isMadarCompleteBundle } from "../types"
 import { ActivationConfirmDialog, type ActivationTarget } from "./activation-confirm-dialog"
+import {
+  ActivationRequestDialog,
+  type ActivationRequestInput,
+  type ActivationRequestTarget,
+} from "./activation-request-dialog"
 
 import { cairo } from "@/components/design/fonts"
 
@@ -31,11 +36,16 @@ const PRICING_BADGE_LABEL: Record<"free" | "paid", string> = {
 export function ApplicationDetailScreen({
   entry,
   onConfirmActivation,
+  onSubmitActivationRequest,
 }: {
   entry: ApplicationCatalogEntry
+  // Deactivation + the مدار الكامل bundle's instant activation -- both still a plain confirm.
   onConfirmActivation: (target: ActivationTarget) => Promise<void>
+  // A single paid application's activation -- now a tier + receipt request, not an instant confirm.
+  onSubmitActivationRequest: (input: ActivationRequestInput) => Promise<void>
 }) {
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
+  const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
   const isBundle = isMadarCompleteBundle(entry)
 
   return (
@@ -122,6 +132,11 @@ export function ApplicationDetailScreen({
                 >
                   إلغاء التفعيل
                 </AppButton>
+              ) : entry.subscriptionStatus === "pending_review" ? (
+                <span className="flex h-11 items-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-4 text-[13px] font-semibold text-[#b45309]">
+                  <Clock className="size-4" />
+                  قيد المراجعة
+                </span>
               ) : (
                 <AppButton
                   className={cn(
@@ -129,14 +144,11 @@ export function ApplicationDetailScreen({
                     entry.accent.primaryButtonClassName
                   )}
                   onClick={() =>
-                    setPendingActivation({
-                      id: entry.id,
+                    setPendingRequest({
+                      applicationId: entry.id,
                       name: entry.name,
-                      priceLabel: entry.priceLabel,
-                      confirmLabel: entry.primaryCta.label as string,
                       icon: entry.icon,
                       iconWrapperClassName: entry.accent.iconWrapperClassName,
-                      confirmButtonClassName: entry.accent.primaryButtonClassName,
                     })
                   }
                 >
@@ -169,6 +181,14 @@ export function ApplicationDetailScreen({
           if (!open) setPendingActivation(null)
         }}
         onConfirm={onConfirmActivation}
+      />
+
+      <ActivationRequestDialog
+        target={pendingRequest}
+        onOpenChange={(open) => {
+          if (!open) setPendingRequest(null)
+        }}
+        onSubmit={onSubmitActivationRequest}
       />
     </div>
   )

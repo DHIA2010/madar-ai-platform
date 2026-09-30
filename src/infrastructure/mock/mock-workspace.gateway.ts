@@ -2,6 +2,8 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  SubscriptionActivationRequestDto,
+  SubscriptionRequestStatus,
   WorkspaceDto,
   WorkspaceSelectionDto,
   WorkspaceServiceSelectionDto,
@@ -15,6 +17,11 @@ import {
   mockWorkspaces,
   waitForMock,
 } from "../workspace"
+
+// Module-level, not per-instance -- mirrors mockOrganizations/mockWorkspaces' own module-level
+// mutable-ish mock state, so a request created in one call is still visible to a list call in the
+// same mock session. Never persisted beyond the page's lifetime, same as the rest of this file.
+let mockSubscriptionRequests: SubscriptionActivationRequestDto[] = []
 
 export class MockWorkspaceGateway implements WorkspaceGateway {
   async getOrganizations(): Promise<OrganizationDto[]> {
@@ -159,6 +166,99 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       throw new Error("Organization not found")
     }
     return organization
+  }
+
+  async requestApplicationActivation(
+    organizationId: string,
+    payload: {
+      application: SubscriptionActivationRequestDto["application"]
+      planTier: SubscriptionActivationRequestDto["planTier"]
+      attachmentContentType: string
+      attachmentDataBase64: string
+    }
+  ): Promise<SubscriptionActivationRequestDto> {
+    await waitForMock()
+    const organization = mockOrganizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      throw new Error("Organization not found")
+    }
+    const now = new Date().toISOString()
+    const request: SubscriptionActivationRequestDto = {
+      id: `mock-request-${mockSubscriptionRequests.length + 1}`,
+      organizationId,
+      organizationName: organization.name,
+      requestedByUserId: "mock-user",
+      application: payload.application,
+      planTier: payload.planTier,
+      attachmentUrl: `data:${payload.attachmentContentType};base64,${payload.attachmentDataBase64}`,
+      attachmentContentType: payload.attachmentContentType,
+      status: "pending",
+      reviewedByUserId: null,
+      reviewedAt: null,
+      rejectionReason: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    mockSubscriptionRequests = [request, ...mockSubscriptionRequests]
+    return request
+  }
+
+  async listMyOrganizationSubscriptionRequests(
+    organizationId: string
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    await waitForMock()
+    return mockSubscriptionRequests.filter((entry) => entry.organizationId === organizationId)
+  }
+
+  async listAllSubscriptionActivationRequests(
+    status?: SubscriptionRequestStatus
+  ): Promise<SubscriptionActivationRequestDto[]> {
+    await waitForMock()
+    return status
+      ? mockSubscriptionRequests.filter((entry) => entry.status === status)
+      : mockSubscriptionRequests
+  }
+
+  async approveSubscriptionActivationRequest(
+    requestId: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    await waitForMock()
+    const request = mockSubscriptionRequests.find((entry) => entry.id === requestId)
+    if (!request) {
+      throw new Error("Subscription request not found")
+    }
+    const updated: SubscriptionActivationRequestDto = {
+      ...request,
+      status: "approved",
+      reviewedByUserId: "mock-admin",
+      reviewedAt: new Date().toISOString(),
+    }
+    mockSubscriptionRequests = mockSubscriptionRequests.map((entry) =>
+      entry.id === requestId ? updated : entry
+    )
+    return updated
+  }
+
+  async rejectSubscriptionActivationRequest(
+    requestId: string,
+    reason: string
+  ): Promise<SubscriptionActivationRequestDto> {
+    await waitForMock()
+    const request = mockSubscriptionRequests.find((entry) => entry.id === requestId)
+    if (!request) {
+      throw new Error("Subscription request not found")
+    }
+    const updated: SubscriptionActivationRequestDto = {
+      ...request,
+      status: "rejected",
+      reviewedByUserId: "mock-admin",
+      reviewedAt: new Date().toISOString(),
+      rejectionReason: reason,
+    }
+    mockSubscriptionRequests = mockSubscriptionRequests.map((entry) =>
+      entry.id === requestId ? updated : entry
+    )
+    return updated
   }
 
   async restoreOrganization(organizationId: string): Promise<OrganizationDto> {

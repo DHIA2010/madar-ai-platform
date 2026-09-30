@@ -5,11 +5,12 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ProtectedRoute } from "@/features/authentication/components"
 
 // No requireWorkspace: this console manages every tenant, not one workspace the logged-in user
-// belongs to -- ProtectedRoute's workspace gate makes no sense here. Auth-only for now; a real
-// platform-staff role check is backend work for later (see the plan's non-goals).
+// belongs to -- ProtectedRoute's workspace gate makes no sense here. requirePlatformAdmin gates on
+// the PLATFORM_ADMIN_EMAILS allowlist (see AuthenticatedActor.isPlatformAdmin) -- any other
+// authenticated customer is redirected to their own dashboard.
 export default function MadarAdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requirePlatformAdmin>
       <TooltipProvider delayDuration={0}>
         <MadarAdminShell>
           {children}

@@ -19,7 +19,11 @@ import type {
 } from "../types"
 
 import { useApplicationServices } from "@/application"
-import type { OrganizationSettingsDto } from "@/application/contracts"
+import type {
+  OrganizationSettingsDto,
+  SubscriptionActivationRequestDto,
+  SubscriptionRequestStatus,
+} from "@/application/contracts"
 
 function getConfigurationErrorMessage(error: unknown): string | null {
   if (!(error instanceof AppError)) {
@@ -360,6 +364,47 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [workspaceApplicationService]
   )
 
+  // No store-syncing needed for any of these five: a request stays pending until a Madar staff
+  // member (a different session entirely) approves/rejects it, and only that decision changes
+  // currentOrganization -- which the customer's own next fetch/poll picks up naturally, same as
+  // any other server-side-only state change in this app (no live push).
+  const requestApplicationActivation = useCallback(
+    (
+      organizationId: string,
+      payload: {
+        application: SubscriptionActivationRequestDto["application"]
+        planTier: SubscriptionActivationRequestDto["planTier"]
+        attachmentContentType: string
+        attachmentDataBase64: string
+      }
+    ) => workspaceApplicationService.requestApplicationActivation(organizationId, payload),
+    [workspaceApplicationService]
+  )
+
+  const listMyOrganizationSubscriptionRequests = useCallback(
+    (organizationId: string) =>
+      workspaceApplicationService.listMyOrganizationSubscriptionRequests(organizationId),
+    [workspaceApplicationService]
+  )
+
+  const listAllSubscriptionActivationRequests = useCallback(
+    (status?: SubscriptionRequestStatus) =>
+      workspaceApplicationService.listAllSubscriptionActivationRequests(status),
+    [workspaceApplicationService]
+  )
+
+  const approveSubscriptionActivationRequest = useCallback(
+    (requestId: string) =>
+      workspaceApplicationService.approveSubscriptionActivationRequest(requestId),
+    [workspaceApplicationService]
+  )
+
+  const rejectSubscriptionActivationRequest = useCallback(
+    (requestId: string, reason: string) =>
+      workspaceApplicationService.rejectSubscriptionActivationRequest(requestId, reason),
+    [workspaceApplicationService]
+  )
+
   const updateWorkspace = useCallback(
     async (
       workspaceId: string,
@@ -423,6 +468,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       updateOrganization,
       uploadOrganizationLogo,
       getConnectedPlatformsCount,
+      requestApplicationActivation,
+      listMyOrganizationSubscriptionRequests,
+      listAllSubscriptionActivationRequests,
+      approveSubscriptionActivationRequest,
+      rejectSubscriptionActivationRequest,
       archiveOrganization,
       restoreOrganization,
       deleteOrganization,
@@ -440,6 +490,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       deleteOrganization,
       uploadOrganizationLogo,
       getConnectedPlatformsCount,
+      requestApplicationActivation,
+      listMyOrganizationSubscriptionRequests,
+      listAllSubscriptionActivationRequests,
+      approveSubscriptionActivationRequest,
+      rejectSubscriptionActivationRequest,
       currentOrganization,
       currentWorkspace,
       restoreOrganization,

@@ -879,6 +879,87 @@ export class InvitationEntity {
   }
 }
 
+export type SubscriptionApplication = "advertising" | "ecommerce" | "pos" | "madarApps"
+export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
+
+export interface SubscriptionActivationRequestState {
+  id: string
+  organizationId: string
+  // Denormalized at request time -- the cross-tenant admin list needs a readable name for every
+  // organization without a second, genuinely cross-tenant "get any org" query per row.
+  organizationName: string
+  requestedByUserId: string
+  application: SubscriptionApplication
+  planTier: SubscriptionPlanTier
+  attachmentUrl: string
+  attachmentContentType: string
+  status: "pending" | "approved" | "rejected"
+  reviewedByUserId: string | null
+  reviewedAt: string | null
+  rejectionReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// Same pending -> approved/rejected shape as InvitationEntity, minus the token/expiry machinery
+// (a subscription request doesn't expire on its own -- it waits for a human decision either way).
+export class SubscriptionActivationRequestEntity {
+  private constructor(private readonly state: SubscriptionActivationRequestState) {}
+
+  static create(state: SubscriptionActivationRequestState) {
+    return new SubscriptionActivationRequestEntity({ ...state })
+  }
+
+  static rehydrate(state: SubscriptionActivationRequestState) {
+    return new SubscriptionActivationRequestEntity({ ...state })
+  }
+
+  get id() {
+    return this.state.id
+  }
+
+  get organizationId() {
+    return this.state.organizationId
+  }
+
+  get application() {
+    return this.state.application
+  }
+
+  get planTier() {
+    return this.state.planTier
+  }
+
+  get status() {
+    return this.state.status
+  }
+
+  approve(reviewerId: string, now: string) {
+    if (this.state.status !== "pending") {
+      throw new Error("Only pending subscription requests can be approved.")
+    }
+    this.state.status = "approved"
+    this.state.reviewedByUserId = reviewerId
+    this.state.reviewedAt = now
+    this.state.updatedAt = now
+  }
+
+  reject(reviewerId: string, reason: string, now: string) {
+    if (this.state.status !== "pending") {
+      throw new Error("Only pending subscription requests can be rejected.")
+    }
+    this.state.status = "rejected"
+    this.state.reviewedByUserId = reviewerId
+    this.state.reviewedAt = now
+    this.state.rejectionReason = reason
+    this.state.updatedAt = now
+  }
+
+  toState(): SubscriptionActivationRequestState {
+    return { ...this.state }
+  }
+}
+
 export interface AuditLogState {
   id: string
   actorUserId: string | null

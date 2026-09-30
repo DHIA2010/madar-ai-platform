@@ -7,6 +7,7 @@ import type {
   OrganizationState,
   PasswordResetState,
   SessionState,
+  SubscriptionActivationRequestState,
   TeamMemberState,
   TeamState,
   UserState,
@@ -85,6 +86,20 @@ export interface InvitationRepository {
   save(entry: InvitationState): Promise<void>
 }
 
+export interface SubscriptionActivationRequestRepository {
+  findById(id: string): Promise<SubscriptionActivationRequestState | null>
+  findPendingByOrganizationAndApplication(
+    organizationId: string,
+    application: SubscriptionActivationRequestState["application"]
+  ): Promise<SubscriptionActivationRequestState | null>
+  listByOrganizationId(organizationId: string): Promise<SubscriptionActivationRequestState[]>
+  // Cross-tenant -- backs the Madar Admin review list, not any customer-facing query.
+  listAll(input?: {
+    status?: SubscriptionActivationRequestState["status"]
+  }): Promise<SubscriptionActivationRequestState[]>
+  save(entry: SubscriptionActivationRequestState): Promise<void>
+}
+
 export interface AuditLogListItem extends AuditLogState {
   actorName: string | null
 }
@@ -152,6 +167,7 @@ export interface IdentityRepositories {
   emailVerifications: EmailVerificationRepository
   passwordResets: PasswordResetRepository
   invitations: InvitationRepository
+  subscriptionActivationRequests: SubscriptionActivationRequestRepository
   auditLogs: AuditLogRepository
   teams: TeamRepository
   customRoles: CustomRoleRepository
