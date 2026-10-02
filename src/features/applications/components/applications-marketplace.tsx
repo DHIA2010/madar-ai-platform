@@ -117,14 +117,23 @@ export function ApplicationsMarketplace() {
       </div>
 
       {/* Application cards -- only this area scrolls, and only once it actually needs to;
-          header/search/tabs above and مدار الكامل below stay put. */}
-      <div className="mb-3.5 max-h-[75vh] overflow-y-auto pe-1">
+          header/search/tabs above and مدار الكامل below stay put. A visible (not
+          hover-only) scrollbar makes it obvious there's more to scroll to instead of
+          looking like clipped/broken content. */}
+      <div
+        className={cn(
+          "mb-3.5 max-h-[58vh] overflow-y-auto pe-2",
+          "[&::-webkit-scrollbar]:w-1.5",
+          "[&::-webkit-scrollbar-track]:bg-transparent",
+          "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8e0ee]"
+        )}
+      >
         {visibleApplications.length === 0 ? (
           <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
             لا يوجد تطبيق مطابق لبحثك.
           </div>
         ) : (
-          <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3.5 pb-1 sm:grid-cols-2 xl:grid-cols-4">
             {visibleApplications.map((application) => (
               <ApplicationCard
                 key={application.id}

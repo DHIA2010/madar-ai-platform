@@ -12,8 +12,6 @@ import { NavUser } from "@/components/nav-user"
 import { Button } from "@/components/ui/button"
 import { WorkspaceSelector } from "@/features/workspace"
 
-import Footer from "@/components/layout/Footer"
-
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 
 import { cn } from "@/lib/utils"
@@ -107,7 +105,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
         <div className="flex flex-1 flex-col p-6">{children}</div>
-        <Footer />
       </SidebarInset>
     </SidebarProvider>
   )
