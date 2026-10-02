@@ -116,9 +116,9 @@ export function ApplicationsMarketplace() {
         />
       </div>
 
-      {/* Application cards -- only this area scrolls; header/search/tabs above and مدار
-          الكامل below stay put. */}
-      <div className="mb-3.5 h-[55vh] min-h-[320px] overflow-y-auto pe-1">
+      {/* Application cards -- only this area scrolls, and only once it actually needs to;
+          header/search/tabs above and مدار الكامل below stay put. */}
+      <div className="mb-3.5 max-h-[75vh] overflow-y-auto pe-1">
         {visibleApplications.length === 0 ? (
           <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
             لا يوجد تطبيق مطابق لبحثك.
