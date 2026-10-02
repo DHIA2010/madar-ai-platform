@@ -1,9 +1,8 @@
 import {
   BarChart3,
-  Blocks,
+  Calculator,
   CreditCard,
   FileText,
-  Link2,
   ListChecks,
   Radio,
   ShoppingBag,
@@ -110,29 +109,119 @@ export const APPLICATION_CATALOG: ApplicationDefinition[] = [
     primaryCta: { label: "اشتراك الآن" },
     subscriptionStatus: "not_subscribed",
   },
+  // تطبيقات مدار -- previously one card showing these 5 as a mini icon-grid; now each is its
+  // own full card with the same activate/learn-more buttons as any other application. They
+  // share the single "madarApps" category/settings flag (APPLICATION_SETTINGS_KEY below) on
+  // purpose: there is no per-item backend subscription unit, so activating any one of the 5
+  // submits/approves the shared "madarApps" request and all 5 flip together.
   {
-    id: "madar-apps",
+    id: "madar-apps-reports",
     category: "madarApps",
-    name: "تطبيقات مدار",
-    shortDescription: "مجموعة تطبيقات مساعدة لإدارة أعمالك بكفاءة أكبر.",
+    name: "التقارير",
+    shortDescription: "تقارير جاهزة وتحليلات شاملة لأداء أعمالك في مكان واحد.",
     detailDescription:
-      "مجموعة من تطبيقات مدار الداخلية لإدارة أعمالك اليومية -- التقارير، المصروفات، المهام، التكاملات، والمستندات -- مع المزيد من التطبيقات قيد الإضافة باستمرار. تفتح هذه الصفحة تفاصيل كل تطبيق ضمن المجموعة.",
-    icon: Blocks,
+      "تابع أداء أعمالك عبر تقارير جاهزة ومخصصة تجمع بياناتك من جميع تطبيقات مدار المفعّلة -- المبيعات، الحملات، المتجر، ونقطة البيع -- مع إمكانية التصدير والجدولة الدورية.",
+    icon: BarChart3,
     accent: {
       iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
       primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
     },
     pricingModel: "paid",
-    featuresDisplay: "iconGrid",
+    featuresDisplay: "checklist",
     features: [
-      { label: "التقارير", icon: BarChart3 },
-      { label: "المصروفات", icon: Wallet },
-      { label: "المهام", icon: ListChecks },
-      { label: "التكاملات", icon: Link2 },
-      { label: "المستندات", icon: FileText },
+      { label: "تقارير جاهزة لكل تطبيق مفعّل" },
+      { label: "تصدير التقارير بصيغ متعددة" },
+      { label: "جدولة تقارير دورية تلقائية" },
     ],
-    // تطبيقات مدار never gets a direct subscribe action on its card -- only "معرفة المزيد".
-    primaryCta: { label: null },
+    primaryCta: { label: "اشتراك الآن" },
+    subscriptionStatus: "not_subscribed",
+  },
+  {
+    id: "madar-apps-expenses",
+    category: "madarApps",
+    name: "المصروفات",
+    shortDescription: "تتبع مصروفات أعمالك وتصنيفها بسهولة في مكان واحد.",
+    detailDescription:
+      "سجّل مصروفاتك التشغيلية وصنّفها حسب الفئة أو الفرع، وتابع التدفق النقدي لأعمالك بشكل مستمر مع تقارير مصروفات جاهزة لمساعدتك على اتخاذ قرارات مالية أفضل.",
+    icon: Wallet,
+    accent: {
+      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
+      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
+    },
+    pricingModel: "paid",
+    featuresDisplay: "checklist",
+    features: [
+      { label: "تسجيل المصروفات وتصنيفها" },
+      { label: "ربط المصروفات بالفروع والفئات" },
+      { label: "تقارير مصروفات دورية" },
+    ],
+    primaryCta: { label: "اشتراك الآن" },
+    subscriptionStatus: "not_subscribed",
+  },
+  {
+    id: "madar-apps-tasks",
+    category: "madarApps",
+    name: "المهام",
+    shortDescription: "نظّم مهام فريقك وتابع إنجازها أولاً بأول.",
+    detailDescription:
+      "أنشئ مهامًا لفريقك، وحدد الأولويات والمواعيد النهائية، وتابع حالة الإنجاز لكل مهمة من لوحة واحدة تجمع كل ما يحتاج فريقك للتركيز عليه.",
+    icon: ListChecks,
+    accent: {
+      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
+      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
+    },
+    pricingModel: "paid",
+    featuresDisplay: "checklist",
+    features: [
+      { label: "إنشاء المهام وتوزيعها على الفريق" },
+      { label: "تحديد الأولويات والمواعيد النهائية" },
+      { label: "متابعة حالة الإنجاز لحظة بلحظة" },
+    ],
+    primaryCta: { label: "اشتراك الآن" },
+    subscriptionStatus: "not_subscribed",
+  },
+  {
+    id: "madar-apps-accounting",
+    category: "madarApps",
+    name: "المحاسبة",
+    shortDescription: "إدارة حساباتك المالية وفواتيرك في مكان واحد.",
+    detailDescription:
+      "تابع القيود المحاسبية والفواتير والموردين والعملاء، وأصدر تقاريرك المالية الدورية -- الأرباح والخسائر، والميزانية العمومية -- بما يتوافق مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA).",
+    icon: Calculator,
+    accent: {
+      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
+      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
+    },
+    pricingModel: "paid",
+    featuresDisplay: "checklist",
+    features: [
+      { label: "إصدار الفواتير والقيود المحاسبية" },
+      { label: "متابعة الموردين والعملاء" },
+      { label: "تقارير مالية جاهزة (أرباح وخسائر)" },
+    ],
+    primaryCta: { label: "اشتراك الآن" },
+    subscriptionStatus: "not_subscribed",
+  },
+  {
+    id: "madar-apps-documents",
+    category: "madarApps",
+    name: "المستندات",
+    shortDescription: "احفظ مستندات أعمالك ونظّمها في مكان واحد آمن.",
+    detailDescription:
+      "ارفع مستندات أعمالك المهمة -- العقود، الفواتير، والتراخيص -- ونظّمها في مجلدات، مع إمكانية الوصول إليها ومشاركتها بأمان في أي وقت.",
+    icon: FileText,
+    accent: {
+      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
+      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
+    },
+    pricingModel: "paid",
+    featuresDisplay: "checklist",
+    features: [
+      { label: "رفع المستندات وتنظيمها في مجلدات" },
+      { label: "مشاركة المستندات بأمان" },
+      { label: "بحث سريع ضمن جميع المستندات" },
+    ],
+    primaryCta: { label: "اشتراك الآن" },
     subscriptionStatus: "not_subscribed",
   },
 ]
