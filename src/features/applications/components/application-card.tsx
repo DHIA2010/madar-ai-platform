@@ -94,40 +94,42 @@ export function ApplicationCard({
         </ul>
       )}
 
-      {application.priceLabel ? (
-        <p className={cn("mt-4 text-[12.5px] font-bold", PAGE_TEXT)}>{application.priceLabel}</p>
-      ) : null}
-
-      <div className="mt-4 flex items-center gap-2 pt-1">
-        <Link href={ROUTES.marketplaceDetails(application.id)} className="flex-1">
-          <AppButton
-            variant="outline"
-            fullWidth
-            className="h-10 rounded-[10px] border-[#e1e7f0] text-[12.5px] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"
-          >
-            معرفة المزيد
-          </AppButton>
-        </Link>
-        {isPendingReview ? (
-          <span className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] text-[12.5px] font-semibold text-[#b45309]">
-            <Clock className="size-3.5" />
-            قيد المراجعة
-          </span>
-        ) : application.primaryCta.label ? (
-          <AppButton
-            variant={isSubscribed ? "outline" : "default"}
-            className={cn(
-              "h-10 flex-1 rounded-[10px] text-[12.5px] font-semibold",
-              isSubscribed
-                ? "border-[#e1e7f0] text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
-                : application.accent.primaryButtonClassName
-            )}
-            loading={activating}
-            onClick={() => (isSubscribed ? onDeactivate(application) : onActivate(application))}
-          >
-            {isSubscribed ? "إلغاء التفعيل" : application.primaryCta.label}
-          </AppButton>
+      <div className="mt-auto pt-4">
+        {application.priceLabel ? (
+          <p className={cn("text-[12.5px] font-bold", PAGE_TEXT)}>{application.priceLabel}</p>
         ) : null}
+
+        <div className={cn("flex items-center gap-2", application.priceLabel && "mt-4")}>
+          <Link href={ROUTES.marketplaceDetails(application.id)} className="flex-1">
+            <AppButton
+              variant="outline"
+              fullWidth
+              className="h-10 rounded-[10px] border-[#e1e7f0] text-[12.5px] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"
+            >
+              معرفة المزيد
+            </AppButton>
+          </Link>
+          {isPendingReview ? (
+            <span className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] text-[12.5px] font-semibold text-[#b45309]">
+              <Clock className="size-3.5" />
+              قيد المراجعة
+            </span>
+          ) : application.primaryCta.label ? (
+            <AppButton
+              variant={isSubscribed ? "outline" : "default"}
+              className={cn(
+                "h-10 flex-1 rounded-[10px] text-[12.5px] font-semibold",
+                isSubscribed
+                  ? "border-[#e1e7f0] text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
+                  : application.accent.primaryButtonClassName
+              )}
+              loading={activating}
+              onClick={() => (isSubscribed ? onDeactivate(application) : onActivate(application))}
+            >
+              {isSubscribed ? "إلغاء التفعيل" : application.primaryCta.label}
+            </AppButton>
+          ) : null}
+        </div>
       </div>
     </div>
   )
