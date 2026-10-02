@@ -68,9 +68,12 @@ export function ApplicationsMarketplace() {
   }
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div
+      className={cn(cairo.className, "flex h-full min-h-0 flex-col bg-[#f7f9fd] px-6 py-5")}
+      dir="rtl"
+    >
       {/* Header */}
-      <div className="mb-3.5 overflow-hidden rounded-[14px] border border-[#e1e7f0] bg-gradient-to-l from-[#eef4ff] to-white px-6 py-6">
+      <div className="mb-3.5 shrink-0 overflow-hidden rounded-[14px] border border-[#e1e7f0] bg-gradient-to-l from-[#eef4ff] to-white px-6 py-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-1.5 text-[#2878ff]">
@@ -96,7 +99,7 @@ export function ApplicationsMarketplace() {
       </div>
 
       {/* Search */}
-      <div className="mb-3.5">
+      <div className="mb-3.5 shrink-0">
         <AppInput
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
@@ -108,7 +111,7 @@ export function ApplicationsMarketplace() {
       </div>
 
       {/* Category tabs */}
-      <div className="mb-3.5">
+      <div className="mb-3.5 shrink-0">
         <ApplicationCategoryTabs
           tabs={categoryTabs}
           activeCategory={activeCategory}
@@ -116,39 +119,43 @@ export function ApplicationsMarketplace() {
         />
       </div>
 
-      {/* Application cards -- only this area scrolls, and only once it actually needs to;
-          header/search/tabs above and مدار الكامل below stay put. A visible (not
-          hover-only) scrollbar makes it obvious there's more to scroll to instead of
-          looking like clipped/broken content. */}
-      <div
-        className={cn(
-          "mb-3.5 max-h-[58vh] overflow-y-auto pe-2",
-          "[&::-webkit-scrollbar]:w-1.5",
-          "[&::-webkit-scrollbar-track]:bg-transparent",
-          "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8e0ee]"
-        )}
-      >
-        {visibleApplications.length === 0 ? (
-          <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
-            لا يوجد تطبيق مطابق لبحثك.
-          </div>
-        ) : (
-          <div className="grid gap-3.5 pb-1 sm:grid-cols-2 xl:grid-cols-4">
-            {visibleApplications.map((application) => (
-              <ApplicationCard
-                key={application.id}
-                application={application}
-                activating={activatingId === application.id}
-                onActivate={requestApplicationActivation}
-                onDeactivate={requestApplicationDeactivation}
-              />
-            ))}
-          </div>
-        )}
+      {/* Application cards -- the only flexible child, so it's the only thing that ever
+          scrolls; header/search/tabs above and مدار الكامل below are shrink-0 and always
+          fully visible. The panel border + visible (not hover-only) scrollbar make it read
+          as a distinct scroll area instead of looking like clipped/broken content. */}
+      <div className="mb-3.5 min-h-0 flex-1 overflow-hidden rounded-[14px] border border-[#e1e7f0] bg-white/60">
+        <div
+          className={cn(
+            "h-full overflow-y-auto p-3.5",
+            "[&::-webkit-scrollbar]:w-1.5",
+            "[&::-webkit-scrollbar-track]:bg-transparent",
+            "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8e0ee]"
+          )}
+        >
+          {visibleApplications.length === 0 ? (
+            <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
+              لا يوجد تطبيق مطابق لبحثك.
+            </div>
+          ) : (
+            <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+              {visibleApplications.map((application) => (
+                <ApplicationCard
+                  key={application.id}
+                  application={application}
+                  activating={activatingId === application.id}
+                  onActivate={requestApplicationActivation}
+                  onDeactivate={requestApplicationDeactivation}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* مدار الكامل */}
-      <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
+      <div className="shrink-0">
+        <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
+      </div>
 
       <ActivationConfirmDialog
         target={pendingActivation}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import type { UIEvent } from "react"
 
 import { ChevronDown, RefreshCw } from "lucide-react"
 
@@ -25,15 +26,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const isExpanded = open || hovered
 
-  // Handle header background on scroll
-  useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 10)
-    }
-
-    window.addEventListener("scroll", onScroll)
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [])
+  // Content now scrolls inside its own container (see the content div below) instead of the
+  // document, so the header's scroll-shadow reads that container's scrollTop directly.
+  function handleContentScroll(event: UIEvent<HTMLDivElement>) {
+    setScrolled(event.currentTarget.scrollTop > 10)
+  }
 
   // Handle responsive sidebar
   useEffect(() => {
@@ -47,10 +44,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [])
 
   return (
-    <SidebarProvider open={isExpanded} onOpenChange={setOpen}>
+    <SidebarProvider open={isExpanded} onOpenChange={setOpen} className="h-svh overflow-hidden">
       <AppSidebar onHoverChange={setHovered} />
-      <SidebarInset>
-        <div className="sticky top-0 z-40 w-full shrink-0 relative">
+      <SidebarInset className="min-h-0 overflow-hidden">
+        <div className="relative w-full shrink-0">
           <header
             className={cn(
               "px-6 flex w-full items-center gap-2 overflow-hidden border-b bg-background/95 backdrop-blur transition-[height,opacity] duration-200 supports-[backdrop-filter]:bg-background/80",
@@ -104,7 +101,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             />
           </button>
         </div>
-        <div className="flex flex-1 flex-col p-6">{children}</div>
+        <div
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6"
+          onScroll={handleContentScroll}
+        >
+          {children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )
