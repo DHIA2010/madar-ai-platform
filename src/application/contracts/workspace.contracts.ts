@@ -56,6 +56,20 @@ export interface OrganizationSettingsDto {
   // Set on approval of a subscription activation request (see SubscriptionActivationRequestDto
   // below) -- the account-wide tier chosen at request time.
   currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
+  // Free 7-day trial bookkeeping (see startApplicationTrial below), one set of 3 keys per
+  // application. TrialEndsAt also doubles as the *Enabled flag's expiry: once past, the
+  // application reads as inactive again even though *Enabled itself is never flipped back by a
+  // scheduled job -- see resolveApplicationStatus. TrialUsed is permanent (never cleared) so a
+  // trial can only ever be used once per application, even after it lapses or is deactivated.
+  // Approving a real paid request always clears the matching TrialEndsAt to "".
+  advertisingTrialEndsAt?: string
+  advertisingTrialUsed?: boolean
+  ecommerceTrialEndsAt?: string
+  ecommerceTrialUsed?: boolean
+  posTrialEndsAt?: string
+  posTrialUsed?: boolean
+  madarAppsTrialEndsAt?: string
+  madarAppsTrialUsed?: boolean
 }
 
 export type SubscriptionApplication = "advertising" | "ecommerce" | "pos" | "madarApps"
@@ -167,6 +181,13 @@ export interface WorkspaceRepository {
   listMyOrganizationSubscriptionRequests(
     organizationId: string
   ): Promise<SubscriptionActivationRequestDto[]>
+  // Instant, no-approval-needed free trial -- returns the updated organization directly (unlike
+  // requestApplicationActivation, which only ever returns the pending request itself) since the
+  // application is active immediately.
+  startApplicationTrial(
+    organizationId: string,
+    application: SubscriptionApplication
+  ): Promise<OrganizationDto>
   // Cross-tenant, platform-admin only -- backs the Madar Admin review console. Reuses this same
   // authenticated repository/adapter rather than standing up a second DI subsystem for 3 methods.
   listAllSubscriptionActivationRequests(

@@ -42,6 +42,10 @@ const SETTINGS_TEXT_KEYS = [
   "city",
   "taxPriceEntryMode",
   "currentPlanTier",
+  "advertisingTrialEndsAt",
+  "ecommerceTrialEndsAt",
+  "posTrialEndsAt",
+  "madarAppsTrialEndsAt",
 ] as const
 
 // Booleans get their own list rather than folding into SETTINGS_TEXT_KEYS above (a `typeof ===
@@ -67,6 +71,12 @@ const APPLICATION_BOOLEAN_KEYS = [
   "ecommerceEnabled",
   "posEnabled",
   "madarAppsEnabled",
+  // Trial-used flags share the same "default false, not undefined" reasoning -- a trial being
+  // available is a real boolean the activation dialog has to check, not a possibly-missing one.
+  "advertisingTrialUsed",
+  "ecommerceTrialUsed",
+  "posTrialUsed",
+  "madarAppsTrialUsed",
 ] as const
 
 function toOrganizationSettingsDto(
@@ -292,6 +302,22 @@ export class WorkspaceApiAdapter {
     return this.client.get<SubscriptionActivationRequestDto[]>(
       `/v1/organizations/${organizationId}/subscription-requests`
     )
+  }
+
+  // Unlike requestApplicationActivation, the backend activates the application immediately and
+  // returns the updated organization itself -- so this goes through toOrganizationDto like
+  // updateOrganization/uploadOrganizationLogo above, not the raw passthrough the subscription-
+  // request methods use.
+  startApplicationTrial(
+    organizationId: string,
+    application: SubscriptionActivationRequestDto["application"]
+  ): Promise<OrganizationDto> {
+    return this.client
+      .post<
+        { application: typeof application },
+        RawOrganization
+      >(`/v1/organizations/${organizationId}/application-trials`, { application })
+      .then(toOrganizationDto)
   }
 
   listAllSubscriptionActivationRequests(

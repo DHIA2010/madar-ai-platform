@@ -42,6 +42,9 @@ import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
 import { ReportsService } from "../../reports/service"
 import type { ReportLevelFilter } from "../../reports/types"
+import { AiChatService } from "../../ai-chat/service"
+import { AiChatLlmClient } from "../../ai-chat/llm-client"
+import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -162,6 +165,9 @@ import {
   verifyEmailSchema,
   requestApplicationActivationSchema,
   rejectSubscriptionActivationRequestSchema,
+  createChatSessionSchema,
+  sendChatMessageSchema,
+  startApplicationTrialSchema,
 } from "../../schemas"
 
 function json(
@@ -630,6 +636,36 @@ export function createIdentityApiServer(
   const storesAggregationService = container.infrastructure.database
     ? new StoresAggregationService(container.infrastructure.database)
     : null
+  // null-gated on config.anthropicApiKey like every other optional external-dependency feature
+  // here -- no key configured means ai-chat routes return 503, same as every other feature
+  // module whose gate is missing. All 7 tool-backing services above are built from `database`
+  // alone (or from other database-only services), so in practice this is true whenever
+  // database + anthropicApiKey are both present.
+  const aiChatService =
+    container.infrastructure.database &&
+    container.config.anthropicApiKey &&
+    campaignsPerformanceAggregationService &&
+    channelsAggregationService &&
+    ordersAggregationService &&
+    storesAggregationService &&
+    posInvoicesService &&
+    posShiftsService &&
+    reportsService
+      ? new AiChatService(
+          container.infrastructure.database,
+          {
+            campaignPerformanceService: campaignsPerformanceAggregationService,
+            channelsService: channelsAggregationService,
+            ordersAggregationService,
+            storesAggregationService,
+            posInvoicesService,
+            posShiftsService,
+            reportsService,
+          },
+          new AiChatLlmClient(container.config.anthropicApiKey, container.config.aiChatModel),
+          container.config.aiChatModel
+        )
+      : null
   const campaignRepositoryForLinks = container.infrastructure.database
     ? new CampaignRepository(container.infrastructure.database)
     : null
@@ -1844,6 +1880,38 @@ export function createIdentityApiServer(
         }
       }
 
+      if (aiChatService) {
+        if (method === "POST" && url.pathname === "/v1/ai/sessions") {
+          if (!actor.modulePermissions.includes("ai:view")) throw ERRORS.forbidden()
+          const payload = createChatSessionSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await aiChatService.createSession(
+              actor,
+              payload.applicationCategory as AiChatApplicationCategoryId
+            )
+          )
+        }
+
+        if (method === "GET" && url.pathname === "/v1/ai/sessions") {
+          if (!actor.modulePermissions.includes("ai:view")) throw ERRORS.forbidden()
+          return send(200, { items: await aiChatService.listSessions(actor) })
+        }
+
+        const aiSessionMessagesMatch = url.pathname.match(/^\/v1\/ai\/sessions\/([^/]+)\/messages$/)
+        if (aiSessionMessagesMatch) {
+          if (!actor.modulePermissions.includes("ai:view")) throw ERRORS.forbidden()
+          const sessionId = decodeURIComponent(aiSessionMessagesMatch[1])
+          if (method === "GET") {
+            return send(200, { items: await aiChatService.listMessages(actor, sessionId) })
+          }
+          if (method === "POST") {
+            const payload = sendChatMessageSchema.parse(await readJsonBody(request))
+            return send(201, await aiChatService.sendMessage(actor, sessionId, payload.content))
+          }
+        }
+      }
+
       const deleteIntegrationMatch = url.pathname.match(/^\/v1\/integrations\/([^/]+)$/)
       if (method === "DELETE" && deleteIntegrationMatch) {
         if (
@@ -2631,6 +2699,22 @@ export function createIdentityApiServer(
               attachmentUrl,
               attachmentContentType: payload.attachmentContentType,
             },
+            context
+          )
+        )
+      }
+
+      const applicationTrialMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/application-trials$/
+      )
+      if (applicationTrialMatch && method === "POST") {
+        const payload = startApplicationTrialSchema.parse(await readJsonBody(request))
+        return send(
+          201,
+          await container.commands.startApplicationTrial(
+            actor,
+            applicationTrialMatch[1],
+            payload,
             context
           )
         )

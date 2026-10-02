@@ -387,6 +387,33 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [workspaceApplicationService]
   )
 
+  // Unlike requestApplicationActivation above, a trial activates the application immediately, so
+  // this syncs currentOrganization/availableOrganizations right away -- same pattern as
+  // updateOrganization/uploadOrganizationLogo, not the fire-and-forget pending-request methods.
+  const startApplicationTrial = useCallback(
+    async (
+      organizationId: string,
+      application: SubscriptionActivationRequestDto["application"]
+    ) => {
+      const organization = await workspaceApplicationService.startApplicationTrial(
+        organizationId,
+        application
+      )
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      if (currentOrganization?.id === organizationId) {
+        setCurrentOrganization(organization)
+      }
+      return organization
+    },
+    [
+      availableOrganizations,
+      currentOrganization?.id,
+      setAvailableOrganizations,
+      setCurrentOrganization,
+      workspaceApplicationService,
+    ]
+  )
+
   const listAllSubscriptionActivationRequests = useCallback(
     (status?: SubscriptionRequestStatus) =>
       workspaceApplicationService.listAllSubscriptionActivationRequests(status),
@@ -470,6 +497,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       getConnectedPlatformsCount,
       requestApplicationActivation,
       listMyOrganizationSubscriptionRequests,
+      startApplicationTrial,
       listAllSubscriptionActivationRequests,
       approveSubscriptionActivationRequest,
       rejectSubscriptionActivationRequest,
@@ -492,6 +520,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       getConnectedPlatformsCount,
       requestApplicationActivation,
       listMyOrganizationSubscriptionRequests,
+      startApplicationTrial,
       listAllSubscriptionActivationRequests,
       approveSubscriptionActivationRequest,
       rejectSubscriptionActivationRequest,

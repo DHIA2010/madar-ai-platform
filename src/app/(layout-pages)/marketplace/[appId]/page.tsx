@@ -11,8 +11,14 @@ import {
 
 export default function Page() {
   const params = useParams<{ appId: string }>()
-  const { statusById, submitActivationRequest, deactivateApplication, activateAllApplications } =
-    useApplicationsCatalog()
+  const {
+    statusById,
+    trialAvailableByCategory,
+    submitActivationRequest,
+    deactivateApplication,
+    activateAllApplications,
+    startTrial,
+  } = useApplicationsCatalog()
   const entry = getApplicationById(params.appId)
 
   if (!entry) {
@@ -26,6 +32,9 @@ export default function Page() {
   return (
     <ApplicationDetailScreen
       entry={liveEntry}
+      trialAvailable={
+        isMadarCompleteBundle(entry) ? false : trialAvailableByCategory[entry.category]
+      }
       onConfirmActivation={async (target) => {
         if (target.id === "madar-complete") {
           await activateAllApplications()
@@ -34,6 +43,7 @@ export default function Page() {
         await deactivateApplication(target.id)
       }}
       onSubmitActivationRequest={submitActivationRequest}
+      onStartTrial={startTrial}
     />
   )
 }

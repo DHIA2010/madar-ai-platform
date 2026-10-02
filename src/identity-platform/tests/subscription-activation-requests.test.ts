@@ -163,3 +163,108 @@ describe("subscription activation requests", () => {
     expect(organization.settings.advertisingEnabled).not.toBe(true)
   })
 })
+
+describe("free application trials", () => {
+  it("activates the application instantly, with no staff approval needed", async () => {
+    const container = createContainer()
+    const customer = await registerAndLogin(container, "trial-customer-1@madar.test")
+    const organizationId = customer.actor.organizationId
+
+    const result = await container.commands.startApplicationTrial(
+      customer.actor,
+      organizationId,
+      { application: "pos" },
+      context
+    )
+    expect(result.settings.posEnabled).toBe(true)
+    expect(result.settings.posTrialUsed).toBe(true)
+    expect(typeof result.settings.posTrialEndsAt).toBe("string")
+    expect(new Date(result.settings.posTrialEndsAt as string).getTime()).toBeGreaterThan(Date.now())
+
+    const organization = await container.queries.getOrganization(customer.actor, organizationId)
+    expect(organization.settings.posEnabled).toBe(true)
+  })
+
+  it("refuses a second trial for the same application once the first has been used", async () => {
+    const container = createContainer()
+    const customer = await registerAndLogin(container, "trial-customer-2@madar.test")
+    const organizationId = customer.actor.organizationId
+
+    await container.commands.startApplicationTrial(
+      customer.actor,
+      organizationId,
+      { application: "ecommerce" },
+      context
+    )
+
+    await expect(
+      container.commands.startApplicationTrial(
+        customer.actor,
+        organizationId,
+        { application: "ecommerce" },
+        context
+      )
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+  })
+
+  it("refuses a trial for an application that's already active", async () => {
+    const container = createContainer()
+    const customer = await registerAndLogin(container, "trial-customer-3@madar.test")
+    const staff = await registerAndLogin(container, PLATFORM_ADMIN_EMAIL)
+    const organizationId = customer.actor.organizationId
+
+    const request = await container.commands.requestApplicationActivation(
+      customer.actor,
+      organizationId,
+      {
+        application: "advertising",
+        planTier: "starter",
+        attachmentUrl: "https://storage.test/subscription-receipts/receipt-trial.png",
+        attachmentContentType: "image/png",
+      },
+      context
+    )
+    await container.commands.approveSubscriptionActivationRequest(staff.actor, request.id, context)
+
+    await expect(
+      container.commands.startApplicationTrial(
+        customer.actor,
+        organizationId,
+        { application: "advertising" },
+        context
+      )
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+  })
+
+  it("clears the trial's expiry marker once the same application is later approved for real", async () => {
+    const container = createContainer()
+    const customer = await registerAndLogin(container, "trial-customer-4@madar.test")
+    const staff = await registerAndLogin(container, PLATFORM_ADMIN_EMAIL)
+    const organizationId = customer.actor.organizationId
+
+    await container.commands.startApplicationTrial(
+      customer.actor,
+      organizationId,
+      { application: "madarApps" },
+      context
+    )
+
+    const request = await container.commands.requestApplicationActivation(
+      customer.actor,
+      organizationId,
+      {
+        application: "madarApps",
+        planTier: "pro",
+        attachmentUrl: "https://storage.test/subscription-receipts/receipt-trial-upgrade.png",
+        attachmentContentType: "image/png",
+      },
+      context
+    )
+    await container.commands.approveSubscriptionActivationRequest(staff.actor, request.id, context)
+
+    const organization = await container.queries.getOrganization(customer.actor, organizationId)
+    expect(organization.settings.madarAppsEnabled).toBe(true)
+    expect(organization.settings.currentPlanTier).toBe("pro")
+    expect(organization.settings.madarAppsTrialEndsAt).toBe("")
+  })
+})

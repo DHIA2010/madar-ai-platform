@@ -28,8 +28,11 @@ import {
   AppSelectValue,
 } from "@/components/app"
 import { PlatformBadge } from "@/components/platform-badge"
+import type { ApplicationCategoryId } from "@/features/applications"
+import { useAiChat } from "@/features/ai"
 
-// --- Mock data (first-pass theme build; will be wired to real AI data next) ---
+// --- Mock data for the "التوصيات المقترحة" panel -- a separate, proactive-insights feature
+// (background analysis + notification) from the reactive chat below, not built in this pass. ---
 
 type RecommendationCategory = "growth" | "optimization" | "alert"
 
@@ -96,19 +99,39 @@ const recommendations: Recommendation[] = [
   },
 ]
 
-const suggestedQuestions: Array<{ label: string; icon: LucideIcon }> = [
-  { label: "ما هي القناة التي تحقق أفضل عائد على الاستثمار؟", icon: BarChart3 },
-  { label: "أين يجب أن أزيد الميزانية للحصول على نتائج أفضل؟", icon: Target },
-  { label: "ما الحملات التي تحتاج إلى تحسين أو إيقاف؟", icon: AlertCircle },
-  { label: "أعطني ملخص لأداء العام لحملاتي", icon: FileText },
-]
-
 const TABS: Array<{ key: "all" | RecommendationCategory; label: string; icon?: LucideIcon }> = [
   { key: "all", label: "الكل" },
   { key: "growth", label: "فرص النمو", icon: TrendingUp },
   { key: "optimization", label: "تحسين الأداء", icon: Gauge },
   { key: "alert", label: "تنبيهات", icon: AlertTriangle },
 ]
+
+const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
+  advertising: "الحملات الإعلانية",
+  ecommerce: "المتاجر الإلكترونية",
+  pos: "نقطة البيع",
+  madarApps: "تطبيقات مدار",
+}
+
+const SUGGESTED_QUESTIONS: Record<
+  ApplicationCategoryId,
+  Array<{ label: string; icon: LucideIcon }>
+> = {
+  advertising: [
+    { label: "ما هي القناة التي تحقق أفضل عائد على الاستثمار؟", icon: BarChart3 },
+    { label: "أين يجب أن أزيد الميزانية للحصول على نتائج أفضل؟", icon: Target },
+    { label: "أعطني ملخص لأداء حملاتي هذا الشهر", icon: FileText },
+  ],
+  pos: [
+    { label: "ما هو إجمالي المبيعات المكتملة هذا الشهر؟", icon: BarChart3 },
+    { label: "كم عدد الفواتير المرتجعة؟", icon: AlertCircle },
+  ],
+  ecommerce: [
+    { label: "ما هو متوسط قيمة الطلب هذا الأسبوع؟", icon: BarChart3 },
+    { label: "ما حالة اتصال متاجري؟", icon: AlertCircle },
+  ],
+  madarApps: [{ label: "أعطني ملخصًا لأهم المؤشرات (KPIs)", icon: FileText }],
+}
 
 function RecommendationCard({ item }: { item: Recommendation }) {
   const category = CATEGORY_META[item.category]
@@ -155,11 +178,22 @@ export default function AIAssistantDashboard() {
   const [activeTab, setActiveTab] = useState<"all" | RecommendationCategory>("all")
   const [period, setPeriod] = useState("30")
   const [chatInput, setChatInput] = useState("")
+  const { messages, availableCategories, isSending, sendMessage } = useAiChat()
+
+  const [selectedCategory, setSelectedCategory] = useState<ApplicationCategoryId | null>(null)
+  const activeCategory = selectedCategory ?? availableCategories[0] ?? null
 
   const filteredRecommendations = useMemo(() => {
     if (activeTab === "all") return recommendations
     return recommendations.filter((item) => item.category === activeTab)
   }, [activeTab])
+
+  async function handleSend(text: string) {
+    const content = text.trim()
+    if (!content || !activeCategory || isSending) return
+    setChatInput("")
+    await sendMessage(content, activeCategory)
+  }
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -185,10 +219,6 @@ export default function AIAssistantDashboard() {
               <AppSelectItem value="90">آخر 90 يومًا</AppSelectItem>
             </AppSelectContent>
           </AppSelect>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            آخر تحديث: قبل 5 دقائق
-          </div>
         </div>
       </div>
 
@@ -197,55 +227,135 @@ export default function AIAssistantDashboard() {
           title="المساعد الذكي"
           className="rounded-2xl border-border/60 shadow-sm xl:order-2"
         >
-          <div className="flex flex-col items-center px-1 py-2 text-center">
-            <div className="flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-blue-100 text-3xl">
-              🤖
+          {availableCategories.length === 0 ? (
+            <div className="flex flex-col items-center px-1 py-6 text-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-muted text-2xl">
+                🤖
+              </div>
+              <p className="mt-4 text-sm font-semibold text-foreground">
+                فعّل أحد التطبيقات أولاً لاستخدام المساعد الذكي
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                المساعد متاح فقط لبيانات التطبيقات التي تم تفعيلها لمؤسستك.
+              </p>
             </div>
-            <p className="mt-4 text-lg font-bold text-foreground">مرحبًا محمد! 👋</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              أنا مساعدك الذكي في مدار، كيف يمكنني مساعدتك اليوم؟
-            </p>
-
-            <div className="mt-5 w-full space-y-2.5">
-              {suggestedQuestions.map((question) => {
-                const Icon = question.icon
-                return (
-                  <button
-                    key={question.label}
-                    type="button"
-                    onClick={() => setChatInput(question.label)}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 text-start text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
+          ) : (
+            <>
+              {availableCategories.length > 1 ? (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">نطاق المحادثة:</span>
+                  <AppSelect
+                    value={activeCategory ?? undefined}
+                    onValueChange={(value) => setSelectedCategory(value as ApplicationCategoryId)}
                   >
-                    <span>{question.label}</span>
-                    <Icon className="size-4 shrink-0 text-muted-foreground" />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+                    <AppSelectTrigger className="h-9 flex-1 rounded-lg border-border bg-card px-3 text-sm">
+                      <AppSelectValue />
+                    </AppSelectTrigger>
+                    <AppSelectContent>
+                      {availableCategories.map((category) => (
+                        <AppSelectItem key={category} value={category}>
+                          {CATEGORY_LABEL[category]}
+                        </AppSelectItem>
+                      ))}
+                    </AppSelectContent>
+                  </AppSelect>
+                </div>
+              ) : null}
 
-          <div className="mt-5 space-y-2">
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(event) => setChatInput(event.target.value)}
-                placeholder="اكتب سؤالك هنا..."
-                className="h-8 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-              />
-              <button
-                type="button"
-                aria-label="إرسال"
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                <Send className="size-4 -scale-x-100" />
-              </button>
-            </div>
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Sparkles className="size-3.5 shrink-0" />
-              يمكنك سؤال أي شيء عن حملاتك، القنوات، الأداء، أو التوصيات
-            </p>
-          </div>
+              <div className="flex flex-col px-1 py-2">
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center text-center">
+                    <div className="flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-blue-100 text-3xl">
+                      🤖
+                    </div>
+                    <p className="mt-4 text-lg font-bold text-foreground">مرحبًا! 👋</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      أنا مساعدك الذكي في مدار لقسم{" "}
+                      {activeCategory ? CATEGORY_LABEL[activeCategory] : ""}، كيف يمكنني مساعدتك
+                      اليوم؟
+                    </p>
+
+                    <div className="mt-5 w-full space-y-2.5">
+                      {(activeCategory ? SUGGESTED_QUESTIONS[activeCategory] : []).map(
+                        (question) => {
+                          const Icon = question.icon
+                          return (
+                            <button
+                              key={question.label}
+                              type="button"
+                              onClick={() => setChatInput(question.label)}
+                              className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 text-start text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
+                            >
+                              <span>{question.label}</span>
+                              <Icon className="size-4 shrink-0 text-muted-foreground" />
+                            </button>
+                          )
+                        }
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="max-h-[420px] space-y-3 overflow-y-auto">
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={cn(
+                          "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6",
+                          message.role === "user"
+                            ? "ms-auto bg-primary text-primary-foreground"
+                            : message.role === "system_notice"
+                              ? "mx-auto bg-amber-50 text-amber-700"
+                              : "bg-muted text-foreground"
+                        )}
+                      >
+                        {message.content}
+                      </div>
+                    ))}
+                    {isSending ? (
+                      <div className="w-fit rounded-2xl bg-muted px-4 py-2.5 text-sm text-muted-foreground">
+                        يكتب الرد...
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 space-y-2">
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(event) => setChatInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        void handleSend(chatInput)
+                      }
+                    }}
+                    placeholder="اكتب سؤالك هنا..."
+                    disabled={isSending}
+                    className="h-8 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                  <button
+                    type="button"
+                    aria-label="إرسال"
+                    disabled={isSending || !chatInput.trim()}
+                    onClick={() => void handleSend(chatInput)}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    <Send className="size-4 -scale-x-100" />
+                  </button>
+                </div>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Sparkles className="size-3.5 shrink-0" />
+                  يمكنك سؤال أي شيء عن بيانات {activeCategory
+                    ? CATEGORY_LABEL[activeCategory]
+                    : ""}{" "}
+                  الحقيقية لمؤسستك
+                </p>
+              </div>
+            </>
+          )}
         </AppCard>
 
         <AppCard
@@ -285,7 +395,7 @@ export default function AIAssistantDashboard() {
 
           <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="size-3.5 shrink-0" />
-            التوصيات مبنية على تحليل البيانات والذكاء الاصطناعي وقد تختلف النتائج الفعلية
+            التوصيات أدناه توضيحية حاليًا وغير مرتبطة بالمساعد الذكي أعلاه
           </p>
         </AppCard>
       </div>

@@ -41,6 +41,7 @@ import type {
   RevokeSessionCommand,
   SendMemberPasswordResetCommand,
   SetMemberModuleAccessCommand,
+  StartApplicationTrialCommand,
   SuspendMemberCommand,
   SwitchWorkspaceCommand,
   TransferOwnershipCommand,
@@ -1379,6 +1380,11 @@ export class IdentityCommandHandlers {
         settings: {
           [IdentityCommandHandlers.APPLICATION_SETTINGS_KEY[request.application]]: true,
           currentPlanTier: request.planTier,
+          // Clears any earlier free-trial expiry marker (empty string, not omitted -- settings
+          // merges are additive, so leaving this out would NOT remove a stale *TrialEndsAt from a
+          // prior trial) so a real paid approval is never mistaken for a lapsed trial by
+          // ai-chat/guards.ts's isApplicationEnabled or the frontend's resolveApplicationStatus.
+          [`${request.application}TrialEndsAt`]: "",
         },
       },
       now
@@ -1435,6 +1441,83 @@ export class IdentityCommandHandlers {
       { application: request.application, reason: command.reason }
     )
     return request.toState()
+  }
+
+  // Instant self-service activation (no payment receipt, no staff review) -- distinct from
+  // requestApplicationActivation's pending-request/approval flow, since a trial carries no real
+  // money and shouldn't wait on anyone. One trial per organization+application, ever (tracked by
+  // the *TrialUsed flag below, which is never cleared even once the trial itself expires), so
+  // deactivating and re-activating doesn't refill it. The trial grant itself is a lazy-expiry
+  // window (*TrialEnabled stays true in storage past the 7 days; ai-chat/guards.ts and the
+  // frontend's resolveApplicationStatus are what actually treat it as inactive once
+  // *TrialEndsAt has passed) -- no scheduled job flips it back off, matching this codebase's
+  // existing preference for lazy, read-time checks over new scheduled-job infrastructure.
+  private static readonly TRIAL_DURATION_DAYS = 7
+
+  async startApplicationTrial(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    command: StartApplicationTrialCommand,
+    context: RequestContext
+  ) {
+    await this.requireModuleAccess(actor, organizationId, "settings:edit")
+
+    const organizationState = await this.deps.repositories.organizations.findById(organizationId)
+    if (!organizationState) {
+      throw ERRORS.notFound("Organization")
+    }
+
+    const enabledKey = IdentityCommandHandlers.APPLICATION_SETTINGS_KEY[command.application]
+    const trialEndsAtKey = `${command.application}TrialEndsAt`
+    const trialUsedKey = `${command.application}TrialUsed`
+
+    if (organizationState.settings[trialUsedKey] === true) {
+      throw ERRORS.validation({
+        application: "A free trial has already been used for this application.",
+      })
+    }
+    if (organizationState.settings[enabledKey] === true) {
+      throw ERRORS.validation({ application: "This application is already active." })
+    }
+
+    const now = this.now
+    const trialEndsAt = new Date(
+      new Date(now).getTime() + IdentityCommandHandlers.TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString()
+
+    const organization = OrganizationEntity.rehydrate(organizationState)
+    organization.update(
+      {
+        settings: {
+          [enabledKey]: true,
+          [trialEndsAtKey]: trialEndsAt,
+          [trialUsedKey]: true,
+        },
+      },
+      now
+    )
+    await this.deps.repositories.organizations.save(organization.toState())
+
+    await this.audit(
+      "application_trial.started",
+      context,
+      actor.userId,
+      organization.id,
+      null,
+      "organization",
+      organization.id,
+      { application: command.application, trialEndsAt }
+    )
+    await this.publishEvents(context, [
+      this.createEvent({
+        eventType: "OrganizationUpdated",
+        aggregateType: "organization",
+        aggregateId: organization.id,
+        context,
+        payload: { organizationId: organization.id },
+      }),
+    ])
+    return organization.toState()
   }
 
   async archiveOrganization(

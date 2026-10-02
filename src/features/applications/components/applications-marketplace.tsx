@@ -30,6 +30,8 @@ export function ApplicationsMarketplace() {
     deactivateApplication,
     activateAllApplications,
     activatingId,
+    trialAvailableByCategory,
+    startTrial,
   } = useApplicationsCatalog()
 
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
@@ -42,6 +44,7 @@ export function ApplicationsMarketplace() {
       name: application.name,
       icon: application.icon,
       iconWrapperClassName: application.accent.iconWrapperClassName,
+      trialAvailable: trialAvailableByCategory[application.category],
     })
   }
 
@@ -177,6 +180,7 @@ export function ApplicationsMarketplace() {
           if (!open) setPendingRequest(null)
         }}
         onSubmit={submitActivationRequest}
+        onStartTrial={startTrial}
       />
     </div>
   )

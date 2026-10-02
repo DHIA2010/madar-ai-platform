@@ -35,14 +35,18 @@ const PRICING_BADGE_LABEL: Record<"free" | "paid", string> = {
 
 export function ApplicationDetailScreen({
   entry,
+  trialAvailable,
   onConfirmActivation,
   onSubmitActivationRequest,
+  onStartTrial,
 }: {
   entry: ApplicationCatalogEntry
+  trialAvailable: boolean
   // Deactivation + the مدار الكامل bundle's instant activation -- both still a plain confirm.
   onConfirmActivation: (target: ActivationTarget) => Promise<void>
   // A single paid application's activation -- now a tier + receipt request, not an instant confirm.
   onSubmitActivationRequest: (input: ActivationRequestInput) => Promise<void>
+  onStartTrial: (applicationId: string) => Promise<void>
 }) {
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
   const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
@@ -77,6 +81,10 @@ export function ApplicationDetailScreen({
                 {isBundle ? (
                   <span className="rounded-full bg-[#fff3d6] px-2.5 py-1 text-[10.5px] font-bold text-[#c2900c]">
                     {entry.badgeLabel}
+                  </span>
+                ) : entry.subscriptionStatus === "trial" ? (
+                  <span className="rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]">
+                    تجربة مجانية
                   </span>
                 ) : (
                   <span
@@ -115,7 +123,7 @@ export function ApplicationDetailScreen({
             </div>
           ) : entry.primaryCta.label ? (
             <div className="flex shrink-0 items-center gap-2">
-              {entry.subscriptionStatus === "subscribed" ? (
+              {entry.subscriptionStatus === "subscribed" || entry.subscriptionStatus === "trial" ? (
                 <AppButton
                   variant="outline"
                   className="h-11 rounded-[10px] border-[#e1e7f0] text-[13px] font-semibold text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
@@ -149,6 +157,7 @@ export function ApplicationDetailScreen({
                       name: entry.name,
                       icon: entry.icon,
                       iconWrapperClassName: entry.accent.iconWrapperClassName,
+                      trialAvailable,
                     })
                   }
                 >
@@ -189,6 +198,7 @@ export function ApplicationDetailScreen({
           if (!open) setPendingRequest(null)
         }}
         onSubmit={onSubmitActivationRequest}
+        onStartTrial={onStartTrial}
       />
     </div>
   )

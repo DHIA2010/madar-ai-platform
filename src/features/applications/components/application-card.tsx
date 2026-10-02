@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Check, Clock } from "lucide-react"
+import { Check, Clock, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -36,6 +36,10 @@ export function ApplicationCard({
 }) {
   const Icon = application.icon
   const isSubscribed = application.subscriptionStatus === "subscribed"
+  const isTrial = application.subscriptionStatus === "trial"
+  // Both "subscribed" and "trial" are a real, currently-active application -- deactivating works
+  // (and reads as "إلغاء التفعيل") the same way in either state.
+  const isActive = isSubscribed || isTrial
   const isPendingReview = application.subscriptionStatus === "pending_review"
 
   return (
@@ -54,14 +58,21 @@ export function ApplicationCard({
             {application.name}
           </p>
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-            PRICING_BADGE_CLASS[application.pricingModel]
-          )}
-        >
-          {PRICING_BADGE_LABEL[application.pricingModel]}
-        </span>
+        {isTrial ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]">
+            <Sparkles className="size-3" />
+            تجربة مجانية
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+              PRICING_BADGE_CLASS[application.pricingModel]
+            )}
+          >
+            {PRICING_BADGE_LABEL[application.pricingModel]}
+          </span>
+        )}
       </div>
 
       <p className={cn("mt-3 text-[11.5px] leading-[19px]", MUTED_TEXT)}>
@@ -116,17 +127,17 @@ export function ApplicationCard({
             </span>
           ) : application.primaryCta.label ? (
             <AppButton
-              variant={isSubscribed ? "outline" : "default"}
+              variant={isActive ? "outline" : "default"}
               className={cn(
                 "h-10 flex-1 rounded-[10px] text-[12.5px] font-semibold",
-                isSubscribed
+                isActive
                   ? "border-[#e1e7f0] text-[#c2410c] hover:bg-[#fff2e8] hover:text-[#c2410c]"
                   : application.accent.primaryButtonClassName
               )}
               loading={activating}
-              onClick={() => (isSubscribed ? onDeactivate(application) : onActivate(application))}
+              onClick={() => (isActive ? onDeactivate(application) : onActivate(application))}
             >
-              {isSubscribed ? "إلغاء التفعيل" : application.primaryCta.label}
+              {isActive ? "إلغاء التفعيل" : application.primaryCta.label}
             </AppButton>
           ) : null}
         </div>

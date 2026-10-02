@@ -36,6 +36,12 @@ export interface IdentityPlatformConfig {
   // resolveActorFromAccessToken and cached on the resolved actor as isPlatformAdmin. No
   // per-user DB flag or admin UI yet; add/remove staff by redeploying with a new value.
   platformAdminEmails: string[]
+  // Bare env var name (no IDENTITY_PLATFORM_ prefix) on purpose -- matches the Anthropic SDK's
+  // own zero-arg client convention (`new Anthropic()` reads ANTHROPIC_API_KEY itself), so this
+  // one value stays usable by any ad-hoc script too, not just this config loader. Optional: the
+  // ai-chat feature module is null-gated on its absence, same as every other optional service.
+  anthropicApiKey?: string
+  aiChatModel: string
 }
 
 const configSchema = z.object({
@@ -71,6 +77,8 @@ const configSchema = z.object({
   objectStorageSecretAccessKey: z.string().optional(),
   objectStorageRegion: z.string().optional(),
   platformAdminEmails: z.array(z.string().email()),
+  anthropicApiKey: z.string().optional(),
+  aiChatModel: z.string().min(1),
 })
 
 export function loadIdentityPlatformConfig(
@@ -169,5 +177,8 @@ export function loadIdentityPlatformConfig(
             .map((email) => email.trim().toLowerCase())
             .filter(Boolean)
         : []),
+    anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
+    aiChatModel:
+      overrides.aiChatModel ?? process.env.IDENTITY_PLATFORM_AI_CHAT_MODEL ?? "claude-sonnet-5",
   })
 }

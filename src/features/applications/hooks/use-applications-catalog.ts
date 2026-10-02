@@ -7,6 +7,7 @@ import { useWorkspace } from "@/features/workspace"
 import {
   APPLICATION_CATALOG,
   APPLICATION_SETTINGS_KEY,
+  isTrialAvailable,
   MADAR_COMPLETE_BUNDLE,
   resolveApplicationStatus,
 } from "../services"
@@ -46,6 +47,7 @@ export function useApplicationsCatalog() {
     updateOrganization,
     requestApplicationActivation,
     listMyOrganizationSubscriptionRequests,
+    startApplicationTrial,
   } = useWorkspace()
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState<ApplicationCategoryId | "all">("all")
@@ -77,6 +79,16 @@ export function useApplicationsCatalog() {
         resolveApplicationStatus(application, settings, pendingApplications),
       ])
     )
+  }, [currentOrganization?.settings, pendingApplications])
+
+  const trialAvailableByCategory = useMemo<Record<ApplicationCategoryId, boolean>>(() => {
+    const settings = currentOrganization?.settings
+    return Object.fromEntries(
+      CATEGORY_ORDER.map((category) => [
+        category,
+        isTrialAvailable(category, settings, pendingApplications),
+      ])
+    ) as Record<ApplicationCategoryId, boolean>
   }, [currentOrganization?.settings, pendingApplications])
 
   const searchMatchedApplications = useMemo(() => {
@@ -129,6 +141,19 @@ export function useApplicationsCatalog() {
       await updateOrganization(currentOrganization.id, {
         settings: { [APPLICATION_SETTINGS_KEY[application.category]]: false },
       })
+    } finally {
+      setActivatingId(null)
+    }
+  }
+
+  async function startTrial(id: string) {
+    if (!currentOrganization) return
+    const application = APPLICATION_CATALOG.find((entry) => entry.id === id)
+    if (!application) return
+
+    setActivatingId(id)
+    try {
+      await startApplicationTrial(currentOrganization.id, application.category)
     } finally {
       setActivatingId(null)
     }
@@ -188,9 +213,11 @@ export function useApplicationsCatalog() {
     // Exposed so a single-application view (the [appId] detail page) can resolve one
     // application's live status without duplicating the settings+pending-request logic above.
     statusById,
+    trialAvailableByCategory,
     bundle: MADAR_COMPLETE_BUNDLE,
     deactivateApplication,
     submitActivationRequest,
+    startTrial,
     activateAllApplications,
     activatingId,
   }

@@ -989,3 +989,19 @@ export const createZatcaDeviceSchema = z.object({
 export const submitZatcaComplianceOtpSchema = z.object({
   otp: z.string().min(1).max(20),
 })
+
+// Free 7-day trial -- instant self-service activation (no payment receipt, no staff review),
+// one-time per organization+application. See command-handlers.ts's startApplicationTrial.
+export const startApplicationTrialSchema = z.object({
+  application: z.enum(["advertising", "ecommerce", "pos", "madarApps"]),
+})
+
+// AI chat -- a session is scoped to exactly one activated application category (see
+// src/identity-platform/ai-chat/guards.ts); the backend only ever offers that category's tools.
+export const createChatSessionSchema = z.object({
+  applicationCategory: z.enum(["advertising", "ecommerce", "pos", "madarApps"]),
+})
+
+export const sendChatMessageSchema = z.object({
+  content: z.string().min(1).max(4000),
+})

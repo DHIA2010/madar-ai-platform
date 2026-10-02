@@ -65,6 +65,17 @@ export interface OrganizationSettings {
   // Set on approval of a subscription activation request -- the account-wide tier chosen at
   // request time.
   currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
+  // Free 7-day trial bookkeeping -- see OrganizationSettingsDto in
+  // @/application/contracts/workspace.contracts for the backend-facing equivalent and the full
+  // explanation of how TrialEndsAt/TrialUsed interact with the *Enabled flags above.
+  advertisingTrialEndsAt?: string
+  advertisingTrialUsed?: boolean
+  ecommerceTrialEndsAt?: string
+  ecommerceTrialUsed?: boolean
+  posTrialEndsAt?: string
+  posTrialUsed?: boolean
+  madarAppsTrialEndsAt?: string
+  madarAppsTrialUsed?: boolean
 }
 
 export interface Organization {

@@ -221,6 +221,10 @@ export interface RejectSubscriptionActivationRequestCommand {
   reason: string
 }
 
+export interface StartApplicationTrialCommand {
+  application: "advertising" | "ecommerce" | "pos" | "madarApps"
+}
+
 export interface RemoveMemberCommand {
   organizationId: string
   memberUserId: string

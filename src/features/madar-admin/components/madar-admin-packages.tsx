@@ -22,50 +22,11 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { PLAN_COMPARISON_ROWS, PLAN_TIER_ACCENT } from "@/features/applications"
+
 import { useMadarAdminPackages } from "../hooks"
 import { PLAN_META, PLAN_ORDER } from "../services"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
-
-const PLAN_TONE_CLASSNAME: Record<string, string> = {
-  enterprise: "bg-orange-50 text-orange-600",
-  pro: "bg-violet-50 text-violet-600",
-  growth: "bg-emerald-50 text-emerald-600",
-  starter: "bg-blue-50 text-blue-600",
-}
-
-const COMPARISON_ROWS: {
-  label: string
-  values: Record<string, string>
-}[] = [
-  {
-    label: "عدد المتاجر",
-    values: { enterprise: "غير محدود", pro: "10", growth: "3", starter: "1" },
-  },
-  {
-    label: "الزوار الشهرون",
-    values: { enterprise: "غير محدود", pro: "500,000", growth: "100,000", starter: "10,000" },
-  },
-  {
-    label: "مدة الاحتفاظ بالبيانات",
-    values: { enterprise: "12 شهر", pro: "6 أشهر", growth: "3 أشهر", starter: "شهر واحد" },
-  },
-  { label: "مصادر الإعلانات", values: { enterprise: "✓", pro: "✓", growth: "✓", starter: "—" } },
-  {
-    label: "أحداث التجارة الإلكترونية",
-    values: { enterprise: "✓", pro: "✓", growth: "✓", starter: "—" },
-  },
-  { label: "تقارير مخصصة", values: { enterprise: "✓", pro: "✓", growth: "—", starter: "—" } },
-  { label: "الوصول إلى API", values: { enterprise: "✓", pro: "✓", growth: "—", starter: "—" } },
-  {
-    label: "الدعم الفني",
-    values: {
-      enterprise: "مخصص",
-      pro: "أولوية",
-      growth: "عبر البريد والدردشة",
-      starter: "عبر البريد",
-    },
-  },
-]
 
 export function MadarAdminPackages() {
   const {
@@ -146,7 +107,7 @@ export function MadarAdminPackages() {
               <div
                 className={cn(
                   "flex size-11 items-center justify-center rounded-xl",
-                  PLAN_TONE_CLASSNAME[tier]
+                  PLAN_TIER_ACCENT[tier].iconWrapperClassName
                 )}
               >
                 <Icon className="size-5" />
@@ -203,7 +164,7 @@ export function MadarAdminPackages() {
               </AppTableRow>
             </AppTableHeader>
             <AppTableBody>
-              {COMPARISON_ROWS.map((row) => (
+              {PLAN_COMPARISON_ROWS.map((row) => (
                 <AppTableRow key={row.label}>
                   <AppTableCell className="font-medium text-foreground">{row.label}</AppTableCell>
                   {PLAN_ORDER.map((tier) => (

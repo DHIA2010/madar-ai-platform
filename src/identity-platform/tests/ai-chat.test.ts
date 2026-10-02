@@ -1,0 +1,242 @@
+// @vitest-environment node
+
+import { randomUUID } from "node:crypto"
+
+import { newDb } from "pg-mem"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import type { AuthenticatedActor } from "../application/dto/identity-dtos"
+import { IdentityError } from "../application/errors/IdentityError"
+import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
+import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { CampaignsPerformanceAggregationService } from "../campaigns/performance-service"
+import { ChannelsAggregationService } from "../channels/channels-service"
+import { OrdersAggregationService } from "../orders/service"
+import { StoresAggregationService } from "../stores/service"
+import { PosInvoicesService } from "../pos/invoices-service"
+import { PosShiftsService } from "../pos/shifts-service"
+import { PosPaymentMethodsService } from "../pos/payment-methods-service"
+import { TaxRatesService } from "../tax/tax-rates-service"
+import { ReportsService } from "../reports/service"
+import { AiChatService } from "../ai-chat/service"
+import { buildToolsForCategory } from "../ai-chat/tools"
+import type { AiChatLlmClientLike } from "../ai-chat/llm-client"
+
+let database: PostgresDatabase
+let service: AiChatService
+let mockRunChatTurn: ReturnType<typeof vi.fn<AiChatLlmClientLike["runChatTurn"]>>
+
+const ORG_A = randomUUID()
+const ORG_B = randomUUID()
+const USER_A = randomUUID()
+const WORKSPACE_A = randomUUID()
+
+function actor(overrides: Partial<AuthenticatedActor> = {}): AuthenticatedActor {
+  return {
+    userId: USER_A,
+    sessionId: randomUUID(),
+    organizationId: ORG_A,
+    workspaceId: null,
+    roles: ["owner"],
+    modulePermissions: ["ai:view"],
+    ...overrides,
+  }
+}
+
+async function setApplicationEnabled(
+  organizationId: string,
+  key: "advertisingEnabled" | "ecommerceEnabled" | "posEnabled" | "madarAppsEnabled",
+  value: boolean
+) {
+  const existing = await database.query<{ settings: Record<string, unknown> }>(
+    "select settings from organizations where id = $1",
+    [organizationId]
+  )
+  const merged = { ...(existing.rows[0]?.settings ?? {}), [key]: value }
+  await database.query("update organizations set settings = $2::jsonb where id = $1", [
+    organizationId,
+    JSON.stringify(merged),
+  ])
+}
+
+async function setOrgSettingValue(organizationId: string, key: string, value: unknown) {
+  const existing = await database.query<{ settings: Record<string, unknown> }>(
+    "select settings from organizations where id = $1",
+    [organizationId]
+  )
+  const merged = { ...(existing.rows[0]?.settings ?? {}), [key]: value }
+  await database.query("update organizations set settings = $2::jsonb where id = $1", [
+    organizationId,
+    JSON.stringify(merged),
+  ])
+}
+
+async function seedInvoice(input: {
+  organizationId: string
+  workspaceId: string | null
+  totalAmount: number
+}) {
+  await database.query(
+    `insert into pos_invoices (
+      id, organization_id, workspace_id, invoice_number, status, payment_method_code,
+      subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+    ) values ($1,$2,$3,$4,'completed','cash',$5,0,0,$5,now(),now())`,
+    [
+      randomUUID(),
+      input.organizationId,
+      input.workspaceId,
+      `INV-${randomUUID().slice(0, 8)}`,
+      input.totalAmount,
+    ]
+  )
+}
+
+beforeEach(async () => {
+  const mem = newDb({ autoCreateForeignKeyIndices: true })
+  const adapter = mem.adapters.createPg()
+  database = new PostgresDatabase(new adapter.Pool())
+  await runIdentityMigrations(database, process.cwd())
+
+  await database.query(
+    `insert into users (id, email, password_hash, full_name, email_verified_at)
+     values ($1, 'ai-chat-test@madar.test', 'hash', 'AI Chat Test', now())`,
+    [USER_A]
+  )
+  await database.query(
+    `insert into organizations (id, name, owner_user_id, status) values ($1, 'Org A', $2, 'active')`,
+    [ORG_A, USER_A]
+  )
+  await database.query(
+    `insert into organizations (id, name, owner_user_id, status) values ($1, 'Org B', $2, 'active')`,
+    [ORG_B, USER_A]
+  )
+  await database.query(
+    `insert into workspaces (id, organization_id, name, status) values ($1, $2, 'Main', 'active')`,
+    [WORKSPACE_A, ORG_A]
+  )
+
+  const posPaymentMethodsService = new PosPaymentMethodsService(database)
+  const taxRatesService = new TaxRatesService(database)
+  const posInvoicesService = new PosInvoicesService(
+    database,
+    posPaymentMethodsService,
+    taxRatesService
+  )
+  const posShiftsService = new PosShiftsService(
+    database,
+    posInvoicesService,
+    posPaymentMethodsService
+  )
+
+  mockRunChatTurn = vi.fn<AiChatLlmClientLike["runChatTurn"]>().mockResolvedValue({
+    text: "ok",
+    toolCalls: [],
+    stopReason: "end_turn",
+  })
+  const mockLlmClient: AiChatLlmClientLike = { runChatTurn: mockRunChatTurn }
+
+  service = new AiChatService(
+    database,
+    {
+      campaignPerformanceService: new CampaignsPerformanceAggregationService(database),
+      channelsService: new ChannelsAggregationService(database),
+      ordersAggregationService: new OrdersAggregationService(database),
+      storesAggregationService: new StoresAggregationService(database),
+      posInvoicesService,
+      posShiftsService,
+      reportsService: new ReportsService(database),
+    },
+    mockLlmClient,
+    "claude-sonnet-5"
+  )
+})
+
+describe("ai-chat: per-application scoping", () => {
+  it("rejects creating a session for a category the org hasn't activated", async () => {
+    await expect(service.createSession(actor(), "pos")).rejects.toThrow(IdentityError)
+  })
+
+  it("allows creating a session once the category is activated", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    const session = await service.createSession(actor(), "pos")
+    expect(session.applicationCategory).toBe("pos")
+    expect(session.organizationId).toBe(ORG_A)
+  })
+
+  it("allows a session while a free trial is active, even without a real approval", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await setOrgSettingValue(
+      ORG_A,
+      "posTrialEndsAt",
+      new Date(Date.now() + 86_400_000).toISOString()
+    )
+    const session = await service.createSession(actor(), "pos")
+    expect(session.applicationCategory).toBe("pos")
+  })
+
+  it("treats a lapsed trial as inactive even though *Enabled is still true in storage", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await setOrgSettingValue(
+      ORG_A,
+      "posTrialEndsAt",
+      new Date(Date.now() - 3_600_000).toISOString()
+    )
+    await expect(service.createSession(actor(), "pos")).rejects.toThrow(IdentityError)
+  })
+
+  it("rejects an actor whose role omits ai:view even though the category is activated", async () => {
+    await setApplicationEnabled(ORG_A, "advertisingEnabled", true)
+    await expect(
+      service.createSession(actor({ modulePermissions: [] }), "advertising")
+    ).rejects.toThrow(IdentityError)
+  })
+
+  it("never offers tools from another category, even when both are activated", () => {
+    const advertisingTools = buildToolsForCategory("advertising").map((tool) => tool.name)
+    expect(advertisingTools).not.toContain("get_pos_invoices_summary")
+    expect(advertisingTools).not.toContain("list_orders")
+    expect(advertisingTools.length).toBeGreaterThan(0)
+  })
+
+  it("re-checks application-enabled on every send, not just at session creation", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    const session = await service.createSession(actor(), "pos")
+
+    await setApplicationEnabled(ORG_A, "posEnabled", false)
+    const reply = await service.sendMessage(actor(), session.id, "ما هي المبيعات اليوم؟")
+
+    expect(reply.role).toBe("system_notice")
+    expect(mockRunChatTurn).not.toHaveBeenCalled()
+  })
+
+  it("rejects reading/sending into another organization's session", async () => {
+    await setApplicationEnabled(ORG_A, "advertisingEnabled", true)
+    const session = await service.createSession(actor(), "advertising")
+
+    const otherOrgActor = actor({ organizationId: ORG_B, modulePermissions: ["ai:view"] })
+    await expect(service.listMessages(otherOrgActor, session.id)).rejects.toThrow(IdentityError)
+    await expect(service.sendMessage(otherOrgActor, session.id, "hi")).rejects.toThrow(
+      IdentityError
+    )
+  })
+
+  it("grounds the assistant's stored message in the real tool result, not invented text", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await seedInvoice({ organizationId: ORG_A, workspaceId: WORKSPACE_A, totalAmount: 321 })
+    const session = await service.createSession(actor(), "pos")
+
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("get_pos_invoices_summary", {})
+      return {
+        text: `summary: ${toolResultText}`,
+        toolCalls: [{ tool: "get_pos_invoices_summary", input: {}, outputSummary: toolResultText }],
+        stopReason: "end_turn",
+      }
+    })
+
+    const reply = await service.sendMessage(actor(), session.id, "كم إجمالي المبيعات؟")
+
+    expect(reply.content).toContain("321")
+    expect(reply.toolCalls?.[0]?.outputSummary).toContain("321")
+  })
+})

@@ -1,6 +1,4 @@
-import { BarChart3, Crown, Star, Zap } from "lucide-react"
-
-import { PLAN_TIER_META } from "@/features/applications"
+import { PLAN_TIER_ACCENT, PLAN_TIER_META } from "@/features/applications"
 
 import type {
   Coupon,
@@ -39,7 +37,7 @@ function pick<T>(pool: T[]): T {
 export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
   enterprise: {
     ...PLAN_TIER_META.enterprise,
-    icon: Crown,
+    icon: PLAN_TIER_ACCENT.enterprise.icon,
     badgeLabel: "مخصصة",
     isActive: true,
     features: [
@@ -51,7 +49,7 @@ export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
   },
   pro: {
     ...PLAN_TIER_META.pro,
-    icon: Star,
+    icon: PLAN_TIER_ACCENT.pro.icon,
     isActive: true,
     features: [
       { label: "10 متاجر" },
@@ -62,7 +60,7 @@ export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
   },
   growth: {
     ...PLAN_TIER_META.growth,
-    icon: BarChart3,
+    icon: PLAN_TIER_ACCENT.growth.icon,
     isActive: true,
     features: [
       { label: "3 متاجر" },
@@ -73,7 +71,7 @@ export const PLAN_META: Record<PlanTier, Omit<MadarPlan, "customerCount">> = {
   },
   starter: {
     ...PLAN_TIER_META.starter,
-    icon: Zap,
+    icon: PLAN_TIER_ACCENT.starter.icon,
     isActive: true,
     features: [
       { label: "متجر واحد" },

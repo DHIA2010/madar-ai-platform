@@ -265,6 +265,26 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     }
   }
 
+  async startApplicationTrial(
+    organizationId: string,
+    application: SubscriptionActivationRequestDto["application"]
+  ): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.startApplicationTrial(organizationId, application)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.startApplicationTrial(organizationId, application)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
   async listAllSubscriptionActivationRequests(
     status?: SubscriptionRequestStatus
   ): Promise<SubscriptionActivationRequestDto[]> {

@@ -203,6 +203,35 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     return request
   }
 
+  // Mutates the fixture's settings object in place (unlike updateOrganization's mock above, which
+  // returns a merged copy without persisting it) so a second call in the same mock session
+  // correctly sees trialUsed=true and rejects -- that one-time-only behavior is the whole point of
+  // this method, so the mock has to actually remember it happened.
+  async startApplicationTrial(
+    organizationId: string,
+    application: SubscriptionActivationRequestDto["application"]
+  ): Promise<OrganizationDto> {
+    await waitForMock()
+    const organization = mockOrganizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      throw new Error("Organization not found")
+    }
+    const settings = organization.settings as Record<string, unknown>
+    if (settings[`${application}TrialUsed`]) {
+      throw new Error("A free trial has already been used for this application.")
+    }
+    if (settings[`${application}Enabled`]) {
+      throw new Error("This application is already active.")
+    }
+    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    Object.assign(settings, {
+      [`${application}Enabled`]: true,
+      [`${application}TrialEndsAt`]: trialEndsAt,
+      [`${application}TrialUsed`]: true,
+    })
+    return organization
+  }
+
   async listMyOrganizationSubscriptionRequests(
     organizationId: string
   ): Promise<SubscriptionActivationRequestDto[]> {

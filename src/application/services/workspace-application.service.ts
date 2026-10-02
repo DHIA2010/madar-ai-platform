@@ -98,6 +98,13 @@ export class WorkspaceApplicationService {
     return this.gateway.listMyOrganizationSubscriptionRequests(organizationId)
   }
 
+  startApplicationTrial(
+    organizationId: string,
+    application: SubscriptionActivationRequestDto["application"]
+  ): Promise<OrganizationDto> {
+    return this.gateway.startApplicationTrial(organizationId, application)
+  }
+
   listAllSubscriptionActivationRequests(
     status?: SubscriptionRequestStatus
   ): Promise<SubscriptionActivationRequestDto[]> {

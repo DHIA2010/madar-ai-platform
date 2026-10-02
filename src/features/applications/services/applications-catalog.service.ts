@@ -29,6 +29,54 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   madarApps: "madarAppsEnabled",
 }
 
+// Free 7-day trial bookkeeping -- see command-handlers.ts's startApplicationTrial (backend) for
+// the full explanation of why *Enabled is never flipped back off at expiry (a lazy, read-time
+// check here and in ai-chat/guards.ts instead of a scheduled job).
+export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
+  ApplicationCategoryId,
+  keyof OrganizationSettings
+> = {
+  advertising: "advertisingTrialEndsAt",
+  ecommerce: "ecommerceTrialEndsAt",
+  pos: "posTrialEndsAt",
+  madarApps: "madarAppsTrialEndsAt",
+}
+
+export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
+  {
+    advertising: "advertisingTrialUsed",
+    ecommerce: "ecommerceTrialUsed",
+    pos: "posTrialUsed",
+    madarApps: "madarAppsTrialUsed",
+  }
+
+// Whether the org can still start a trial for this category -- never used before, and not
+// already active/pending. Drives the "تجربة مجانية" button's visibility in
+// ActivationRequestDialog.
+export function isTrialAvailable(
+  category: ApplicationCategoryId,
+  settings: OrganizationSettings | undefined,
+  pendingApplications?: ReadonlySet<ApplicationCategoryId>
+): boolean {
+  if (settings?.[APPLICATION_TRIAL_USED_KEY[category]]) return false
+  if (settings?.[APPLICATION_SETTINGS_KEY[category]]) return false
+  if (pendingApplications?.has(category)) return false
+  return true
+}
+
+// Whole days left in an active trial (0 on its last day, never negative) -- null when there is no
+// active trial. Used to show "متبقي 3 أيام" on a trial-status badge.
+export function trialDaysRemaining(
+  category: ApplicationCategoryId,
+  settings: OrganizationSettings | undefined
+): number | null {
+  const trialEndsAt = settings?.[APPLICATION_TRIAL_ENDS_AT_KEY[category]] as string | undefined
+  if (!trialEndsAt) return null
+  const msRemaining = new Date(trialEndsAt).getTime() - Date.now()
+  if (msRemaining <= 0) return null
+  return Math.ceil(msRemaining / (24 * 60 * 60 * 1000))
+}
+
 // Static, hand-authored catalog for this UI-only pass -- no fetch, no async, no command/query
 // layer. This is deliberately the ONE place that will need to change when a real
 // subscriptions/applications backend lands; nothing in components/ or hooks/ should reach past
@@ -258,7 +306,19 @@ export function resolveApplicationStatus(
   settings: OrganizationSettings | undefined,
   pendingApplications?: ReadonlySet<ApplicationCategoryId>
 ): ApplicationSubscriptionStatus {
-  if (settings?.[APPLICATION_SETTINGS_KEY[application.category]]) {
+  const trialEndsAt = settings?.[APPLICATION_TRIAL_ENDS_AT_KEY[application.category]] as
+    | string
+    | undefined
+  // A lapsed trial that was never upgraded to a real approval must NOT read as "subscribed" even
+  // though *Enabled is still true in storage (see startApplicationTrial's own comment on why it's
+  // never flipped back off) -- approveSubscriptionActivationRequest always clears this to "" on a
+  // real approval, so a genuinely-paid app is never caught by this check.
+  const trialExpired = Boolean(trialEndsAt) && new Date(trialEndsAt!).getTime() <= Date.now()
+
+  if (trialEndsAt && !trialExpired) {
+    return "trial"
+  }
+  if (settings?.[APPLICATION_SETTINGS_KEY[application.category]] && !trialExpired) {
     return "subscribed"
   }
   if (pendingApplications?.has(application.category)) {

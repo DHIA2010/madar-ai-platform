@@ -1,3 +1,5 @@
+import { BarChart3, Crown, type LucideIcon, Star, Zap } from "lucide-react"
+
 import type { SubscriptionPlanTier } from "@/application/contracts"
 
 // The one place tier names/prices are defined -- both the customer-facing activation-request flow
@@ -45,3 +47,58 @@ export const PLAN_TIER_META: Record<SubscriptionPlanTier, PlanTierMeta> = {
     billingSuffix: "شهرياً",
   },
 }
+
+// A single shared icon+color per tier -- used by both the customer-facing activation-request
+// dialog and Madar Admin's packages page, so the same tier always looks the same wherever a
+// customer or staff member sees it.
+export interface PlanTierAccent {
+  icon: LucideIcon
+  iconWrapperClassName: string
+}
+
+export const PLAN_TIER_ACCENT: Record<SubscriptionPlanTier, PlanTierAccent> = {
+  enterprise: { icon: Crown, iconWrapperClassName: "bg-orange-50 text-orange-600" },
+  pro: { icon: Star, iconWrapperClassName: "bg-violet-50 text-violet-600" },
+  growth: { icon: BarChart3, iconWrapperClassName: "bg-emerald-50 text-emerald-600" },
+  starter: { icon: Zap, iconWrapperClassName: "bg-blue-50 text-blue-600" },
+}
+
+// The feature-comparison matrix behind the "مقارنة الباقات" button -- moved here (rather than kept
+// local to Madar Admin's packages page, where it used to live) so the customer-facing activation
+// dialog can show the exact same comparison a staff member sees, with no risk of the two drifting
+// apart.
+export interface PlanComparisonRow {
+  label: string
+  values: Record<SubscriptionPlanTier, string>
+}
+
+export const PLAN_COMPARISON_ROWS: PlanComparisonRow[] = [
+  {
+    label: "عدد المتاجر",
+    values: { enterprise: "غير محدود", pro: "10", growth: "3", starter: "1" },
+  },
+  {
+    label: "الزوار الشهرون",
+    values: { enterprise: "غير محدود", pro: "500,000", growth: "100,000", starter: "10,000" },
+  },
+  {
+    label: "مدة الاحتفاظ بالبيانات",
+    values: { enterprise: "12 شهر", pro: "6 أشهر", growth: "3 أشهر", starter: "شهر واحد" },
+  },
+  { label: "مصادر الإعلانات", values: { enterprise: "✓", pro: "✓", growth: "✓", starter: "—" } },
+  {
+    label: "أحداث التجارة الإلكترونية",
+    values: { enterprise: "✓", pro: "✓", growth: "✓", starter: "—" },
+  },
+  { label: "تقارير مخصصة", values: { enterprise: "✓", pro: "✓", growth: "—", starter: "—" } },
+  { label: "الوصول إلى API", values: { enterprise: "✓", pro: "✓", growth: "—", starter: "—" } },
+  {
+    label: "الدعم الفني",
+    values: {
+      enterprise: "مخصص",
+      pro: "أولوية",
+      growth: "عبر البريد والدردشة",
+      starter: "عبر البريد",
+    },
+  },
+]

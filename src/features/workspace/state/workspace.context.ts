@@ -53,6 +53,10 @@ export interface WorkspaceContextValue {
   listMyOrganizationSubscriptionRequests: (
     organizationId: string
   ) => Promise<SubscriptionActivationRequestDto[]>
+  startApplicationTrial: (
+    organizationId: string,
+    application: SubscriptionActivationRequestDto["application"]
+  ) => Promise<Organization>
   listAllSubscriptionActivationRequests: (
     status?: SubscriptionRequestStatus
   ) => Promise<SubscriptionActivationRequestDto[]>
