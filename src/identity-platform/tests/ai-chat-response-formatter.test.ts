@@ -38,7 +38,10 @@ function snapshot(overrides: Partial<MetricSnapshot> = {}): MetricSnapshot {
 
 describe("buildStructuredResponse", () => {
   it("returns null when no analytics tool was called this turn", () => {
-    const result = buildStructuredResponse([{ tool: "list_pos_shifts", output: [{ id: "s1" }] }])
+    const result = buildStructuredResponse(
+      [{ tool: "get_metric_definitions", output: { roas: "revenue / spend" } }],
+      "Asia/Riyadh"
+    )
     expect(result).toBeNull()
   })
 
@@ -94,7 +97,7 @@ describe("buildStructuredResponse", () => {
     }
     const raw: RawToolResult[] = [{ tool: "compare_campaign_periods", output: comparison }]
 
-    const result = buildStructuredResponse(raw)
+    const result = buildStructuredResponse(raw, "Asia/Riyadh")
     expect(result).not.toBeNull()
     expect(result!.confidence).toBe("high")
     expect(result!.dataPeriod).toEqual({ from: "2026-09-01", to: "2026-09-30" })
@@ -138,7 +141,10 @@ describe("buildStructuredResponse", () => {
         changePercent: null,
       },
     ]
-    const result = buildStructuredResponse([{ tool: "get_campaign_anomalies", output: anomalies }])
+    const result = buildStructuredResponse(
+      [{ tool: "get_campaign_anomalies", output: anomalies }],
+      "Asia/Riyadh"
+    )
 
     expect(result).not.toBeNull()
     expect(result!.facts).toHaveLength(2)
@@ -178,9 +184,10 @@ describe("buildStructuredResponse", () => {
         confidence: "high",
       },
     ]
-    const result = buildStructuredResponse([
-      { tool: "get_campaign_scaling_signals", output: signals },
-    ])
+    const result = buildStructuredResponse(
+      [{ tool: "get_campaign_scaling_signals", output: signals }],
+      "Asia/Riyadh"
+    )
 
     expect(result).not.toBeNull()
     expect(result!.insights).toHaveLength(1)
@@ -203,11 +210,17 @@ describe("buildStructuredResponse", () => {
         confidence: "high",
       },
     ]
-    const withRows = buildStructuredResponse([{ tool: "get_channel_comparison", output: rows }])
+    const withRows = buildStructuredResponse(
+      [{ tool: "get_channel_comparison", output: rows }],
+      "Asia/Riyadh"
+    )
     expect(withRows!.charts).toHaveLength(1)
     expect(withRows!.charts[0].series[0].data[0]).toEqual({ label: "Google Search", value: 20_000 })
 
-    const withoutRows = buildStructuredResponse([{ tool: "get_channel_comparison", output: [] }])
+    const withoutRows = buildStructuredResponse(
+      [{ tool: "get_channel_comparison", output: [] }],
+      "Asia/Riyadh"
+    )
     expect(withoutRows!.charts).toHaveLength(0)
   })
 
@@ -223,7 +236,10 @@ describe("buildStructuredResponse", () => {
         confidence: "high",
       },
     ]
-    const result = buildStructuredResponse([{ tool: "get_top_campaigns", output: rows }])
+    const result = buildStructuredResponse(
+      [{ tool: "get_top_campaigns", output: rows }],
+      "Asia/Riyadh"
+    )
     expect(result!.charts).toHaveLength(1)
     expect(result!.charts[0].series[0].data[0]).toEqual({ label: "Campaign One", value: 50_000 })
   })
@@ -245,7 +261,10 @@ describe("buildStructuredResponse", () => {
         invoiceCount: 3,
       },
     ]
-    const result = buildStructuredResponse([{ tool: "get_top_selling_products", output: rows }])
+    const result = buildStructuredResponse(
+      [{ tool: "get_top_selling_products", output: rows }],
+      "Asia/Riyadh"
+    )
 
     expect(result).not.toBeNull()
     expect(result!.source).toEqual({ domain: "pos" })
@@ -257,8 +276,158 @@ describe("buildStructuredResponse", () => {
     ])
   })
 
+  it("builds a shifts ReportTable with Arabic-formatted dates in the org timezone, dashes for an open shift's missing fields", () => {
+    const rows = [
+      {
+        id: "shift-1",
+        shiftNumber: 1,
+        status: "closed" as const,
+        openingCashAmount: 500,
+        closingCashAmount: 620,
+        openedAt: "2026-09-14T06:00:00.000Z",
+        closedAt: "2026-09-22T17:32:00.000Z",
+      },
+      {
+        id: "shift-2",
+        shiftNumber: 2,
+        status: "open" as const,
+        openingCashAmount: 300,
+        closingCashAmount: null,
+        openedAt: "2026-09-22T17:32:00.000Z",
+        closedAt: null,
+      },
+    ]
+    const result = buildStructuredResponse(
+      [{ tool: "list_pos_shifts", output: rows }],
+      "Asia/Riyadh"
+    )
+
+    expect(result).not.toBeNull()
+    expect(result!.source).toEqual({ domain: "pos" })
+    expect(result!.tables).toHaveLength(1)
+    const table = result!.tables[0]
+    expect(table.rows[0].shiftNumber).toBe("#1")
+    expect(table.rows[0].status).toBe("مغلقة")
+    // No raw ISO timestamp or pipe-delimited text ever reaches the row -- a human-readable,
+    // org-timezone-formatted Arabic string instead (this is the exact screenshot regression).
+    expect(table.rows[0].closedAt).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+    expect(table.rows[0].closedAt).toContain("سبتمبر")
+    expect(table.rows[1].status).toBe("مفتوحة")
+    expect(table.rows[1].closedAt).toBeNull()
+  })
+
+  it("returns an empty table list (but a non-null envelope) for an empty shift list", () => {
+    const result = buildStructuredResponse([{ tool: "list_pos_shifts", output: [] }], "Asia/Riyadh")
+    expect(result).not.toBeNull()
+    expect(result!.tables).toHaveLength(0)
+  })
+
+  it("builds KPI cards from a POS invoice summary", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "get_pos_invoices_summary",
+          output: {
+            totalCount: 10,
+            completedCount: 7,
+            cancelledCount: 1,
+            returnedCount: 2,
+            averageCompletedValue: 150,
+            totalCompletedAmount: 1050,
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result).not.toBeNull()
+    expect(result!.source).toEqual({ domain: "pos" })
+    expect(result!.metrics).toHaveLength(5)
+    const total = result!.metrics.find((m) => m.title === "إجمالي المبيعات المكتملة")!
+    expect(total.value).toBe(1050)
+    expect(total.format).toBe("currency")
+  })
+
+  it("builds an ecommerce ReportTable from list_orders, localizing the order status", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "list_orders",
+          output: {
+            items: [
+              {
+                id: "o1",
+                orderNumber: "#1001",
+                customerName: "Ahmed",
+                platform: "Salla",
+                amount: 250,
+                orderStatus: "Completed",
+                createdAt: "2026-09-20T10:00:00.000Z",
+              },
+            ],
+            summary: {},
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result).not.toBeNull()
+    expect(result!.source).toEqual({ domain: "ecommerce" })
+    expect(result!.tables).toHaveLength(1)
+    expect(result!.tables[0].rows[0].orderStatus).toBe("مكتمل")
+    expect(result!.tables[0].rows[0].amount).toBe(250)
+  })
+
+  it("builds an ecommerce ReportTable from list_stores with a formatted last-sync time", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "list_stores",
+          output: [
+            {
+              id: "s1",
+              name: "My Store",
+              platform: "Shopify",
+              connectionStatus: "connected",
+              orderCount: 42,
+              lastSyncAt: "2026-09-22T05:00:00.000Z",
+            },
+          ],
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result).not.toBeNull()
+    expect(result!.tables).toHaveLength(1)
+    expect(result!.tables[0].rows[0].connectionStatus).toBe("متصل")
+    expect(result!.tables[0].rows[0].lastSyncAt).toContain("سبتمبر")
+  })
+
+  it("builds a single KPI card from run_kpi_preview, carrying its own comparison if present", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "run_kpi_preview",
+          output: { points: [], currentValue: 5000, previousValue: 4000, changePercent: 25 },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result).not.toBeNull()
+    expect(result!.source).toEqual({ domain: "madarApps" })
+    expect(result!.metrics).toHaveLength(1)
+    expect(result!.metrics[0].value).toBe(5000)
+    expect(result!.metrics[0].trend).toBe("up")
+  })
+
   it("returns an empty chart list for top-selling products when there are none, but still a non-null envelope", () => {
-    const result = buildStructuredResponse([{ tool: "get_top_selling_products", output: [] }])
+    const result = buildStructuredResponse(
+      [{ tool: "get_top_selling_products", output: [] }],
+      "Asia/Riyadh"
+    )
     expect(result).not.toBeNull()
     expect(result!.charts).toHaveLength(0)
   })
@@ -282,27 +451,30 @@ describe("buildStructuredResponse", () => {
       sampleSize: { spend: 10_000, clicks: 2_000, conversions: 200, days: 30 },
       confidence: "medium",
     }
-    const result = buildStructuredResponse([
-      { tool: "compare_campaign_periods", output: comparison },
-      {
-        tool: "generate_campaign_recommendations",
-        output: {
-          recommendations: [
-            {
-              type: "no_action",
-              priority: "low",
-              entityType: "account",
-              entityId: null,
-              entityName: null,
-              reason: "لا تغيّر جوهري",
-              evidence: [],
-              confidence: "medium",
-              recommendedAction: "لا حاجة لإجراء حاليًا.",
-            },
-          ],
+    const result = buildStructuredResponse(
+      [
+        { tool: "compare_campaign_periods", output: comparison },
+        {
+          tool: "generate_campaign_recommendations",
+          output: {
+            recommendations: [
+              {
+                type: "no_action",
+                priority: "low",
+                entityType: "account",
+                entityId: null,
+                entityName: null,
+                reason: "لا تغيّر جوهري",
+                evidence: [],
+                confidence: "medium",
+                recommendedAction: "لا حاجة لإجراء حاليًا.",
+              },
+            ],
+          },
         },
-      },
-    ])
+      ],
+      "Asia/Riyadh"
+    )
 
     expect(result).not.toBeNull()
     expect(result!.metrics.length).toBeGreaterThan(0)

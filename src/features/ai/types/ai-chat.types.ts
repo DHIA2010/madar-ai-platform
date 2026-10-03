@@ -50,12 +50,38 @@ export interface ChatChartSpec {
   series: Array<{ name: string; data: ChatChartPoint[] }>
 }
 
+// Mirrors ai-chat/response-types.ts's ReportTable -- a multi-column record list (shifts, orders,
+// stores) that ChartSpec's single label/value series can't represent. Datetime/status/text cells
+// already carry their final display string, formatted server-side in the organization's own
+// timezone; currency/percent/number cells carry a raw value the frontend formats the same way it
+// already formats a KPI card. null means "no value" for any column, rendered as "—".
+export type ChatReportColumnFormat =
+  | "text"
+  | "datetime"
+  | "currency"
+  | "percent"
+  | "status"
+  | "number"
+
+export interface ChatReportTableColumn {
+  key: string
+  label: string
+  format: ChatReportColumnFormat
+}
+
+export interface ChatReportTable {
+  title: string
+  columns: ChatReportTableColumn[]
+  rows: Array<Record<string, string | number | null>>
+}
+
 export interface ChatStructuredResponse {
   type: "analytics_response"
   facts: ChatFact[]
   insights: ChatInsight[]
   metrics: ChatKpiCard[]
   charts: ChatChartSpec[]
+  tables: ChatReportTable[]
   dataPeriod: { from: string; to: string } | null
   confidence: ChatConfidenceLevel | null
 }

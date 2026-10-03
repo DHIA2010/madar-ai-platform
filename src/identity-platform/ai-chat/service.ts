@@ -2,6 +2,8 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { ERRORS } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
+import { getOrganizationTimezone } from "../shared/date-range-resolver"
+
 import type { AiChatLlmClientLike } from "./llm-client"
 import { isApplicationEnabled, requireApplicationEnabled } from "./guards"
 import { AiChatRepository } from "./repository"
@@ -22,6 +24,19 @@ const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
 function todayFact(): string {
   return `تاريخ اليوم هو ${new Date().toISOString().slice(0, 10)}.`
 }
+
+// Fixes the reported "raw pipe-delimited table" failure mode at its actual source: the LLM was
+// never told it shouldn't hand-draw tables, so when a tool returned a list of records (shifts,
+// orders, products) with nothing else to go on, it fell back to ASCII/pipe formatting. The
+// structural fix is response-formatter.ts's ReportTable (rendered separately by the frontend);
+// this prompt rule is the second, necessary layer -- it tells the model that detail layer already
+// exists, so its own prose should stay a short summary instead of re-describing every record.
+const PRESENTATION_RULES = [
+  'لا تستخدم أبدًا رمز الخط العمودي (|) أو جداول بتنسيق ASCII أو عرض بيانات بشكل "حقل: قيمة | حقل: قيمة" في ردك. لا تحاول رسم جدول بنفسك بأي شكل نصي.',
+  "عندما تُرجع إحدى الأدوات قائمة سجلات متعددة (ورديات، طلبات، فواتير، منتجات، متاجر)، لا تُعدّد كل سجل وكل حقل في النص -- هذه التفاصيل تُعرض تلقائيًا في جدول منفصل ضمن واجهة المحادثة. اكتفِ في ردك بفقرة موجزة جدًا (جملة أو جملتين): العدد الإجمالي، والحالة العامة، وأي ملاحظة مهمة واحدة إن وجدت.",
+  'لا تعرض أبدًا تاريخًا أو وقتًا بصيغته الخام مثل 2026-09-22T20:32:00Z -- التنسيق المقروء يُعرض تلقائيًا في الجدول أو البطاقة؛ إذا احتجت لذكر تاريخ في النص، اذكره بصياغة عربية طبيعية (مثل "22 سبتمبر") لا كسلسلة ISO.',
+  'لا تكتب أبدًا null أو undefined أو N/A أو [] في ردك. إذا كانت قيمة غير متوفرة، صرّح بذلك بجملة طبيعية (مثل "غير متوفر حاليًا") أو اترك الأمر لعرض الجدول الذي يستخدم شرطة (—) تلقائيًا.',
+].join("\n")
 
 const ADVERTISING_ANALYTICS_RULES = [
   "لا تخترع أو تحسب بنفسك أيًا من: الإنفاق، الإيرادات، ROAS، CPA، CPC، CTR، CPM، معدل التحويل، عدد التحويلات، مرات الظهور، النقرات، الميزانية، أو أي نسبة تغيّر مئوية. كل هذه القيم يجب أن تأتي من نتيجة أداة فعلية فقط.",
@@ -55,6 +70,7 @@ function buildSystemPrompt(category: ApplicationCategoryId): string {
     "إذا كانت الأداة المطلوبة تعتمد على بيانات قناة أو تكامل غير متصل (مثال: لا توجد بيانات Meta Ads ضمن نتيجة المقارنة)، صرّح بوضوح أن هذا المصدر غير متصل أو لا يحتوي على بيانات لهذه الفترة -- لا تفترض أنه غير موجود أصلاً ولا تتجاهله بصمت.",
     "إذا سُئلت عن موضوع خارج نطاق هذه المحادثة (قسم آخر غير المذكور أعلاه)، وضّح أن هذه المحادثة مخصصة لهذا القسم فقط واقترح فتح محادثة جديدة لذلك القسم.",
     "أجب باللغة العربية بشكل افتراضي، بأسلوب مختصر ومباشر.",
+    PRESENTATION_RULES,
     category === "advertising" ? ADVERTISING_ANALYTICS_RULES : "",
     scopeNote,
   ]
@@ -189,12 +205,14 @@ export class AiChatService {
 
     await this.repository.touchSession(sessionId)
 
+    const timezone = await getOrganizationTimezone(this.db, actor.organizationId)
+
     return this.repository.appendMessage({
       sessionId,
       role: "assistant",
       content: result.text,
       toolCalls: result.toolCalls.length > 0 ? result.toolCalls : null,
-      structured: buildStructuredResponse(rawToolResults),
+      structured: buildStructuredResponse(rawToolResults, timezone),
       model: this.model,
     })
   }

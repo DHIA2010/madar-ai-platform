@@ -127,6 +127,34 @@ async function seedInvoiceWithProduct(input: {
   )
 }
 
+async function seedShift(input: {
+  organizationId: string
+  workspaceId: string
+  cashierUserId: string
+  shiftNumber: number
+  status: "open" | "closed"
+  openedAt: string
+  closedAt: string | null
+}) {
+  await database.query(
+    `insert into pos_shifts (
+      id, organization_id, workspace_id, cashier_user_id, status, shift_number,
+      opening_cash_amount, opened_at, closing_cash_amount, closed_at
+    ) values ($1,$2,$3,$4,$5,$6,500,$7,$8,$9)`,
+    [
+      randomUUID(),
+      input.organizationId,
+      input.workspaceId,
+      input.cashierUserId,
+      input.status,
+      input.shiftNumber,
+      input.openedAt,
+      input.status === "closed" ? 620 : null,
+      input.closedAt,
+    ]
+  )
+}
+
 beforeEach(async () => {
   const mem = newDb({ autoCreateForeignKeyIndices: true })
   const adapter = mem.adapters.createPg()
@@ -378,5 +406,83 @@ describe("ai-chat: per-application scoping", () => {
       label: "Product A",
       value: 400,
     })
+  })
+
+  // This is the exact regression reported against production: a question like "إيش أفضل وردية؟"
+  // left the LLM with nothing but a raw array of shift records to narrate, and it fell back to
+  // dumping them as a pipe-delimited pseudo-table in plain prose. Proving this end-to-end (real
+  // seeded shift rows -> service.sendMessage -> persisted structured.tables) is what verifies the
+  // fix structurally, not just that response-formatter.ts's unit tests pass in isolation.
+  it("renders list_pos_shifts as a ReportTable with Arabic dates in the org's own timezone, never raw ISO or pipe-delimited text", async () => {
+    await database.query("update organizations set timezone = $2 where id = $1", [
+      ORG_A,
+      "Asia/Riyadh",
+    ])
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await seedShift({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      cashierUserId: USER_A,
+      shiftNumber: 1,
+      status: "closed",
+      openedAt: "2026-09-14T06:00:00.000Z",
+      closedAt: "2026-09-22T17:32:00.000Z",
+    })
+    await seedShift({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      cashierUserId: USER_A,
+      shiftNumber: 2,
+      status: "open",
+      openedAt: "2026-09-22T17:32:00.000Z",
+      closedAt: null,
+    })
+    const session = await service.createSession(actor(), "pos")
+
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("list_pos_shifts", {})
+      return {
+        text: "تم العثور على وردّيتين خلال الفترة المحددة.",
+        toolCalls: [{ tool: "list_pos_shifts", input: {}, outputSummary: toolResultText }],
+        stopReason: "end_turn",
+      }
+    })
+
+    const reply = await service.sendMessage(actor(), session.id, "إيش أفضل وردية؟")
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.tables).toHaveLength(1)
+    const table = reply.structured!.tables[0]
+    expect(table.rows).toHaveLength(2)
+
+    const closedRow = table.rows.find((r) => r.status === "مغلقة")!
+    expect(closedRow.shiftNumber).toBe("#1")
+    expect(closedRow.closedAt).toContain("سبتمبر")
+    expect(closedRow.closedAt).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+    expect(closedRow.closedAt).not.toMatch(/\|/)
+
+    const openRow = table.rows.find((r) => r.status === "مفتوحة")!
+    expect(openRow.shiftNumber).toBe("#2")
+    expect(openRow.closedAt).toBeNull()
+
+    // No raw pipe-delimited record dump anywhere in the final content either -- the chat prose
+    // itself now only needs a short summary, since the table carries the record-level detail.
+    expect(reply.content).not.toMatch(/\|.*\|.*\|/)
+  })
+
+  it("instructs the model never to hand-draw pipe tables and to keep prose brief when a tool returns a record list", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    const session = await service.createSession(actor(), "pos")
+
+    let capturedSystemPrompt = ""
+    mockRunChatTurn.mockImplementation(async (input) => {
+      capturedSystemPrompt = input.systemPrompt
+      return { text: "ok", toolCalls: [], stopReason: "end_turn" }
+    })
+
+    await service.sendMessage(actor(), session.id, "مرحبا")
+
+    expect(capturedSystemPrompt).toContain("|")
+    expect(capturedSystemPrompt).toMatch(/جدول منفصل ضمن واجهة المحادثة/)
   })
 })

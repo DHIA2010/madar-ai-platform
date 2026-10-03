@@ -42,11 +42,38 @@ export interface ChartSpec {
   series: Array<{ name: string; data: ChartSeriesPoint[] }>
 }
 
+// For multi-field record lists (shifts, orders, stores, invoices) that ChartSpec's single
+// label/value series can't represent. Every cell value is either already display-ready (dates,
+// statuses, and text are formatted server-side, in the organization's own timezone where
+// relevant -- see response-formatter.ts's formatDate/formatDateTime) or a raw number the frontend
+// formats consistently with how KpiCard.format is applied (currency/percent/number). null means
+// "no value" uniformly across every column type; the frontend renders it as "—", never "null" or
+// "N/A". This is the structural fix for the "raw pipe-delimited table" failure mode: a tool that
+// returns a list of records gets a ReportTable here instead of being left for the LLM's prose to
+// describe unassisted.
+export type ReportColumnFormat = "text" | "datetime" | "currency" | "percent" | "status" | "number"
+
+export interface ReportTableColumn {
+  key: string
+  label: string
+  format: ReportColumnFormat
+}
+
+export interface ReportTable {
+  title: string
+  columns: ReportTableColumn[]
+  rows: Array<Record<string, string | number | null>>
+}
+
 // The envelope persisted alongside a chat_messages row (see ai-chat/repository.ts's `structured`
 // column) -- purely additive to the existing `content` prose string, never a replacement for it.
-// A message with no analytics tool calls (e.g. a plain POS shift list) simply has `structured:
-// null`; the frontend falls back to rendering `content` as before, so this never breaks existing
-// rendering (Phase 9's explicit backward-compatibility requirement).
+// A message with no analytics tool calls (e.g. a plain get_metric_definitions lookup) simply has
+// `structured: null`; the frontend falls back to rendering `content` as before, so this never
+// breaks existing rendering (Phase 9's explicit backward-compatibility requirement). This same
+// envelope doubles as the "report" the AI-response redesign asked for -- its fields already cover
+// a report's header/KPIs/sections/recommendations/source, so there is no separate parallel report
+// schema; `tables` is the one field added to let record-listing tools (shifts, orders, stores)
+// stop falling back to unassisted LLM prose for data they return.
 export interface StructuredAnalyticsResponse {
   type: "analytics_response"
   facts: Fact[]
@@ -54,6 +81,7 @@ export interface StructuredAnalyticsResponse {
   recommendations: CampaignRecommendation[]
   metrics: KpiCard[]
   charts: ChartSpec[]
+  tables: ReportTable[]
   dataPeriod: { from: string; to: string } | null
   source: { domain: string } | null
   confidence: ConfidenceLevel | null

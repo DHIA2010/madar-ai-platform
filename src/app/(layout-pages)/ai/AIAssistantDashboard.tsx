@@ -38,6 +38,8 @@ import type {
   ChatFact,
   ChatInsight,
   ChatKpiCard,
+  ChatReportTable,
+  ChatReportTableColumn,
 } from "@/features/ai/types/ai-chat.types"
 
 function formatKpiValue(card: ChatKpiCard): string {
@@ -144,6 +146,93 @@ function ChatChartBlock({ chart }: { chart: ChatChartSpec }) {
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+// Problem states first (so "غير متصل" never matches the "متصل" pattern below it), then positive
+// states, everything else falls to a neutral badge -- this is purely a visual classification of an
+// already-final Arabic label from the backend, never a translation or a judgment call about the
+// underlying data.
+function statusBadgeClass(label: string): string {
+  if (/ملغي|خطأ|غير متصل|متعثر|متوقف/.test(label)) return "bg-rose-50 text-rose-700"
+  if (/مفتوحة|نشط|متصل|مكتمل/.test(label)) return "bg-emerald-50 text-emerald-700"
+  return "bg-amber-50 text-amber-700"
+}
+
+function formatReportCell(
+  value: string | number | null,
+  format: ChatReportTableColumn["format"]
+): string {
+  if (value === null) return "—"
+  switch (format) {
+    case "currency":
+      return `${Number(value).toLocaleString("ar")} ر.س`
+    case "percent":
+      return `${Number(value).toFixed(1)}%`
+    case "number":
+      return Number(value).toLocaleString("ar")
+    default:
+      return String(value)
+  }
+}
+
+// The structural fix for the "raw pipe-delimited table" failure mode: a tool that returns a list
+// of records (shifts, orders, stores) gets a real table here instead of being left for the LLM's
+// prose to describe unassisted. Every cell's display value already came from the backend
+// (response-formatter.ts) -- this component only lays it out and applies the per-column visual
+// treatment (status badge vs. plain text vs. right-aligned number).
+function ReportTableBlock({ table }: { table: ChatReportTable }) {
+  if (table.rows.length === 0) return null
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border/60">
+      <p className="border-b border-border/60 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-foreground">
+        {table.title}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border/40 text-muted-foreground">
+              {table.columns.map((column) => (
+                <th
+                  key={column.key}
+                  className="whitespace-nowrap px-3 py-1.5 text-start font-medium"
+                >
+                  {column.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, index) => (
+              <tr key={index} className="border-t border-border/40 first:border-t-0">
+                {table.columns.map((column) => {
+                  const value = row[column.key] ?? null
+                  if (column.format === "status" && value !== null) {
+                    return (
+                      <td key={column.key} className="whitespace-nowrap px-3 py-1.5">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            statusBadgeClass(String(value))
+                          )}
+                        >
+                          {value}
+                        </span>
+                      </td>
+                    )
+                  }
+                  return (
+                    <td key={column.key} className="whitespace-nowrap px-3 py-1.5 text-foreground">
+                      {formatReportCell(value, column.format)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -473,6 +562,9 @@ export default function AIAssistantDashboard() {
                         {message.role === "assistant" && message.structured ? (
                           <>
                             <ChatKpiRow cards={message.structured.metrics} />
+                            {message.structured.tables.map((table, index) => (
+                              <ReportTableBlock key={index} table={table} />
+                            ))}
                             {message.structured.charts.map((chart, index) => (
                               <ChatChartBlock key={index} chart={chart} />
                             ))}
