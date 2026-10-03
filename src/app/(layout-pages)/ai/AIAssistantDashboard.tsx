@@ -8,11 +8,15 @@ import {
   ArrowUpRight,
   BarChart3,
   Calendar as CalendarIcon,
+  CreditCard,
   FileText,
   Gauge,
   Info,
+  LayoutGrid,
+  Megaphone,
   Minus,
   Send,
+  ShoppingBag,
   Sparkles,
   Target,
   TrendingUp,
@@ -24,6 +28,8 @@ import { cn } from "@/lib/utils"
 import {
   AppCard,
   AppButton,
+  AppSearchableSelect,
+  type AppSearchableSelectOption,
   AppSelect,
   AppSelectContent,
   AppSelectItem,
@@ -408,6 +414,13 @@ const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
   madarApps: "تطبيقات مدار",
 }
 
+const CATEGORY_ICON: Record<ApplicationCategoryId, { icon: LucideIcon; tint: string }> = {
+  advertising: { icon: Megaphone, tint: "bg-[#eef4ff] text-[#2878ff]" },
+  ecommerce: { icon: ShoppingBag, tint: "bg-violet-50 text-violet-600" },
+  pos: { icon: CreditCard, tint: "bg-emerald-50 text-emerald-600" },
+  madarApps: { icon: LayoutGrid, tint: "bg-amber-50 text-amber-600" },
+}
+
 const SUGGESTED_QUESTIONS: Record<
   ApplicationCategoryId,
   Array<{ label: string; icon: LucideIcon }>
@@ -485,6 +498,17 @@ export default function AIAssistantDashboard() {
 
   const [selectedCategory, setSelectedCategory] = useState<ApplicationCategoryId | null>(null)
   const activeCategory = selectedCategory ?? availableCategories[0] ?? null
+
+  const categoryOptions = useMemo<AppSearchableSelectOption[]>(
+    () =>
+      availableCategories.map((category) => ({
+        value: category,
+        label: CATEGORY_LABEL[category],
+        icon: CATEGORY_ICON[category].icon,
+        tint: CATEGORY_ICON[category].tint,
+      })),
+    [availableCategories]
+  )
 
   const filteredRecommendations = useMemo(() => {
     if (activeTab === "all") return recommendations
@@ -568,22 +592,20 @@ export default function AIAssistantDashboard() {
             <>
               {availableCategories.length > 1 ? (
                 <div className="mb-3 flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">نطاق المحادثة:</span>
-                  <AppSelect
-                    value={activeCategory ?? undefined}
-                    onValueChange={(value) => setSelectedCategory(value as ApplicationCategoryId)}
-                  >
-                    <AppSelectTrigger className="h-9 w-56 rounded-lg border-border bg-card px-3 text-sm">
-                      <AppSelectValue />
-                    </AppSelectTrigger>
-                    <AppSelectContent position="popper" align="start" className="w-56">
-                      {availableCategories.map((category) => (
-                        <AppSelectItem key={category} value={category}>
-                          {CATEGORY_LABEL[category]}
-                        </AppSelectItem>
-                      ))}
-                    </AppSelectContent>
-                  </AppSelect>
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    نطاق المحادثة:
+                  </span>
+                  <AppSearchableSelect
+                    value={activeCategory ?? ""}
+                    options={categoryOptions}
+                    onChange={(value) => setSelectedCategory(value as ApplicationCategoryId)}
+                    placeholder="اختر نطاق المحادثة"
+                    searchPlaceholder="ابحث عن قسم..."
+                    emptyLabel="لا يوجد قسم مطابق"
+                    ariaLabel="نطاق المحادثة"
+                    compact
+                    triggerClassName="w-56"
+                  />
                 </div>
               ) : null}
 
