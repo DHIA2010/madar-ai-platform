@@ -469,7 +469,15 @@ function RecommendationCard({ item }: { item: Recommendation }) {
   )
 }
 
+type PageView = "chat" | "recommendations"
+
+const PAGE_VIEWS: Array<{ key: PageView; label: string; icon: LucideIcon }> = [
+  { key: "chat", label: "المساعد الذكي", icon: Sparkles },
+  { key: "recommendations", label: "التوصيات المقترحة", icon: TrendingUp },
+]
+
 export default function AIAssistantDashboard() {
+  const [view, setView] = useState<PageView>("chat")
   const [activeTab, setActiveTab] = useState<"all" | RecommendationCategory>("all")
   const [period, setPeriod] = useState("30")
   const [chatInput, setChatInput] = useState("")
@@ -503,25 +511,47 @@ export default function AIAssistantDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <AppSelect value={period} onValueChange={setPeriod}>
-            <AppSelectTrigger className="h-10 gap-2 rounded-xl border-border bg-card px-3 text-sm font-medium text-foreground">
-              <CalendarIcon className="size-4 text-muted-foreground" />
-              <AppSelectValue />
-            </AppSelectTrigger>
-            <AppSelectContent align="end">
-              <AppSelectItem value="7">آخر 7 أيام</AppSelectItem>
-              <AppSelectItem value="30">آخر 30 يومًا</AppSelectItem>
-              <AppSelectItem value="90">آخر 90 يومًا</AppSelectItem>
-            </AppSelectContent>
-          </AppSelect>
+          {view === "recommendations" ? (
+            <AppSelect value={period} onValueChange={setPeriod}>
+              <AppSelectTrigger className="h-10 gap-2 rounded-xl border-border bg-card px-3 text-sm font-medium text-foreground">
+                <CalendarIcon className="size-4 text-muted-foreground" />
+                <AppSelectValue />
+              </AppSelectTrigger>
+              <AppSelectContent align="end">
+                <AppSelectItem value="7">آخر 7 أيام</AppSelectItem>
+                <AppSelectItem value="30">آخر 30 يومًا</AppSelectItem>
+                <AppSelectItem value="90">آخر 90 يومًا</AppSelectItem>
+              </AppSelectContent>
+            </AppSelect>
+          ) : null}
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
-        <AppCard
-          title="المساعد الذكي"
-          className="rounded-2xl border-border/60 shadow-sm xl:order-2"
-        >
+      <div className="flex gap-2 rounded-xl border border-border/60 bg-card p-1">
+        {PAGE_VIEWS.map((pageView) => {
+          const Icon = pageView.icon
+          const isActive = view === pageView.key
+          return (
+            <button
+              key={pageView.key}
+              type="button"
+              onClick={() => setView(pageView.key)}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+              )}
+            >
+              <Icon className="size-4" />
+              {pageView.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {view === "chat" ? (
+        <AppCard title="المساعد الذكي" className="rounded-2xl border-border/60 shadow-sm">
           {availableCategories.length === 0 ? (
             <div className="flex flex-col items-center px-1 py-6 text-center">
               <div className="flex size-14 items-center justify-center rounded-full bg-muted text-2xl">
@@ -543,10 +573,10 @@ export default function AIAssistantDashboard() {
                     value={activeCategory ?? undefined}
                     onValueChange={(value) => setSelectedCategory(value as ApplicationCategoryId)}
                   >
-                    <AppSelectTrigger className="h-9 flex-1 rounded-lg border-border bg-card px-3 text-sm">
+                    <AppSelectTrigger className="h-9 w-56 rounded-lg border-border bg-card px-3 text-sm">
                       <AppSelectValue />
                     </AppSelectTrigger>
-                    <AppSelectContent>
+                    <AppSelectContent position="popper" align="start" className="w-56">
                       {availableCategories.map((category) => (
                         <AppSelectItem key={category} value={category}>
                           {CATEGORY_LABEL[category]}
@@ -590,7 +620,7 @@ export default function AIAssistantDashboard() {
                     </div>
                   </div>
                 ) : (
-                  <div className="max-h-[420px] space-y-3 overflow-y-auto">
+                  <div className="max-h-[65vh] space-y-3 overflow-y-auto">
                     {messages.map((message) => (
                       <div
                         key={message.id}
@@ -672,11 +702,11 @@ export default function AIAssistantDashboard() {
             </>
           )}
         </AppCard>
-
+      ) : (
         <AppCard
           title="التوصيات المقترحة"
           icon={<Sparkles className="size-4 text-primary" />}
-          className="rounded-2xl border-border/60 shadow-sm xl:order-1"
+          className="rounded-2xl border-border/60 shadow-sm"
         >
           <div className="mb-4 flex flex-wrap items-center gap-5 border-b border-border/60">
             {TABS.map((tab) => {
@@ -713,7 +743,7 @@ export default function AIAssistantDashboard() {
             التوصيات أدناه توضيحية حاليًا وغير مرتبطة بالمساعد الذكي أعلاه
           </p>
         </AppCard>
-      </div>
+      )}
     </div>
   )
 }
