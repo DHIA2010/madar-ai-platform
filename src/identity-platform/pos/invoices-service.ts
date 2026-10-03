@@ -691,6 +691,72 @@ export class PosInvoicesService {
     }
   }
 
+  // Real per-product sales ranking -- joins pos_invoice_items to pos_invoices for org/workspace/
+  // date scoping (items carry no organization_id of their own). Only completed sales count as
+  // "sold" (a cancelled/returned invoice's items were never actually sold), matching the same
+  // completed-only convention summary()'s totalCompletedAmount already uses. Grouped by
+  // (product_id, product_name) rather than product_id alone so free-text line items (no native
+  // product_id) still group sensibly by name instead of all collapsing into one null-id bucket.
+  async topProducts(
+    organizationId: string,
+    filter: { workspaceId: string | null; from: string | null; to: string | null; limit: number }
+  ): Promise<
+    Array<{
+      productId: string | null
+      productName: string
+      quantitySold: number
+      revenue: number
+      invoiceCount: number
+    }>
+  > {
+    const conditions = ["pi.organization_id = $1", "pi.status = 'completed'"]
+    const params: unknown[] = [organizationId]
+
+    if (filter.workspaceId) {
+      params.push(filter.workspaceId)
+      conditions.push(`pi.workspace_id = $${params.length}`)
+    }
+    if (filter.from) {
+      params.push(filter.from)
+      conditions.push(`pi.created_at >= $${params.length}`)
+    }
+    if (filter.to) {
+      params.push(filter.to)
+      conditions.push(`pi.created_at <= $${params.length}`)
+    }
+    params.push(filter.limit)
+
+    const result = await this.database.query<{
+      product_id: string | null
+      product_name: string
+      quantity_sold: string
+      revenue: string
+      invoice_count: string
+    }>(
+      `SELECT
+         pii.product_id,
+         pii.product_name,
+         sum(pii.quantity) AS quantity_sold,
+         sum(pii.line_total) AS revenue,
+         count(distinct pii.invoice_id) AS invoice_count
+       FROM pos_invoice_items pii
+       JOIN pos_invoices pi ON pi.id = pii.invoice_id
+       WHERE ${conditions.join(" AND ")}
+       GROUP BY pii.product_id, pii.product_name
+       ORDER BY revenue DESC
+       LIMIT $${params.length}`,
+      params
+    )
+
+    return result.rows.map((row) => ({
+      productId: row.product_id,
+      productName: row.product_name,
+      quantitySold: Number(row.quantity_sold),
+      revenue: Number(row.revenue),
+      invoiceCount: Number(row.invoice_count),
+    }))
+  }
+
   async create(input: CreateInvoiceInput): Promise<InvoiceView> {
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
     if (input.payments.length === 0) throw INVOICE_ERRORS.invalidPaymentMethod()

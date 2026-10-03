@@ -423,6 +423,34 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       services.posShiftsService.list(actor.organizationId, actor.workspaceId),
   },
   {
+    category: "pos",
+    tool: {
+      name: "get_top_selling_products",
+      description:
+        "Real ranking of best-selling products by revenue, from completed point-of-sale invoices for an optional date range: product name, total quantity sold, total revenue, and number of invoices it appeared on. Use this for any question about which products sell best, how many units sold, or revenue per product.",
+      input_schema: {
+        type: "object",
+        properties: {
+          ...dateRangeProperties,
+          limit: { type: "number", description: "Max products to return, default 10, max 50." },
+        },
+      },
+    },
+    schema: z.object({
+      ...dateRangeShape,
+      limit: z.number().int().min(1).max(50).optional(),
+    }),
+    execute: (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; limit?: number }
+      return services.posInvoicesService.topProducts(actor.organizationId, {
+        workspaceId: actor.workspaceId,
+        from: parsed.startDate ?? null,
+        to: parsed.endDate ?? null,
+        limit: parsed.limit ?? 10,
+      })
+    },
+  },
+  {
     category: "ecommerce",
     tool: {
       name: "list_orders",
