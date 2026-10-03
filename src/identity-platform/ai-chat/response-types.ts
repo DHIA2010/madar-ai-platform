@@ -1,0 +1,70 @@
+import type { CampaignRecommendation, ConfidenceLevel } from "../campaigns/analytics-types"
+
+// Phase 2's Fact/Insight/Recommendation separation. A Fact is a directly observed number (or
+// pair of numbers); an Insight is an interpretation spanning multiple facts (always hedged --
+// see analytics-engine.ts's identifyPerformanceDrivers); a Recommendation is the existing
+// CampaignRecommendation type, unchanged. None of these three is ever built from LLM text --
+// response-formatter.ts derives all of them from the same tool-call results already computed
+// deterministically this turn.
+export interface Fact {
+  statement: string
+  metric: string
+  currentValue: number | null
+  previousValue: number | null
+  changePercent: number | null
+}
+
+export interface Insight {
+  statement: string
+  relatedMetrics: string[]
+  confidence: ConfidenceLevel
+}
+
+export interface KpiCard {
+  type: "kpi"
+  title: string
+  value: number
+  previousValue: number | null
+  changePercent: number | null
+  trend: "up" | "down" | "flat"
+  format: "currency" | "multiple" | "percent" | "number"
+}
+
+export interface ChartSeriesPoint {
+  label: string
+  value: number
+}
+
+export interface ChartSpec {
+  type: "chart"
+  chartType: "line" | "bar" | "donut" | "table" | "comparison"
+  title: string
+  series: Array<{ name: string; data: ChartSeriesPoint[] }>
+}
+
+// The envelope persisted alongside a chat_messages row (see ai-chat/repository.ts's `structured`
+// column) -- purely additive to the existing `content` prose string, never a replacement for it.
+// A message with no analytics tool calls (e.g. a plain POS shift list) simply has `structured:
+// null`; the frontend falls back to rendering `content` as before, so this never breaks existing
+// rendering (Phase 9's explicit backward-compatibility requirement).
+export interface StructuredAnalyticsResponse {
+  type: "analytics_response"
+  facts: Fact[]
+  insights: Insight[]
+  recommendations: CampaignRecommendation[]
+  metrics: KpiCard[]
+  charts: ChartSpec[]
+  dataPeriod: { from: string; to: string } | null
+  source: { domain: string } | null
+  confidence: ConfidenceLevel | null
+}
+
+// What response-formatter.ts actually consumes -- the RAW (never re-serialized/truncated) output
+// of each tool call made during a turn, captured by ai-chat/service.ts before it gets
+// JSON.stringify'd for the LLM. Using the raw object (not the 6000-char-truncated outputSummary
+// string already stored in chat_messages.tool_calls) means the formatter never has to re-parse
+// JSON that might have been cut off mid-string.
+export interface RawToolResult {
+  tool: string
+  output: unknown
+}

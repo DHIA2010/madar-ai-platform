@@ -73,6 +73,7 @@ export function useAiChat() {
         role: "user",
         content,
         toolCalls: null,
+        structured: null,
         model: null,
         createdAt: new Date().toISOString(),
       }

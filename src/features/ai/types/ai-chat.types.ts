@@ -8,6 +8,27 @@ export interface ChatToolCallTrace {
   outputSummary: string
 }
 
+export type ChatConfidenceLevel = "high" | "medium" | "low" | "insufficient"
+
+// Mirrors ai-chat/response-types.ts's KpiCard -- a deterministic value already computed
+// server-side, never something the frontend formats or invents on its own.
+export interface ChatKpiCard {
+  type: "kpi"
+  title: string
+  value: number
+  previousValue: number | null
+  changePercent: number | null
+  trend: "up" | "down" | "flat"
+  format: "currency" | "multiple" | "percent" | "number"
+}
+
+export interface ChatStructuredResponse {
+  type: "analytics_response"
+  metrics: ChatKpiCard[]
+  dataPeriod: { from: string; to: string } | null
+  confidence: ChatConfidenceLevel | null
+}
+
 export interface ChatSessionDto {
   id: string
   organizationId: string
@@ -26,6 +47,7 @@ export interface ChatMessageDto {
   role: ChatMessageRole
   content: string
   toolCalls: ChatToolCallTrace[] | null
+  structured: ChatStructuredResponse | null
   model: string | null
   createdAt: string
 }

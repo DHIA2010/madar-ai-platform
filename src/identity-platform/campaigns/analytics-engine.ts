@@ -13,6 +13,7 @@ import type {
   AnomalyFlag,
   CampaignDeclineRow,
   CampaignRow,
+  CampaignScalingSignal,
   ChannelComparisonRow,
   ChannelFreshness,
   ContributionRow,
@@ -24,6 +25,7 @@ import type {
   PerformanceDriver,
   SampleSize,
 } from "./analytics-types"
+import { METRIC_FUNNEL_STAGE } from "./analytics-types"
 
 const STALE_SYNC_MINUTES = 90
 
@@ -446,6 +448,16 @@ export class CampaignAnalyticsEngine {
                     ? "conversion_rate_drop"
                     : null
         if (!anomalyType) continue
+        // Phase 7 (anomaly explanation): other metrics that moved materially in the SAME
+        // campaign/period -- "CPA increased 42%" ships with "CPC +18%, conversion rate -21%"
+        // rather than the bare number alone. Hedged by construction: this is a list of
+        // co-occurring facts, not a claim that any one of them caused the anomaly.
+        const supportingChanges = campaign.deltas.filter(
+          (other) =>
+            other.metric !== delta.metric &&
+            other.changePercent !== null &&
+            Math.abs(other.changePercent) >= MATERIAL_CHANGE_PCT
+        )
         flags.push({
           type: anomalyType,
           scope: "campaign",
@@ -454,6 +466,7 @@ export class CampaignAnalyticsEngine {
           severity: Math.abs(delta.changePercent) >= 50 ? "critical" : "warning",
           detail: `${campaign.name}: ${delta.metric} تغيّر ${delta.changePercent}% مقارنة بالفترة السابقة`,
           changePercent: delta.changePercent,
+          supportingChanges,
         })
       }
     }
@@ -493,6 +506,7 @@ export class CampaignAnalyticsEngine {
           index === 0
             ? `أكبر تغيّر ملحوظ هو ${verb} ${delta.metric} بنسبة ${Math.abs(delta.changePercent ?? 0)}%، وهو ما يتوافق زمنيًا مع اتجاه ${targetDirection === "down" ? "انخفاض" : "ارتفاع"} ${targetMetric}.`
             : `${verb} ${delta.metric} أيضًا بنسبة ${Math.abs(delta.changePercent ?? 0)}%.`,
+        funnelStage: METRIC_FUNNEL_STAGE[delta.metric] ?? null,
       }
     })
   }
@@ -517,7 +531,7 @@ export class CampaignAnalyticsEngine {
     const totalSpend = currentRows.reduce((sum, row) => sum + row.spend, 0)
     const totalRevenue = currentRows.reduce((sum, row) => sum + row.revenue, 0)
 
-    const rows: ContributionRow[] = currentRows.map((row) => {
+    const prelim = currentRows.map((row) => {
       const previousRow = previousById.get(row.id)
       const revenueDeltaAbsolute = previousRow
         ? Math.round((row.revenue - previousRow.revenue) * 100) / 100
@@ -538,9 +552,83 @@ export class CampaignAnalyticsEngine {
       }
     })
 
+    // "Campaign A -> 41% of decline" -- each campaign's deterioration score as a share of the
+    // TOTAL deterioration across every campaign that deteriorated, not a share of total spend.
+    const totalDeterioration = prelim.reduce(
+      (sum, row) => sum + Math.max(0, row.roasDeteriorationScore ?? 0),
+      0
+    )
+    const rows: ContributionRow[] = prelim.map((row) => ({
+      ...row,
+      declineContributionPercent:
+        totalDeterioration > 0 && (row.roasDeteriorationScore ?? 0) > 0
+          ? Math.round((row.roasDeteriorationScore! / totalDeterioration) * 1000) / 10
+          : null,
+    }))
+
     return rows
       .filter((row) => (row.roasDeteriorationScore ?? 0) > 0 || (row.revenueDeltaAbsolute ?? 0) < 0)
       .sort((a, b) => (b.roasDeteriorationScore ?? 0) - (a.roasDeteriorationScore ?? 0))
       .slice(0, options.limit)
+  }
+
+  // get_campaign_scaling_signals -- a deterministic, NON-promissory efficiency signal per
+  // campaign relative to the account average (requirement: "this is NOT an automatic instruction
+  // to change the campaign... do not promise future performance"). Gated on the same
+  // confidence/sample-size rules as ranking -- a campaign with 2 conversions never gets a real
+  // signal, only insufficient_data, no matter how extreme its raw ROAS looks.
+  async getCampaignScalingSignals(
+    actor: AuthenticatedActor,
+    query: CampaignPerformanceQuery
+  ): Promise<CampaignScalingSignal[]> {
+    const [rows, accountSummary] = await Promise.all([
+      this.listAllCampaigns(actor, query),
+      this.performanceService.getSummary(actor, query),
+    ])
+    const days = query.startDate && query.endDate ? daysBetween(query.startDate, query.endDate) : 30
+    const accountRoas = accountSummary.roas
+    const accountCpa = accountSummary.cpa
+
+    return rows.map((row) => {
+      const metrics = snapshotFromRow(row)
+      const sampleSize = sampleSizeFromSnapshot(metrics, days)
+      const confidence = computeConfidence(sampleSize)
+      if (confidence === "insufficient") {
+        return {
+          campaignId: row.id,
+          campaignName: row.name,
+          signal: "insufficient_data",
+          roasVsAccountPercent: null,
+          cpaVsAccountPercent: null,
+          conversionVolume: row.conversions,
+          confidence,
+        }
+      }
+      const roasVsAccountPercent = pctChange(row.roas, accountRoas)
+      // Lower CPA is better, so a NEGATIVE cpaVsAccountPercent (cheaper than account average) is
+      // the favorable direction -- the opposite sign convention from every other "vs account"
+      // comparison in this engine, called out explicitly here to avoid a silent sign-flip bug.
+      const cpaVsAccountPercent = pctChange(row.cpa, accountCpa)
+
+      let signal: CampaignScalingSignal["signal"] = "neutral"
+      const roasBetter = (roasVsAccountPercent ?? 0) >= 15
+      const roasWorse = (roasVsAccountPercent ?? 0) <= -15
+      const cpaBetter = (cpaVsAccountPercent ?? 0) <= -15
+      const cpaWorse = (cpaVsAccountPercent ?? 0) >= 15
+      if (roasBetter && cpaBetter) signal = "strong_positive"
+      else if (roasBetter || cpaBetter) signal = "positive"
+      else if (roasWorse && cpaWorse) signal = "negative"
+      else if (roasWorse || cpaWorse) signal = "negative"
+
+      return {
+        campaignId: row.id,
+        campaignName: row.name,
+        signal,
+        roasVsAccountPercent,
+        cpaVsAccountPercent,
+        conversionVolume: row.conversions,
+        confidence,
+      }
+    })
   }
 }

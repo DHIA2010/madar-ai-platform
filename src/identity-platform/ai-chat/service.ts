@@ -5,6 +5,8 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { AiChatLlmClientLike } from "./llm-client"
 import { isApplicationEnabled, requireApplicationEnabled } from "./guards"
 import { AiChatRepository } from "./repository"
+import { buildStructuredResponse } from "./response-formatter"
+import type { RawToolResult } from "./response-types"
 import { buildToolsForCategory, dispatchToolCall, type AiChatToolServices } from "./tools"
 import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto } from "./types"
 
@@ -154,6 +156,11 @@ export class AiChatService {
     const history = await this.repository.listMessages(sessionId, 20)
     const tools = buildToolsForCategory(session.applicationCategory)
 
+    // Captured from the real, pre-JSON.stringify tool return values -- the formatter builds the
+    // structured envelope from these, never from the LLM's own text or from re-parsing the
+    // (possibly truncated) outputSummary trace.
+    const rawToolResults: RawToolResult[] = []
+
     const result = await this.llmClient.runChatTurn({
       systemPrompt: buildSystemPrompt(session.applicationCategory),
       tools,
@@ -175,6 +182,7 @@ export class AiChatService {
         if (error) {
           return `Error: ${error}`
         }
+        rawToolResults.push({ tool: toolName, output: toolResult ?? {} })
         return JSON.stringify(toolResult ?? {})
       },
     })
@@ -186,6 +194,7 @@ export class AiChatService {
       role: "assistant",
       content: result.text,
       toolCalls: result.toolCalls.length > 0 ? result.toolCalls : null,
+      structured: buildStructuredResponse(rawToolResults),
       model: this.model,
     })
   }

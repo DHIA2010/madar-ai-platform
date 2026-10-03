@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
+import type { StructuredAnalyticsResponse } from "./response-types"
 import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto, ToolCallTrace } from "./types"
 
 function mapSession(row: Record<string, unknown>): ChatSessionDto {
@@ -25,6 +26,7 @@ function mapMessage(row: Record<string, unknown>): ChatMessageDto {
     role: row.role as ChatMessageDto["role"],
     content: String(row.content),
     toolCalls: (row.tool_calls as ToolCallTrace[] | null) ?? null,
+    structured: (row.structured as StructuredAnalyticsResponse | null) ?? null,
     model: (row.model as string | null) ?? null,
     createdAt: new Date(row.created_at as string).toISOString(),
   }
@@ -91,11 +93,12 @@ export class AiChatRepository {
     role: ChatMessageDto["role"]
     content: string
     toolCalls?: ToolCallTrace[] | null
+    structured?: StructuredAnalyticsResponse | null
     model?: string | null
   }): Promise<ChatMessageDto> {
     const result = await this.db.query<Record<string, unknown>>(
-      `insert into chat_messages (id, session_id, role, content, tool_calls, model, created_at)
-       values ($1,$2,$3,$4,$5::jsonb,$6,now())
+      `insert into chat_messages (id, session_id, role, content, tool_calls, structured, model, created_at)
+       values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,now())
        returning *`,
       [
         randomUUID(),
@@ -103,6 +106,7 @@ export class AiChatRepository {
         input.role,
         input.content,
         input.toolCalls ? JSON.stringify(input.toolCalls) : null,
+        input.structured ? JSON.stringify(input.structured) : null,
         input.model ?? null,
       ]
     )

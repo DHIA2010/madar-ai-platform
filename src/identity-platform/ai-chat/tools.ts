@@ -476,6 +476,69 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    category: "advertising",
+    tool: {
+      name: "get_campaign_scaling_signals",
+      description:
+        "Deterministic, non-predictive efficiency signal per campaign (strong_positive/positive/neutral/negative/insufficient_data) based on ROAS AND CPA together versus the account average, gated on conversion volume. This is NOT an instruction to change budget and NEVER implies future performance -- present it as a current-efficiency signal only.",
+      input_schema: {
+        type: "object",
+        properties: { ...dateRangeProperties, period: relativePeriodProperty },
+      },
+    },
+    schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
+    execute: async (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      return services.campaignAnalyticsEngine.getCampaignScalingSignals(actor, resolved)
+    },
+  },
+  {
+    category: "advertising",
+    tool: {
+      name: "get_proactive_insights",
+      description:
+        "Use this specifically when the user asks a broad, undirected question like 'is there anything I should pay attention to?' or 'how are things going?'. Runs the account comparison, anomaly detection, and contribution analysis together and returns only the most material findings (not everything) -- a short, prioritized list, not a full report.",
+      input_schema: { type: "object", properties: {} },
+    },
+    schema: z.object({}),
+    execute: async (actor, services) => {
+      const ranges = defaultComparisonRanges()
+      const [comparison, anomalies] = await Promise.all([
+        services.campaignAnalyticsEngine.comparePeriods(actor, ranges),
+        services.campaignAnalyticsEngine.detectAnomalies(actor),
+      ])
+      const drivers = services.campaignAnalyticsEngine.identifyPerformanceDrivers(
+        comparison,
+        "roas"
+      )
+      const contributions =
+        comparison.confidence !== "insufficient"
+          ? await services.campaignAnalyticsEngine.getContributionAnalysis(actor, {
+              ranges,
+              limit: 3,
+            })
+          : []
+      // Only material findings -- a >=15-point ROAS move, critical anomalies, and the top 3
+      // contributors to any decline. An account with nothing notable gets an empty list back,
+      // which is the honest answer to "is there anything I should pay attention to?".
+      const roasDelta = comparison.deltas.find((d) => d.metric === "roas")
+      const materialAccountChange =
+        roasDelta?.changePercent !== null && roasDelta && Math.abs(roasDelta.changePercent) >= 15
+          ? roasDelta
+          : null
+      return {
+        accountRoasChange: materialAccountChange,
+        drivers: materialAccountChange ? drivers.slice(0, 3) : [],
+        criticalAnomalies: anomalies.filter((a) => a.severity === "critical").slice(0, 5),
+        warningAnomalies: anomalies.filter((a) => a.severity === "warning").slice(0, 3),
+        topContributors: contributions,
+        confidence: comparison.confidence,
+        period: comparison.period,
+      }
+    },
+  },
+  {
     category: "pos",
     tool: {
       name: "get_pos_invoices_summary",

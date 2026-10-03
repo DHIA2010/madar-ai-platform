@@ -270,4 +270,47 @@ describe("ai-chat: per-application scoping", () => {
     expect(reply.content).toContain("321")
     expect(reply.toolCalls?.[0]?.outputSummary).toContain("321")
   })
+
+  it("populates the structured envelope from the real tool output when an analytics tool is called", async () => {
+    await setApplicationEnabled(ORG_A, "advertisingEnabled", true)
+    const session = await service.createSession(actor(), "advertising")
+
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("get_campaign_summary", {})
+      return {
+        text: `summary: ${toolResultText}`,
+        toolCalls: [{ tool: "get_campaign_summary", input: {}, outputSummary: toolResultText }],
+        stopReason: "end_turn",
+      }
+    })
+
+    const reply = await service.sendMessage(actor(), session.id, "ما ملخص أداء حملاتي؟")
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.type).toBe("analytics_response")
+    expect(reply.structured!.metrics.length).toBeGreaterThan(0)
+
+    // Persisted, not just returned in-memory -- re-reading the message from the repository must
+    // round-trip the same structured envelope.
+    const assistantMessage = (await service.listMessages(actor(), session.id)).find(
+      (m) => m.role === "assistant"
+    )
+    expect(assistantMessage?.structured).not.toBeNull()
+    expect(assistantMessage?.structured?.type).toBe("analytics_response")
+  })
+
+  it("leaves the structured envelope null when no analytics tool was called this turn", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await seedInvoice({ organizationId: ORG_A, workspaceId: WORKSPACE_A, totalAmount: 100 })
+    const session = await service.createSession(actor(), "pos")
+
+    mockRunChatTurn.mockResolvedValue({
+      text: "لا أملك معلومات كافية.",
+      toolCalls: [],
+      stopReason: "end_turn",
+    })
+
+    const reply = await service.sendMessage(actor(), session.id, "ما هي سياسة الإرجاع؟")
+    expect(reply.structured).toBeNull()
+  })
 })

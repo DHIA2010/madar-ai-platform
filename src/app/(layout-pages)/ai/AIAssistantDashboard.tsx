@@ -4,11 +4,14 @@ import { useMemo, useState } from "react"
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   BarChart3,
   Calendar as CalendarIcon,
   FileText,
   Gauge,
   Info,
+  Minus,
   Send,
   Sparkles,
   Target,
@@ -30,6 +33,60 @@ import {
 import { PlatformBadge } from "@/components/platform-badge"
 import type { ApplicationCategoryId } from "@/features/applications"
 import { useAiChat } from "@/features/ai"
+import type { ChatKpiCard } from "@/features/ai/types/ai-chat.types"
+
+function formatKpiValue(card: ChatKpiCard): string {
+  switch (card.format) {
+    case "currency":
+      return `${card.value.toLocaleString("ar")} ر.س`
+    case "multiple":
+      return `${card.value.toFixed(2)}x`
+    case "percent":
+      return `${card.value.toFixed(1)}%`
+    default:
+      return card.value.toLocaleString("ar")
+  }
+}
+
+// Minimal, additive rendering of the deterministic structured.metrics already computed
+// server-side (ai-chat/response-formatter.ts) -- never a chat redesign, just a small KPI strip
+// under an assistant reply that has analytics-shaped data attached.
+function ChatKpiRow({ cards }: { cards: ChatKpiCard[] }) {
+  if (cards.length === 0) return null
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {cards.map((card) => {
+        const TrendIcon =
+          card.trend === "up" ? ArrowUpRight : card.trend === "down" ? ArrowDownRight : Minus
+        return (
+          <div
+            key={card.title}
+            className="rounded-xl border border-border/60 bg-background/60 px-3 py-2"
+          >
+            <p className="text-[11px] text-muted-foreground">{card.title}</p>
+            <p className="mt-0.5 text-sm font-bold text-foreground">{formatKpiValue(card)}</p>
+            {card.changePercent !== null ? (
+              <p
+                className={cn(
+                  "mt-0.5 flex items-center gap-0.5 text-[11px] font-medium",
+                  card.trend === "up"
+                    ? "text-emerald-600"
+                    : card.trend === "down"
+                      ? "text-rose-600"
+                      : "text-muted-foreground"
+                )}
+              >
+                <TrendIcon className="size-3" />
+                {card.changePercent > 0 ? "+" : ""}
+                {card.changePercent}%
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 // --- Mock data for the "التوصيات المقترحة" panel -- a separate, proactive-insights feature
 // (background analysis + notification) from the reactive chat below, not built in this pass. ---
@@ -309,6 +366,9 @@ export default function AIAssistantDashboard() {
                         )}
                       >
                         {message.content}
+                        {message.role === "assistant" && message.structured ? (
+                          <ChatKpiRow cards={message.structured.metrics} />
+                        ) : null}
                       </div>
                     ))}
                     {isSending ? (

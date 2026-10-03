@@ -109,6 +109,56 @@ export interface AnomalyFlag {
   severity: "warning" | "critical"
   detail: string
   changePercent?: number | null
+  // Other metric deltas that moved materially in the same period as this anomaly -- so "CPA
+  // increased 42%" ships with "CPC +18%, conversion rate -21%" alongside it instead of the bare
+  // number alone. Empty when no other metric crossed the material-change threshold.
+  supportingChanges?: MetricDelta[]
+}
+
+// Which stage of the click-to-revenue funnel a metric belongs to -- lets the diagnostic engine
+// say "the deterioration is concentrated in the conversion stage" instead of just listing metrics
+// in whatever order they happened to change. Mirrors the funnel in the product brief:
+// traffic quality -> engagement -> click cost -> conversion -> acquisition cost -> revenue -> ROAS.
+export type FunnelStage =
+  | "traffic_quality"
+  | "engagement"
+  | "click_cost"
+  | "conversion"
+  | "acquisition_cost"
+  | "revenue_efficiency"
+
+export const METRIC_FUNNEL_STAGE: Partial<Record<MetricKey, FunnelStage>> = {
+  impressions: "traffic_quality",
+  ctr: "engagement",
+  clicks: "engagement",
+  cpc: "click_cost",
+  cpm: "click_cost",
+  conversionRate: "conversion",
+  conversions: "conversion",
+  cpa: "acquisition_cost",
+  revenue: "revenue_efficiency",
+  roas: "revenue_efficiency",
+}
+
+// Deterministic, non-promissory signal (requirement: "this is NOT an automatic instruction to
+// change the campaign... do not promise future performance") -- a campaign's current efficiency
+// relative to the account average, gated on the same confidence/sample-size rules as everything
+// else in this engine. insufficient_data always wins over a real signal.
+export type ScalingSignalLevel =
+  | "strong_positive"
+  | "positive"
+  | "neutral"
+  | "negative"
+  | "insufficient_data"
+
+export interface CampaignScalingSignal {
+  campaignId: string
+  campaignName: string
+  signal: ScalingSignalLevel
+  roasVsAccountPercent: number | null
+  cpaVsAccountPercent: number | null
+  conversionVolume: number
+  confidence: ConfidenceLevel
 }
 
 // A single comparative observation, deliberately worded to never assert causation -- see
@@ -122,6 +172,7 @@ export interface PerformanceDriver {
   direction: "up" | "down"
   magnitudeRank: number
   narrative: string
+  funnelStage: FunnelStage | null
 }
 
 export interface ContributionRow {
@@ -135,6 +186,10 @@ export interface ContributionRow {
   // a campaign "contributing to a loss" that didn't happen is a meaningless number.
   revenueDeltaAbsolute: number | null
   roasDeteriorationScore: number | null
+  // This campaign's roasDeteriorationScore as a percentage of the SUM of every campaign's
+  // positive roasDeteriorationScore -- "Campaign A -> 41% of decline" from the product brief.
+  // null when nothing in the account deteriorated (the percentage would be of zero).
+  declineContributionPercent: number | null
 }
 
 export interface AnalyticalEvidence {

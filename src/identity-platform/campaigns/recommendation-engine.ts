@@ -1,6 +1,7 @@
 import type {
   AnalyticalEvidence,
   CampaignRecommendation,
+  CampaignScalingSignal,
   ContributionRow,
   MetricDelta,
   PeriodComparisonResult,
@@ -132,7 +133,9 @@ export function generateContributionRecommendations(
       entityType: "campaign" as const,
       entityId: row.entityId,
       entityName: row.entityName,
-      reason: `ساهمت هذه الحملة بأكبر قدر من تراجع كفاءة ROAS الإجمالية، وتمثل ${Math.round(row.spendShare * 100)}% من إجمالي الإنفاق.`,
+      reason: row.declineContributionPercent
+        ? `ساهمت هذه الحملة بنحو ${row.declineContributionPercent}% من إجمالي تراجع كفاءة ROAS على مستوى الحساب، وتمثل ${Math.round(row.spendShare * 100)}% من إجمالي الإنفاق.`
+        : `ساهمت هذه الحملة بأكبر قدر من تراجع كفاءة ROAS الإجمالية، وتمثل ${Math.round(row.spendShare * 100)}% من إجمالي الإنفاق.`,
       evidence: [
         {
           metric: "roasDeteriorationScore",
@@ -148,4 +151,74 @@ export function generateContributionRecommendations(
       confidence,
       recommendedAction: "يُنصح بمراجعة استهداف وكفاءة هذه الحملة قبل أي زيادة في ميزانيتها.",
     }))
+}
+
+// Translates a scaling signal (itself already a multi-factor computation over ROAS, CPA, AND
+// conversion volume together -- see analytics-engine.ts's getCampaignScalingSignals) into
+// conservative, decision-support language. Never promises future performance (requirement: "Do
+// not promise future performance. Do not predict revenue") -- only ever "a test could be
+// considered" / "review before any change," never a specific percentage or guaranteed outcome.
+// insufficient_data and neutral signals never produce a recommendation at all -- silence is the
+// honest answer when there's nothing material to say.
+export function generateScalingRecommendations(
+  signals: CampaignScalingSignal[],
+  period: PeriodComparisonResult["period"]
+): CampaignRecommendation[] {
+  const source = "campaigns/analytics-engine.ts:getCampaignScalingSignals"
+  const recommendations: CampaignRecommendation[] = []
+
+  for (const signal of signals) {
+    if (signal.signal === "insufficient_data" || signal.signal === "neutral") continue
+    const evidence: AnalyticalEvidence[] = [
+      {
+        metric: "roasVsAccount",
+        currentValue: signal.roasVsAccountPercent,
+        previousValue: null,
+        changePercent: null,
+        period: { current: `${period.current.from} -> ${period.current.to}` },
+        entity: { type: "campaign", id: signal.campaignId, name: signal.campaignName },
+        source,
+        confidence: signal.confidence,
+      },
+      {
+        metric: "cpaVsAccount",
+        currentValue: signal.cpaVsAccountPercent,
+        previousValue: null,
+        changePercent: null,
+        period: { current: `${period.current.from} -> ${period.current.to}` },
+        entity: { type: "campaign", id: signal.campaignId, name: signal.campaignName },
+        source,
+        confidence: signal.confidence,
+      },
+    ]
+
+    if (signal.signal === "strong_positive" || signal.signal === "positive") {
+      recommendations.push({
+        type: "budget_increase_consideration",
+        priority: signal.signal === "strong_positive" ? "medium" : "low",
+        entityType: "campaign",
+        entityId: signal.campaignId,
+        entityName: signal.campaignName,
+        reason: `كفاءة هذه الحملة (ROAS وCPA) أفضل من متوسط الحساب، بحجم تحويلات ${signal.conversionVolume}.`,
+        evidence,
+        confidence: signal.confidence,
+        recommendedAction:
+          "هذه الحملة تُظهر كفاءة جيدة مقارنة بباقي الحملات، ويمكن دراسة زيادة الميزانية تدريجيًا بعد التأكد من استقرار الأداء -- دون ضمان تكرار نفس النتيجة مستقبلًا.",
+      })
+    } else {
+      recommendations.push({
+        type: "investigate_inefficiency",
+        priority: "medium",
+        entityType: "campaign",
+        entityId: signal.campaignId,
+        entityName: signal.campaignName,
+        reason: `كفاءة هذه الحملة (ROAS وCPA) أضعف من متوسط الحساب، بحجم تحويلات ${signal.conversionVolume}.`,
+        evidence,
+        confidence: signal.confidence,
+        recommendedAction: "يُنصح بمراجعة هذه الحملة قبل زيادة ميزانيتها.",
+      })
+    }
+  }
+
+  return recommendations
 }

@@ -17,6 +17,7 @@ import { combineConfidence, computeConfidence } from "../campaigns/confidence-en
 import {
   generateAccountRecommendation,
   generateContributionRecommendations,
+  generateScalingRecommendations,
 } from "../campaigns/recommendation-engine"
 import type {
   CampaignPerformancePlatformRow,
@@ -394,6 +395,223 @@ describe("performance drivers", () => {
   })
 })
 
+describe("performance drivers -- funnel stage labeling", () => {
+  it("tags each driver with its funnel stage, or null when the metric has no mapped stage", async () => {
+    const { performanceService, channelsService, getSummaryMock } = buildFakeServices()
+    getSummaryMock.mockImplementation((_actor: unknown, query: CampaignPerformanceQuery) =>
+      Promise.resolve(
+        query.startDate === "2026-09-01"
+          ? summary({ roas: 3.7, spend: 13_200, revenue: 42_000, ctr: 1.5, cpa: 70 })
+          : summary({ roas: 4.6, spend: 10_000, revenue: 40_000, ctr: 2, cpa: 50 })
+      )
+    )
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+    const comparison = await engine.comparePeriods(actor(), {
+      current: { from: "2026-09-01", to: "2026-09-30" },
+      previous: { from: "2026-08-01", to: "2026-08-31" },
+    })
+
+    const drivers = engine.identifyPerformanceDrivers(comparison, "roas")
+    const ctrDriver = drivers.find((d) => d.metric === "ctr")
+    const cpaDriver = drivers.find((d) => d.metric === "cpa")
+    expect(ctrDriver?.funnelStage).toBe("engagement")
+    expect(cpaDriver?.funnelStage).toBe("acquisition_cost")
+  })
+})
+
+describe("contribution analysis -- decline contribution percent", () => {
+  it("expresses each campaign's deterioration as a share of total deterioration across all campaigns", async () => {
+    const { performanceService, channelsService, listCampaignsMock } = buildFakeServices()
+    listCampaignsMock.mockImplementation((_actor: unknown, query: CampaignPerformanceQuery) => {
+      if (query.startDate === "2026-09-01") {
+        return Promise.resolve({
+          items: [
+            campaignRow({ id: "a", name: "A", spend: 1000, revenue: 2000, roas: 2 }),
+            campaignRow({ id: "b", name: "B", spend: 1000, revenue: 1000, roas: 1 }),
+            campaignRow({ id: "c", name: "C", spend: 1000, revenue: 5000, roas: 5 }),
+          ],
+          pagination: { page: 1, pageSize: 200, total: 3 },
+        })
+      }
+      return Promise.resolve({
+        items: [
+          campaignRow({ id: "a", name: "A", spend: 1000, revenue: 4000, roas: 4 }),
+          campaignRow({ id: "b", name: "B", spend: 1000, revenue: 3000, roas: 3 }),
+          campaignRow({ id: "c", name: "C", spend: 1000, revenue: 4000, roas: 4 }),
+        ],
+        pagination: { page: 1, pageSize: 200, total: 3 },
+      })
+    })
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+
+    const rows = await engine.getContributionAnalysis(actor(), {
+      ranges: {
+        current: { from: "2026-09-01", to: "2026-09-30" },
+        previous: { from: "2026-08-01", to: "2026-08-31" },
+      },
+      limit: 10,
+    })
+
+    // A: (4-2)*1000=2000, B: (3-1)*1000=2000, C improved so null -- total deterioration = 4000.
+    const a = rows.find((r) => r.entityId === "a")!
+    const b = rows.find((r) => r.entityId === "b")!
+    const c = rows.find((r) => r.entityId === "c")
+    expect(a.declineContributionPercent).toBe(50)
+    expect(b.declineContributionPercent).toBe(50)
+    expect(c?.declineContributionPercent ?? null).toBeNull()
+  })
+
+  it("returns null declineContributionPercent for every row when nothing deteriorated", async () => {
+    const { performanceService, channelsService, listCampaignsMock } = buildFakeServices()
+    listCampaignsMock.mockResolvedValue({
+      items: [campaignRow({ id: "a", name: "A", spend: 1000, revenue: 5000, roas: 5 })],
+      pagination: { page: 1, pageSize: 200, total: 1 },
+    })
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+
+    const rows = await engine.getContributionAnalysis(actor(), {
+      ranges: {
+        current: { from: "2026-09-01", to: "2026-09-30" },
+        previous: { from: "2026-08-01", to: "2026-08-31" },
+      },
+      limit: 10,
+    })
+    for (const row of rows) {
+      expect(row.declineContributionPercent).toBeNull()
+    }
+  })
+})
+
+describe("anomaly detection -- supporting changes", () => {
+  it("attaches other materially-changed metrics from the same campaign, excluding the triggering metric", async () => {
+    const { performanceService, channelsService, listCampaignsMock } = buildFakeServices()
+    listCampaignsMock.mockImplementation((_actor: unknown, query: CampaignPerformanceQuery) => {
+      if (query.startDate === defaultComparisonRanges().current.from) {
+        return Promise.resolve({
+          items: [
+            campaignRow({
+              id: "x",
+              name: "X",
+              spend: 2000,
+              clicks: 300,
+              conversions: 40,
+              roas: 2,
+              cpc: 10,
+            }),
+          ],
+          pagination: { page: 1, pageSize: 200, total: 1 },
+        })
+      }
+      return Promise.resolve({
+        items: [
+          campaignRow({
+            id: "x",
+            name: "X",
+            spend: 2000,
+            clicks: 300,
+            conversions: 40,
+            roas: 4,
+            cpc: 5,
+          }),
+        ],
+        pagination: { page: 1, pageSize: 200, total: 1 },
+      })
+    })
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+
+    const flags = await engine.detectAnomalies(actor())
+    const roasDrop = flags.find((f) => f.type === "roas_drop" && f.entityId === "x")
+    expect(roasDrop).toBeDefined()
+    expect(roasDrop!.supportingChanges?.some((d) => d.metric === "cpc")).toBe(true)
+    expect(roasDrop!.supportingChanges?.every((d) => d.metric !== "roas")).toBe(true)
+  })
+})
+
+describe("campaign scaling signals", () => {
+  it("marks a campaign with better ROAS and lower CPA than the account average as strong_positive", async () => {
+    const { performanceService, channelsService, listCampaignsMock, getSummaryMock } =
+      buildFakeServices()
+    getSummaryMock.mockResolvedValue(summary({ roas: 4, cpa: 50 }))
+    listCampaignsMock.mockResolvedValue({
+      items: [
+        campaignRow({
+          id: "best",
+          name: "Best",
+          spend: 2000,
+          clicks: 300,
+          conversions: 40,
+          roas: 6,
+          cpa: 35,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 200, total: 1 },
+    })
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+
+    const signals = await engine.getCampaignScalingSignals(actor(), {
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+    })
+    expect(signals[0].signal).toBe("strong_positive")
+    expect(signals[0].confidence).not.toBe("insufficient")
+  })
+
+  it("marks a low-sample campaign as insufficient_data regardless of how extreme its raw ROAS looks", async () => {
+    const { performanceService, channelsService, listCampaignsMock, getSummaryMock } =
+      buildFakeServices()
+    getSummaryMock.mockResolvedValue(summary({ roas: 4, cpa: 50 }))
+    listCampaignsMock.mockResolvedValue({
+      items: [
+        campaignRow({
+          id: "tiny",
+          name: "Tiny",
+          spend: 5,
+          clicks: 2,
+          conversions: 0,
+          roas: 50,
+          cpa: 0,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 200, total: 1 },
+    })
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+
+    const signals = await engine.getCampaignScalingSignals(actor(), {
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+    })
+    expect(signals[0].signal).toBe("insufficient_data")
+    expect(signals[0].roasVsAccountPercent).toBeNull()
+  })
+
+  it("marks a campaign with worse ROAS and higher CPA than the account average as negative", async () => {
+    const { performanceService, channelsService, listCampaignsMock, getSummaryMock } =
+      buildFakeServices()
+    getSummaryMock.mockResolvedValue(summary({ roas: 4, cpa: 50 }))
+    listCampaignsMock.mockResolvedValue({
+      items: [
+        campaignRow({
+          id: "worst",
+          name: "Worst",
+          spend: 2000,
+          clicks: 300,
+          conversions: 40,
+          roas: 2,
+          cpa: 80,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 200, total: 1 },
+    })
+    const engine = new CampaignAnalyticsEngine(performanceService, channelsService)
+
+    const signals = await engine.getCampaignScalingSignals(actor(), {
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+    })
+    expect(signals[0].signal).toBe("negative")
+  })
+})
+
 describe("confidence engine", () => {
   it("returns insufficient below the lowest band", () => {
     expect(computeConfidence({ spend: 1, clicks: 1, conversions: 0, days: 1 })).toBe("insufficient")
@@ -502,12 +720,86 @@ describe("recommendation engine", () => {
         revenueShare: 0.3,
         revenueDeltaAbsolute: -5000,
         roasDeteriorationScore: 4000,
+        declineContributionPercent: 100,
       },
     ]
     const recs = generateContributionRecommendations(rows, period, "high")
     expect(recs).toHaveLength(1)
     expect(recs[0].recommendedAction).not.toMatch(/\d+%/)
     expect(recs[0].recommendedAction).not.toMatch(/زيادة الميزانية بنسبة/)
+  })
+})
+
+describe("scaling recommendations", () => {
+  const period = {
+    current: { from: "2026-09-01", to: "2026-09-30" },
+    previous: { from: "2026-08-01", to: "2026-08-31" },
+  }
+
+  it("skips insufficient_data and neutral signals entirely", () => {
+    const recs = generateScalingRecommendations(
+      [
+        {
+          campaignId: "a",
+          campaignName: "A",
+          signal: "insufficient_data",
+          roasVsAccountPercent: null,
+          cpaVsAccountPercent: null,
+          conversionVolume: 0,
+          confidence: "insufficient",
+        },
+        {
+          campaignId: "b",
+          campaignName: "B",
+          signal: "neutral",
+          roasVsAccountPercent: 2,
+          cpaVsAccountPercent: 1,
+          conversionVolume: 20,
+          confidence: "high",
+        },
+      ],
+      period
+    )
+    expect(recs).toHaveLength(0)
+  })
+
+  it("never promises future performance for a positive signal", () => {
+    const recs = generateScalingRecommendations(
+      [
+        {
+          campaignId: "c",
+          campaignName: "C",
+          signal: "strong_positive",
+          roasVsAccountPercent: 30,
+          cpaVsAccountPercent: -20,
+          conversionVolume: 40,
+          confidence: "high",
+        },
+      ],
+      period
+    )
+    expect(recs).toHaveLength(1)
+    expect(recs[0].type).toBe("budget_increase_consideration")
+    expect(recs[0].recommendedAction).not.toMatch(/ستحقق|سيضمن|مضمون/)
+  })
+
+  it("recommends investigating inefficiency for a negative signal", () => {
+    const recs = generateScalingRecommendations(
+      [
+        {
+          campaignId: "d",
+          campaignName: "D",
+          signal: "negative",
+          roasVsAccountPercent: -25,
+          cpaVsAccountPercent: 25,
+          conversionVolume: 15,
+          confidence: "medium",
+        },
+      ],
+      period
+    )
+    expect(recs).toHaveLength(1)
+    expect(recs[0].type).toBe("investigate_inefficiency")
   })
 })
 

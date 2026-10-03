@@ -1,3 +1,5 @@
+import type { StructuredAnalyticsResponse } from "./response-types"
+
 // Redeclared locally rather than imported from the frontend's
 // applications-catalog.service.ts -- same reasoning as command-handlers.ts's own
 // APPLICATION_SETTINGS_KEY copy: backend modules must not import frontend feature code.
@@ -29,6 +31,10 @@ export interface ChatMessageDto {
   role: ChatMessageRole
   content: string
   toolCalls: ToolCallTrace[] | null
+  // Deterministic facts/insights/recommendations/KPI cards/chart specs built from this turn's
+  // tool results -- see ai-chat/response-formatter.ts. null for any message with nothing
+  // analytics-shaped to show (most POS/ecommerce/plain-text turns).
+  structured: StructuredAnalyticsResponse | null
   model: string | null
   createdAt: string
 }
