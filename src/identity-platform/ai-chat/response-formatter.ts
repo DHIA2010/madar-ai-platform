@@ -137,6 +137,28 @@ function chartFromChannelComparison(rows: ChannelComparisonRow[]): ChartSpec {
   }
 }
 
+// Mirrors the shape PosInvoicesService.topProducts() actually returns (pos/invoices-service.ts)
+// -- not re-exported as a named type there, so reproduced structurally here rather than widening
+// that service's own return type just for this.
+interface TopProductRow {
+  productId: string | null
+  productName: string
+  quantitySold: number
+  revenue: number
+  invoiceCount: number
+}
+
+function chartFromTopProducts(rows: TopProductRow[]): ChartSpec {
+  return {
+    type: "chart",
+    chartType: "bar",
+    title: "أفضل المنتجات مبيعًا -- الإيرادات",
+    series: [
+      { name: "revenue", data: rows.map((r) => ({ label: r.productName, value: r.revenue })) },
+    ],
+  }
+}
+
 function insightsFromScalingSignals(signals: CampaignScalingSignal[]): Insight[] {
   return signals
     .filter((s) => s.signal !== "insufficient_data" && s.signal !== "neutral")
@@ -162,11 +184,13 @@ export function buildStructuredResponse(
   let dataPeriod: { from: string; to: string } | null = null
   let confidence: ConfidenceLevel | null = null
   let sawAnalyticsTool = false
+  let domain: string | null = null
 
   for (const { tool, output } of rawResults) {
     switch (tool) {
       case "get_campaign_summary": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const result = output as { metrics: Record<MetricKey, number>; confidence: ConfidenceLevel }
         metrics.push(...kpiCardsFromSnapshot(result.metrics))
         confidence = result.confidence
@@ -174,6 +198,7 @@ export function buildStructuredResponse(
       }
       case "compare_campaign_periods": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const comparison = output as PeriodComparisonResult
         facts.push(...factFromComparison(comparison))
         metrics.push(...kpiCardsFromComparison(comparison))
@@ -183,6 +208,7 @@ export function buildStructuredResponse(
       }
       case "identify_performance_drivers": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const result = output as {
           comparison: PeriodComparisonResult
           drivers: PerformanceDriver[]
@@ -194,12 +220,14 @@ export function buildStructuredResponse(
       }
       case "generate_campaign_recommendations": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const result = output as { recommendations: CampaignRecommendation[] }
         recommendations.push(...result.recommendations)
         break
       }
       case "get_campaign_anomalies": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const anomalies = output as AnomalyFlag[]
         const derived = factsAndInsightsFromAnomalies(anomalies)
         facts.push(...derived.facts)
@@ -208,17 +236,20 @@ export function buildStructuredResponse(
       }
       case "get_campaign_scaling_signals": {
         sawAnalyticsTool = true
+        domain = "advertising"
         insights.push(...insightsFromScalingSignals(output as CampaignScalingSignal[]))
         break
       }
       case "get_channel_comparison": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const rows = output as ChannelComparisonRow[]
         if (rows.length > 0) charts.push(chartFromChannelComparison(rows))
         break
       }
       case "get_top_campaigns": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const rows = output as CampaignRow[]
         if (rows.length > 0)
           charts.push(chartFromCampaignRows(rows, "revenue", "أفضل الحملات -- الإيرادات"))
@@ -226,8 +257,16 @@ export function buildStructuredResponse(
       }
       case "get_campaign_declines": {
         sawAnalyticsTool = true
+        domain = "advertising"
         const rows = output as CampaignDeclineRow[]
         if (rows.length > 0) charts.push(chartFromCampaignRows(rows, "roas", "الحملات المتراجعة"))
+        break
+      }
+      case "get_top_selling_products": {
+        sawAnalyticsTool = true
+        domain = "pos"
+        const rows = output as TopProductRow[]
+        if (rows.length > 0) charts.push(chartFromTopProducts(rows))
         break
       }
       default:
@@ -245,7 +284,7 @@ export function buildStructuredResponse(
     metrics,
     charts,
     dataPeriod,
-    source: { domain: "advertising" },
+    source: domain ? { domain } : null,
     confidence,
   }
 }

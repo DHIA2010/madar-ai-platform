@@ -22,9 +22,40 @@ export interface ChatKpiCard {
   format: "currency" | "multiple" | "percent" | "number"
 }
 
+// Mirrors ai-chat/response-types.ts's Fact/Insight -- again, always a direct readout of a tool's
+// own already-computed output, never text the frontend has to interpret or format itself.
+export interface ChatFact {
+  statement: string
+  metric: string
+  currentValue: number | null
+  previousValue: number | null
+  changePercent: number | null
+}
+
+export interface ChatInsight {
+  statement: string
+  relatedMetrics: string[]
+  confidence: ChatConfidenceLevel
+}
+
+export interface ChatChartPoint {
+  label: string
+  value: number
+}
+
+export interface ChatChartSpec {
+  type: "chart"
+  chartType: "line" | "bar" | "donut" | "table" | "comparison"
+  title: string
+  series: Array<{ name: string; data: ChatChartPoint[] }>
+}
+
 export interface ChatStructuredResponse {
   type: "analytics_response"
+  facts: ChatFact[]
+  insights: ChatInsight[]
   metrics: ChatKpiCard[]
+  charts: ChatChartSpec[]
   dataPeriod: { from: string; to: string } | null
   confidence: ChatConfidenceLevel | null
 }

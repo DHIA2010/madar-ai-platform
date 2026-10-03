@@ -228,6 +228,41 @@ describe("buildStructuredResponse", () => {
     expect(result!.charts[0].series[0].data[0]).toEqual({ label: "Campaign One", value: 50_000 })
   })
 
+  it("builds a bar chart from POS top-selling products and tags the source domain as pos", () => {
+    const rows = [
+      {
+        productId: "p1",
+        productName: "Product A",
+        quantitySold: 40,
+        revenue: 4000,
+        invoiceCount: 12,
+      },
+      {
+        productId: null,
+        productName: "Custom Item",
+        quantitySold: 5,
+        revenue: 500,
+        invoiceCount: 3,
+      },
+    ]
+    const result = buildStructuredResponse([{ tool: "get_top_selling_products", output: rows }])
+
+    expect(result).not.toBeNull()
+    expect(result!.source).toEqual({ domain: "pos" })
+    expect(result!.charts).toHaveLength(1)
+    expect(result!.charts[0].chartType).toBe("bar")
+    expect(result!.charts[0].series[0].data).toEqual([
+      { label: "Product A", value: 4000 },
+      { label: "Custom Item", value: 500 },
+    ])
+  })
+
+  it("returns an empty chart list for top-selling products when there are none, but still a non-null envelope", () => {
+    const result = buildStructuredResponse([{ tool: "get_top_selling_products", output: [] }])
+    expect(result).not.toBeNull()
+    expect(result!.charts).toHaveLength(0)
+  })
+
   it("merges multiple tool calls from the same turn into a single envelope", () => {
     const comparison: PeriodComparisonResult = {
       period: {

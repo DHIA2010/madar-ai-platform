@@ -33,7 +33,12 @@ import {
 import { PlatformBadge } from "@/components/platform-badge"
 import type { ApplicationCategoryId } from "@/features/applications"
 import { useAiChat } from "@/features/ai"
-import type { ChatKpiCard } from "@/features/ai/types/ai-chat.types"
+import type {
+  ChatChartSpec,
+  ChatFact,
+  ChatInsight,
+  ChatKpiCard,
+} from "@/features/ai/types/ai-chat.types"
 
 function formatKpiValue(card: ChatKpiCard): string {
   switch (card.format) {
@@ -84,6 +89,105 @@ function ChatKpiRow({ cards }: { cards: ChatKpiCard[] }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// A chart spec's `chartType` (line/bar/donut/table/comparison) is a hint about the underlying
+// data's shape, not a request for a dedicated charting library here -- every type renders as
+// either a plain table (chartType "table") or a simple proportional bar list (everything else),
+// per the explicit "simple tables/bars, not a redesign" scope for this pass.
+function ChatChartBlock({ chart }: { chart: ChatChartSpec }) {
+  const series = chart.series[0]
+  if (!series || series.data.length === 0) return null
+
+  if (chart.chartType === "table") {
+    return (
+      <div className="mt-2 overflow-hidden rounded-xl border border-border/60">
+        <p className="border-b border-border/60 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-foreground">
+          {chart.title}
+        </p>
+        <table className="w-full text-xs">
+          <tbody>
+            {series.data.map((point) => (
+              <tr key={point.label} className="border-t border-border/40 first:border-t-0">
+                <td className="px-3 py-1.5 text-muted-foreground">{point.label}</td>
+                <td className="px-3 py-1.5 text-end font-semibold text-foreground">
+                  {point.value.toLocaleString("ar")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  const maxValue = Math.max(...series.data.map((point) => point.value), 1)
+  return (
+    <div className="mt-2 rounded-xl border border-border/60 bg-background/60 p-3">
+      <p className="text-[11px] font-semibold text-foreground">{chart.title}</p>
+      <div className="mt-2 space-y-1.5">
+        {series.data.map((point) => (
+          <div key={point.label} className="flex items-center gap-2">
+            <span className="w-24 shrink-0 truncate text-[11px] text-muted-foreground">
+              {point.label}
+            </span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${Math.max(4, (point.value / maxValue) * 100)}%` }}
+              />
+            </div>
+            <span className="w-16 shrink-0 text-end text-[11px] font-semibold text-foreground">
+              {point.value.toLocaleString("ar")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Same principle as the KPI strip -- these are already-computed, hedged statements from
+// response-formatter.ts, never text the frontend composes. Facts first (observed numbers), then
+// insights (associative, confidence-labelled interpretations), visually subordinate to the
+// message bubble's own prose.
+function ChatFactsInsightsPanel({
+  facts,
+  insights,
+}: {
+  facts: ChatFact[]
+  insights: ChatInsight[]
+}) {
+  if (facts.length === 0 && insights.length === 0) return null
+  return (
+    <div className="mt-2 space-y-1.5 rounded-xl border border-border/60 bg-background/40 p-3">
+      {facts.length > 0 ? (
+        <ul className="space-y-1 text-[11px] text-foreground">
+          {facts.map((fact, index) => (
+            <li key={index} className="flex gap-1.5">
+              <span className="text-muted-foreground">•</span>
+              <span>{fact.statement}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {insights.length > 0 ? (
+        <ul
+          className={cn(
+            "space-y-1 text-[11px] text-muted-foreground",
+            facts.length > 0 && "border-t border-border/40 pt-1.5"
+          )}
+        >
+          {insights.map((insight, index) => (
+            <li key={index} className="flex gap-1.5">
+              <Sparkles className="mt-0.5 size-3 shrink-0 text-primary" />
+              <span>{insight.statement}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
@@ -367,7 +471,16 @@ export default function AIAssistantDashboard() {
                       >
                         {message.content}
                         {message.role === "assistant" && message.structured ? (
-                          <ChatKpiRow cards={message.structured.metrics} />
+                          <>
+                            <ChatKpiRow cards={message.structured.metrics} />
+                            {message.structured.charts.map((chart, index) => (
+                              <ChatChartBlock key={index} chart={chart} />
+                            ))}
+                            <ChatFactsInsightsPanel
+                              facts={message.structured.facts}
+                              insights={message.structured.insights}
+                            />
+                          </>
                         ) : null}
                       </div>
                     ))}

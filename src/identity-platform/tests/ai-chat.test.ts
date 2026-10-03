@@ -92,6 +92,41 @@ async function seedInvoice(input: {
   )
 }
 
+async function seedInvoiceWithProduct(input: {
+  organizationId: string
+  workspaceId: string | null
+  productName: string
+  quantity: number
+  lineTotal: number
+}) {
+  const invoiceId = randomUUID()
+  await database.query(
+    `insert into pos_invoices (
+      id, organization_id, workspace_id, invoice_number, status, payment_method_code,
+      subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+    ) values ($1,$2,$3,$4,'completed','cash',$5,0,0,$5,now(),now())`,
+    [
+      invoiceId,
+      input.organizationId,
+      input.workspaceId,
+      `INV-${invoiceId.slice(0, 8)}`,
+      input.lineTotal,
+    ]
+  )
+  await database.query(
+    `insert into pos_invoice_items (id, invoice_id, product_id, product_name, unit_price, quantity, line_total)
+     values ($1,$2,null,$3,$4,$5,$6)`,
+    [
+      randomUUID(),
+      invoiceId,
+      input.productName,
+      input.lineTotal / input.quantity,
+      input.quantity,
+      input.lineTotal,
+    ]
+  )
+}
+
 beforeEach(async () => {
   const mem = newDb({ autoCreateForeignKeyIndices: true })
   const adapter = mem.adapters.createPg()
@@ -312,5 +347,36 @@ describe("ai-chat: per-application scoping", () => {
 
     const reply = await service.sendMessage(actor(), session.id, "ما هي سياسة الإرجاع؟")
     expect(reply.structured).toBeNull()
+  })
+
+  it("populates a pos-domain structured chart when get_top_selling_products is called", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await seedInvoiceWithProduct({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      productName: "Product A",
+      quantity: 4,
+      lineTotal: 400,
+    })
+    const session = await service.createSession(actor(), "pos")
+
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("get_top_selling_products", {})
+      return {
+        text: `top products: ${toolResultText}`,
+        toolCalls: [{ tool: "get_top_selling_products", input: {}, outputSummary: toolResultText }],
+        stopReason: "end_turn",
+      }
+    })
+
+    const reply = await service.sendMessage(actor(), session.id, "ما هي أفضل المنتجات مبيعًا؟")
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.source).toEqual({ domain: "pos" })
+    expect(reply.structured!.charts).toHaveLength(1)
+    expect(reply.structured!.charts[0].series[0].data[0]).toEqual({
+      label: "Product A",
+      value: 400,
+    })
   })
 })
