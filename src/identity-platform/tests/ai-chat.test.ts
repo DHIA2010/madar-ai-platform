@@ -142,6 +142,7 @@ beforeEach(async () => {
   service = new AiChatService(
     database,
     {
+      db: database,
       campaignPerformanceService,
       channelsService,
       campaignAnalyticsEngine: new CampaignAnalyticsEngine(

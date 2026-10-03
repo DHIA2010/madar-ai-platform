@@ -7,21 +7,31 @@ import {
   type CampaignAnalyticsEngine,
 } from "../campaigns/analytics-engine"
 import type { MetricKey } from "../campaigns/analytics-types"
+import { METRIC_DEFINITIONS, UNAVAILABLE_METRICS_NOTE } from "../campaigns/metric-definitions"
 import type { CampaignsPerformanceAggregationService } from "../campaigns/performance-service"
 import {
   generateAccountRecommendation,
   generateContributionRecommendations,
 } from "../campaigns/recommendation-engine"
 import type { ChannelsAggregationService } from "../channels/channels-service"
+import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { OrdersAggregationService } from "../orders/service"
 import type { PosInvoicesService } from "../pos/invoices-service"
 import type { PosShiftsService } from "../pos/shifts-service"
 import type { ReportsService } from "../reports/service"
+import {
+  getOrganizationTimezone,
+  precedingPeriod,
+  RELATIVE_PERIODS,
+  resolveRelativePeriod,
+  type RelativePeriod,
+} from "../shared/date-range-resolver"
 import type { StoresAggregationService } from "../stores/service"
 
 import type { ApplicationCategoryId } from "./types"
 
 export interface AiChatToolServices {
+  db: PostgresDatabase
   campaignPerformanceService: CampaignsPerformanceAggregationService
   channelsService: ChannelsAggregationService
   campaignAnalyticsEngine: CampaignAnalyticsEngine
@@ -30,6 +40,55 @@ export interface AiChatToolServices {
   posInvoicesService: PosInvoicesService
   posShiftsService: PosShiftsService
   reportsService: ReportsService
+}
+
+const relativePeriodProperty = {
+  type: "string",
+  enum: RELATIVE_PERIODS as unknown as string[],
+  description:
+    "A named relative period (resolved deterministically server-side in the org's own timezone) -- prefer this over startDate/endDate whenever the user's question matches one of these phrases exactly (e.g. 'this week', 'last month'). Takes precedence over startDate/endDate if both are given.",
+} as const
+
+// Deterministic date resolution (never the model doing date arithmetic itself) -- if `period` is
+// given, resolves it server-side in the organization's own timezone; otherwise falls back to
+// whatever explicit startDate/endDate the model supplied (or the underlying service's own
+// default window, if neither is given).
+async function resolveSinglePeriod(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  input: { period?: RelativePeriod; startDate?: string; endDate?: string }
+): Promise<{ startDate?: string; endDate?: string }> {
+  if (input.period) {
+    const timezone = await getOrganizationTimezone(db, actor.organizationId)
+    const range = resolveRelativePeriod(input.period, timezone)
+    return { startDate: range.from, endDate: range.to }
+  }
+  return { startDate: input.startDate, endDate: input.endDate }
+}
+
+// Same idea for a two-period comparison -- `currentPeriod` resolves both sides (the previous side
+// via precedingPeriod, an equal-length window immediately before) unless explicit dates override it.
+async function resolveComparisonPeriods(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  input: {
+    currentPeriod?: RelativePeriod
+    currentFrom?: string
+    currentTo?: string
+    previousFrom?: string
+    previousTo?: string
+  }
+) {
+  if (input.currentPeriod) {
+    const timezone = await getOrganizationTimezone(db, actor.organizationId)
+    const current = resolveRelativePeriod(input.currentPeriod, timezone)
+    const previous = precedingPeriod(current)
+    return {
+      current: { from: current.from, to: current.to },
+      previous: { from: input.previousFrom ?? previous.from, to: input.previousTo ?? previous.to },
+    }
+  }
+  return resolveRanges(input)
 }
 
 const RANKABLE_METRICS = [
@@ -99,50 +158,73 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     category: "advertising",
     tool: {
+      name: "get_metric_definitions",
+      description:
+        "Returns the exact formula, data source, and null-handling rule for every advertising metric this system computes (ROAS, CPA, CTR, CPC, CPM, conversion rate, spend, revenue). Call this whenever the user asks how a metric is calculated or defined -- never explain a formula from memory.",
+      input_schema: { type: "object", properties: {} },
+    },
+    schema: z.object({}),
+    execute: async () => ({ metrics: METRIC_DEFINITIONS, unavailable: UNAVAILABLE_METRICS_NOTE }),
+  },
+  {
+    category: "advertising",
+    tool: {
       name: "get_campaign_summary",
       description:
         "Real ad account summary for an optional date range: spend, revenue, ROAS, impressions, clicks, CTR, CPC, CPM, conversions, conversion rate, CPA, active campaign count -- plus data freshness per channel and a confidence level based on sample size. Reach/frequency/creative/audience/geo/device breakdowns are not available at this level -- say so if asked, never estimate them.",
       input_schema: {
         type: "object",
-        properties: { ...dateRangeProperties },
+        properties: { ...dateRangeProperties, period: relativePeriodProperty },
       },
     },
-    schema: z.object(dateRangeShape),
-    execute: (actor, services, input) =>
-      services.campaignAnalyticsEngine.getCampaignSummary(
-        actor,
-        input as { startDate?: string; endDate?: string }
-      ),
+    schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
+    execute: async (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      return services.campaignAnalyticsEngine.getCampaignSummary(actor, resolved)
+    },
   },
   {
     category: "advertising",
     tool: {
       name: "compare_campaign_periods",
       description:
-        "Deterministic before/after comparison of the account-wide summary between two periods (defaults to this-30-days vs previous-30-days if dates are omitted). Returns raw current/previous values, percentage change, and a confidence level -- never calculate these percentages yourself, always call this tool.",
+        "Deterministic before/after comparison of the account-wide summary between two periods (defaults to this-30-days vs previous-30-days if no period/dates are given). Returns raw current/previous values, percentage change, and a confidence level -- never calculate these percentages yourself, always call this tool. Prefer currentPeriod over currentFrom/currentTo whenever the question names a relative phrase ('this month', 'last week').",
       input_schema: {
         type: "object",
         properties: {
-          currentFrom: { type: "string", description: "ISO date, start of the period to analyze." },
-          currentTo: { type: "string", description: "ISO date, end of the period to analyze." },
+          currentPeriod: relativePeriodProperty,
+          currentFrom: {
+            type: "string",
+            description:
+              "ISO date, start of the period to analyze. Ignored if currentPeriod is set.",
+          },
+          currentTo: {
+            type: "string",
+            description: "ISO date, end of the period to analyze. Ignored if currentPeriod is set.",
+          },
           previousFrom: {
             type: "string",
             description:
-              "ISO date, start of the comparison period. Omit to use the equal-length period immediately before currentFrom.",
+              "ISO date, start of the comparison period. Omit to use the equal-length period immediately before the current period.",
           },
           previousTo: { type: "string", description: "ISO date, end of the comparison period." },
         },
       },
     },
     schema: z.object({
+      currentPeriod: z.enum(RELATIVE_PERIODS).optional(),
       currentFrom: z.string().optional(),
       currentTo: z.string().optional(),
       previousFrom: z.string().optional(),
       previousTo: z.string().optional(),
     }),
-    execute: (actor, services, input) => {
-      const ranges = resolveRanges(
+    execute: async (actor, services, input) => {
+      const ranges = await resolveComparisonPeriods(
+        services.db,
+        actor,
         input as {
+          currentPeriod?: RelativePeriod
           currentFrom?: string
           currentTo?: string
           previousFrom?: string
@@ -160,15 +242,15 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         "Real per-channel comparison (Google Ads, Meta Ads, TikTok Ads, Snapchat) for an optional date range -- spend, revenue, ROAS, CPA, CTR, CPC, conversion rate, conversions, plus sync freshness and confidence per channel. Only returns channels actually connected with campaigns in range.",
       input_schema: {
         type: "object",
-        properties: { ...dateRangeProperties },
+        properties: { ...dateRangeProperties, period: relativePeriodProperty },
       },
     },
-    schema: z.object(dateRangeShape),
-    execute: (actor, services, input) =>
-      services.campaignAnalyticsEngine.getChannelComparison(
-        actor,
-        input as { startDate?: string; endDate?: string }
-      ),
+    schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
+    execute: async (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      return services.campaignAnalyticsEngine.getChannelComparison(actor, resolved)
+    },
   },
   {
     category: "advertising",
@@ -180,6 +262,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         type: "object",
         properties: {
           ...dateRangeProperties,
+          period: relativePeriodProperty,
           metric: { type: "string", enum: RANKABLE_METRICS as unknown as string[] },
           direction: { type: "string", enum: ["top", "bottom"] },
           limit: { type: "number", description: "Max rows to return, default 5, max 20." },
@@ -189,20 +272,23 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
     schema: z.object({
       ...dateRangeShape,
+      period: z.enum(RELATIVE_PERIODS).optional(),
       metric: z.enum(RANKABLE_METRICS),
       direction: z.enum(["top", "bottom"]),
       limit: z.number().int().min(1).max(20).optional(),
     }),
-    execute: (actor, services, input) => {
+    execute: async (actor, services, input) => {
       const parsed = input as {
         startDate?: string
         endDate?: string
+        period?: RelativePeriod
         metric: MetricKey
         direction: "top" | "bottom"
         limit?: number
       }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
       return services.campaignAnalyticsEngine.getCampaignRanking(actor, {
-        query: { startDate: parsed.startDate, endDate: parsed.endDate },
+        query: resolved,
         metric: parsed.metric,
         direction: parsed.direction,
         limit: parsed.limit ?? 5,
@@ -218,6 +304,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       input_schema: {
         type: "object",
         properties: {
+          currentPeriod: relativePeriodProperty,
           currentFrom: { type: "string" },
           currentTo: { type: "string" },
           previousFrom: { type: "string" },
@@ -229,6 +316,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
     schema: z.object({
+      currentPeriod: z.enum(RELATIVE_PERIODS).optional(),
       currentFrom: z.string().optional(),
       currentTo: z.string().optional(),
       previousFrom: z.string().optional(),
@@ -236,8 +324,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       metric: z.enum(RANKABLE_METRICS),
       limit: z.number().int().min(1).max(20).optional(),
     }),
-    execute: (actor, services, input) => {
+    execute: async (actor, services, input) => {
       const parsed = input as {
+        currentPeriod?: RelativePeriod
         currentFrom?: string
         currentTo?: string
         previousFrom?: string
@@ -245,7 +334,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         metric: MetricKey
         limit?: number
       }
-      const ranges = resolveRanges(parsed)
+      const ranges = await resolveComparisonPeriods(services.db, actor, parsed)
       return services.campaignAnalyticsEngine.getCampaignDeclines(actor, {
         ranges,
         metric: parsed.metric,
@@ -273,6 +362,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       input_schema: {
         type: "object",
         properties: {
+          currentPeriod: relativePeriodProperty,
           currentFrom: { type: "string" },
           currentTo: { type: "string" },
           previousFrom: { type: "string" },
@@ -283,6 +373,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
     schema: z.object({
+      currentPeriod: z.enum(RELATIVE_PERIODS).optional(),
       currentFrom: z.string().optional(),
       currentTo: z.string().optional(),
       previousFrom: z.string().optional(),
@@ -291,13 +382,14 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     }),
     execute: async (actor, services, input) => {
       const parsed = input as {
+        currentPeriod?: RelativePeriod
         currentFrom?: string
         currentTo?: string
         previousFrom?: string
         previousTo?: string
         metric: MetricKey
       }
-      const ranges = resolveRanges(parsed)
+      const ranges = await resolveComparisonPeriods(services.db, actor, parsed)
       const comparison = await services.campaignAnalyticsEngine.comparePeriods(actor, ranges)
       return {
         comparison,
@@ -317,6 +409,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       input_schema: {
         type: "object",
         properties: {
+          currentPeriod: relativePeriodProperty,
           currentFrom: { type: "string" },
           currentTo: { type: "string" },
           previousFrom: { type: "string" },
@@ -325,14 +418,18 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
     schema: z.object({
+      currentPeriod: z.enum(RELATIVE_PERIODS).optional(),
       currentFrom: z.string().optional(),
       currentTo: z.string().optional(),
       previousFrom: z.string().optional(),
       previousTo: z.string().optional(),
     }),
     execute: async (actor, services, input) => {
-      const ranges = resolveRanges(
+      const ranges = await resolveComparisonPeriods(
+        services.db,
+        actor,
         input as {
+          currentPeriod?: RelativePeriod
           currentFrom?: string
           currentTo?: string
           previousFrom?: string
@@ -368,15 +465,15 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         "Real daily/weekly ad spend broken down by channel (Google Ads, Meta Ads, TikTok Ads, Snapchat) for an optional date range.",
       input_schema: {
         type: "object",
-        properties: { ...dateRangeProperties },
+        properties: { ...dateRangeProperties, period: relativePeriodProperty },
       },
     },
-    schema: z.object(dateRangeShape),
-    execute: (actor, services, input) =>
-      services.channelsService.getPerformanceTrend(
-        actor,
-        input as { startDate?: string; endDate?: string }
-      ),
+    schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
+    execute: async (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      return services.channelsService.getPerformanceTrend(actor, resolved)
+    },
   },
   {
     category: "pos",
@@ -388,6 +485,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         type: "object",
         properties: {
           ...dateRangeProperties,
+          period: relativePeriodProperty,
           status: {
             type: "string",
             enum: ["completed", "cancelled", "returned", "partially_returned"],
@@ -398,16 +496,23 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
     schema: z.object({
       ...dateRangeShape,
+      period: z.enum(RELATIVE_PERIODS).optional(),
       status: z.enum(["completed", "cancelled", "returned", "partially_returned"]).optional(),
     }),
-    execute: (actor, services, input) => {
-      const parsed = input as { startDate?: string; endDate?: string; status?: string }
+    execute: async (actor, services, input) => {
+      const parsed = input as {
+        startDate?: string
+        endDate?: string
+        period?: RelativePeriod
+        status?: string
+      }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
       return services.posInvoicesService.summary(actor.organizationId, {
         workspaceId: actor.workspaceId,
         status: (parsed.status as Parameters<PosInvoicesService["summary"]>[1]["status"]) ?? null,
         paymentMethodCode: null,
-        from: parsed.startDate ?? null,
-        to: parsed.endDate ?? null,
+        from: resolved.startDate ?? null,
+        to: resolved.endDate ?? null,
       })
     },
   },
@@ -432,20 +537,28 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         type: "object",
         properties: {
           ...dateRangeProperties,
+          period: relativePeriodProperty,
           limit: { type: "number", description: "Max products to return, default 10, max 50." },
         },
       },
     },
     schema: z.object({
       ...dateRangeShape,
+      period: z.enum(RELATIVE_PERIODS).optional(),
       limit: z.number().int().min(1).max(50).optional(),
     }),
-    execute: (actor, services, input) => {
-      const parsed = input as { startDate?: string; endDate?: string; limit?: number }
+    execute: async (actor, services, input) => {
+      const parsed = input as {
+        startDate?: string
+        endDate?: string
+        period?: RelativePeriod
+        limit?: number
+      }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
       return services.posInvoicesService.topProducts(actor.organizationId, {
         workspaceId: actor.workspaceId,
-        from: parsed.startDate ?? null,
-        to: parsed.endDate ?? null,
+        from: resolved.startDate ?? null,
+        to: resolved.endDate ?? null,
         limit: parsed.limit ?? 10,
       })
     },
@@ -458,15 +571,15 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         "Real e-commerce orders (Salla/Shopify/Zid) and their summary stats (total orders, sales, average order value) for an optional date range.",
       input_schema: {
         type: "object",
-        properties: { ...dateRangeProperties },
+        properties: { ...dateRangeProperties, period: relativePeriodProperty },
       },
     },
-    schema: z.object(dateRangeShape),
-    execute: (actor, services, input) =>
-      services.ordersAggregationService.listOrders(
-        actor,
-        input as { startDate?: string; endDate?: string }
-      ),
+    schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
+    execute: async (actor, services, input) => {
+      const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
+      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      return services.ordersAggregationService.listOrders(actor, resolved)
+    },
   },
   {
     category: "ecommerce",

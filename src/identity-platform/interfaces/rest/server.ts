@@ -664,6 +664,7 @@ export function createIdentityApiServer(
       ? new AiChatService(
           container.infrastructure.database,
           {
+            db: container.infrastructure.database,
             campaignPerformanceService: campaignsPerformanceAggregationService,
             channelsService: channelsAggregationService,
             campaignAnalyticsEngine: new CampaignAnalyticsEngine(
