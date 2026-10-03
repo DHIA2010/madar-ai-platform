@@ -45,6 +45,7 @@ import type { ReportLevelFilter } from "../../reports/types"
 import { AiChatService } from "../../ai-chat/service"
 import { AiChatLlmClient } from "../../ai-chat/llm-client"
 import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
+import { CampaignAnalyticsEngine } from "../../campaigns/analytics-engine"
 import { CustomersAggregationService } from "../../customers/service"
 import {
   NativeCustomersService,
@@ -198,6 +199,15 @@ function getLogoutCookieHeaders(): Record<string, string[]> {
     "set-cookie": names.map((name) => `${name}=; ${expiredAttributes}`),
   }
 }
+
+// Cost-control limits for /v1/ai/sessions/:id/messages (see that route) -- generous defaults so
+// normal use is never blocked, overridable per-environment without a code change.
+const AI_CHAT_USER_MESSAGES_PER_MINUTE = Number(
+  process.env.IDENTITY_PLATFORM_AI_CHAT_USER_MESSAGES_PER_MINUTE ?? 20
+)
+const AI_CHAT_ORG_MESSAGES_PER_DAY = Number(
+  process.env.IDENTITY_PLATFORM_AI_CHAT_ORG_MESSAGES_PER_DAY ?? 300
+)
 
 const CAMPAIGN_PERFORMANCE_PLATFORMS = new Set<CampaignPerformancePlatform>([
   "Google Search",
@@ -656,6 +666,11 @@ export function createIdentityApiServer(
           {
             campaignPerformanceService: campaignsPerformanceAggregationService,
             channelsService: channelsAggregationService,
+            campaignAnalyticsEngine: new CampaignAnalyticsEngine(
+              campaignsPerformanceAggregationService,
+              channelsAggregationService,
+              container.infrastructure.cache
+            ),
             ordersAggregationService,
             storesAggregationService,
             posInvoicesService,
@@ -1906,6 +1921,36 @@ export function createIdentityApiServer(
             return send(200, { items: await aiChatService.listMessages(actor, sessionId) })
           }
           if (method === "POST") {
+            // Cost control (section 25): each message send is a real, billed Anthropic call, up
+            // to AI_CHAT_MAX_TOOL_ROUNDS rounds -- unlike every other route's rate limit (abuse
+            // prevention), this one exists specifically to bound spend. Two windows: a per-user
+            // burst limit (catches a runaway frontend retry loop) and a coarser per-organization
+            // daily cap (catches sustained heavy use before it becomes a surprise bill). Both
+            // reuse the same rateLimiter every other rate-limited route already uses -- no new
+            // infrastructure.
+            const userDecision = await container.infrastructure.rateLimiter?.check(
+              `ai_chat_send_user:${actor.userId}`,
+              AI_CHAT_USER_MESSAGES_PER_MINUTE,
+              60_000
+            )
+            if (userDecision && !userDecision.allowed) {
+              return send(429, {
+                code: "AI_CHAT_RATE_LIMITED",
+                message: "لقد أرسلت عدة رسائل خلال وقت قصير. حاول مرة أخرى بعد قليل.",
+              })
+            }
+            const orgDecision = await container.infrastructure.rateLimiter?.check(
+              `ai_chat_send_org:${actor.organizationId}`,
+              AI_CHAT_ORG_MESSAGES_PER_DAY,
+              24 * 60 * 60 * 1000
+            )
+            if (orgDecision && !orgDecision.allowed) {
+              return send(429, {
+                code: "AI_CHAT_DAILY_LIMIT_REACHED",
+                message: "تم الوصول إلى الحد اليومي لعدد رسائل المساعد الذكي لمؤسستك.",
+              })
+            }
+
             const payload = sendChatMessageSchema.parse(await readJsonBody(request))
             return send(201, await aiChatService.sendMessage(actor, sessionId, payload.content))
           }

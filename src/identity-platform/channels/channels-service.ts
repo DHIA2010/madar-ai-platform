@@ -509,6 +509,23 @@ export class ChannelsAggregationService {
     this.storesService = new StoresAggregationService(db)
   }
 
+  // Exposes the connection/sync-freshness state this service already computes internally for
+  // getAlerts() -- added for campaigns/analytics-engine.ts's data-freshness reporting, so an AI
+  // answer can state how recently each channel's data was synced instead of implying it's
+  // real-time. Deliberately a thin public wrapper over the existing private helper, not a new
+  // query -- the freshness facts already existed, they just weren't reachable outside this file.
+  async getConnectionFreshness(
+    actor: AuthenticatedActor
+  ): Promise<Record<ChannelName, { connected: boolean; lastSyncedAt: string | null }>> {
+    const states = await fetchAllConnectionStates(this.db, actor)
+    return Object.fromEntries(
+      CHANNEL_NAMES.map((name) => [
+        name,
+        { connected: states[name].connected, lastSyncedAt: states[name].lastSyncedAt },
+      ])
+    ) as Record<ChannelName, { connected: boolean; lastSyncedAt: string | null }>
+  }
+
   private buildChannelTotals(platformRows: CampaignPerformancePlatformRow[]) {
     return {
       "Google Ads": mergeGoogleRow(platformRows),

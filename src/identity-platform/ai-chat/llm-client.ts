@@ -4,6 +4,20 @@ import type { ToolCallTrace } from "./types"
 
 const MAX_TOOL_ROUNDS = 5
 const MAX_OUTPUT_TOKENS = 2048
+// A tool call that hangs (a slow upstream sync provider, a stuck query) must not hold the whole
+// chat turn open indefinitely -- bounds worst-case request latency and cost (section 25: "tool
+// execution timeout").
+const TOOL_EXECUTION_TIMEOUT_MS = 15_000
+
+async function withTimeout(promise: Promise<string>, timeoutMs: number): Promise<string> {
+  let timer: ReturnType<typeof setTimeout>
+  const timeout = new Promise<string>((resolve) => {
+    timer = setTimeout(() => resolve("Error: tool execution timed out."), timeoutMs)
+  })
+  const result = await Promise.race([promise, timeout])
+  clearTimeout(timer!)
+  return result
+}
 
 export interface ChatTurnMessage {
   role: "user" | "assistant"
@@ -104,14 +118,19 @@ export class AiChatLlmClient implements AiChatLlmClientLike {
 
       const toolResults: Anthropic.ToolResultBlockParam[] = []
       for (const block of toolUseBlocks) {
-        const resultText = await input.executeTool(
-          block.name,
-          (block.input as Record<string, unknown>) ?? {}
+        const resultText = await withTimeout(
+          input.executeTool(block.name, (block.input as Record<string, unknown>) ?? {}),
+          TOOL_EXECUTION_TIMEOUT_MS
         )
         toolCalls.push({
           tool: block.name,
           input: (block.input as Record<string, unknown>) ?? {},
-          outputSummary: resultText.slice(0, 2000),
+          // 6000 (not the original 2000) -- a compare_campaign_periods/generate_campaign_
+          // recommendations result (deltas + evidence + recommendations) is a meaningfully
+          // larger structured payload than a plain summary, and this trace is this system's
+          // only durable traceability record (section 10/19/33) for what evidence actually
+          // produced a given answer -- truncating it defeats that purpose.
+          outputSummary: resultText.slice(0, 6000),
         })
         toolResults.push({
           type: "tool_result",

@@ -9,6 +9,7 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { IdentityError } from "../application/errors/IdentityError"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { CampaignAnalyticsEngine } from "../campaigns/analytics-engine"
 import { CampaignsPerformanceAggregationService } from "../campaigns/performance-service"
 import { ChannelsAggregationService } from "../channels/channels-service"
 import { OrdersAggregationService } from "../orders/service"
@@ -135,11 +136,18 @@ beforeEach(async () => {
   })
   const mockLlmClient: AiChatLlmClientLike = { runChatTurn: mockRunChatTurn }
 
+  const campaignPerformanceService = new CampaignsPerformanceAggregationService(database)
+  const channelsService = new ChannelsAggregationService(database)
+
   service = new AiChatService(
     database,
     {
-      campaignPerformanceService: new CampaignsPerformanceAggregationService(database),
-      channelsService: new ChannelsAggregationService(database),
+      campaignPerformanceService,
+      channelsService,
+      campaignAnalyticsEngine: new CampaignAnalyticsEngine(
+        campaignPerformanceService,
+        channelsService
+      ),
       ordersAggregationService: new OrdersAggregationService(database),
       storesAggregationService: new StoresAggregationService(database),
       posInvoicesService,
@@ -196,6 +204,28 @@ describe("ai-chat: per-application scoping", () => {
     expect(advertisingTools).not.toContain("get_pos_invoices_summary")
     expect(advertisingTools).not.toContain("list_orders")
     expect(advertisingTools.length).toBeGreaterThan(0)
+  })
+
+  it("exposes the full campaign analytics tool set under advertising only", () => {
+    const advertisingTools = buildToolsForCategory("advertising").map((tool) => tool.name)
+    expect(advertisingTools).toEqual(
+      expect.arrayContaining([
+        "get_campaign_summary",
+        "compare_campaign_periods",
+        "get_channel_comparison",
+        "get_top_campaigns",
+        "get_campaign_declines",
+        "get_campaign_anomalies",
+        "identify_performance_drivers",
+        "generate_campaign_recommendations",
+        "get_channel_spend_trend",
+      ])
+    )
+    for (const category of ["pos", "ecommerce", "madarApps"] as const) {
+      const names = buildToolsForCategory(category).map((tool) => tool.name)
+      expect(names).not.toContain("generate_campaign_recommendations")
+      expect(names).not.toContain("compare_campaign_periods")
+    }
   })
 
   it("re-checks application-enabled on every send, not just at session creation", async () => {
