@@ -30,6 +30,7 @@ import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { PosDevicesService } from "../../pos/devices-service"
 import { PosHeldOrdersService } from "../../pos/held-orders-service"
 import { PosInvoicesService, type InvoiceStatus } from "../../pos/invoices-service"
+import { PosSalesAnalyticsEngine } from "../../pos/sales-analytics-engine"
 import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
 import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
@@ -676,6 +677,7 @@ export function createIdentityApiServer(
             storesAggregationService,
             posInvoicesService,
             posShiftsService,
+            posSalesAnalyticsEngine: new PosSalesAnalyticsEngine(posInvoicesService),
             reportsService,
           },
           new AiChatLlmClient(container.config.anthropicApiKey, container.config.aiChatModel),

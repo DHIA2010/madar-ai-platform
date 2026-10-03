@@ -17,6 +17,7 @@ import type { ChannelsAggregationService } from "../channels/channels-service"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { OrdersAggregationService } from "../orders/service"
 import type { PosInvoicesService } from "../pos/invoices-service"
+import type { PosSalesAnalyticsEngine } from "../pos/sales-analytics-engine"
 import type { PosShiftsService } from "../pos/shifts-service"
 import type { ReportsService } from "../reports/service"
 import {
@@ -39,6 +40,7 @@ export interface AiChatToolServices {
   storesAggregationService: StoresAggregationService
   posInvoicesService: PosInvoicesService
   posShiftsService: PosShiftsService
+  posSalesAnalyticsEngine: PosSalesAnalyticsEngine
   reportsService: ReportsService
 }
 
@@ -624,6 +626,65 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         to: resolved.endDate ?? null,
         limit: parsed.limit ?? 10,
       })
+    },
+  },
+  {
+    category: "pos",
+    tool: {
+      name: "analyze_sales_performance",
+      description:
+        "Use this specifically for 'why' questions about sales (e.g. 'why are sales lower this month?', 'why did revenue drop?'). Deterministically decomposes the revenue change into order-volume effect vs. average-order-value effect, and ranks which products contributed most to the change -- never just 'invoice count went down.' Also reports whether the current period is still in progress and, if so, that the comparison was adjusted to the same number of elapsed days on both sides for fairness. Defaults to this month vs the equal-length period immediately before it. Prefer currentPeriod over explicit dates whenever the question names a relative phrase.",
+      input_schema: {
+        type: "object",
+        properties: {
+          currentPeriod: relativePeriodProperty,
+          currentFrom: {
+            type: "string",
+            description:
+              "ISO date, start of the period to analyze. Ignored if currentPeriod is set.",
+          },
+          currentTo: {
+            type: "string",
+            description: "ISO date, end of the period to analyze. Ignored if currentPeriod is set.",
+          },
+          previousFrom: {
+            type: "string",
+            description:
+              "ISO date, start of the comparison period. Omit to use the equal-length period immediately before the current period.",
+          },
+          previousTo: { type: "string", description: "ISO date, end of the comparison period." },
+        },
+      },
+    },
+    schema: z.object({
+      currentPeriod: z.enum(RELATIVE_PERIODS).optional(),
+      currentFrom: z.string().optional(),
+      currentTo: z.string().optional(),
+      previousFrom: z.string().optional(),
+      previousTo: z.string().optional(),
+    }),
+    execute: async (actor, services, input) => {
+      const parsed = input as {
+        currentPeriod?: RelativePeriod
+        currentFrom?: string
+        currentTo?: string
+        previousFrom?: string
+        previousTo?: string
+      }
+      const timezone = await getOrganizationTimezone(services.db, actor.organizationId)
+      const ranges = await resolveComparisonPeriods(services.db, actor, {
+        currentPeriod: parsed.currentPeriod ?? (parsed.currentFrom ? undefined : "this_month"),
+        currentFrom: parsed.currentFrom,
+        currentTo: parsed.currentTo,
+        previousFrom: parsed.previousFrom,
+        previousTo: parsed.previousTo,
+      })
+      return services.posSalesAnalyticsEngine.getSalesPerformanceAnalysis(
+        actor.organizationId,
+        actor.workspaceId,
+        ranges,
+        timezone
+      )
     },
   },
   {

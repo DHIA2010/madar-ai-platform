@@ -5,7 +5,7 @@
 // turn's raw tool results. Never touches the LLM or the database: every input here is a
 // hand-built tool-output shape, same as what dispatchToolCall would have actually returned.
 
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   AnomalyFlag,
@@ -224,6 +224,39 @@ describe("buildStructuredResponse", () => {
     expect(withoutRows!.charts).toHaveLength(0)
   })
 
+  it("builds a line chart from the channel spend trend, summing spend across channels per bucket", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "get_channel_spend_trend",
+          output: {
+            items: [
+              { bucketStart: "2026-09-01", spendByChannel: { "Google Ads": 100, "Meta Ads": 50 } },
+              { bucketStart: "2026-09-02", spendByChannel: { "Google Ads": 120, "Meta Ads": 60 } },
+            ],
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+    expect(result).not.toBeNull()
+    expect(result!.charts).toHaveLength(1)
+    expect(result!.charts[0].chartType).toBe("line")
+    expect(result!.charts[0].series[0].data).toEqual([
+      { label: "2026-09-01", value: 150 },
+      { label: "2026-09-02", value: 180 },
+    ])
+  })
+
+  it("returns no chart (but a non-null envelope) for an empty spend trend", () => {
+    const result = buildStructuredResponse(
+      [{ tool: "get_channel_spend_trend", output: { items: [] } }],
+      "Asia/Riyadh"
+    )
+    expect(result).not.toBeNull()
+    expect(result!.charts).toHaveLength(0)
+  })
+
   it("builds a chart from top campaigns by revenue", () => {
     const rows: CampaignRow[] = [
       {
@@ -241,6 +274,7 @@ describe("buildStructuredResponse", () => {
       "Asia/Riyadh"
     )
     expect(result!.charts).toHaveLength(1)
+    expect(result!.charts[0].chartType).toBe("bar")
     expect(result!.charts[0].series[0].data[0]).toEqual({ label: "Campaign One", value: 50_000 })
   })
 
@@ -480,5 +514,258 @@ describe("buildStructuredResponse", () => {
     expect(result!.metrics.length).toBeGreaterThan(0)
     expect(result!.recommendations).toHaveLength(1)
     expect(result!.recommendations[0].type).toBe("no_action")
+  })
+
+  describe("data quality warnings", () => {
+    function comparisonWith(
+      overrides: Partial<PeriodComparisonResult> = {}
+    ): PeriodComparisonResult {
+      return {
+        period: {
+          current: { from: "2026-09-01", to: "2026-09-30" },
+          previous: { from: "2026-08-01", to: "2026-08-31" },
+        },
+        current: snapshot(),
+        previous: snapshot(),
+        deltas: (Object.keys(snapshot()) as Array<keyof MetricSnapshot>).map((metric) => ({
+          metric,
+          current: snapshot()[metric],
+          previous: snapshot()[metric],
+          changePercent: 0,
+          changeAbsolute: 0,
+        })),
+        freshness: [],
+        sampleSize: { spend: 10_000, clicks: 2_000, conversions: 200, days: 30 },
+        confidence: "high",
+        ...overrides,
+      }
+    }
+
+    it("warns when the current period hasn't finished yet", () => {
+      const now = new Date("2026-10-03T12:00:00Z")
+      const comparison = comparisonWith({
+        period: {
+          current: { from: "2026-10-01", to: "2026-10-03" },
+          previous: { from: "2026-09-28", to: "2026-09-30" },
+        },
+      })
+      // buildStructuredResponse calls describePeriodFairness with its own `new Date()` default --
+      // freeze time for this assertion only, restored immediately after.
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.setSystemTime(now)
+      const result = buildStructuredResponse(
+        [{ tool: "compare_campaign_periods", output: comparison }],
+        "UTC"
+      )
+      vi.useRealTimers()
+
+      expect(result!.warnings.some((w) => w.type === "incomplete_period")).toBe(true)
+    })
+
+    it("does not warn about incompleteness when the current period has already fully elapsed", () => {
+      const comparison = comparisonWith({
+        period: {
+          current: { from: "2026-08-01", to: "2026-08-31" },
+          previous: { from: "2026-07-01", to: "2026-07-31" },
+        },
+      })
+      const result = buildStructuredResponse(
+        [{ tool: "compare_campaign_periods", output: comparison }],
+        "UTC"
+      )
+      expect(result!.warnings.some((w) => w.type === "incomplete_period")).toBe(false)
+    })
+
+    it("surfaces a stale-sync warning from channel freshness instead of dropping it silently", () => {
+      const comparison = comparisonWith({
+        freshness: [
+          {
+            channel: "Meta Ads",
+            connected: true,
+            lastSyncedAt: "2026-08-01T00:00:00Z",
+            minutesSinceSync: 4000,
+            isStale: true,
+          },
+          {
+            channel: "Google Ads",
+            connected: true,
+            lastSyncedAt: "2026-09-30T00:00:00Z",
+            minutesSinceSync: 5,
+            isStale: false,
+          },
+        ],
+      })
+      const result = buildStructuredResponse(
+        [{ tool: "compare_campaign_periods", output: comparison }],
+        "Asia/Riyadh"
+      )
+      const staleWarnings = result!.warnings.filter((w) => w.type === "stale_sync")
+      expect(staleWarnings).toHaveLength(1)
+      expect(staleWarnings[0].message).toContain("Meta Ads")
+    })
+
+    it("warns about insufficient sample size when confidence is insufficient", () => {
+      const comparison = comparisonWith({ confidence: "insufficient" })
+      const result = buildStructuredResponse(
+        [{ tool: "compare_campaign_periods", output: comparison }],
+        "Asia/Riyadh"
+      )
+      expect(result!.warnings.some((w) => w.type === "insufficient_sample")).toBe(true)
+    })
+  })
+
+  describe("follow-up questions", () => {
+    it("generates contextual, deduplicated follow-up questions capped at 4", () => {
+      const comparison: PeriodComparisonResult = {
+        period: {
+          current: { from: "2026-09-01", to: "2026-09-30" },
+          previous: { from: "2026-08-01", to: "2026-08-31" },
+        },
+        current: snapshot(),
+        previous: snapshot(),
+        deltas: (Object.keys(snapshot()) as Array<keyof MetricSnapshot>).map((metric) => ({
+          metric,
+          current: snapshot()[metric],
+          previous: snapshot()[metric],
+          changePercent: 0,
+          changeAbsolute: 0,
+        })),
+        freshness: [],
+        sampleSize: { spend: 10_000, clicks: 2_000, conversions: 200, days: 30 },
+        confidence: "high",
+      }
+      const result = buildStructuredResponse(
+        [{ tool: "compare_campaign_periods", output: comparison }],
+        "Asia/Riyadh"
+      )
+      expect(result!.followUpQuestions.length).toBeGreaterThan(0)
+      expect(result!.followUpQuestions.length).toBeLessThanOrEqual(4)
+      expect(new Set(result!.followUpQuestions).size).toBe(result!.followUpQuestions.length)
+    })
+
+    it("names the actual declining campaign in its follow-up question instead of a generic phrase", () => {
+      const rows = [
+        {
+          id: "camp-1",
+          name: "Summer Sale",
+          platform: "Google Search",
+          status: "Active",
+          metrics: snapshot(),
+          sampleSize: { spend: 5000, clicks: 500, conversions: 20, days: 30 },
+          confidence: "high" as const,
+          previousMetrics: snapshot(),
+          deltas: [],
+        },
+      ]
+      const result = buildStructuredResponse(
+        [{ tool: "get_campaign_declines", output: rows }],
+        "Asia/Riyadh"
+      )
+      expect(result!.followUpQuestions.some((q) => q.includes("Summer Sale"))).toBe(true)
+    })
+
+    it("returns an empty array when no tool has a registered follow-up template", () => {
+      const result = buildStructuredResponse(
+        [{ tool: "get_campaign_scaling_signals", output: [] }],
+        "Asia/Riyadh"
+      )
+      expect(result!.followUpQuestions).toEqual([])
+    })
+  })
+
+  describe("analyze_sales_performance (POS)", () => {
+    function posAnalysis(overrides: Record<string, unknown> = {}) {
+      return {
+        comparison: {
+          period: {
+            current: { from: "2026-09-01", to: "2026-09-30" },
+            previous: { from: "2026-08-01", to: "2026-08-31" },
+          },
+          current: { revenue: 400, orders: 1, aov: 400 },
+          previous: { revenue: 2100, orders: 4, aov: 525 },
+          revenueChangePercent: -81,
+          ordersChangePercent: -75,
+          aovChangePercent: -23.8,
+          decomposition: {
+            revenueChange: -1700,
+            orderEffect: -1575,
+            aovEffect: -125,
+            orderEffectPercent: 92.6,
+            aovEffectPercent: 7.4,
+            dominantDriver: "orders",
+          },
+          confidence: "medium",
+          periodFairness: { isCurrentPeriodIncomplete: false, elapsedDays: 30 },
+          ...overrides,
+        },
+        productContributions: [
+          {
+            productName: "Product A",
+            currentRevenue: 100,
+            previousRevenue: 500,
+            revenueDelta: -400,
+          },
+        ],
+      }
+    }
+
+    it("builds KPI cards, a decomposition insight naming the dominant driver, and a contribution table", () => {
+      const result = buildStructuredResponse(
+        [{ tool: "analyze_sales_performance", output: posAnalysis() }],
+        "Asia/Riyadh"
+      )
+
+      expect(result).not.toBeNull()
+      expect(result!.source).toEqual({ domain: "pos" })
+      expect(result!.confidence).toBe("medium")
+      expect(result!.metrics).toHaveLength(3)
+      const revenueCard = result!.metrics.find((m) => m.title === "الإيرادات")!
+      expect(revenueCard.value).toBe(400)
+      expect(revenueCard.trend).toBe("down")
+
+      expect(result!.insights).toHaveLength(1)
+      expect(result!.insights[0].statement).toContain("عدد الطلبات")
+      expect(result!.insights[0].statement).toContain("92.6%")
+
+      expect(result!.tables).toHaveLength(1)
+      expect(result!.tables[0].rows[0].productName).toBe("Product A")
+    })
+
+    it("warns when the current period hasn't fully elapsed", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "analyze_sales_performance",
+            output: posAnalysis({
+              periodFairness: { isCurrentPeriodIncomplete: true, elapsedDays: 3 },
+            }),
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.warnings.some((w) => w.type === "incomplete_period")).toBe(true)
+    })
+
+    it("emits no decomposition insight when nothing changed", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "analyze_sales_performance",
+            output: posAnalysis({
+              decomposition: {
+                revenueChange: 0,
+                orderEffect: 0,
+                aovEffect: 0,
+                orderEffectPercent: null,
+                aovEffectPercent: null,
+                dominantDriver: "none",
+              },
+            }),
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.insights).toHaveLength(0)
+    })
   })
 })

@@ -15,6 +15,7 @@ import { ChannelsAggregationService } from "../channels/channels-service"
 import { OrdersAggregationService } from "../orders/service"
 import { StoresAggregationService } from "../stores/service"
 import { PosInvoicesService } from "../pos/invoices-service"
+import { PosSalesAnalyticsEngine } from "../pos/sales-analytics-engine"
 import { PosShiftsService } from "../pos/shifts-service"
 import { PosPaymentMethodsService } from "../pos/payment-methods-service"
 import { TaxRatesService } from "../tax/tax-rates-service"
@@ -88,6 +89,28 @@ async function seedInvoice(input: {
       input.workspaceId,
       `INV-${randomUUID().slice(0, 8)}`,
       input.totalAmount,
+    ]
+  )
+}
+
+async function seedInvoiceAt(input: {
+  organizationId: string
+  workspaceId: string | null
+  totalAmount: number
+  createdAt: string
+}) {
+  await database.query(
+    `insert into pos_invoices (
+      id, organization_id, workspace_id, invoice_number, status, payment_method_code,
+      subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+    ) values ($1,$2,$3,$4,'completed','cash',$5,0,0,$5,$6,$6)`,
+    [
+      randomUUID(),
+      input.organizationId,
+      input.workspaceId,
+      `INV-${randomUUID().slice(0, 8)}`,
+      input.totalAmount,
+      input.createdAt,
     ]
   )
 }
@@ -216,6 +239,7 @@ beforeEach(async () => {
       storesAggregationService: new StoresAggregationService(database),
       posInvoicesService,
       posShiftsService,
+      posSalesAnalyticsEngine: new PosSalesAnalyticsEngine(posInvoicesService),
       reportsService: new ReportsService(database),
     },
     mockLlmClient,
@@ -289,6 +313,16 @@ describe("ai-chat: per-application scoping", () => {
       const names = buildToolsForCategory(category).map((tool) => tool.name)
       expect(names).not.toContain("generate_campaign_recommendations")
       expect(names).not.toContain("compare_campaign_periods")
+    }
+  })
+
+  it("exposes analyze_sales_performance under pos only", () => {
+    const posTools = buildToolsForCategory("pos").map((tool) => tool.name)
+    expect(posTools).toContain("analyze_sales_performance")
+    for (const category of ["advertising", "ecommerce", "madarApps"] as const) {
+      expect(buildToolsForCategory(category).map((tool) => tool.name)).not.toContain(
+        "analyze_sales_performance"
+      )
     }
   })
 
@@ -375,6 +409,56 @@ describe("ai-chat: per-application scoping", () => {
 
     const reply = await service.sendMessage(actor(), session.id, "ما هي سياسة الإرجاع؟")
     expect(reply.structured).toBeNull()
+  })
+
+  it("analyze_sales_performance decomposes a real revenue decline into order-volume vs AOV effects, and flags the incomplete current period", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await database.query("update organizations set timezone = $2 where id = $1", [ORG_A, "UTC"])
+
+    // Current period ("this_month" as of the frozen "now" below): Oct 1-3, one 400 SAR sale.
+    await seedInvoiceAt({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 400,
+      createdAt: "2026-10-02T10:00:00Z",
+    })
+    // Previous period (the equal-length 3 days immediately before, Sep 28-30): four sales
+    // totalling 2100 SAR.
+    for (const amount of [525, 525, 525, 525]) {
+      await seedInvoiceAt({
+        organizationId: ORG_A,
+        workspaceId: WORKSPACE_A,
+        totalAmount: amount,
+        createdAt: "2026-09-29T10:00:00Z",
+      })
+    }
+
+    const session = await service.createSession(actor(), "pos")
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("analyze_sales_performance", {})
+      return {
+        text: "الإيرادات انخفضت بشكل ملحوظ هذا الشهر.",
+        toolCalls: [
+          { tool: "analyze_sales_performance", input: {}, outputSummary: toolResultText },
+        ],
+        stopReason: "end_turn",
+      }
+    })
+
+    // Only fake Date (not setTimeout/etc.) -- faking all timers would stall pg-mem's own internal
+    // async scheduling and hang this test indefinitely.
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-03T12:00:00Z"))
+    const reply = await service.sendMessage(actor(), session.id, "ليش المبيعات أقل هذا الشهر؟")
+    vi.useRealTimers()
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.source).toEqual({ domain: "pos" })
+    const revenueCard = reply.structured!.metrics.find((m) => m.title === "الإيرادات")!
+    expect(revenueCard.value).toBe(400)
+    expect(revenueCard.previousValue).toBe(2100)
+    expect(reply.structured!.insights[0]?.statement).toContain("عدد الطلبات")
+    expect(reply.structured!.warnings.some((w) => w.type === "incomplete_period")).toBe(true)
   })
 
   it("populates a pos-domain structured chart when get_top_selling_products is called", async () => {

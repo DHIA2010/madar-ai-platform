@@ -42,3 +42,29 @@ export function combineConfidence(a: ConfidenceLevel, b: ConfidenceLevel): Confi
   const order: ConfidenceLevel[] = ["insufficient", "low", "medium", "high"]
   return order[Math.min(order.indexOf(a), order.indexOf(b))]
 }
+
+// Pure addition alongside computeConfidence -- never changes its signature or any existing
+// caller, since that function is used throughout analytics-engine.ts/recommendation-engine.ts and
+// changing its return shape would ripple through all of them for no benefit. This is for callers
+// that specifically want the human-readable "why" (the response-formatter's data-quality layer),
+// not every caller that just needs the bare level to gate a decision.
+export function explainConfidence(sampleSize: SampleSize, level: ConfidenceLevel): string[] {
+  if (level === "high") {
+    return ["تتوفر بيانات كافية (الإنفاق والنقرات والتحويلات ومدة الفترة) لإعطاء نتيجة موثوقة."]
+  }
+  const reasons: string[] = []
+  const band = level === "medium" ? CONFIDENCE_THRESHOLDS.high : CONFIDENCE_THRESHOLDS.medium
+  if (sampleSize.spend < band.minSpend) {
+    reasons.push(`الإنفاق خلال الفترة (${sampleSize.spend}) أقل من الحد المطلوب لثقة أعلى.`)
+  }
+  if (sampleSize.clicks < band.minClicks) {
+    reasons.push(`عدد النقرات (${sampleSize.clicks}) أقل من الحد المطلوب لثقة أعلى.`)
+  }
+  if (sampleSize.conversions < band.minConversions) {
+    reasons.push(`عدد التحويلات (${sampleSize.conversions}) أقل من الحد المطلوب لثقة أعلى.`)
+  }
+  if (sampleSize.days < band.minDays) {
+    reasons.push(`مدة الفترة (${sampleSize.days} يوم) أقصر من الحد المطلوب لثقة أعلى.`)
+  }
+  return reasons.length > 0 ? reasons : ["البيانات المتاحة محدودة مقارنة بالحجم المعتاد."]
+}

@@ -75,6 +75,20 @@ export interface ChatReportTable {
   rows: Array<Record<string, string | number | null>>
 }
 
+// Mirrors ai-chat/response-types.ts's DataQualityWarning -- surfaced distinctly from `confidence`
+// so a "high confidence" answer can still carry an honest caveat (an incomplete period, a stale
+// channel) instead of it being silently dropped.
+export type ChatDataQualityWarningType =
+  | "incomplete_period"
+  | "disconnected_channel"
+  | "insufficient_sample"
+  | "stale_sync"
+
+export interface ChatDataQualityWarning {
+  type: ChatDataQualityWarningType
+  message: string
+}
+
 export interface ChatStructuredResponse {
   type: "analytics_response"
   facts: ChatFact[]
@@ -82,6 +96,8 @@ export interface ChatStructuredResponse {
   metrics: ChatKpiCard[]
   charts: ChatChartSpec[]
   tables: ChatReportTable[]
+  warnings: ChatDataQualityWarning[]
+  followUpQuestions: string[]
   dataPeriod: { from: string; to: string } | null
   confidence: ChatConfidenceLevel | null
 }

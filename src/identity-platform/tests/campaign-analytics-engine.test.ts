@@ -13,7 +13,11 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { CampaignAnalyticsEngine, defaultComparisonRanges } from "../campaigns/analytics-engine"
-import { combineConfidence, computeConfidence } from "../campaigns/confidence-engine"
+import {
+  combineConfidence,
+  computeConfidence,
+  explainConfidence,
+} from "../campaigns/confidence-engine"
 import {
   generateAccountRecommendation,
   generateContributionRecommendations,
@@ -624,6 +628,23 @@ describe("confidence engine", () => {
   it("combineConfidence takes the weaker of the two sides", () => {
     expect(combineConfidence("high", "low")).toBe("low")
     expect(combineConfidence("insufficient", "high")).toBe("insufficient")
+  })
+
+  it("explainConfidence gives a single positive reason for high confidence", () => {
+    const reasons = explainConfidence(
+      { spend: 5000, clicks: 500, conversions: 20, days: 10 },
+      "high"
+    )
+    expect(reasons).toHaveLength(1)
+    expect(reasons[0]).toContain("بيانات كافية")
+  })
+
+  it("explainConfidence names the specific thresholds not met for a lower confidence level", () => {
+    const sampleSize = { spend: 300, clicks: 500, conversions: 20, days: 10 }
+    expect(computeConfidence(sampleSize)).toBe("medium")
+    const reasons = explainConfidence(sampleSize, "medium")
+    expect(reasons.some((r) => r.includes("الإنفاق"))).toBe(true)
+    expect(reasons.some((r) => r.includes("النقرات"))).toBe(false)
   })
 })
 

@@ -65,6 +65,21 @@ export interface ReportTable {
   rows: Array<Record<string, string | number | null>>
 }
 
+// Surfaces exactly the conditions section 14 of the Genie-upgrade audit asked never be silently
+// dropped: a period that hasn't fully elapsed yet, a disconnected/stale channel, or a sample too
+// small to trust. Distinct from `confidence` (a single overall level) -- a response can be "high"
+// confidence yet still carry a warning worth stating plainly (e.g. "this month is incomplete").
+export type DataQualityWarningType =
+  | "incomplete_period"
+  | "disconnected_channel"
+  | "insufficient_sample"
+  | "stale_sync"
+
+export interface DataQualityWarning {
+  type: DataQualityWarningType
+  message: string
+}
+
 // The envelope persisted alongside a chat_messages row (see ai-chat/repository.ts's `structured`
 // column) -- purely additive to the existing `content` prose string, never a replacement for it.
 // A message with no analytics tool calls (e.g. a plain get_metric_definitions lookup) simply has
@@ -82,6 +97,11 @@ export interface StructuredAnalyticsResponse {
   metrics: KpiCard[]
   charts: ChartSpec[]
   tables: ReportTable[]
+  warnings: DataQualityWarning[]
+  // Deterministic, templated per tool (never LLM-generated -- see response-formatter.ts's
+  // FOLLOW_UP_TEMPLATES) so they stay grounded in what this turn's tools actually returned,
+  // never a generic "anything else?" prompt.
+  followUpQuestions: string[]
   dataPeriod: { from: string; to: string } | null
   source: { domain: string } | null
   confidence: ConfidenceLevel | null

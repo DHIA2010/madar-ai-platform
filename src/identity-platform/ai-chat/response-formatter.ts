@@ -5,15 +5,18 @@ import type {
   CampaignRow,
   CampaignScalingSignal,
   ChannelComparisonRow,
+  ChannelFreshness,
   ConfidenceLevel,
   MetricKey,
   PeriodComparisonResult,
   PerformanceDriver,
 } from "../campaigns/analytics-types"
+import { describePeriodFairness } from "../shared/analytics-rules"
 
 import type {
   ChartSeriesPoint,
   ChartSpec,
+  DataQualityWarning,
   Fact,
   Insight,
   KpiCard,
@@ -139,6 +142,9 @@ function factsAndInsightsFromAnomalies(anomalies: AnomalyFlag[]): {
   return { facts, insights }
 }
 
+// Visualization-selection fix from the Genie-upgrade audit: a ranked list of campaigns is a
+// category comparison, which a bar chart communicates better than a two-column table (the
+// generic ReportTable above already covers the "give me the raw records" case separately).
 function chartFromCampaignRows(
   rows: CampaignRow[] | CampaignDeclineRow[],
   metric: MetricKey,
@@ -148,7 +154,7 @@ function chartFromCampaignRows(
     label: row.name,
     value: row.metrics[metric],
   }))
-  return { type: "chart", chartType: "table", title, series: [{ name: metric, data }] }
+  return { type: "chart", chartType: "bar", title, series: [{ name: metric, data }] }
 }
 
 function chartFromChannelComparison(rows: ChannelComparisonRow[]): ChartSpec {
@@ -158,6 +164,34 @@ function chartFromChannelComparison(rows: ChannelComparisonRow[]): ChartSpec {
     title: "مقارنة القنوات -- الإيرادات",
     series: [
       { name: "revenue", data: rows.map((r) => ({ label: r.channel, value: r.metrics.revenue })) },
+    ],
+  }
+}
+
+// Mirrors channels/channels-service.ts's ChannelsTrendPoint.
+interface ChannelSpendTrendPoint {
+  bucketStart: string
+  spendByChannel: Record<string, number>
+}
+
+// Visualization-selection fix (audit section 8/10): a time series over days/weeks is a trend,
+// which a line chart communicates correctly -- this was the one tool returning time-bucketed data
+// with no structured handling at all before, so it fell back to raw LLM narration like every
+// other unhandled case.
+function chartFromSpendTrend(points: ChannelSpendTrendPoint[]): ChartSpec {
+  return {
+    type: "chart",
+    chartType: "line",
+    title: "اتجاه الإنفاق الإعلاني",
+    series: [
+      {
+        name: "spend",
+        data: points.map((point) => ({
+          label: point.bucketStart,
+          value:
+            Math.round(Object.values(point.spendByChannel).reduce((a, b) => a + b, 0) * 100) / 100,
+        })),
+      },
     ],
   }
 }
@@ -309,6 +343,205 @@ function insightsFromScalingSignals(signals: CampaignScalingSignal[]): Insight[]
     }))
 }
 
+// Data-quality layer (audit section 14/4): a channel's own stale-sync state was already computed
+// by getFreshness() but silently dropped before reaching the UI -- surfaced here instead of
+// leaving the user to assume a stale number is live.
+function warningsFromFreshness(freshness: ChannelFreshness[]): DataQualityWarning[] {
+  return freshness
+    .filter((f) => f.connected && f.isStale)
+    .map((f) => ({
+      type: "stale_sync" as const,
+      message: `بيانات ${f.channel} لم تتم مزامنتها منذ ${f.minutesSinceSync ?? "فترة غير معروفة"} دقيقة، وقد لا تعكس أحدث الأرقام.`,
+    }))
+}
+
+// Audit section 5: the current/previous period arithmetic was already fair (precedingPeriod
+// mirrors the exact elapsed-day span -- see shared/analytics-rules.ts's own comment), but nothing
+// ever told the user that. This is the one piece that was actually missing: an explicit note when
+// the current period hasn't finished yet, so "this month" at 3 days in doesn't silently read like
+// a full-month comparison.
+function periodIncompleteWarning(
+  current: { from: string; to: string },
+  timezone: string
+): DataQualityWarning | null {
+  const note = describePeriodFairness(current, timezone)
+  if (!note.isCurrentPeriodIncomplete) return null
+  return {
+    type: "incomplete_period",
+    message: `الفترة الحالية لم تكتمل بعد (${note.elapsedDays} ${note.elapsedDays === 1 ? "يوم" : "أيام"} فقط) -- تمت مقارنتها بنفس عدد الأيام من الفترة السابقة لضمان مقارنة عادلة.`,
+  }
+}
+
+// Mirrors pos/sales-analytics-engine.ts's PosSalesPerformanceAnalysis/PosSalesComparisonResult --
+// reproduced structurally for the same reason as the other Mirrors-X-Service interfaces above.
+interface PosSalesSnapshot {
+  revenue: number
+  orders: number
+  aov: number
+}
+interface PosRevenueDecomposition {
+  orderEffect: number
+  aovEffect: number
+  orderEffectPercent: number | null
+  aovEffectPercent: number | null
+  dominantDriver: "orders" | "aov" | "both" | "none"
+}
+interface PosSalesComparisonResult {
+  period: { current: { from: string; to: string }; previous: { from: string; to: string } }
+  current: PosSalesSnapshot
+  previous: PosSalesSnapshot
+  revenueChangePercent: number | null
+  ordersChangePercent: number | null
+  aovChangePercent: number | null
+  decomposition: PosRevenueDecomposition
+  confidence: ConfidenceLevel
+  periodFairness: { isCurrentPeriodIncomplete: boolean; elapsedDays: number }
+}
+interface PosSalesPerformanceAnalysis {
+  comparison: PosSalesComparisonResult
+  productContributions: Array<{
+    productName: string
+    currentRevenue: number
+    previousRevenue: number
+    revenueDelta: number
+  }>
+}
+
+function kpiCardsFromPosComparison(comparison: PosSalesComparisonResult): KpiCard[] {
+  return [
+    {
+      type: "kpi",
+      title: "الإيرادات",
+      value: comparison.current.revenue,
+      previousValue: comparison.previous.revenue,
+      changePercent: comparison.revenueChangePercent,
+      trend: trend(comparison.revenueChangePercent),
+      format: "currency",
+    },
+    {
+      type: "kpi",
+      title: "عدد الطلبات",
+      value: comparison.current.orders,
+      previousValue: comparison.previous.orders,
+      changePercent: comparison.ordersChangePercent,
+      trend: trend(comparison.ordersChangePercent),
+      format: "number",
+    },
+    {
+      type: "kpi",
+      title: "متوسط قيمة الطلب",
+      value: comparison.current.aov,
+      previousValue: comparison.previous.aov,
+      changePercent: comparison.aovChangePercent,
+      trend: trend(comparison.aovChangePercent),
+      format: "currency",
+    },
+  ]
+}
+
+// The core "don't stop at invoice count dropped" fix (audit section 6/19): names which factor --
+// order volume, average order value, or both -- explains most of the measured revenue change,
+// backed by the exact decomposition in shared/analytics-rules.ts. Hedged ("the largest measured
+// contributor"), never a causal claim.
+function insightFromPosDecomposition(decomposition: PosRevenueDecomposition): Insight[] {
+  if (decomposition.dominantDriver === "none") return []
+  const label =
+    decomposition.dominantDriver === "orders"
+      ? "تغيّر عدد الطلبات"
+      : decomposition.dominantDriver === "aov"
+        ? "تغيّر متوسط قيمة الطلب"
+        : "تغيّر عدد الطلبات ومتوسط قيمة الطلب معًا"
+  const share =
+    decomposition.dominantDriver === "orders"
+      ? decomposition.orderEffectPercent
+      : decomposition.dominantDriver === "aov"
+        ? decomposition.aovEffectPercent
+        : null
+  return [
+    {
+      statement:
+        decomposition.dominantDriver === "both"
+          ? `أكبر عامل مقاس في تغيّر الإيرادات هو ${label}، إذ ساهم كل منهما بنسبة متقاربة من إجمالي التغيّر.`
+          : `أكبر عامل مقاس في تغيّر الإيرادات هو ${label} (يمثل نحو ${share}% من إجمالي التغيّر).`,
+      relatedMetrics: ["revenue", "orders", "aov"],
+      confidence: "medium",
+    },
+  ]
+}
+
+function tableFromPosProductContributions(
+  rows: PosSalesPerformanceAnalysis["productContributions"]
+): ReportTable {
+  return {
+    title: "المنتجات الأكثر تأثرًا بالتغيّر",
+    columns: [
+      { key: "productName", label: "المنتج", format: "text" },
+      { key: "currentRevenue", label: "الإيرادات الحالية", format: "currency" },
+      { key: "previousRevenue", label: "الإيرادات السابقة", format: "currency" },
+      { key: "revenueDelta", label: "التغيّر", format: "currency" },
+    ],
+    rows: rows.map((row) => ({
+      productName: row.productName,
+      currentRevenue: row.currentRevenue,
+      previousRevenue: row.previousRevenue,
+      revenueDelta: row.revenueDelta,
+    })),
+  }
+}
+
+// Deterministic, templated per tool -- never an LLM-authored "anything else?" (audit section 17's
+// explicit "do not generate generic questions"). Each entry only fires for tools that actually ran
+// this turn, and a couple of templates fold in a real value from that tool's own output (the
+// declining campaign's name, the dominant driver) so the suggestion reads as genuinely contextual.
+const FOLLOW_UP_TEMPLATES: Partial<Record<string, (output: unknown) => string[]>> = {
+  compare_campaign_periods: () => [
+    "ما سبب هذا التغيير؟",
+    "ما هي أفضل الحملات أداءً خلال هذه الفترة؟",
+    "قارن هذه الفترة مع نفس الفترة من الشهر الماضي.",
+  ],
+  get_campaign_declines: (output) => {
+    const rows = output as CampaignDeclineRow[]
+    const top = rows[0]?.name
+    return [
+      top ? `لماذا تراجع أداء حملة "${top}"؟` : "ما سبب هذا التراجع؟",
+      "ما هي الحملات الأفضل أداءً حاليًا؟",
+      "هل هناك توصيات بخصوص هذه الحملات؟",
+    ]
+  },
+  get_top_campaigns: () => [
+    "ما الذي يجعل هذه الحملات تحقق أداءً أفضل؟",
+    "هل يمكن زيادة ميزانيتها؟",
+  ],
+  get_campaign_anomalies: () => ["ما هي أسباب هذه التغيرات المفاجئة؟", "هل هناك توصيات لمعالجتها؟"],
+  get_top_selling_products: () => [
+    "ما هو إجمالي المبيعات لهذه الفترة؟",
+    "قارن هذه الفترة مع الفترة السابقة.",
+  ],
+  list_pos_shifts: () => ["ما هو إجمالي المبيعات لهذه الفترة؟", "هل هناك ورديات متأخرة الإغلاق؟"],
+  list_orders: () => ["ما هي حالة المتاجر المتصلة؟", "ما هي أفضل المنتجات مبيعًا؟"],
+  analyze_sales_performance: (output) => {
+    const analysis = output as PosSalesPerformanceAnalysis
+    const topProduct = analysis.productContributions[0]?.productName
+    return [
+      topProduct ? `لماذا تراجع أداء منتج "${topProduct}"؟` : "ما هي أفضل المنتجات مبيعًا؟",
+      "قارن هذه الفترة مع نفس الفترة من الشهر الماضي.",
+      "ما هو إجمالي المبيعات لهذه الفترة؟",
+    ]
+  },
+}
+
+function buildFollowUpQuestions(rawResults: RawToolResult[]): string[] {
+  const questions: string[] = []
+  for (const { tool, output } of rawResults) {
+    const template = FOLLOW_UP_TEMPLATES[tool]
+    if (!template) continue
+    for (const question of template(output)) {
+      if (!questions.includes(question)) questions.push(question)
+    }
+  }
+  return questions.slice(0, 4)
+}
+
 // Mirrors PosInvoicesService's InvoiceSummary (pos/invoices-service.ts).
 interface PosInvoiceSummaryResult {
   totalCount: number
@@ -405,6 +638,7 @@ export function buildStructuredResponse(
   const metrics: KpiCard[] = []
   const charts: ChartSpec[] = []
   const tables: ReportTable[] = []
+  const warnings: DataQualityWarning[] = []
   let dataPeriod: { from: string; to: string } | null = null
   let confidence: ConfidenceLevel | null = null
   let sawAnalyticsTool = false
@@ -415,9 +649,14 @@ export function buildStructuredResponse(
       case "get_campaign_summary": {
         sawAnalyticsTool = true
         domain = "advertising"
-        const result = output as { metrics: Record<MetricKey, number>; confidence: ConfidenceLevel }
+        const result = output as {
+          metrics: Record<MetricKey, number>
+          confidence: ConfidenceLevel
+          freshness: ChannelFreshness[]
+        }
         metrics.push(...kpiCardsFromSnapshot(result.metrics))
         confidence = result.confidence
+        warnings.push(...warningsFromFreshness(result.freshness))
         break
       }
       case "compare_campaign_periods": {
@@ -428,6 +667,9 @@ export function buildStructuredResponse(
         metrics.push(...kpiCardsFromComparison(comparison))
         dataPeriod = comparison.period.current
         confidence = comparison.confidence
+        warnings.push(...warningsFromFreshness(comparison.freshness))
+        const incomplete = periodIncompleteWarning(comparison.period.current, timezone)
+        if (incomplete) warnings.push(incomplete)
         break
       }
       case "identify_performance_drivers": {
@@ -471,6 +713,13 @@ export function buildStructuredResponse(
         if (rows.length > 0) charts.push(chartFromChannelComparison(rows))
         break
       }
+      case "get_channel_spend_trend": {
+        sawAnalyticsTool = true
+        domain = "advertising"
+        const result = output as { items: ChannelSpendTrendPoint[] }
+        if (result.items.length > 0) charts.push(chartFromSpendTrend(result.items))
+        break
+      }
       case "get_top_campaigns": {
         sawAnalyticsTool = true
         domain = "advertising"
@@ -498,6 +747,26 @@ export function buildStructuredResponse(
         domain = "pos"
         const rows = output as ShiftRow[]
         if (rows.length > 0) tables.push(tableFromShifts(rows, timezone))
+        break
+      }
+      case "analyze_sales_performance": {
+        sawAnalyticsTool = true
+        domain = "pos"
+        const analysis = output as PosSalesPerformanceAnalysis
+        metrics.push(...kpiCardsFromPosComparison(analysis.comparison))
+        insights.push(...insightFromPosDecomposition(analysis.comparison.decomposition))
+        if (analysis.productContributions.length > 0) {
+          tables.push(tableFromPosProductContributions(analysis.productContributions))
+        }
+        dataPeriod = analysis.comparison.period.current
+        confidence = analysis.comparison.confidence
+        if (analysis.comparison.periodFairness.isCurrentPeriodIncomplete) {
+          const days = analysis.comparison.periodFairness.elapsedDays
+          warnings.push({
+            type: "incomplete_period",
+            message: `الفترة الحالية لم تكتمل بعد (${days} ${days === 1 ? "يوم" : "أيام"} فقط) -- تمت مقارنتها بنفس عدد الأيام من الفترة السابقة لضمان مقارنة عادلة.`,
+          })
+        }
         break
       }
       case "get_pos_invoices_summary": {
@@ -533,6 +802,13 @@ export function buildStructuredResponse(
 
   if (!sawAnalyticsTool) return null
 
+  if (confidence === "insufficient") {
+    warnings.push({
+      type: "insufficient_sample",
+      message: "حجم البيانات المتاحة صغير جدًا لإعطاء نتيجة موثوقة لهذا السؤال.",
+    })
+  }
+
   return {
     type: "analytics_response",
     facts,
@@ -541,6 +817,8 @@ export function buildStructuredResponse(
     metrics,
     charts,
     tables,
+    warnings,
+    followUpQuestions: buildFollowUpQuestions(rawResults),
     dataPeriod,
     source: domain ? { domain } : null,
     confidence,

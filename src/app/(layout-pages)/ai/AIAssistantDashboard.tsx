@@ -35,6 +35,7 @@ import type { ApplicationCategoryId } from "@/features/applications"
 import { useAiChat } from "@/features/ai"
 import type {
   ChatChartSpec,
+  ChatDataQualityWarning,
   ChatFact,
   ChatInsight,
   ChatKpiCard,
@@ -277,6 +278,50 @@ function ChatFactsInsightsPanel({
           ))}
         </ul>
       ) : null}
+    </div>
+  )
+}
+
+// Data-quality caveats (an incomplete period, a stale channel, a thin sample) -- distinct from the
+// KPI/chart/table content above, so a genuinely honest answer still reads as trustworthy rather
+// than burying the caveat inside a sentence of prose.
+function ChatWarningsPanel({ warnings }: { warnings: ChatDataQualityWarning[] }) {
+  if (warnings.length === 0) return null
+  return (
+    <div className="mt-2 space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3">
+      {warnings.map((warning, index) => (
+        <p key={index} className="flex gap-1.5 text-[11px] text-amber-800">
+          <Info className="mt-0.5 size-3 shrink-0" />
+          <span>{warning.message}</span>
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// Deterministic, templated follow-ups (response-formatter.ts's FOLLOW_UP_TEMPLATES) rendered as
+// clickable chips that just populate the input -- never auto-sent, so the user stays in control of
+// what actually gets asked next.
+function ChatFollowUpChips({
+  questions,
+  onSelect,
+}: {
+  questions: string[]
+  onSelect: (question: string) => void
+}) {
+  if (questions.length === 0) return null
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {questions.map((question) => (
+        <button
+          key={question}
+          type="button"
+          onClick={() => onSelect(question)}
+          className="rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-[11px] text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
+        >
+          {question}
+        </button>
+      ))}
     </div>
   )
 }
@@ -571,6 +616,11 @@ export default function AIAssistantDashboard() {
                             <ChatFactsInsightsPanel
                               facts={message.structured.facts}
                               insights={message.structured.insights}
+                            />
+                            <ChatWarningsPanel warnings={message.structured.warnings} />
+                            <ChatFollowUpChips
+                              questions={message.structured.followUpQuestions}
+                              onSelect={setChatInput}
                             />
                           </>
                         ) : null}
