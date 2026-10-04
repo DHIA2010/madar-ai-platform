@@ -582,6 +582,16 @@ describe("Zid marketplace-initiated install (Activate from Zid's App Market)", (
     )
     expect(membershipRows.rows[0]).toMatchObject({ role_code: "owner", status: "active" })
 
+    // Confirmed as a real failure in production (2026-10-04): with no settings passed, a
+    // brand-new org starts with zero active applications -- app-sidebar.tsx hides "Integrations"
+    // (and every other application-scoped nav item) entirely in that state, so a merchant bounced
+    // off the direct zid_oauth=connected redirect has no way back into the Zid setup wizard.
+    const orgRows = await database.query(
+      `SELECT settings FROM organizations WHERE owner_user_id = $1`,
+      [userId]
+    )
+    expect(orgRows.rows[0].settings).toMatchObject({ ecommerceEnabled: true })
+
     const installRows = await database.query(
       `SELECT status, auto_provisioned_user_id FROM zid_marketplace_installs`
     )

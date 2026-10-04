@@ -143,10 +143,19 @@ export class ZidMarketplaceAutoProvisionService {
     // the verification email.
     user.verifyEmail(now)
 
+    // Confirmed as a real failure in production (2026-10-04): with no settings passed, a
+    // brand-new org starts with zero active applications -- app-sidebar.tsx's ANY_APPLICATION
+    // gate then hides "Integrations" (and every other application-scoped nav item) entirely, so
+    // a merchant who gets bounced off the direct zid_oauth=connected redirect (e.g. by a
+    // workspace-selection interstitial) has no way back into the Zid setup wizard at all. This
+    // org exists specifically because of a Zid (ecommerce) install, so there's no ambiguity about
+    // which application it needs active -- activate it at creation time instead of leaving the
+    // merchant to discover and flip the toggle themselves before they can even find the page.
     const organization = OrganizationEntity.create({
       id: organizationId,
       ownerUserId: userId,
       name: install.storeName,
+      settings: { ecommerceEnabled: true },
       now,
     })
     const workspace = WorkspaceEntity.create({
