@@ -318,6 +318,43 @@ export class OrdersAggregationService {
     return { platform: provider as ProviderKey, connectionId: row.connection_id, entityId }
   }
 
+  // Backs the "all time" period: the real earliest/latest order date actually present across
+  // every connected store, never an assumed "since the store opened" date. Reads MIN(date_start)/
+  // MAX(date_end) from each provider's own sync_runs bookkeeping table (salla_sync_runs /
+  // shopify_sync_runs / zid_sync_runs) rather than scanning fetchOrderRows: that query caps at
+  // MAX_ORDERS_PER_PROVIDER rows ordered by most-recently-updated, so for a store with more
+  // orders than the cap it would silently truncate away the true oldest order and report a too-
+  // recent "earliest" date. Every provider's sync_runs table shares the same shape (organization_
+  // id, workspace_id, date_start, date_end, status) for exactly this reason.
+  async getDateCoverage(
+    actor: AuthenticatedActor
+  ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
+    const tables = ["salla_sync_runs", "shopify_sync_runs", "zid_sync_runs"]
+    const results = await Promise.all(
+      tables.map((table) =>
+        this.db.query<{ earliest: string | null; latest: string | null }>(
+          `SELECT min(date_start) AS earliest, max(date_end) AS latest
+           FROM ${table}
+           WHERE organization_id = $1 AND status = 'completed'
+             AND ($2::uuid IS NULL OR workspace_id = $2::uuid)`,
+          [actor.organizationId, actor.workspaceId]
+        )
+      )
+    )
+
+    let earliest: string | null = null
+    let latest: string | null = null
+    for (const result of results) {
+      const row = result.rows[0]
+      if (!row?.earliest || !row?.latest) continue
+      const rowEarliest = new Date(row.earliest).toISOString().slice(0, 10)
+      const rowLatest = new Date(row.latest).toISOString().slice(0, 10)
+      if (earliest === null || rowEarliest < earliest) earliest = rowEarliest
+      if (latest === null || rowLatest > latest) latest = rowLatest
+    }
+    return { earliestDate: earliest, latestDate: latest }
+  }
+
   async listOrders(actor: AuthenticatedActor, query: OrdersQuery): Promise<OrdersListResult> {
     const endDate = query.endDate ? new Date(query.endDate) : new Date()
     const startDate = query.startDate

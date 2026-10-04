@@ -653,10 +653,12 @@ export function buildStructuredResponse(
           metrics: Record<MetricKey, number>
           confidence: ConfidenceLevel
           freshness: ChannelFreshness[]
+          queriedPeriod: { from: string; to: string } | null
         }
         metrics.push(...kpiCardsFromSnapshot(result.metrics))
         confidence = result.confidence
         warnings.push(...warningsFromFreshness(result.freshness))
+        dataPeriod = dataPeriod ?? result.queriedPeriod
         break
       }
       case "compare_campaign_periods": {
@@ -716,7 +718,11 @@ export function buildStructuredResponse(
       case "get_channel_spend_trend": {
         sawAnalyticsTool = true
         domain = "advertising"
-        const result = output as { items: ChannelSpendTrendPoint[] }
+        const result = output as {
+          items: ChannelSpendTrendPoint[]
+          queriedPeriod: { from: string; to: string } | null
+        }
+        dataPeriod = dataPeriod ?? result.queriedPeriod
         if (result.items.length > 0) charts.push(chartFromSpendTrend(result.items))
         break
       }
@@ -772,13 +778,21 @@ export function buildStructuredResponse(
       case "get_pos_invoices_summary": {
         sawAnalyticsTool = true
         domain = "pos"
-        metrics.push(...kpiCardsFromInvoiceSummary(output as PosInvoiceSummaryResult))
+        const result = output as PosInvoiceSummaryResult & {
+          queriedPeriod: { from: string; to: string } | null
+        }
+        metrics.push(...kpiCardsFromInvoiceSummary(result))
+        dataPeriod = dataPeriod ?? result.queriedPeriod
         break
       }
       case "list_orders": {
         sawAnalyticsTool = true
         domain = "ecommerce"
-        const result = output as { items: OrderRow[] }
+        const result = output as {
+          items: OrderRow[]
+          queriedPeriod: { from: string; to: string } | null
+        }
+        dataPeriod = dataPeriod ?? result.queriedPeriod
         if (result.items.length > 0) tables.push(tableFromOrders(result.items))
         break
       }

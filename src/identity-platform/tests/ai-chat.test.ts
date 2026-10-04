@@ -569,4 +569,68 @@ describe("ai-chat: per-application scoping", () => {
     expect(capturedSystemPrompt).toContain("|")
     expect(capturedSystemPrompt).toMatch(/جدول منفصل ضمن واجهة المحادثة/)
   })
+
+  it("instructs the model to use period=all_time for 'كل الوقت'/'from the beginning' phrasing instead of asking for clarification", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    const session = await service.createSession(actor(), "pos")
+
+    let capturedSystemPrompt = ""
+    mockRunChatTurn.mockImplementation(async (input) => {
+      capturedSystemPrompt = input.systemPrompt
+      return { text: "ok", toolCalls: [], stopReason: "end_turn" }
+    })
+
+    await service.sendMessage(actor(), session.id, "مرحبا")
+
+    expect(capturedSystemPrompt).toContain("all_time")
+    expect(capturedSystemPrompt).toContain("كل الوقت")
+  })
+
+  // The exact regression reported: a question like "وش أفضل الحملات كل الوقت؟" left the model
+  // with no period value to express "all time" with, so it listed the available periods back at
+  // the user instead of answering. This proves the fix end-to-end: period="all_time" resolves to
+  // the REAL earliest/latest invoice date actually present, never a guessed or fixed window.
+  it("resolves period=all_time to the real earliest/latest invoice date actually present, not a guessed range", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await seedInvoiceAt({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 100,
+      createdAt: "2025-02-10T10:00:00Z",
+    })
+    await seedInvoiceAt({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 300,
+      createdAt: "2026-09-15T10:00:00Z",
+    })
+    const session = await service.createSession(actor(), "pos")
+
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("get_pos_invoices_summary", {
+        period: "all_time",
+      })
+      return {
+        text: "منذ بداية البيانات المتاحة وحتى اليوم، إجمالي المبيعات 400 ر.س.",
+        toolCalls: [
+          {
+            tool: "get_pos_invoices_summary",
+            input: { period: "all_time" },
+            outputSummary: toolResultText,
+          },
+        ],
+        stopReason: "end_turn",
+      }
+    })
+
+    const reply = await service.sendMessage(actor(), session.id, "وش إجمالي مبيعاتي كل الوقت؟")
+
+    expect(reply.structured).not.toBeNull()
+    const totalCard = reply.structured!.metrics.find((m) => m.title === "إجمالي المبيعات المكتملة")!
+    // Proves the fix: without the all_time resolution (or with a naive non-inclusive upper
+    // bound), the 2026-09-15 invoice created at 10:00 would be silently dropped and this would
+    // read 100, not 400.
+    expect(totalCard.value).toBe(400)
+    expect(reply.structured!.dataPeriod?.from).toBe("2025-02-10")
+  })
 })

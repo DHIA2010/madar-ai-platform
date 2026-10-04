@@ -626,6 +626,25 @@ export class PosInvoicesService {
     )
   }
 
+  // Backs the "all time" period: the real earliest/latest invoice date actually present, never
+  // an assumed "since the business started" date.
+  async getDateCoverage(
+    organizationId: string,
+    workspaceId: string | null
+  ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
+    const result = await this.database.query<{ earliest: string | null; latest: string | null }>(
+      `SELECT min(created_at) AS earliest, max(created_at) AS latest
+       FROM pos_invoices
+       WHERE organization_id = $1 AND ($2::uuid IS NULL OR workspace_id = $2::uuid)`,
+      [organizationId, workspaceId]
+    )
+    const row = result.rows[0]
+    return {
+      earliestDate: row?.earliest ? new Date(row.earliest).toISOString().slice(0, 10) : null,
+      latestDate: row?.latest ? new Date(row.latest).toISOString().slice(0, 10) : null,
+    }
+  }
+
   // Same filters as list() (minus search, which has no bearing on the totals), so the summary
   // cards always describe exactly the rows the table below them shows.
   async summary(

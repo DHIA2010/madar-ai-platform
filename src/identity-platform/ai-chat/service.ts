@@ -38,6 +38,18 @@ const PRESENTATION_RULES = [
   'لا تكتب أبدًا null أو undefined أو N/A أو [] في ردك. إذا كانت قيمة غير متوفرة، صرّح بذلك بجملة طبيعية (مثل "غير متوفر حاليًا") أو اترك الأمر لعرض الجدول الذي يستخدم شرطة (—) تلقائيًا.',
 ].join("\n")
 
+// Fixes the reported "لا توجد خيار 'كل الوقت' ضمن الفترات المتاحة" failure: the model had no
+// period value to express "all time" with, so it listed the available periods back at the user
+// instead of answering. The structural fix is RELATIVE_PERIODS' new "all_time" value (resolved
+// deterministically against each domain's own real earliest/latest data -- never a guessed date,
+// see shared/analytics-rules.ts/tools.ts's resolveAllTimeRange); this prompt rule is what tells
+// the model that value exists and when to reach for it instead of asking a clarifying question.
+const TIME_INTENT_RULES = [
+  'إذا ذكر المستخدم أي صيغة تعني "كل الفترة المتاحة" (مثل: كل الوقت، من البداية، منذ إنشاء الحساب، كل البيانات، جميع البيانات، تاريخيًا، على مر التاريخ، من البداية إلى الآن، all time، lifetime، since the beginning)، استخدم القيمة period="all_time" في الأداة مباشرة -- لا تسأل المستخدم عن الفترة التي يقصدها، ولا تقل إن هذا الخيار غير متاح.',
+  "all_time يُحسب من البيانات الفعلية المتاحة (أقدم وأحدث تاريخ حقيقي في المصدر)، وليس من تاريخ افتراضي. إذا احتوت نتيجة الأداة على queriedPeriod، اذكر الفترة الفعلية في ردك بصياغة طبيعية (مثل: \"من 15 يناير 2025 وحتى اليوم\") بدلاً من ذكر 'كل الوقت' فقط دون تحديد.",
+  "إذا كانت رسالة المستخدم تصحيحًا لفترة زمنية سبق ذكرها في نفس المحادثة (مثال: بعد سؤال عن 'هذا الشهر'، يقول المستخدم 'لا، كل الوقت' أو 'لا، أقصد الأسبوع الماضي')، أعد استدعاء نفس الأداة بنفس المقياس والكيان لكن بالفترة الجديدة فقط -- لا تُعد تحليل نية الرسالة بالكامل ولا تسأل أسئلة توضيحية إضافية ما دامت الفترة الجديدة واضحة.",
+].join("\n")
+
 const ADVERTISING_ANALYTICS_RULES = [
   "لا تخترع أو تحسب بنفسك أيًا من: الإنفاق، الإيرادات، ROAS، CPA، CPC، CTR، CPM، معدل التحويل، عدد التحويلات، مرات الظهور، النقرات، الميزانية، أو أي نسبة تغيّر مئوية. كل هذه القيم يجب أن تأتي من نتيجة أداة فعلية فقط.",
   "لا تتوفر حاليًا بيانات على مستوى الإعلان الفردي أو الجمهور أو الموقع الجغرافي أو نوع الجهاز أو الإبداع الإعلاني (creative) -- إذا سُئلت عن أي منها، صرّح بوضوح أنها غير متاحة حاليًا بدلاً من التخمين.",
@@ -71,6 +83,7 @@ function buildSystemPrompt(category: ApplicationCategoryId): string {
     "إذا سُئلت عن موضوع خارج نطاق هذه المحادثة (قسم آخر غير المذكور أعلاه)، وضّح أن هذه المحادثة مخصصة لهذا القسم فقط واقترح فتح محادثة جديدة لذلك القسم.",
     "أجب باللغة العربية بشكل افتراضي، بأسلوب مختصر ومباشر.",
     PRESENTATION_RULES,
+    TIME_INTENT_RULES,
     category === "advertising" ? ADVERTISING_ANALYTICS_RULES : "",
     scopeNote,
   ]

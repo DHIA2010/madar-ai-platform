@@ -1509,6 +1509,55 @@ export class CampaignsPerformanceAggregationService {
     return [...google, ...meta, ...tiktok, ...snapchat]
   }
 
+  // Backs the "all time" period: the real earliest/latest activity date actually present across
+  // every connected platform, never a fabricated or assumed range (audit requirement -- "never
+  // assume the database contains data since the business was created"). Reuses
+  // fetchAllCampaignRows itself rather than hand-rolling a parallel MIN/MAX SQL query against
+  // four different platform schemas -- a wide-enough window (2015-01-01, safely before any
+  // realistically connected ad account's history) covers any real data, and this call is only
+  // ever made for an explicit "all time" question, not the hot path.
+  // Reads MIN(date_start)/MAX(date_end) across each platform's own sync_runs bookkeeping table
+  // (google_ads_sync_runs / meta_sync_runs / tiktok_ads_sync_runs / snapchat_sync_runs) rather
+  // than scanning raw metric rows -- fetchAllCampaignRows' own per-campaign aggregation only ever
+  // keeps MAX(metric_date) per row (see fetchGoogleCampaignRows' "activity_date"), which collapses
+  // to the latest date only and silently loses the true earliest one. Every platform's sync_runs
+  // table shares the exact same shape (organization_id, workspace_id, date_start, date_end,
+  // status) for this reason -- it is the one place "what date range has actually been synced" is
+  // recorded uniformly across platforms.
+  async getDateCoverage(
+    actor: AuthenticatedActor
+  ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
+    const tables = [
+      "google_ads_sync_runs",
+      "meta_sync_runs",
+      "tiktok_ads_sync_runs",
+      "snapchat_sync_runs",
+    ]
+    const results = await Promise.all(
+      tables.map((table) =>
+        this.db.query<{ earliest: string | null; latest: string | null }>(
+          `SELECT min(date_start) AS earliest, max(date_end) AS latest
+           FROM ${table}
+           WHERE organization_id = $1 AND status = 'completed'
+             AND ($2::uuid IS NULL OR workspace_id = $2::uuid)`,
+          [actor.organizationId, actor.workspaceId]
+        )
+      )
+    )
+
+    let earliest: string | null = null
+    let latest: string | null = null
+    for (const result of results) {
+      const row = result.rows[0]
+      if (!row?.earliest || !row?.latest) continue
+      const rowEarliest = new Date(row.earliest).toISOString().slice(0, 10)
+      const rowLatest = new Date(row.latest).toISOString().slice(0, 10)
+      if (earliest === null || rowEarliest < earliest) earliest = rowEarliest
+      if (latest === null || rowLatest > latest) latest = rowLatest
+    }
+    return { earliestDate: earliest, latestDate: latest }
+  }
+
   async getSummary(
     actor: AuthenticatedActor,
     query: CampaignPerformanceQuery

@@ -48,30 +48,92 @@ const relativePeriodProperty = {
   type: "string",
   enum: RELATIVE_PERIODS as unknown as string[],
   description:
-    "A named relative period (resolved deterministically server-side in the org's own timezone) -- prefer this over startDate/endDate whenever the user's question matches one of these phrases exactly (e.g. 'this week', 'last month'). Takes precedence over startDate/endDate if both are given.",
+    "A named relative period (resolved deterministically server-side in the org's own timezone) -- prefer this over startDate/endDate whenever the user's question matches one of these phrases exactly (e.g. 'this week', 'last month'). Takes precedence over startDate/endDate if both are given. Use 'all_time' whenever the user means the entire available history (e.g. 'all time', 'from the beginning', 'كل الوقت', 'من البداية', 'منذ إنشاء الحساب') -- it resolves to the real earliest-to-latest date range actually present in the data, never a guessed date. Never ask the user to clarify the period when one of these phrases already names it.",
 } as const
+
+type AnalyticsDomain = "advertising" | "pos" | "ecommerce"
+
+// "all time" has no fixed [from, to] computable from "now" -- it needs the real earliest/latest
+// date actually present in this specific domain's own data (never assumed, e.g., as "since the
+// business was created"). Each domain's own service already knows how to find that (reusing its
+// existing multi-platform/multi-provider row-fetching rather than hand-rolling parallel SQL per
+// schema -- see each getDateCoverage's own comment). Falls back to "today" on both ends only when
+// a domain genuinely has zero rows yet, so the underlying query still runs (and correctly returns
+// nothing) instead of being left with undefined dates.
+async function resolveAllTimeRange(
+  actor: AuthenticatedActor,
+  services: AiChatToolServices,
+  domain: AnalyticsDomain
+): Promise<{ from: string; to: string }> {
+  const today = new Date().toISOString().slice(0, 10)
+  const coverage =
+    domain === "advertising"
+      ? await services.campaignPerformanceService.getDateCoverage(actor)
+      : domain === "pos"
+        ? await services.posInvoicesService.getDateCoverage(actor.organizationId, actor.workspaceId)
+        : await services.ordersAggregationService.getDateCoverage(actor)
+  const to = coverage.latestDate ?? today
+  // Every downstream query compares `created_at <= $to` with `to` as a bare date (implicit
+  // midnight), so a record timestamped later than 00:00 on the latest coverage day would
+  // otherwise be silently excluded -- the exact opposite of "all time" actually meaning all of
+  // it. Push the upper bound one day forward so the whole latest day is included; `from` still
+  // reports the real earliest date untouched. (The one acceptable side effect: a reported
+  // "to" date one calendar day past the true latest transaction, never a lost transaction.)
+  const toInclusive = new Date(`${to}T00:00:00Z`)
+  toInclusive.setUTCDate(toInclusive.getUTCDate() + 1)
+  return { from: coverage.earliestDate ?? today, to: toInclusive.toISOString().slice(0, 10) }
+}
 
 // Deterministic date resolution (never the model doing date arithmetic itself) -- if `period` is
 // given, resolves it server-side in the organization's own timezone; otherwise falls back to
 // whatever explicit startDate/endDate the model supplied (or the underlying service's own
-// default window, if neither is given).
+// default window, if neither is given). `isAllTime` lets a caller attach the resolved range to
+// its own tool output as `queriedPeriod`, so the model can tell the user what "all time" actually
+// covered instead of leaving them to guess.
 async function resolveSinglePeriod(
-  db: PostgresDatabase,
+  services: AiChatToolServices,
+  domain: AnalyticsDomain,
   actor: AuthenticatedActor,
   input: { period?: RelativePeriod; startDate?: string; endDate?: string }
-): Promise<{ startDate?: string; endDate?: string }> {
-  if (input.period) {
-    const timezone = await getOrganizationTimezone(db, actor.organizationId)
-    const range = resolveRelativePeriod(input.period, timezone)
-    return { startDate: range.from, endDate: range.to }
+): Promise<{ startDate?: string; endDate?: string; isAllTime: boolean }> {
+  if (input.period === "all_time") {
+    const range = await resolveAllTimeRange(actor, services, domain)
+    return { startDate: range.from, endDate: range.to, isAllTime: true }
   }
-  return { startDate: input.startDate, endDate: input.endDate }
+  if (input.period) {
+    const timezone = await getOrganizationTimezone(services.db, actor.organizationId)
+    const range = resolveRelativePeriod(input.period, timezone)
+    return { startDate: range.from, endDate: range.to, isAllTime: false }
+  }
+  return { startDate: input.startDate, endDate: input.endDate, isAllTime: false }
+}
+
+// Attaches the real resolved date range to a tool's own result object -- the only way the model
+// (and, through it, the user) can learn what "all time" actually covered, since
+// CampaignPerformanceSummary/InvoiceSummary/etc. don't otherwise echo back which dates were
+// queried. Additive, never overwrites an existing field.
+function withQueriedPeriod<T extends object>(
+  resolved: { startDate?: string; endDate?: string },
+  result: T
+): T & { queriedPeriod: { from: string; to: string } | null } {
+  return {
+    ...result,
+    queriedPeriod:
+      resolved.startDate && resolved.endDate
+        ? { from: resolved.startDate, to: resolved.endDate }
+        : null,
+  }
 }
 
 // Same idea for a two-period comparison -- `currentPeriod` resolves both sides (the previous side
-// via precedingPeriod, an equal-length window immediately before) unless explicit dates override it.
+// via precedingPeriod, an equal-length window immediately before) unless explicit dates override
+// it. "all time vs. the period before it" isn't a meaningful comparison (there IS no "before" the
+// earliest data), so an all-time current period resolves `previous` to the single day right
+// before the earliest date -- genuinely empty, which honestly reports "no prior data" rather than
+// fabricating a comparison window.
 async function resolveComparisonPeriods(
-  db: PostgresDatabase,
+  services: AiChatToolServices,
+  domain: AnalyticsDomain,
   actor: AuthenticatedActor,
   input: {
     currentPeriod?: RelativePeriod
@@ -80,17 +142,33 @@ async function resolveComparisonPeriods(
     previousFrom?: string
     previousTo?: string
   }
-) {
+): Promise<{
+  current: { from: string; to: string }
+  previous: { from: string; to: string }
+  isAllTime: boolean
+}> {
+  if (input.currentPeriod === "all_time") {
+    const range = await resolveAllTimeRange(actor, services, domain)
+    const dayBefore = new Date(new Date(`${range.from}T00:00:00Z`).getTime() - 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    return {
+      current: { from: range.from, to: range.to },
+      previous: { from: dayBefore, to: dayBefore },
+      isAllTime: true,
+    }
+  }
   if (input.currentPeriod) {
-    const timezone = await getOrganizationTimezone(db, actor.organizationId)
+    const timezone = await getOrganizationTimezone(services.db, actor.organizationId)
     const current = resolveRelativePeriod(input.currentPeriod, timezone)
     const previous = precedingPeriod(current)
     return {
       current: { from: current.from, to: current.to },
       previous: { from: input.previousFrom ?? previous.from, to: input.previousTo ?? previous.to },
+      isAllTime: false,
     }
   }
-  return resolveRanges(input)
+  return { ...resolveRanges(input), isAllTime: false }
 }
 
 const RANKABLE_METRICS = [
@@ -182,8 +260,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
     execute: async (actor, services, input) => {
       const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
-      return services.campaignAnalyticsEngine.getCampaignSummary(actor, resolved)
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
+      const summary = await services.campaignAnalyticsEngine.getCampaignSummary(actor, resolved)
+      return withQueriedPeriod(resolved, summary)
     },
   },
   {
@@ -223,7 +302,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     }),
     execute: async (actor, services, input) => {
       const ranges = await resolveComparisonPeriods(
-        services.db,
+        services,
+        "advertising",
         actor,
         input as {
           currentPeriod?: RelativePeriod
@@ -250,7 +330,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
     execute: async (actor, services, input) => {
       const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
       return services.campaignAnalyticsEngine.getChannelComparison(actor, resolved)
     },
   },
@@ -288,7 +368,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         direction: "top" | "bottom"
         limit?: number
       }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
       return services.campaignAnalyticsEngine.getCampaignRanking(actor, {
         query: resolved,
         metric: parsed.metric,
@@ -336,7 +416,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         metric: MetricKey
         limit?: number
       }
-      const ranges = await resolveComparisonPeriods(services.db, actor, parsed)
+      const ranges = await resolveComparisonPeriods(services, "advertising", actor, parsed)
       return services.campaignAnalyticsEngine.getCampaignDeclines(actor, {
         ranges,
         metric: parsed.metric,
@@ -391,7 +471,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         previousTo?: string
         metric: MetricKey
       }
-      const ranges = await resolveComparisonPeriods(services.db, actor, parsed)
+      const ranges = await resolveComparisonPeriods(services, "advertising", actor, parsed)
       const comparison = await services.campaignAnalyticsEngine.comparePeriods(actor, ranges)
       return {
         comparison,
@@ -428,7 +508,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     }),
     execute: async (actor, services, input) => {
       const ranges = await resolveComparisonPeriods(
-        services.db,
+        services,
+        "advertising",
         actor,
         input as {
           currentPeriod?: RelativePeriod
@@ -473,8 +554,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
     execute: async (actor, services, input) => {
       const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
-      return services.channelsService.getPerformanceTrend(actor, resolved)
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
+      const trend = await services.channelsService.getPerformanceTrend(actor, resolved)
+      return withQueriedPeriod(resolved, trend)
     },
   },
   {
@@ -491,7 +573,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
     execute: async (actor, services, input) => {
       const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      const resolved = await resolveSinglePeriod(services, "advertising", actor, parsed)
       return services.campaignAnalyticsEngine.getCampaignScalingSignals(actor, resolved)
     },
   },
@@ -571,14 +653,15 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         period?: RelativePeriod
         status?: string
       }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
-      return services.posInvoicesService.summary(actor.organizationId, {
+      const resolved = await resolveSinglePeriod(services, "pos", actor, parsed)
+      const summary = await services.posInvoicesService.summary(actor.organizationId, {
         workspaceId: actor.workspaceId,
         status: (parsed.status as Parameters<PosInvoicesService["summary"]>[1]["status"]) ?? null,
         paymentMethodCode: null,
         from: resolved.startDate ?? null,
         to: resolved.endDate ?? null,
       })
+      return withQueriedPeriod(resolved, summary)
     },
   },
   {
@@ -619,7 +702,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         period?: RelativePeriod
         limit?: number
       }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
+      const resolved = await resolveSinglePeriod(services, "pos", actor, parsed)
       return services.posInvoicesService.topProducts(actor.organizationId, {
         workspaceId: actor.workspaceId,
         from: resolved.startDate ?? null,
@@ -672,7 +755,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         previousTo?: string
       }
       const timezone = await getOrganizationTimezone(services.db, actor.organizationId)
-      const ranges = await resolveComparisonPeriods(services.db, actor, {
+      const ranges = await resolveComparisonPeriods(services, "pos", actor, {
         currentPeriod: parsed.currentPeriod ?? (parsed.currentFrom ? undefined : "this_month"),
         currentFrom: parsed.currentFrom,
         currentTo: parsed.currentTo,
@@ -701,8 +784,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     schema: z.object({ ...dateRangeShape, period: z.enum(RELATIVE_PERIODS).optional() }),
     execute: async (actor, services, input) => {
       const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
-      const resolved = await resolveSinglePeriod(services.db, actor, parsed)
-      return services.ordersAggregationService.listOrders(actor, resolved)
+      const resolved = await resolveSinglePeriod(services, "ecommerce", actor, parsed)
+      const result = await services.ordersAggregationService.listOrders(actor, resolved)
+      return withQueriedPeriod(resolved, result)
     },
   },
   {

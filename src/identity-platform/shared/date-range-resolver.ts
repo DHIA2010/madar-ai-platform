@@ -18,8 +18,15 @@ export const RELATIVE_PERIODS = [
   "last_year",
   "last_7_days",
   "last_30_days",
+  "last_90_days",
   "month_to_date",
   "year_to_date",
+  // Deliberately NOT resolvable by resolveRelativePeriod below -- "all time" has no fixed
+  // [from, to] computable from "now" alone, it needs the real earliest/latest date actually
+  // present in a domain's own data (ai-chat/tools.ts's resolveAllTimeRange queries each domain's
+  // getDateCoverage before this period ever reaches resolveRelativePeriod). Included here so it's
+  // still one recognized value in the tool schema the model sees and RELATIVE_PERIODS' own type.
+  "all_time",
 ] as const
 
 export type RelativePeriod = (typeof RELATIVE_PERIODS)[number]
@@ -121,6 +128,17 @@ export function resolveRelativePeriod(
       return build(addDays(today.year, today.month, today.day, -6), today)
     case "last_30_days":
       return build(addDays(today.year, today.month, today.day, -29), today)
+    case "last_90_days":
+      return build(addDays(today.year, today.month, today.day, -89), today)
+    case "all_time":
+      // Never reaches here in practice -- ai-chat/tools.ts intercepts "all_time" before calling
+      // resolveRelativePeriod, since the real range requires an async, domain-specific data-
+      // coverage query this synchronous function has no way to perform. Throwing (instead of
+      // silently returning some fixed window) means a caller that forgets to intercept it fails
+      // loudly rather than quietly fabricating a date range.
+      throw new Error(
+        "resolveRelativePeriod cannot resolve 'all_time' -- callers must resolve it via each domain's own getDateCoverage query first."
+      )
   }
 }
 
