@@ -18,6 +18,7 @@ import {
   Send,
   ShoppingBag,
   Sparkles,
+  Square,
   Target,
   TrendingUp,
   type LucideIcon,
@@ -494,7 +495,8 @@ export default function AIAssistantDashboard() {
   const [activeTab, setActiveTab] = useState<"all" | RecommendationCategory>("all")
   const [period, setPeriod] = useState("30")
   const [chatInput, setChatInput] = useState("")
-  const { messages, availableCategories, isSending, sendMessage } = useAiChat()
+  const { messages, availableCategories, isSending, activeSessionId, sendMessage, cancelMessage } =
+    useAiChat()
 
   const [selectedCategory, setSelectedCategory] = useState<ApplicationCategoryId | null>(null)
   const activeCategory = selectedCategory ?? availableCategories[0] ?? null
@@ -519,7 +521,19 @@ export default function AIAssistantDashboard() {
     const content = text.trim()
     if (!content || !activeCategory || isSending) return
     setChatInput("")
-    await sendMessage(content, activeCategory)
+    try {
+      await sendMessage(content, activeCategory)
+    } catch (error) {
+      // sendMessage/sendMessageStream route every expected failure (network error, stream
+      // error, cancellation) through the per-message status machine instead of throwing -- this
+      // only catches a genuinely unexpected bug, so surface it instead of repeating the old
+      // silent `void handleSend(...)` swallow that hid the original timeout bug from the user.
+      console.error("Unexpected error sending AI chat message", error)
+    }
+  }
+
+  function handleCancel() {
+    if (activeSessionId) cancelMessage(activeSessionId)
   }
 
   return (
@@ -643,46 +657,76 @@ export default function AIAssistantDashboard() {
                   </div>
                 ) : (
                   <div className="max-h-[65vh] space-y-3 overflow-y-auto">
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={cn(
-                          "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6",
-                          message.role === "user"
-                            ? "ms-auto bg-primary text-primary-foreground"
-                            : message.role === "system_notice"
-                              ? "mx-auto bg-amber-50 text-amber-700"
-                              : "bg-muted text-foreground"
-                        )}
-                      >
-                        {message.content}
-                        {message.role === "assistant" && message.structured ? (
-                          <>
-                            <ChatKpiRow cards={message.structured.metrics} />
-                            {message.structured.tables.map((table, index) => (
-                              <ReportTableBlock key={index} table={table} />
-                            ))}
-                            {message.structured.charts.map((chart, index) => (
-                              <ChatChartBlock key={index} chart={chart} />
-                            ))}
-                            <ChatFactsInsightsPanel
-                              facts={message.structured.facts}
-                              insights={message.structured.insights}
-                            />
-                            <ChatWarningsPanel warnings={message.structured.warnings} />
-                            <ChatFollowUpChips
-                              questions={message.structured.followUpQuestions}
-                              onSelect={setChatInput}
-                            />
-                          </>
-                        ) : null}
-                      </div>
-                    ))}
-                    {isSending ? (
-                      <div className="w-fit rounded-2xl bg-muted px-4 py-2.5 text-sm text-muted-foreground">
-                        يكتب الرد...
-                      </div>
-                    ) : null}
+                    {messages.map((message) => {
+                      // A message loaded from the DB (listMessages) has no status field at all
+                      // (always implicitly "completed" -- see ChatStreamingMessageDto's own
+                      // comment), so this only ever branches for a message created client-side
+                      // during the current session's active send.
+                      const isWaitingForFirstToken =
+                        message.role === "assistant" &&
+                        (message.status === "pending" || message.status === "streaming") &&
+                        message.content.length === 0
+                      const isFailed = message.status === "failed"
+                      const isCancelled = message.status === "cancelled"
+                      return (
+                        <div
+                          key={message.id}
+                          className={cn(
+                            "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6",
+                            message.role === "user"
+                              ? "ms-auto bg-primary text-primary-foreground"
+                              : message.role === "system_notice"
+                                ? "mx-auto bg-amber-50 text-amber-700"
+                                : isFailed
+                                  ? "bg-rose-50 text-rose-700"
+                                  : "bg-muted text-foreground"
+                          )}
+                        >
+                          {isWaitingForFirstToken ? (
+                            <span className="flex items-center gap-2 text-muted-foreground">
+                              <span className="flex gap-1">
+                                <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+                                <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+                                <span className="size-1.5 animate-bounce rounded-full bg-current" />
+                              </span>
+                              {message.statusLabel ?? "جاري التفكير..."}
+                            </span>
+                          ) : (
+                            <>
+                              {message.content}
+                              {message.status === "streaming" ? (
+                                <span className="ms-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-current align-middle" />
+                              ) : null}
+                              {isCancelled ? (
+                                <span className="mt-1 block text-xs text-muted-foreground">
+                                  تم إيقاف الإجابة.
+                                </span>
+                              ) : null}
+                            </>
+                          )}
+                          {message.role === "assistant" && message.structured ? (
+                            <>
+                              <ChatKpiRow cards={message.structured.metrics} />
+                              {message.structured.tables.map((table, index) => (
+                                <ReportTableBlock key={index} table={table} />
+                              ))}
+                              {message.structured.charts.map((chart, index) => (
+                                <ChatChartBlock key={index} chart={chart} />
+                              ))}
+                              <ChatFactsInsightsPanel
+                                facts={message.structured.facts}
+                                insights={message.structured.insights}
+                              />
+                              <ChatWarningsPanel warnings={message.structured.warnings} />
+                              <ChatFollowUpChips
+                                questions={message.structured.followUpQuestions}
+                                onSelect={setChatInput}
+                              />
+                            </>
+                          ) : null}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -700,18 +744,28 @@ export default function AIAssistantDashboard() {
                       }
                     }}
                     placeholder="اكتب سؤالك هنا..."
-                    disabled={isSending}
                     className="h-8 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                   />
-                  <button
-                    type="button"
-                    aria-label="إرسال"
-                    disabled={isSending || !chatInput.trim()}
-                    onClick={() => void handleSend(chatInput)}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    <Send className="size-4 -scale-x-100" />
-                  </button>
+                  {isSending ? (
+                    <button
+                      type="button"
+                      aria-label="إيقاف الإجابة"
+                      onClick={handleCancel}
+                      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-muted/70"
+                    >
+                      <Square className="size-3.5 fill-current" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="إرسال"
+                      disabled={!chatInput.trim()}
+                      onClick={() => void handleSend(chatInput)}
+                      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      <Send className="size-4 -scale-x-100" />
+                    </button>
+                  )}
                 </div>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Sparkles className="size-3.5 shrink-0" />

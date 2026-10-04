@@ -4,13 +4,25 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import { getOrganizationTimezone } from "../shared/date-range-resolver"
 
-import type { AiChatLlmClientLike } from "./llm-client"
+import type { AiChatLlmClientLike, ChatStreamEvent } from "./llm-client"
 import { isApplicationEnabled, requireApplicationEnabled } from "./guards"
 import { AiChatRepository } from "./repository"
 import { buildStructuredResponse } from "./response-formatter"
 import type { RawToolResult } from "./response-types"
 import { buildToolsForCategory, dispatchToolCall, type AiChatToolServices } from "./tools"
 import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto, ToolCallTrace } from "./types"
+
+// Signals a cancelled turn distinctly from a real failure -- the caller (the SSE route) must
+// emit a "cancelled" status rather than "error", and critically must NOT treat this as "retry
+// with the same request," since the backend has already stopped. No assistant message is ever
+// persisted for a cancelled turn (see sendMessageStream's own comment on why) -- the user's own
+// question, already appended before the model call starts, is the only row that survives.
+export class ChatTurnCancelledError extends Error {
+  constructor() {
+    super("AI chat turn was cancelled before completion.")
+    this.name = "ChatTurnCancelledError"
+  }
+}
 
 const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
   advertising: "الحملات الإعلانية",
@@ -258,6 +270,101 @@ export class AiChatService {
         return JSON.stringify(toolResult ?? {})
       },
     })
+
+    await this.repository.touchSession(sessionId)
+
+    const timezone = await getOrganizationTimezone(this.db, actor.organizationId)
+
+    return this.repository.appendMessage({
+      sessionId,
+      role: "assistant",
+      content: result.text,
+      toolCalls: result.toolCalls.length > 0 ? result.toolCalls : null,
+      structured: buildStructuredResponse(rawToolResults, timezone),
+      model: this.model,
+    })
+  }
+
+  // Streaming counterpart of sendMessage -- same guards, same history-building, same tool
+  // dispatch and same final persistence shape, so a message sent through either path is
+  // indistinguishable once stored. The only real difference is which llmClient method is called
+  // and that onEvent/signal are threaded through for progressive rendering and cancellation (see
+  // interfaces/rest/server.ts's SSE route, the only caller). Kept as a separate method rather
+  // than unifying with sendMessage behind a flag: the two call sites (JSON route, SSE route) are
+  // different enough in how they consume the result that a shared branchy method would be harder
+  // to follow than the small amount of duplication here.
+  async sendMessageStream(
+    actor: AuthenticatedActor,
+    sessionId: string,
+    content: string,
+    options: { onEvent: (event: ChatStreamEvent) => void; signal?: AbortSignal }
+  ): Promise<ChatMessageDto> {
+    assertActorCanUseAiChat(actor)
+    const session = await this.loadOwnedSession(actor, sessionId)
+
+    const stillEnabled = await isApplicationEnabled(
+      this.db,
+      actor.organizationId,
+      session.applicationCategory
+    )
+    if (!stillEnabled) {
+      await this.repository.appendMessage({ sessionId, role: "user", content })
+      return this.repository.appendMessage({
+        sessionId,
+        role: "system_notice",
+        content: `تطبيق "${CATEGORY_LABEL[session.applicationCategory]}" غير مفعّل حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة.`,
+      })
+    }
+
+    await this.repository.appendMessage({ sessionId, role: "user", content })
+
+    if (!session.title) {
+      await this.repository.updateSessionTitle(sessionId, content.slice(0, 80))
+    }
+
+    const history = await this.repository.listMessages(sessionId, 20)
+    const tools = buildToolsForCategory(session.applicationCategory)
+
+    const rawToolResults: RawToolResult[] = []
+
+    const result = await this.llmClient.runChatTurnStreaming({
+      systemPrompt: buildSystemPrompt(session.applicationCategory),
+      tools,
+      model: this.model,
+      messages: history
+        .filter((message) => message.role !== "system_notice")
+        .map((message) => ({
+          role: message.role === "user" ? "user" : "assistant",
+          content:
+            message.role === "assistant" && message.toolCalls && message.toolCalls.length > 0
+              ? message.content + formatToolCallsAnnotation(message.toolCalls)
+              : message.content,
+        })),
+      onEvent: options.onEvent,
+      signal: options.signal,
+      executeTool: async (toolName, toolInput) => {
+        const { result: toolResult, error } = await dispatchToolCall(
+          session.applicationCategory,
+          toolName,
+          toolInput,
+          actor,
+          this.toolServices
+        )
+        if (error) {
+          return `Error: ${error}`
+        }
+        rawToolResults.push({ tool: toolName, output: toolResult ?? {} })
+        return JSON.stringify(toolResult ?? {})
+      },
+    })
+
+    // A cancelled turn never appends an assistant reply -- the user's own question (already
+    // persisted above) stands alone until/unless they ask again. Returning a half-generated
+    // answer here would contradict the cancellation the user explicitly asked for, and could be
+    // mistaken for a complete response on the next page load.
+    if (result.stopReason === "cancelled") {
+      throw new ChatTurnCancelledError()
+    }
 
     await this.repository.touchSession(sessionId)
 

@@ -43,7 +43,7 @@ import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
 import { ReportsService } from "../../reports/service"
 import type { ReportLevelFilter } from "../../reports/types"
-import { AiChatService } from "../../ai-chat/service"
+import { AiChatService, ChatTurnCancelledError } from "../../ai-chat/service"
 import { AiChatLlmClient } from "../../ai-chat/llm-client"
 import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
 import { CampaignAnalyticsEngine } from "../../campaigns/analytics-engine"
@@ -1916,6 +1916,160 @@ export function createIdentityApiServer(
           return send(200, { items: await aiChatService.listSessions(actor) })
         }
 
+        // Cost control (section 25): each message send is a real, billed Anthropic call, up to
+        // AI_CHAT_MAX_TOOL_ROUNDS rounds -- unlike every other route's rate limit (abuse
+        // prevention), this one exists specifically to bound spend. Two windows: a per-user burst
+        // limit (catches a runaway frontend retry loop) and a coarser per-organization daily cap
+        // (catches sustained heavy use before it becomes a surprise bill). Shared by both the
+        // buffered JSON route and the SSE streaming route below -- a client bypassing one must
+        // not bypass the spend guard.
+        const checkAiChatRateLimits = async (): Promise<{
+          status: number
+          body: unknown
+        } | null> => {
+          const userDecision = await container.infrastructure.rateLimiter?.check(
+            `ai_chat_send_user:${actor.userId}`,
+            AI_CHAT_USER_MESSAGES_PER_MINUTE,
+            60_000
+          )
+          if (userDecision && !userDecision.allowed) {
+            return {
+              status: 429,
+              body: {
+                code: "AI_CHAT_RATE_LIMITED",
+                message: "لقد أرسلت عدة رسائل خلال وقت قصير. حاول مرة أخرى بعد قليل.",
+              },
+            }
+          }
+          const orgDecision = await container.infrastructure.rateLimiter?.check(
+            `ai_chat_send_org:${actor.organizationId}`,
+            AI_CHAT_ORG_MESSAGES_PER_DAY,
+            24 * 60 * 60 * 1000
+          )
+          if (orgDecision && !orgDecision.allowed) {
+            return {
+              status: 429,
+              body: {
+                code: "AI_CHAT_DAILY_LIMIT_REACHED",
+                message: "تم الوصول إلى الحد اليومي لعدد رسائل المساعد الذكي لمؤسستك.",
+              },
+            }
+          }
+          return null
+        }
+
+        // SSE streaming route -- matched before the plain /messages route below since its path
+        // is a strict suffix of it. See ai-chat/service.ts's sendMessageStream and
+        // ai-chat/llm-client.ts's runChatTurnStreaming for the actual streaming mechanics; this
+        // route is purely transport: open an event stream, forward each backend event as an SSE
+        // frame, and tear the model call down if the client disconnects.
+        const aiSessionStreamMatch = url.pathname.match(
+          /^\/v1\/ai\/sessions\/([^/]+)\/messages\/stream$/
+        )
+        if (method === "POST" && aiSessionStreamMatch) {
+          if (!actor.modulePermissions.includes("ai:view")) throw ERRORS.forbidden()
+          const sessionId = decodeURIComponent(aiSessionStreamMatch[1])
+
+          const limited = await checkAiChatRateLimits()
+          if (limited) {
+            return send(limited.status, limited.body)
+          }
+
+          const payload = sendChatMessageSchema.parse(await readJsonBody(request))
+
+          response.writeHead(200, {
+            ...corsHeaders,
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-cache, no-transform",
+            connection: "keep-alive",
+            // Disables buffering on nginx-style reverse proxies -- otherwise chunks sit in a
+            // proxy buffer and the "progressive" rendering this whole route exists for never
+            // reaches the browser until the connection closes.
+            "x-accel-buffering": "no",
+          })
+          const emit = (event: string, data: unknown) => {
+            response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          }
+
+          // The client disconnecting (navigated away, cancelled) is the ONLY way this backend
+          // learns a stream is no longer wanted -- raw node:http gives no other signal. Aborting
+          // this controller tears down the in-flight Anthropic request (runChatTurnStreaming
+          // passes it straight through as the SDK call's own `signal`) rather than letting a
+          // model generation nobody is listening to run to completion and get billed anyway.
+          const abortController = new AbortController()
+          request.on("close", () => abortController.abort())
+
+          // Part 11/12 diagnostics: enough to reconstruct what happened and how long each phase
+          // took without a dedicated APM pipeline (none exists in this codebase yet) -- never
+          // sent to the client, console only, same JSON-line shape logAuthFailure already uses
+          // elsewhere in this file.
+          const streamStartedAt = Date.now()
+          let firstTokenAt: number | null = null
+          let toolCallCount = 0
+          const logStreamOutcome = (
+            outcome: "completed" | "cancelled" | "error",
+            error?: unknown
+          ) => {
+            console.log(
+              JSON.stringify({
+                level: outcome === "error" ? "error" : "info",
+                service: "identity-platform",
+                timestamp: new Date().toISOString(),
+                event: "ai_chat.stream",
+                requestId: context.requestId,
+                correlationId: context.correlationId,
+                sessionId,
+                userId: actor.userId,
+                organizationId: actor.organizationId,
+                outcome,
+                totalLatencyMs: Date.now() - streamStartedAt,
+                timeToFirstTokenMs: firstTokenAt ? firstTokenAt - streamStartedAt : null,
+                toolCallCount,
+                llmProvider: "anthropic",
+                errorMessage: error instanceof Error ? error.message : undefined,
+              })
+            )
+          }
+
+          try {
+            const message = await aiChatService.sendMessageStream(
+              actor,
+              sessionId,
+              payload.content,
+              {
+                signal: abortController.signal,
+                onEvent: (event) => {
+                  if (event.type === "text_delta") {
+                    if (firstTokenAt === null) firstTokenAt = Date.now()
+                    emit("text_delta", { delta: event.delta })
+                  } else if (event.type === "status") {
+                    toolCallCount += 1
+                    emit("status", { stage: event.stage, tool: event.tool })
+                  }
+                },
+              }
+            )
+            emit("message_complete", message)
+            logStreamOutcome("completed")
+          } catch (error) {
+            if (error instanceof ChatTurnCancelledError || abortController.signal.aborted) {
+              emit("cancelled", {})
+              logStreamOutcome("cancelled")
+            } else {
+              emit("error", {
+                message:
+                  error instanceof IdentityError
+                    ? error.message
+                    : "تعذر إكمال الإجابة. حاول مرة أخرى.",
+              })
+              logStreamOutcome("error", error)
+            }
+          } finally {
+            response.end()
+          }
+          return
+        }
+
         const aiSessionMessagesMatch = url.pathname.match(/^\/v1\/ai\/sessions\/([^/]+)\/messages$/)
         if (aiSessionMessagesMatch) {
           if (!actor.modulePermissions.includes("ai:view")) throw ERRORS.forbidden()
@@ -1924,34 +2078,9 @@ export function createIdentityApiServer(
             return send(200, { items: await aiChatService.listMessages(actor, sessionId) })
           }
           if (method === "POST") {
-            // Cost control (section 25): each message send is a real, billed Anthropic call, up
-            // to AI_CHAT_MAX_TOOL_ROUNDS rounds -- unlike every other route's rate limit (abuse
-            // prevention), this one exists specifically to bound spend. Two windows: a per-user
-            // burst limit (catches a runaway frontend retry loop) and a coarser per-organization
-            // daily cap (catches sustained heavy use before it becomes a surprise bill). Both
-            // reuse the same rateLimiter every other rate-limited route already uses -- no new
-            // infrastructure.
-            const userDecision = await container.infrastructure.rateLimiter?.check(
-              `ai_chat_send_user:${actor.userId}`,
-              AI_CHAT_USER_MESSAGES_PER_MINUTE,
-              60_000
-            )
-            if (userDecision && !userDecision.allowed) {
-              return send(429, {
-                code: "AI_CHAT_RATE_LIMITED",
-                message: "لقد أرسلت عدة رسائل خلال وقت قصير. حاول مرة أخرى بعد قليل.",
-              })
-            }
-            const orgDecision = await container.infrastructure.rateLimiter?.check(
-              `ai_chat_send_org:${actor.organizationId}`,
-              AI_CHAT_ORG_MESSAGES_PER_DAY,
-              24 * 60 * 60 * 1000
-            )
-            if (orgDecision && !orgDecision.allowed) {
-              return send(429, {
-                code: "AI_CHAT_DAILY_LIMIT_REACHED",
-                message: "تم الوصول إلى الحد اليومي لعدد رسائل المساعد الذكي لمؤسستك.",
-              })
+            const limited = await checkAiChatRateLimits()
+            if (limited) {
+              return send(limited.status, limited.body)
             }
 
             const payload = sendChatMessageSchema.parse(await readJsonBody(request))

@@ -109,6 +109,7 @@ function buildFakeAdvertisingEngine(
 let database: PostgresDatabase
 let service: AiChatService
 let mockRunChatTurn: ReturnType<typeof vi.fn<AiChatLlmClientLike["runChatTurn"]>>
+let mockRunChatTurnStreaming: ReturnType<typeof vi.fn<AiChatLlmClientLike["runChatTurnStreaming"]>>
 
 const ORG_A = randomUUID()
 const USER_A = randomUUID()
@@ -187,7 +188,18 @@ function buildService(
   posInvoicesService: PosInvoicesService
 ) {
   mockRunChatTurn = vi.fn<AiChatLlmClientLike["runChatTurn"]>()
-  const mockLlmClient: AiChatLlmClientLike = { runChatTurn: mockRunChatTurn }
+  // See ai-chat.test.ts's identical comment -- delegates to mockRunChatTurn so every existing
+  // scriptSingleTool/scriptMultipleTools-configured test gets equivalent sendMessageStream
+  // behavior for free.
+  mockRunChatTurnStreaming = vi.fn<AiChatLlmClientLike["runChatTurnStreaming"]>(async (input) => {
+    const result = await mockRunChatTurn(input)
+    if (result.text) input.onEvent({ type: "text_delta", delta: result.text })
+    return result
+  })
+  const mockLlmClient: AiChatLlmClientLike = {
+    runChatTurn: mockRunChatTurn,
+    runChatTurnStreaming: mockRunChatTurnStreaming,
+  }
   const posPaymentMethodsService = new PosPaymentMethodsService(database)
   const posShiftsService = new PosShiftsService(
     database,

@@ -124,3 +124,17 @@ export interface ChatMessageDto {
   model: string | null
   createdAt: string
 }
+
+// Per-message lifecycle, not a single conversation-wide boolean -- each message (the request
+// that produced it) owns its own state so one slow/failed/cancelled turn never freezes or
+// misrepresents any other message's status. A message loaded from the backend (listMessages) is
+// always implicitly "completed": the DB only ever stores a message once a turn finished, so this
+// field is optional and only ever set for a message created client-side during an active send.
+export type ChatMessageStatus = "pending" | "streaming" | "completed" | "failed" | "cancelled"
+
+export interface ChatStreamingMessageDto extends ChatMessageDto {
+  status: ChatMessageStatus
+  // A transient, user-facing stage label ("جاري تحليل البيانات...") shown only while status is
+  // "pending"/"streaming" and no text has arrived yet -- cleared once the first text_delta lands.
+  statusLabel?: string
+}

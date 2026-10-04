@@ -20,13 +20,14 @@ import { PosShiftsService } from "../pos/shifts-service"
 import { PosPaymentMethodsService } from "../pos/payment-methods-service"
 import { TaxRatesService } from "../tax/tax-rates-service"
 import { ReportsService } from "../reports/service"
-import { AiChatService } from "../ai-chat/service"
+import { AiChatService, ChatTurnCancelledError } from "../ai-chat/service"
 import { buildToolsForCategory } from "../ai-chat/tools"
 import type { AiChatLlmClientLike } from "../ai-chat/llm-client"
 
 let database: PostgresDatabase
 let service: AiChatService
 let mockRunChatTurn: ReturnType<typeof vi.fn<AiChatLlmClientLike["runChatTurn"]>>
+let mockRunChatTurnStreaming: ReturnType<typeof vi.fn<AiChatLlmClientLike["runChatTurnStreaming"]>>
 
 const ORG_A = randomUUID()
 const ORG_B = randomUUID()
@@ -220,7 +221,19 @@ beforeEach(async () => {
     toolCalls: [],
     stopReason: "end_turn",
   })
-  const mockLlmClient: AiChatLlmClientLike = { runChatTurn: mockRunChatTurn }
+  // Default streaming mock delegates to the exact same scripted mockRunChatTurn, emitting its
+  // whole text as one delta -- existing tests that only configure mockRunChatTurn (via
+  // scriptSingleTool/mockImplementation) get equivalent behavior through sendMessageStream too,
+  // with zero changes needed. Tests that care about streaming specifically override this mock.
+  mockRunChatTurnStreaming = vi.fn<AiChatLlmClientLike["runChatTurnStreaming"]>(async (input) => {
+    const result = await mockRunChatTurn(input)
+    if (result.text) input.onEvent({ type: "text_delta", delta: result.text })
+    return result
+  })
+  const mockLlmClient: AiChatLlmClientLike = {
+    runChatTurn: mockRunChatTurn,
+    runChatTurnStreaming: mockRunChatTurnStreaming,
+  }
 
   const campaignPerformanceService = new CampaignsPerformanceAggregationService(database)
   const channelsService = new ChannelsAggregationService(database)
@@ -661,5 +674,187 @@ describe("ai-chat: per-application scoping", () => {
     // read 100, not 400.
     expect(totalCard.value).toBe(400)
     expect(reply.structured!.dataPeriod?.from).toBe("2025-02-10")
+  })
+})
+
+// Fixes a real production bug: the chat send route's client-side timeout (15s) is shorter than
+// realistic multi-round tool-calling LLM latency, so a slow turn got silently aborted on the
+// frontend while the backend kept running and persisted its reply anyway -- orphaned until the
+// user's NEXT message's full-history refetch surfaced it, producing "nothing, then two answers
+// appear together." sendMessageStream (and the SSE transport wrapping it in server.ts) is the
+// fix: progressive rendering means the user sees the answer arriving long before any timeout
+// could fire, and real request isolation means one turn's state can never bleed into another's.
+describe("ai-chat: streaming (sendMessageStream)", () => {
+  beforeEach(async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+  })
+
+  it("forwards text deltas to onEvent progressively, then persists the full accumulated text", async () => {
+    const session = await service.createSession(actor(), "pos")
+    const received: string[] = []
+    mockRunChatTurnStreaming.mockImplementation(async (input) => {
+      for (const delta of ["المبيعات ", "انخفضت ", "بنسبة 12%."]) {
+        input.onEvent({ type: "text_delta", delta })
+      }
+      return { text: "المبيعات انخفضت بنسبة 12%.", toolCalls: [], stopReason: "end_turn" }
+    })
+
+    const message = await service.sendMessageStream(actor(), session.id, "لماذا انخفضت المبيعات؟", {
+      onEvent: (event) => {
+        if (event.type === "text_delta") received.push(event.delta)
+      },
+    })
+
+    expect(received).toEqual(["المبيعات ", "انخفضت ", "بنسبة 12%."])
+    expect(message.content).toBe("المبيعات انخفضت بنسبة 12%.")
+    expect(message.role).toBe("assistant")
+  })
+
+  it("two sequential streamed sends in the same session never mix content", async () => {
+    const session = await service.createSession(actor(), "pos")
+
+    mockRunChatTurnStreaming.mockImplementationOnce(async (input) => {
+      input.onEvent({ type: "text_delta", delta: "answer A" })
+      return { text: "answer A", toolCalls: [], stopReason: "end_turn" }
+    })
+    const replyA = await service.sendMessageStream(actor(), session.id, "question A", {
+      onEvent: () => {},
+    })
+
+    mockRunChatTurnStreaming.mockImplementationOnce(async (input) => {
+      input.onEvent({ type: "text_delta", delta: "answer B" })
+      return { text: "answer B", toolCalls: [], stopReason: "end_turn" }
+    })
+    const replyB = await service.sendMessageStream(actor(), session.id, "question B", {
+      onEvent: () => {},
+    })
+
+    expect(replyA.content).toBe("answer A")
+    expect(replyB.content).toBe("answer B")
+
+    const history = await service.listMessages(actor(), session.id)
+    expect(history.map((m) => m.content)).toEqual([
+      "question A",
+      "answer A",
+      "question B",
+      "answer B",
+    ])
+  })
+
+  // Part 2 of the task spec: request isolation. Two concurrent sendMessageStream calls (different
+  // sessions) must never let one's events reach the other's onEvent callback, even though both
+  // run through the exact same shared mocked LLM client at the same time.
+  it("two concurrent streamed sends for different sessions remain fully isolated", async () => {
+    const sessionA = await service.createSession(actor(), "pos")
+    const sessionB = await service.createSession(actor(), "pos")
+
+    mockRunChatTurnStreaming.mockImplementation(async (input) => {
+      const lastUserMessage = input.messages[input.messages.length - 1]?.content ?? ""
+      const isA = lastUserMessage.includes("A")
+      // Interleave the two calls' async work on purpose (A yields before emitting) to actually
+      // exercise concurrent execution rather than two calls that happen to run sequentially.
+      if (isA) await new Promise((resolve) => setTimeout(resolve, 5))
+      const delta = isA ? "stream A content" : "stream B content"
+      input.onEvent({ type: "text_delta", delta })
+      return { text: delta, toolCalls: [], stopReason: "end_turn" }
+    })
+
+    const receivedA: string[] = []
+    const receivedB: string[] = []
+    const [replyA, replyB] = await Promise.all([
+      service.sendMessageStream(actor(), sessionA.id, "question A", {
+        onEvent: (event) => {
+          if (event.type === "text_delta") receivedA.push(event.delta)
+        },
+      }),
+      service.sendMessageStream(actor(), sessionB.id, "question B", {
+        onEvent: (event) => {
+          if (event.type === "text_delta") receivedB.push(event.delta)
+        },
+      }),
+    ])
+
+    expect(receivedA).toEqual(["stream A content"])
+    expect(receivedB).toEqual(["stream B content"])
+    expect(replyA.content).toBe("stream A content")
+    expect(replyB.content).toBe("stream B content")
+    expect(replyA.sessionId).toBe(sessionA.id)
+    expect(replyB.sessionId).toBe(sessionB.id)
+  })
+
+  // Part 7: cancellation must not leave a half-generated answer in the conversation -- only the
+  // user's own question (already persisted before the model call even starts) survives.
+  it("a cancelled turn persists the user's question but never an assistant reply", async () => {
+    const session = await service.createSession(actor(), "pos")
+    mockRunChatTurnStreaming.mockImplementation(async () => ({
+      text: "",
+      toolCalls: [],
+      stopReason: "cancelled",
+    }))
+
+    await expect(
+      service.sendMessageStream(actor(), session.id, "سؤال سيتم إلغاؤه", { onEvent: () => {} })
+    ).rejects.toThrow(ChatTurnCancelledError)
+
+    const history = await service.listMessages(actor(), session.id)
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe("user")
+    expect(history[0].content).toBe("سؤال سيتم إلغاؤه")
+  })
+
+  // Part 11: a stream failure must still resolve to a real, final message (never leave the turn
+  // stuck) -- exactly how the existing non-streaming sendMessage already handles an LLM error.
+  it("an LLM error during streaming still resolves to a persisted apology message, not a thrown error", async () => {
+    const session = await service.createSession(actor(), "pos")
+    mockRunChatTurnStreaming.mockImplementation(async () => ({
+      text: "حدث خطأ أثناء الاتصال بالمساعد الذكي: network down",
+      toolCalls: [],
+      stopReason: "error",
+    }))
+
+    const message = await service.sendMessageStream(actor(), session.id, "سؤال", {
+      onEvent: () => {},
+    })
+
+    expect(message.content).toContain("حدث خطأ")
+    const history = await service.listMessages(actor(), session.id)
+    expect(history).toHaveLength(2)
+  })
+
+  // Part 9: tool execution must complete (and be visible as a status event) BEFORE any text is
+  // streamed -- never a conclusion presented before the data backing it has been retrieved.
+  it("emits the tool-call status event before any text_delta, never after", async () => {
+    const session = await service.createSession(actor(), "pos")
+    const order: string[] = []
+    mockRunChatTurnStreaming.mockImplementation(async (input) => {
+      input.onEvent({ type: "status", stage: "tool_call", tool: "get_pos_invoices_summary" })
+      input.onEvent({ type: "text_delta", delta: "النتيجة جاهزة." })
+      return { text: "النتيجة جاهزة.", toolCalls: [], stopReason: "end_turn" }
+    })
+
+    await service.sendMessageStream(actor(), session.id, "كم مبيعاتي؟", {
+      onEvent: (event) => order.push(event.type),
+    })
+
+    expect(order).toEqual(["status", "text_delta"])
+  })
+
+  it("a long response's text_delta chunks accumulate exactly into the final persisted content", async () => {
+    const session = await service.createSession(actor(), "pos")
+    const chunks = Array.from({ length: 20 }, (_, i) => `جزء ${i} `)
+    mockRunChatTurnStreaming.mockImplementation(async (input) => {
+      for (const chunk of chunks) input.onEvent({ type: "text_delta", delta: chunk })
+      return { text: chunks.join(""), toolCalls: [], stopReason: "end_turn" }
+    })
+
+    const received: string[] = []
+    const message = await service.sendMessageStream(actor(), session.id, "سؤال طويل", {
+      onEvent: (event) => {
+        if (event.type === "text_delta") received.push(event.delta)
+      },
+    })
+
+    expect(received).toHaveLength(20)
+    expect(received.join("")).toBe(message.content)
   })
 })
