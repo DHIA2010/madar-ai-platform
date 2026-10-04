@@ -42,10 +42,13 @@ import type { ApplicationCategoryId } from "@/features/applications"
 import { useAiChat } from "@/features/ai"
 import type {
   ChatChartSpec,
+  ChatContributionFinding,
   ChatDataQualityWarning,
+  ChatDriverFinding,
   ChatFact,
   ChatInsight,
   ChatKpiCard,
+  ChatRecommendation,
   ChatReportTable,
   ChatReportTableColumn,
 } from "@/features/ai/types/ai-chat.types"
@@ -285,6 +288,117 @@ function ChatFactsInsightsPanel({
           ))}
         </ul>
       ) : null}
+    </div>
+  )
+}
+
+const DRIVER_METRIC_LABEL: Record<string, string> = {
+  orders: "عدد الطلبات",
+  aov: "متوسط قيمة الطلب",
+  revenue: "الإيرادات",
+  spend: "الإنفاق",
+  roas: "ROAS",
+  cpa: "تكلفة الاكتساب",
+  ctr: "معدل النقر",
+  cpc: "تكلفة النقرة",
+  conversions: "التحويلات",
+}
+
+// Analysis Orchestration audit (Genie-upgrade, round 2) section 11/12: a dedicated callout for
+// StructuredAnalyticsResponse.drivers, distinct from the general facts/insights panel -- the
+// "primary driver" framing (section 4's "Revenue ↓ 79% / Orders ↓ 65% ... Primary driver:
+// Orders") needs its own visual weight, not to be buried as one bullet among many.
+function ChatDriversPanel({ drivers }: { drivers: ChatDriverFinding[] }) {
+  if (drivers.length === 0) return null
+  return (
+    <div className="mt-2 space-y-1.5 rounded-xl border border-border/60 bg-background/40 p-3">
+      <p className="text-[11px] font-semibold text-foreground">العوامل الرئيسية</p>
+      {drivers.map((driver, index) => {
+        const TrendIcon = driver.direction === "up" ? ArrowUpRight : ArrowDownRight
+        return (
+          <div key={index} className="flex items-start gap-1.5 text-[11px]">
+            <TrendIcon
+              className={cn(
+                "mt-0.5 size-3 shrink-0",
+                driver.direction === "up" ? "text-emerald-600" : "text-rose-600"
+              )}
+            />
+            <span className="text-foreground">
+              <span className="font-medium">
+                {driver.role === "primary" ? "العامل الأساسي" : "عامل إضافي"} —{" "}
+                {DRIVER_METRIC_LABEL[driver.metric] ?? driver.metric}:
+              </span>{" "}
+              <span className="text-muted-foreground">{driver.statement}</span>
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Same idea for StructuredAnalyticsResponse.contributions (section 5: "Campaign A contributed
+// approximately 42% of the total decline") -- a ranked breakdown with each contributor's share
+// of the total change, distinct from a plain ReportTable since it carries that share explicitly.
+function ChatContributionsPanel({ contributions }: { contributions: ChatContributionFinding[] }) {
+  if (contributions.length === 0) return null
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border/60">
+      <p className="border-b border-border/60 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-foreground">
+        أكبر المساهمين في التغيّر
+      </p>
+      <div className="divide-y divide-border/40">
+        {contributions.slice(0, 5).map((contribution, index) => (
+          <div
+            key={index}
+            className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px]"
+          >
+            <span className="truncate text-foreground">{contribution.label}</span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className={contribution.delta >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                {contribution.delta >= 0 ? "+" : ""}
+                {contribution.delta.toLocaleString("ar")}
+              </span>
+              {contribution.contributionSharePercent !== null ? (
+                <span className="text-muted-foreground">
+                  ({contribution.contributionSharePercent}%)
+                </span>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const RECOMMENDATION_PRIORITY_LABEL: Record<ChatRecommendation["priority"], string> = {
+  high: "أولوية عالية",
+  medium: "أولوية متوسطة",
+  low: "أولوية منخفضة",
+}
+
+// Section 10: evidence-gated recommendations (generate_campaign_recommendations) were already
+// computed and transmitted by the backend but had no rendering at all on this dashboard -- the
+// type itself didn't declare the field (see ai-chat.types.ts's own comment). This closes that.
+function ChatRecommendationsPanel({ recommendations }: { recommendations: ChatRecommendation[] }) {
+  if (recommendations.length === 0) return null
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+      {recommendations.map((recommendation, index) => (
+        <div key={index} className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold text-foreground">
+              💡 {recommendation.entityName}
+            </p>
+            <span className="shrink-0 rounded-full bg-background/60 px-2 py-0.5 text-[10px] text-muted-foreground">
+              {RECOMMENDATION_PRIORITY_LABEL[recommendation.priority]}
+            </span>
+          </div>
+          <p className="text-[11px] text-foreground">{recommendation.recommendedAction}</p>
+          <p className="text-[11px] text-muted-foreground">{recommendation.reason}</p>
+        </div>
+      ))}
     </div>
   )
 }
@@ -713,9 +827,16 @@ export default function AIAssistantDashboard() {
                               {message.structured.charts.map((chart, index) => (
                                 <ChatChartBlock key={index} chart={chart} />
                               ))}
+                              <ChatDriversPanel drivers={message.structured.drivers} />
+                              <ChatContributionsPanel
+                                contributions={message.structured.contributions}
+                              />
                               <ChatFactsInsightsPanel
                                 facts={message.structured.facts}
                                 insights={message.structured.insights}
+                              />
+                              <ChatRecommendationsPanel
+                                recommendations={message.structured.recommendations}
                               />
                               <ChatWarningsPanel warnings={message.structured.warnings} />
                               <ChatFollowUpChips

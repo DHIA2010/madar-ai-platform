@@ -20,6 +20,48 @@ export interface Insight {
   confidence: ConfidenceLevel
 }
 
+// Analysis Orchestration audit (Genie-upgrade, round 2) section 7/11/12: the driver/contribution
+// analysis behind a hedged Insight.statement was already being computed deterministically
+// (decomposeRevenueChange, PosSalesAnalyticsEngine's product ranking, identifyPerformanceDrivers,
+// run_kpi_preview's groupByDimension+compareEnabled mode) -- it just had nowhere structured to
+// go, so response-formatter.ts flattened it into prose before the frontend ever saw it. These two
+// types give that same already-computed data a typed home so a frontend can render a dedicated
+// driver callout or contribution table instead of re-parsing a sentence. Purely additive: Insight/
+// Fact/ReportTable keep carrying the same information for whatever already consumes them.
+export interface DriverEvidence {
+  metric: string
+  current: number
+  previous: number
+  changePercent: number | null
+}
+
+export interface DriverFinding {
+  // Which factor this is ("orders", "aov", "roas", ...) -- the catalog/metric key, not a
+  // display label, so a frontend can map it to its own formatting/icon if it wants to.
+  metric: string
+  role: "primary" | "secondary"
+  direction: "up" | "down"
+  changePercent: number | null
+  // Always hedged, non-causal phrasing -- same convention as Insight.statement.
+  statement: string
+  evidence: DriverEvidence[]
+  confidence: ConfidenceLevel
+}
+
+export interface ContributionFinding {
+  label: string
+  // The dimension this label came from ("product", "campaign", "platform", "payment_method",
+  // ...) -- lets a frontend group/label a contribution table by what it's actually breaking
+  // down, since one answer can only ever carry contributions from a single dimension today.
+  dimension: string
+  currentValue: number
+  previousValue: number
+  delta: number
+  // Share of the TOTAL absolute change across every contributor in this breakdown (0-100) --
+  // null when there's no change to attribute a share of.
+  contributionSharePercent: number | null
+}
+
 export interface KpiCard {
   type: "kpi"
   title: string
@@ -93,6 +135,10 @@ export interface StructuredAnalyticsResponse {
   type: "analytics_response"
   facts: Fact[]
   insights: Insight[]
+  // Additive, both default to [] when a tool's result carries no driver/contribution analysis
+  // (most non-"why" questions). See DriverFinding/ContributionFinding's own comments.
+  drivers: DriverFinding[]
+  contributions: ContributionFinding[]
   recommendations: CampaignRecommendation[]
   metrics: KpiCard[]
   charts: ChartSpec[]

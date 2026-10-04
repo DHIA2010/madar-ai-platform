@@ -777,7 +777,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     tool: {
       name: "list_orders",
       description:
-        "Real e-commerce orders (Salla/Shopify/Zid) and their summary stats (total orders, sales, average order value) for an optional date range.",
+        "Real e-commerce orders (Salla/Shopify/Zid) and their summary stats (total orders, sales, average order value, and -- for 'why did sales change' questions -- a deterministic decomposition of the revenue change into order-volume effect vs. average-order-value effect, same methodology as POS's analyze_sales_performance) for an optional date range. The comparison period is always the equal-length span immediately before, so a partial current period is compared fairly. For contribution analysis ('which platform/customer drove the change'), follow up with run_kpi_preview on dataSource='orders' using groupByDimension + compareEnabled=true.",
       input_schema: {
         type: "object",
         properties: { ...dateRangeProperties, period: relativePeriodProperty },
@@ -788,7 +788,16 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       const parsed = input as { startDate?: string; endDate?: string; period?: RelativePeriod }
       const resolved = await resolveSinglePeriod(services, "ecommerce", actor, parsed)
       const result = await services.ordersAggregationService.listOrders(actor, resolved)
-      return withQueriedPeriod(resolved, result)
+      const withPeriod = withQueriedPeriod(resolved, result)
+      if (!resolved.startDate || !resolved.endDate) return withPeriod
+      const timezone = await getOrganizationTimezone(services.db, actor.organizationId)
+      return {
+        ...withPeriod,
+        periodFairness: describePeriodFairness(
+          { from: resolved.startDate, to: resolved.endDate },
+          timezone
+        ),
+      }
     },
   },
   {

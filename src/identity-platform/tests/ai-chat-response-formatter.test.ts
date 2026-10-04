@@ -399,7 +399,28 @@ describe("buildStructuredResponse", () => {
                 createdAt: "2026-09-20T10:00:00.000Z",
               },
             ],
-            summary: {},
+            // listOrders() always returns a populated summary alongside items (never just
+            // items alone) -- this mirrors its real OrdersSummaryStats shape, including the
+            // revenue decomposition added alongside the ecommerce driver-analysis work.
+            summary: {
+              totalOrders: 1,
+              totalOrdersChangePct: null,
+              previousTotalOrders: 0,
+              totalSales: 250,
+              totalSalesChangePct: null,
+              previousTotalSales: 0,
+              averageOrderValue: 250,
+              averageOrderValueChangePct: null,
+              previousAverageOrderValue: 0,
+              decomposition: {
+                revenueChange: 250,
+                orderEffect: 0,
+                aovEffect: 250,
+                orderEffectPercent: 0,
+                aovEffectPercent: 100,
+                dominantDriver: "aov",
+              },
+            },
           },
         },
       ],
@@ -411,6 +432,50 @@ describe("buildStructuredResponse", () => {
     expect(result!.tables).toHaveLength(1)
     expect(result!.tables[0].rows[0].orderStatus).toBe("مكتمل")
     expect(result!.tables[0].rows[0].amount).toBe(250)
+
+    // Analysis Orchestration audit (Genie-upgrade, round 2) section 4: list_orders' summary now
+    // carries KPI cards and a typed driver finding from the same decomposeRevenueChange
+    // methodology POS already used -- e-commerce reaches parity here for the first time.
+    expect(result!.metrics).toHaveLength(3)
+    expect(result!.metrics.find((m) => m.title === "إجمالي المبيعات")!.value).toBe(250)
+    expect(result!.drivers).toHaveLength(2)
+    expect(result!.drivers.find((d) => d.metric === "aov")!.role).toBe("primary")
+  })
+
+  it("warns when list_orders' current period hasn't fully elapsed yet", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "list_orders",
+          output: {
+            items: [],
+            summary: {
+              totalOrders: 1,
+              totalOrdersChangePct: null,
+              previousTotalOrders: 1,
+              totalSales: 100,
+              totalSalesChangePct: 0,
+              previousTotalSales: 100,
+              averageOrderValue: 100,
+              averageOrderValueChangePct: 0,
+              previousAverageOrderValue: 100,
+              decomposition: {
+                revenueChange: 0,
+                orderEffect: 0,
+                aovEffect: 0,
+                orderEffectPercent: null,
+                aovEffectPercent: null,
+                dominantDriver: "none",
+              },
+            },
+            periodFairness: { isCurrentPeriodIncomplete: true, elapsedDays: 3 },
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result!.warnings.some((w) => w.type === "incomplete_period")).toBe(true)
   })
 
   it("builds an ecommerce ReportTable from list_stores with a formatted last-sync time", () => {
@@ -455,6 +520,61 @@ describe("buildStructuredResponse", () => {
     expect(result!.metrics).toHaveLength(1)
     expect(result!.metrics[0].value).toBe(5000)
     expect(result!.metrics[0].trend).toBe("up")
+  })
+
+  it("builds typed contribution findings from run_kpi_preview's groupByDimension+compareEnabled mode", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "run_kpi_preview",
+          output: {
+            points: [
+              {
+                label: "card",
+                value: 50,
+                extraValues: { previousValue: 200, delta: -150, deltaPercent: -75 },
+              },
+              {
+                label: "cash",
+                value: 100,
+                extraValues: { previousValue: 20, delta: 80, deltaPercent: 400 },
+              },
+            ],
+            currentValue: 150,
+            previousValue: 220,
+            changePercent: -31.8,
+            sampleSize: 10,
+            meta: {
+              dataSourceLabel: "المبيعات",
+              fieldLabel: "إجمالي المبيعات",
+              groupByDimensionLabel: "payment_method",
+              application: "pos",
+              queriedPeriod: { from: "2026-06-01", to: "2026-06-08" },
+            },
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result!.contributions).toEqual([
+      {
+        label: "card",
+        dimension: "payment_method",
+        currentValue: 50,
+        previousValue: 200,
+        delta: -150,
+        contributionSharePercent: 65.2,
+      },
+      {
+        label: "cash",
+        dimension: "payment_method",
+        currentValue: 100,
+        previousValue: 20,
+        delta: 80,
+        contributionSharePercent: 34.8,
+      },
+    ])
   })
 
   it("returns an empty chart list for top-selling products when there are none, but still a non-null envelope", () => {
@@ -673,6 +793,67 @@ describe("buildStructuredResponse", () => {
     })
   })
 
+  describe("identify_performance_drivers", () => {
+    it("ranks drivers by magnitude into primary/secondary typed findings with real evidence", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "identify_performance_drivers",
+            output: {
+              comparison: {
+                period: {
+                  current: { from: "2026-09-01", to: "2026-09-30" },
+                  previous: { from: "2026-08-01", to: "2026-08-31" },
+                },
+                confidence: "high",
+              },
+              drivers: [
+                {
+                  metric: "cpc",
+                  current: 6.5,
+                  previous: 5,
+                  changePercent: 30,
+                  changeAbsolute: 1.5,
+                  direction: "up",
+                  magnitudeRank: 1,
+                  narrative: "أكبر تغيّر ملحوظ هو ارتفاع cpc بنسبة 30%.",
+                  funnelStage: null,
+                },
+                {
+                  metric: "ctr",
+                  current: 1.5,
+                  previous: 2,
+                  changePercent: -25,
+                  changeAbsolute: -0.5,
+                  direction: "down",
+                  magnitudeRank: 2,
+                  narrative: "انخفض ctr أيضًا بنسبة 25%.",
+                  funnelStage: "engagement",
+                },
+              ],
+            },
+          },
+        ],
+        "Asia/Riyadh"
+      )
+
+      expect(result!.drivers).toHaveLength(2)
+      expect(result!.drivers[0]).toEqual({
+        metric: "cpc",
+        role: "primary",
+        direction: "up",
+        changePercent: 30,
+        statement: "أكبر تغيّر ملحوظ هو ارتفاع cpc بنسبة 30%.",
+        evidence: [{ metric: "cpc", current: 6.5, previous: 5, changePercent: 30 }],
+        confidence: "medium",
+      })
+      expect(result!.drivers[1].role).toBe("secondary")
+      expect(result!.drivers[1].evidence).toEqual([
+        { metric: "ctr", current: 1.5, previous: 2, changePercent: -25 },
+      ])
+    })
+  })
+
   describe("analyze_sales_performance (POS)", () => {
     function posAnalysis(overrides: Record<string, unknown> = {}) {
       return {
@@ -729,6 +910,30 @@ describe("buildStructuredResponse", () => {
 
       expect(result!.tables).toHaveLength(1)
       expect(result!.tables[0].rows[0].productName).toBe("Product A")
+
+      // Analysis Orchestration audit (Genie-upgrade, round 2) section 7/11/12: the same
+      // decomposition/contribution data, now ALSO available as typed drivers/contributions --
+      // additive, the existing insights/tables assertions above still hold unchanged.
+      expect(result!.drivers).toHaveLength(2)
+      const ordersDriver = result!.drivers.find((d) => d.metric === "orders")!
+      expect(ordersDriver.role).toBe("primary")
+      expect(ordersDriver.direction).toBe("down")
+      expect(ordersDriver.evidence).toEqual([
+        { metric: "orders", current: 1, previous: 4, changePercent: -75 },
+      ])
+      const aovDriver = result!.drivers.find((d) => d.metric === "aov")!
+      expect(aovDriver.role).toBe("secondary")
+
+      expect(result!.contributions).toEqual([
+        {
+          label: "Product A",
+          dimension: "product",
+          currentValue: 100,
+          previousValue: 500,
+          delta: -400,
+          contributionSharePercent: 100,
+        },
+      ])
     })
 
     it("warns when the current period hasn't fully elapsed", () => {

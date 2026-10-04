@@ -167,6 +167,8 @@ export interface CampaignScalingSignal {
 // that correlation never gets reported as causation.
 export interface PerformanceDriver {
   metric: MetricKey
+  current: number
+  previous: number
   changePercent: number | null
   changeAbsolute: number
   direction: "up" | "down"

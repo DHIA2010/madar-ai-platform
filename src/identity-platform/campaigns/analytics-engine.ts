@@ -498,6 +498,8 @@ export class CampaignAnalyticsEngine {
       const verb = direction === "up" ? "ارتفع" : "انخفض"
       return {
         metric: delta.metric,
+        current: delta.current,
+        previous: delta.previous,
         changePercent: delta.changePercent,
         changeAbsolute: delta.changeAbsolute,
         direction,

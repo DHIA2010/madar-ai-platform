@@ -38,6 +38,67 @@ export interface ChatInsight {
   confidence: ChatConfidenceLevel
 }
 
+// Mirrors ai-chat/response-types.ts's DriverEvidence/DriverFinding/ContributionFinding -- the
+// same driver/contribution analysis that used to only exist flattened into an Insight.statement
+// or a generic ReportTable, now typed so the dashboard can render a dedicated driver callout /
+// contribution breakdown instead of treating it as plain prose or an undifferentiated table.
+export interface ChatDriverEvidence {
+  metric: string
+  current: number
+  previous: number
+  changePercent: number | null
+}
+
+export interface ChatDriverFinding {
+  metric: string
+  role: "primary" | "secondary"
+  direction: "up" | "down"
+  changePercent: number | null
+  statement: string
+  evidence: ChatDriverEvidence[]
+  confidence: ChatConfidenceLevel
+}
+
+export interface ChatContributionFinding {
+  label: string
+  dimension: string
+  currentValue: number
+  previousValue: number
+  delta: number
+  contributionSharePercent: number | null
+}
+
+// Mirrors ai-chat/campaigns/analytics-types.ts's CampaignRecommendation -- pre-existing,
+// evidence-gated recommendation data the backend already computes and transmits
+// (generate_campaign_recommendations), but that this type never declared, so it was silently
+// unreachable from the dashboard despite being sent on the wire. Section 10/11 of the Genie-
+// upgrade audit explicitly wants a visible "💡 Recommendation" section -- this is what closes it.
+export type ChatRecommendationType =
+  | "budget_review"
+  | "budget_increase_consideration"
+  | "investigate_decline"
+  | "investigate_inefficiency"
+  | "review_targeting"
+  | "review_creative"
+  | "no_action"
+
+export interface ChatAnalyticalEvidence {
+  metric: string
+  currentValue: number | null
+  previousValue: number | null
+  changePercent: number | null
+}
+
+export interface ChatRecommendation {
+  type: ChatRecommendationType
+  priority: "high" | "medium" | "low"
+  entityName: string
+  reason: string
+  evidence: ChatAnalyticalEvidence[]
+  confidence: ChatConfidenceLevel
+  recommendedAction: string
+}
+
 export interface ChatChartPoint {
   label: string
   value: number
@@ -93,6 +154,9 @@ export interface ChatStructuredResponse {
   type: "analytics_response"
   facts: ChatFact[]
   insights: ChatInsight[]
+  drivers: ChatDriverFinding[]
+  contributions: ChatContributionFinding[]
+  recommendations: ChatRecommendation[]
   metrics: ChatKpiCard[]
   charts: ChatChartSpec[]
   tables: ChatReportTable[]

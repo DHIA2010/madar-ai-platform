@@ -1139,3 +1139,115 @@ describe("golden questions -- generic query engine (no dedicated tool)", () => {
     )
   })
 })
+
+async function insertConnectedSallaConnection(input: {
+  organizationId: string
+  workspaceId: string
+  userId: string
+}) {
+  const connectionId = randomUUID()
+  await database.query(
+    `insert into salla_oauth_connections (
+       id, organization_id, workspace_id, project_id, status,
+       created_by_user_id, updated_by_user_id, created_at, updated_at
+     ) values ($1, $2, $3, $4, 'connected', $5, $5, now(), now())`,
+    [connectionId, input.organizationId, input.workspaceId, randomUUID(), input.userId]
+  )
+  return connectionId
+}
+
+async function insertSallaOrderRecord(input: {
+  connectionId: string
+  entityId: string
+  payload: Record<string, unknown>
+  recordDate: string
+}) {
+  await database.query(
+    `insert into salla_records (
+       id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at
+     ) values ($1, $2, 'store-1', 'orders', $3, $4::date, $5::jsonb, now(), $4::timestamptz)`,
+    [
+      randomUUID(),
+      input.connectionId,
+      input.entityId,
+      input.recordDate,
+      JSON.stringify(input.payload),
+    ]
+  )
+}
+
+// Analysis Orchestration audit (Genie-upgrade, round 2) section 4/15/18: proves the e-commerce
+// "why did sales change" chain end-to-end with real seeded Salla orders -- list_orders' summary
+// now carries the same decomposeRevenueChange methodology POS already had, reaching parity for
+// the first time. Mirrors the spec's own "Important Example" (section 18), just for e-commerce
+// instead of POS (POS's equivalent is already covered by the "why are sales lower" tests above).
+describe("golden questions -- ecommerce driver analysis (parity with POS)", () => {
+  it("'Why are ecommerce sales lower this period?' -- list_orders decomposes the change into orders vs AOV effect", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await setApplicationEnabled(ORG_A, "ecommerceEnabled", true)
+
+    const connectionId = await insertConnectedSallaConnection({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      userId: USER_A,
+    })
+    const order = (reference: number, amount: number, dateIso: string) => ({
+      reference_id: reference,
+      customer: { full_name: "Test Customer" },
+      source: "web",
+      total: { amount, currency: "SAR" },
+      status: { name: "Completed", slug: "completed" },
+      items: [{ name: "Item", quantity: 1 }],
+      is_pending_payment: false,
+      date: { date: `${dateIso} 00:00:00` },
+    })
+    // Current window (2026-09-01..2026-09-08): 1 order, 400 SAR.
+    await insertSallaOrderRecord({
+      connectionId,
+      entityId: "500001",
+      recordDate: "2026-09-03",
+      payload: order(500001, 400, "2026-09-03"),
+    })
+    // Previous window (computed server-side as the equal-length span before 2026-09-01): 4
+    // orders totalling 2100 SAR.
+    for (const [index, amount] of [600, 500, 500, 500].entries()) {
+      await insertSallaOrderRecord({
+        connectionId,
+        entityId: `500${100 + index}`,
+        recordDate: "2026-08-28",
+        payload: order(500100 + index, amount, "2026-08-28"),
+      })
+    }
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "ecommerce")
+    await scriptSingleTool("list_orders", {
+      startDate: "2026-09-01",
+      endDate: "2026-09-08",
+    })
+
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "لماذا مبيعاتي أقل هذه الفترة؟"
+    )
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.source).toEqual({ domain: "ecommerce" })
+    const salesCard = reply.structured!.metrics.find((m) => m.title === "إجمالي المبيعات")!
+    expect(salesCard.value).toBe(400)
+    expect(salesCard.previousValue).toBe(2100)
+
+    // orderEffect = (1-4)*525 = -1575; aovEffect = 1*(400-525) = -125; sum = -1700 = 400-2100.
+    expect(reply.structured!.drivers.length).toBeGreaterThan(0)
+    const ordersDriver = reply.structured!.drivers.find((d) => d.metric === "orders")!
+    expect(ordersDriver.role).toBe("primary")
+    expect(ordersDriver.direction).toBe("down")
+  })
+})

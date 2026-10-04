@@ -100,6 +100,23 @@ const CONVERSATION_CONTEXT_RULES = [
   "مهم: مهما كانت المعاملات مطابقة لاستدعاء سابق، استدعِ الأداة المناسبة من جديد في هذا الدور دائمًا -- لا تُعد رقمًا أو نسبة من رد سابق كإجابة نهائية لسؤال جديد دون استدعاء الأداة فعليًا في هذا الدور.",
 ].join("\n")
 
+// Analysis Orchestration audit (Genie-upgrade, round 2), section 1/6/17: the deterministic
+// capabilities behind a "why" question (fair comparison, revenue decomposition, contribution
+// ranking, confidence, non-causal phrasing) already exist per domain -- this block is the one
+// place that spells out WHICH tool(s) assemble the full chain for each domain and when to stop,
+// instead of that chain only existing implicitly in ADVERTISING_ANALYTICS_RULES. Deliberately NOT
+// a rigid intent-classifier or a separate "analysis plan" data structure: the model still picks
+// which of these already-built capabilities apply, per section 17's own split (backend computes,
+// LLM plans+narrates) -- this is the documented POLICY for that planning, not a new mechanism.
+const ANALYSIS_ORCHESTRATION_RULES = [
+  "لسؤال 'لماذا ارتفع/انخفض [مقياس]؟' أو 'ما الذي تغيّر؟'، اتبع هذا الترتيب حسب القسم الحالي، ولا تتوقف عند أول رقم فقط:",
+  "• نقطة البيع (POS): استخدم analyze_sales_performance مباشرة -- تُرجع مقارنة عادلة (بنفس عدد الأيام)، تفكيك التغيّر إلى تأثير عدد الطلبات مقابل متوسط قيمة الطلب، وترتيب المنتجات الأكثر مساهمة في التغيّر، في استدعاء واحد.",
+  "• المتاجر الإلكترونية (ecommerce): استخدم list_orders أولاً -- تُرجع الآن أيضًا تفكيك تغيّر المبيعات (عدد الطلبات مقابل متوسط قيمة الطلب) بنفس منهجية نقطة البيع. إذا أشار التفكيك إلى أن عدد الطلبات هو العامل الأساسي، تابع باستخدام run_kpi_preview على dataSource='orders' مع groupByDimension='platform' أو 'customer_name' وcompareEnabled=true لمعرفة أي منصة/عميل ساهم أكثر في التغيّر.",
+  "• الحملات الإعلانية (advertising): اتبع compare_campaign_periods ثم identify_performance_drivers ثم generate_campaign_recommendations بالترتيب (مفصّل في القواعد الخاصة بهذا القسم أدناه إن وُجدت).",
+  "توقف عن التعمق أكثر عندما: (1) توفرت أدلة كافية للإجابة على السؤال، أو (2) لم تعد أداة إضافية متاحة لهذا القسم ستضيف دليلاً جديدًا، أو (3) البيانات اللازمة للتعمق أكثر (مثل بُعد غير موجود في get_report_catalog) غير متوفرة أصلاً. لا تستمر في استدعاء أدوات دون غاية واضحة.",
+  "في كل إجابة تحليلية ('لماذا...')، اذكر أولًا الخلاصة المباشرة (أي عامل ساهم أكثر وبأي نسبة تقريبية)، ثم الأدلة الداعمة (الأرقام الفعلية قبل/بعد). لا تقل أبدًا إن عاملاً 'تسبب في' أو 'كان السبب' التغيّر -- استخدم 'ساهم في'، 'ارتبط بـ'، 'يفسر جزءًا من'، أو 'أكبر عامل ملحوظ' إلا إذا كانت الأداة نفسها أثبتت علاقة سببية مباشرة.",
+].join("\n")
+
 function buildSystemPrompt(category: ApplicationCategoryId): string {
   const scopeNote =
     category === "madarApps"
@@ -120,6 +137,7 @@ function buildSystemPrompt(category: ApplicationCategoryId): string {
     "أجب باللغة العربية بشكل افتراضي، بأسلوب مختصر ومباشر.",
     PRESENTATION_RULES,
     TIME_INTENT_RULES,
+    ANALYSIS_ORCHESTRATION_RULES,
     category === "advertising" ? ADVERTISING_ANALYTICS_RULES : "",
     GENERIC_QUERY_RULES,
     CONVERSATION_CONTEXT_RULES,

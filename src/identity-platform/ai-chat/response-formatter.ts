@@ -12,12 +12,14 @@ import type {
   PerformanceDriver,
 } from "../campaigns/analytics-types"
 import type { KpiResult } from "../reports/types"
-import { describePeriodFairness } from "../shared/analytics-rules"
+import { describePeriodFairness, type RevenueDecomposition } from "../shared/analytics-rules"
 
 import type {
   ChartSeriesPoint,
   ChartSpec,
+  ContributionFinding,
   DataQualityWarning,
+  DriverFinding,
   Fact,
   Insight,
   KpiCard,
@@ -112,6 +114,29 @@ function insightsFromDrivers(drivers: PerformanceDriver[]): Insight[] {
     statement: driver.narrative,
     relatedMetrics: [driver.metric],
     confidence: "medium" as ConfidenceLevel,
+  }))
+}
+
+// Typed counterpart of insightsFromDrivers -- identifyPerformanceDrivers already ranks by
+// magnitude (magnitudeRank), so rank 1 is "primary" and everything else "secondary"; current/
+// previous now travel on PerformanceDriver itself (added alongside this) so evidence doesn't
+// need to re-derive them from a sibling compare_campaign_periods call that may not have run.
+function driverFindingsFromPerformanceDrivers(drivers: PerformanceDriver[]): DriverFinding[] {
+  return drivers.map((driver) => ({
+    metric: driver.metric,
+    role: driver.magnitudeRank === 1 ? "primary" : "secondary",
+    direction: driver.direction,
+    changePercent: driver.changePercent,
+    statement: driver.narrative,
+    evidence: [
+      {
+        metric: driver.metric,
+        current: driver.current,
+        previous: driver.previous,
+        changePercent: driver.changePercent,
+      },
+    ],
+    confidence: "medium",
   }))
 }
 
@@ -296,6 +321,96 @@ function tableFromOrders(rows: OrderRow[]): ReportTable {
   }
 }
 
+// Mirrors OrdersAggregationService's OrdersSummaryStats (orders/service.ts).
+interface OrdersSummaryStats {
+  totalOrders: number
+  totalOrdersChangePct: number | null
+  previousTotalOrders: number
+  totalSales: number
+  totalSalesChangePct: number | null
+  previousTotalSales: number
+  averageOrderValue: number
+  averageOrderValueChangePct: number | null
+  previousAverageOrderValue: number
+  decomposition: RevenueDecomposition
+}
+
+function kpiCardsFromOrdersSummary(summary: OrdersSummaryStats): KpiCard[] {
+  return [
+    {
+      type: "kpi",
+      title: "إجمالي المبيعات",
+      value: summary.totalSales,
+      previousValue: summary.previousTotalSales,
+      changePercent: summary.totalSalesChangePct,
+      trend: trend(summary.totalSalesChangePct),
+      format: "currency",
+    },
+    {
+      type: "kpi",
+      title: "عدد الطلبات",
+      value: summary.totalOrders,
+      previousValue: summary.previousTotalOrders,
+      changePercent: summary.totalOrdersChangePct,
+      trend: trend(summary.totalOrdersChangePct),
+      format: "number",
+    },
+    {
+      type: "kpi",
+      title: "متوسط قيمة الطلب",
+      value: summary.averageOrderValue,
+      previousValue: summary.previousAverageOrderValue,
+      changePercent: summary.averageOrderValueChangePct,
+      trend: trend(summary.averageOrderValueChangePct),
+      format: "currency",
+    },
+  ]
+}
+
+// Same framing as driverFindingsFromPosDecomposition -- same decomposeRevenueChange output,
+// now reused for e-commerce (Analysis Orchestration audit section 4/15: e-commerce had the raw
+// before/after numbers but never decomposed WHY sales moved).
+function driverFindingsFromOrdersDecomposition(summary: OrdersSummaryStats): DriverFinding[] {
+  const decomposition = summary.decomposition
+  if (decomposition.dominantDriver === "none") return []
+  const ordersIsPrimary =
+    (decomposition.orderEffectPercent ?? 0) >= (decomposition.aovEffectPercent ?? 0)
+  return [
+    {
+      metric: "orders",
+      role: ordersIsPrimary ? "primary" : "secondary",
+      direction: decomposition.orderEffect >= 0 ? "up" : "down",
+      changePercent: summary.totalOrdersChangePct,
+      statement: `${ordersIsPrimary ? "العامل الأساسي" : "عامل إضافي"} في تغيّر المبيعات هو عدد الطلبات (${decomposition.orderEffectPercent ?? 0}% من إجمالي التغيّر).`,
+      evidence: [
+        {
+          metric: "orders",
+          current: summary.totalOrders,
+          previous: summary.previousTotalOrders,
+          changePercent: summary.totalOrdersChangePct,
+        },
+      ],
+      confidence: "medium",
+    },
+    {
+      metric: "aov",
+      role: ordersIsPrimary ? "secondary" : "primary",
+      direction: decomposition.aovEffect >= 0 ? "up" : "down",
+      changePercent: summary.averageOrderValueChangePct,
+      statement: `${ordersIsPrimary ? "عامل إضافي" : "العامل الأساسي"} في تغيّر المبيعات هو متوسط قيمة الطلب (${decomposition.aovEffectPercent ?? 0}% من إجمالي التغيّر).`,
+      evidence: [
+        {
+          metric: "aov",
+          current: summary.averageOrderValue,
+          previous: summary.previousAverageOrderValue,
+          changePercent: summary.averageOrderValueChangePct,
+        },
+      ],
+      confidence: "medium",
+    },
+  ]
+}
+
 // Mirrors StoresAggregationService's StoreSummary (stores/service.ts).
 interface StoreRow {
   id: string
@@ -468,6 +583,71 @@ function insightFromPosDecomposition(decomposition: PosRevenueDecomposition): In
       confidence: "medium",
     },
   ]
+}
+
+// Typed counterpart of insightFromPosDecomposition -- same decomposeRevenueChange output, same
+// dominant/secondary framing, just structured instead of flattened into one sentence (Analysis
+// Orchestration audit section 7/11/12). Always returns BOTH factors (never just the dominant
+// one) so a frontend can show "orders: primary driver / AOV: secondary driver" side by side.
+function driverFindingsFromPosDecomposition(
+  decomposition: PosRevenueDecomposition,
+  comparison: PosSalesComparisonResult
+): DriverFinding[] {
+  if (decomposition.dominantDriver === "none") return []
+  const ordersIsPrimary =
+    (decomposition.orderEffectPercent ?? 0) >= (decomposition.aovEffectPercent ?? 0)
+  return [
+    {
+      metric: "orders",
+      role: ordersIsPrimary ? "primary" : "secondary",
+      direction: decomposition.orderEffect >= 0 ? "up" : "down",
+      changePercent: comparison.ordersChangePercent,
+      statement: `${ordersIsPrimary ? "العامل الأساسي" : "عامل إضافي"} في تغيّر الإيرادات هو عدد الطلبات (${decomposition.orderEffectPercent ?? 0}% من إجمالي التغيّر).`,
+      evidence: [
+        {
+          metric: "orders",
+          current: comparison.current.orders,
+          previous: comparison.previous.orders,
+          changePercent: comparison.ordersChangePercent,
+        },
+      ],
+      confidence: comparison.confidence,
+    },
+    {
+      metric: "aov",
+      role: ordersIsPrimary ? "secondary" : "primary",
+      direction: decomposition.aovEffect >= 0 ? "up" : "down",
+      changePercent: comparison.aovChangePercent,
+      statement: `${ordersIsPrimary ? "عامل إضافي" : "العامل الأساسي"} في تغيّر الإيرادات هو متوسط قيمة الطلب (${decomposition.aovEffectPercent ?? 0}% من إجمالي التغيّر).`,
+      evidence: [
+        {
+          metric: "aov",
+          current: comparison.current.aov,
+          previous: comparison.previous.aov,
+          changePercent: comparison.aovChangePercent,
+        },
+      ],
+      confidence: comparison.confidence,
+    },
+  ]
+}
+
+// Typed counterpart of tableFromPosProductContributions -- same ranked product deltas, plus
+// each one's share of the TOTAL absolute change across every contributor (section 5's "Campaign
+// A contributed approximately 42% of the total decline" framing).
+function contributionFindingsFromPosProducts(
+  rows: PosSalesPerformanceAnalysis["productContributions"]
+): ContributionFinding[] {
+  const totalAbs = rows.reduce((sum, row) => sum + Math.abs(row.revenueDelta), 0)
+  return rows.map((row) => ({
+    label: row.productName,
+    dimension: "product",
+    currentValue: row.currentRevenue,
+    previousValue: row.previousRevenue,
+    delta: row.revenueDelta,
+    contributionSharePercent:
+      totalAbs === 0 ? null : Math.round((Math.abs(row.revenueDelta) / totalAbs) * 1000) / 10,
+  }))
 }
 
 function tableFromPosProductContributions(
@@ -650,6 +830,26 @@ function insightsFromGenericContribution(result: KpiResult): Insight[] {
   })
 }
 
+// Typed counterpart of insightsFromGenericContribution -- same run_kpi_preview
+// groupByDimension+compareEnabled result, same |delta| ranking, but every contributor (not just
+// the top 3 narrated as prose) with its share of the total absolute change.
+function contributionFindingsFromGenericResult(result: KpiResult): ContributionFinding[] {
+  const withDelta = result.points.filter((point) => point.extraValues?.delta !== undefined)
+  if (withDelta.length === 0) return []
+  const totalAbs = withDelta.reduce((sum, point) => sum + Math.abs(point.extraValues!.delta), 0)
+  return withDelta.map((point) => ({
+    label: point.label,
+    dimension: result.meta?.groupByDimensionLabel ?? "unknown",
+    currentValue: point.value,
+    previousValue: point.extraValues!.previousValue,
+    delta: point.extraValues!.delta,
+    contributionSharePercent:
+      totalAbs === 0
+        ? null
+        : Math.round((Math.abs(point.extraValues!.delta) / totalAbs) * 1000) / 10,
+  }))
+}
+
 function chartFromGenericResult(result: KpiResult): ChartSpec {
   const title = result.meta
     ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}${
@@ -682,6 +882,8 @@ export function buildStructuredResponse(
 ): StructuredAnalyticsResponse | null {
   const facts: Fact[] = []
   const insights: Insight[] = []
+  const drivers: DriverFinding[] = []
+  const contributions: ContributionFinding[] = []
   const recommendations: CampaignRecommendation[] = []
   const metrics: KpiCard[] = []
   const charts: ChartSpec[] = []
@@ -730,6 +932,7 @@ export function buildStructuredResponse(
           drivers: PerformanceDriver[]
         }
         insights.push(...insightsFromDrivers(result.drivers))
+        drivers.push(...driverFindingsFromPerformanceDrivers(result.drivers))
         dataPeriod = dataPeriod ?? result.comparison.period.current
         confidence = confidence ?? result.comparison.confidence
         break
@@ -809,8 +1012,15 @@ export function buildStructuredResponse(
         const analysis = output as PosSalesPerformanceAnalysis
         metrics.push(...kpiCardsFromPosComparison(analysis.comparison))
         insights.push(...insightFromPosDecomposition(analysis.comparison.decomposition))
+        drivers.push(
+          ...driverFindingsFromPosDecomposition(
+            analysis.comparison.decomposition,
+            analysis.comparison
+          )
+        )
         if (analysis.productContributions.length > 0) {
           tables.push(tableFromPosProductContributions(analysis.productContributions))
+          contributions.push(...contributionFindingsFromPosProducts(analysis.productContributions))
         }
         dataPeriod = analysis.comparison.period.current
         confidence = analysis.comparison.confidence
@@ -838,10 +1048,21 @@ export function buildStructuredResponse(
         domain = "ecommerce"
         const result = output as {
           items: OrderRow[]
+          summary: OrdersSummaryStats
           queriedPeriod: { from: string; to: string } | null
+          periodFairness?: { isCurrentPeriodIncomplete: boolean; elapsedDays: number }
         }
         dataPeriod = dataPeriod ?? result.queriedPeriod
         if (result.items.length > 0) tables.push(tableFromOrders(result.items))
+        metrics.push(...kpiCardsFromOrdersSummary(result.summary))
+        drivers.push(...driverFindingsFromOrdersDecomposition(result.summary))
+        if (result.periodFairness?.isCurrentPeriodIncomplete) {
+          const days = result.periodFairness.elapsedDays
+          warnings.push({
+            type: "incomplete_period",
+            message: `الفترة الحالية لم تكتمل بعد (${days} ${days === 1 ? "يوم" : "أيام"} فقط) -- تمت مقارنتها بنفس عدد الأيام من الفترة السابقة لضمان مقارنة عادلة.`,
+          })
+        }
         break
       }
       case "list_stores": {
@@ -862,6 +1083,7 @@ export function buildStructuredResponse(
         if (result.points.length > 1) {
           charts.push(chartFromGenericResult(result))
           insights.push(...insightsFromGenericContribution(result))
+          contributions.push(...contributionFindingsFromGenericResult(result))
         } else {
           metrics.push(kpiCardFromGenericResult(result))
         }
@@ -903,6 +1125,8 @@ export function buildStructuredResponse(
     type: "analytics_response",
     facts,
     insights,
+    drivers,
+    contributions,
     recommendations,
     metrics,
     charts,

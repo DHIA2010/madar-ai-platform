@@ -1,5 +1,6 @@
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { decomposeRevenueChange, type RevenueDecomposition } from "../shared/analytics-rules"
 
 export type OrderPlatform = "Salla" | "Shopify" | "Zid"
 // Bucketed from each provider's own real status text (see bucketOrderStatus) -- not a field
@@ -34,16 +35,24 @@ export interface OrderSummaryView {
 export interface OrdersSummaryStats {
   totalOrders: number
   totalOrdersChangePct: number | null
+  previousTotalOrders: number
   totalSales: number
   totalSalesChangePct: number | null
+  previousTotalSales: number
   averageOrderValue: number
   averageOrderValueChangePct: number | null
+  previousAverageOrderValue: number
   completedOrders: number
   completedOrdersChangePct: number | null
   processingOrders: number
   processingOrdersChangePct: number | null
   cancelledOrders: number
   cancelledOrdersChangePct: number | null
+  // Analysis Orchestration audit (Genie-upgrade, round 2) section 4: e-commerce had the raw
+  // before/after numbers (above) but never decomposed WHY sales moved into order-volume vs.
+  // average-order-value effect -- the same decomposeRevenueChange POS already uses for exactly
+  // this question, reused here rather than re-implemented.
+  decomposition: RevenueDecomposition
 }
 
 function toIsoDate(value: Date | string): string {
@@ -433,16 +442,23 @@ export class OrdersAggregationService {
     return {
       totalOrders: current.length,
       totalOrdersChangePct: computeChangePct(current.length, previous.length),
+      previousTotalOrders: previous.length,
       totalSales: currentSales,
       totalSalesChangePct: computeChangePct(currentSales, previousSales),
+      previousTotalSales: previousSales,
       averageOrderValue: currentAov,
       averageOrderValueChangePct: computeChangePct(currentAov, previousAov),
+      previousAverageOrderValue: previousAov,
       completedOrders: currentCompleted,
       completedOrdersChangePct: computeChangePct(currentCompleted, previousCompleted),
       processingOrders: currentProcessing,
       processingOrdersChangePct: computeChangePct(currentProcessing, previousProcessing),
       cancelledOrders: currentCancelled,
       cancelledOrdersChangePct: computeChangePct(currentCancelled, previousCancelled),
+      decomposition: decomposeRevenueChange(
+        { orders: current.length, aov: currentAov },
+        { orders: previous.length, aov: previousAov }
+      ),
     }
   }
 }

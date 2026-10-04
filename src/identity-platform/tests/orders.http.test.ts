@@ -243,6 +243,17 @@ describe("GET /v1/orders: real order aggregation", () => {
         cancelledOrders: number
         cancelledOrdersChangePct: number | null
         totalOrdersChangePct: number | null
+        previousTotalOrders: number
+        previousTotalSales: number
+        previousAverageOrderValue: number
+        decomposition: {
+          revenueChange: number
+          orderEffect: number
+          aovEffect: number
+          orderEffectPercent: number | null
+          aovEffectPercent: number | null
+          dominantDriver: "orders" | "aov" | "both" | "none"
+        }
       }
     }
 
@@ -275,6 +286,18 @@ describe("GET /v1/orders: real order aggregation", () => {
     // divide-by-zero guard returns null rather than an infinite/fabricated percentage.
     expect(body.summary.processingOrdersChangePct).toBeNull()
     expect(body.summary.cancelledOrdersChangePct).toBeNull()
+
+    // Analysis Orchestration audit (Genie-upgrade, round 2) section 4: e-commerce now reuses
+    // POS's exact decomposeRevenueChange methodology. Current: 2 orders / 469 SAR (AOV 234.5).
+    // Previous: 1 order / 200 SAR (AOV 200). orderEffect = (2-1)*200 = 200;
+    // aovEffect = 2*(234.5-200) = 69; 200+69 = 269 = 469-200, zero residual.
+    expect(body.summary.previousTotalOrders).toBe(1)
+    expect(body.summary.previousTotalSales).toBe(200)
+    expect(body.summary.previousAverageOrderValue).toBe(200)
+    expect(body.summary.decomposition.revenueChange).toBe(269)
+    expect(body.summary.decomposition.orderEffect).toBe(200)
+    expect(body.summary.decomposition.aovEffect).toBe(69)
+    expect(body.summary.decomposition.dominantDriver).toBe("orders")
   })
 
   it("returns an order's items for the 'view products' action", async () => {
