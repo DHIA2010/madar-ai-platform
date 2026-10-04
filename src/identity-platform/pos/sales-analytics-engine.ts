@@ -83,6 +83,7 @@ export interface PosSalesComparisonResult {
 }
 
 export interface PosProductContribution {
+  productId: string | null
   productName: string
   currentRevenue: number
   previousRevenue: number
@@ -184,13 +185,28 @@ export class PosSalesAnalyticsEngine {
       }),
     ])
 
-    const previousByName = new Map(previousProducts.map((row) => [row.productName, row]))
-    const seen = new Set<string>()
+    // Match by productId first -- a renamed product (typo fix, casing change, re-categorization)
+    // must still be treated as the SAME product across periods, not reported as one dropped
+    // product plus one brand-new product. Only falls back to matching by name when productId is
+    // null (a free-text invoice line with no catalog product behind it), which is the one case
+    // where id-based matching isn't possible at all.
+    const previousById = new Map<string, (typeof previousProducts)[number]>()
+    const previousByName = new Map<string, (typeof previousProducts)[number]>()
+    for (const row of previousProducts) {
+      if (row.productId) previousById.set(row.productId, row)
+      else previousByName.set(row.productName, row)
+    }
+    const matchedPreviousKeys = new Set<string>()
     const productContributions: PosProductContribution[] = []
     for (const row of currentProducts) {
-      seen.add(row.productName)
-      const previousRow = previousByName.get(row.productName)
+      const previousRow = row.productId
+        ? previousById.get(row.productId)
+        : previousByName.get(row.productName)
+      if (previousRow) {
+        matchedPreviousKeys.add(previousRow.productId ?? `name:${previousRow.productName}`)
+      }
       productContributions.push({
+        productId: row.productId,
         productName: row.productName,
         currentRevenue: row.revenue,
         previousRevenue: previousRow?.revenue ?? 0,
@@ -201,8 +217,10 @@ export class PosSalesAnalyticsEngine {
     // evidence for a decline -- it must not silently disappear just because it has no "current"
     // row to anchor the loop above.
     for (const row of previousProducts) {
-      if (seen.has(row.productName)) continue
+      const key = row.productId ?? `name:${row.productName}`
+      if (matchedPreviousKeys.has(key)) continue
       productContributions.push({
+        productId: row.productId,
         productName: row.productName,
         currentRevenue: 0,
         previousRevenue: row.revenue,

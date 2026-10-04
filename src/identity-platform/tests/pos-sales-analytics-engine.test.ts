@@ -220,6 +220,110 @@ describe("PosSalesAnalyticsEngine.getSalesPerformanceAnalysis", () => {
     expect(productB?.revenueDelta).toBe(-300)
   })
 
+  it("matches a product across periods by productId even when its display name changed, instead of reporting a dropped + a new product", async () => {
+    const { invoicesService, summaryMock, topProductsMock } = buildFakeInvoicesService()
+    summaryMock.mockResolvedValue({
+      totalCount: 1,
+      completedCount: 1,
+      cancelledCount: 0,
+      returnedCount: 0,
+      averageCompletedValue: 100,
+      totalCompletedAmount: 100,
+    })
+    topProductsMock.mockImplementation((_orgId: string, filter: { from: string | null }) =>
+      Promise.resolve(
+        filter.from === "2026-09-01"
+          ? [
+              {
+                productId: "p1",
+                productName: "تنورة فخمة",
+                quantitySold: 1,
+                revenue: 100,
+                invoiceCount: 1,
+              },
+            ]
+          : [
+              {
+                productId: "p1",
+                productName: "تنورة",
+                quantitySold: 5,
+                revenue: 500,
+                invoiceCount: 5,
+              },
+            ]
+      )
+    )
+    const engine = new PosSalesAnalyticsEngine(invoicesService)
+
+    const result = await engine.getSalesPerformanceAnalysis(
+      "org-1",
+      null,
+      {
+        current: { from: "2026-09-01", to: "2026-09-30" },
+        previous: { from: "2026-08-01", to: "2026-08-31" },
+      },
+      "UTC"
+    )
+
+    // Same productId across both periods -- must be ONE row (the renamed product), not a
+    // "dropped تنورة" + "new تنورة فخمة" pair.
+    expect(result.productContributions).toHaveLength(1)
+    expect(result.productContributions[0].productId).toBe("p1")
+    expect(result.productContributions[0].productName).toBe("تنورة فخمة")
+    expect(result.productContributions[0].currentRevenue).toBe(100)
+    expect(result.productContributions[0].previousRevenue).toBe(500)
+    expect(result.productContributions[0].revenueDelta).toBe(-400)
+  })
+
+  it("still matches by name when productId is null on both sides (a free-text invoice line)", async () => {
+    const { invoicesService, summaryMock, topProductsMock } = buildFakeInvoicesService()
+    summaryMock.mockResolvedValue({
+      totalCount: 1,
+      completedCount: 1,
+      cancelledCount: 0,
+      returnedCount: 0,
+      averageCompletedValue: 100,
+      totalCompletedAmount: 100,
+    })
+    topProductsMock.mockImplementation((_orgId: string, filter: { from: string | null }) =>
+      Promise.resolve(
+        filter.from === "2026-09-01"
+          ? [
+              {
+                productId: null,
+                productName: "منتج بدون كود",
+                quantitySold: 1,
+                revenue: 50,
+                invoiceCount: 1,
+              },
+            ]
+          : [
+              {
+                productId: null,
+                productName: "منتج بدون كود",
+                quantitySold: 3,
+                revenue: 150,
+                invoiceCount: 3,
+              },
+            ]
+      )
+    )
+    const engine = new PosSalesAnalyticsEngine(invoicesService)
+
+    const result = await engine.getSalesPerformanceAnalysis(
+      "org-1",
+      null,
+      {
+        current: { from: "2026-09-01", to: "2026-09-30" },
+        previous: { from: "2026-08-01", to: "2026-08-31" },
+      },
+      "UTC"
+    )
+
+    expect(result.productContributions).toHaveLength(1)
+    expect(result.productContributions[0].revenueDelta).toBe(-100)
+  })
+
   it("caps the contribution list at 5 products", async () => {
     const { invoicesService, summaryMock, topProductsMock } = buildFakeInvoicesService()
     summaryMock.mockResolvedValue({

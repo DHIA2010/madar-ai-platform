@@ -211,11 +211,14 @@ function chartFromCampaignRows(
   return { type: "chart", chartType: "bar", title, series: [{ name: metric, data }] }
 }
 
+// Analytical-title fix (audit item 5): was a static "مقارنة القنوات -- الإيرادات" (dataset
+// label) regardless of what the data actually shows -- now the same ranking framing
+// deriveRankingTitle already gives the generic/contribution paths ("أعلى قيم X حسب Y").
 function chartFromChannelComparison(rows: ChannelComparisonRow[]): ChartSpec {
   return {
     type: "chart",
     chartType: "comparison",
-    title: "مقارنة القنوات -- الإيرادات",
+    title: deriveRankingTitle("القناة", "الإيرادات"),
     series: [
       { name: "revenue", data: rows.map((r) => ({ label: r.channel, value: r.metrics.revenue })) },
     ],
@@ -232,18 +235,32 @@ interface ChannelSpendTrendPoint {
 // which a line chart communicates correctly -- this was the one tool returning time-bucketed data
 // with no structured handling at all before, so it fell back to raw LLM narration like every
 // other unhandled case.
+// Analytical-title fix (audit item 5): names the actual direction of the trend (computed from
+// the first vs. last bucket's total spend) instead of a static label that never changed
+// regardless of whether spend was climbing, falling, or flat across the period.
 function chartFromSpendTrend(points: ChannelSpendTrendPoint[]): ChartSpec {
+  const totals = points.map(
+    (point) =>
+      Math.round(Object.values(point.spendByChannel).reduce((a, b) => a + b, 0) * 100) / 100
+  )
+  const first = totals[0] ?? 0
+  const last = totals[totals.length - 1] ?? 0
+  const direction =
+    totals.length < 2 || Math.abs(last - first) < 0.01 * Math.max(first, 1)
+      ? "مستقر"
+      : last > first
+        ? "تصاعدي"
+        : "تنازلي"
   return {
     type: "chart",
     chartType: "line",
-    title: "اتجاه الإنفاق الإعلاني",
+    title: `اتجاه الإنفاق الإعلاني -- ${direction} خلال الفترة`,
     series: [
       {
         name: "spend",
-        data: points.map((point) => ({
+        data: points.map((point, index) => ({
           label: point.bucketStart,
-          value:
-            Math.round(Object.values(point.spendByChannel).reduce((a, b) => a + b, 0) * 100) / 100,
+          value: totals[index],
         })),
       },
     ],
@@ -361,6 +378,7 @@ interface OrdersSummaryStats {
   averageOrderValueChangePct: number | null
   previousAverageOrderValue: number
   decomposition: RevenueDecomposition
+  confidence: ConfidenceLevel
 }
 
 function kpiCardsFromOrdersSummary(summary: OrdersSummaryStats): KpiCard[] {
@@ -397,7 +415,10 @@ function kpiCardsFromOrdersSummary(summary: OrdersSummaryStats): KpiCard[] {
 
 // Same framing as driverFindingsFromPosDecomposition -- same decomposeRevenueChange output,
 // now reused for e-commerce (Analysis Orchestration audit section 4/15: e-commerce had the raw
-// before/after numbers but never decomposed WHY sales moved).
+// before/after numbers but never decomposed WHY sales moved). confidence now comes from the
+// summary's own sample-size computation (orders/service.ts's OrdersConfidenceLevel) instead of
+// an unconditional "medium" -- Genie-level audit finding: this was the one driver-finding path
+// with no real confidence signal at all.
 function driverFindingsFromOrdersDecomposition(summary: OrdersSummaryStats): DriverFinding[] {
   const decomposition = summary.decomposition
   if (decomposition.dominantDriver === "none") return []
@@ -418,7 +439,7 @@ function driverFindingsFromOrdersDecomposition(summary: OrdersSummaryStats): Dri
           changePercent: summary.totalOrdersChangePct,
         },
       ],
-      confidence: "medium",
+      confidence: summary.confidence,
     },
     {
       metric: "aov",
@@ -434,9 +455,238 @@ function driverFindingsFromOrdersDecomposition(summary: OrdersSummaryStats): Dri
           changePercent: summary.averageOrderValueChangePct,
         },
       ],
-      confidence: "medium",
+      confidence: summary.confidence,
     },
   ]
+}
+
+// Evidence-gated recommendations for the two domains that had NONE at all (Genie-level spec
+// section 8 audit finding) -- only advertising had generate_campaign_recommendations; POS/
+// e-commerce produced drivers/contributions but every "what should I do" answer fell back to
+// ungated free LLM prose. Mirrors campaigns/recommendation-engine.ts's own conservative, gated
+// design exactly (insufficient-confidence branch first, a "no_action" fallback when nothing is
+// material, never a stronger claim than the evidence supports) rather than introducing a
+// different shape -- reuses CampaignRecommendation/AnalyticalEvidence as-is (see their own
+// comments: this envelope was always meant to be domain-generic despite the historical name).
+const REVENUE_DECLINE_REVIEW_THRESHOLD_PCT = -15
+const REVENUE_GROWTH_NOTE_THRESHOLD_PCT = 15
+const DOMINANT_CONTRIBUTOR_SHARE_THRESHOLD_PCT = 25
+
+function recommendationsFromPosAnalysis(
+  analysis: PosSalesPerformanceAnalysis
+): CampaignRecommendation[] {
+  const { comparison, productContributions } = analysis
+  const source = "pos/sales-analytics-engine.ts:getSalesPerformanceAnalysis"
+  const period = {
+    current: `${comparison.period.current.from} -> ${comparison.period.current.to}`,
+    previous: `${comparison.period.previous.from} -> ${comparison.period.previous.to}`,
+  }
+  const revenueEvidence = {
+    metric: "revenue",
+    currentValue: comparison.current.revenue,
+    previousValue: comparison.previous.revenue,
+    changePercent: comparison.revenueChangePercent,
+    period,
+    source,
+    confidence: comparison.confidence,
+  }
+
+  if (comparison.confidence === "insufficient") {
+    return [
+      {
+        type: "no_action",
+        priority: "low",
+        entityType: "account",
+        entityId: null,
+        entityName: "نقطة البيع",
+        reason: "لا توجد بيانات كافية (عدد الطلبات/الأيام) لمقارنة موثوقة بين الفترتين.",
+        evidence: [revenueEvidence],
+        confidence: "insufficient",
+        recommendedAction: "لا توجد بيانات كافية لإعطاء توصية موثوقة.",
+      },
+    ]
+  }
+
+  if (comparison.decomposition.dominantDriver === "none") return []
+
+  const revenueDelta = comparison.revenueChangePercent
+  if (revenueDelta !== null && revenueDelta <= REVENUE_DECLINE_REVIEW_THRESHOLD_PCT) {
+    const driverLabel =
+      comparison.decomposition.dominantDriver === "orders"
+        ? "عدد الطلبات"
+        : comparison.decomposition.dominantDriver === "aov"
+          ? "متوسط قيمة الطلب"
+          : "عدد الطلبات ومتوسط قيمة الطلب معًا"
+    const totalAbs = productContributions.reduce((sum, p) => sum + Math.abs(p.revenueDelta), 0)
+    const topContributor = productContributions[0]
+    const topShare =
+      topContributor && totalAbs > 0
+        ? Math.round((Math.abs(topContributor.revenueDelta) / totalAbs) * 1000) / 10
+        : null
+    const hasDominantContributor =
+      topShare !== null && topShare >= DOMINANT_CONTRIBUTOR_SHARE_THRESHOLD_PCT && !!topContributor
+
+    const evidence: CampaignRecommendation["evidence"] = [revenueEvidence]
+    if (hasDominantContributor && topContributor) {
+      evidence.push({
+        metric: "productRevenueDelta",
+        currentValue: topContributor.currentRevenue,
+        previousValue: topContributor.previousRevenue,
+        changePercent: null,
+        period,
+        entity: {
+          type: "product",
+          id: topContributor.productId ?? topContributor.productName,
+          name: topContributor.productName,
+        },
+        source,
+        confidence: comparison.confidence,
+      })
+    }
+
+    return [
+      {
+        type: "investigate_decline",
+        priority: Math.abs(revenueDelta) >= 30 ? "high" : "medium",
+        entityType: hasDominantContributor ? "product" : "account",
+        entityId: hasDominantContributor ? (topContributor!.productId ?? null) : null,
+        entityName: hasDominantContributor ? topContributor!.productName : "نقطة البيع",
+        reason: hasDominantContributor
+          ? `انخفضت الإيرادات بنسبة ${Math.abs(revenueDelta)}%، والعامل الأكبر الملحوظ هو ${driverLabel}؛ أكبر مساهم في هذا الانخفاض هو منتج "${topContributor!.productName}" بنسبة ${topShare}% من إجمالي التراجع.`
+          : `انخفضت الإيرادات بنسبة ${Math.abs(revenueDelta)}%، والعامل الأكبر الملحوظ هو ${driverLabel}.`,
+        evidence,
+        confidence: comparison.confidence,
+        recommendedAction: hasDominantContributor
+          ? `يُنصح بالتركيز أولًا على مراجعة منتج "${topContributor!.productName}" ومعرفة سبب تراجعه، لأنه العامل الأكبر الملحوظ في انخفاض الإيرادات.`
+          : `يُنصح بالتركيز أولًا على ${driverLabel} لأنه العامل الأكبر الملحوظ في انخفاض الإيرادات.`,
+      },
+    ]
+  }
+
+  if (revenueDelta !== null && revenueDelta >= REVENUE_GROWTH_NOTE_THRESHOLD_PCT) {
+    return [
+      {
+        type: "no_action",
+        priority: "low",
+        entityType: "account",
+        entityId: null,
+        entityName: "نقطة البيع",
+        reason: `ارتفعت الإيرادات بنسبة ${revenueDelta}% مقارنة بالفترة السابقة.`,
+        evidence: [revenueEvidence],
+        confidence: comparison.confidence,
+        recommendedAction:
+          "الأداء إيجابي حاليًا، ولا يوجد إجراء عاجل مطلوب بناءً على البيانات المتاحة.",
+      },
+    ]
+  }
+
+  return [
+    {
+      type: "no_action",
+      priority: "low",
+      entityType: "account",
+      entityId: null,
+      entityName: "نقطة البيع",
+      reason: "لم يتجاوز التغيّر في الإيرادات حدًا يستدعي إجراءً.",
+      evidence: [revenueEvidence],
+      confidence: comparison.confidence,
+      recommendedAction: "لا يوصى حاليًا بأي إجراء إضافي.",
+    },
+  ]
+}
+
+// Same design as recommendationsFromPosAnalysis above, for e-commerce's list_orders decomposition
+// -- deliberately returns [] (not a "no_action" filler) whenever dominantDriver is "none", unlike
+// POS, since list_orders is called far more broadly (any order-browsing question, not just "why"
+// questions); a recommendation only belongs here when there's an actual material change to react
+// to, never bolted onto an ordinary order list.
+function recommendationsFromOrdersSummary(
+  summary: OrdersSummaryStats,
+  queriedPeriod: { from: string; to: string } | null
+): CampaignRecommendation[] {
+  if (summary.confidence === "insufficient") {
+    return [
+      {
+        type: "no_action",
+        priority: "low",
+        entityType: "account",
+        entityId: null,
+        entityName: "المتجر الإلكتروني",
+        reason: "لا توجد بيانات كافية (عدد الطلبات/الأيام) لمقارنة موثوقة بين الفترتين.",
+        evidence: [
+          {
+            metric: "totalSales",
+            currentValue: summary.totalSales,
+            previousValue: summary.previousTotalSales,
+            changePercent: summary.totalSalesChangePct,
+            period: {
+              current: queriedPeriod ? `${queriedPeriod.from} -> ${queriedPeriod.to}` : "",
+            },
+            source: "orders/service.ts:listOrders",
+            confidence: "insufficient",
+          },
+        ],
+        confidence: "insufficient",
+        recommendedAction: "لا توجد بيانات كافية لإعطاء توصية موثوقة.",
+      },
+    ]
+  }
+
+  if (summary.decomposition.dominantDriver === "none") return []
+
+  const revenueDelta = summary.totalSalesChangePct
+  const source = "orders/service.ts:listOrders"
+  const period = { current: queriedPeriod ? `${queriedPeriod.from} -> ${queriedPeriod.to}` : "" }
+  const revenueEvidence = {
+    metric: "totalSales",
+    currentValue: summary.totalSales,
+    previousValue: summary.previousTotalSales,
+    changePercent: revenueDelta,
+    period,
+    source,
+    confidence: summary.confidence,
+  }
+
+  if (revenueDelta !== null && revenueDelta <= REVENUE_DECLINE_REVIEW_THRESHOLD_PCT) {
+    const driverLabel =
+      summary.decomposition.dominantDriver === "orders"
+        ? "عدد الطلبات"
+        : summary.decomposition.dominantDriver === "aov"
+          ? "متوسط قيمة الطلب"
+          : "عدد الطلبات ومتوسط قيمة الطلب معًا"
+    return [
+      {
+        type: "investigate_decline",
+        priority: Math.abs(revenueDelta) >= 30 ? "high" : "medium",
+        entityType: "account",
+        entityId: null,
+        entityName: "المتجر الإلكتروني",
+        reason: `انخفضت المبيعات بنسبة ${Math.abs(revenueDelta)}%، والعامل الأكبر الملحوظ هو ${driverLabel}.`,
+        evidence: [revenueEvidence],
+        confidence: summary.confidence,
+        recommendedAction: `يُنصح بالتركيز أولًا على ${driverLabel} لأنه العامل الأكبر الملحوظ في انخفاض المبيعات -- يمكن تحديد المنصة/العميل الأكثر مساهمة عبر تحليل إضافي حسب البُعد.`,
+      },
+    ]
+  }
+
+  if (revenueDelta !== null && revenueDelta >= REVENUE_GROWTH_NOTE_THRESHOLD_PCT) {
+    return [
+      {
+        type: "no_action",
+        priority: "low",
+        entityType: "account",
+        entityId: null,
+        entityName: "المتجر الإلكتروني",
+        reason: `ارتفعت المبيعات بنسبة ${revenueDelta}% مقارنة بالفترة السابقة.`,
+        evidence: [revenueEvidence],
+        confidence: summary.confidence,
+        recommendedAction:
+          "الأداء إيجابي حاليًا، ولا يوجد إجراء عاجل مطلوب بناءً على البيانات المتاحة.",
+      },
+    ]
+  }
+
+  return []
 }
 
 // Mirrors StoresAggregationService's StoreSummary (stores/service.ts).
@@ -544,6 +794,7 @@ interface PosSalesComparisonResult {
 interface PosSalesPerformanceAnalysis {
   comparison: PosSalesComparisonResult
   productContributions: Array<{
+    productId: string | null
     productName: string
     currentRevenue: number
     previousRevenue: number
@@ -717,6 +968,40 @@ const FOLLOW_UP_TEMPLATES: Partial<Record<string, (output: unknown) => string[]>
       "قارن هذه الفترة مع نفس الفترة من الشهر الماضي.",
       "ما هو إجمالي المبيعات لهذه الفترة؟",
     ]
+  },
+  get_campaign_summary: () => [
+    "كيف تغيّر الأداء مقارنة بالفترة السابقة؟",
+    "ما هي أفضل الحملات أداءً؟",
+  ],
+  get_channel_comparison: () => [
+    "أي قناة ساهمت أكثر في هذه النتائج؟",
+    "ما اتجاه الإنفاق خلال هذه الفترة؟",
+  ],
+  get_pos_invoices_summary: () => [
+    "قارن هذه الفترة مع الفترة السابقة.",
+    "ما هي أفضل المنتجات مبيعًا؟",
+  ],
+  // Highest-impact gap (audit section 16): run_kpi_preview is the most-used fallback tool, yet
+  // had zero follow-up coverage -- any answer produced primarily through it got no suggestions
+  // at all. Branches on the result's own shape (grouped/ranked vs. compared vs. plain) so the
+  // suggestion matches what's actually missing from THIS result, not a generic "anything else?".
+  run_kpi_preview: (output) => {
+    const result = output as KpiResult
+    const fieldLabel = result.meta?.fieldLabel ?? "هذا المقياس"
+    const isContributionMode = result.points.some((point) => point.extraValues?.delta !== undefined)
+    if (isContributionMode) {
+      return ["هل هناك عامل آخر ساهم في هذا التغيّر؟", `ما إجمالي ${fieldLabel} لهذه الفترة؟`]
+    }
+    if (result.points.length > 1) {
+      return [
+        "كيف تغيّر هذا الترتيب مقارنة بالفترة السابقة؟",
+        `ما إجمالي ${fieldLabel} لهذه الفترة؟`,
+      ]
+    }
+    if (result.previousValue !== null) {
+      return ["ما أكبر المساهمين في هذا التغيّر؟"]
+    }
+    return [`قارن ${fieldLabel} بالفترة السابقة.`]
   },
 }
 
@@ -1015,7 +1300,8 @@ export function buildStructuredResponse(
         sawAnalyticsTool = true
         domain = "advertising"
         const rows = output as CampaignDeclineRow[]
-        if (rows.length > 0) charts.push(chartFromCampaignRows(rows, "roas", "الحملات المتراجعة"))
+        if (rows.length > 0)
+          charts.push(chartFromCampaignRows(rows, "roas", "الحملات الأكثر تراجعًا في ROAS"))
         break
       }
       case "get_top_selling_products": {
@@ -1057,6 +1343,7 @@ export function buildStructuredResponse(
             analysis.productContributions.map((row) => row.revenueDelta)
           )
         }
+        recommendations.push(...recommendationsFromPosAnalysis(analysis))
         dataPeriod = analysis.comparison.period.current
         confidence = analysis.comparison.confidence
         if (analysis.comparison.periodFairness.isCurrentPeriodIncomplete) {
@@ -1091,6 +1378,10 @@ export function buildStructuredResponse(
         if (result.items.length > 0) tables.push(tableFromOrders(result.items))
         metrics.push(...kpiCardsFromOrdersSummary(result.summary))
         drivers.push(...driverFindingsFromOrdersDecomposition(result.summary))
+        recommendations.push(
+          ...recommendationsFromOrdersSummary(result.summary, result.queriedPeriod)
+        )
+        confidence = confidence ?? result.summary.confidence
         if (result.periodFairness?.isCurrentPeriodIncomplete) {
           const days = result.periodFairness.elapsedDays
           warnings.push({

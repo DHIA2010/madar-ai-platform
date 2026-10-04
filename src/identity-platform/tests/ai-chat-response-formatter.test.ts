@@ -216,6 +216,9 @@ describe("buildStructuredResponse", () => {
     )
     expect(withRows!.charts).toHaveLength(1)
     expect(withRows!.charts[0].series[0].data[0]).toEqual({ label: "Google Search", value: 20_000 })
+    // Analytical-title fix (audit item 5): was a static dataset-label title regardless of the
+    // data -- now the same ranking framing the generic/contribution paths already use.
+    expect(withRows!.charts[0].title).toBe("أعلى قيم الإيرادات حسب القناة")
 
     const withoutRows = buildStructuredResponse(
       [{ tool: "get_channel_comparison", output: [] }],
@@ -246,6 +249,45 @@ describe("buildStructuredResponse", () => {
       { label: "2026-09-01", value: 150 },
       { label: "2026-09-02", value: 180 },
     ])
+    // Analytical-title fix (audit item 5): names the real trend direction (150 -> 180 is
+    // upward) instead of a static label that never changed regardless of the data.
+    expect(result!.charts[0].title).toBe("اتجاه الإنفاق الإعلاني -- تصاعدي خلال الفترة")
+  })
+
+  it("names a downward trend direction when spend fell across the period", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "get_channel_spend_trend",
+          output: {
+            items: [
+              { bucketStart: "2026-09-01", spendByChannel: { "Google Ads": 200 } },
+              { bucketStart: "2026-09-02", spendByChannel: { "Google Ads": 100 } },
+            ],
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+    expect(result!.charts[0].title).toBe("اتجاه الإنفاق الإعلاني -- تنازلي خلال الفترة")
+  })
+
+  it("names the trend as stable when spend barely changed across the period", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "get_channel_spend_trend",
+          output: {
+            items: [
+              { bucketStart: "2026-09-01", spendByChannel: { "Google Ads": 100 } },
+              { bucketStart: "2026-09-02", spendByChannel: { "Google Ads": 100.05 } },
+            ],
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+    expect(result!.charts[0].title).toBe("اتجاه الإنفاق الإعلاني -- مستقر خلال الفترة")
   })
 
   it("returns no chart (but a non-null envelope) for an empty spend trend", () => {
@@ -420,6 +462,7 @@ describe("buildStructuredResponse", () => {
                 aovEffectPercent: 100,
                 dominantDriver: "aov",
               },
+              confidence: "high",
             },
           },
         },
@@ -440,6 +483,119 @@ describe("buildStructuredResponse", () => {
     expect(result!.metrics.find((m) => m.title === "إجمالي المبيعات")!.value).toBe(250)
     expect(result!.drivers).toHaveLength(2)
     expect(result!.drivers.find((d) => d.metric === "aov")!.role).toBe("primary")
+    expect(result!.drivers.find((d) => d.metric === "aov")!.confidence).toBe("high")
+    // No material revenue change signal (totalSalesChangePct is null, a first-ever period with
+    // nothing to compare against) -- no recommendation filler should be attached either.
+    expect(result!.recommendations).toHaveLength(0)
+    expect(result!.confidence).toBe("high")
+  })
+
+  function ordersSummary(overrides: Record<string, unknown> = {}) {
+    return {
+      totalOrders: 10,
+      totalOrdersChangePct: -50,
+      previousTotalOrders: 20,
+      totalSales: 1000,
+      totalSalesChangePct: -50,
+      previousTotalSales: 2000,
+      averageOrderValue: 100,
+      averageOrderValueChangePct: 0,
+      previousAverageOrderValue: 100,
+      decomposition: {
+        revenueChange: -1000,
+        orderEffect: -1000,
+        aovEffect: 0,
+        orderEffectPercent: 100,
+        aovEffectPercent: 0,
+        dominantDriver: "orders",
+      },
+      confidence: "high",
+      ...overrides,
+    }
+  }
+
+  describe("list_orders recommendations (e-commerce, Genie-level analytical response upgrade)", () => {
+    it("recommends investigating the dominant driver when sales declined materially", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "list_orders",
+            output: { items: [], summary: ordersSummary(), queriedPeriod: null },
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].type).toBe("investigate_decline")
+      expect(result!.recommendations[0].entityType).toBe("account")
+      expect(result!.recommendations[0].reason).toContain("عدد الطلبات")
+      expect(result!.recommendations[0].confidence).toBe("high")
+    })
+
+    it("notes positive performance with a no_action recommendation when sales grew materially", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "list_orders",
+            output: {
+              items: [],
+              summary: ordersSummary({ totalSalesChangePct: 30 }),
+              queriedPeriod: null,
+            },
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].type).toBe("no_action")
+      expect(result!.recommendations[0].reason).toContain("ارتفعت")
+    })
+
+    it("returns an insufficient-data recommendation when confidence is insufficient", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "list_orders",
+            output: {
+              items: [],
+              summary: ordersSummary({ confidence: "insufficient" }),
+              queriedPeriod: null,
+            },
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].type).toBe("no_action")
+      expect(result!.recommendations[0].confidence).toBe("insufficient")
+    })
+
+    it("returns no recommendation when nothing changed (dominantDriver: none)", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "list_orders",
+            output: {
+              items: [],
+              summary: ordersSummary({
+                totalSalesChangePct: 0,
+                decomposition: {
+                  revenueChange: 0,
+                  orderEffect: 0,
+                  aovEffect: 0,
+                  orderEffectPercent: null,
+                  aovEffectPercent: null,
+                  dominantDriver: "none",
+                },
+              }),
+              queriedPeriod: null,
+            },
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(0)
+    })
   })
 
   it("warns when list_orders' current period hasn't fully elapsed yet", () => {
@@ -467,6 +623,7 @@ describe("buildStructuredResponse", () => {
                 aovEffectPercent: null,
                 dominantDriver: "none",
               },
+              confidence: "low",
             },
             periodFairness: { isCurrentPeriodIncomplete: true, elapsedDays: 3 },
           },
@@ -520,6 +677,9 @@ describe("buildStructuredResponse", () => {
     expect(result!.metrics).toHaveLength(1)
     expect(result!.metrics[0].value).toBe(5000)
     expect(result!.metrics[0].trend).toBe("up")
+    // Audit item 4: run_kpi_preview was the highest-impact tool with zero follow-up coverage --
+    // a single compared value (no grouping) should still suggest drilling into contributors.
+    expect(result!.followUpQuestions).toContain("ما أكبر المساهمين في هذا التغيّر؟")
   })
 
   it("builds typed contribution findings from run_kpi_preview's groupByDimension+compareEnabled mode", () => {
@@ -589,6 +749,10 @@ describe("buildStructuredResponse", () => {
     expect(result!.contributionsTitle).toBe(
       "أكبر المساهمين في انخفاض إجمالي المبيعات حسب payment_method"
     )
+    expect(result!.followUpQuestions).toEqual([
+      "هل هناك عامل آخر ساهم في هذا التغيّر؟",
+      "ما إجمالي إجمالي المبيعات لهذه الفترة؟",
+    ])
   })
 
   // Sibling of the test above: a PLAIN ranking (groupByDimension alone, no compareEnabled) has
@@ -835,6 +999,9 @@ describe("buildStructuredResponse", () => {
         "Asia/Riyadh"
       )
       expect(result!.followUpQuestions.some((q) => q.includes("Summer Sale"))).toBe(true)
+      // Analytical-title fix (audit item 5): names the actual metric this view ranks declining
+      // campaigns by, instead of a generic "الحملات المتراجعة" label.
+      expect(result!.charts[0].title).toBe("الحملات الأكثر تراجعًا في ROAS")
     })
 
     it("returns an empty array when no tool has a registered follow-up template", () => {
@@ -990,6 +1157,99 @@ describe("buildStructuredResponse", () => {
       // single contributor's delta is -400, so "انخفاض"/decline) and metric, not a generic
       // "contributions" label.
       expect(result!.contributionsTitle).toBe("أكبر المساهمين في انخفاض الإيرادات حسب المنتج")
+
+      // Genie-level analytical response upgrade section 8: POS had no evidence-based
+      // recommendation at all before this -- Product A is 100% of the (single-product) decline,
+      // clearing the dominant-contributor threshold, so the recommendation should name it by
+      // entity rather than just the account-level driver.
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].type).toBe("investigate_decline")
+      expect(result!.recommendations[0].entityType).toBe("product")
+      expect(result!.recommendations[0].entityName).toBe("Product A")
+      expect(result!.recommendations[0].confidence).toBe("medium")
+      expect(result!.recommendations[0].reason).toContain("Product A")
+    })
+
+    it("recommends the account-level driver (not a specific product) when no single product dominates the decline", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "analyze_sales_performance",
+            output: {
+              ...posAnalysis(),
+              // 5 contributors each at 20% of the total decline -- below the 25% dominant-
+              // contributor threshold, so no single product should be named.
+              productContributions: Array.from({ length: 5 }, (_, i) => ({
+                productName: `Product ${i}`,
+                currentRevenue: 20,
+                previousRevenue: 100,
+                revenueDelta: -80,
+              })),
+            },
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].entityType).toBe("account")
+      expect(result!.recommendations[0].entityId).toBeNull()
+      expect(result!.recommendations[0].entityName).toBe("نقطة البيع")
+      expect(result!.recommendations[0].reason).not.toContain("Product")
+    })
+
+    it("returns an insufficient-data recommendation, never a stronger one, when confidence is insufficient", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "analyze_sales_performance",
+            output: posAnalysis({ confidence: "insufficient" }),
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].type).toBe("no_action")
+      expect(result!.recommendations[0].confidence).toBe("insufficient")
+      expect(result!.recommendations[0].recommendedAction).toBe(
+        "لا توجد بيانات كافية لإعطاء توصية موثوقة."
+      )
+    })
+
+    it("notes positive performance with a no_action recommendation when revenue grew materially", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "analyze_sales_performance",
+            output: posAnalysis({ revenueChangePercent: 25 }),
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(1)
+      expect(result!.recommendations[0].type).toBe("no_action")
+      expect(result!.recommendations[0].reason).toContain("ارتفعت")
+    })
+
+    it("returns no recommendation at all when nothing changed (dominantDriver: none)", () => {
+      const result = buildStructuredResponse(
+        [
+          {
+            tool: "analyze_sales_performance",
+            output: posAnalysis({
+              decomposition: {
+                revenueChange: 0,
+                orderEffect: 0,
+                aovEffect: 0,
+                orderEffectPercent: null,
+                aovEffectPercent: null,
+                dominantDriver: "none",
+              },
+            }),
+          },
+        ],
+        "Asia/Riyadh"
+      )
+      expect(result!.recommendations).toHaveLength(0)
     })
 
     it("warns when the current period hasn't fully elapsed", () => {

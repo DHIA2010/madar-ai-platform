@@ -254,6 +254,7 @@ describe("GET /v1/orders: real order aggregation", () => {
           aovEffectPercent: number | null
           dominantDriver: "orders" | "aov" | "both" | "none"
         }
+        confidence: "high" | "medium" | "low" | "insufficient"
       }
     }
 
@@ -298,6 +299,33 @@ describe("GET /v1/orders: real order aggregation", () => {
     expect(body.summary.decomposition.orderEffect).toBe(200)
     expect(body.summary.decomposition.aovEffect).toBe(69)
     expect(body.summary.decomposition.dominantDriver).toBe("orders")
+    // Genie-level audit finding: e-commerce had no confidence computation at all (unconditional
+    // "medium" in ai-chat/response-formatter.ts). 2 current / 1 previous order over a ~31-day
+    // window is below the "medium" sample-size band (needs >=5 orders), so this must be "low".
+    expect(body.summary.confidence).toBe("low")
+  })
+
+  it("reports insufficient confidence when no orders exist in either period", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "orders-no-data@madar.test",
+      "Orders No Data Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000002601"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Orders No Data",
+    })
+    await insertConnectedSallaConnection({
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/orders`, { headers: authHeaders(login) })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { summary: { confidence: string } }
+    expect(body.summary.confidence).toBe("insufficient")
   })
 
   it("returns an order's items for the 'view products' action", async () => {

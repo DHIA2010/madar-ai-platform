@@ -200,7 +200,11 @@ export interface AnalyticalEvidence {
   previousValue: number | null
   changePercent: number | null
   period: { current: string; previous?: string }
-  entity?: { type: "campaign" | "channel" | "account"; id: string; name: string }
+  // "product" added for POS/e-commerce evidence-based recommendations (Genie-level analytical
+  // response upgrade) -- this type is deliberately the one shared recommendation/evidence
+  // envelope across every domain (see ai-chat/response-types.ts's own comment), not a
+  // campaigns-only shape, despite its historical name.
+  entity?: { type: "campaign" | "channel" | "account" | "product"; id: string; name: string }
   source: string
   dataFreshness?: string
   sampleSize?: number
@@ -219,7 +223,7 @@ export type RecommendationType =
 export interface CampaignRecommendation {
   type: RecommendationType
   priority: "high" | "medium" | "low"
-  entityType: "campaign" | "channel" | "account"
+  entityType: "campaign" | "channel" | "account" | "product"
   entityId: string | null
   entityName: string
   reason: string

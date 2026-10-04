@@ -522,6 +522,53 @@ describe("golden questions -- multi-step", () => {
     expect(reply.structured!.contributions[0].label).toBe("Product A")
     expect(reply.structured!.contributions[0].delta).toBe(-400)
   })
+
+  // Genie-level analytical response upgrade section 8: POS/e-commerce had NO evidence-based
+  // recommendation at all before this -- every "what should I do" question for these two domains
+  // fell back to ungated free LLM prose (confirmed audit gap). Proves the new
+  // recommendationsFromPosAnalysis path reaches reply.structured.recommendations end-to-end
+  // (not just the response-formatter unit level), naming the single dominant product by entity.
+  it("'وش أسوي بخصوص انخفاض المبيعات؟' -- POS evidence-based recommendations reach structured.recommendations end-to-end", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceWithProductAt({
+      productName: "Product A",
+      quantity: 1,
+      lineTotal: 100,
+      createdAt: "2026-09-15T10:00:00Z",
+    })
+    await seedInvoiceWithProductAt({
+      productName: "Product A",
+      quantity: 5,
+      lineTotal: 500,
+      createdAt: "2026-08-15T10:00:00Z",
+    })
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("analyze_sales_performance", {
+      currentFrom: "2026-09-01",
+      currentTo: "2026-09-30",
+    })
+
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "وش أسوي بخصوص انخفاض المبيعات؟"
+    )
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.recommendations).toHaveLength(1)
+    expect(reply.structured!.recommendations[0].type).toBe("investigate_decline")
+    expect(reply.structured!.recommendations[0].entityType).toBe("product")
+    expect(reply.structured!.recommendations[0].entityName).toBe("Product A")
+    expect(reply.structured!.recommendations[0].evidence.length).toBeGreaterThan(0)
+  })
 })
 
 describe("golden questions -- data quality", () => {

@@ -2,6 +2,56 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { decomposeRevenueChange, type RevenueDecomposition } from "../shared/analytics-rules"
 
+// Genie-level audit finding: e-commerce had no confidence computation at all --
+// driverFindingsFromOrdersDecomposition (ai-chat/response-formatter.ts) hardcoded "medium"
+// regardless of actual order volume. Same sample-size bands as pos/sales-analytics-engine.ts's
+// PosConfidenceLevel (orders are the equivalent sample unit to POS invoices), kept local here
+// rather than importing across domains -- the same duplication precedent that file's own comment
+// documents (APPLICATION_SETTINGS_KEY, confidence-engine.ts vs. PosConfidenceLevel).
+export type OrdersConfidenceLevel = "high" | "medium" | "low" | "insufficient"
+
+interface OrdersSampleSize {
+  orders: number
+  days: number
+}
+
+const ORDERS_CONFIDENCE_THRESHOLDS = {
+  high: { minOrders: 20, minDays: 7 },
+  medium: { minOrders: 5, minDays: 3 },
+  low: { minOrders: 1, minDays: 1 },
+} as const
+
+function computeOrdersConfidence(sample: OrdersSampleSize): OrdersConfidenceLevel {
+  if (
+    sample.orders >= ORDERS_CONFIDENCE_THRESHOLDS.high.minOrders &&
+    sample.days >= ORDERS_CONFIDENCE_THRESHOLDS.high.minDays
+  )
+    return "high"
+  if (
+    sample.orders >= ORDERS_CONFIDENCE_THRESHOLDS.medium.minOrders &&
+    sample.days >= ORDERS_CONFIDENCE_THRESHOLDS.medium.minDays
+  )
+    return "medium"
+  if (
+    sample.orders >= ORDERS_CONFIDENCE_THRESHOLDS.low.minOrders &&
+    sample.days >= ORDERS_CONFIDENCE_THRESHOLDS.low.minDays
+  )
+    return "low"
+  return "insufficient"
+}
+
+function combineOrdersConfidence(
+  a: OrdersConfidenceLevel,
+  b: OrdersConfidenceLevel
+): OrdersConfidenceLevel {
+  const order: OrdersConfidenceLevel[] = ["insufficient", "low", "medium", "high"]
+  return order[Math.min(order.indexOf(a), order.indexOf(b))]
+}
+
+function daysBetweenDates(from: Date, to: Date): number {
+  return Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1)
+}
+
 export type OrderPlatform = "Salla" | "Shopify" | "Zid"
 // Bucketed from each provider's own real status text (see bucketOrderStatus) -- not a field
 // any provider syncs directly, since each has its own status vocabulary.
@@ -53,6 +103,7 @@ export interface OrdersSummaryStats {
   // average-order-value effect -- the same decomposeRevenueChange POS already uses for exactly
   // this question, reused here rather than re-implemented.
   decomposition: RevenueDecomposition
+  confidence: OrdersConfidenceLevel
 }
 
 function toIsoDate(value: Date | string): string {
@@ -380,7 +431,17 @@ export class OrdersAggregationService {
     ])
 
     const items = currentRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    const summary = this.buildSummary(items, previousRows)
+    const confidence = combineOrdersConfidence(
+      computeOrdersConfidence({
+        orders: currentRows.length,
+        days: daysBetweenDates(startDate, endDate),
+      }),
+      computeOrdersConfidence({
+        orders: previousRows.length,
+        days: daysBetweenDates(previousStart, previousEnd),
+      })
+    )
+    const summary = this.buildSummary(items, previousRows, confidence)
 
     return { items, summary }
   }
@@ -426,7 +487,8 @@ export class OrdersAggregationService {
 
   private buildSummary(
     current: OrderSummaryView[],
-    previous: OrderSummaryView[]
+    previous: OrderSummaryView[],
+    confidence: OrdersConfidenceLevel
   ): OrdersSummaryStats {
     const currentSales = current.reduce((sum, o) => sum + o.amount, 0)
     const previousSales = previous.reduce((sum, o) => sum + o.amount, 0)
@@ -459,6 +521,7 @@ export class OrdersAggregationService {
         { orders: current.length, aov: currentAov },
         { orders: previous.length, aov: previousAov }
       ),
+      confidence,
     }
   }
 }
