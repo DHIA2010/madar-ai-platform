@@ -156,6 +156,11 @@ export interface ChatStructuredResponse {
   insights: ChatInsight[]
   drivers: ChatDriverFinding[]
   contributions: ChatContributionFinding[]
+  // Mirrors ai-chat/response-types.ts's StructuredAnalyticsResponse.contributionsTitle -- an
+  // analytical heading for contributions ("أكبر المساهمين في انخفاض المبيعات حسب المنتج"),
+  // already derived server-side from the dimension/metric/direction. null when contributions is
+  // empty; the dashboard falls back to a generic heading in that case.
+  contributionsTitle: string | null
   recommendations: ChatRecommendation[]
   metrics: ChatKpiCard[]
   charts: ChatChartSpec[]

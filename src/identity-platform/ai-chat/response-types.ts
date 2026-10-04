@@ -139,6 +139,11 @@ export interface StructuredAnalyticsResponse {
   // (most non-"why" questions). See DriverFinding/ContributionFinding's own comments.
   drivers: DriverFinding[]
   contributions: ContributionFinding[]
+  // Final-polish audit section 2: an analytical heading for contributions[] ("أكبر المساهمين في
+  // انخفاض المبيعات حسب المنتج"), derived from the dimension/metric/direction already in the
+  // tool's own result -- see response-formatter.ts's deriveContributionTitle. null whenever
+  // contributions is empty; the frontend falls back to a generic heading in that case.
+  contributionsTitle: string | null
   recommendations: CampaignRecommendation[]
   metrics: KpiCard[]
   charts: ChartSpec[]

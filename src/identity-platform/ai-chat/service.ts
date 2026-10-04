@@ -60,6 +60,16 @@ const PRESENTATION_RULES = [
   // separately, see response-formatter.ts) already carry the supporting detail, so the text's
   // job is the conclusion in the first 1-3 sentences, nothing before it.
   "ابدأ ردك دائمًا بالإجابة المباشرة على سؤال المستخدم في أول 1-3 جمل -- مثل: 'انخفضت الإيرادات بنسبة 42% مقارنة بالفترة السابقة. السبب الرئيسي هو...'. لا تبدأ أبدًا بعبارات تمهيدية مثل 'بناءً على البيانات المتاحة...' أو 'بعد تحليل البيانات...' أو شرح لما قامت به الأداة -- اذهب للنتيجة مباشرة.",
+  // Final-polish audit sections 6-9: observation (what happened) / explanation (what it means) /
+  // recommendation (what to do) are three distinct ideas -- mixing them into one long paragraph
+  // is exactly what this rule exists to prevent. Each stays short; the structured KPI/driver/
+  // contribution blocks already carry the supporting numbers, so the prose never needs to
+  // restate them in full, only name the conclusion.
+  "بعد جملة الإجابة المباشرة، افصل ردك إلى فقرات قصيرة ومنفصلة بوضوح: (1) النتيجة المباشرة، (2) السبب/الدليل الداعم باختصار (رقم أو اثنان فقط، التفاصيل الكاملة تُعرض في البطاقات/الجداول المنفصلة)، (3) ماذا يعني هذا عمليًا (جملة واحدة)، (4) توصية إن وُجد ما يدعمها. لا تدمج هذه الأفكار في فقرة واحدة طويلة، ولا تكرر نفس الرقم أكثر من مرة واحدة في النص.",
+  // Final-polish audit section 10: a recommendation's wording must match the evidence strength
+  // behind it -- never phrase a weakly-supported guess with the same confidence as a strongly-
+  // supported one.
+  "إذا أوصيت بإجراء، اربط قوة صياغة التوصية بقوة الدليل: مع دليل قوي ومحدد (مساهم واضح ومهيمن، ثقة عالية/متوسطة) استخدم صياغة مباشرة مثل 'أوصي بمراجعة...'. مع دليل ضعيف أو غير كافٍ (ثقة منخفضة أو insufficient، أو مساهمون متعددون متقاربون دون مهيمن واضح) استخدم صياغة متحفظة مثل 'قد يكون من المفيد مراجعة...، لكن البيانات الحالية لا تكفي لتحديد السبب بثقة عالية' -- لا تصغ توصية بثقة أعلى مما يدعمه الدليل الفعلي.",
   'لا تستخدم أبدًا رمز الخط العمودي (|) أو جداول بتنسيق ASCII أو عرض بيانات بشكل "حقل: قيمة | حقل: قيمة" في ردك. لا تحاول رسم جدول بنفسك بأي شكل نصي.',
   "عندما تُرجع إحدى الأدوات قائمة سجلات متعددة (ورديات، طلبات، فواتير، منتجات، متاجر)، لا تُعدّد كل سجل وكل حقل في النص -- هذه التفاصيل تُعرض تلقائيًا في جدول منفصل ضمن واجهة المحادثة. اكتفِ في ردك بفقرة موجزة جدًا (جملة أو جملتين): العدد الإجمالي، والحالة العامة، وأي ملاحظة مهمة واحدة إن وجدت.",
   'لا تعرض أبدًا تاريخًا أو وقتًا بصيغته الخام مثل 2026-09-22T20:32:00Z -- التنسيق المقروء يُعرض تلقائيًا في الجدول أو البطاقة؛ إذا احتجت لذكر تاريخ في النص، اذكره بصياغة عربية طبيعية (مثل "22 سبتمبر") لا كسلسلة ISO.',

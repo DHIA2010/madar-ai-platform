@@ -46,6 +46,34 @@ function trend(changePercent: number | null): KpiCard["trend"] {
   return changePercent > 0 ? "up" : "down"
 }
 
+// Final-polish audit section 2 (the spec's own "most important remaining improvement"): a chart/
+// contribution title should answer "why am I looking at this?" ("أكبر المنتجات مساهمة في انخفاض
+// المبيعات"), not just name the dataset ("المبيعات -- إجمالي المبيعات حسب المنتج"). Deliberately
+// does NOT thread the user's raw question text into the formatter to get there -- direction,
+// metric, and dimension are already fully available from the tool's own computed result
+// (deltaSum's sign, fieldLabel, dimensionLabel), so the smallest clean change is to derive the
+// title from data already in hand rather than adding a new userQuestion/intent plumbing path.
+// "المساهمين" (contributors) is used instead of pluralizing the dimension label itself (e.g.
+// "المنتجات") -- catalog dimension labels are singular nouns with irregular Arabic plurals
+// (العميل -> العملاء, الفرع -> الفروع, طريقة الدفع -> طرق الدفع), so a generic pluralizer would
+// just as often produce broken Arabic as correct Arabic; "حسب <dimension>" (by <dimension>,
+// singular) is grammatically safe for any noun.
+function deriveContributionTitle(
+  dimensionLabel: string,
+  fieldLabel: string,
+  deltas: number[]
+): string {
+  const totalDelta = deltas.reduce((sum, delta) => sum + delta, 0)
+  const direction = totalDelta >= 0 ? "ارتفاع" : "انخفاض"
+  return `أكبر المساهمين في ${direction} ${fieldLabel} حسب ${dimensionLabel}`
+}
+
+// Same reasoning for a plain ranking (no comparison -- see chartFromGenericResult's call site):
+// "قيم" (values) is already plural and dimension-agnostic, so no pluralization risk either.
+function deriveRankingTitle(dimensionLabel: string, fieldLabel: string): string {
+  return `أعلى قيم ${fieldLabel} حسب ${dimensionLabel}`
+}
+
 // Human-readable Arabic datetime strings in the organization's own timezone -- the one place an
 // ISO timestamp from a tool's raw output becomes something a user should actually read. Built
 // from Intl.DateTimeFormat parts (not the locale's own combined string) so the separator between
@@ -844,13 +872,15 @@ function contributionFindingsFromGenericResult(result: KpiResult): ContributionF
 }
 
 function chartFromGenericResult(result: KpiResult): ChartSpec {
-  // Only ever reached for a plain ranking now -- contribution mode is handled entirely by
-  // contributions[] instead (see this function's call site).
-  const title = result.meta
-    ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}${
-        result.meta.groupByDimensionLabel ? ` حسب ${result.meta.groupByDimensionLabel}` : ""
-      }`
-    : "نتيجة الاستعلام"
+  // Only ever reached for a plain ranking now (contribution mode is handled entirely by
+  // contributions[]/deriveContributionTitle instead -- see this function's call site), so a
+  // dimension+field pair is always expected here.
+  const title =
+    result.meta?.groupByDimensionLabel && result.meta?.fieldLabel
+      ? deriveRankingTitle(result.meta.groupByDimensionLabel, result.meta.fieldLabel)
+      : result.meta
+        ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}`
+        : "نتيجة الاستعلام"
   return {
     type: "chart",
     chartType: "bar",
@@ -879,6 +909,7 @@ export function buildStructuredResponse(
   const insights: Insight[] = []
   const drivers: DriverFinding[] = []
   const contributions: ContributionFinding[] = []
+  let contributionsTitle: string | null = null
   const recommendations: CampaignRecommendation[] = []
   const metrics: KpiCard[] = []
   const charts: ChartSpec[] = []
@@ -1020,6 +1051,11 @@ export function buildStructuredResponse(
         // must earn a distinct analytical purpose; a verbatim duplicate doesn't.
         if (analysis.productContributions.length > 0) {
           contributions.push(...contributionFindingsFromPosProducts(analysis.productContributions))
+          contributionsTitle = deriveContributionTitle(
+            "المنتج",
+            "الإيرادات",
+            analysis.productContributions.map((row) => row.revenueDelta)
+          )
         }
         dataPeriod = analysis.comparison.period.current
         confidence = analysis.comparison.confidence
@@ -1090,6 +1126,13 @@ export function buildStructuredResponse(
           if (isContributionMode) {
             insights.push(...insightsFromGenericContribution(result))
             contributions.push(...contributionFindingsFromGenericResult(result))
+            if (result.meta?.groupByDimensionLabel && result.meta?.fieldLabel) {
+              contributionsTitle = deriveContributionTitle(
+                result.meta.groupByDimensionLabel,
+                result.meta.fieldLabel,
+                result.points.map((point) => point.extraValues?.delta ?? 0)
+              )
+            }
           } else {
             charts.push(chartFromGenericResult(result))
           }
@@ -1136,6 +1179,7 @@ export function buildStructuredResponse(
     insights,
     drivers,
     contributions,
+    contributionsTitle,
     recommendations,
     metrics,
     charts,

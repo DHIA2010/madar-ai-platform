@@ -446,6 +446,41 @@ describe("golden questions -- why (diagnostic)", () => {
       expect(insight.statement).not.toMatch(/كان السبب|تسبب في/)
     }
   })
+
+  // Final-polish audit section 22, benchmark Q5 ("وش تنصحني أسوي؟"): proves
+  // generate_campaign_recommendations' output reaches reply.structured.recommendations end-to-
+  // end (not just the response-formatter unit level already covered elsewhere) -- this is the
+  // field the previous phase's ChatRecommendationsPanel renders, which had no end-to-end test.
+  it("'وش تنصحني أسوي؟' -- evidence-gated recommendations reach structured.recommendations end-to-end", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    const engine = buildFakeAdvertisingEngine(
+      summary({ roas: 6, spend: 10_000, revenue: 60_000 }),
+      summary({ roas: 4, spend: 10_000, revenue: 40_000 })
+    )
+    service = buildService(engine, posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "advertising")
+    await scriptSingleTool("generate_campaign_recommendations", {
+      currentFrom: "2026-09-01",
+      currentTo: "2026-09-30",
+      previousFrom: "2026-08-01",
+      previousTo: "2026-08-31",
+    })
+
+    const reply = await service.sendMessage(actor(ORG_A, USER_A), session.id, "وش تنصحني أسوي؟")
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.recommendations.length).toBeGreaterThan(0)
+    for (const recommendation of reply.structured!.recommendations) {
+      expect(recommendation.evidence.length).toBeGreaterThan(0)
+      expect(recommendation.confidence).toBeDefined()
+    }
+  })
 })
 
 describe("golden questions -- multi-step", () => {

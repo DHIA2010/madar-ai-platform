@@ -341,12 +341,18 @@ function ChatDriversPanel({ drivers }: { drivers: ChatDriverFinding[] }) {
 // Same idea for StructuredAnalyticsResponse.contributions (section 5: "Campaign A contributed
 // approximately 42% of the total decline") -- a ranked breakdown with each contributor's share
 // of the total change, distinct from a plain ReportTable since it carries that share explicitly.
-function ChatContributionsPanel({ contributions }: { contributions: ChatContributionFinding[] }) {
+function ChatContributionsPanel({
+  contributions,
+  title,
+}: {
+  contributions: ChatContributionFinding[]
+  title: string | null
+}) {
   if (contributions.length === 0) return null
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-border/60">
       <p className="border-b border-border/60 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-foreground">
-        أكبر المساهمين في التغيّر
+        {title ?? "أكبر المساهمين في التغيّر"}
       </p>
       <div className="divide-y divide-border/40">
         {contributions.slice(0, 5).map((contribution, index) => (
@@ -867,6 +873,7 @@ export default function AIAssistantDashboard() {
                               <ChatDriversPanel drivers={message.structured.drivers} />
                               <ChatContributionsPanel
                                 contributions={message.structured.contributions}
+                                title={message.structured.contributionsTitle}
                               />
                               <ChatFactsInsightsPanel
                                 facts={message.structured.facts}

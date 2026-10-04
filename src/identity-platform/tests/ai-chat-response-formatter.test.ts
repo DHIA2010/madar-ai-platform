@@ -582,6 +582,13 @@ describe("buildStructuredResponse", () => {
     expect(result!.charts).toHaveLength(0)
     expect(result!.insights).toHaveLength(1)
     expect(result!.insights[0].statement).toContain("card")
+
+    // Final-polish audit section 2: an analytical heading, not a dataset label -- derived from
+    // the dimension/metric already in the result, naming the direction of the NET change
+    // (card -150 + cash +80 = -70 net, so "انخفاض"/decline).
+    expect(result!.contributionsTitle).toBe(
+      "أكبر المساهمين في انخفاض إجمالي المبيعات حسب payment_method"
+    )
   })
 
   // Sibling of the test above: a PLAIN ranking (groupByDimension alone, no compareEnabled) has
@@ -617,7 +624,10 @@ describe("buildStructuredResponse", () => {
     expect(result!.charts).toHaveLength(1)
     expect(result!.contributions).toHaveLength(0)
     expect(result!.insights).toHaveLength(0)
-    expect(result!.charts[0].title).toBe("المبيعات -- إجمالي المبيعات حسب payment_method")
+
+    // Final-polish audit section 2: "أعلى قيم <field> حسب <dimension>" instead of the old
+    // "<dataSourceLabel> -- <fieldLabel> حسب <dimensionLabel>" dataset-naming boilerplate.
+    expect(result!.charts[0].title).toBe("أعلى قيم إجمالي المبيعات حسب payment_method")
   })
 
   it("returns an empty chart list for top-selling products when there are none, but still a non-null envelope", () => {
@@ -975,6 +985,11 @@ describe("buildStructuredResponse", () => {
           contributionSharePercent: 100,
         },
       ])
+
+      // Final-polish audit section 2: an analytical heading naming the actual direction (the
+      // single contributor's delta is -400, so "انخفاض"/decline) and metric, not a generic
+      // "contributions" label.
+      expect(result!.contributionsTitle).toBe("أكبر المساهمين في انخفاض الإيرادات حسب المنتج")
     })
 
     it("warns when the current period hasn't fully elapsed", () => {
