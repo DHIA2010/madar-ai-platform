@@ -146,14 +146,16 @@ export const REPORT_CATALOG: CatalogDataSource[] = [
       {
         key: "quantity_sold",
         label: "الكمية المباعة",
-        description: "إجمالي الكمية المباعة لكل سطر فاتورة.",
+        description:
+          "إجمالي الكمية المباعة لكل سطر فاتورة، بغض النظر عن حالة الفاتورة (شاملة الملغاة والمرتجعة) ما لم يُطبّق فلتر status.",
         sqlExpr: "i.quantity",
         allowedAggregations: SUM_AVG,
       },
       {
         key: "revenue",
         label: "إيرادات المنتج",
-        description: "إجمالي قيمة المبيعات لكل سطر فاتورة (الكمية × سعر الوحدة).",
+        description:
+          "إجمالي قيمة المبيعات لكل سطر فاتورة (الكمية × سعر الوحدة)، بغض النظر عن حالة الفاتورة (شاملة الملغاة والمرتجعة) ما لم يُطبّق فلتر status.",
         sqlExpr: "i.line_total",
         allowedAggregations: SUM_AVG,
       },
@@ -174,6 +176,12 @@ export const REPORT_CATALOG: CatalogDataSource[] = [
         label: "الفئة",
         sqlExpr: "coalesce(pr.category, 'غير مصنف')",
         allowedOperators: ["eq", "neq", "contains", "not_contains"],
+      },
+      {
+        key: "status",
+        label: "حالة الفاتورة",
+        sqlExpr: "p.status",
+        allowedOperators: ["eq", "neq"],
       },
     ],
   },
@@ -226,14 +234,16 @@ export const REPORT_CATALOG: CatalogDataSource[] = [
       {
         key: "total_spend",
         label: "إجمالي إنفاق العملاء",
-        description: "إجمالي قيمة الفواتير المرتبطة بالعميل.",
+        description:
+          "إجمالي قيمة الفواتير المرتبطة بالعميل، بغض النظر عن حالة الفاتورة (شاملة الملغاة والمرتجعة) ما لم يُطبّق فلتر status.",
         sqlExpr: "p.total_amount",
         allowedAggregations: SUM_AVG,
       },
       {
         key: "visit_count",
         label: "عدد الزيارات",
-        description: "عدد الفواتير المرتبطة بالعميل (كمؤشر على عدد مرات الشراء).",
+        description:
+          "عدد الفواتير المرتبطة بالعميل (كمؤشر على عدد مرات الشراء)، بغض النظر عن حالتها ما لم يُطبّق فلتر status.",
         sqlExpr: "p.id",
         allowedAggregations: COUNT_ONLY,
       },
@@ -245,6 +255,12 @@ export const REPORT_CATALOG: CatalogDataSource[] = [
         label: "اسم العميل",
         sqlExpr: "c.name",
         allowedOperators: ["eq", "neq", "contains", "not_contains"],
+      },
+      {
+        key: "status",
+        label: "حالة الفاتورة",
+        sqlExpr: "p.status",
+        allowedOperators: ["eq", "neq"],
       },
     ],
   },
@@ -261,21 +277,24 @@ export const REPORT_CATALOG: CatalogDataSource[] = [
       {
         key: "revenue",
         label: "الإيرادات",
-        description: "إجمالي قيمة الفواتير (شامل الضريبة، بعد الخصومات).",
+        description:
+          "إجمالي قيمة الفواتير (شامل الضريبة، بعد الخصومات)، بغض النظر عن حالة الفاتورة (شاملة الملغاة والمرتجعة) ما لم يُطبّق فلتر status.",
         sqlExpr: "p.total_amount",
         allowedAggregations: SUM_AVG,
       },
       {
         key: "tax_collected",
         label: "الضريبة المحصلة",
-        description: "إجمالي الضريبة المحصلة على الفواتير.",
+        description:
+          "إجمالي الضريبة المحصلة على الفواتير، بغض النظر عن حالتها ما لم يُطبّق فلتر status.",
         sqlExpr: "p.tax_amount",
         allowedAggregations: SUM_AVG,
       },
       {
         key: "discounts_given",
         label: "الخصومات الممنوحة",
-        description: "إجمالي قيمة الخصومات الممنوحة على الفواتير.",
+        description:
+          "إجمالي قيمة الخصومات الممنوحة على الفواتير، بغض النظر عن حالتها ما لم يُطبّق فلتر status.",
         sqlExpr: "p.discount_amount",
         allowedAggregations: SUM_AVG,
       },
@@ -286,7 +305,7 @@ export const REPORT_CATALOG: CatalogDataSource[] = [
         // expense ledger exists in this app), which is why this is labeled "مقدّر" (estimated).
         label: "هامش الربح (مقدّر)",
         description:
-          "تقدير للهامش: قيمة الفاتورة ناقص تكلفة البضاعة المباعة المقدّرة (الكمية × سعر التكلفة الحالي للمنتج). ليس ربحًا محاسبيًا دقيقًا -- لا يوجد دفتر مصروفات في النظام.",
+          "تقدير للهامش: قيمة الفاتورة ناقص تكلفة البضاعة المباعة المقدّرة (الكمية × سعر التكلفة الحالي للمنتج). ليس ربحًا محاسبيًا دقيقًا -- لا يوجد دفتر مصروفات في النظام. بغض النظر عن حالة الفاتورة ما لم يُطبّق فلتر status.",
         sqlExpr: `(p.total_amount - coalesce((
           select sum(i.quantity * coalesce(pr.cost_price, 0))
           from pos_invoice_items i

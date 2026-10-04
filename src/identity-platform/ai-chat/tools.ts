@@ -19,7 +19,9 @@ import type { OrdersAggregationService } from "../orders/service"
 import type { PosInvoicesService } from "../pos/invoices-service"
 import type { PosSalesAnalyticsEngine } from "../pos/sales-analytics-engine"
 import type { PosShiftsService } from "../pos/shifts-service"
+import { findDataSource } from "../reports/catalog"
 import type { ReportsService } from "../reports/service"
+import { describePeriodFairness } from "../shared/analytics-rules"
 import {
   getOrganizationTimezone,
   precedingPeriod,
@@ -832,7 +834,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         tool: {
           name: "run_kpi_preview",
           description:
-            "Runs a real, whitelisted query (dataSource + field + aggregation) and returns the actual result -- the general-purpose way to answer a question with no dedicated tool. dataSource/field/groupByDimension/filters[].field must come from get_report_catalog -- any other value is rejected. Set groupByDimension for a ranked breakdown ('which product/category/customer contributed most'); set compareEnabled for 'did this change vs the period before' (ignored when groupByDimension is set).",
+            "Runs a real, whitelisted query (dataSource + field + aggregation) over a resolved date range and returns the actual result -- the general-purpose way to answer a question with no dedicated tool. dataSource/field/groupByDimension/filters[].field must come from get_report_catalog -- any other value is rejected. Set groupByDimension for a ranked breakdown ('which product/category/customer contributed most'); set compareEnabled for 'did this change vs the period before'. Set BOTH together for a generic contribution/driver breakdown ('which products caused the decline', 'who contributed to the increase') -- each item in the ranked result then also carries previousValue/delta/deltaPercent vs the preceding equal-length period, ranked by |delta| descending (largest driver of the change first, increases and decreases both included). Prefer `period` (including 'all_time') over startDate/endDate whenever the question names a relative period -- never compute a date yourself. Omit all three only when the question has no time dimension at all.",
           input_schema: {
             type: "object",
             properties: {
@@ -869,6 +871,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
                 description:
                   "When true (and groupByDimension is not set), also returns the equal-length immediately-preceding period's value and percentage change.",
               },
+              ...dateRangeProperties,
+              period: relativePeriodProperty,
             },
             required: ["dataSource", "field", "aggregation", "timeGrouping"],
           },
@@ -889,8 +893,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
             )
             .optional(),
           compareEnabled: z.boolean().optional(),
+          ...dateRangeShape,
+          period: z.enum(RELATIVE_PERIODS).optional(),
         }),
-        execute: (actor, services, input) => {
+        execute: async (actor, services, input) => {
           const parsed = input as {
             dataSource: string
             field: string
@@ -903,7 +909,30 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
               value: string
             }>
             compareEnabled?: boolean
+            period?: RelativePeriod
+            startDate?: string
+            endDate?: string
           }
+          // The catalog's own `application` tag on this data source is the true owning domain,
+          // independent of which category this chat session itself is scoped to -- needed
+          // because a madarApps-scoped session's catalog spans every domain (see
+          // getCatalogForApplication's own comment), so "this_month" must resolve in the
+          // timezone/coverage sense appropriate to whichever domain was actually picked, not to
+          // "madarApps" (which isn't a resolvable domain -- no data source is ever tagged that).
+          const catalogSource = findDataSource(parsed.dataSource)
+          const domain: AnalyticsDomain | null =
+            catalogSource?.application === "advertising" ||
+            catalogSource?.application === "pos" ||
+            catalogSource?.application === "ecommerce"
+              ? catalogSource.application
+              : null
+          const resolved = domain
+            ? await resolveSinglePeriod(services, domain, actor, {
+                period: parsed.period,
+                startDate: parsed.startDate,
+                endDate: parsed.endDate,
+              })
+            : { startDate: parsed.startDate, endDate: parsed.endDate }
           return services.reportsService.previewKpi(actor, {
             dataSource: parsed.dataSource,
             field: parsed.field,
@@ -913,6 +942,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
             groupByDimension: parsed.groupByDimension ?? null,
             compareEnabled: parsed.compareEnabled ?? false,
             workspaceId: actor.workspaceId,
+            range:
+              resolved.startDate && resolved.endDate
+                ? { from: resolved.startDate, to: resolved.endDate }
+                : undefined,
           })
         },
       },

@@ -213,13 +213,19 @@ export async function executeKpi(
     )
     const aggFn = aggregationSqlFn(definition.aggregation)
     const extraSelect = extraParts.map((part) => `, ${part.selectSql}`).join("")
+    // Universal Data Intelligence "Next Level" audit, Section 6 (generic contribution/driver
+    // analysis): when compareEnabled is also set, the top-10 cutoff must happen AFTER merging
+    // with the previous period and re-ranking by |delta| below -- a label ranked outside the
+    // top 10 by current value can still be the single largest driver of a decline (e.g. it fell
+    // from #1 to #30), and limiting the current-period query alone would hide it invisibly.
+    const limitClause = definition.compareEnabled ? "" : "limit 10"
     const sql = `
       select ${dimension.sqlExpr} as label, ${aggFn}(${field.sqlExpr}) as value${extraSelect}
       from ${dataSource.fromClause}
       where ${conditions.join(" and ")}
       group by ${dimension.sqlExpr}
       order by value desc
-      limit 10
+      ${limitClause}
     `
     const result = await db.query<Record<string, string | number | null>>(sql, params)
     points = result.rows.map((row) => ({
@@ -227,6 +233,56 @@ export async function executeKpi(
       value: row.value === null ? 0 : Number(row.value),
       extraValues: extractExtraValues(row, extraParts),
     }))
+
+    if (definition.compareEnabled) {
+      const previousRange = computePreviousRange(range)
+      const { conditions: previousConditions, params: previousParams } = buildScopeAndFilters(
+        definition.dataSource,
+        organizationId,
+        workspaceId,
+        definition.filters,
+        previousRange
+      )
+      const previousSql = `
+        select ${dimension.sqlExpr} as label, ${aggFn}(${field.sqlExpr}) as value
+        from ${dataSource.fromClause}
+        where ${previousConditions.join(" and ")}
+        group by ${dimension.sqlExpr}
+      `
+      const previousResult = await db.query<Record<string, string | number | null>>(
+        previousSql,
+        previousParams
+      )
+      const previousByLabel = new Map<string, number>()
+      for (const row of previousResult.rows) {
+        const label = (row.label as string | null) ?? "غير محدد"
+        previousByLabel.set(label, row.value === null ? 0 : Number(row.value))
+      }
+      const currentByLabel = new Map(points.map((point) => [point.label, point]))
+      // The union of labels seen in EITHER period, not just the current (unlimited) query's own
+      // labels -- a label that dropped to zero this period (fully disappeared) would otherwise
+      // never surface as a negative driver.
+      const allLabels = new Set([...currentByLabel.keys(), ...previousByLabel.keys()])
+      const merged: KpiDataPoint[] = Array.from(allLabels, (label) => {
+        const current = currentByLabel.get(label)
+        const currentPointValue = current?.value ?? 0
+        const previousValue = previousByLabel.get(label) ?? 0
+        const delta = currentPointValue - previousValue
+        return {
+          label,
+          value: currentPointValue,
+          extraValues: {
+            ...(current?.extraValues ?? {}),
+            previousValue,
+            delta,
+            deltaPercent: previousValue === 0 ? 0 : (delta / previousValue) * 100,
+          },
+        }
+      })
+      points = merged
+        .sort((a, b) => Math.abs(b.extraValues!.delta) - Math.abs(a.extraValues!.delta))
+        .slice(0, 10)
+    }
   } else if (definition.timeGrouping !== "none" && dataSource.dateExpr) {
     const { conditions, params } = buildScopeAndFilters(
       definition.dataSource,
@@ -331,6 +387,7 @@ export async function executeKpi(
       fieldLabel: field.label,
       groupByDimensionLabel,
       application: dataSource.application,
+      queriedPeriod: { from: range.from, to: range.to },
     },
   }
 }

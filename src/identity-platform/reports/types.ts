@@ -184,5 +184,9 @@ export interface KpiResult {
     fieldLabel: string
     groupByDimensionLabel: string | null
     application: CatalogApplication
+    // The actual [from, to) range executeKpi ran against -- lets a generic consumer (the AI
+    // chat's structured-response formatter) render data-coverage transparency ("من بداية
+    // البيانات المتاحة لدينا في X وحتى Y") without re-resolving or re-threading the period itself.
+    queriedPeriod: { from: string; to: string }
   }
 }

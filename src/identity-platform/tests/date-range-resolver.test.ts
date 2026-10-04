@@ -101,6 +101,37 @@ describe("resolveRelativePeriod", () => {
     expect(tokyo.from).toBe("2026-09-16")
     expect(losAngeles.from).toBe("2026-09-15")
   })
+
+  it("last_90_days is a rolling 90-day window ending today, inclusive", () => {
+    expect(resolveRelativePeriod("last_90_days", TZ, NOW)).toMatchObject({
+      from: "2026-06-18",
+      to: "2026-09-15",
+    })
+  })
+
+  // Section 1/2 of the "Next Level" audit: "all_time" is deliberately NOT resolvable here --
+  // it needs each domain's real earliest/latest data (ai-chat/tools.ts's resolveAllTimeRange),
+  // which this synchronous, data-less function has no way to query. A caller that forgets to
+  // intercept it before reaching here must fail loudly, never silently fabricate a window.
+  it("throws for 'all_time' rather than fabricating a fixed window", () => {
+    expect(() => resolveRelativePeriod("all_time", TZ, NOW)).toThrow(/all_time/)
+  })
+
+  // "this_month" crossing a timezone boundary: 2026-09-01T00:30 UTC is still 2026-08-31 in a
+  // negative-offset zone, so "this month" must resolve to August there, not September -- proves
+  // a month-boundary period (not just "today") actually uses the organization's own timezone.
+  it("resolves 'this_month' using the organization's own timezone across a month boundary", () => {
+    const justAfterMidnightUtc = new Date("2026-09-01T00:30:00.000Z")
+    const riyadh = resolveRelativePeriod("this_month", "Asia/Riyadh", justAfterMidnightUtc) // UTC+3
+    const losAngeles = resolveRelativePeriod(
+      "this_month",
+      "America/Los_Angeles",
+      justAfterMidnightUtc
+    ) // UTC-7
+    expect(riyadh.from).toBe("2026-09-01")
+    expect(losAngeles.from).toBe("2026-08-01")
+    expect(losAngeles.to).toBe("2026-08-31")
+  })
 })
 
 describe("precedingPeriod", () => {

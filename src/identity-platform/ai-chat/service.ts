@@ -10,7 +10,7 @@ import { AiChatRepository } from "./repository"
 import { buildStructuredResponse } from "./response-formatter"
 import type { RawToolResult } from "./response-types"
 import { buildToolsForCategory, dispatchToolCall, type AiChatToolServices } from "./tools"
-import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto } from "./types"
+import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto, ToolCallTrace } from "./types"
 
 const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
   advertising: "الحملات الإعلانية",
@@ -71,7 +71,21 @@ const ADVERTISING_ANALYTICS_RULES = [
 const GENERIC_QUERY_RULES = [
   "إذا سُئلت سؤالاً تحليليًا معقولاً عن بيانات هذا القسم ولا توجد أداة مخصصة تجيب عنه مباشرة (مثل: 'أي فئة منتجات حققت أعلى مبيعات؟'، 'من أكثر عميل اشترى؟'، 'ما إجمالي هامش الربح هذا الشهر؟')، لا تقل إن البيانات غير متوفرة قبل التحقق -- استخدم get_report_catalog لمعرفة مصادر البيانات/الحقول/الأبعاد المتاحة فعليًا، ثم استخدم run_kpi_preview لتنفيذ الاستعلام الفعلي.",
   "في run_kpi_preview: استخدم groupByDimension عندما يطلب السؤال 'أي/أكثر/أفضل X ساهم في Y' (يُعيد ترتيبًا تنازليًا لأعلى 10 نتائج). استخدم compareEnabled=true عندما يطلب السؤال مقارنة بالفترة السابقة. لا تستخدم dataSource أو field أو اسم بُعد لم يرد حرفيًا في نتيجة get_report_catalog -- هذا يُرفض من الخادم فورًا.",
+  "عند سؤال 'لماذا ارتفع/انخفض X' أو 'أي المنتجات/العملاء/الفئات تسبب في التغيير' ولا توجد أداة تشخيصية مخصصة لهذا المصدر، استخدم run_kpi_preview مع groupByDimension وcompareEnabled=true معًا -- النتيجة تُرتّب تلقائيًا بأكبر تغيّر (زيادة أو نخفاض) أولًا، ويحمل كل عنصر previousValue/delta/deltaPercent. اعرض هذا كملاحظة تزامن (مثل 'أكبر مساهم في التغيّر هو...')، ولا تستخدم صياغة جزم سببي (لا تقل 'كان السبب' أو 'تسبب في') إلا إذا كانت الأداة نفسها أثبتت ذلك.",
   "إذا كانت أداة مخصصة (مثل analyze_sales_performance أو get_top_selling_products) تجيب عن السؤال مباشرة وبتحليل أعمق (تفصيل الأسباب، مستوى الثقة، إلخ)، فضّلها دائمًا على run_kpi_preview -- الأخير هو الخيار العام عند عدم وجود أداة أكثر تخصصًا فقط.",
+].join("\n")
+
+// Section 3 of the "Next Level" audit: without this, a follow-up like "قارنها بالشهر الماضي"
+// has no structured anchor to the prior turn's actual query (dataSource/field/period/dimension)
+// -- only the model's own prose summary of it, which is lossy and not meant to be re-parsed.
+// formatToolCallsAnnotation (below) attaches a compact, machine-readable record of each past
+// assistant turn's real tool calls to the message history sent to the LLM; this is the prompt
+// half telling it how to read and use that record.
+const CONVERSATION_CONTEXT_RULES = [
+  "كل رسالة سابقة من المساعد في هذه المحادثة قد يتبعها سطر [أدوات مستخدمة في هذا الرد: ...] يسرد اسم الأداة والمعاملات الفعلية (dataSource وfield وperiod وgroupByDimension وغيرها) التي استُخدمت لإنتاج ذلك الرد. هذا السطر معلومة داخلية للسياق فقط -- لا تذكره للمستخدم ولا تُشر إلى وجوده.",
+  "إذا كان سؤال المستخدم الحالي متابعة لسؤال سابق (مثل 'قارنها بالشهر الماضي'، 'وماذا عن المنتجات؟'، 'طيب الأسبوع الماضي؟'، 'نفس الشيء لكن...')، استخرج المعاملات (dataSource/field/aggregation/metric) من آخر استدعاء أداة ذي صلة في [أدوات مستخدمة]، وغيّر فقط الجزء الذي غيّره المستخدم صريحًا في سؤاله الحالي (الفترة، البُعد، المقياس) -- لا تطلب توضيحًا لما هو واضح من السياق.",
+  "إذا سأل المستخدم 'ما السبب؟' أو 'لماذا؟' أو 'وش السبب' بعد مقارنة سابقة، استخدم نفس الفترتين (الحالية والسابقة) من آخر مقارنة مذكورة في [أدوات مستخدمة] عند استدعاء أداة تشخيصية (مثل identify_performance_drivers) -- لا تطلب من المستخدم تحديد الفترة من جديد.",
+  "مهم: مهما كانت المعاملات مطابقة لاستدعاء سابق، استدعِ الأداة المناسبة من جديد في هذا الدور دائمًا -- لا تُعد رقمًا أو نسبة من رد سابق كإجابة نهائية لسؤال جديد دون استدعاء الأداة فعليًا في هذا الدور.",
 ].join("\n")
 
 function buildSystemPrompt(category: ApplicationCategoryId): string {
@@ -96,10 +110,25 @@ function buildSystemPrompt(category: ApplicationCategoryId): string {
     TIME_INTENT_RULES,
     category === "advertising" ? ADVERTISING_ANALYTICS_RULES : "",
     GENERIC_QUERY_RULES,
+    CONVERSATION_CONTEXT_RULES,
     scopeNote,
   ]
     .filter(Boolean)
     .join("\n")
+}
+
+// Renders a past turn's real tool calls as a compact, machine-readable trailer appended to its
+// stored prose -- only for the copy of history sent to the LLM (never persisted; the DB/frontend
+// keep the original, unannotated content). Truncated per call (not the full 6000-char
+// outputSummary) since this accumulates across up to 20 history messages each turn, and its only
+// job is to anchor follow-up parameters/periods, not to re-supply full evidence -- see
+// CONVERSATION_CONTEXT_RULES for why the model must still re-call the tool rather than reuse
+// a number from here.
+function formatToolCallsAnnotation(toolCalls: ToolCallTrace[]): string {
+  const lines = toolCalls.map(
+    (call) => `- ${call.tool}(${JSON.stringify(call.input)}) -> ${call.outputSummary.slice(0, 300)}`
+  )
+  return `\n\n[أدوات مستخدمة في هذا الرد (للسياق الداخلي فقط):\n${lines.join("\n")}]`
 }
 
 // Matches the route's own `actor.modulePermissions.includes("ai:view")` check in server.ts --
@@ -209,7 +238,10 @@ export class AiChatService {
         .filter((message) => message.role !== "system_notice")
         .map((message) => ({
           role: message.role === "user" ? "user" : "assistant",
-          content: message.content,
+          content:
+            message.role === "assistant" && message.toolCalls && message.toolCalls.length > 0
+              ? message.content + formatToolCallsAnnotation(message.toolCalls)
+              : message.content,
         })),
       executeTool: async (toolName, toolInput) => {
         const { result: toolResult, error } = await dispatchToolCall(

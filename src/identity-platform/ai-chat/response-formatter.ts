@@ -624,6 +624,32 @@ function kpiCardFromGenericResult(result: KpiResult): KpiCard {
   }
 }
 
+// Universal Data Intelligence "Next Level" audit, Section 6: run_kpi_preview's generic
+// contribution/driver mode (groupByDimension + compareEnabled together -- see query-builder.ts's
+// executeKpi) attaches each label's delta vs the preceding period purely as numeric extraValues.
+// This turns the top few into the same hedged, non-causal co-occurrence language the hand-written
+// identify_performance_drivers tool already uses for advertising -- never "caused"/"because of",
+// only "the largest contributor to the change was" -- so the same wording convention holds
+// whether the diagnostic came from a dedicated tool or the generic engine.
+function insightsFromGenericContribution(result: KpiResult): Insight[] {
+  const withDelta = result.points.filter((point) => point.extraValues?.delta !== undefined)
+  if (withDelta.length === 0) return []
+  const fieldLabel = result.meta?.fieldLabel ?? "القيمة"
+  const confidence: ConfidenceLevel =
+    result.sampleSize > 0 && result.sampleSize < 3 ? "low" : "medium"
+  return withDelta.slice(0, 3).map((point, index) => {
+    const delta = point.extraValues!.delta
+    const previousValue = point.extraValues!.previousValue
+    const direction = delta >= 0 ? "بارتفاع" : "بانخفاض"
+    const rank = index === 0 ? "أكبر مساهم في التغيّر" : "من المساهمين أيضًا في التغيّر"
+    return {
+      statement: `${rank} في ${fieldLabel} هو "${point.label}" ${direction} قدره ${Math.abs(delta)} (من ${previousValue} إلى ${point.value}) -- هذا تزامن وليس بالضرورة سببًا مباشرًا.`,
+      relatedMetrics: [fieldLabel],
+      confidence,
+    }
+  })
+}
+
 function chartFromGenericResult(result: KpiResult): ChartSpec {
   const title = result.meta
     ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}${
@@ -829,13 +855,23 @@ export function buildStructuredResponse(
         sawAnalyticsTool = true
         const result = output as KpiResult
         domain = result.meta?.application ?? domain ?? "madarApps"
+        dataPeriod = dataPeriod ?? result.meta?.queriedPeriod ?? null
         // A grouped breakdown (groupByDimension was set) is a ranked comparison -- a bar chart,
         // same as every other ranking tool here. A single aggregate (with or without a period
         // comparison) is a KPI card. Never both: the model asked for one or the other.
         if (result.points.length > 1) {
           charts.push(chartFromGenericResult(result))
+          insights.push(...insightsFromGenericContribution(result))
         } else {
           metrics.push(kpiCardFromGenericResult(result))
+        }
+        // previousValue is only ever set when compareEnabled fired (executeKpi ignores
+        // compareEnabled whenever groupByDimension is set) -- same scope periodIncompleteWarning
+        // already has for compare_campaign_periods: a single, uncompared period isn't a fairness
+        // question, only a comparison is.
+        if (result.previousValue !== null && result.meta?.queriedPeriod) {
+          const incomplete = periodIncompleteWarning(result.meta.queriedPeriod, timezone)
+          if (incomplete) warnings.push(incomplete)
         }
         // A generic, conservative floor -- this is a much cruder signal than the multi-dimension
         // confidence engines elsewhere (see KpiResult.sampleSize's own comment), so the threshold

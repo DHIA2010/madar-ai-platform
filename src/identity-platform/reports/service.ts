@@ -100,7 +100,11 @@ export class ReportsService {
   // Scoped to one activated application's own data sources -- the generic query tools expose
   // this instead of the full getCatalog(), the same server-side scoping buildToolsForCategory
   // already enforces for the hand-written tools (never trust the LLM to self-restrict).
+  // "madarApps" is the one exception: it's the cross-cutting reports/KPI feature (no catalog
+  // entry is ever tagged application:"madarApps" -- there is no madarApps-owned table), so a
+  // madarApps-scoped session sees the full catalog across every domain instead of an empty list.
   getCatalogForApplication(application: CatalogApplication) {
+    if (application === "madarApps") return this.getCatalog()
     return this.getCatalog().filter((source) => source.application === application)
   }
 
@@ -168,10 +172,21 @@ export class ReportsService {
       groupByDimension: string | null
       compareEnabled: boolean
       workspaceId: string | null
+      // Caller-resolved [from, to) -- lets run_kpi_preview pass a deterministically-resolved
+      // period/all_time/custom range instead of always falling back to the hardcoded last-12-
+      // months window below. Omitted (undefined), the report-builder's own preview call keeps its
+      // existing behavior unchanged.
+      range?: { from: string; to: string }
     }
   ): Promise<KpiResult> {
     validateDefinitionShape(input)
-    return executeKpi(this.db, actor.organizationId, input.workspaceId, input, defaultRange())
+    return executeKpi(
+      this.db,
+      actor.organizationId,
+      input.workspaceId,
+      input,
+      input.range ?? defaultRange()
+    )
   }
 
   async getFilterFieldValues(

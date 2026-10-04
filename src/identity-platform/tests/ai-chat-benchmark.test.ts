@@ -116,7 +116,7 @@ const WORKSPACE_A = randomUUID()
 
 async function setApplicationEnabled(
   organizationId: string,
-  key: "advertisingEnabled" | "posEnabled",
+  key: "advertisingEnabled" | "posEnabled" | "madarAppsEnabled" | "ecommerceEnabled",
   value: boolean
 ) {
   const existing = await database.query<{ settings: Record<string, unknown> }>(
@@ -563,6 +563,35 @@ describe("golden questions -- data quality", () => {
     expect(reply.structured!.confidence).toBe("insufficient")
     expect(reply.structured!.warnings.some((w) => w.type === "insufficient_sample")).toBe(true)
   })
+
+  // Section 13 of the "Next Level" audit: an empty dataset (zero rows, e.g. a newly connected
+  // store/workspace with no invoices yet) must resolve to a real, honest 0 -- never an error,
+  // never a fabricated placeholder number -- through the generic query engine specifically (no
+  // dedicated tool exists for this data source).
+  it("run_kpi_preview resolves a genuinely empty dataset to 0, not an error or a fabricated number", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    // No invoices seeded at all for ORG_A.
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+    })
+
+    const reply = await service.sendMessage(actor(ORG_A, USER_A), session.id, "كم مبيعاتي؟")
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.metrics[0].value).toBe(0)
+    expect(reply.structured!.warnings.some((w) => w.type === "insufficient_sample")).toBe(false)
+  })
 })
 
 describe("golden questions -- follow-up relevance", () => {
@@ -594,6 +623,96 @@ describe("golden questions -- follow-up relevance", () => {
     )
     expect(reply.structured!.followUpQuestions.length).toBeGreaterThan(0)
     expect(reply.structured!.followUpQuestions.every((q) => q !== "هل هناك أي شيء آخر؟")).toBe(true)
+  })
+})
+
+// Universal Data Intelligence "Next Level" audit, Section 3: the LLM only ever sees the message
+// history ai-chat/service.ts builds -- previously plain {role, content} with the prior turn's
+// prose and nothing else, so a follow-up like "قارنها بالشهر الماضي" had no structured anchor to
+// what was actually queried (dataSource/field/period), only lossy prose to infer from. These
+// tests prove the fix structurally: the prior turn's real tool call (name + exact input) now
+// reaches the model's own `messages` input on the NEXT turn, independent of trusting any real
+// LLM's behavior (which can't be asserted on deterministically).
+describe("golden questions -- conversational context (structured tool-call history)", () => {
+  it("a follow-up turn's LLM call receives the prior turn's exact tool name and input as part of message history", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceAt({ totalAmount: 500, createdAt: "2026-10-02T10:00:00Z" })
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+      period: "this_month",
+    })
+    await service.sendMessage(actor(ORG_A, USER_A), session.id, "كم مبيعاتي هذا الشهر؟")
+
+    let capturedMessages: Array<{ role: string; content: string }> = []
+    mockRunChatTurn.mockImplementation(async (input) => {
+      capturedMessages = input.messages
+      const outputSummary = await input.executeTool("run_kpi_preview", {
+        dataSource: "sales",
+        field: "total_revenue",
+        aggregation: "sum",
+        timeGrouping: "none",
+        period: "last_month",
+      })
+      return {
+        text: "comparison narration",
+        toolCalls: [
+          {
+            tool: "run_kpi_preview",
+            input: { dataSource: "sales", field: "total_revenue", period: "last_month" },
+            outputSummary,
+          },
+        ],
+        stopReason: "end_turn",
+      }
+    })
+    await service.sendMessage(actor(ORG_A, USER_A), session.id, "قارنها بالشهر الماضي")
+
+    const assistantTurnWithAnnotation = capturedMessages.find(
+      (m) => m.role === "assistant" && m.content.includes("أدوات مستخدمة")
+    )
+    expect(assistantTurnWithAnnotation).toBeDefined()
+    expect(assistantTurnWithAnnotation!.content).toContain("run_kpi_preview")
+    expect(assistantTurnWithAnnotation!.content).toContain('"dataSource":"sales"')
+    expect(assistantTurnWithAnnotation!.content).toContain('"period":"this_month"')
+  })
+
+  it("the annotation never corrupts what is actually persisted/rendered for the user (DB content stays unannotated)", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+    })
+    const reply = await service.sendMessage(actor(ORG_A, USER_A), session.id, "كم مبيعاتي؟")
+
+    expect(reply.content).not.toContain("أدوات مستخدمة")
+
+    const stored = await service.listMessages(actor(ORG_A, USER_A), session.id)
+    const assistantMessage = stored.find((m) => m.role === "assistant")!
+    expect(assistantMessage.content).not.toContain("أدوات مستخدمة")
   })
 })
 
@@ -702,6 +821,225 @@ describe("golden questions -- generic query engine (no dedicated tool)", () => {
     expect(reply.structured!.warnings.some((w) => w.type === "insufficient_sample")).toBe(true)
   })
 
+  // Universal Data Intelligence "Next Level" audit, Priority 1: run_kpi_preview previously had no
+  // date-range/period input at all -- previewKpi always ran against a fixed last-12-months
+  // window, so a "last month" question and a "this month" question against the same data source
+  // were indistinguishable. Proves period resolution now actually constrains the query (not just
+  // that the schema accepts the field).
+  it("run_kpi_preview resolves 'period' deterministically, excluding rows outside the named period", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceAt({ totalAmount: 300, createdAt: "2026-09-10T10:00:00Z" }) // last month
+    await seedInvoiceAt({ totalAmount: 999, createdAt: "2026-10-02T10:00:00Z" }) // this month
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+      period: "last_month",
+    })
+
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-03T12:00:00Z"))
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "كم إجمالي المبيعات الشهر الماضي؟"
+    )
+    vi.useRealTimers()
+
+    expect(reply.structured!.metrics[0].value).toBe(300)
+  })
+
+  // Section 2 of the "Next Level" audit: "all_time" for the generic engine specifically must
+  // resolve to the real earliest/latest invoice date actually present (reusing the same
+  // getDateCoverage-backed resolveAllTimeRange already proven for the hand-written tools in
+  // ai-chat.test.ts), not run_kpi_preview's own hardcoded last-12-months default -- the 2020
+  // invoice falls well outside that default window and must still be counted.
+  it("run_kpi_preview resolves period='all_time' to the real earliest-to-latest invoice coverage, not the default window", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceAt({ totalAmount: 999, createdAt: "2020-03-10T10:00:00Z" })
+    await seedInvoiceAt({ totalAmount: 1, createdAt: "2026-09-20T10:00:00Z" })
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+      period: "all_time",
+    })
+
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "كم مبيعاتي من البداية؟"
+    )
+
+    expect(reply.structured!.metrics[0].value).toBe(1000)
+    expect(reply.structured!.dataPeriod?.from).toBe("2020-03-10")
+  })
+
+  // Confirms the resolved period comes from the CATALOG ENTRY's own application tag, not the
+  // session's own category -- needed because a madarApps-scoped session's catalog spans every
+  // domain (reports/service.ts's getCatalogForApplication special-cases madarApps to the full,
+  // unfiltered catalog), so "last_month" must still resolve correctly for a pos-owned data source
+  // even when queried from a madarApps-scoped session.
+  it("resolves 'period' correctly for a madarApps-scoped session querying a pos-owned data source", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceAt({ totalAmount: 300, createdAt: "2026-09-10T10:00:00Z" })
+    await seedInvoiceAt({ totalAmount: 999, createdAt: "2026-10-02T10:00:00Z" })
+    await setApplicationEnabled(ORG_A, "madarAppsEnabled", true)
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "madarApps")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+      period: "last_month",
+    })
+
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-03T12:00:00Z"))
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "كم إجمالي المبيعات الشهر الماضي؟"
+    )
+    vi.useRealTimers()
+
+    expect(reply.structured!.metrics[0].value).toBe(300)
+  })
+
+  // Universal Data Intelligence "Next Level" audit, Section 6: proves the generic contribution/
+  // driver mode end-to-end -- "which product caused the decline" answered via run_kpi_preview
+  // (groupByDimension + compareEnabled together) with no dedicated tool for this data source,
+  // surfaced as a hedged, non-causal insight (never "caused"/"because of").
+  it("'Which product caused the decline?' -- answered via run_kpi_preview's generic contribution mode", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+      groupByDimension: "payment_method",
+      compareEnabled: true,
+      startDate: "2026-06-01T00:00:00Z",
+      endDate: "2026-06-08T00:00:00Z",
+    })
+    // Previous period (computed server-side as the equal-length span before startDate):
+    // [2026-05-25T00:00:00Z, 2026-06-01T00:00:00Z). Two different payment methods so the grouped
+    // breakdown has more than one point -- a single-group result would collapse to a plain KPI
+    // card instead of exercising the chart+insights contribution path.
+    await database.query(
+      `insert into pos_invoices (
+        id, organization_id, workspace_id, invoice_number, status, payment_method_code,
+        subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+      ) values
+        ($1,$2,$3,$4,'completed','cash',20,0,0,20,$5,$5),
+        ($6,$2,$3,$7,'completed','card',200,0,0,200,$8,$8),
+        ($9,$2,$3,$10,'completed','cash',100,0,0,100,$11,$11),
+        ($12,$2,$3,$13,'completed','card',50,0,0,50,$14,$14)`,
+      [
+        randomUUID(),
+        ORG_A,
+        WORKSPACE_A,
+        `INV-${randomUUID().slice(0, 8)}`,
+        "2026-05-26T10:00:00Z",
+        randomUUID(),
+        `INV-${randomUUID().slice(0, 8)}`,
+        "2026-05-27T10:00:00Z",
+        randomUUID(),
+        `INV-${randomUUID().slice(0, 8)}`,
+        "2026-06-02T10:00:00Z",
+        randomUUID(),
+        `INV-${randomUUID().slice(0, 8)}`,
+        "2026-06-03T10:00:00Z",
+      ]
+    )
+
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "أي طريقة دفع ساهمت أكثر في التغيّر؟"
+    )
+
+    expect(reply.structured!.insights.length).toBeGreaterThan(0)
+    expect(reply.structured!.insights[0].statement).toContain("أكبر مساهم في التغيّر")
+    for (const insight of reply.structured!.insights) {
+      expect(insight.statement).not.toMatch(/كان السبب|تسبب في/)
+    }
+  })
+
+  // Section 7/10 of the "Next Level" audit: run_kpi_preview's compareEnabled path must warn when
+  // the current period hasn't fully elapsed yet, the same way compare_campaign_periods already
+  // does -- otherwise "this month" at 3 days in would silently read like a full-month comparison.
+  it("run_kpi_preview warns when a compareEnabled period hasn't fully elapsed yet", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceAt({ totalAmount: 300, createdAt: "2026-10-02T10:00:00Z" })
+    await seedInvoiceAt({ totalAmount: 100, createdAt: "2026-09-15T10:00:00Z" })
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+      compareEnabled: true,
+      period: "this_month",
+    })
+
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-03T12:00:00Z"))
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "كم مبيعاتي هذا الشهر مقارنة بالشهر الماضي؟"
+    )
+    vi.useRealTimers()
+
+    expect(reply.structured!.warnings.some((w) => w.type === "incomplete_period")).toBe(true)
+  })
+
   it("Step 5: the generic query engine also answers an advertising question with no dedicated tool shape, grouped by campaign", async () => {
     const taxRatesService = new TaxRatesService(database)
     const posPaymentMethodsService = new PosPaymentMethodsService(database)
@@ -759,9 +1097,10 @@ describe("golden questions -- generic query engine (no dedicated tool)", () => {
 
     service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
     const session = await service.createSession(actor(ORG_A, USER_A), "advertising")
-    // run_kpi_preview has no date-range/period input today -- previewKpi always uses its own
-    // fixed last-12-months default window (reports/service.ts's defaultRange()), a known, not-yet
-    // -closed gap noted in the final report. The seeded metric date just needs to fall inside it.
+    // No period/startDate/endDate given -- previewKpi falls back to its own default last-12-
+    // months window (reports/service.ts's defaultRange()). The seeded metric date just needs to
+    // fall inside it; real period resolution (period: "this_month"/"all_time"/etc) is covered
+    // separately below.
     await scriptSingleTool("run_kpi_preview", {
       dataSource: "marketing",
       field: "spend",

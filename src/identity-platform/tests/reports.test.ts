@@ -259,6 +259,10 @@ describe("reports: catalog-driven query builder", () => {
       fieldLabel: "إجمالي المبيعات",
       groupByDimensionLabel: null,
       application: "pos",
+      queriedPeriod: expect.objectContaining({
+        from: expect.any(String),
+        to: expect.any(String),
+      }),
     })
 
     const grouped = await service.previewKpi(actor(), {
@@ -272,6 +276,197 @@ describe("reports: catalog-driven query builder", () => {
       workspaceId: null,
     })
     expect(grouped.meta?.groupByDimensionLabel).toBe("طريقة الدفع")
+  })
+
+  // Universal Data Intelligence "Next Level" audit, Section 6: groupByDimension + compareEnabled
+  // together is the generic contribution/driver mode -- each label gets ranked by |delta| vs the
+  // preceding equal-length period (largest driver of the change first, increases and decreases
+  // both included), not by raw current value. "card" swings from 200 to 50 (delta -150, the
+  // bigger move) while "cash" swings from 20 to 100 (delta +80) -- card must rank first despite
+  // having the smaller current-period value.
+  it("ranks a grouped breakdown by |delta| vs the preceding period when compareEnabled is combined with groupByDimension", async () => {
+    // Previous period: [2026-05-25T00:00:00Z, 2026-06-01T00:00:00Z)
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 20,
+      createdAt: "2026-05-26T10:00:00Z",
+      paymentMethodCode: "cash",
+    })
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 200,
+      createdAt: "2026-05-27T10:00:00Z",
+      paymentMethodCode: "card",
+    })
+    // Current period: [2026-06-01T00:00:00Z, 2026-06-08T00:00:00Z)
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 100,
+      createdAt: "2026-06-02T10:00:00Z",
+      paymentMethodCode: "cash",
+    })
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 50,
+      createdAt: "2026-06-03T10:00:00Z",
+      paymentMethodCode: "card",
+    })
+
+    const result = await service.previewKpi(actor(), {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      filters: [],
+      timeGrouping: "none",
+      groupByDimension: "payment_method",
+      compareEnabled: true,
+      workspaceId: null,
+      range: { from: "2026-06-01T00:00:00Z", to: "2026-06-08T00:00:00Z" },
+    })
+
+    expect(result.points.map((p) => p.label)).toEqual(["card", "cash"])
+    expect(result.points[0]).toEqual({
+      label: "card",
+      value: 50,
+      extraValues: { previousValue: 200, delta: -150, deltaPercent: -75 },
+    })
+    expect(result.points[1]).toEqual({
+      label: "cash",
+      value: 100,
+      extraValues: { previousValue: 20, delta: 80, deltaPercent: 400 },
+    })
+  })
+
+  // Universal Data Intelligence "Next Level" audit, Section 4: "products" and "customers" used to
+  // have no status filterField at all -- a cancelled/returned invoice's line items/spend were
+  // silently always included in these two data sources' breakdowns with no way to exclude them
+  // (unlike "sales"/"financial", which already exposed status). Proves the newly added status
+  // filterField on both actually excludes a cancelled invoice's contribution.
+  it("excludes a cancelled invoice from products/customers breakdowns via the newly added status filter", async () => {
+    const customerId = randomUUID()
+    await database.query(
+      `insert into customers (id, organization_id, workspace_id, name, created_by, created_at, updated_at)
+       values ($1,$2,$3,'Ahmed',$4,now(),now())`,
+      [customerId, ORG_A, WORKSPACE_A, USER_A]
+    )
+
+    const completedInvoiceId = randomUUID()
+    await database.query(
+      `insert into pos_invoices (
+        id, organization_id, workspace_id, customer_id, invoice_number, status, payment_method_code,
+        subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+      ) values ($1,$2,$3,$4,$5,'completed','cash',100,0,0,100,$6,$6)`,
+      [
+        completedInvoiceId,
+        ORG_A,
+        WORKSPACE_A,
+        customerId,
+        `INV-${randomUUID().slice(0, 8)}`,
+        "2026-06-01T10:00:00Z",
+      ]
+    )
+    await database.query(
+      `insert into pos_invoice_items (id, invoice_id, product_id, product_name, unit_price, quantity, line_total)
+       values ($1,$2,null,'Widget',50,2,100)`,
+      [randomUUID(), completedInvoiceId]
+    )
+
+    const cancelledInvoiceId = randomUUID()
+    await database.query(
+      `insert into pos_invoices (
+        id, organization_id, workspace_id, customer_id, invoice_number, status, payment_method_code,
+        subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+      ) values ($1,$2,$3,$4,$5,'cancelled','cash',999,0,0,999,$6,$6)`,
+      [
+        cancelledInvoiceId,
+        ORG_A,
+        WORKSPACE_A,
+        customerId,
+        `INV-${randomUUID().slice(0, 8)}`,
+        "2026-06-02T10:00:00Z",
+      ]
+    )
+    await database.query(
+      `insert into pos_invoice_items (id, invoice_id, product_id, product_name, unit_price, quantity, line_total)
+       values ($1,$2,null,'Widget',999,1,999)`,
+      [randomUUID(), cancelledInvoiceId]
+    )
+
+    const productsResult = await service.previewKpi(actor(), {
+      dataSource: "products",
+      field: "revenue",
+      aggregation: "sum",
+      filters: [{ field: "status", operator: "eq", value: "completed" }],
+      timeGrouping: "none",
+      groupByDimension: null,
+      compareEnabled: false,
+      workspaceId: null,
+    })
+    expect(productsResult.currentValue).toBe(100)
+
+    const customersResult = await service.previewKpi(actor(), {
+      dataSource: "customers",
+      field: "total_spend",
+      aggregation: "sum",
+      filters: [{ field: "status", operator: "eq", value: "completed" }],
+      timeGrouping: "none",
+      groupByDimension: null,
+      compareEnabled: false,
+      workspaceId: null,
+    })
+    expect(customersResult.currentValue).toBe(100)
+  })
+
+  // Universal Data Intelligence "Next Level" audit, Priority 1: previewKpi's caller (run_kpi_
+  // preview) now resolves a real period/all_time/custom range deterministically and passes it
+  // in -- this is the mechanism that closes the fixed-last-12-months-window gap. Proven here at
+  // the previewKpi level, independent of the AI-chat-level period resolution tested elsewhere.
+  it("honors an explicit caller-resolved range instead of the hardcoded last-12-months window", async () => {
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 999,
+      createdAt: "2020-01-15T10:00:00Z", // outside the default 12-month window
+    })
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 50,
+      createdAt: "2026-06-01T10:00:00Z", // inside the default window too
+    })
+
+    const withoutRange = await service.previewKpi(actor(), {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      filters: [],
+      timeGrouping: "none",
+      groupByDimension: null,
+      compareEnabled: false,
+      workspaceId: null,
+    })
+    expect(withoutRange.currentValue).toBe(50) // the 2020 invoice falls outside the default window
+
+    const withRange = await service.previewKpi(actor(), {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      filters: [],
+      timeGrouping: "none",
+      groupByDimension: null,
+      compareEnabled: false,
+      workspaceId: null,
+      range: { from: "2020-01-01T00:00:00Z", to: "2020-02-01T00:00:00Z" },
+    })
+    expect(withRange.currentValue).toBe(999)
+    expect(withRange.meta?.queriedPeriod).toEqual({
+      from: "2020-01-01T00:00:00Z",
+      to: "2020-02-01T00:00:00Z",
+    })
   })
 
   it("reports the real row count behind the aggregate as sampleSize", async () => {
@@ -437,5 +632,33 @@ describe("reports: system report seeding", () => {
     await expect(service.deleteKpi(actor(), systemKpi.id)).rejects.toMatchObject({
       code: "RESOURCE_NOT_FOUND",
     })
+  })
+})
+
+describe("reports: getCatalogForApplication", () => {
+  it("scopes pos/ecommerce/advertising to only their own tagged data sources", () => {
+    const pos = service.getCatalogForApplication("pos")
+    expect(pos.map((s) => s.key).sort()).toEqual(
+      ["customers", "financial", "inventory", "products", "sales"].sort()
+    )
+    expect(pos.every((s) => s.application === "pos")).toBe(true)
+
+    const ecommerce = service.getCatalogForApplication("ecommerce")
+    expect(ecommerce.map((s) => s.key)).toEqual(["orders"])
+
+    const advertising = service.getCatalogForApplication("advertising")
+    expect(advertising.map((s) => s.key)).toEqual(["marketing"])
+  })
+
+  // Regression test: no catalog entry is ever tagged application:"madarApps" (there is no
+  // madarApps-owned table -- it's the cross-cutting reports/KPI feature), so filtering by exact
+  // equality used to return an empty array, silently breaking run_kpi_preview for every
+  // madarApps-scoped chat session. madarApps must see the full, unfiltered catalog instead.
+  it("returns the full, unfiltered catalog for madarApps rather than an empty list", () => {
+    const madarApps = service.getCatalogForApplication("madarApps")
+    const full = service.getCatalog()
+    expect(madarApps.length).toBe(full.length)
+    expect(madarApps.length).toBeGreaterThan(0)
+    expect(madarApps.map((s) => s.key).sort()).toEqual(full.map((s) => s.key).sort())
   })
 })
