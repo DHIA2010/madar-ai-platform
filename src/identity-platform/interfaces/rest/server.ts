@@ -886,6 +886,27 @@ export function createIdentityApiServer(
         return
       }
 
+      // Unauthenticated: the anonymous-visitor equivalent of the oauth/start route above, for a
+      // provider whose own app-store "Activate" button sends a merchant straight to a URL of
+      // ours before any MADAR session exists (first added for Zid -- see
+      // zid-oauth/controller.ts's startMarketplace for why this route has to exist at all).
+      const providerOauthMarketplaceStartMatch = url.pathname.match(
+        /^\/v1\/integrations\/([^/]+)\/start$/
+      )
+      if (method === "GET" && providerOauthMarketplaceStartMatch) {
+        const provider = container.infrastructure.integrations?.find(
+          providerOauthMarketplaceStartMatch[1]
+        )
+        if (!provider || !provider.oauthMarketplaceStart) {
+          return send(404, { code: "PROVIDER_NOT_FOUND", message: "Provider not found." })
+        }
+
+        const startResult = await provider.oauthMarketplaceStart()
+        response.writeHead(startResult.status, startResult.headers)
+        response.end()
+        return
+      }
+
       const zidInstallSummaryMatch = url.pathname.match(
         /^\/v1\/integrations\/zid\/install\/([^/]+)$/
       )

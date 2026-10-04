@@ -179,6 +179,10 @@ export class ZidIntegrationProvider {
     return this.requireController().callback(request, query)
   }
 
+  async oauthMarketplaceStart(): Promise<IntegrationProviderOAuthControllerResult> {
+    return this.requireController().startMarketplace()
+  }
+
   async getActiveConnection(actor: AuthenticatedActor) {
     return this.requireController().getActiveConnection(actor)
   }

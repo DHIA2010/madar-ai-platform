@@ -137,14 +137,22 @@ export class ZidOAuthRepository
     return { projectId, workspaceId }
   }
 
+  // organizationId/projectId/userId/connectionId are null for the "marketplace" flow (an
+  // anonymous App Market visitor has none of those yet at state-creation time) -- see migration
+  // 092. The admin-initiated "connect" flow always passes real values for all four, unchanged.
+  // `flow` is optional (defaulting to "connect") so this still satisfies
+  // ProviderConnectionLifecycleRepository's generic savePendingState(ProviderStateRecordInput)
+  // signature, which every other OAuth-connector repository also implements and knows nothing
+  // about this Zid-only concept.
   async savePendingState(input: {
     id: string
     state: string
-    organizationId: string
+    flow?: "connect" | "marketplace"
+    organizationId: string | null
     workspaceId: string | null
-    projectId: string
-    userId: string
-    connectionId: string
+    projectId: string | null
+    userId: string | null
+    connectionId: string | null
     requestedScopes: string[]
     redirectUri: string
     expiresAt: string
@@ -153,15 +161,16 @@ export class ZidOAuthRepository
       name: "zid-oauth-state-insert",
       text: `
         INSERT INTO zid_oauth_states (
-          id, state, organization_id, workspace_id, project_id, user_id, connection_id,
+          id, state, flow, organization_id, workspace_id, project_id, user_id, connection_id,
           requested_scopes, redirect_uri, status, expires_at, created_at, updated_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10,$11,$11
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$12
         )
       `,
       values: [
         input.id,
         input.state,
+        input.flow ?? "connect",
         input.organizationId,
         input.workspaceId,
         input.projectId,

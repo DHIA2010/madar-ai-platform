@@ -174,6 +174,10 @@ export interface IntegrationProvider {
     request: IncomingMessage,
     query: URLSearchParams
   ): Promise<IntegrationProviderOAuthControllerResult>
+  // Unauthenticated, anonymous-visitor equivalent of oauthStart -- for a provider whose app-store
+  // "Activate" flow sends a merchant straight to a URL of ours before any MADAR session exists
+  // (first added for Zid; see zid-oauth/controller.ts's startMarketplace).
+  oauthMarketplaceStart?(): Promise<IntegrationProviderOAuthControllerResult>
   getActiveConnection?(actor: AuthenticatedActor): Promise<unknown>
   sync?(actor: AuthenticatedActor, input: IntegrationProviderSyncInput): Promise<unknown>
   retry?(actor: AuthenticatedActor, input: { connectionId: string }): Promise<unknown>

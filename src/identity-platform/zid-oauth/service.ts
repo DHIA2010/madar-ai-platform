@@ -550,6 +550,7 @@ export class ZidOAuthService {
     await this.repository.savePendingState({
       id: randomUUID(),
       state,
+      flow: "connect",
       organizationId: actor.organizationId,
       workspaceId: resolvedProject.workspaceId,
       projectId: resolvedProject.projectId,
@@ -608,6 +609,14 @@ export class ZidOAuthService {
     }
 
     if (String(state.status) !== "pending") {
+      throw new Error("ZID_OAUTH_STATE_INVALID")
+    }
+
+    // A "marketplace" state (migration 092) carries no organization_id/project_id/user_id/
+    // connection_id -- this path requires all four, so it must never accept one. The controller
+    // already routes by flow via resolveStateFlow before calling either completion path; this is
+    // the defense-in-depth guard against that routing being bypassed or wrong.
+    if (String(state.flow) !== "connect") {
       throw new Error("ZID_OAUTH_STATE_INVALID")
     }
 
@@ -724,6 +733,87 @@ export class ZidOAuthService {
       connectedAt: now,
       status: "connected",
     }
+  }
+
+  // Zid support's required fix (2026-10-04): the App Market "Activate" button must hit a
+  // dedicated start route -- NOT the callback itself -- so a real `state` exists before Zid ever
+  // redirects back. No actor: this is an anonymous merchant who may not have a MADAR account yet,
+  // so unlike startAuthorization there is no organization/project/connection to bind the state to
+  // (migration 092 made those columns nullable specifically for this "marketplace" flow).
+  async startMarketplaceAuthorization(): Promise<{ authorizationUrl: string }> {
+    const config = await this.loadResolvedConfig()
+    const state = createStateToken()
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+
+    await this.repository.savePendingState({
+      id: randomUUID(),
+      state,
+      flow: "marketplace",
+      organizationId: null,
+      workspaceId: null,
+      projectId: null,
+      userId: null,
+      connectionId: null,
+      requestedScopes: config.scopes,
+      redirectUri: config.redirectUri,
+      expiresAt,
+    })
+
+    const authorizationUrl = new URL(config.authorizationUrl)
+    authorizationUrl.searchParams.set("client_id", config.clientId)
+    authorizationUrl.searchParams.set("redirect_uri", config.redirectUri)
+    authorizationUrl.searchParams.set("response_type", "code")
+    if (config.scopes.length > 0) {
+      authorizationUrl.searchParams.set("scope", config.scopes.join(" "))
+    }
+    authorizationUrl.searchParams.set("state", state)
+
+    return { authorizationUrl: authorizationUrl.toString() }
+  }
+
+  // Lets the callback route to the right completion path (completeAuthorization vs.
+  // completeMarketplaceAuthorization) BEFORE committing to either one -- the marketplace path
+  // additionally needs ZidMarketplaceAutoProvisionService, which lives outside this service, so
+  // the controller (which holds both) must make this decision itself rather than this service
+  // trying to own both flows end to end. Returns null for anything not found/not pending --
+  // completeAuthorization's own lookup re-validates and throws the specific mapped error for
+  // that case either way, so there's no behavior gap from treating "unknown" and "connect" alike
+  // here.
+  async resolveStateFlow(stateValue: string): Promise<"connect" | "marketplace" | null> {
+    const state = await this.repository.findPendingStateByValue(stateValue)
+    if (!state || String(state.status) !== "pending") {
+      return null
+    }
+    return String(state.flow) === "marketplace" ? "marketplace" : "connect"
+  }
+
+  // Validates and single-use-consumes a "marketplace" state, then delegates to the existing,
+  // unchanged completeMarketplaceInstall for the actual token exchange/store lookup/pending-
+  // install row -- this method's only job is making state mandatory for that flow, closing
+  // exactly the gap Zid support flagged (a bare `code` with no verifiable state must never be
+  // accepted). Consuming before the exchange (unlike completeAuthorization, which consumes
+  // after) is deliberate and safe here: Zid's own authorization code is one-time-use regardless,
+  // so a retry with the same state+old code could never succeed a second time either way.
+  async completeMarketplaceAuthorization(input: { state: string; code: string }) {
+    const state = await this.repository.findPendingStateByValue(input.state)
+    if (!state || String(state.status) !== "pending" || String(state.flow) !== "marketplace") {
+      throw new Error("ZID_OAUTH_STATE_INVALID")
+    }
+
+    const expiresAt = new Date(String(state.expires_at)).getTime()
+    if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+      throw new Error("ZID_OAUTH_STATE_EXPIRED")
+    }
+
+    const consumed = await this.repository.consumeStateOnce(
+      String(state.id),
+      new Date().toISOString()
+    )
+    if (!consumed) {
+      throw new Error("ZID_OAUTH_STATE_ALREADY_CONSUMED")
+    }
+
+    return this.completeMarketplaceInstall({ code: input.code })
   }
 
   // Connects a store using a merchant-supplied access token (Zid's "Direct API Integration",
@@ -854,11 +944,12 @@ export class ZidOAuthService {
     }
   }
 
-  // Marketplace-initiated install: Zid redirected a merchant here directly from its own App
-  // Market (no `state`, since MADAR never called startAuthorization -- the merchant may not
-  // even have a MADAR account yet). Exchanges the code and stores the result unclaimed; there
-  // is no organization to attach a real connection to until the merchant logs in/registers and
-  // claims it via claimInstall.
+  // Marketplace-initiated install: the merchant arrived via Zid's own App Market "Activate"
+  // button -- the merchant may not even have a MADAR account yet. State is now validated and
+  // consumed by completeMarketplaceAuthorization (the only caller) before this runs; this method
+  // itself only exchanges the code and stores the result unclaimed, since there is no
+  // organization to attach a real connection to until the merchant logs in/registers and claims
+  // it via claimInstall.
   async completeMarketplaceInstall(input: { code: string }): Promise<{
     installId: string
     claimToken: string

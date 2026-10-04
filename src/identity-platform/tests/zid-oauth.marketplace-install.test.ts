@@ -221,10 +221,25 @@ function authHeaders(accessToken: string) {
   return { "content-type": "application/json", authorization: `Bearer ${accessToken}` }
 }
 
+// Zid support's confirmed fix: the App Market "Activate" button's Redirection URL must point at
+// this new, unauthenticated GET /v1/integrations/zid/start route -- not the callback -- so a
+// real `state` exists before Zid ever redirects back. Every marketplace test below now goes
+// through this first, exactly like a real merchant would via Zid's own Redirection URL.
+async function startMarketplaceAuthorization(): Promise<string> {
+  const response = await fetch(`${baseUrl}/v1/integrations/zid/start`, { redirect: "manual" })
+  expect(response.status).toBe(302)
+  const location = response.headers.get("location") ?? ""
+  const state = new URL(location).searchParams.get("state")
+  expect(state).not.toBeNull()
+  return state!
+}
+
 async function completeMarketplaceCallback(): Promise<string> {
-  const response = await fetch(`${baseUrl}/v1/integrations/zid/oauth/callback?code=zid-mkt-code`, {
-    redirect: "manual",
-  })
+  const state = await startMarketplaceAuthorization()
+  const response = await fetch(
+    `${baseUrl}/v1/integrations/zid/oauth/callback?state=${encodeURIComponent(state)}&code=zid-mkt-code`,
+    { redirect: "manual" }
+  )
   expect(response.status).toBe(302)
   const location = response.headers.get("location") ?? ""
   const match = location.match(/\/integrations\/zid\/claim\/([^/?]+)/)
@@ -233,9 +248,11 @@ async function completeMarketplaceCallback(): Promise<string> {
 }
 
 async function completeMarketplaceCallbackExpectingAutoLogin(): Promise<string> {
-  const response = await fetch(`${baseUrl}/v1/integrations/zid/oauth/callback?code=zid-mkt-code`, {
-    redirect: "manual",
-  })
+  const state = await startMarketplaceAuthorization()
+  const response = await fetch(
+    `${baseUrl}/v1/integrations/zid/oauth/callback?state=${encodeURIComponent(state)}&code=zid-mkt-code`,
+    { redirect: "manual" }
+  )
   expect(response.status).toBe(302)
   const location = response.headers.get("location") ?? ""
   const match = location.match(/\/integrations\/zid\/auto-login\/([^/?]+)/)
@@ -243,7 +260,73 @@ async function completeMarketplaceCallbackExpectingAutoLogin(): Promise<string> 
   return decodeURIComponent(match![1])
 }
 
+describe("GET /v1/integrations/zid/start (the new Redirection URL target)", () => {
+  it("redirects to Zid's authorize endpoint with client_id, redirect_uri, response_type, and a real state -- with no authentication required", async () => {
+    const response = await fetch(`${baseUrl}/v1/integrations/zid/start`, { redirect: "manual" })
+    expect(response.status).toBe(302)
+    const location = new URL(response.headers.get("location") ?? "")
+    expect(location.origin + location.pathname).toBe("https://oauth.zid.sa/oauth/authorize")
+    expect(location.searchParams.get("client_id")).toBe("zid-client-id")
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "http://localhost:4000/v1/integrations/zid/oauth/callback"
+    )
+    expect(location.searchParams.get("response_type")).toBe("code")
+    const state = location.searchParams.get("state")
+    expect(state).toBeTruthy()
+
+    const stateRows = await database.query(
+      `SELECT flow, organization_id, project_id, user_id, connection_id, status FROM zid_oauth_states WHERE state = $1`,
+      [state]
+    )
+    expect(stateRows.rows[0]).toMatchObject({
+      flow: "marketplace",
+      organization_id: null,
+      project_id: null,
+      user_id: null,
+      connection_id: null,
+      status: "pending",
+    })
+  })
+})
+
 describe("Zid marketplace-initiated install (Activate from Zid's App Market)", () => {
+  // The actual bug Zid support identified and the actual fix: a bare `code` with no `state` at
+  // all must be rejected outright, never exchanged. This was exactly the behavior the old
+  // `!state -> exchange anyway` branch masked -- the Redirection URL pointing straight at the
+  // callback produced this same request shape, and the callback happily treated it as a
+  // legitimate marketplace install.
+  it("rejects a callback with a code but no state at all, without ever exchanging it", async () => {
+    const tokenFetchSpy = mockZidTokenAndProfile({
+      accessToken: "should-never-be-used",
+      refreshToken: "should-never-be-used",
+      store: { id: "000000", title: "Should Never Be Fetched" },
+    })
+
+    const response = await fetch(
+      `${baseUrl}/v1/integrations/zid/oauth/callback?code=zid-mkt-code`,
+      {
+        redirect: "manual",
+      }
+    )
+    expect(response.status).toBe(302)
+    const location = response.headers.get("location") ?? ""
+    expect(location).toContain("zid_oauth=error")
+    expect(location).toContain("reason=missing_code_or_state")
+
+    // No token exchange should have been attempted at all -- only this test server's own
+    // fetch calls (register/login, none here) should have gone through.
+    const tokenCalls = tokenFetchSpy.mock.calls.filter(([rawInput]) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      return url.includes("/oauth/token")
+    })
+    expect(tokenCalls).toHaveLength(0)
+
+    const installRows = await database.query(
+      `SELECT count(*)::int AS count FROM zid_marketplace_installs`
+    )
+    expect(installRows.rows[0].count).toBe(0)
+  })
+
   it("exchanges the code with no state, lands on an unclaimed install, and claims it into the actor's org", async () => {
     mockZidTokenAndProfile({
       accessToken: "mkt-access-token",

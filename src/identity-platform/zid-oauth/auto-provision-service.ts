@@ -63,8 +63,11 @@ export class ZidMarketplaceAutoProvisionService {
     private readonly deps: ZidAutoProvisionDeps
   ) {}
 
-  async completeInstall(input: { code: string }): Promise<ZidCompleteInstallResult> {
-    const install = await this.oauthService.completeMarketplaceInstall({ code: input.code })
+  async completeInstall(input: { state: string; code: string }): Promise<ZidCompleteInstallResult> {
+    const install = await this.oauthService.completeMarketplaceAuthorization({
+      state: input.state,
+      code: input.code,
+    })
 
     const email = install.merchantEmail?.trim().toLowerCase()
     if (!email) {

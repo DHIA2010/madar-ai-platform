@@ -64,6 +64,15 @@ export class ZidOAuthController {
     return this.service.startAuthorization(actor, input)
   }
 
+  // Zid support's required fix: the App Market "Activate" button's Redirection URL must point
+  // here (GET /v1/integrations/zid/start), not at the callback -- this is what actually
+  // originates the /oauth/authorize round trip (and the `state` it depends on) for an anonymous
+  // marketplace visitor, the thing that was missing entirely before.
+  async startMarketplace() {
+    const { authorizationUrl } = await this.service.startMarketplaceAuthorization()
+    return { status: 302, headers: { location: authorizationUrl } }
+  }
+
   async connectDirect(
     actor: AuthenticatedActor,
     input: {
@@ -149,17 +158,29 @@ export class ZidOAuthController {
       }
     }
 
-    // No `state` means MADAR never called startAuthorization for this request -- Zid sent the
-    // merchant here directly from its own App Market "Activate" button, not from an admin
-    // clicking "Connect Zid" inside MADAR. Distinct flow: exchange the code now, but defer
-    // organization attachment to a later claim step (see zid-oauth/service.ts's
-    // completeMarketplaceInstall/claimInstall doc comments) -- unless the merchant's email from
-    // Zid doesn't match any existing MADAR account, in which case autoProvisionService creates
-    // one and logs them straight in instead (see ZidMarketplaceAutoProvisionService).
+    // Zid support's confirmed fix (2026-10-04): there is no supported flow where a legitimate
+    // callback arrives with a code but no state -- both the admin-initiated "connect" flow and
+    // the marketplace "Activate" flow (via the new GET /v1/integrations/zid/start route) now
+    // always originate a real state first. A bare code with no state is therefore always
+    // rejected, never exchanged.
     if (!state) {
+      return {
+        status: 302,
+        headers: {
+          location: this.service.buildErrorRedirect("missing_code_or_state"),
+        },
+      }
+    }
+
+    // Which completion path a state belongs to -- the marketplace path additionally needs
+    // autoProvisionService (email-match auto-login), which lives outside ZidOAuthService, so
+    // this controller has to make the choice itself rather than the service owning both flows.
+    const flow = await this.service.resolveStateFlow(state)
+
+    if (flow === "marketplace") {
       try {
         if (this.autoProvisionService) {
-          const outcome = await this.autoProvisionService.completeInstall({ code })
+          const outcome = await this.autoProvisionService.completeInstall({ state, code })
           return {
             status: 302,
             headers: {
@@ -171,7 +192,7 @@ export class ZidOAuthController {
           }
         }
 
-        const pending = await this.service.completeMarketplaceInstall({ code })
+        const pending = await this.service.completeMarketplaceAuthorization({ state, code })
         return {
           status: 302,
           headers: {
