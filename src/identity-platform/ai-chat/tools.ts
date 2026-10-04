@@ -800,57 +800,124 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     schema: z.object({}),
     execute: (actor, services) => services.storesAggregationService.listStores(actor),
   },
-  {
-    category: "madarApps",
-    tool: {
-      name: "get_report_catalog",
-      description:
-        "The whitelist of real data sources/fields available to query via run_kpi_preview (sales, products, inventory, customers, financial, marketing). Call this before run_kpi_preview if unsure which dataSource/field names are valid.",
-      input_schema: { type: "object", properties: {} },
-    },
-    schema: z.object({}),
-    execute: async (_actor, services) => services.reportsService.getCatalog(),
-  },
-  {
-    category: "madarApps",
-    tool: {
-      name: "run_kpi_preview",
-      description:
-        "Runs a real, whitelisted KPI query (one dataSource + field + aggregation, e.g. sum of sales.revenue) and returns the actual result. dataSource/field must come from get_report_catalog -- any other value is rejected.",
-      input_schema: {
-        type: "object",
-        properties: {
-          dataSource: { type: "string" },
-          field: { type: "string" },
-          aggregation: { type: "string", enum: ["sum", "avg", "count", "min", "max"] },
-          timeGrouping: {
-            type: "string",
-            enum: ["day", "week", "month", "quarter", "year", "none"],
+  // Universal Data Intelligence audit, Step 3: the generic query engine (reports/catalog.ts +
+  // query-builder.ts -- already production-tested, built for the report-builder feature) exposed
+  // to the AI chat for any question that doesn't match one of the hand-written tools above,
+  // instead of writing a new dedicated tool per question shape. Scoped per category via
+  // getCatalogForApplication, the same server-side enforcement buildToolsForCategory already
+  // relies on -- a pos-scoped session can never see/query an ecommerce or advertising data
+  // source, regardless of what the model asks for. Step 5: now including advertising too, now
+  // that the pattern is proven for POS/ecommerce -- but its own 12 hand-written tools
+  // (campaigns/analytics-engine.ts) stay the PRIMARY path (see GENERIC_QUERY_RULES in service.ts
+  // -- a dedicated tool is always preferred when one exists); the marketing catalog source only
+  // covers Google Ads' 4 raw summable fields today, so this mainly adds a fallback for the long
+  // tail, not a replacement for the deeper ranking/decline/contribution/anomaly analysis already
+  // built there.
+  ...(["pos", "ecommerce", "madarApps", "advertising"] as const).flatMap(
+    (category): ToolDefinition[] => [
+      {
+        category,
+        tool: {
+          name: "get_report_catalog",
+          description:
+            "The whitelist of real data sources/fields/dimensions available to query via run_kpi_preview, scoped to this conversation's own application. Call this before run_kpi_preview if unsure which dataSource/field/dimension/filter name is valid -- never invent one. Use this for any reasonable question about this application's data that doesn't match one of your other, more specific tools.",
+          input_schema: { type: "object", properties: {} },
+        },
+        schema: z.object({}),
+        execute: async (_actor, services) =>
+          services.reportsService.getCatalogForApplication(category),
+      },
+      {
+        category,
+        tool: {
+          name: "run_kpi_preview",
+          description:
+            "Runs a real, whitelisted query (dataSource + field + aggregation) and returns the actual result -- the general-purpose way to answer a question with no dedicated tool. dataSource/field/groupByDimension/filters[].field must come from get_report_catalog -- any other value is rejected. Set groupByDimension for a ranked breakdown ('which product/category/customer contributed most'); set compareEnabled for 'did this change vs the period before' (ignored when groupByDimension is set).",
+          input_schema: {
+            type: "object",
+            properties: {
+              dataSource: { type: "string" },
+              field: { type: "string" },
+              aggregation: { type: "string", enum: ["sum", "avg", "count", "min", "max"] },
+              timeGrouping: {
+                type: "string",
+                enum: ["day", "week", "month", "quarter", "year", "none"],
+                description:
+                  "Use 'none' unless the question explicitly asks for a trend over time.",
+              },
+              groupByDimension: {
+                type: "string",
+                description:
+                  "Optional dimension key from get_report_catalog to break the result down by, ranked by value descending (top 10). Omit for a single aggregate number.",
+              },
+              filters: {
+                type: "array",
+                description:
+                  "Optional filters, each {field, operator, value} using field/operator names from get_report_catalog's filterFields.",
+                items: {
+                  type: "object",
+                  properties: {
+                    field: { type: "string" },
+                    operator: { type: "string", enum: ["eq", "neq", "contains", "not_contains"] },
+                    value: { type: "string" },
+                  },
+                  required: ["field", "operator", "value"],
+                },
+              },
+              compareEnabled: {
+                type: "boolean",
+                description:
+                  "When true (and groupByDimension is not set), also returns the equal-length immediately-preceding period's value and percentage change.",
+              },
+            },
+            required: ["dataSource", "field", "aggregation", "timeGrouping"],
           },
         },
-        required: ["dataSource", "field", "aggregation", "timeGrouping"],
-      },
-    },
-    schema: z.object({
-      dataSource: z.string(),
-      field: z.string(),
-      aggregation: z.enum(["sum", "avg", "count", "min", "max"]),
-      timeGrouping: z.enum(["day", "week", "month", "quarter", "year", "none"]),
-    }),
-    execute: (actor, services, input) =>
-      services.reportsService.previewKpi(actor, {
-        ...(input as {
-          dataSource: string
-          field: string
-          aggregation: "sum" | "avg" | "count" | "min" | "max"
-          timeGrouping: "day" | "week" | "month" | "quarter" | "year" | "none"
+        schema: z.object({
+          dataSource: z.string(),
+          field: z.string(),
+          aggregation: z.enum(["sum", "avg", "count", "min", "max"]),
+          timeGrouping: z.enum(["day", "week", "month", "quarter", "year", "none"]),
+          groupByDimension: z.string().optional(),
+          filters: z
+            .array(
+              z.object({
+                field: z.string(),
+                operator: z.enum(["eq", "neq", "contains", "not_contains"]),
+                value: z.string(),
+              })
+            )
+            .optional(),
+          compareEnabled: z.boolean().optional(),
         }),
-        filters: [],
-        groupByDimension: null,
-        compareEnabled: false,
-        workspaceId: actor.workspaceId,
-      }),
-  },
+        execute: (actor, services, input) => {
+          const parsed = input as {
+            dataSource: string
+            field: string
+            aggregation: "sum" | "avg" | "count" | "min" | "max"
+            timeGrouping: "day" | "week" | "month" | "quarter" | "year" | "none"
+            groupByDimension?: string
+            filters?: Array<{
+              field: string
+              operator: "eq" | "neq" | "contains" | "not_contains"
+              value: string
+            }>
+            compareEnabled?: boolean
+          }
+          return services.reportsService.previewKpi(actor, {
+            dataSource: parsed.dataSource,
+            field: parsed.field,
+            aggregation: parsed.aggregation,
+            timeGrouping: parsed.timeGrouping,
+            filters: parsed.filters ?? [],
+            groupByDimension: parsed.groupByDimension ?? null,
+            compareEnabled: parsed.compareEnabled ?? false,
+            workspaceId: actor.workspaceId,
+          })
+        },
+      },
+    ]
+  ),
 ]
 
 export function buildToolsForCategory(category: ApplicationCategoryId): Anthropic.Tool[] {

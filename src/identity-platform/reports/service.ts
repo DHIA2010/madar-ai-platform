@@ -2,7 +2,7 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { ERRORS, IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
-import { findDataSource, findField, REPORT_CATALOG } from "./catalog"
+import { findDataSource, findField, REPORT_CATALOG, type CatalogApplication } from "./catalog"
 import { executeKpi, getFilterFieldValues } from "./query-builder"
 import { ReportsRepository } from "./repository"
 import { ensureSystemReportsSeeded } from "./seed"
@@ -78,9 +78,11 @@ export class ReportsService {
       key: source.key,
       label: source.label,
       category: source.category,
+      application: source.application,
       fields: source.fields.map((field) => ({
         key: field.key,
         label: field.label,
+        description: field.description,
         allowedAggregations: field.allowedAggregations,
       })),
       dimensions: source.dimensions.map((dimension) => ({
@@ -93,6 +95,13 @@ export class ReportsService {
         allowedOperators: filterField.allowedOperators,
       })),
     }))
+  }
+
+  // Scoped to one activated application's own data sources -- the generic query tools expose
+  // this instead of the full getCatalog(), the same server-side scoping buildToolsForCategory
+  // already enforces for the hand-written tools (never trust the LLM to self-restrict).
+  getCatalogForApplication(application: CatalogApplication) {
+    return this.getCatalog().filter((source) => source.application === application)
   }
 
   async listKpis(actor: AuthenticatedActor): Promise<KpiDefinition[]> {

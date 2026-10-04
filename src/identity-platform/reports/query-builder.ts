@@ -194,6 +194,7 @@ export async function executeKpi(
   const extraParts = resolveExtraFields(dataSource, extraFields)
 
   let points: KpiDataPoint[]
+  let groupByDimensionLabel: string | null = null
 
   if (definition.groupByDimension) {
     const dimension = findDimension(dataSource, definition.groupByDimension)
@@ -202,6 +203,7 @@ export async function executeKpi(
         `بُعد غير معروف "${definition.groupByDimension}" لمصدر البيانات "${definition.dataSource}"`
       )
     }
+    groupByDimensionLabel = dimension.label
     const { conditions, params } = buildScopeAndFilters(
       definition.dataSource,
       organizationId,
@@ -262,6 +264,19 @@ export async function executeKpi(
     definition.filters,
     range
   )
+  // Generic, domain-agnostic sample-size proxy -- COUNT(field) rather than a dedicated row-id
+  // expression, since the catalog doesn't define one per data source and the field itself is
+  // already guaranteed to exist. Reuses the exact same scope/filter/range as the real aggregate.
+  const sampleSize = await runAggregate(
+    db,
+    definition.dataSource,
+    field.sqlExpr,
+    "count",
+    organizationId,
+    workspaceId,
+    definition.filters,
+    range
+  )
 
   if (points.length === 0) {
     let extraValues: Record<string, number> | undefined
@@ -305,7 +320,19 @@ export async function executeKpi(
       previousValue === 0 ? null : ((currentValue - previousValue) / previousValue) * 100
   }
 
-  return { points, currentValue, previousValue, changePercent }
+  return {
+    points,
+    currentValue,
+    previousValue,
+    changePercent,
+    sampleSize,
+    meta: {
+      dataSourceLabel: dataSource.label,
+      fieldLabel: field.label,
+      groupByDimensionLabel,
+      application: dataSource.application,
+    },
+  }
 }
 
 // Distinct real values seen for a catalog-whitelisted filter field, used to populate the wizard's

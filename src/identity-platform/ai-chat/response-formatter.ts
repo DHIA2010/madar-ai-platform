@@ -11,6 +11,7 @@ import type {
   PeriodComparisonResult,
   PerformanceDriver,
 } from "../campaigns/analytics-types"
+import type { KpiResult } from "../reports/types"
 import { describePeriodFairness } from "../shared/analytics-rules"
 
 import type {
@@ -602,22 +603,43 @@ function kpiCardsFromInvoiceSummary(result: PosInvoiceSummaryResult): KpiCard[] 
   ]
 }
 
-// Mirrors reports/types.ts's KpiResult -- the generic whitelisted-query preview tool.
-interface KpiPreviewResult {
-  currentValue: number
-  previousValue: number | null
-  changePercent: number | null
-}
-
-function kpiCardFromPreview(result: KpiPreviewResult): KpiCard {
+// Universal Data Intelligence audit, Step 3/4: the generic query engine's result (reports/
+// query-builder.ts's executeKpi, run via run_kpi_preview) has no fixed shape the way every other
+// tool here does -- it can be a single number, a single number with a period comparison, or a
+// ranked breakdown, depending entirely on what the model asked for. `meta` (added alongside this
+// step) is what makes a readable title possible here without the formatter re-deriving it from
+// the catalog itself.
+function kpiCardFromGenericResult(result: KpiResult): KpiCard {
+  const title = result.meta
+    ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}`
+    : "نتيجة الاستعلام"
   return {
     type: "kpi",
-    title: "نتيجة المؤشر",
+    title,
     value: result.currentValue,
     previousValue: result.previousValue,
     changePercent: result.changePercent,
     trend: trend(result.changePercent),
     format: "number",
+  }
+}
+
+function chartFromGenericResult(result: KpiResult): ChartSpec {
+  const title = result.meta
+    ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}${
+        result.meta.groupByDimensionLabel ? ` حسب ${result.meta.groupByDimensionLabel}` : ""
+      }`
+    : "نتيجة الاستعلام"
+  return {
+    type: "chart",
+    chartType: "bar",
+    title,
+    series: [
+      {
+        name: result.meta?.fieldLabel ?? "value",
+        data: result.points.map((point) => ({ label: point.label, value: point.value })),
+      },
+    ],
   }
 }
 
@@ -805,8 +827,26 @@ export function buildStructuredResponse(
       }
       case "run_kpi_preview": {
         sawAnalyticsTool = true
-        domain = "madarApps"
-        metrics.push(kpiCardFromPreview(output as KpiPreviewResult))
+        const result = output as KpiResult
+        domain = result.meta?.application ?? domain ?? "madarApps"
+        // A grouped breakdown (groupByDimension was set) is a ranked comparison -- a bar chart,
+        // same as every other ranking tool here. A single aggregate (with or without a period
+        // comparison) is a KPI card. Never both: the model asked for one or the other.
+        if (result.points.length > 1) {
+          charts.push(chartFromGenericResult(result))
+        } else {
+          metrics.push(kpiCardFromGenericResult(result))
+        }
+        // A generic, conservative floor -- this is a much cruder signal than the multi-dimension
+        // confidence engines elsewhere (see KpiResult.sampleSize's own comment), so the threshold
+        // stays deliberately low: this only ever fires for a result genuinely too thin to rank or
+        // trust, not a borderline one.
+        if (result.sampleSize > 0 && result.sampleSize < 3) {
+          warnings.push({
+            type: "insufficient_sample",
+            message: `هذه النتيجة محسوبة من ${result.sampleSize} ${result.sampleSize === 1 ? "سجل فقط" : "سجلات فقط"} -- قد لا تكون كافية لإعطاء استنتاج موثوق.`,
+          })
+        }
         break
       }
       default:

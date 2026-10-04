@@ -64,6 +64,16 @@ const ADVERTISING_ANALYTICS_RULES = [
   "اذكر حداثة بيانات القناة (دقائق منذ آخر مزامنة) عند توفرها في نتيجة الأداة، ولا تصف الأرقام بأنها لحظية إذا كانت آخر مزامنة قديمة.",
 ].join("\n")
 
+// Universal Data Intelligence audit, Step 3: tells the model when to reach for the generic query
+// engine (get_report_catalog + run_kpi_preview) instead of either refusing a question or trying
+// to force it into one of the fixed, hand-written tools above. This is the prompt half of "don't
+// write a new dedicated tool for every question shape" -- the backend half is the catalog itself.
+const GENERIC_QUERY_RULES = [
+  "إذا سُئلت سؤالاً تحليليًا معقولاً عن بيانات هذا القسم ولا توجد أداة مخصصة تجيب عنه مباشرة (مثل: 'أي فئة منتجات حققت أعلى مبيعات؟'، 'من أكثر عميل اشترى؟'، 'ما إجمالي هامش الربح هذا الشهر؟')، لا تقل إن البيانات غير متوفرة قبل التحقق -- استخدم get_report_catalog لمعرفة مصادر البيانات/الحقول/الأبعاد المتاحة فعليًا، ثم استخدم run_kpi_preview لتنفيذ الاستعلام الفعلي.",
+  "في run_kpi_preview: استخدم groupByDimension عندما يطلب السؤال 'أي/أكثر/أفضل X ساهم في Y' (يُعيد ترتيبًا تنازليًا لأعلى 10 نتائج). استخدم compareEnabled=true عندما يطلب السؤال مقارنة بالفترة السابقة. لا تستخدم dataSource أو field أو اسم بُعد لم يرد حرفيًا في نتيجة get_report_catalog -- هذا يُرفض من الخادم فورًا.",
+  "إذا كانت أداة مخصصة (مثل analyze_sales_performance أو get_top_selling_products) تجيب عن السؤال مباشرة وبتحليل أعمق (تفصيل الأسباب، مستوى الثقة، إلخ)، فضّلها دائمًا على run_kpi_preview -- الأخير هو الخيار العام عند عدم وجود أداة أكثر تخصصًا فقط.",
+].join("\n")
+
 function buildSystemPrompt(category: ApplicationCategoryId): string {
   const scopeNote =
     category === "madarApps"
@@ -85,6 +95,7 @@ function buildSystemPrompt(category: ApplicationCategoryId): string {
     PRESENTATION_RULES,
     TIME_INTENT_RULES,
     category === "advertising" ? ADVERTISING_ANALYTICS_RULES : "",
+    GENERIC_QUERY_RULES,
     scopeNote,
   ]
     .filter(Boolean)

@@ -326,6 +326,14 @@ describe("ai-chat: per-application scoping", () => {
     }
   })
 
+  it("exposes the generic query tools (get_report_catalog, run_kpi_preview) under every category", () => {
+    for (const category of ["pos", "ecommerce", "madarApps", "advertising"] as const) {
+      const names = buildToolsForCategory(category).map((tool) => tool.name)
+      expect(names).toContain("get_report_catalog")
+      expect(names).toContain("run_kpi_preview")
+    }
+  })
+
   it("re-checks application-enabled on every send, not just at session creation", async () => {
     await setApplicationEnabled(ORG_A, "posEnabled", true)
     const session = await service.createSession(actor(), "pos")
@@ -584,6 +592,27 @@ describe("ai-chat: per-application scoping", () => {
 
     expect(capturedSystemPrompt).toContain("all_time")
     expect(capturedSystemPrompt).toContain("كل الوقت")
+  })
+
+  it("instructs every category's session to use the generic query engine for questions with no dedicated tool, while preferring a dedicated tool when one exists", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await setApplicationEnabled(ORG_A, "advertisingEnabled", true)
+
+    let capturedSystemPrompt = ""
+    mockRunChatTurn.mockImplementation(async (input) => {
+      capturedSystemPrompt = input.systemPrompt
+      return { text: "ok", toolCalls: [], stopReason: "end_turn" }
+    })
+
+    const posSession = await service.createSession(actor(), "pos")
+    await service.sendMessage(actor(), posSession.id, "مرحبا")
+    expect(capturedSystemPrompt).toContain("get_report_catalog")
+    expect(capturedSystemPrompt).toContain("groupByDimension")
+    expect(capturedSystemPrompt).toMatch(/فضّلها دائمًا على run_kpi_preview/)
+
+    const advertisingSession = await service.createSession(actor(), "advertising")
+    await service.sendMessage(actor(), advertisingSession.id, "مرحبا")
+    expect(capturedSystemPrompt).toContain("get_report_catalog")
   })
 
   // The exact regression reported: a question like "وش أفضل الحملات كل الوقت؟" left the model

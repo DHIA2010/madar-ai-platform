@@ -232,6 +232,75 @@ describe("reports: catalog-driven query builder", () => {
     )
   })
 
+  // Universal Data Intelligence audit, Step 3/4: `meta` is what lets a generic consumer (the AI
+  // chat's response-formatter) build a human-readable title/domain without re-deriving it from
+  // the catalog -- added specifically so run_kpi_preview's result is self-describing.
+  it("echoes back the resolved data source/field/dimension labels and application in meta", async () => {
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 100,
+      createdAt: "2026-06-01T10:00:00Z",
+      paymentMethodCode: "cash",
+    })
+
+    const ungrouped = await service.previewKpi(actor(), {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      filters: [],
+      timeGrouping: "none",
+      groupByDimension: null,
+      compareEnabled: false,
+      workspaceId: null,
+    })
+    expect(ungrouped.meta).toEqual({
+      dataSourceLabel: "المبيعات",
+      fieldLabel: "إجمالي المبيعات",
+      groupByDimensionLabel: null,
+      application: "pos",
+    })
+
+    const grouped = await service.previewKpi(actor(), {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      filters: [],
+      timeGrouping: "none",
+      groupByDimension: "payment_method",
+      compareEnabled: false,
+      workspaceId: null,
+    })
+    expect(grouped.meta?.groupByDimensionLabel).toBe("طريقة الدفع")
+  })
+
+  it("reports the real row count behind the aggregate as sampleSize", async () => {
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 100,
+      createdAt: "2026-06-01T10:00:00Z",
+    })
+    await seedInvoice({
+      organizationId: ORG_A,
+      workspaceId: WORKSPACE_A,
+      totalAmount: 50,
+      createdAt: "2026-06-02T10:00:00Z",
+    })
+
+    const result = await service.previewKpi(actor(), {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      filters: [],
+      timeGrouping: "none",
+      groupByDimension: null,
+      compareEnabled: false,
+      workspaceId: null,
+    })
+    expect(result.sampleSize).toBe(2)
+  })
+
   it("rejects a KPI definition referencing an unknown data source", async () => {
     await expect(
       service.previewKpi(actor(), {

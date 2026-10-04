@@ -1,3 +1,10 @@
+// Redeclared locally rather than imported from ai-chat/types.ts -- same reasoning as that file's
+// own copy of this union (and command-handlers.ts's, and the frontend's): backend modules don't
+// reach into each other's internals, and reports/ is the lower-level data layer, so it must not
+// depend on ai-chat/ at all. Defined here (not in catalog.ts, which imports from this file) to
+// avoid a circular import between the two.
+export type CatalogApplication = "advertising" | "ecommerce" | "pos" | "madarApps"
+
 export type ReportAggregation = "sum" | "avg" | "count" | "min" | "max"
 export type ReportTimeGrouping = "day" | "week" | "month" | "quarter" | "year" | "none"
 export type ReportDisplayType = "number" | "line" | "bar" | "pie" | "table" | "gauge"
@@ -161,4 +168,21 @@ export interface KpiResult {
   currentValue: number
   previousValue: number | null
   changePercent: number | null
+  // Count of non-null rows the primary field aggregated over, in the current range -- a generic,
+  // domain-agnostic proxy for "how much data actually backs this number." Not the same rigor as
+  // campaigns/confidence-engine.ts's multi-dimension spend/clicks/conversions/days bands (those
+  // stay domain-specific, deliberately not generalized here -- see the Universal Data
+  // Intelligence audit's own answer on why), but enough to stop a result computed from a
+  // handful of rows from being presented as a definitive ranking.
+  sampleSize: number
+  // Echoes back what was actually queried -- lets a generic consumer (the AI chat's structured-
+  // response formatter) build a human-readable title without re-deriving it from the catalog
+  // itself. Optional: the report-builder frontend already has this locally (it authored the
+  // KpiDefinition), so only executeKpi's ad-hoc preview path (run_kpi_preview) needs it.
+  meta?: {
+    dataSourceLabel: string
+    fieldLabel: string
+    groupByDimensionLabel: string | null
+    application: CatalogApplication
+  }
 }

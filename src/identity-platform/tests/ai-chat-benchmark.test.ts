@@ -20,7 +20,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
-import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
+import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/migration-runner"
 import { CampaignAnalyticsEngine } from "../campaigns/analytics-engine"
 import type {
   CampaignPerformanceQuery,
@@ -243,6 +243,10 @@ beforeEach(async () => {
   const adapter = mem.adapters.createPg()
   database = new PostgresDatabase(new adapter.Pool())
   await runIdentityMigrations(database, process.cwd())
+  await runSqlFile(
+    database,
+    `${process.cwd()}/src/project-platform/migrations/001_project_core.sql`
+  )
 
   await database.query(
     `insert into users (id, email, password_hash, full_name, email_verified_at)
@@ -590,5 +594,197 @@ describe("golden questions -- follow-up relevance", () => {
     )
     expect(reply.structured!.followUpQuestions.length).toBeGreaterThan(0)
     expect(reply.structured!.followUpQuestions.every((q) => q !== "هل هناك أي شيء آخر؟")).toBe(true)
+  })
+})
+
+// Universal Data Intelligence audit, Step 3: proves the generic query engine (get_report_catalog
+// + run_kpi_preview, backed by the existing, already-tested reports/query-builder.ts) can answer
+// a real question with NO dedicated tool behind it -- the actual success criterion this whole
+// architecture change exists for, not just that the two tools are wired in.
+describe("golden questions -- generic query engine (no dedicated tool)", () => {
+  it("'Which customer spent the most?' -- answered via run_kpi_preview, not a hand-written get_top_customers tool", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+
+    const customerA = randomUUID()
+    const customerB = randomUUID()
+    await database.query(
+      `insert into customers (id, organization_id, workspace_id, name, created_by, created_at, updated_at)
+       values ($1,$2,$3,'Ahmed',$4,now(),now()), ($5,$2,$3,'Sara',$4,now(),now())`,
+      [customerA, ORG_A, WORKSPACE_A, USER_A, customerB]
+    )
+    await database.query(
+      `insert into pos_invoices (
+         id, organization_id, workspace_id, customer_id, invoice_number, status, payment_method_code,
+         subtotal_amount, discount_amount, tax_amount, total_amount, created_at, updated_at
+       ) values
+         ($1,$2,$3,$4,'INV-1','completed','cash',500,0,0,500,$6,$6),
+         ($5,$2,$3,$7,'INV-2','completed','cash',120,0,0,120,$6,$6)`,
+      [randomUUID(), ORG_A, WORKSPACE_A, customerA, randomUUID(), "2026-09-15T10:00:00Z", customerB]
+    )
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "customers",
+      field: "total_spend",
+      aggregation: "sum",
+      timeGrouping: "none",
+      groupByDimension: "customer_name",
+    })
+
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "مين أكثر عميل اشترى؟"
+    )
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.source).toEqual({ domain: "pos" })
+    expect(reply.structured!.charts).toHaveLength(1)
+    expect(reply.structured!.charts[0].series[0].data[0]).toEqual({ label: "Ahmed", value: 500 })
+  })
+
+  it("get_report_catalog for a pos session only returns pos-application data sources", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+
+    let capturedCatalog: Array<{ application: string }> = []
+    mockRunChatTurn.mockImplementation(async (input) => {
+      const outputSummary = await input.executeTool("get_report_catalog", {})
+      capturedCatalog = JSON.parse(outputSummary)
+      return {
+        text: "ok",
+        toolCalls: [{ tool: "get_report_catalog", input: {}, outputSummary }],
+        stopReason: "end_turn",
+      }
+    })
+
+    await service.sendMessage(actor(ORG_A, USER_A), session.id, "ما البيانات المتاحة؟")
+
+    expect(capturedCatalog.length).toBeGreaterThan(0)
+    expect(capturedCatalog.every((source) => source.application === "pos")).toBe(true)
+  })
+
+  it("flags a generic query result computed from too few records instead of presenting it as a trustworthy ranking", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+    await seedInvoiceAt({ totalAmount: 100, createdAt: "2026-09-15T10:00:00Z" })
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "pos")
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "sales",
+      field: "total_revenue",
+      aggregation: "sum",
+      timeGrouping: "none",
+    })
+
+    const reply = await service.sendMessage(actor(ORG_A, USER_A), session.id, "كم إجمالي المبيعات؟")
+
+    expect(reply.structured!.warnings.some((w) => w.type === "insufficient_sample")).toBe(true)
+  })
+
+  it("Step 5: the generic query engine also answers an advertising question with no dedicated tool shape, grouped by campaign", async () => {
+    const taxRatesService = new TaxRatesService(database)
+    const posPaymentMethodsService = new PosPaymentMethodsService(database)
+    const posInvoicesService = new PosInvoicesService(
+      database,
+      posPaymentMethodsService,
+      taxRatesService
+    )
+
+    const connectionId = randomUUID()
+    const projectId = randomUUID()
+    const oauthAccountId = randomUUID()
+    await database.query(
+      `insert into projects (id, organization_id, workspace_id, owner_user_id, name, status)
+       values ($1,$2,$3,$4,'Google Ads Project','active')`,
+      [projectId, ORG_A, WORKSPACE_A, USER_A]
+    )
+    await database.query(
+      `insert into google_oauth_connections (
+         id, organization_id, workspace_id, project_id, status, created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1,$2,$3,$4,'connected',$5,$5,now(),now())`,
+      [connectionId, ORG_A, WORKSPACE_A, projectId, USER_A]
+    )
+    await database.query(
+      `insert into oauth_accounts (
+         id, provider_family, organization_id, workspace_id, status, created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1,'google',$2,$3,'active',$4,$4,now(),now())`,
+      [oauthAccountId, ORG_A, WORKSPACE_A, USER_A]
+    )
+    await database.query(
+      `insert into integration_connections (
+         id, provider_id, provider_family, platform, organization_id, workspace_id, project_id, oauth_account_id,
+         status, created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1,'google-ads','google','marketing',$2,$3,$4,$5,'connected',$6,$6,now(),now())`,
+      [connectionId, ORG_A, WORKSPACE_A, projectId, oauthAccountId, USER_A]
+    )
+    const syncRunId = randomUUID()
+    await database.query(
+      `insert into google_ads_sync_runs (
+         id, connection_id, organization_id, workspace_id, project_id, customer_id,
+         date_start, date_end, idempotency_key, status, created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1,$2,$3,$4,$5,'111222333','2026-09-01'::date,'2026-09-30'::date,$6,'completed',$7,$7,now(),now())`,
+      [syncRunId, connectionId, ORG_A, WORKSPACE_A, projectId, `seed-${syncRunId}`, USER_A]
+    )
+    await database.query(
+      `insert into google_ads_daily_metrics (
+         id, connection_id, sync_run_id, customer_id, metric_scope, metric_entity_id, campaign_id, metric_date,
+         impressions, clicks, ctr, cost_micros, average_cpc, average_cpm, conversions, conversion_value,
+         payload, created_at, updated_at
+       ) values
+         ($1,$2,$3,'111222333','campaign','camp-a','camp-a','2026-09-15'::date,1000,50,0,500000000,0,0,5,500,'{}'::jsonb,now(),now()),
+         ($4,$2,$3,'111222333','campaign','camp-b','camp-b','2026-09-15'::date,2000,80,0,200000000,0,0,8,800,'{}'::jsonb,now(),now())`,
+      [randomUUID(), connectionId, syncRunId, randomUUID()]
+    )
+
+    service = buildService(buildFakeAdvertisingEngine(summary(), summary()), posInvoicesService)
+    const session = await service.createSession(actor(ORG_A, USER_A), "advertising")
+    // run_kpi_preview has no date-range/period input today -- previewKpi always uses its own
+    // fixed last-12-months default window (reports/service.ts's defaultRange()), a known, not-yet
+    // -closed gap noted in the final report. The seeded metric date just needs to fall inside it.
+    await scriptSingleTool("run_kpi_preview", {
+      dataSource: "marketing",
+      field: "spend",
+      aggregation: "sum",
+      timeGrouping: "none",
+      groupByDimension: "campaign",
+    })
+
+    const reply = await service.sendMessage(
+      actor(ORG_A, USER_A),
+      session.id,
+      "ما الإنفاق لكل حملة هذا الشهر؟"
+    )
+
+    expect(reply.structured).not.toBeNull()
+    expect(reply.structured!.source).toEqual({ domain: "advertising" })
+    expect(reply.structured!.charts).toHaveLength(1)
+    // 500000000 micros = 500 SAR, 200000000 micros = 200 SAR.
+    expect(reply.structured!.charts[0].series[0].data).toEqual(
+      expect.arrayContaining([
+        { label: "camp-a", value: 500 },
+        { label: "camp-b", value: 200 },
+      ])
+    )
   })
 })
