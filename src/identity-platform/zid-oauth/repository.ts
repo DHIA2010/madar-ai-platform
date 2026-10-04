@@ -859,6 +859,18 @@ export class ZidOAuthRepository
       values: [connectionId],
     })
 
+    // A marketplace install (Zid App Market "Activate") that was already claimed into this
+    // connection still references it via claimed_connection_id -- confirmed as a real failure in
+    // stage (2026-10-04): deleting the connection without clearing this first throws a foreign
+    // key violation and the whole delete silently fails. The install row itself is kept (it's the
+    // install's own historical record of being claimed), just detached from the connection that's
+    // about to stop existing.
+    await this.db.query({
+      name: "zid-marketplace-install-clear-claimed-connection",
+      text: "UPDATE zid_marketplace_installs SET claimed_connection_id = NULL WHERE claimed_connection_id = $1",
+      values: [connectionId],
+    })
+
     await this.db.query({
       name: "zid-oauth-delete-connection",
       text: "DELETE FROM zid_oauth_connections WHERE id = $1",

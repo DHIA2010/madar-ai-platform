@@ -410,6 +410,51 @@ describe("Zid marketplace-initiated install (Activate from Zid's App Market)", (
     expect(replayResponse.status).not.toBe(200)
   })
 
+  // Confirmed as a real failure on stage (2026-10-04): a claimed marketplace install's
+  // zid_marketplace_installs row still points at the connection via claimed_connection_id, and
+  // deleteConnectionCascade used to delete the connection row without clearing that reference
+  // first, so every delete of a claimed connection threw a foreign key violation (the DELETE
+  // request failed outright, leaving the stale connection in place).
+  it("deletes a claimed marketplace connection cleanly, without a foreign key violation", async () => {
+    mockZidTokenAndProfile({
+      accessToken: "mkt-delete-access-token",
+      refreshToken: "mkt-delete-refresh-token",
+      store: { id: "665544", title: "Marketplace Delete Store" },
+    })
+
+    const claimToken = await completeMarketplaceCallback()
+    const { login } = await registerAndProvisionOrg(
+      "zid-marketplace-delete@madar.test",
+      "Zid Marketplace Delete Org"
+    )
+
+    const claimResponse = await fetch(
+      `${baseUrl}/v1/integrations/zid/install/${claimToken}/claim`,
+      { method: "POST", headers: authHeaders(login.session.accessToken) }
+    )
+    expect(claimResponse.status).toBe(200)
+    const claimed = (await claimResponse.json()) as { connectionId: string }
+
+    const deleteResponse = await fetch(`${baseUrl}/v1/integrations/${claimed.connectionId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${login.session.accessToken}` },
+    })
+    expect(deleteResponse.status).toBe(204)
+
+    const connectionRows = await database.query(
+      `SELECT id FROM zid_oauth_connections WHERE id = $1`,
+      [claimed.connectionId]
+    )
+    expect(connectionRows.rows).toHaveLength(0)
+
+    // The install row itself survives (it's the historical record of the claim) -- only its
+    // reference to the now-deleted connection is cleared.
+    const installRows = await database.query(
+      `SELECT status, claimed_connection_id FROM zid_marketplace_installs`
+    )
+    expect(installRows.rows[0]).toMatchObject({ status: "claimed", claimed_connection_id: null })
+  })
+
   it("carries the store UUID and domain through the claim so tracking resolves immediately", async () => {
     // Before this, zid_marketplace_installs persisted only name/currency/timezone, so a merchant
     // arriving through Zid's App Market got a connection with no store_uuid and no store_domain
