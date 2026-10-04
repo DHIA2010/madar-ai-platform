@@ -2045,6 +2045,14 @@ export function createIdentityApiServer(
                   } else if (event.type === "status") {
                     toolCallCount += 1
                     emit("status", { stage: event.stage, tool: event.tool })
+                  } else if (event.type === "structured") {
+                    // Genie-level quality audit section 21: sent once, as soon as it's ready --
+                    // normally right alongside the first text_delta, often before the narration
+                    // finishes streaming -- so the frontend can render KPI cards/drivers/charts
+                    // progressively instead of waiting for message_complete at the very end.
+                    // message_complete still carries the same structured payload too, for the
+                    // persisted message's own sake -- this is forwarded, not replaces, that.
+                    emit("structured", event.data)
                   }
                 },
               }

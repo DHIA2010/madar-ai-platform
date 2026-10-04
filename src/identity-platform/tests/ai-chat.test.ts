@@ -710,6 +710,43 @@ describe("ai-chat: streaming (sendMessageStream)", () => {
     expect(message.role).toBe("assistant")
   })
 
+  // Genie-level quality audit section 21: everything buildStructuredResponse needs is available
+  // the instant tool execution finishes, which is BEFORE the model's final narration round
+  // streams any text -- this proves sendMessageStream actually seizes that moment (emitting
+  // "structured" once, exactly when the first text_delta arrives) instead of only computing it
+  // after the whole turn finishes, which was the pre-existing (and valid, but needlessly late)
+  // behavior.
+  it("emits a structured event exactly once, at the first text_delta, built from this turn's real tool result", async () => {
+    await seedInvoice({ organizationId: ORG_A, workspaceId: WORKSPACE_A, totalAmount: 500 })
+    const session = await service.createSession(actor(), "pos")
+    const order: string[] = []
+    let structuredPayload: unknown
+
+    mockRunChatTurnStreaming.mockImplementation(async (input) => {
+      const toolResultText = await input.executeTool("get_pos_invoices_summary", {})
+      input.onEvent({ type: "text_delta", delta: "إجمالي المبيعات" })
+      input.onEvent({ type: "text_delta", delta: " 500 ريال." })
+      return {
+        text: "إجمالي المبيعات 500 ريال.",
+        toolCalls: [{ tool: "get_pos_invoices_summary", input: {}, outputSummary: toolResultText }],
+        stopReason: "end_turn",
+      }
+    })
+
+    const message = await service.sendMessageStream(actor(), session.id, "كم مبيعاتي؟", {
+      onEvent: (event) => {
+        order.push(event.type)
+        if (event.type === "structured") structuredPayload = event.data
+      },
+    })
+
+    // Exactly one "structured" event, arriving before the SECOND text_delta (i.e. as soon as
+    // text starts, not buffered until the whole turn is done).
+    expect(order.filter((type) => type === "structured")).toHaveLength(1)
+    expect(order.indexOf("structured")).toBeLessThan(order.lastIndexOf("text_delta"))
+    expect(structuredPayload).toEqual(message.structured)
+  })
+
   it("two sequential streamed sends in the same session never mix content", async () => {
     const session = await service.createSession(actor(), "pos")
 

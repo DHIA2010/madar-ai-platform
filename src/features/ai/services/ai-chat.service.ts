@@ -1,6 +1,6 @@
 import type { ApplicationCategoryId } from "@/features/applications"
 
-import type { ChatMessageDto, ChatSessionDto } from "../types"
+import type { ChatMessageDto, ChatSessionDto, ChatStructuredResponse } from "../types"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
@@ -48,6 +48,10 @@ const client = createHttpDataClient({
 export interface ChatStreamCallbacks {
   onTextDelta: (delta: string) => void
   onStatus: (stage: string, tool?: string) => void
+  // Genie-level quality audit section 21: fires once, as soon as the backend has it -- usually
+  // alongside the first text_delta, often before the text finishes streaming -- so KPI cards/
+  // drivers/charts/recommendations can render progressively instead of waiting for onComplete.
+  onStructured: (structured: ChatStructuredResponse) => void
   onComplete: (message: ChatMessageDto) => void
   onError: (message: string) => void
   onCancelled: () => void
@@ -112,6 +116,9 @@ async function consumeSseStream(response: Response, callbacks: ChatStreamCallbac
         callbacks.onStatus(statusData.stage, statusData.tool)
         break
       }
+      case "structured":
+        callbacks.onStructured(data as ChatStructuredResponse)
+        break
       case "message_complete":
         callbacks.onComplete(data as ChatMessageDto)
         break

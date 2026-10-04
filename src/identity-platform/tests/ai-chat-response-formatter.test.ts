@@ -575,6 +575,49 @@ describe("buildStructuredResponse", () => {
         contributionSharePercent: 34.8,
       },
     ])
+
+    // Genie-level quality audit section 6: contribution mode must not ALSO render a bar chart
+    // (raw current values, not the change the question was actually about) or narrate every
+    // contributor a second time in prose -- contributions[] above is the single ranked source.
+    expect(result!.charts).toHaveLength(0)
+    expect(result!.insights).toHaveLength(1)
+    expect(result!.insights[0].statement).toContain("card")
+  })
+
+  // Sibling of the test above: a PLAIN ranking (groupByDimension alone, no compareEnabled) has
+  // no delta to speak of, so the chart is still the right -- and only -- representation. Proves
+  // the contribution-mode suppression above is scoped to comparison data, not rankings in general.
+  it("still renders a bar chart for a plain ranking with no compareEnabled (no delta data)", () => {
+    const result = buildStructuredResponse(
+      [
+        {
+          tool: "run_kpi_preview",
+          output: {
+            points: [
+              { label: "card", value: 200 },
+              { label: "cash", value: 50 },
+            ],
+            currentValue: 250,
+            previousValue: null,
+            changePercent: null,
+            sampleSize: 10,
+            meta: {
+              dataSourceLabel: "المبيعات",
+              fieldLabel: "إجمالي المبيعات",
+              groupByDimensionLabel: "payment_method",
+              application: "pos",
+              queriedPeriod: { from: "2026-06-01", to: "2026-06-08" },
+            },
+          },
+        },
+      ],
+      "Asia/Riyadh"
+    )
+
+    expect(result!.charts).toHaveLength(1)
+    expect(result!.contributions).toHaveLength(0)
+    expect(result!.insights).toHaveLength(0)
+    expect(result!.charts[0].title).toBe("المبيعات -- إجمالي المبيعات حسب payment_method")
   })
 
   it("returns an empty chart list for top-selling products when there are none, but still a non-null envelope", () => {
@@ -759,7 +802,7 @@ describe("buildStructuredResponse", () => {
         "Asia/Riyadh"
       )
       expect(result!.followUpQuestions.length).toBeGreaterThan(0)
-      expect(result!.followUpQuestions.length).toBeLessThanOrEqual(4)
+      expect(result!.followUpQuestions.length).toBeLessThanOrEqual(3)
       expect(new Set(result!.followUpQuestions).size).toBe(result!.followUpQuestions.length)
     })
 
@@ -890,7 +933,7 @@ describe("buildStructuredResponse", () => {
       }
     }
 
-    it("builds KPI cards, a decomposition insight naming the dominant driver, and a contribution table", () => {
+    it("builds KPI cards, a decomposition insight naming the dominant driver, and typed contributions (no duplicate table)", () => {
       const result = buildStructuredResponse(
         [{ tool: "analyze_sales_performance", output: posAnalysis() }],
         "Asia/Riyadh"
@@ -908,12 +951,10 @@ describe("buildStructuredResponse", () => {
       expect(result!.insights[0].statement).toContain("عدد الطلبات")
       expect(result!.insights[0].statement).toContain("92.6%")
 
-      expect(result!.tables).toHaveLength(1)
-      expect(result!.tables[0].rows[0].productName).toBe("Product A")
-
-      // Analysis Orchestration audit (Genie-upgrade, round 2) section 7/11/12: the same
-      // decomposition/contribution data, now ALSO available as typed drivers/contributions --
-      // additive, the existing insights/tables assertions above still hold unchanged.
+      // Genie-level quality audit section 6: no parallel ReportTable repeating this same
+      // product-contribution data -- contributions[] below is the single structured
+      // representation (it carries strictly more: contributionSharePercent).
+      expect(result!.tables).toHaveLength(0)
       expect(result!.drivers).toHaveLength(2)
       const ordersDriver = result!.drivers.find((d) => d.metric === "orders")!
       expect(ordersDriver.role).toBe("primary")

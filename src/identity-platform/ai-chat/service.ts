@@ -8,9 +8,20 @@ import type { AiChatLlmClientLike, ChatStreamEvent } from "./llm-client"
 import { isApplicationEnabled, requireApplicationEnabled } from "./guards"
 import { AiChatRepository } from "./repository"
 import { buildStructuredResponse } from "./response-formatter"
-import type { RawToolResult } from "./response-types"
+import type { RawToolResult, StructuredAnalyticsResponse } from "./response-types"
 import { buildToolsForCategory, dispatchToolCall, type AiChatToolServices } from "./tools"
 import type { ApplicationCategoryId, ChatMessageDto, ChatSessionDto, ToolCallTrace } from "./types"
+
+// Genie-level quality audit section 21: everything buildStructuredResponse needs (every tool's
+// raw output) is already fully available the moment the model's tool-calling rounds finish --
+// which is BEFORE its final narration round starts streaming text, not after. A strict superset
+// of ChatStreamEvent (every llm-client.ts event is still a valid ChatTurnStreamEvent) so
+// sendMessageStream can forward the LLM's own events unchanged and additionally emit this one,
+// without llm-client.ts needing to know buildStructuredResponse/StructuredAnalyticsResponse exist
+// -- that stays an ai-chat/response-formatter.ts concern, not an LLM-transport one.
+export type ChatTurnStreamEvent =
+  | ChatStreamEvent
+  | { type: "structured"; data: StructuredAnalyticsResponse }
 
 // Signals a cancelled turn distinctly from a real failure -- the caller (the SSE route) must
 // emit a "cancelled" status rather than "error", and critically must NOT treat this as "retry
@@ -44,6 +55,11 @@ function todayFact(): string {
 // this prompt rule is the second, necessary layer -- it tells the model that detail layer already
 // exists, so its own prose should stay a short summary instead of re-describing every record.
 const PRESENTATION_RULES = [
+  // Genie-level quality audit section 2: the model's own narration must lead with the direct
+  // answer, not a preamble -- the structured KPI cards/drivers/contributions/charts (rendered
+  // separately, see response-formatter.ts) already carry the supporting detail, so the text's
+  // job is the conclusion in the first 1-3 sentences, nothing before it.
+  "ابدأ ردك دائمًا بالإجابة المباشرة على سؤال المستخدم في أول 1-3 جمل -- مثل: 'انخفضت الإيرادات بنسبة 42% مقارنة بالفترة السابقة. السبب الرئيسي هو...'. لا تبدأ أبدًا بعبارات تمهيدية مثل 'بناءً على البيانات المتاحة...' أو 'بعد تحليل البيانات...' أو شرح لما قامت به الأداة -- اذهب للنتيجة مباشرة.",
   'لا تستخدم أبدًا رمز الخط العمودي (|) أو جداول بتنسيق ASCII أو عرض بيانات بشكل "حقل: قيمة | حقل: قيمة" في ردك. لا تحاول رسم جدول بنفسك بأي شكل نصي.',
   "عندما تُرجع إحدى الأدوات قائمة سجلات متعددة (ورديات، طلبات، فواتير، منتجات، متاجر)، لا تُعدّد كل سجل وكل حقل في النص -- هذه التفاصيل تُعرض تلقائيًا في جدول منفصل ضمن واجهة المحادثة. اكتفِ في ردك بفقرة موجزة جدًا (جملة أو جملتين): العدد الإجمالي، والحالة العامة، وأي ملاحظة مهمة واحدة إن وجدت.",
   'لا تعرض أبدًا تاريخًا أو وقتًا بصيغته الخام مثل 2026-09-22T20:32:00Z -- التنسيق المقروء يُعرض تلقائيًا في الجدول أو البطاقة؛ إذا احتجت لذكر تاريخ في النص، اذكره بصياغة عربية طبيعية (مثل "22 سبتمبر") لا كسلسلة ISO.',
@@ -315,7 +331,7 @@ export class AiChatService {
     actor: AuthenticatedActor,
     sessionId: string,
     content: string,
-    options: { onEvent: (event: ChatStreamEvent) => void; signal?: AbortSignal }
+    options: { onEvent: (event: ChatTurnStreamEvent) => void; signal?: AbortSignal }
   ): Promise<ChatMessageDto> {
     assertActorCanUseAiChat(actor)
     const session = await this.loadOwnedSession(actor, sessionId)
@@ -342,8 +358,23 @@ export class AiChatService {
 
     const history = await this.repository.listMessages(sessionId, 20)
     const tools = buildToolsForCategory(session.applicationCategory)
+    const timezone = await getOrganizationTimezone(this.db, actor.organizationId)
 
     const rawToolResults: RawToolResult[] = []
+    // Genie-level quality audit section 21: structured data (KPI cards, drivers, contributions,
+    // charts, recommendations) is fully computable the instant tool execution finishes -- which
+    // is exactly when the model's final narration round starts. Emitting it once, right as the
+    // FIRST text token arrives, means the frontend can render those blocks progressively instead
+    // of waiting for the full answer to finish streaming before showing anything but text. Guard
+    // flag ensures this fires exactly once per turn (rawToolResults is fixed by this point --
+    // no further tool calls happen once the model has started narrating).
+    let structuredEmitted = false
+    const emitStructuredOnce = () => {
+      if (structuredEmitted) return
+      structuredEmitted = true
+      const structured = buildStructuredResponse(rawToolResults, timezone)
+      if (structured) options.onEvent({ type: "structured", data: structured })
+    }
 
     const result = await this.llmClient.runChatTurnStreaming({
       systemPrompt: buildSystemPrompt(session.applicationCategory),
@@ -358,7 +389,10 @@ export class AiChatService {
               ? message.content + formatToolCallsAnnotation(message.toolCalls)
               : message.content,
         })),
-      onEvent: options.onEvent,
+      onEvent: (event) => {
+        if (event.type === "text_delta") emitStructuredOnce()
+        options.onEvent(event)
+      },
       signal: options.signal,
       executeTool: async (toolName, toolInput) => {
         const { result: toolResult, error } = await dispatchToolCall(
@@ -385,8 +419,6 @@ export class AiChatService {
     }
 
     await this.repository.touchSession(sessionId)
-
-    const timezone = await getOrganizationTimezone(this.db, actor.organizationId)
 
     return this.repository.appendMessage({
       sessionId,

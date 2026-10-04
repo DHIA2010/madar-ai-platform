@@ -173,6 +173,12 @@ export function useAiChat() {
                 content: message.content + delta,
               }))
             },
+            // Genie-level quality audit section 21: arrives once, typically alongside the first
+            // text_delta -- lets KPI cards/drivers/charts/recommendations render progressively
+            // instead of only appearing once the whole answer has finished streaming.
+            onStructured: (structured) => {
+              updateMessage(assistantMessageId, (message) => ({ ...message, structured }))
+            },
             onComplete: (finalMessage) => {
               updateMessage(assistantMessageId, () => ({ ...finalMessage, status: "completed" }))
             },

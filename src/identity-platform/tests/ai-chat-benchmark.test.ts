@@ -482,8 +482,10 @@ describe("golden questions -- multi-step", () => {
       session.id,
       "ما المنتجات المسؤولة عن انخفاض المبيعات؟"
     )
-    expect(reply.structured!.tables[0].rows[0].productName).toBe("Product A")
-    expect(reply.structured!.tables[0].rows[0].revenueDelta).toBe(-400)
+    // Genie-level quality audit section 6: this product-contribution data now lives only in
+    // contributions[] (richer: carries contributionSharePercent too) -- no duplicate ReportTable.
+    expect(reply.structured!.contributions[0].label).toBe("Product A")
+    expect(reply.structured!.contributions[0].delta).toBe(-400)
   })
 })
 

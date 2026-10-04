@@ -632,9 +632,10 @@ function driverFindingsFromPosDecomposition(
   ]
 }
 
-// Typed counterpart of tableFromPosProductContributions -- same ranked product deltas, plus
-// each one's share of the TOTAL absolute change across every contributor (section 5's "Campaign
-// A contributed approximately 42% of the total decline" framing).
+// The ranked product deltas behind a POS revenue change, plus each one's share of the TOTAL
+// absolute change across every contributor (section 5's "Campaign A contributed approximately
+// 42% of the total decline" framing). This is the ONLY structured representation of this data --
+// no parallel ReportTable, to avoid rendering the same numbers twice (Genie-level audit section 6).
 function contributionFindingsFromPosProducts(
   rows: PosSalesPerformanceAnalysis["productContributions"]
 ): ContributionFinding[] {
@@ -648,26 +649,6 @@ function contributionFindingsFromPosProducts(
     contributionSharePercent:
       totalAbs === 0 ? null : Math.round((Math.abs(row.revenueDelta) / totalAbs) * 1000) / 10,
   }))
-}
-
-function tableFromPosProductContributions(
-  rows: PosSalesPerformanceAnalysis["productContributions"]
-): ReportTable {
-  return {
-    title: "المنتجات الأكثر تأثرًا بالتغيّر",
-    columns: [
-      { key: "productName", label: "المنتج", format: "text" },
-      { key: "currentRevenue", label: "الإيرادات الحالية", format: "currency" },
-      { key: "previousRevenue", label: "الإيرادات السابقة", format: "currency" },
-      { key: "revenueDelta", label: "التغيّر", format: "currency" },
-    ],
-    rows: rows.map((row) => ({
-      productName: row.productName,
-      currentRevenue: row.currentRevenue,
-      previousRevenue: row.previousRevenue,
-      revenueDelta: row.revenueDelta,
-    })),
-  }
 }
 
 // Deterministic, templated per tool -- never an LLM-authored "anything else?" (audit section 17's
@@ -720,7 +701,9 @@ function buildFollowUpQuestions(rawResults: RawToolResult[]): string[] {
       if (!questions.includes(question)) questions.push(question)
     }
   }
-  return questions.slice(0, 4)
+  // Genie-level quality audit section 19: capped at 3, not 4 -- matching the spec's own explicit
+  // "Maximum 3 suggestions" (a longer chip row reads as generic filler, not a focused next step).
+  return questions.slice(0, 3)
 }
 
 // Mirrors PosInvoicesService's InvoiceSummary (pos/invoices-service.ts).
@@ -807,32 +790,42 @@ function kpiCardFromGenericResult(result: KpiResult): KpiCard {
 // Universal Data Intelligence "Next Level" audit, Section 6: run_kpi_preview's generic
 // contribution/driver mode (groupByDimension + compareEnabled together -- see query-builder.ts's
 // executeKpi) attaches each label's delta vs the preceding period purely as numeric extraValues.
-// This turns the top few into the same hedged, non-causal co-occurrence language the hand-written
+// This turns it into the same hedged, non-causal co-occurrence language the hand-written
 // identify_performance_drivers tool already uses for advertising -- never "caused"/"because of",
 // only "the largest contributor to the change was" -- so the same wording convention holds
 // whether the diagnostic came from a dedicated tool or the generic engine.
+//
+// Genie-level quality audit section 6: only the single TOP contributor becomes a lead-in
+// insight sentence -- previously this narrated the top 3 in prose, verbatim duplicating what
+// contributionFindingsFromGenericResult (below) already lists in full, ranked, with each one's
+// share of the total change. One component, one purpose: this is the short observational lead;
+// the ranked detail belongs to contributions[] alone.
 function insightsFromGenericContribution(result: KpiResult): Insight[] {
   const withDelta = result.points.filter((point) => point.extraValues?.delta !== undefined)
   if (withDelta.length === 0) return []
   const fieldLabel = result.meta?.fieldLabel ?? "القيمة"
   const confidence: ConfidenceLevel =
     result.sampleSize > 0 && result.sampleSize < 3 ? "low" : "medium"
-  return withDelta.slice(0, 3).map((point, index) => {
-    const delta = point.extraValues!.delta
-    const previousValue = point.extraValues!.previousValue
-    const direction = delta >= 0 ? "بارتفاع" : "بانخفاض"
-    const rank = index === 0 ? "أكبر مساهم في التغيّر" : "من المساهمين أيضًا في التغيّر"
-    return {
-      statement: `${rank} في ${fieldLabel} هو "${point.label}" ${direction} قدره ${Math.abs(delta)} (من ${previousValue} إلى ${point.value}) -- هذا تزامن وليس بالضرورة سببًا مباشرًا.`,
+  const top = withDelta[0]
+  const delta = top.extraValues!.delta
+  const previousValue = top.extraValues!.previousValue
+  const direction = delta >= 0 ? "بارتفاع" : "بانخفاض"
+  return [
+    {
+      statement: `أكبر مساهم في التغيّر في ${fieldLabel} هو "${top.label}" ${direction} قدره ${Math.abs(delta)} (من ${previousValue} إلى ${top.value}) -- هذا تزامن وليس بالضرورة سببًا مباشرًا.`,
       relatedMetrics: [fieldLabel],
       confidence,
-    }
-  })
+    },
+  ]
 }
 
 // Typed counterpart of insightsFromGenericContribution -- same run_kpi_preview
 // groupByDimension+compareEnabled result, same |delta| ranking, but every contributor (not just
-// the top 3 narrated as prose) with its share of the total absolute change.
+// the top one narrated above) with its share of the total absolute change. The single source of
+// truth for the full ranked breakdown (Genie-level audit section 6) -- chartFromGenericResult is
+// deliberately NOT also rendered for this same result (see its call site in
+// buildStructuredResponse) since a bar of raw current values wouldn't add anything beyond what's
+// already here, just the same numbers a second way.
 function contributionFindingsFromGenericResult(result: KpiResult): ContributionFinding[] {
   const withDelta = result.points.filter((point) => point.extraValues?.delta !== undefined)
   if (withDelta.length === 0) return []
@@ -851,6 +844,8 @@ function contributionFindingsFromGenericResult(result: KpiResult): ContributionF
 }
 
 function chartFromGenericResult(result: KpiResult): ChartSpec {
+  // Only ever reached for a plain ranking now -- contribution mode is handled entirely by
+  // contributions[] instead (see this function's call site).
   const title = result.meta
     ? `${result.meta.dataSourceLabel} -- ${result.meta.fieldLabel}${
         result.meta.groupByDimensionLabel ? ` حسب ${result.meta.groupByDimensionLabel}` : ""
@@ -1018,8 +1013,12 @@ export function buildStructuredResponse(
             analysis.comparison
           )
         )
+        // Genie-level quality audit section 6: this used to ALSO push a ReportTable of the same
+        // productName/currentRevenue/previousRevenue/revenueDelta rows -- rendered as a second,
+        // visually distinct block carrying identical numbers to contributions[] below (which has
+        // strictly more information: contributionSharePercent). Every structured-response block
+        // must earn a distinct analytical purpose; a verbatim duplicate doesn't.
         if (analysis.productContributions.length > 0) {
-          tables.push(tableFromPosProductContributions(analysis.productContributions))
           contributions.push(...contributionFindingsFromPosProducts(analysis.productContributions))
         }
         dataPeriod = analysis.comparison.period.current
@@ -1077,13 +1076,23 @@ export function buildStructuredResponse(
         const result = output as KpiResult
         domain = result.meta?.application ?? domain ?? "madarApps"
         dataPeriod = dataPeriod ?? result.meta?.queriedPeriod ?? null
-        // A grouped breakdown (groupByDimension was set) is a ranked comparison -- a bar chart,
-        // same as every other ranking tool here. A single aggregate (with or without a period
-        // comparison) is a KPI card. Never both: the model asked for one or the other.
         if (result.points.length > 1) {
-          charts.push(chartFromGenericResult(result))
-          insights.push(...insightsFromGenericContribution(result))
-          contributions.push(...contributionFindingsFromGenericResult(result))
+          // Genie-level quality audit section 6/7: a plain ranking (groupByDimension alone, no
+          // comparison) is a bar chart of current values -- the chart answers the question. But
+          // once compareEnabled also fired (contribution/driver mode, extraValues.delta present),
+          // "current value per label" stops being the interesting story -- the CHANGE is -- and
+          // contributions[] already carries that (current/previous/delta/share%) plus a one-line
+          // lead insight below. Rendering a current-value bar chart alongside would just be the
+          // same numbers a third way, so it's deliberately skipped for this case.
+          const isContributionMode = result.points.some(
+            (point) => point.extraValues?.delta !== undefined
+          )
+          if (isContributionMode) {
+            insights.push(...insightsFromGenericContribution(result))
+            contributions.push(...contributionFindingsFromGenericResult(result))
+          } else {
+            charts.push(chartFromGenericResult(result))
+          }
         } else {
           metrics.push(kpiCardFromGenericResult(result))
         }

@@ -42,6 +42,7 @@ import type { ApplicationCategoryId } from "@/features/applications"
 import { useAiChat } from "@/features/ai"
 import type {
   ChatChartSpec,
+  ChatConfidenceLevel,
   ChatContributionFinding,
   ChatDataQualityWarning,
   ChatDriverFinding,
@@ -400,6 +401,42 @@ function ChatRecommendationsPanel({ recommendations }: { recommendations: ChatRe
         </div>
       ))}
     </div>
+  )
+}
+
+const CONFIDENCE_LABEL: Record<ChatConfidenceLevel, string> = {
+  high: "عالية",
+  medium: "متوسطة",
+  low: "منخفضة",
+  insufficient: "غير كافية",
+}
+
+const CONFIDENCE_TINT: Record<ChatConfidenceLevel, string> = {
+  high: "bg-emerald-50 text-emerald-700",
+  medium: "bg-amber-50 text-amber-700",
+  low: "bg-orange-50 text-orange-700",
+  insufficient: "bg-rose-50 text-rose-700",
+}
+
+// Section 16: confidence was already tracked end-to-end on the backend (ConfidenceLevel) but
+// never surfaced to the user at all. Shown only alongside an actual analytical finding (a driver
+// or contribution breakdown) -- a confidence label on a plain "what are my sales" lookup would
+// be noise, not useful context; the spec's own framing is "communicate confidence WHEN
+// APPROPRIATE," not unconditionally.
+function ChatConfidenceBadge({
+  confidence,
+  hasAnalysis,
+}: {
+  confidence: ChatConfidenceLevel | null
+  hasAnalysis: boolean
+}) {
+  if (!confidence || !hasAnalysis) return null
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-[11px]">
+      <span className={cn("rounded-full px-2 py-0.5 font-medium", CONFIDENCE_TINT[confidence])}>
+        ثقة التحليل: {CONFIDENCE_LABEL[confidence]}
+      </span>
+    </p>
   )
 }
 
@@ -839,6 +876,13 @@ export default function AIAssistantDashboard() {
                                 recommendations={message.structured.recommendations}
                               />
                               <ChatWarningsPanel warnings={message.structured.warnings} />
+                              <ChatConfidenceBadge
+                                confidence={message.structured.confidence}
+                                hasAnalysis={
+                                  message.structured.drivers.length > 0 ||
+                                  message.structured.contributions.length > 0
+                                }
+                              />
                               <ChatFollowUpChips
                                 questions={message.structured.followUpQuestions}
                                 onSelect={setChatInput}
