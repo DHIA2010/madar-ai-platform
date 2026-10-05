@@ -217,6 +217,13 @@ export interface CreateConnectionRequestDto {
 
 export interface ValidateConnectionRequestDto {
   connectionId: string
+  // Only needed for a connection this client has never seen before (e.g. a marketplace/App-
+  // Market-initiated OAuth install, which never creates the locally-cached "draft" connection
+  // this wizard's own Connect button normally creates before redirecting) -- lets
+  // validateConnection resolve the right provider and fetch its accounts directly instead of
+  // requiring a pre-existing local cache entry. Ignored when a local entry already exists.
+  connectorDefinitionId?: string
+  workspaceId?: string
 }
 
 // A merchant-supplied credential (store id + a pre-issued access token from the provider's own

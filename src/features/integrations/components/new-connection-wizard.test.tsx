@@ -242,7 +242,11 @@ describe("NewConnectionWizard", () => {
     )
 
     await waitFor(() => {
-      expect(mockValidateConnection).toHaveBeenCalledWith({ connectionId: "conn_1" })
+      expect(mockValidateConnection).toHaveBeenCalledWith({
+        connectionId: "conn_1",
+        connectorDefinitionId: "connector_def_salla",
+        workspaceId: "ws_marketing_ops",
+      })
       expect(screen.getByRole("button", { name: /مراجعة الإعدادات/ })).toBeTruthy()
     })
 
@@ -284,7 +288,11 @@ describe("NewConnectionWizard", () => {
     )
 
     await waitFor(() => {
-      expect(mockValidateConnection).toHaveBeenCalledWith({ connectionId: "conn_marketplace_1" })
+      expect(mockValidateConnection).toHaveBeenCalledWith({
+        connectionId: "conn_marketplace_1",
+        connectorDefinitionId: "connector_def_zid",
+        workspaceId: "ws_marketing_ops",
+      })
     })
 
     // The defining regression check -- confirmed as the exact real-world symptom (2026-10-05):

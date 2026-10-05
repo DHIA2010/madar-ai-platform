@@ -1080,6 +1080,11 @@ export function NewConnectionWizard() {
       try {
         const validateConnectionInput = {
           connectionId: callbackConnectionId,
+          // Lets validateConnection resolve a connection it's never locally cached before (a
+          // marketplace/App-Market-initiated install) directly from this provider's own
+          // accounts endpoint, instead of requiring a pre-existing local draft.
+          connectorDefinitionId: matchedCatalogEntry?.connectorDefinitionId,
+          workspaceId: workspaceId ?? undefined,
         }
 
         const validated =
@@ -1136,8 +1141,9 @@ export function NewConnectionWizard() {
     // the new immediate setSelectedConnectorDefinitionId call above would otherwise retrigger
     // this same effect mid-flight (selectedConnector?.connectorId changing on the first render),
     // cancelling the in-flight validateConnection call before its catch block ever runs and
-    // silently swallowing the resulting error state.
-  }, [integrationApplicationService])
+    // silently swallowing the resulting error state. workspaceId IS safe to depend on -- this
+    // effect only reads it, never writes it, so no such retrigger risk applies there.
+  }, [integrationApplicationService, workspaceId])
 
   useEffect(() => {
     if (!selectedConnectorDetails) {

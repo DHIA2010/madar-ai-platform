@@ -909,9 +909,44 @@ export class RestIntegrationRepository implements IntegrationRepository {
     }
   }
 
-  async validateConnection(input: { connectionId: string }): Promise<Connection> {
+  async validateConnection(input: {
+    connectionId: string
+    connectorDefinitionId?: string
+    workspaceId?: string
+  }): Promise<Connection> {
     try {
-      const current = this.getConnectionOrThrow(input.connectionId)
+      let current: Connection
+      try {
+        current = this.getConnectionOrThrow(input.connectionId)
+      } catch (lookupError) {
+        // No local cache entry -- this connection was never created via this wizard's own
+        // Connect button (which always writes a local draft before redirecting). Confirmed as
+        // a real production bug (2026-10-05): a marketplace/App-Market-initiated install (e.g.
+        // Zid's "Activate" button) lands here directly from the provider's own redirect, so
+        // this client never had a chance to create that draft -- the backend connection is
+        // real and already connected, only this client's local cache doesn't know about it
+        // yet. If the caller told us which provider this is (resolved from the callback URL's
+        // own match, same as this method's normal flow would have used from a local draft),
+        // synthesize a minimal one here instead of failing outright.
+        if (!input.connectorDefinitionId) {
+          throw lookupError
+        }
+        const recoveredProfile = resolveProviderProfileByDefinition(input.connectorDefinitionId)
+        if (!recoveredProfile) {
+          throw lookupError
+        }
+        current = {
+          connectionId: input.connectionId,
+          workspaceId:
+            input.workspaceId ?? this.options?.getWorkspaceId?.() ?? DEFAULT_WORKSPACE_ID,
+          connectorId: recoveredProfile.connectorId,
+          connectorDefinitionId: input.connectorDefinitionId,
+          status: "draft",
+          metadata: {},
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        }
+      }
       const providerProfile = resolveProviderProfileByConnection(current)
       if (!providerProfile) {
         throw new ValidationError({

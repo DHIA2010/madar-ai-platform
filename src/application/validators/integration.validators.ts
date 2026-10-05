@@ -49,6 +49,8 @@ export const createConnectionSchema = z.object({
 
 export const validateConnectionSchema = z.object({
   connectionId: z.string().min(1),
+  connectorDefinitionId: z.string().min(1).optional(),
+  workspaceId: z.string().min(1).optional(),
 })
 
 export const authorizeConnectorSchema = z.object({
