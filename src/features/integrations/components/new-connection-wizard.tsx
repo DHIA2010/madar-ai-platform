@@ -1048,11 +1048,28 @@ export function NewConnectionWizard() {
     if (!matchedProfileEntry) {
       return
     }
-    const [, matchedProfile] = matchedProfileEntry
+    const [matchedConnectorId, matchedProfile] = matchedProfileEntry
 
     const callbackConnectionId = callbackParams.get(matchedProfile.connectionIdParam)
     if (!callbackConnectionId) {
       return
+    }
+
+    // Set the displayed provider immediately from the URL's own OAuth callback match, instead of
+    // waiting on validateConnection below. validateConnection resolves the provider from a
+    // locally-cached "draft" connection that only exists when the flow started from MADAR's own
+    // wizard (clicking Connect there creates it before redirecting) -- a marketplace/App-Market-
+    // initiated connect (e.g. Zid's "Activate" button, which starts on Zid's own site and never
+    // touches this wizard until this redirect) never creates that draft, so validateConnection
+    // can't resolve the right provider for it. Confirmed in production: a merchant activating Zid
+    // this way saw the wizard still showing their last-used "Salla" connector the whole way
+    // through, since selectedConnectorDefinitionId was previously only ever updated on a
+    // successful validateConnection response.
+    const matchedCatalogEntry = CONNECTOR_CATALOG.find(
+      (entry) => entry.connectorId === matchedConnectorId
+    )
+    if (matchedCatalogEntry) {
+      setSelectedConnectorDefinitionId(matchedCatalogEntry.connectorDefinitionId)
     }
 
     let cancelled = false
@@ -1115,7 +1132,12 @@ export function NewConnectionWizard() {
     return () => {
       cancelled = true
     }
-  }, [integrationApplicationService, selectedConnector?.connectorId])
+    // Deliberately NOT depending on selectedConnector -- nothing in this effect reads it, and
+    // the new immediate setSelectedConnectorDefinitionId call above would otherwise retrigger
+    // this same effect mid-flight (selectedConnector?.connectorId changing on the first render),
+    // cancelling the in-flight validateConnection call before its catch block ever runs and
+    // silently swallowing the resulting error state.
+  }, [integrationApplicationService])
 
   useEffect(() => {
     if (!selectedConnectorDetails) {

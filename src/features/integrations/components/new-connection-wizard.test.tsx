@@ -261,6 +261,42 @@ describe("NewConnectionWizard", () => {
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
+  // A marketplace/App-Market-initiated connect (e.g. clicking "Activate" on Zid's own site) never
+  // creates the locally-cached "draft" connection validateConnection depends on -- that draft is
+  // only ever created by this wizard's own "Connect" button, which an App-Market install skips
+  // entirely. Confirmed as a real production bug (2026-10-05): with validateConnection unable to
+  // resolve the provider, the wizard kept showing whatever connector was already selected/cached
+  // by default (Salla, CONNECTOR_CATALOG[0]) instead of the one actually in the callback URL.
+  it("shows the real provider from the callback URL even when validateConnection fails (no local draft, e.g. a marketplace-initiated connect)", async () => {
+    mockValidateConnection.mockRejectedValue(new Error("connection_not_found"))
+
+    window.history.pushState(
+      {},
+      "",
+      `${ROUTES.integrationsNew}?zid_oauth=connected&zid_connection_id=conn_marketplace_1`
+    )
+
+    const queryClient = new QueryClient()
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NewConnectionWizard />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      expect(mockValidateConnection).toHaveBeenCalledWith({ connectionId: "conn_marketplace_1" })
+    })
+
+    // The defining regression check -- confirmed as the exact real-world symptom (2026-10-05):
+    // the footer button read "المتابعة إلى Salla" for a merchant who had never touched Salla in
+    // this flow at all, purely because it's CONNECTOR_CATALOG[0]. It must read "...Zid" instead,
+    // taken from the callback URL's own match, never a leftover default.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /المتابعة إلى Zid/ })).toBeTruthy()
+    })
+    expect(screen.queryByRole("button", { name: /المتابعة إلى Salla/ })).toBeNull()
+  })
+
   // Step 3 is only reachable after a completed OAuth handshake, so it cannot be opened in local
   // dev at all (no provider credentials are configured there). This renders it through the same
   // callback-resume path the wizard really uses, so the import step has coverage that does not
