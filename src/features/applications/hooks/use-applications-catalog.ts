@@ -7,6 +7,7 @@ import { useWorkspace } from "@/features/workspace"
 import {
   APPLICATION_CATALOG,
   APPLICATION_SETTINGS_KEY,
+  APPLICATION_TRIAL_ENDS_AT_KEY,
   isTrialAvailable,
   MADAR_COMPLETE_BUNDLE,
   resolveApplicationStatus,
@@ -139,7 +140,15 @@ export function useApplicationsCatalog() {
     setActivatingId(id)
     try {
       await updateOrganization(currentOrganization.id, {
-        settings: { [APPLICATION_SETTINGS_KEY[application.category]]: false },
+        settings: {
+          [APPLICATION_SETTINGS_KEY[application.category]]: false,
+          // resolveApplicationStatus treats a still-unexpired trial as "trial" (effectively
+          // active) REGARDLESS of *Enabled -- clearing only *Enabled left a trial app showing
+          // as still active after "cancel activation" (confirmed as a real production bug,
+          // 2026-10-05: the toast succeeded but the card never updated). APPLICATION_TRIAL_USED_KEY
+          // deliberately stays untouched -- cancelling must not grant a second free trial.
+          [APPLICATION_TRIAL_ENDS_AT_KEY[application.category]]: "",
+        },
       })
     } finally {
       setActivatingId(null)
