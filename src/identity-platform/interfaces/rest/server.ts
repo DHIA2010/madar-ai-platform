@@ -46,6 +46,12 @@ import type { ReportLevelFilter } from "../../reports/types"
 import { AiChatService, ChatTurnCancelledError } from "../../ai-chat/service"
 import { AiChatLlmClient } from "../../ai-chat/llm-client"
 import type { ApplicationCategoryId as AiChatApplicationCategoryId } from "../../ai-chat/types"
+import { MoyasarBillingService } from "../../billing/moyasar/service"
+import { MoyasarBillingRepository } from "../../billing/moyasar/repository"
+import { resolveMoyasarCredentials } from "../../billing/moyasar/credentials"
+import { verifyMoyasarWebhookSecret } from "../../billing/moyasar/webhook-verification"
+import { confirmCheckoutSchema, createCheckoutIntentSchema } from "../../billing/moyasar/schemas"
+import type { MoyasarWebhookPayload } from "../../billing/moyasar/types"
 import { CampaignAnalyticsEngine } from "../../campaigns/analytics-engine"
 import { CustomersAggregationService } from "../../customers/service"
 import {
@@ -575,6 +581,12 @@ export function createIdentityApiServer(
   const productsAggregationService = container.infrastructure.database
     ? new ProductsAggregationService(container.infrastructure.database)
     : null
+  const moyasarBillingService = container.infrastructure.database
+    ? new MoyasarBillingService(
+        container.infrastructure.database,
+        new MoyasarBillingRepository(container.infrastructure.database)
+      )
+    : null
   const posDevicesService = container.infrastructure.database
     ? new PosDevicesService(container.infrastructure.database)
     : null
@@ -884,6 +896,41 @@ export function createIdentityApiServer(
         response.writeHead(callbackResult.status, callbackResult.headers)
         response.end()
         return
+      }
+
+      // Unauthenticated, verified via secret_token instead of a bearer token -- Moyasar calls this
+      // directly, server-to-server, with no MADAR session (https://docs.moyasar.com/api/webhooks).
+      // Placed before the bearer-token resolution below, same as the Zid marketplace routes above.
+      if (method === "POST" && url.pathname === "/v1/billing/moyasar/webhook") {
+        if (!moyasarBillingService) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is unavailable in memory mode.",
+          })
+        }
+
+        const credentials = await resolveMoyasarCredentials()
+        if (!credentials?.webhookSecret) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is not configured.",
+          })
+        }
+
+        const payload = (await readJsonBody(request)) as MoyasarWebhookPayload
+        if (!verifyMoyasarWebhookSecret(payload?.secret_token, credentials.webhookSecret)) {
+          return send(401, {
+            code: "MOYASAR_WEBHOOK_INVALID_SECRET",
+            message: "Invalid webhook secret.",
+          })
+        }
+
+        // Only payment_paid moves money into a subscription flip -- every other event type
+        // (refunded, voided, authorized, etc.) is acknowledged but not actionable here yet.
+        if (payload.type === "payment_paid") {
+          await moyasarBillingService.handleWebhookEvent(payload)
+        }
+        return send(200, { received: true })
       }
 
       // Unauthenticated: the anonymous-visitor equivalent of the oauth/start route above, for a
@@ -2907,6 +2954,52 @@ export function createIdentityApiServer(
             },
             context
           )
+        )
+      }
+
+      // Self-serve Moyasar checkout for starter/growth/pro -- the real-payment alternative to the
+      // manual bank-transfer-receipt flow above. Same "settings:edit" permission as
+      // requestApplicationActivation, since starting a checkout is "editing this organization's
+      // subscription," just via a different payment rail.
+      if (url.pathname === "/v1/billing/moyasar/checkout" && method === "POST") {
+        if (!moyasarBillingService) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) {
+          throw ERRORS.forbidden()
+        }
+        return send(
+          201,
+          await moyasarBillingService.createCheckoutIntent(
+            actor,
+            createCheckoutIntentSchema.parse(await readJsonBody(request))
+          )
+        )
+      }
+
+      const moyasarCheckoutConfirmMatch = url.pathname.match(
+        /^\/v1\/billing\/moyasar\/checkout\/([^/]+)\/confirm$/
+      )
+      if (moyasarCheckoutConfirmMatch && method === "POST") {
+        if (!moyasarBillingService) {
+          return send(503, {
+            code: "MOYASAR_BILLING_UNAVAILABLE",
+            message: "Moyasar billing is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("settings:edit")) {
+          throw ERRORS.forbidden()
+        }
+        const { moyasarPaymentId } = confirmCheckoutSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await moyasarBillingService.confirmCheckout(actor, {
+            checkoutId: moyasarCheckoutConfirmMatch[1],
+            moyasarPaymentId,
+          })
         )
       }
 
