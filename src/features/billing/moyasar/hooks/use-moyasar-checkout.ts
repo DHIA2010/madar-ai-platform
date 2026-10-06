@@ -54,7 +54,7 @@ export function useMoyasarCheckout() {
         currency: intent.currency,
         description: `اشتراك ${input.applicationName}`,
         callback_url: callbackUrl.toString(),
-        payment_methods: ["creditcard"],
+        methods: ["creditcard"],
         // Round-trips to the webhook's payload.data.metadata.checkout_id -- see
         // billing/moyasar/service.ts's handleWebhookEvent on the backend. The synchronous confirm
         // path (the callback page) doesn't need this; it gets checkoutId from the URL directly.

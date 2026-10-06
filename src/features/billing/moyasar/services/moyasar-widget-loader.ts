@@ -19,8 +19,10 @@ export interface MoyasarInitOptions {
   // domain verification (label/validation URL/country) isn't configured there yet, which made the
   // widget fail to render at all (it tried to mount Apple Pay first and errored out before ever
   // reaching the card form). Leaving this unset would otherwise default to every method the
-  // dashboard has toggled on, Apple Pay included.
-  payment_methods?: Array<"creditcard" | "applepay" | "stcpay">
+  // dashboard has toggled on, Apple Pay included. The field is called "methods", not
+  // "payment_methods" -- confirmed by testing against the real widget after the first guess
+  // (payment_methods, going off a doc summary that turned out wrong) silently did nothing.
+  methods?: Array<"creditcard" | "applepay" | "samsungpay" | "stcpay">
   on_failure?: (payment: { id: string; status: string }) => void
 }
 
