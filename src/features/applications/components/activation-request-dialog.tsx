@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import type { LucideIcon } from "lucide-react"
-import { CheckCircle2, Scale, Sparkles, Upload } from "lucide-react"
+import { CheckCircle2, CreditCard, Landmark, Scale, Sparkles, Upload } from "lucide-react"
 import { toast } from "sonner"
 
 import { fileToBase64 } from "@/lib/file-to-base64"
@@ -10,13 +10,17 @@ import { cn } from "@/lib/utils"
 
 import { AppButton, AppDialog } from "@/components/app"
 
+import { MoyasarPaymentPanel } from "@/features/billing"
+
 import { PLAN_TIER_ACCENT, PLAN_TIER_META, PLAN_TIER_ORDER } from "../services"
+import type { ApplicationCategoryId } from "../types"
 import { PlanComparisonDialog } from "./plan-comparison-dialog"
 
 import type { SubscriptionPlanTier } from "@/application/contracts"
 
 export interface ActivationRequestTarget {
   applicationId: string
+  category: ApplicationCategoryId
   name: string
   icon?: LucideIcon
   iconWrapperClassName?: string
@@ -24,6 +28,15 @@ export interface ActivationRequestTarget {
   // pending) -- shows the "ابدأ تجربة مجانية" option above the paid-tier form when true.
   trialAvailable?: boolean
 }
+
+// Enterprise has no fixed self-serve price (see plan-tiers.ts's "تواصل معنا") -- Moyasar checkout
+// only ever charges a known amount, so that tier stays on the manual bank-transfer review path
+// regardless of which payment-method tab is active.
+const MOYASAR_ELIGIBLE_TIERS: ReadonlySet<SubscriptionPlanTier> = new Set([
+  "starter",
+  "growth",
+  "pro",
+])
 
 const ACCEPTED_CONTENT_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"]
 const ACCEPT_ATTR = ACCEPTED_CONTENT_TYPES.join(",")
@@ -51,15 +64,18 @@ export function ActivationRequestDialog({
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
   const [selectedTier, setSelectedTier] = useState<SubscriptionPlanTier>("growth")
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "bank_transfer">("card")
   const [file, setFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [startingTrial, setStartingTrial] = useState(false)
   const [comparisonOpen, setComparisonOpen] = useState(false)
 
   const Icon = target?.icon
+  const isCardCheckout = paymentMethod === "card" && MOYASAR_ELIGIBLE_TIERS.has(selectedTier)
 
   function reset() {
     setSelectedTier("growth")
+    setPaymentMethod("card")
     setFile(null)
   }
 
@@ -145,8 +161,8 @@ export function ActivationRequestDialog({
         description={
           target ? (
             <span dir="rtl" className="text-[13.5px] leading-[22px] text-[#6b7b96]">
-              اختر الباقة المناسبة وأرفق إيصال التحويل البنكي -- سيتم تفعيل التطبيق فور مراجعة الطلب
-              والموافقة عليه.
+              اختر الباقة المناسبة، وادفع ببطاقتك فورًا أو أرفق إيصال تحويل بنكي -- التفعيل عبر
+              البطاقة فوري، وعبر التحويل البنكي بعد مراجعة الطلب.
             </span>
           ) : null
         }
@@ -161,14 +177,16 @@ export function ActivationRequestDialog({
             >
               إلغاء
             </AppButton>
-            <AppButton
-              className="h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm"
-              loading={submitting}
-              disabled={startingTrial}
-              onClick={handleSubmit}
-            >
-              إرسال الطلب
-            </AppButton>
+            {isCardCheckout ? null : (
+              <AppButton
+                className="h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm"
+                loading={submitting}
+                disabled={startingTrial}
+                onClick={handleSubmit}
+              >
+                إرسال الطلب
+              </AppButton>
+            )}
           </div>
         }
       >
@@ -220,7 +238,14 @@ export function ActivationRequestDialog({
                     <button
                       key={tier}
                       type="button"
-                      onClick={() => setSelectedTier(tier)}
+                      onClick={() => {
+                        setSelectedTier(tier)
+                        // Enterprise has no fixed self-serve price -- selecting it while on the
+                        // card tab must not leave the dialog in a dead state with no submit path.
+                        if (!MOYASAR_ELIGIBLE_TIERS.has(tier)) {
+                          setPaymentMethod("bank_transfer")
+                        }
+                      }}
                       className={cn(
                         "rounded-[12px] border p-3.5 text-right transition-colors",
                         selected
@@ -256,39 +281,79 @@ export function ActivationRequestDialog({
               </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-[12.5px] font-semibold text-[#0b1738]">
-                إيصال التحويل البنكي
-              </label>
-              <label
-                className={cn(
-                  "flex h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[12px] border-2 border-dashed text-center transition-colors",
-                  file
-                    ? "border-[#16a34a] bg-[#f0fdf4]"
-                    : "border-[#dbe6f8] bg-[#f7f9fd] hover:border-[#c4d5f0]"
-                )}
-              >
-                <input
-                  type="file"
-                  accept={ACCEPT_ATTR}
-                  className="hidden"
-                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                />
-                {file ? (
-                  <>
-                    <CheckCircle2 className="size-5 text-[#16a34a]" />
-                    <span className="text-[12px] font-semibold text-[#16a34a]">{file.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="size-5 text-[#95a4bd]" />
-                    <span className="text-[11.5px] text-[#6b7b96]">
-                      اضغط لإرفاق صورة أو ملف PDF (حتى 5 ميجابايت)
-                    </span>
-                  </>
-                )}
-              </label>
-            </div>
+            {MOYASAR_ELIGIBLE_TIERS.has(selectedTier) ? (
+              <div className="grid grid-cols-2 gap-2 rounded-[12px] bg-[#f1f4f9] p-1">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={cn(
+                    "flex h-10 items-center justify-center gap-1.5 rounded-[9px] text-[12.5px] font-bold transition-colors",
+                    paymentMethod === "card"
+                      ? "bg-white text-[#2878ff] shadow-sm"
+                      : "text-[#6b7b96] hover:text-[#0b1738]"
+                  )}
+                >
+                  <CreditCard className="size-3.5" />
+                  ادفع الآن
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("bank_transfer")}
+                  className={cn(
+                    "flex h-10 items-center justify-center gap-1.5 rounded-[9px] text-[12.5px] font-bold transition-colors",
+                    paymentMethod === "bank_transfer"
+                      ? "bg-white text-[#2878ff] shadow-sm"
+                      : "text-[#6b7b96] hover:text-[#0b1738]"
+                  )}
+                >
+                  <Landmark className="size-3.5" />
+                  تحويل بنكي
+                </button>
+              </div>
+            ) : null}
+
+            {isCardCheckout && target ? (
+              <MoyasarPaymentPanel
+                key={selectedTier}
+                application={target.category}
+                applicationName={target.name}
+                planTier={selectedTier as "starter" | "growth" | "pro"}
+              />
+            ) : (
+              <div>
+                <label className="mb-2 block text-[12.5px] font-semibold text-[#0b1738]">
+                  إيصال التحويل البنكي
+                </label>
+                <label
+                  className={cn(
+                    "flex h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[12px] border-2 border-dashed text-center transition-colors",
+                    file
+                      ? "border-[#16a34a] bg-[#f0fdf4]"
+                      : "border-[#dbe6f8] bg-[#f7f9fd] hover:border-[#c4d5f0]"
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept={ACCEPT_ATTR}
+                    className="hidden"
+                    onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  />
+                  {file ? (
+                    <>
+                      <CheckCircle2 className="size-5 text-[#16a34a]" />
+                      <span className="text-[12px] font-semibold text-[#16a34a]">{file.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="size-5 text-[#95a4bd]" />
+                      <span className="text-[11.5px] text-[#6b7b96]">
+                        اضغط لإرفاق صورة أو ملف PDF (حتى 5 ميجابايت)
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
+            )}
           </div>
         ) : null}
       </AppDialog>

@@ -41,6 +41,7 @@ export function ApplicationsMarketplace() {
     if (!application.primaryCta.label) return
     setPendingRequest({
       applicationId: application.id,
+      category: application.category,
       name: application.name,
       icon: application.icon,
       iconWrapperClassName: application.accent.iconWrapperClassName,

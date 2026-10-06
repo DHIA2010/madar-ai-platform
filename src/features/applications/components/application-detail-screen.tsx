@@ -154,6 +154,7 @@ export function ApplicationDetailScreen({
                   onClick={() =>
                     setPendingRequest({
                       applicationId: entry.id,
+                      category: entry.category,
                       name: entry.name,
                       icon: entry.icon,
                       iconWrapperClassName: entry.accent.iconWrapperClassName,
