@@ -1,16 +1,24 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
-import { CheckCircle2, CreditCard, Landmark, Scale, Sparkles, Upload } from "lucide-react"
+import {
+  CheckCircle2,
+  CreditCard,
+  Landmark,
+  Scale,
+  ShieldCheck,
+  Sparkles,
+  Upload,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { fileToBase64 } from "@/lib/file-to-base64"
 import { cn } from "@/lib/utils"
+import { ROUTES } from "@/constants/routes"
 
 import { AppButton, AppDialog } from "@/components/app"
-
-import { MoyasarPaymentPanel } from "@/features/billing"
 
 import { PLAN_TIER_ACCENT, PLAN_TIER_META, PLAN_TIER_ORDER } from "../services"
 import type { ApplicationCategoryId } from "../types"
@@ -63,6 +71,7 @@ export function ActivationRequestDialog({
   onSubmit: (input: ActivationRequestInput) => Promise<void>
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
+  const router = useRouter()
   const [selectedTier, setSelectedTier] = useState<SubscriptionPlanTier>("growth")
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank_transfer">("card")
   const [file, setFile] = useState<File | null>(null)
@@ -72,6 +81,20 @@ export function ActivationRequestDialog({
 
   const Icon = target?.icon
   const isCardCheckout = paymentMethod === "card" && MOYASAR_ELIGIBLE_TIERS.has(selectedTier)
+
+  // Moyasar's widget injects its own DOM content in ways that don't play well with a
+  // scroll-clipped, fixed-position modal (the Apple Pay/3DS surfaces visually escaped the dialog
+  // card entirely when mounted inline) -- a dedicated full page is the robust fix, same pattern
+  // as the callback page this already redirects to on completion.
+  function goToCardCheckout() {
+    if (!target) return
+    const url = new URL(ROUTES.marketplaceBillingCheckout, window.location.origin)
+    url.searchParams.set("application", target.category)
+    url.searchParams.set("planTier", selectedTier)
+    url.searchParams.set("name", target.name)
+    onOpenChange(false)
+    router.push(`${url.pathname}${url.search}`)
+  }
 
   function reset() {
     setSelectedTier("growth")
@@ -177,16 +200,14 @@ export function ActivationRequestDialog({
             >
               إلغاء
             </AppButton>
-            {isCardCheckout ? null : (
-              <AppButton
-                className="h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm"
-                loading={submitting}
-                disabled={startingTrial}
-                onClick={handleSubmit}
-              >
-                إرسال الطلب
-              </AppButton>
-            )}
+            <AppButton
+              className="h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm"
+              loading={submitting}
+              disabled={startingTrial}
+              onClick={isCardCheckout ? goToCardCheckout : handleSubmit}
+            >
+              {isCardCheckout ? "ادفع الآن" : "إرسال الطلب"}
+            </AppButton>
           </div>
         }
       >
@@ -312,13 +333,14 @@ export function ActivationRequestDialog({
               </div>
             ) : null}
 
-            {isCardCheckout && target ? (
-              <MoyasarPaymentPanel
-                key={selectedTier}
-                application={target.category}
-                applicationName={target.name}
-                planTier={selectedTier as "starter" | "growth" | "pro"}
-              />
+            {isCardCheckout ? (
+              <div className="flex items-start gap-2.5 rounded-[12px] border border-[#e1e7f0] bg-[#f7f9fd] p-3.5">
+                <ShieldCheck className="size-4 shrink-0 text-[#2878ff]" />
+                <p className="text-[12px] leading-[20px] text-[#6b7b96]">
+                  اضغط &quot;ادفع الآن&quot; للانتقال إلى صفحة دفع آمنة عبر ميسر، ثم أدخل بيانات
+                  بطاقتك لإتمام الاشتراك فورًا.
+                </p>
+              </div>
             ) : (
               <div>
                 <label className="mb-2 block text-[12.5px] font-semibold text-[#0b1738]">

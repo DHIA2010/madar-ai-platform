@@ -12,6 +12,7 @@ export const ROUTES = {
   marketplace: "/marketplace",
   marketplaceDetails: (appId: string) => `/marketplace/${appId}`,
   marketplaceBillingCallback: "/marketplace/billing/callback",
+  marketplaceBillingCheckout: "/marketplace/billing/checkout",
   stores: "/stores",
   products: "/products",
   productsAdd: "/eCommerce/add-product",

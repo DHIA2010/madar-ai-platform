@@ -13,10 +13,12 @@ import type { ApplicationCategoryId } from "@/features/applications"
 import { useMoyasarCheckout } from "../hooks"
 import type { MoyasarSelfServePlanTier } from "../types"
 
-// Mounted inside ActivationRequestDialog's "ادفع الآن" tab -- the alternative to the manual
-// bank-transfer-receipt flow that same dialog already offers (see activation-request-dialog.tsx).
-// A tier change re-mounts this component (parent keys it by tier), so each tier gets its own
-// fresh checkout intent rather than this panel trying to mutate an in-flight one.
+// Mounted on the dedicated /marketplace/billing/checkout page (see moyasar-checkout-page.tsx) --
+// not embedded in the activation dialog itself: Moyasar's widget injects DOM content in ways that
+// don't play well with a scroll-clipped, fixed-position modal (Apple Pay/3DS surfaces visually
+// escaped a modal card entirely when this was tried inline), so a full, unconstrained page is the
+// robust container. A tier change re-mounts this component (parent keys it by tier), so each tier
+// gets its own fresh checkout intent rather than this panel trying to mutate an in-flight one.
 export function MoyasarPaymentPanel({
   application,
   applicationName,
