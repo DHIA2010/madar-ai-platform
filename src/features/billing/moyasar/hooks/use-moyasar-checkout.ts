@@ -16,7 +16,11 @@ export interface StartMoyasarCheckoutInput {
   // Where the browser lands (a real top-level navigation, not a route change -- Moyasar's own
   // redirect, not Next's router) once the customer finishes on Moyasar's side, success or not.
   returnPath: string
-  formElementSelector: string
+  // The actual mount node, not a CSS selector -- a selector built from React's useId() raced
+  // Moyasar.init's own element lookup and lost (confirmed in the browser console: "Element: null
+  // is not a valid element"), even though the div was already committed to the DOM before this
+  // ran. A direct element reference removes that whole class of lookup-timing failure.
+  formElement: HTMLElement
   onFailure?: (message: string) => void
 }
 
@@ -48,7 +52,7 @@ export function useMoyasarCheckout() {
       callbackUrl.searchParams.set("checkout_id", intent.checkoutId)
 
       window.Moyasar.init({
-        element: input.formElementSelector,
+        element: input.formElement,
         publishable_api_key: intent.publishableKey,
         amount: intent.amount,
         currency: intent.currency,

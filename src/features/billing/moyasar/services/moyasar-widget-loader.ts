@@ -8,7 +8,7 @@ const MOYASAR_STYLESHEET_URL = `https://cdn.moyasar.com/mpf/${MOYASAR_WIDGET_VER
 // actually passes; the widget accepts several more (apple_pay, sender, recipient, etc.) this app
 // doesn't use yet.
 export interface MoyasarInitOptions {
-  element: string
+  element: string | HTMLElement
   publishable_api_key: string
   amount: number
   currency: string
