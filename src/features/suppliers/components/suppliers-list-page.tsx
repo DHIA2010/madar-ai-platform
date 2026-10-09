@@ -54,6 +54,7 @@ import {
 } from "./supplier-field"
 import { SupplierStatusBadge } from "./supplier-status-badge"
 import { SupplierViewDialog } from "./supplier-view-dialog"
+import { SuppliersKpiCards } from "./suppliers-kpi-cards"
 
 const STATUS_OPTIONS = [
   { value: "all", label: "جميع الحالات" },
@@ -108,6 +109,14 @@ export function SuppliersListPage() {
       supplier.id,
       computeSupplierBalance(supplier.id, ledgerPurchases, returns, vouchers),
     ])
+  )
+  const kpiTotalPurchases = list.filteredSuppliers.reduce(
+    (sum, supplier) => sum + (totalPurchasesBySupplier.get(supplier.id) ?? 0),
+    0
+  )
+  const kpiTotalBalance = list.filteredSuppliers.reduce(
+    (sum, supplier) => sum + (balanceBySupplier.get(supplier.id) ?? 0),
+    0
   )
 
   function toggleRow(id: string, checked: boolean) {
@@ -183,6 +192,12 @@ export function SuppliersListPage() {
           </p>
         </div>
       </div>
+
+      <SuppliersKpiCards
+        suppliers={list.filteredSuppliers}
+        totalPurchases={kpiTotalPurchases}
+        totalBalance={kpiTotalBalance}
+      />
 
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
         <AppSearchInput

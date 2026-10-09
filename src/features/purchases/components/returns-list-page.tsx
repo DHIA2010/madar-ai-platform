@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 
 import {
   AppButton,
+  AppDateRangeFilter,
   AppSearchableSelect,
   AppSearchInput,
   AppTable,
@@ -31,6 +32,7 @@ import { ReturnFormDialog } from "./return-form-dialog"
 import { ReturnPrintDocument } from "./return-print-document"
 import { ReturnStatusSelect } from "./return-status-select"
 import { ReturnViewDialog } from "./return-view-dialog"
+import { ReturnsKpiCards } from "./returns-kpi-cards"
 
 const STATUS_OPTIONS = [
   { value: "all", label: "كل حالات الإرجاع" },
@@ -86,6 +88,8 @@ export function ReturnsListPage() {
         <p className={cn("mt-1 text-sm", MUTED)}>إدارة جميع مرتجعات طلبات الشراء من الموردين.</p>
       </div>
 
+      <ReturnsKpiCards returns={list.filteredReturns} />
+
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
         <AppSearchInput
           placeholder="البحث في المرتجعات..."
@@ -126,6 +130,7 @@ export function ReturnsListPage() {
             ariaLabel="المستودع"
             triggerClassName="w-[160px]"
           />
+          <AppDateRangeFilter value={list.dateRange} onChange={list.setDateRange} />
           <AppButton
             variant="outline"
             icon={<Download className="size-4" />}

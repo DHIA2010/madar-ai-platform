@@ -1,18 +1,20 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import type { DateRange } from "react-day-picker"
 
 import type { PurchaseReturn } from "../types"
 
 const PAGE_SIZE = 10
 
-// Search/status/supplier/warehouse filter + pagination over an already-fetched list -- the real
-// data source (useProcurementReturns()) lives at the page level.
+// Search/status/supplier/warehouse/date-range filter + pagination over an already-fetched list --
+// the real data source (useProcurementReturns()) lives at the page level.
 export function useReturnsList(returns: PurchaseReturn[]) {
   const [search, setSearchState] = useState("")
   const [status, setStatusState] = useState<PurchaseReturn["status"] | "all">("all")
   const [supplierId, setSupplierIdState] = useState<string | "all">("all")
   const [warehouseId, setWarehouseIdState] = useState<string | "all">("all")
+  const [dateRange, setDateRangeState] = useState<DateRange | undefined>(undefined)
   const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
@@ -21,6 +23,11 @@ export function useReturnsList(returns: PurchaseReturn[]) {
       if (status !== "all" && entry.status !== status) return false
       if (supplierId !== "all" && entry.supplierId !== supplierId) return false
       if (warehouseId !== "all" && entry.warehouseId !== warehouseId) return false
+      if (dateRange?.from || dateRange?.to) {
+        const occurred = new Date(entry.returnDate)
+        if (dateRange.from && occurred < dateRange.from) return false
+        if (dateRange.to && occurred > dateRange.to) return false
+      }
       if (query.length === 0) return true
       return (
         entry.code.toLowerCase().includes(query) ||
@@ -28,7 +35,7 @@ export function useReturnsList(returns: PurchaseReturn[]) {
         entry.supplierName.toLowerCase().includes(query)
       )
     })
-  }, [returns, search, status, supplierId, warehouseId])
+  }, [returns, search, status, supplierId, warehouseId, dateRange])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
@@ -53,6 +60,10 @@ export function useReturnsList(returns: PurchaseReturn[]) {
     setWarehouseIdState(value)
     setPage(1)
   }
+  function setDateRange(value: DateRange | undefined) {
+    setDateRangeState(value)
+    setPage(1)
+  }
 
   return {
     search,
@@ -63,6 +74,8 @@ export function useReturnsList(returns: PurchaseReturn[]) {
     setSupplierId,
     warehouseId,
     setWarehouseId,
+    dateRange,
+    setDateRange,
     page: currentPage,
     setPage,
     totalPages,
