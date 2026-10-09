@@ -1120,3 +1120,19 @@ export const createSupplierVoucherSchema = z.object({
   notes: z.string().max(2000).default(""),
   transactionDate: z.string().min(1),
 })
+
+export const createExpenseCategorySchema = z.object({
+  name: z.string().min(1).max(120),
+})
+
+export const createExpenseSchema = z.object({
+  workspaceId: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  amount: z.number().finite().positive().max(1_000_000_000),
+  paymentMethod: z.enum(["cash", "bank_transfer", "card", "cheque"]),
+  taxInclusive: z.boolean().default(false),
+  expenseDate: z.string().min(1),
+  referenceNumber: z.string().max(200).default(""),
+  notes: z.string().max(2000).default(""),
+})

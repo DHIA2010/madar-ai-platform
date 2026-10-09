@@ -46,6 +46,7 @@ import {
   List,
   PackageSearch,
   RotateCcw,
+  Wallet,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -163,6 +164,20 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       items: [
         { title: t("purchasesList"), url: ROUTES.purchases, icon: <List /> },
         { title: t("purchasesReturns"), url: ROUTES.purchasesReturns, icon: <RotateCcw /> },
+      ],
+    },
+    // Same sub-items convention as Suppliers/Purchases above. "Add Expense" is reached from
+    // each list page's own button, not the nav -- this first pass only ships Overview + the
+    // expenses list (see src/features/expenses).
+    {
+      title: t("expenses"),
+      url: ROUTES.expenses,
+      icon: <Wallet />,
+      permission: "expenses:view",
+      applications: ["ecommerce", "pos"],
+      items: [
+        { title: t("expensesOverview"), url: ROUTES.expenses, icon: <Gauge /> },
+        { title: t("expensesList"), url: ROUTES.expensesList, icon: <List /> },
       ],
     },
     {

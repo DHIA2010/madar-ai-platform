@@ -123,6 +123,63 @@ function categoryMeta(category: string): CategoryMeta {
   return CATEGORY_META[category] ?? DEFAULT_CATEGORY_META
 }
 
+// 5 bespoke, hand-built dashboards (not backed by the KPI/custom-report system -- see
+// src/identity-platform/reports/ready-reports-*.ts) merged into the "ready" tab's list so they
+// appear in the one place the user asked for. The rest of the CustomReport shape below is never
+// read for these rows: showOwner is false on the ready tab, and the view button short-circuits
+// via viewHref before anything else would need them.
+const BESPOKE_READY_REPORTS: CustomReport[] = [
+  {
+    id: "ready-net-income",
+    name: "تقرير صافي الدخل",
+    description: "تحليل صافي الدخل من المبيعات والمصروفات مع مخطط توزيع الحسابات.",
+    category: "financial",
+    viewHref: ROUTES.reportsReadyNetIncome,
+  },
+  {
+    id: "ready-sales-by-user-payment-method",
+    name: "المبيعات حسب المستخدم وطريقة الدفع",
+    description: "توزيع المبيعات بين المستخدمين وطرق الدفع.",
+    category: "sales",
+    viewHref: ROUTES.reportsReadySalesByUserPaymentMethod,
+  },
+  {
+    id: "ready-sales-by-customer",
+    name: "تقرير المبيعات حسب العميل",
+    description: "تحليل المبيعات والطلبات لكل عميل.",
+    category: "customers",
+    viewHref: ROUTES.reportsReadySalesByCustomer,
+  },
+  {
+    id: "ready-sales-by-product",
+    name: "تقرير المبيعات حسب المنتج",
+    description: "تحليل المبيعات لكل منتج وفئة.",
+    category: "products",
+    viewHref: ROUTES.reportsReadySalesByProduct,
+  },
+  {
+    id: "ready-sales-by-invoice-source",
+    name: "المبيعات حسب مصدري الفاتورة",
+    description: "توزيع المبيعات حسب المستخدم الذي أصدر الفاتورة.",
+    category: "sales",
+    viewHref: ROUTES.reportsReadySalesByInvoiceSource,
+  },
+].map((entry) => ({
+  organizationId: "",
+  workspaceId: null,
+  defaultFilters: {},
+  displayOptions: {},
+  sharing: "organization",
+  isSystem: true,
+  status: "active",
+  createdByUserId: "",
+  createdByName: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  widgets: [],
+  ...entry,
+}))
+
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
     dateStyle: "medium",
@@ -284,7 +341,9 @@ function ReportsTable({
                   <div className="flex items-center justify-center">
                     <button
                       type="button"
-                      onClick={() => router.push(ROUTES.reportsCustomView(report.id))}
+                      onClick={() =>
+                        router.push(report.viewHref ?? ROUTES.reportsCustomView(report.id))
+                      }
                       className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#eaf1ff] px-3.5 py-2 text-[12px] font-semibold text-[#2878ff] transition-colors hover:bg-[#2878ff] hover:text-white"
                     >
                       <Eye className="size-3.5" />
@@ -657,7 +716,7 @@ export function ReportsOverviewPage() {
 
       {activeTab === "ready" ? (
         <ReportsTab
-          reports={readyMade}
+          reports={[...BESPOKE_READY_REPORTS, ...readyMade]}
           loading={loadingReady}
           showOwner={false}
           title="التقارير الجاهزة"

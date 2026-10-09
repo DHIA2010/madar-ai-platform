@@ -63,6 +63,10 @@ export interface CustomReport {
   createdAt: string
   updatedAt: string
   widgets: ReportWidgetRef[]
+  // Frontend-only, never sent to/from the backend -- set on the 5 static bespoke ready-report
+  // entries (reports-overview-page.tsx) so their row routes to a dedicated page instead of the
+  // generic single-KPI viewer. Real (backend-sourced) reports never set this.
+  viewHref?: string
 }
 
 export interface SaveCustomReportInput {

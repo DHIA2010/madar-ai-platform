@@ -40,12 +40,16 @@ import { SuppliersService } from "../../procurement/suppliers-service"
 import { PurchasesService } from "../../procurement/purchases-service"
 import { ReturnsService } from "../../procurement/returns-service"
 import { VouchersService } from "../../procurement/vouchers-service"
+import { ExpenseCategoriesService } from "../../expenses/expense-categories-service"
+import { ExpensesService } from "../../expenses/expenses-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { PosSettingsService } from "../../pos/pos-settings-service"
 import { ConnectionSyncScheduleRepository } from "../../integrations/scheduling/schedule-repository"
 import { ConnectionSyncScheduleService } from "../../integrations/scheduling/schedule-service"
 import { ReportsService } from "../../reports/service"
+import { normalizeTimeGrouping } from "../../reports/ready-reports-repository"
+import { ReadyReportsService } from "../../reports/ready-reports-service"
 import type { ReportLevelFilter } from "../../reports/types"
 import { AiChatService, ChatTurnCancelledError } from "../../ai-chat/service"
 import { AiChatLlmClient } from "../../ai-chat/llm-client"
@@ -186,6 +190,8 @@ import {
   createPurchaseSchema,
   createPurchaseReturnSchema,
   createSupplierVoucherSchema,
+  createExpenseCategorySchema,
+  createExpenseSchema,
 } from "../../schemas"
 
 function json(
@@ -622,6 +628,9 @@ export function createIdentityApiServer(
   const reportsService = container.infrastructure.database
     ? new ReportsService(container.infrastructure.database)
     : null
+  const readyReportsService = container.infrastructure.database
+    ? new ReadyReportsService(container.infrastructure.database)
+    : null
   const suppliersService = container.infrastructure.database
     ? new SuppliersService(container.infrastructure.database)
     : null
@@ -633,6 +642,12 @@ export function createIdentityApiServer(
     : null
   const vouchersService = container.infrastructure.database
     ? new VouchersService(container.infrastructure.database)
+    : null
+  const expenseCategoriesService = container.infrastructure.database
+    ? new ExpenseCategoriesService(container.infrastructure.database)
+    : null
+  const expensesService = container.infrastructure.database
+    ? new ExpensesService(container.infrastructure.database)
     : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
@@ -1984,6 +1999,54 @@ export function createIdentityApiServer(
             if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
             await reportsService.deleteCustomReport(actor, reportId)
             return send(200, { deleted: true })
+          }
+        }
+      }
+
+      // Ready reports: 5 bespoke dashboards (Net Income, Sales by User & Payment Method, Sales by
+      // Customer, Sales by Product, Sales by Invoice Source) -- hand-written SQL in
+      // src/identity-platform/reports/ready-reports-*.ts, not the generic KPI catalog/query-
+      // builder (which only supports one groupByDimension and a single-aggregate trend, neither
+      // of which fits these). "Sales by Invoice Source" reuses the same
+      // sales-by-user-payment-method endpoint -- the frontend groups the same flat rows two ways.
+      if (readyReportsService) {
+        if (url.pathname.startsWith("/v1/reports/ready/")) {
+          if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+
+          const from = url.searchParams.get("from")
+          const to = url.searchParams.get("to")
+          if (!from || !to) {
+            throw new IdentityError(
+              "REPORT_DEFINITION_INVALID",
+              400,
+              "validation",
+              "from and to query params are required"
+            )
+          }
+          const workspaceId = url.searchParams.get("workspaceId") || null
+          const range = { organizationId: actor.organizationId, workspaceId, from, to }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/net-income") {
+            // Net income surfaces expense totals -- requires expenses:view alongside reports:view.
+            if (!actor.modulePermissions.includes("expenses:view")) throw ERRORS.forbidden()
+            const timeGrouping = normalizeTimeGrouping(url.searchParams.get("timeGrouping"))
+            return send(200, await readyReportsService.netIncome(range, timeGrouping))
+          }
+
+          if (
+            method === "GET" &&
+            url.pathname === "/v1/reports/ready/sales-by-user-payment-method"
+          ) {
+            return send(200, await readyReportsService.salesByUserAndPaymentMethod(range))
+          }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/sales-by-customer") {
+            const customerId = url.searchParams.get("customerId") || null
+            return send(200, await readyReportsService.salesByCustomer(range, customerId))
+          }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/sales-by-product") {
+            return send(200, await readyReportsService.salesByProduct(range))
           }
         }
       }
@@ -4329,6 +4392,47 @@ export function createIdentityApiServer(
             201,
             await vouchersService.create(actor.organizationId, actor.workspaceId, payload)
           )
+        }
+      }
+
+      // Expenses: see src/identity-platform/expenses/. Categories list+create only -- no
+      // edit/delete, matching the frontend's inline "add new category" flow and nothing more.
+      if (url.pathname === "/v1/expense-categories") {
+        if (!expenseCategoriesService) {
+          return send(503, {
+            code: "EXPENSES_UNAVAILABLE",
+            message: "Expenses are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("expenses:view")) throw ERRORS.forbidden()
+          return send(200, { items: await expenseCategoriesService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("expenses:manage")) throw ERRORS.forbidden()
+          const payload = createExpenseCategorySchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await expenseCategoriesService.create(actor.organizationId, payload.name)
+          )
+        }
+      }
+
+      if (url.pathname === "/v1/expenses") {
+        if (!expensesService) {
+          return send(503, {
+            code: "EXPENSES_UNAVAILABLE",
+            message: "Expenses are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("expenses:view")) throw ERRORS.forbidden()
+          return send(200, { items: await expensesService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("expenses:manage")) throw ERRORS.forbidden()
+          const payload = createExpenseSchema.parse(await readJsonBody(request))
+          return send(201, await expensesService.create(actor.organizationId, payload))
         }
       }
 
