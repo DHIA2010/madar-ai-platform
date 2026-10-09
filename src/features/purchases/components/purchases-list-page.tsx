@@ -26,7 +26,7 @@ import { useWorkspace } from "@/features/workspace"
 
 import { usePurchases, usePurchasesList, useReturns } from "../hooks"
 import { convertToOrgCurrency, exportPurchasesToCsv, isSupportedOrgCurrency } from "../services"
-import { type Purchase, purchaseGrandTotal, purchaseItemCount, purchasePaidAmount } from "../types"
+import { type Purchase, purchaseGrandTotal, purchaseItemCount } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, PurchasePagination } from "./purchase-field"
 import { PurchasePrintDocument } from "./purchase-print-document"
@@ -170,20 +170,12 @@ export function PurchasesListPage() {
               <AppTableHead>المورد</AppTableHead>
               <AppTableHead>العناصر</AppTableHead>
               <AppTableHead>الإجمالي</AppTableHead>
-              <AppTableHead>المبلغ المدفوع</AppTableHead>
-              <AppTableHead>المبلغ المتبقي</AppTableHead>
               <AppTableHead>التاريخ</AppTableHead>
               <AppTableHead className="w-20">الإجراءات</AppTableHead>
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
             {list.rows.map((purchase) => {
-              const paidAmount = purchasePaidAmount(purchase, vouchers)
-              // Rounded to cents and normalized away from -0 (the `|| 0`) -- otherwise a
-              // fully-paid purchase can show a stray minus sign (e.g. "-$0.00") purely from
-              // floating-point noise in the tax/total math landing exactly on negative zero.
-              const remainingAmount =
-                Math.round((purchaseGrandTotal(purchase) - paidAmount) * 100) / 100 || 0
               return (
                 <AppTableRow key={purchase.id}>
                   <AppTableCell className={MUTED}>{purchase.code}</AppTableCell>
@@ -202,14 +194,6 @@ export function PurchasesListPage() {
                   </AppTableCell>
                   <AppTableCell className={cn("font-medium", HEADING)}>
                     {formatCurrency(purchaseGrandTotal(purchase), purchase.currency)}
-                  </AppTableCell>
-                  <AppTableCell className="font-medium text-[#16a34a]">
-                    {formatCurrency(paidAmount, purchase.currency)}
-                  </AppTableCell>
-                  <AppTableCell
-                    className={cn("font-medium", remainingAmount > 0 ? "text-[#dc2626]" : MUTED)}
-                  >
-                    {formatCurrency(remainingAmount, purchase.currency)}
                   </AppTableCell>
                   <AppTableCell className={MUTED}>{purchase.date}</AppTableCell>
                   <AppTableCell>
