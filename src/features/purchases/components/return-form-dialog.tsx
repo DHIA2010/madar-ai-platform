@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils"
 import { AppButton, AppDateField, AppDialog, AppInput, AppSearchableSelect } from "@/components/app"
 
 import type { Supplier } from "@/features/suppliers"
+import { useWorkspace } from "@/features/workspace"
 
-import { returnService, WAREHOUSES } from "../services"
+import { returnService } from "../services"
 import {
   EMPTY_RETURN_FORM_VALUES,
   type Purchase,
@@ -44,6 +45,7 @@ export function ReturnFormDialog({
   allReturns: PurchaseReturn[]
   onCreated: () => void
 }) {
+  const { availableWorkspaces } = useWorkspace()
   const [values, setValues] = useState<ReturnFormValues>(EMPTY_RETURN_FORM_VALUES)
   const [submitting, setSubmitting] = useState(false)
   // The search box is a pure "find and add" control -- its dropdown closes the moment an item is
@@ -251,7 +253,7 @@ export function ReturnFormDialog({
 
   async function handleSubmit() {
     if (!values.purchaseId || !values.warehouseId || !values.returnDate.trim()) {
-      toast.error("يرجى تعبئة أمر الشراء والمستودع وتاريخ الإرجاع.")
+      toast.error("يرجى تعبئة أمر الشراء والفرع وتاريخ الإرجاع.")
       return
     }
     if (values.items.length === 0 || totalReturnQty <= 0) {
@@ -327,16 +329,16 @@ export function ReturnFormDialog({
               className={cn(FIELD_CLASS, "bg-[#f7f9fd]")}
             />
           </PurchaseField>
-          <PurchaseField label="المستودع" required>
+          <PurchaseField label="الفرع" required>
             <AppSearchableSelect
               value={values.warehouseId}
-              options={WAREHOUSES.map((warehouse) => ({
-                value: warehouse.id,
-                label: warehouse.name,
+              options={availableWorkspaces.map((workspace) => ({
+                value: workspace.id,
+                label: workspace.name,
               }))}
               onChange={(value) => set("warehouseId", value)}
-              placeholder="اختر المستودع"
-              ariaLabel="المستودع"
+              placeholder="اختر الفرع"
+              ariaLabel="الفرع"
             />
           </PurchaseField>
         </div>

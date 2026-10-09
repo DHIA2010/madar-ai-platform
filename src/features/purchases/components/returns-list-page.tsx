@@ -21,9 +21,10 @@ import {
 } from "@/components/app"
 
 import { useSuppliers } from "@/features/suppliers"
+import { useWorkspace } from "@/features/workspace"
 
 import { usePurchases, useReturns, useReturnsList } from "../hooks"
-import { exportReturnsToCsv, WAREHOUSES } from "../services"
+import { exportReturnsToCsv } from "../services"
 import type { PurchaseReturn } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, PurchasePagination } from "./purchase-field"
@@ -47,6 +48,7 @@ export function ReturnsListPage() {
   const { returns, isLoading, refetch } = useReturns()
   const { purchases } = usePurchases()
   const { suppliers } = useSuppliers()
+  const { availableWorkspaces } = useWorkspace()
   const list = useReturnsList(returns)
   const [formOpen, setFormOpen] = useState(false)
   const [viewTarget, setViewTarget] = useState<PurchaseReturn | null>(null)
@@ -110,12 +112,15 @@ export function ReturnsListPage() {
           <AppSearchableSelect
             value={list.warehouseId}
             options={[
-              { value: "all", label: "كل المستودعات" },
-              ...WAREHOUSES.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })),
+              { value: "all", label: "كل الفروع" },
+              ...availableWorkspaces.map((workspace) => ({
+                value: workspace.id,
+                label: workspace.name,
+              })),
             ]}
             onChange={(value) => list.setWarehouseId(value)}
-            placeholder="المستودع"
-            ariaLabel="المستودع"
+            placeholder="الفرع"
+            ariaLabel="الفرع"
             triggerClassName="w-[160px]"
           />
           <AppDateRangeFilter value={list.dateRange} onChange={list.setDateRange} />
@@ -152,7 +157,7 @@ export function ReturnsListPage() {
               <AppTableHead>مبلغ الإرجاع</AppTableHead>
               <AppTableHead>الحالة</AppTableHead>
               <AppTableHead>التاريخ</AppTableHead>
-              <AppTableHead>المستودع</AppTableHead>
+              <AppTableHead>الفرع</AppTableHead>
               <AppTableHead className="w-20">الإجراءات</AppTableHead>
             </AppTableRow>
           </AppTableHeader>

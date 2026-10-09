@@ -74,7 +74,7 @@ export function ReturnViewDialog({
           <div className="rounded-[12px] border border-[#e1e7f0] p-4">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               <Field label="رقم الطلب" value={entry.purchaseCode} />
-              <Field label="المستودع" value={entry.warehouseName} />
+              <Field label="الفرع" value={entry.warehouseName} />
               <Field label="العناصر المرتجعة" value={`${entry.returnQty} صنف`} />
               <Field label="تاريخ الإرجاع" value={entry.returnDate} />
             </div>

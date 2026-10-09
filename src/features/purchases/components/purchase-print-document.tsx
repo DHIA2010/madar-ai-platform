@@ -110,7 +110,7 @@ export function PurchasePrintDocument({
           <DetailLine label="اسم المورد" value={purchase.supplierName} />
           <DetailLine label="رقم جوال المورد" value={supplier?.phone ?? ""} />
           <DetailLine label="رقم المورد الضريبي" value={supplier?.companyDetails.taxNumber ?? ""} />
-          <DetailLine label="المستودع" value={purchase.warehouseName} />
+          <DetailLine label="الفرع" value={purchase.warehouseName} />
         </div>
       </div>
 

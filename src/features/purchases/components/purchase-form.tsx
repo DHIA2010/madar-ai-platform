@@ -11,15 +11,16 @@ import { ROUTES } from "@/constants/routes"
 import { AppButton, AppDateField, AppForm, AppInput, AppSearchableSelect } from "@/components/app"
 
 import { useSuppliers } from "@/features/suppliers"
+import { useWorkspace } from "@/features/workspace"
 
-import { purchaseService, WAREHOUSES } from "../services"
+import { purchaseService } from "../services"
 import {
   DEFAULT_PURCHASE_CURRENCY,
   EMPTY_PURCHASE_FORM_VALUES,
   type Purchase,
   type PurchaseFormValues,
 } from "../types"
-import { FIELD_CLASS, HEADING, PANEL, PurchaseField, SuffixInput } from "./purchase-field"
+import { FIELD_CLASS, PANEL, PurchaseField, SuffixInput } from "./purchase-field"
 import { PurchaseLineItemsTable } from "./purchase-line-items-table"
 
 function purchaseToFormValues(purchase: Purchase): PurchaseFormValues {
@@ -45,6 +46,7 @@ function purchaseToFormValues(purchase: Purchase): PurchaseFormValues {
 export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }) {
   const router = useRouter()
   const { suppliers } = useSuppliers()
+  const { availableWorkspaces } = useWorkspace()
   const isEditing = Boolean(initialPurchase)
 
   const [values, setValues] = useState<PurchaseFormValues>(() =>
@@ -68,12 +70,10 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
     }))
   }
 
-  const currencyLabel = "ريال سعودي (SAR)"
-
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!values.supplierId || !values.date.trim() || !values.warehouseId) {
-      toast.error("يرجى تعبئة المورد والتاريخ والمستودع.")
+      toast.error("يرجى تعبئة المورد والتاريخ والفرع.")
       return
     }
     if (values.items.length === 0) {
@@ -117,32 +117,21 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
               ariaLabel="المورد"
             />
           </PurchaseField>
-          <PurchaseField label="العملة">
-            <div
-              className={cn(
-                "flex h-11 items-center justify-between rounded-[12px] border border-[#e1e7f0] bg-[#f7f9fd] px-3 text-[13px]",
-                HEADING
-              )}
-            >
-              <span className="font-semibold">{currencyLabel}</span>
-              <span className="text-[11px] font-normal text-[#95a4bd]">حسب المورد</span>
-            </div>
-          </PurchaseField>
           <PurchaseField label="التاريخ" required>
             <AppDateField value={values.date} onChange={(value) => set("date", value)} />
           </PurchaseField>
-          <PurchaseField label="المستودع" required>
+          <PurchaseField label="الفرع" required>
             <AppSearchableSelect
               value={values.warehouseId}
-              options={WAREHOUSES.map((warehouse) => ({
-                value: warehouse.id,
-                label: warehouse.name,
+              options={availableWorkspaces.map((workspace) => ({
+                value: workspace.id,
+                label: workspace.name,
               }))}
               onChange={(value) => set("warehouseId", value)}
-              placeholder="اختر المستودع"
+              placeholder="اختر الفرع"
               searchPlaceholder="ابحث..."
-              emptyLabel="لا توجد مستودعات"
-              ariaLabel="المستودع"
+              emptyLabel="لا توجد فروع"
+              ariaLabel="الفرع"
             />
           </PurchaseField>
           <PurchaseField label="تاريخ الإستحقاق">

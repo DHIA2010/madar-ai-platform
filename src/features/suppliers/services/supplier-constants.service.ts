@@ -1,7 +1,6 @@
 import type { PaymentTerms, SupplierVatType } from "../types"
 
-// Static reference lists for the supplier form's selects -- no backend table backs any of these,
-// same rationale as purchases/services/warehouses.ts.
+// Static reference lists for the supplier form's selects -- no backend table backs any of these.
 export const SUPPLIER_COUNTRIES = [
   "السعودية",
   "الإمارات",

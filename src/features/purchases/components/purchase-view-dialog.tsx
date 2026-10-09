@@ -124,7 +124,7 @@ export function PurchaseViewDialog({
           <Section title="تفاصيل الطلب">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               <Field label="حالة الطلب" value={STATUS_LABEL[purchase.status]} />
-              <Field label="المستودع" value={purchase.warehouseName} />
+              <Field label="الفرع" value={purchase.warehouseName} />
               <Field label="تاريخ الطلب" value={purchase.date} />
               <Field label="تاريخ الإستحقاق" value={purchase.dueDate ?? ""} />
               <Field label="تاريخ التوريد" value={purchase.deliveryDate ?? ""} />

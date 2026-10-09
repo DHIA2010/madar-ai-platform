@@ -1,5 +1,4 @@
 import type { Purchase, PurchaseFormValues } from "../types"
-import { WAREHOUSES } from "./warehouses"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
@@ -22,6 +21,25 @@ function getWorkspaceIdFromStorage(): string | null {
   }
 }
 
+// "الفرع" (shown in the UI) is really just the workspace a purchase belongs to -- there's no
+// separate warehouses table (see identity-platform/migrations/094_procurement.sql's own comment,
+// the field/column is still named warehouseId). The backend DTO carries warehouseId only; the
+// name is resolved client-side from the same workspace-context localStorage the Zustand
+// workspace store already persists to.
+function getAvailableWorkspacesFromStorage(): Array<{ id: string; name: string }> {
+  if (typeof window === "undefined") return []
+  const raw = window.localStorage.getItem("workspace-context")
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as {
+      state?: { availableWorkspaces?: Array<{ id: string; name: string }> }
+    }
+    return parsed.state?.availableWorkspaces ?? []
+  } catch {
+    return []
+  }
+}
+
 const PATH_SEPARATOR = String.fromCharCode(47)
 const PURCHASES_ENDPOINT = ["", "v1", "purchases"].join(PATH_SEPARATOR)
 
@@ -32,11 +50,13 @@ const client = createHttpDataClient({
 })
 
 // The backend DTO carries warehouseId only (no warehouses table exists) -- warehouseName is
-// resolved client-side from the static WAREHOUSES list, same as the old mock-data version did.
+// resolved client-side from the real workspaces list (see getAvailableWorkspacesFromStorage).
 type PurchaseDto = Omit<Purchase, "warehouseName">
 
 function withWarehouseName(dto: PurchaseDto): Purchase {
-  const warehouseName = WAREHOUSES.find((wh) => wh.id === dto.warehouseId)?.name ?? dto.warehouseId
+  const warehouseName =
+    getAvailableWorkspacesFromStorage().find((workspace) => workspace.id === dto.warehouseId)
+      ?.name ?? dto.warehouseId
   return { ...dto, warehouseName }
 }
 

@@ -71,7 +71,7 @@ export function ReturnPrintDocument({
           <DetailLine label="اسم المورد" value={entry.supplierName} />
           <DetailLine label="رقم جوال المورد" value={supplier?.phone ?? ""} />
           <DetailLine label="رقم المورد الضريبي" value={supplier?.companyDetails.taxNumber ?? ""} />
-          <DetailLine label="المستودع" value={entry.warehouseName} />
+          <DetailLine label="الفرع" value={entry.warehouseName} />
         </div>
       </div>
 
