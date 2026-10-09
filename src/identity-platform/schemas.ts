@@ -1016,7 +1016,8 @@ const supplierBankDetailsSchema = z.object({
   accountName: z.string().max(200).default(""),
   accountType: z.enum(["savings", "current", "other"]).default("savings"),
   accountNumber: z.string().max(100).default(""),
-  currency: z.string().max(8).default("SAR"),
+  // SAR is the only currency procurement supports -- see purchases.currency's own note below.
+  currency: z.literal("SAR").default("SAR"),
   swiftIban: z.string().max(100).default(""),
   branchCode: z.string().max(100).default(""),
   bankCity: z.string().max(200).default(""),
@@ -1084,7 +1085,8 @@ export const createPurchaseSchema = z.object({
   discountAmount: productMoneySchema.default(0),
   shippingAmount: productMoneySchema.default(0),
   otherCosts: productMoneySchema.default(0),
-  currency: z.string().min(1).max(8).default("SAR"),
+  // SAR is the only currency procurement supports.
+  currency: z.literal("SAR").default("SAR"),
   paymentMethod: z
     .enum(["cash", "bank_transfer", "card", "cheque"])
     .nullable()

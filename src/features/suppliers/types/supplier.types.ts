@@ -12,7 +12,6 @@ export interface SupplierBankDetails {
   accountName: string
   accountType: BankAccountType
   accountNumber: string
-  currency: string
   swiftIban: string
   branchCode: string
   bankCity: string
@@ -55,7 +54,6 @@ export const EMPTY_BANK_DETAILS: SupplierBankDetails = {
   accountName: "",
   accountType: "savings",
   accountNumber: "",
-  currency: "SAR",
   swiftIban: "",
   branchCode: "",
   bankCity: "",

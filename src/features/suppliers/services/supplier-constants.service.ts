@@ -20,14 +20,6 @@ export const SUPPLIER_COUNTRIES = [
   "ألمانيا",
 ]
 
-// Closed to exactly these two -- SAR/USD (3.75 peg) is the only real, non-fluctuating exchange
-// rate available anywhere in this system (see currency-conversion.service.ts), so a bank account
-// in any other currency could never be converted into the organization's reports accurately.
-export const SUPPLIER_CURRENCIES: Array<{ value: string; label: string }> = [
-  { value: "SAR", label: "ريال سعودي (SAR)" },
-  { value: "USD", label: "دولار أمريكي (USD)" },
-]
-
 export const PAYMENT_TERMS_OPTIONS: Array<{ value: PaymentTerms; label: string }> = [
   { value: "prepaid", label: "دفع مسبق" },
   { value: "cod", label: "الدفع عند الاستلام" },

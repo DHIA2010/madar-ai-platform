@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 
 import { AppButton, AppDialog } from "@/components/app"
 
-import { SUPPLIER_CURRENCIES, VAT_TYPE_OPTIONS } from "../services"
+import { VAT_TYPE_OPTIONS } from "../services"
 import type { Supplier } from "../types"
 import { SupplierAvatar } from "./supplier-avatar"
 import { SupplierStatusBadge } from "./supplier-status-badge"
@@ -23,9 +23,6 @@ const ACCOUNT_TYPE_LABEL: Record<Supplier["bankDetails"]["accountType"], string>
   current: "جاري",
   other: "أخرى",
 }
-const CURRENCY_LABEL: Record<string, string> = Object.fromEntries(
-  SUPPLIER_CURRENCIES.map((currency) => [currency.value, currency.label])
-)
 const VAT_TYPE_LABEL: Record<
   NonNullable<Supplier["companyDetails"]["vatType"]>,
   string
@@ -126,10 +123,6 @@ export function SupplierViewDialog({
               value={ACCOUNT_TYPE_LABEL[supplier.bankDetails.accountType]}
             />
             <Field label="رقم الحساب" value={supplier.bankDetails.accountNumber} />
-            <Field
-              label="العملة"
-              value={CURRENCY_LABEL[supplier.bankDetails.currency] ?? supplier.bankDetails.currency}
-            />
             <Field label="Swift / IBAN" value={supplier.bankDetails.swiftIban} />
             <Field label="رمز الفرع" value={supplier.bankDetails.branchCode} />
             <Field label="مدينة البنك" value={supplier.bankDetails.bankCity} />

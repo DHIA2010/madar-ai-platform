@@ -43,8 +43,7 @@ export interface Purchase {
   discountAmount: number
   shippingAmount: number
   otherCosts: number
-  // Follows the selected supplier's own currency (set on suppliers.bankDetails.currency) --
-  // never edited directly on the purchase, see handleSupplierChange in purchase-form.tsx.
+  // Always "SAR" -- the only currency procurement supports, see DEFAULT_PURCHASE_CURRENCY.
   currency: string
   paymentMethod: PurchasePaymentMethod | null
   referenceNumber: string

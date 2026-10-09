@@ -13,7 +13,6 @@ import { AppButton, AppForm, AppInput, AppSearchableSelect } from "@/components/
 import {
   PAYMENT_TERMS_OPTIONS,
   SUPPLIER_COUNTRIES,
-  SUPPLIER_CURRENCIES,
   supplierService,
   VAT_TYPE_OPTIONS,
 } from "../services"
@@ -433,30 +432,14 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
               ]}
             />
           </SupplierField>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SupplierField label="رقم الحساب">
-              <AppInput
-                value={values.bankDetails.accountNumber}
-                onChange={(event) => setBank("accountNumber", event.target.value)}
-                placeholder="رقم الحساب"
-                className={FIELD_CLASS}
-              />
-            </SupplierField>
-            <SupplierField label="العملة">
-              <AppSearchableSelect
-                value={values.bankDetails.currency}
-                options={SUPPLIER_CURRENCIES.map((currency) => ({
-                  value: currency.value,
-                  label: currency.label,
-                }))}
-                onChange={(value) => setBank("currency", value)}
-                placeholder="اختر العملة"
-                searchPlaceholder="ابحث عن عملة..."
-                emptyLabel="لا توجد نتائج"
-                ariaLabel="العملة"
-              />
-            </SupplierField>
-          </div>
+          <SupplierField label="رقم الحساب">
+            <AppInput
+              value={values.bankDetails.accountNumber}
+              onChange={(event) => setBank("accountNumber", event.target.value)}
+              placeholder="رقم الحساب"
+              className={FIELD_CLASS}
+            />
+          </SupplierField>
           <SupplierField label="Swift / IBAN">
             <AppInput
               value={values.bankDetails.swiftIban}

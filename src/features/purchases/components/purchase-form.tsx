@@ -10,7 +10,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton, AppDateField, AppForm, AppInput, AppSearchableSelect } from "@/components/app"
 
-import { SUPPLIER_CURRENCIES, useSuppliers } from "@/features/suppliers"
+import { useSuppliers } from "@/features/suppliers"
 
 import { purchaseService, WAREHOUSES } from "../services"
 import {
@@ -58,19 +58,17 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
     setValues((current) => ({ ...current, [key]: value }))
   }
 
-  // The purchase's currency always follows its supplier (suppliers.bankDetails.currency) rather
-  // than being chosen independently -- defaults to SAR when the supplier has none set.
+  // Only SAR is supported anywhere in procurement, so a purchase's currency is always this fixed
+  // value -- never chosen independently or derived per-supplier.
   function handleSupplierChange(supplierId: string) {
-    const supplier = suppliers.find((entry) => entry.id === supplierId)
     setValues((current) => ({
       ...current,
       supplierId,
-      currency: supplier?.bankDetails.currency || DEFAULT_PURCHASE_CURRENCY,
+      currency: DEFAULT_PURCHASE_CURRENCY,
     }))
   }
 
-  const currencyLabel =
-    SUPPLIER_CURRENCIES.find((entry) => entry.value === values.currency)?.label ?? values.currency
+  const currencyLabel = "ريال سعودي (SAR)"
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
