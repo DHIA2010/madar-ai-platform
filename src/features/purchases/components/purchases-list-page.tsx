@@ -10,7 +10,6 @@ import { ROUTES } from "@/constants/routes"
 
 import {
   AppButton,
-  AppSearchableSelect,
   AppSearchInput,
   AppTable,
   AppTableBody,
@@ -32,20 +31,6 @@ import { FIELD_CLASS, HEADING, MUTED, PANEL, PurchasePagination } from "./purcha
 import { PurchasePrintDocument } from "./purchase-print-document"
 import { PurchaseViewDialog } from "./purchase-view-dialog"
 import { PurchasesKpiCards } from "./purchases-kpi-cards"
-
-const STATUS_OPTIONS = [
-  { value: "all", label: "كل حالات الطلب" },
-  { value: "received", label: "تم الاستلام" },
-  { value: "pending", label: "قيد الانتظار" },
-]
-
-const PAYMENT_STATUS_OPTIONS = [
-  { value: "all", label: "كل حالات الدفع" },
-  { value: "paid", label: "مدفوع" },
-  { value: "partial", label: "مدفوع جزئياً" },
-  { value: "pending", label: "معلّق" },
-  { value: "overdue", label: "متأخر" },
-]
 
 function formatCurrency(value: number, currency: string) {
   try {
@@ -114,22 +99,6 @@ export function PurchasesListPage() {
 
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
         <div className="flex flex-wrap items-center gap-2">
-          <AppSearchableSelect
-            value={list.status}
-            options={STATUS_OPTIONS}
-            onChange={(value) => list.setStatus(value as typeof list.status)}
-            placeholder="حالة الطلب"
-            ariaLabel="حالة الطلب"
-            triggerClassName="w-[170px]"
-          />
-          <AppSearchableSelect
-            value={list.paymentStatus}
-            options={PAYMENT_STATUS_OPTIONS}
-            onChange={(value) => list.setPaymentStatus(value as typeof list.paymentStatus)}
-            placeholder="حالة الدفع"
-            ariaLabel="حالة الدفع"
-            triggerClassName="w-[170px]"
-          />
           <AppSearchInput
             placeholder="البحث عن أمر شراء..."
             value={list.search}
