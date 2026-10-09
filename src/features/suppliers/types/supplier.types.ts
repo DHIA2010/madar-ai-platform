@@ -16,8 +16,6 @@ export interface SupplierBankDetails {
   swiftIban: string
   branchCode: string
   bankCity: string
-  isPrimaryAccount: boolean
-  isDefaultForPayments: boolean
 }
 
 export interface SupplierCompanyDetails {
@@ -61,8 +59,6 @@ export const EMPTY_BANK_DETAILS: SupplierBankDetails = {
   swiftIban: "",
   branchCode: "",
   bankCity: "",
-  isPrimaryAccount: false,
-  isDefaultForPayments: false,
 }
 
 export const EMPTY_COMPANY_DETAILS: SupplierCompanyDetails = {

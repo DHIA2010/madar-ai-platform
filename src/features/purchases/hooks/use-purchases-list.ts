@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 
+import { convertToOrgCurrency, type SupportedOrgCurrency } from "../services"
 import type { Purchase, PurchasePaymentStatus, PurchasePaymentVoucher } from "../types"
 import { derivePurchasePaymentStatus, purchaseGrandTotal } from "../types"
 
@@ -10,7 +11,11 @@ const PAGE_SIZE = 10
 // Search/status/payment-status filter + pagination over an already-fetched list -- the real data
 // sources (useProcurementPurchases(), the supplier vouchers fetch) live at the page level; this
 // hook is otherwise unchanged from its Zustand-backed version.
-export function usePurchasesList(purchases: Purchase[], vouchers: PurchasePaymentVoucher[]) {
+export function usePurchasesList(
+  purchases: Purchase[],
+  vouchers: PurchasePaymentVoucher[],
+  orgCurrency: SupportedOrgCurrency
+) {
   const [search, setSearchState] = useState("")
   const [status, setStatusState] = useState<Purchase["status"] | "all">("all")
   const [paymentStatus, setPaymentStatusState] = useState<PurchasePaymentStatus | "all">("all")
@@ -56,14 +61,17 @@ export function usePurchasesList(purchases: Purchase[], vouchers: PurchasePaymen
   }
 
   const kpis = useMemo(() => {
-    const totalPurchases = purchases.reduce((sum, p) => sum + purchaseGrandTotal(p), 0)
+    const totalPurchases = purchases.reduce((sum, p) => {
+      const converted = convertToOrgCurrency(purchaseGrandTotal(p), p.currency, orgCurrency)
+      return sum + (converted ?? 0)
+    }, 0)
     const pendingOrders = purchases.filter((p) => p.status === "pending").length
     return {
       totalPurchases,
       totalOrders: purchases.length,
       pendingOrders,
     }
-  }, [purchases])
+  }, [purchases, orgCurrency])
 
   return {
     search,

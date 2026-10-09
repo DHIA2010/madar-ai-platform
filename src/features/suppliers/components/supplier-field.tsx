@@ -3,8 +3,6 @@ import type { ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
-import { AppCheckbox } from "@/components/app"
-
 // Mirrors the exact classes AddProduct.tsx uses for its own PANEL/HEADING/MUTED/FIELD_CLASS/Field
 // -- duplicated here rather than imported since that file keeps them page-local (same convention
 // every other feature follows: each screen owns its own copy instead of reaching into another
@@ -86,42 +84,6 @@ export function SupplierPagination({
         <ChevronLeft className="size-4" />
       </button>
     </div>
-  )
-}
-
-// A bordered settings-style row (label + hint description, checkbox at the end) -- replaces a
-// bare <label><Checkbox/>text</label> pairing that gave no explanation of what either toggle
-// actually does.
-export function SupplierCheckboxRow({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-}: {
-  label: string
-  description: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start justify-between gap-3 rounded-[12px] border p-3 transition-colors",
-        checked
-          ? "border-[#c4d5f0] bg-[#f7f9fd]"
-          : "border-[#e1e7f0] bg-white hover:border-[#c4d5f0]"
-      )}
-    >
-      <div>
-        <p className={cn("text-[12.5px] font-semibold", HEADING)}>{label}</p>
-        <p className={cn("mt-0.5 text-[11px] leading-[16px]", MUTED)}>{description}</p>
-      </div>
-      <AppCheckbox
-        checked={checked}
-        onCheckedChange={(next) => onCheckedChange(next === true)}
-        className="mt-0.5 shrink-0 size-[18px] rounded-[5px] border-[#c4d5f0] bg-white data-checked:border-[#2878ff] data-checked:bg-[#2878ff]"
-      />
-    </label>
   )
 }
 

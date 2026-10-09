@@ -45,6 +45,11 @@ import {
   useSuppliers,
   useSupplierVouchers,
 } from "../hooks"
+import {
+  convertToOrgCurrency,
+  isSupportedOrgCurrency,
+  type SupportedOrgCurrency,
+} from "../services"
 import type { SupplierVoucher } from "../types"
 import { SupplierAvatar } from "./supplier-avatar"
 import { PAYMENT_METHOD_NAME } from "./supplier-voucher-dialog"
@@ -151,7 +156,8 @@ function buildSupplierTransactions(
   supplierId: string,
   purchases: Purchase[],
   returns: PurchaseReturn[],
-  vouchers: SupplierVoucher[]
+  vouchers: SupplierVoucher[],
+  orgCurrency: SupportedOrgCurrency
 ): SupplierTransaction[] {
   const events: Array<{
     reference: string
@@ -161,12 +167,22 @@ function buildSupplierTransactions(
     occurredAt: string
   }> = []
 
+  // A return has no currency of its own -- it always follows its parent purchase's.
+  const purchaseIdToCurrency = new Map(
+    purchases.map((purchase) => [purchase.id, purchase.currency])
+  )
+
   for (const purchase of purchases) {
     if (purchase.supplierId !== supplierId) continue
     events.push({
       reference: purchase.code,
       type: "purchase",
-      amount: crossFeaturePurchaseGrandTotal(purchase),
+      amount:
+        convertToOrgCurrency(
+          crossFeaturePurchaseGrandTotal(purchase),
+          purchase.currency,
+          orgCurrency
+        ) ?? 0,
       description: `فاتورة شراء ${purchase.code}`,
       occurredAt: purchase.date,
     })
@@ -176,7 +192,12 @@ function buildSupplierTransactions(
     events.push({
       reference: entry.code,
       type: "return",
-      amount: entry.returnAmount,
+      amount:
+        convertToOrgCurrency(
+          entry.returnAmount,
+          purchaseIdToCurrency.get(entry.purchaseId),
+          orgCurrency
+        ) ?? 0,
       description: `مرتجع مشتريات ${entry.code} (${entry.purchaseCode})`,
       occurredAt: entry.returnDate,
     })
@@ -295,14 +316,16 @@ export function SupplierStatement({ supplierId }: { supplierId: string }) {
   const { vouchers } = useSupplierVouchers()
   const { purchases, returns } = useCrossFeaturePurchaseData()
   const supplier = suppliers.find((entry) => entry.id === supplierId) ?? null
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
   const [transactionType, setTransactionType] = useState<SupplierTransactionType | "all">("all")
   const [page, setPage] = useState(1)
 
   const allTransactions = useMemo(
-    () => buildSupplierTransactions(supplierId, purchases, returns, vouchers),
-    [supplierId, purchases, returns, vouchers]
+    () => buildSupplierTransactions(supplierId, purchases, returns, vouchers, orgCurrency),
+    [supplierId, purchases, returns, vouchers, orgCurrency]
   )
 
   const transactions = useMemo(() => {

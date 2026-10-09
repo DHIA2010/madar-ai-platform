@@ -33,6 +33,8 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import {
   crossFeaturePurchaseGrandTotal,
   useCrossFeaturePurchaseData,
@@ -40,7 +42,14 @@ import {
   useSuppliersList,
   useSupplierVouchers,
 } from "../hooks"
-import { computeSupplierBalance, exportSuppliersToCsv, supplierService } from "../services"
+import {
+  computeSupplierBalance,
+  convertToOrgCurrency,
+  exportSuppliersToCsv,
+  isSupportedOrgCurrency,
+  supplierService,
+  type SupportedOrgCurrency,
+} from "../services"
 import type { Supplier } from "../types"
 import { SupplierAvatar } from "./supplier-avatar"
 import { SupplierDeleteDialog } from "./supplier-delete-dialog"
@@ -64,13 +73,21 @@ const STATUS_OPTIONS = [
 
 const ACTION_ICON_CLASS = "rounded-[8px] border"
 
-function formatCurrency(value: number) {
-  return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
+function formatCurrency(value: number, currency: SupportedOrgCurrency) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)} ${currency}`
+  }
 }
 
-function formatBalance(value: number) {
+function formatBalance(value: number, currency: SupportedOrgCurrency) {
   const sign = value < 0 ? "-" : ""
-  return `${sign}$${new Intl.NumberFormat("en-US").format(Math.abs(value))}`
+  return `${sign}${formatCurrency(Math.abs(value), currency)}`
 }
 
 export function SuppliersListPage() {
@@ -78,6 +95,9 @@ export function SuppliersListPage() {
   const { suppliers, isLoading, refetch } = useSuppliers()
   const { purchases, returns } = useCrossFeaturePurchaseData()
   const { vouchers } = useSupplierVouchers()
+  const { currentOrganization } = useWorkspace()
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
   const list = useSuppliersList(suppliers)
   const [viewTarget, setViewTarget] = useState<Supplier | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
@@ -91,23 +111,42 @@ export function SuppliersListPage() {
   const someOnPageSelected = selectedOnPage.length > 0 && !allOnPageSelected
 
   // Real totals/balance, derived from the actual fetched purchases/returns/vouchers (see
-  // supplier-ledger.service.ts) -- not a stored field on Supplier.
-  const totalPurchasesBySupplier = new Map(
-    suppliers.map((supplier) => [
-      supplier.id,
-      purchases
-        .filter((purchase) => purchase.supplierId === supplier.id)
-        .reduce((sum, purchase) => sum + crossFeaturePurchaseGrandTotal(purchase), 0),
-    ])
+  // supplier-ledger.service.ts) -- not a stored field on Supplier. Each purchase/return can carry
+  // a different supplier currency (SAR or USD), so every amount is converted into the org's
+  // default currency before it's summed -- see currency-conversion.service.ts.
+  const purchaseIdToCurrency = new Map(
+    purchases.map((purchase) => [purchase.id, purchase.currency])
   )
   const ledgerPurchases = purchases.map((purchase) => ({
     supplierId: purchase.supplierId,
-    grandTotal: crossFeaturePurchaseGrandTotal(purchase),
+    grandTotal:
+      convertToOrgCurrency(
+        crossFeaturePurchaseGrandTotal(purchase),
+        purchase.currency,
+        orgCurrency
+      ) ?? 0,
   }))
+  const ledgerReturns = returns.map((entry) => ({
+    supplierId: entry.supplierId,
+    returnAmount:
+      convertToOrgCurrency(
+        entry.returnAmount,
+        purchaseIdToCurrency.get(entry.purchaseId),
+        orgCurrency
+      ) ?? 0,
+  }))
+  const totalPurchasesBySupplier = new Map(
+    suppliers.map((supplier) => [
+      supplier.id,
+      ledgerPurchases
+        .filter((purchase) => purchase.supplierId === supplier.id)
+        .reduce((sum, purchase) => sum + purchase.grandTotal, 0),
+    ])
+  )
   const balanceBySupplier = new Map(
     suppliers.map((supplier) => [
       supplier.id,
-      computeSupplierBalance(supplier.id, ledgerPurchases, returns, vouchers),
+      computeSupplierBalance(supplier.id, ledgerPurchases, ledgerReturns, vouchers),
     ])
   )
   const kpiTotalPurchases = list.filteredSuppliers.reduce(
@@ -197,6 +236,7 @@ export function SuppliersListPage() {
         suppliers={list.filteredSuppliers}
         totalPurchases={kpiTotalPurchases}
         totalBalance={kpiTotalBalance}
+        currency={orgCurrency}
       />
 
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
@@ -331,7 +371,7 @@ export function SuppliersListPage() {
                     {supplier.companyDetails.companyName}
                   </AppTableCell>
                   <AppTableCell className={cn("font-medium", HEADING)}>
-                    {formatCurrency(totalPurchasesBySupplier.get(supplier.id) ?? 0)}
+                    {formatCurrency(totalPurchasesBySupplier.get(supplier.id) ?? 0, orgCurrency)}
                   </AppTableCell>
                   <AppTableCell className={MUTED}>{supplier.phone}</AppTableCell>
                   <AppTableCell>
@@ -343,7 +383,7 @@ export function SuppliersListPage() {
                       balance === 0 ? HEADING : balance > 0 ? "text-[#16a34a]" : "text-[#dc2626]"
                     )}
                   >
-                    {formatBalance(balance)}
+                    {formatBalance(balance, orgCurrency)}
                   </AppTableCell>
                   <AppTableCell>
                     <div className="flex items-center gap-1.5">

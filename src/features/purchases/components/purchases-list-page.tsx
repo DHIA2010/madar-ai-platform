@@ -22,9 +22,10 @@ import {
 } from "@/components/app"
 
 import { useSuppliers, useSupplierVouchers } from "@/features/suppliers"
+import { useWorkspace } from "@/features/workspace"
 
 import { usePurchases, usePurchasesList, useReturns } from "../hooks"
-import { exportPurchasesToCsv } from "../services"
+import { convertToOrgCurrency, exportPurchasesToCsv, isSupportedOrgCurrency } from "../services"
 import { type Purchase, purchaseGrandTotal, purchaseItemCount, purchasePaidAmount } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, PurchasePagination } from "./purchase-field"
@@ -64,7 +65,10 @@ export function PurchasesListPage() {
   const { returns } = useReturns()
   const { vouchers } = useSupplierVouchers()
   const { suppliers } = useSuppliers()
-  const list = usePurchasesList(purchases, vouchers)
+  const { currentOrganization } = useWorkspace()
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
+  const list = usePurchasesList(purchases, vouchers, orgCurrency)
   const [viewTarget, setViewTarget] = useState<Purchase | null>(null)
   const [printTarget, setPrintTarget] = useState<Purchase | null>(null)
 
@@ -98,7 +102,14 @@ export function PurchasesListPage() {
         totalPurchases={list.kpis.totalPurchases}
         totalOrders={list.kpis.totalOrders}
         pendingOrders={list.kpis.pendingOrders}
-        returns={returns}
+        returnedItems={returns.reduce((sum, entry) => sum + entry.returnQty, 0)}
+        returnedAmount={returns.reduce((sum, entry) => {
+          // A return has no currency of its own -- it always follows its parent purchase's.
+          const parentCurrency = purchases.find((p) => p.id === entry.purchaseId)?.currency
+          const converted = convertToOrgCurrency(entry.returnAmount, parentCurrency, orgCurrency)
+          return sum + (converted ?? 0)
+        }, 0)}
+        currency={orgCurrency}
       />
 
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>

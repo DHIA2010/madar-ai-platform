@@ -3,6 +3,7 @@ import { ShoppingBag, UserCheck, Users, Wallet } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+import type { SupportedOrgCurrency } from "../services"
 import type { Supplier } from "../types"
 import { HEADING, MUTED, PANEL } from "./supplier-field"
 
@@ -39,8 +40,19 @@ function Card({
   )
 }
 
-function formatCurrency(value: number) {
-  return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
+// totalPurchases/totalBalance arrive already converted into the org's default currency (a
+// supplier's purchases can be in a different currency than another's -- see
+// currency-conversion.service.ts), so this just formats in that one currency.
+function formatCurrency(value: number, currency: SupportedOrgCurrency) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)} ${currency}`
+  }
 }
 
 // Computed from the currently filtered rows (search/status), not the full unfiltered list -- so
@@ -51,10 +63,12 @@ export function SuppliersKpiCards({
   suppliers,
   totalPurchases,
   totalBalance,
+  currency,
 }: {
   suppliers: Supplier[]
   totalPurchases: number
   totalBalance: number
+  currency: SupportedOrgCurrency
 }) {
   const activeCount = suppliers.filter((supplier) => supplier.status === "active").length
 
@@ -64,13 +78,13 @@ export function SuppliersKpiCards({
       <Card label="موردون نشطون" value={String(activeCount)} icon={UserCheck} tone="emerald" />
       <Card
         label="إجمالي المشتريات"
-        value={formatCurrency(totalPurchases)}
+        value={formatCurrency(totalPurchases, currency)}
         icon={ShoppingBag}
         tone="violet"
       />
       <Card
         label="إجمالي الأرصدة"
-        value={formatCurrency(totalBalance)}
+        value={formatCurrency(totalBalance, currency)}
         icon={Wallet}
         tone="amber"
       />

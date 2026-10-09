@@ -3,7 +3,7 @@ import { ClipboardList, Clock, RotateCcw, ShoppingBag, Wallet } from "lucide-rea
 
 import { cn } from "@/lib/utils"
 
-import { DEFAULT_PURCHASE_CURRENCY, type PurchaseReturn } from "../types"
+import type { SupportedOrgCurrency } from "../services"
 import { HEADING, MUTED, PANEL } from "./purchase-field"
 
 const KPI_TONE = {
@@ -40,18 +40,18 @@ function Card({
   )
 }
 
-// These cards sum across every purchase, which can carry different suppliers' currencies -- with
-// no real exchange-rate/conversion backend for this frontend-only module, the aggregate is shown
-// in the default currency (SAR) rather than attempting cross-currency arithmetic.
-function formatCurrency(value: number) {
+// totalPurchases/returnedAmount arrive already converted into the org's default currency (every
+// purchase can carry a different supplier currency -- see currency-conversion.service.ts), so this
+// just formats in that one currency rather than attempting cross-currency arithmetic itself.
+function formatCurrency(value: number, currency: SupportedOrgCurrency) {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: DEFAULT_PURCHASE_CURRENCY,
+      currency,
       maximumFractionDigits: 0,
     }).format(value)
   } catch {
-    return `${new Intl.NumberFormat("en-US").format(Math.round(value))} ${DEFAULT_PURCHASE_CURRENCY}`
+    return `${new Intl.NumberFormat("en-US").format(Math.round(value))} ${currency}`
   }
 }
 
@@ -62,21 +62,22 @@ export function PurchasesKpiCards({
   totalPurchases,
   totalOrders,
   pendingOrders,
-  returns,
+  returnedItems,
+  returnedAmount,
+  currency,
 }: {
   totalPurchases: number
   totalOrders: number
   pendingOrders: number
-  returns: PurchaseReturn[]
+  returnedItems: number
+  returnedAmount: number
+  currency: SupportedOrgCurrency
 }) {
-  const returnedItems = returns.reduce((sum, entry) => sum + entry.returnQty, 0)
-  const returnedAmount = returns.reduce((sum, entry) => sum + entry.returnAmount, 0)
-
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Card
         label="إجمالي المشتريات"
-        value={formatCurrency(totalPurchases)}
+        value={formatCurrency(totalPurchases, currency)}
         icon={ShoppingBag}
         tone="blue"
       />
@@ -85,7 +86,7 @@ export function PurchasesKpiCards({
       <Card label="عناصر مرتجعة" value={String(returnedItems)} icon={RotateCcw} tone="rose" />
       <Card
         label="إجمالي صافي المشتريات"
-        value={formatCurrency(totalPurchases - returnedAmount)}
+        value={formatCurrency(totalPurchases - returnedAmount, currency)}
         icon={Wallet}
         tone="emerald"
       />

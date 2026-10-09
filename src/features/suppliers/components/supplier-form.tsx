@@ -24,7 +24,7 @@ import {
   type SupplierFormValues,
   type SupplierKind,
 } from "../types"
-import { FIELD_CLASS, HEADING, PANEL, SupplierCheckboxRow, SupplierField } from "./supplier-field"
+import { FIELD_CLASS, HEADING, PANEL, SupplierField } from "./supplier-field"
 
 function supplierToFormValues(supplier: Supplier): SupplierFormValues {
   return {
@@ -209,14 +209,6 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
           <SectionHeading icon={User} title="بيانات المورد" />
 
           <div className="space-y-4">
-            <SupplierField label="صورة المورد">
-              <ImageDropzone
-                imageUrl={values.imageUrl}
-                onChange={(url) => set("imageUrl", url)}
-                label="اسحب وأفلت صورة أو اضغط للرفع"
-              />
-            </SupplierField>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <SupplierField label="اسم المورد" required>
                 <AppInput
@@ -260,6 +252,9 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
 
             <div className="grid gap-4 sm:grid-cols-3">
               <SupplierField label="الدولة">
+                {/* Creatable: the starter list is just suggestions, not a closed set -- a country
+                    not on it is typed here and used as-is, same pattern as AddProduct's category
+                    field. */}
                 <AppSearchableSelect
                   value={values.country}
                   options={SUPPLIER_COUNTRIES.map((country) => ({
@@ -267,8 +262,10 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
                     label: country,
                   }))}
                   onChange={(value) => set("country", value)}
-                  placeholder="اختر الدولة"
-                  searchPlaceholder="ابحث عن دولة..."
+                  onCreate={(draft) => set("country", draft)}
+                  createLabel={(draft) => `إضافة دولة "${draft}"`}
+                  placeholder="اختر الدولة أو اكتب دولة جديدة"
+                  searchPlaceholder="ابحث أو اكتب دولة جديدة..."
                   emptyLabel="لا توجد دولة مطابقة"
                   ariaLabel="الدولة"
                 />
@@ -298,20 +295,6 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
                 />
               </SupplierField>
             </div>
-
-            <SupplierField label="العنوان">
-              <textarea
-                value={values.address}
-                onChange={(event) => set("address", event.target.value)}
-                placeholder="العنوان الكامل"
-                rows={3}
-                className={cn(
-                  "w-full resize-none p-3 outline-none focus:border-[#2878ff]",
-                  FIELD_CLASS,
-                  "h-auto rounded-[12px] border"
-                )}
-              />
-            </SupplierField>
           </div>
         </section>
 
@@ -319,7 +302,7 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
           <SectionHeading icon={Building2} title="بيانات الشركة" />
 
           <div className="space-y-4">
-            <SupplierField label="صورة الشركة">
+            <SupplierField label="شعار الشركة">
               <ImageDropzone
                 imageUrl={values.companyDetails.companyImageUrl}
                 onChange={(url) => setCompany("companyImageUrl", url)}
@@ -500,19 +483,6 @@ export function SupplierForm({ initialSupplier }: { initialSupplier?: Supplier }
               />
             </SupplierField>
           </div>
-
-          <SupplierCheckboxRow
-            label="اعتماد كحساب أساسي"
-            description="يظهر هذا الحساب أولًا عند اختيار وجهة تحويل لهذا المورد في المشتريات والفواتير."
-            checked={values.bankDetails.isPrimaryAccount}
-            onCheckedChange={(checked) => setBank("isPrimaryAccount", checked)}
-          />
-          <SupplierCheckboxRow
-            label="افتراضي للمدفوعات"
-            description="يُستخدم هذا الحساب تلقائيًا عند تسجيل أي دفعة جديدة لهذا المورد ما لم تختر حسابًا آخر."
-            checked={values.bankDetails.isDefaultForPayments}
-            onCheckedChange={(checked) => setBank("isDefaultForPayments", checked)}
-          />
         </div>
       </section>
 

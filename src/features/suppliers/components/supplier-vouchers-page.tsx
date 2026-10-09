@@ -23,13 +23,20 @@ import {
   AppTableRow,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
 import {
   crossFeaturePurchaseGrandTotal,
   useCrossFeaturePurchaseData,
   useSuppliers,
   useSupplierVouchers,
 } from "../hooks"
-import { computeSupplierBalance, voucherService } from "../services"
+import {
+  computeSupplierBalance,
+  convertToOrgCurrency,
+  isSupportedOrgCurrency,
+  voucherService,
+} from "../services"
 import type { SupplierVoucher, SupplierVoucherPaymentMethod, SupplierVoucherType } from "../types"
 import { SupplierAvatar } from "./supplier-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, SupplierPagination } from "./supplier-field"
@@ -96,6 +103,9 @@ export function SupplierVouchersPage() {
   const { suppliers } = useSuppliers()
   const { vouchers, isLoading, refetch } = useSupplierVouchers()
   const { purchases, returns } = useCrossFeaturePurchaseData()
+  const { currentOrganization } = useWorkspace()
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
 
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<SupplierVoucherType | "all">("all")
@@ -165,15 +175,34 @@ export function SupplierVouchersPage() {
   const [notes, setNotes] = useState("")
   const [isSaving, setIsSaving] = useState(false)
 
+  // Converted into the org's default currency before the balance is summed -- purchases/returns
+  // can carry a different supplier currency (SAR or USD); see currency-conversion.service.ts.
+  const purchaseIdToCurrency = useMemo(
+    () => new Map(purchases.map((purchase) => [purchase.id, purchase.currency])),
+    [purchases]
+  )
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
   const selectedSupplierBalance = selectedSupplier
     ? computeSupplierBalance(
         selectedSupplier.id,
         purchases.map((purchase) => ({
           supplierId: purchase.supplierId,
-          grandTotal: crossFeaturePurchaseGrandTotal(purchase),
+          grandTotal:
+            convertToOrgCurrency(
+              crossFeaturePurchaseGrandTotal(purchase),
+              purchase.currency,
+              orgCurrency
+            ) ?? 0,
         })),
-        returns,
+        returns.map((entry) => ({
+          supplierId: entry.supplierId,
+          returnAmount:
+            convertToOrgCurrency(
+              entry.returnAmount,
+              purchaseIdToCurrency.get(entry.purchaseId),
+              orgCurrency
+            ) ?? 0,
+        })),
         vouchers
       )
     : 0
