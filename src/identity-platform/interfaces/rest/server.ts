@@ -36,6 +36,10 @@ import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
+import { SuppliersService } from "../../procurement/suppliers-service"
+import { PurchasesService } from "../../procurement/purchases-service"
+import { ReturnsService } from "../../procurement/returns-service"
+import { VouchersService } from "../../procurement/vouchers-service"
 import { TaxRatesService } from "../../tax/tax-rates-service"
 import { ZatcaDevicesService } from "../../zatca/zatca-devices-service"
 import { PosSettingsService } from "../../pos/pos-settings-service"
@@ -176,6 +180,13 @@ import {
   createChatSessionSchema,
   sendChatMessageSchema,
   startApplicationTrialSchema,
+  createSupplierSchema,
+  bulkUpdateSupplierStatusSchema,
+  uploadSupplierImageSchema,
+  createPurchaseSchema,
+  createPurchaseReturnSchema,
+  updatePurchaseReturnStatusSchema,
+  createSupplierVoucherSchema,
 } from "../../schemas"
 
 function json(
@@ -611,6 +622,18 @@ export function createIdentityApiServer(
       : null
   const reportsService = container.infrastructure.database
     ? new ReportsService(container.infrastructure.database)
+    : null
+  const suppliersService = container.infrastructure.database
+    ? new SuppliersService(container.infrastructure.database)
+    : null
+  const purchasesService = container.infrastructure.database
+    ? new PurchasesService(container.infrastructure.database)
+    : null
+  const returnsService = container.infrastructure.database
+    ? new ReturnsService(container.infrastructure.database)
+    : null
+  const vouchersService = container.infrastructure.database
+    ? new VouchersService(container.infrastructure.database)
     : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
@@ -4116,6 +4139,214 @@ export function createIdentityApiServer(
           200,
           await productCatalogService.getById(actor.organizationId, nativeProductMatch[1])
         )
+      }
+
+      // Procurement: Suppliers / Purchases / Purchase Returns / Supplier Vouchers -- see
+      // src/identity-platform/procurement/. "purchases:*" covers purchases+returns+vouchers as
+      // one module, same granularity as "pos" already covering invoices+shifts+devices.
+
+      if (url.pathname === "/v1/suppliers") {
+        if (!suppliersService) {
+          return send(503, {
+            code: "SUPPLIERS_UNAVAILABLE",
+            message: "Suppliers are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("suppliers:view")) throw ERRORS.forbidden()
+          return send(200, { items: await suppliersService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("suppliers:manage")) throw ERRORS.forbidden()
+          const payload = createSupplierSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await suppliersService.create(actor.organizationId, actor.workspaceId, payload)
+          )
+        }
+      }
+
+      if (method === "PATCH" && url.pathname === "/v1/suppliers/status") {
+        if (!suppliersService) {
+          return send(503, {
+            code: "SUPPLIERS_UNAVAILABLE",
+            message: "Suppliers are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("suppliers:manage")) throw ERRORS.forbidden()
+        const payload = bulkUpdateSupplierStatusSchema.parse(await readJsonBody(request))
+        const updated = await suppliersService.setStatus(
+          actor.organizationId,
+          payload.ids,
+          payload.status
+        )
+        return send(200, { updated })
+      }
+
+      if (method === "POST" && url.pathname === "/v1/suppliers/images") {
+        if (!actor.modulePermissions.includes("suppliers:manage")) throw ERRORS.forbidden()
+        if (!container.infrastructure.objectStorage) {
+          return send(503, {
+            code: "SUPPLIER_IMAGE_UPLOAD_UNAVAILABLE",
+            message: "Image uploads are not available right now.",
+          })
+        }
+
+        const payload = uploadSupplierImageSchema.parse(await readJsonBody(request))
+        const buffer = Buffer.from(payload.dataBase64, "base64")
+        const MAX_SUPPLIER_IMAGE_BYTES = 10 * 1024 * 1024
+        if (buffer.length === 0 || buffer.length > MAX_SUPPLIER_IMAGE_BYTES) {
+          throw ERRORS.validation({ image: "Image must be between 1 byte and 10MB." })
+        }
+        const extension =
+          payload.contentType.split("/")[1] === "jpeg" ? "jpg" : payload.contentType.split("/")[1]
+        const key = `suppliers/${actor.organizationId}/${randomUUID()}.${extension}`
+        const imageUrl = await container.infrastructure.objectStorage.uploadPublicObject({
+          key,
+          body: buffer,
+          contentType: payload.contentType,
+        })
+        return send(201, { url: imageUrl })
+      }
+
+      const supplierMatch = url.pathname.match(/^\/v1\/suppliers\/([^/]+)$/)
+      if (supplierMatch) {
+        if (!suppliersService) {
+          return send(503, {
+            code: "SUPPLIERS_UNAVAILABLE",
+            message: "Suppliers are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("suppliers:view")) throw ERRORS.forbidden()
+          return send(200, await suppliersService.getById(actor.organizationId, supplierMatch[1]))
+        }
+        if (method === "PATCH") {
+          if (!actor.modulePermissions.includes("suppliers:manage")) throw ERRORS.forbidden()
+          const payload = createSupplierSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await suppliersService.update(actor.organizationId, supplierMatch[1], payload)
+          )
+        }
+        if (method === "DELETE") {
+          if (!actor.modulePermissions.includes("suppliers:manage")) throw ERRORS.forbidden()
+          await suppliersService.delete(actor.organizationId, supplierMatch[1])
+          return send(204, null)
+        }
+      }
+
+      if (url.pathname === "/v1/purchases") {
+        if (!purchasesService) {
+          return send(503, {
+            code: "PURCHASES_UNAVAILABLE",
+            message: "Purchases are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+          return send(200, { items: await purchasesService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+          const payload = createPurchaseSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await purchasesService.create(actor.organizationId, actor.workspaceId, payload)
+          )
+        }
+      }
+
+      const purchaseMatch = url.pathname.match(/^\/v1\/purchases\/([^/]+)$/)
+      if (purchaseMatch) {
+        if (!purchasesService) {
+          return send(503, {
+            code: "PURCHASES_UNAVAILABLE",
+            message: "Purchases are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+          return send(200, await purchasesService.getById(actor.organizationId, purchaseMatch[1]))
+        }
+        if (method === "PATCH") {
+          if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+          const payload = createPurchaseSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await purchasesService.update(actor.organizationId, purchaseMatch[1], payload)
+          )
+        }
+      }
+
+      if (url.pathname === "/v1/purchase-returns") {
+        if (!returnsService) {
+          return send(503, {
+            code: "RETURNS_UNAVAILABLE",
+            message: "Purchase returns are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+          return send(200, { items: await returnsService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+          const payload = createPurchaseReturnSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await returnsService.create(actor.organizationId, actor.workspaceId, payload)
+          )
+        }
+      }
+
+      const returnMatch = url.pathname.match(/^\/v1\/purchase-returns\/([^/]+)$/)
+      if (returnMatch && method === "GET") {
+        if (!returnsService) {
+          return send(503, {
+            code: "RETURNS_UNAVAILABLE",
+            message: "Purchase returns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+        return send(200, await returnsService.getById(actor.organizationId, returnMatch[1]))
+      }
+
+      const returnStatusMatch = url.pathname.match(/^\/v1\/purchase-returns\/([^/]+)\/status$/)
+      if (returnStatusMatch && method === "PATCH") {
+        if (!returnsService) {
+          return send(503, {
+            code: "RETURNS_UNAVAILABLE",
+            message: "Purchase returns are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+        const payload = updatePurchaseReturnStatusSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await returnsService.setStatus(actor.organizationId, returnStatusMatch[1], payload.status)
+        )
+      }
+
+      if (url.pathname === "/v1/supplier-vouchers") {
+        if (!vouchersService) {
+          return send(503, {
+            code: "VOUCHERS_UNAVAILABLE",
+            message: "Supplier vouchers are unavailable in memory mode.",
+          })
+        }
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+          return send(200, { items: await vouchersService.list(actor.organizationId) })
+        }
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+          const payload = createSupplierVoucherSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await vouchersService.create(actor.organizationId, actor.workspaceId, payload)
+          )
+        }
       }
 
       const NATIVE_CUSTOMER_ID_PATTERN =

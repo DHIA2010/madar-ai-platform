@@ -42,6 +42,10 @@ import {
   ShoppingBag,
   Sparkles,
   Radio,
+  Truck,
+  List,
+  PackageSearch,
+  RotateCcw,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -129,6 +133,37 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <Grid2x2 />,
       permission: "products:view",
       applications: ["ecommerce", "pos"],
+    },
+    // Same shared ecommerce/pos audience as Products. Sub-items aren't separately gated (NavItem
+    // only checks permission/applications at this top level), which is fine here since both live
+    // under the same real suppliers:view permission (see system-roles.ts).
+    {
+      title: t("suppliers"),
+      url: ROUTES.suppliers,
+      icon: <Truck />,
+      permission: "suppliers:view",
+      applications: ["ecommerce", "pos"],
+      items: [
+        { title: t("suppliersList"), url: ROUTES.suppliers, icon: <List /> },
+        {
+          title: t("suppliersVouchers"),
+          url: ROUTES.suppliersVouchers,
+          icon: <FileText />,
+        },
+      ],
+    },
+    // Same reasoning as Suppliers above, gated on the real purchases:view permission. "Add
+    // Purchase"/"Add Return" are reached from each list page's own button, not the nav.
+    {
+      title: t("purchases"),
+      url: ROUTES.purchases,
+      icon: <PackageSearch />,
+      permission: "purchases:view",
+      applications: ["ecommerce", "pos"],
+      items: [
+        { title: t("purchasesList"), url: ROUTES.purchases, icon: <List /> },
+        { title: t("purchasesReturns"), url: ROUTES.purchasesReturns, icon: <RotateCcw /> },
+      ],
     },
     {
       title: t("orders"),

@@ -1005,3 +1005,121 @@ export const createChatSessionSchema = z.object({
 export const sendChatMessageSchema = z.object({
   content: z.string().min(1).max(4000),
 })
+
+// Procurement (Suppliers / Purchases / Purchase Returns / Supplier Vouchers) -- see
+// src/identity-platform/procurement/. Shapes mirror the frontend's SupplierFormValues/
+// PurchaseFormValues/ReturnFormValues/voucher-create inputs 1:1; the forms already collect
+// exactly what the backend needs.
+
+const supplierBankDetailsSchema = z.object({
+  bankName: z.string().max(200).default(""),
+  accountName: z.string().max(200).default(""),
+  accountType: z.enum(["savings", "current", "other"]).default("savings"),
+  accountNumber: z.string().max(100).default(""),
+  currency: z.string().max(8).default("SAR"),
+  swiftIban: z.string().max(100).default(""),
+  branchCode: z.string().max(100).default(""),
+  bankCity: z.string().max(200).default(""),
+  isPrimaryAccount: z.boolean().default(false),
+  isDefaultForPayments: z.boolean().default(false),
+})
+
+const supplierCompanyDetailsSchema = z.object({
+  companyImageUrl: z.string().url().max(2000).nullable().default(null),
+  companyName: z.string().max(200).default(""),
+  companyEmail: z.string().max(200).default(""),
+  companyPhone: z.string().max(60).default(""),
+  website: z.string().max(300).default(""),
+  address: z.string().max(500).default(""),
+  taxNumber: z.string().max(100).default(""),
+  vatType: z.enum(["standard", "zero_rated", "exempt", "not_registered"]).nullable().default(null),
+  industryType: z.string().max(200).default(""),
+})
+
+export const createSupplierSchema = z.object({
+  imageUrl: z.string().url().max(2000).nullable().optional().default(null),
+  name: z.string().min(1).max(200),
+  email: z.string().max(200).default(""),
+  phone: z.string().max(60).default(""),
+  kind: z.enum(["local", "international"]),
+  country: z.string().max(200).default(""),
+  city: z.string().max(200).default(""),
+  paymentTerms: z
+    .enum(["prepaid", "cod", "net15", "net30", "net45", "net60"])
+    .nullable()
+    .optional()
+    .default(null),
+  address: z.string().max(500).default(""),
+  bankDetails: supplierBankDetailsSchema,
+  companyDetails: supplierCompanyDetailsSchema,
+})
+
+export const bulkUpdateSupplierStatusSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  status: z.enum(["active", "inactive"]),
+})
+
+export const uploadSupplierImageSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  dataBase64: z.string().min(1),
+})
+
+const purchaseLineItemSchema = z.object({
+  productId: z.string().uuid(),
+  netUnitCost: productMoneySchema,
+  qty: z.number().finite().positive().max(1_000_000),
+  discount: productMoneySchema.default(0),
+  taxPercent: z.number().finite().min(0).max(100).default(0),
+})
+
+export const createPurchaseSchema = z.object({
+  supplierId: z.string().uuid(),
+  warehouseId: z.string().min(1).max(64),
+  date: z.string().min(1),
+  dueDate: z.string().nullable().optional().default(null),
+  deliveryDate: z.string().nullable().optional().default(null),
+  status: z.enum(["received", "pending"]).default("pending"),
+  items: z.array(purchaseLineItemSchema).min(1).max(200),
+  orderTaxPercent: z.number().finite().min(0).max(100).default(0),
+  discountAmount: productMoneySchema.default(0),
+  shippingAmount: productMoneySchema.default(0),
+  otherCosts: productMoneySchema.default(0),
+  currency: z.string().min(1).max(8).default("SAR"),
+  paymentMethod: z
+    .enum(["cash", "bank_transfer", "card", "cheque"])
+    .nullable()
+    .optional()
+    .default(null),
+  referenceNumber: z.string().max(200).default(""),
+  note: z.string().max(2000).default(""),
+})
+
+const returnLineItemSchema = z.object({
+  productId: z.string().uuid(),
+  qty: z.number().finite().positive().max(1_000_000),
+})
+
+export const createPurchaseReturnSchema = z.object({
+  purchaseId: z.string().uuid(),
+  warehouseId: z.string().min(1).max(64),
+  items: z.array(returnLineItemSchema).min(1).max(200),
+  status: z.enum(["pending", "approved", "refunded", "rejected"]).default("pending"),
+  returnDate: z.string().min(1),
+  notes: z.string().max(2000).default(""),
+})
+
+export const updatePurchaseReturnStatusSchema = z.object({
+  status: z.enum(["pending", "approved", "refunded", "rejected"]),
+})
+
+export const createSupplierVoucherSchema = z.object({
+  supplierId: z.string().uuid(),
+  purchaseId: z.string().uuid().nullable().optional().default(null),
+  type: z.enum(["receipt", "payment"]),
+  amount: productMoneySchema,
+  taxInclusive: z.boolean().default(false),
+  taxAmount: productMoneySchema.default(0),
+  paymentMethod: z.enum(["cash", "card", "transfer"]),
+  notes: z.string().max(2000).default(""),
+  transactionDate: z.string().min(1),
+})
