@@ -1,4 +1,4 @@
-import type { PurchaseReturn, ReturnFormValues, ReturnStatus } from "../types"
+import type { PurchaseReturn, ReturnFormValues } from "../types"
 import { WAREHOUSES } from "./warehouses"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
@@ -23,15 +23,15 @@ export const returnService = {
     return response.items.map(withWarehouseName)
   },
 
-  // unitCost/productName/sku are resolved server-side from the original purchase line -- the
-  // client only ever sends which product and how many units.
+  // unitCost/productName/sku/status are all resolved server-side (status from comparing the
+  // submitted items against the original purchase, see returns-repository.ts) -- the client only
+  // ever sends which product and how many units.
   async create(values: ReturnFormValues): Promise<PurchaseReturn> {
     const dto = await client.post<
       {
         purchaseId: string
         warehouseId: string
         items: Array<{ productId: string; qty: number }>
-        status: ReturnStatus
         returnDate: string
         notes: string
       },
@@ -40,18 +40,9 @@ export const returnService = {
       purchaseId: values.purchaseId,
       warehouseId: values.warehouseId,
       items: values.items.map((item) => ({ productId: item.productId, qty: item.qty })),
-      status: values.status,
       returnDate: values.returnDate,
       notes: values.notes,
     })
-    return withWarehouseName(dto)
-  },
-
-  async setStatus(id: string, status: ReturnStatus): Promise<PurchaseReturn> {
-    const dto = await client.patch<{ status: ReturnStatus }, PurchaseReturnDto>(
-      [RETURNS_ENDPOINT, encodeURIComponent(id), "status"].join(PATH_SEPARATOR),
-      { status }
-    )
     return withWarehouseName(dto)
   },
 }

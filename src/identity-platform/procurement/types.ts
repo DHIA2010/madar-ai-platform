@@ -132,7 +132,10 @@ export interface SavePurchaseInput {
   note: string
 }
 
-export type ReturnStatus = "pending" | "approved" | "refunded" | "rejected"
+// Fixed and server-computed at creation, never client-set or changed afterward (see
+// ReturnsRepository.create()): 'full' if the return covers every purchase line at its full
+// originally-purchased qty, 'partial' otherwise.
+export type ReturnStatus = "full" | "partial"
 
 export interface ReturnLineItemDto {
   productId: string
@@ -174,7 +177,6 @@ export interface CreatePurchaseReturnInput {
   purchaseId: string
   warehouseId: string
   items: CreateReturnLineItemInput[]
-  status: ReturnStatus
   returnDate: string
   notes: string
 }

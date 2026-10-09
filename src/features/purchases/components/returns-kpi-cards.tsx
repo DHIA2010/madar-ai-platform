@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { Clock, Layers, PackageMinus, RotateCcw } from "lucide-react"
+import { Layers, PackageMinus, RotateCcw, SplitSquareHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -61,7 +61,7 @@ function formatCurrency(value: number) {
 export function ReturnsKpiCards({ returns }: { returns: PurchaseReturn[] }) {
   const totalAmount = returns.reduce((sum, entry) => sum + entry.returnAmount, 0)
   const totalItems = returns.reduce((sum, entry) => sum + entry.returnQty, 0)
-  const pendingCount = returns.filter((entry) => entry.status === "pending").length
+  const partialCount = returns.filter((entry) => entry.status === "partial").length
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -73,7 +73,12 @@ export function ReturnsKpiCards({ returns }: { returns: PurchaseReturn[] }) {
       />
       <Card label="عدد المرتجعات" value={String(returns.length)} icon={Layers} tone="violet" />
       <Card label="عناصر مرتجعة" value={String(totalItems)} icon={PackageMinus} tone="blue" />
-      <Card label="مرتجعات معلّقة" value={String(pendingCount)} icon={Clock} tone="amber" />
+      <Card
+        label="مرتجعات جزئية"
+        value={String(partialCount)}
+        icon={SplitSquareHorizontal}
+        tone="amber"
+      />
     </div>
   )
 }

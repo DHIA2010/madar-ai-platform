@@ -1103,13 +1103,8 @@ export const createPurchaseReturnSchema = z.object({
   purchaseId: z.string().uuid(),
   warehouseId: z.string().min(1).max(64),
   items: z.array(returnLineItemSchema).min(1).max(200),
-  status: z.enum(["pending", "approved", "refunded", "rejected"]).default("pending"),
   returnDate: z.string().min(1),
   notes: z.string().max(2000).default(""),
-})
-
-export const updatePurchaseReturnStatusSchema = z.object({
-  status: z.enum(["pending", "approved", "refunded", "rejected"]),
 })
 
 export const createSupplierVoucherSchema = z.object({

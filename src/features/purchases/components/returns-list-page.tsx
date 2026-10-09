@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Download, Eye, Loader2, Plus, Printer } from "lucide-react"
 import { createPortal } from "react-dom"
-import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 
@@ -24,22 +23,20 @@ import {
 import { useSuppliers } from "@/features/suppliers"
 
 import { usePurchases, useReturns, useReturnsList } from "../hooks"
-import { exportReturnsToCsv, returnService, WAREHOUSES } from "../services"
+import { exportReturnsToCsv, WAREHOUSES } from "../services"
 import type { PurchaseReturn } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, PurchasePagination } from "./purchase-field"
 import { ReturnFormDialog } from "./return-form-dialog"
 import { ReturnPrintDocument } from "./return-print-document"
-import { ReturnStatusSelect } from "./return-status-select"
+import { ReturnStatusBadge } from "./return-status-badge"
 import { ReturnViewDialog } from "./return-view-dialog"
 import { ReturnsKpiCards } from "./returns-kpi-cards"
 
 const STATUS_OPTIONS = [
   { value: "all", label: "كل حالات الإرجاع" },
-  { value: "pending", label: "معلّق" },
-  { value: "approved", label: "مقبول" },
-  { value: "refunded", label: "مسترد" },
-  { value: "rejected", label: "مرفوض" },
+  { value: "full", label: "إرجاع كامل" },
+  { value: "partial", label: "إرجاع جزئي" },
 ]
 
 function formatCurrency(value: number) {
@@ -67,15 +64,6 @@ export function ReturnsListPage() {
       window.removeEventListener("afterprint", handleAfterPrint)
     }
   }, [printTarget])
-
-  async function handleStatusChange(entry: PurchaseReturn, status: PurchaseReturn["status"]) {
-    try {
-      await returnService.setStatus(entry.id, status)
-      void refetch()
-    } catch {
-      toast.error("تعذر تحديث حالة المرتجع.")
-    }
-  }
 
   const printSupplier = printTarget
     ? (suppliers.find((supplier) => supplier.id === printTarget.supplierId) ?? null)
@@ -188,10 +176,7 @@ export function ReturnsListPage() {
                   {formatCurrency(entry.returnAmount)}
                 </AppTableCell>
                 <AppTableCell>
-                  <ReturnStatusSelect
-                    status={entry.status}
-                    onChange={(status) => void handleStatusChange(entry, status)}
-                  />
+                  <ReturnStatusBadge status={entry.status} />
                 </AppTableCell>
                 <AppTableCell className={MUTED}>{entry.returnDate}</AppTableCell>
                 <AppTableCell className={MUTED}>{entry.warehouseName}</AppTableCell>

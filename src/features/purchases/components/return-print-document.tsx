@@ -6,10 +6,8 @@ import { useWorkspace } from "@/features/workspace"
 import type { PurchaseReturn, ReturnStatus } from "../types"
 
 const STATUS_LABEL: Record<ReturnStatus, string> = {
-  pending: "معلّق",
-  approved: "مقبول",
-  refunded: "مسترد",
-  rejected: "مرفوض",
+  full: "إرجاع كامل",
+  partial: "إرجاع جزئي",
 }
 
 function formatCurrency(value: number) {

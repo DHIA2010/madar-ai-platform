@@ -2,7 +2,7 @@ import { ERRORS } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import { ReturnsRepository } from "./returns-repository"
-import type { CreatePurchaseReturnInput, PurchaseReturnDto, ReturnStatus } from "./types"
+import type { CreatePurchaseReturnInput, PurchaseReturnDto } from "./types"
 
 export class ReturnsService {
   private readonly repository: ReturnsRepository
@@ -30,15 +30,5 @@ export class ReturnsService {
       throw ERRORS.validation({ items: "At least one line item is required." })
     }
     return this.repository.create(organizationId, workspaceId, input)
-  }
-
-  async setStatus(
-    organizationId: string,
-    id: string,
-    status: ReturnStatus
-  ): Promise<PurchaseReturnDto> {
-    const updated = await this.repository.setStatus(organizationId, id, status)
-    if (!updated) throw ERRORS.notFound("Purchase return")
-    return updated
   }
 }

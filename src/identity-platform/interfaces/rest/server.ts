@@ -185,7 +185,6 @@ import {
   uploadSupplierImageSchema,
   createPurchaseSchema,
   createPurchaseReturnSchema,
-  updatePurchaseReturnStatusSchema,
   createSupplierVoucherSchema,
 } from "../../schemas"
 
@@ -4310,22 +4309,6 @@ export function createIdentityApiServer(
         }
         if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
         return send(200, await returnsService.getById(actor.organizationId, returnMatch[1]))
-      }
-
-      const returnStatusMatch = url.pathname.match(/^\/v1\/purchase-returns\/([^/]+)\/status$/)
-      if (returnStatusMatch && method === "PATCH") {
-        if (!returnsService) {
-          return send(503, {
-            code: "RETURNS_UNAVAILABLE",
-            message: "Purchase returns are unavailable in memory mode.",
-          })
-        }
-        if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
-        const payload = updatePurchaseReturnStatusSchema.parse(await readJsonBody(request))
-        return send(
-          200,
-          await returnsService.setStatus(actor.organizationId, returnStatusMatch[1], payload.status)
-        )
       }
 
       if (url.pathname === "/v1/supplier-vouchers") {

@@ -343,7 +343,9 @@ describe("procurement: purchase returns", () => {
       items: [{ productId, qty: 9 }], // all 9 purchased units are returnable
     })
     expect(returned.status).toBe(201)
-    expect(returned.body).toMatchObject({ code: "#RET-0001", returnQty: 9 })
+    // Returning all 9 originally-purchased units of the purchase's only line item is a full
+    // return -- computed server-side, never client-set.
+    expect(returned.body).toMatchObject({ code: "#RET-0001", returnQty: 9, status: "full" })
 
     const product = await getProduct(productId)
     expect(product.stockQuantity).toBe(-8) // 1 - 9, intentionally allowed to go negative
@@ -364,6 +366,8 @@ describe("procurement: purchase returns", () => {
       items: [{ productId, qty: 3 }],
     })
     expect(firstReturn.status).toBe(201)
+    // Only 3 of the 5 originally-purchased units came back -- a partial return.
+    expect(firstReturn.body).toMatchObject({ status: "partial" })
 
     const secondReturn = await createReturn(token, {
       purchaseId: purchase.body.id,
@@ -371,6 +375,30 @@ describe("procurement: purchase returns", () => {
       items: [{ productId, qty: 3 }], // only 2 remain returnable (5 - 3)
     })
     expect(secondReturn.status).toBe(400)
+  })
+
+  it("is 'partial' when a return covers every unit of one product but leaves another untouched", async () => {
+    const { token, actor } = await signIn("return-multi-line@example.com", "Return Multi Line")
+    const supplier = await createSupplier(token)
+    const productA = await seedProduct(actor.organizationId, actor.workspaceId)
+    const productB = await seedProduct(actor.organizationId, actor.workspaceId)
+
+    const purchase = await createPurchase(token, {
+      supplierId: supplier.body.id,
+      items: [
+        { productId: productA, netUnitCost: 20, qty: 4, discount: 0, taxPercent: 0 },
+        { productId: productB, netUnitCost: 20, qty: 2, discount: 0, taxPercent: 0 },
+      ],
+    })
+
+    // Returns all 4 units of product A (its full purchased qty) but never names product B at
+    // all -- not a full return of the purchase, since product B's line was never touched.
+    const returned = await createReturn(token, {
+      purchaseId: purchase.body.id,
+      items: [{ productId: productA, qty: 4 }],
+    })
+    expect(returned.status).toBe(201)
+    expect(returned.body).toMatchObject({ status: "partial" })
   })
 })
 

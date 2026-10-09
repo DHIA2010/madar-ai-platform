@@ -118,6 +118,22 @@ export class ReturnsRepository {
       const purchase = purchaseResult.rows[0]
       if (!purchase) throw ERRORS.notFound("Purchase")
 
+      // Full vs partial is computed against the purchase's own full set of line items, not just
+      // the items this return names -- a return covering only some of the purchase's products can
+      // never be "full" even if every product it does name comes back at its full qty.
+      const purchaseLinesResult = await this.db.query<{ product_id: string; qty: string }>(
+        `SELECT product_id, qty FROM purchase_line_items WHERE purchase_id = $1`,
+        [input.purchaseId]
+      )
+      const purchaseQtyByProduct = new Map(
+        purchaseLinesResult.rows.map((row) => [row.product_id, Number(row.qty)])
+      )
+      const status =
+        purchaseQtyByProduct.size === input.items.length &&
+        input.items.every((item) => purchaseQtyByProduct.get(item.productId) === item.qty)
+          ? "full"
+          : "partial"
+
       const code = await nextProcurementCode(this.db, organizationId, "return", "#RET", 4)
 
       await this.db.query(
@@ -133,7 +149,7 @@ export class ReturnsRepository {
           input.purchaseId,
           purchase.supplier_id,
           input.warehouseId,
-          input.status,
+          status,
           input.returnDate,
           input.notes,
         ]
@@ -200,19 +216,5 @@ export class ReturnsRepository {
     const created = await this.findById(organizationId, id)
     if (!created) throw ERRORS.notFound("Purchase return")
     return created
-  }
-
-  async setStatus(
-    organizationId: string,
-    id: string,
-    status: ReturnStatus
-  ): Promise<PurchaseReturnDto | null> {
-    const result = await this.db.query(
-      `UPDATE purchase_returns SET status = $3, updated_at = now()
-       WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`,
-      [organizationId, id, status]
-    )
-    if (result.rowCount === 0) return null
-    return this.findById(organizationId, id)
   }
 }

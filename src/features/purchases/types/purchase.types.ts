@@ -2,7 +2,11 @@
 export type PurchaseStatus = "received" | "pending"
 export type PurchasePaymentStatus = "paid" | "partial" | "pending" | "overdue"
 export type PurchasePaymentMethod = "cash" | "bank_transfer" | "card" | "cheque"
-export type ReturnStatus = "pending" | "approved" | "refunded" | "rejected"
+// Fixed and server-computed at creation, never settable or changeable from the frontend (see
+// src/identity-platform/procurement/returns-repository.ts's create()): "full" if the return
+// covers every line on its purchase at that line's full originally-purchased qty, "partial"
+// otherwise.
+export type ReturnStatus = "full" | "partial"
 
 export interface PurchaseLineItem {
   id: string
@@ -93,15 +97,23 @@ export interface PurchasePaymentVoucher {
 //   - nothing paid yet, due date has passed        -> overdue
 //   - something paid but less than the grand total -> partial (overdue takes priority once due)
 //   - paid amount reaches the grand total          -> paid, regardless of date
+// Sum of every سند صرف (payment voucher) linked to this purchase -- the only source "paid" ever
+// comes from, since there's no other way to record a payment against a purchase. Exported so
+// callers that just need the paid/remaining amounts (e.g. the purchases list table's own columns)
+// don't have to duplicate this filter+reduce.
+export function purchasePaidAmount(purchase: Purchase, vouchers: PurchasePaymentVoucher[]): number {
+  return vouchers
+    .filter((voucher) => voucher.purchaseId === purchase.id && voucher.type === "payment")
+    .reduce((sum, voucher) => sum + voucher.amount, 0)
+}
+
 export function derivePurchasePaymentStatus(
   purchase: Purchase,
   vouchers: PurchasePaymentVoucher[],
   today: Date = new Date()
 ): PurchasePaymentStatus {
   const grandTotal = purchaseGrandTotal(purchase)
-  const paidAmount = vouchers
-    .filter((voucher) => voucher.purchaseId === purchase.id && voucher.type === "payment")
-    .reduce((sum, voucher) => sum + voucher.amount, 0)
+  const paidAmount = purchasePaidAmount(purchase, vouchers)
 
   if (grandTotal > 0 && paidAmount >= grandTotal) return "paid"
 
@@ -191,12 +203,13 @@ export const EMPTY_PURCHASE_FORM_VALUES: PurchaseFormValues = {
   note: "",
 }
 
+// No "status" field -- it's computed server-side from the submitted items vs the purchase, never
+// set by this form.
 export interface ReturnFormValues {
   purchaseId: string
   supplierId: string
   warehouseId: string
   items: ReturnLineItem[]
-  status: ReturnStatus
   returnDate: string
   notes: string
 }
@@ -206,7 +219,6 @@ export const EMPTY_RETURN_FORM_VALUES: ReturnFormValues = {
   supplierId: "",
   warehouseId: "",
   items: [],
-  status: "pending",
   returnDate: "",
   notes: "",
 }

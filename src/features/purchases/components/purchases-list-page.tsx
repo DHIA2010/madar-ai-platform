@@ -25,15 +25,9 @@ import { useSuppliers, useSupplierVouchers } from "@/features/suppliers"
 
 import { usePurchases, usePurchasesList, useReturns } from "../hooks"
 import { exportPurchasesToCsv } from "../services"
-import {
-  derivePurchasePaymentStatus,
-  type Purchase,
-  purchaseGrandTotal,
-  purchaseItemCount,
-} from "../types"
+import { type Purchase, purchaseGrandTotal, purchaseItemCount, purchasePaidAmount } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, PurchasePagination } from "./purchase-field"
-import { PurchasePaymentStatusBadge } from "./purchase-payment-status-badge"
 import { PurchasePrintDocument } from "./purchase-print-document"
 import { PurchaseViewDialog } from "./purchase-view-dialog"
 import { PurchasesKpiCards } from "./purchases-kpi-cards"
@@ -165,61 +159,73 @@ export function PurchasesListPage() {
               <AppTableHead>المورد</AppTableHead>
               <AppTableHead>العناصر</AppTableHead>
               <AppTableHead>الإجمالي</AppTableHead>
-              <AppTableHead>حالة الدفع</AppTableHead>
+              <AppTableHead>المبلغ المدفوع</AppTableHead>
+              <AppTableHead>المبلغ المتبقي</AppTableHead>
               <AppTableHead>التاريخ</AppTableHead>
               <AppTableHead className="w-20">الإجراءات</AppTableHead>
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
-            {list.rows.map((purchase) => (
-              <AppTableRow key={purchase.id}>
-                <AppTableCell className={MUTED}>{purchase.code}</AppTableCell>
-                <AppTableCell>
-                  <div className="flex items-center gap-2.5">
-                    <PurchaseAvatar
-                      name={purchase.supplierName}
-                      imageUrl={purchase.supplierImageUrl}
-                      className="size-8"
-                    />
-                    <span className={cn("font-medium", HEADING)}>{purchase.supplierName}</span>
-                  </div>
-                </AppTableCell>
-                <AppTableCell className={MUTED}>
-                  {purchaseItemCount(purchase.items)} صنف
-                </AppTableCell>
-                <AppTableCell className={cn("font-medium", HEADING)}>
-                  {formatCurrency(purchaseGrandTotal(purchase), purchase.currency)}
-                </AppTableCell>
-                <AppTableCell>
-                  <PurchasePaymentStatusBadge
-                    status={derivePurchasePaymentStatus(purchase, vouchers)}
-                  />
-                </AppTableCell>
-                <AppTableCell className={MUTED}>{purchase.date}</AppTableCell>
-                <AppTableCell>
-                  <div className="flex items-center gap-1.5">
-                    <AppButton
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="عرض"
-                      className="rounded-[8px] border border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                      onClick={() => setViewTarget(purchase)}
-                    >
-                      <Eye className="size-4" />
-                    </AppButton>
-                    <AppButton
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="طباعة"
-                      className="rounded-[8px] border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      onClick={() => setPrintTarget(purchase)}
-                    >
-                      <Printer className="size-4" />
-                    </AppButton>
-                  </div>
-                </AppTableCell>
-              </AppTableRow>
-            ))}
+            {list.rows.map((purchase) => {
+              const paidAmount = purchasePaidAmount(purchase, vouchers)
+              // Rounded to cents and normalized away from -0 (the `|| 0`) -- otherwise a
+              // fully-paid purchase can show a stray minus sign (e.g. "-$0.00") purely from
+              // floating-point noise in the tax/total math landing exactly on negative zero.
+              const remainingAmount =
+                Math.round((purchaseGrandTotal(purchase) - paidAmount) * 100) / 100 || 0
+              return (
+                <AppTableRow key={purchase.id}>
+                  <AppTableCell className={MUTED}>{purchase.code}</AppTableCell>
+                  <AppTableCell>
+                    <div className="flex items-center gap-2.5">
+                      <PurchaseAvatar
+                        name={purchase.supplierName}
+                        imageUrl={purchase.supplierImageUrl}
+                        className="size-8"
+                      />
+                      <span className={cn("font-medium", HEADING)}>{purchase.supplierName}</span>
+                    </div>
+                  </AppTableCell>
+                  <AppTableCell className={MUTED}>
+                    {purchaseItemCount(purchase.items)} صنف
+                  </AppTableCell>
+                  <AppTableCell className={cn("font-medium", HEADING)}>
+                    {formatCurrency(purchaseGrandTotal(purchase), purchase.currency)}
+                  </AppTableCell>
+                  <AppTableCell className="font-medium text-[#16a34a]">
+                    {formatCurrency(paidAmount, purchase.currency)}
+                  </AppTableCell>
+                  <AppTableCell
+                    className={cn("font-medium", remainingAmount > 0 ? "text-[#dc2626]" : MUTED)}
+                  >
+                    {formatCurrency(remainingAmount, purchase.currency)}
+                  </AppTableCell>
+                  <AppTableCell className={MUTED}>{purchase.date}</AppTableCell>
+                  <AppTableCell>
+                    <div className="flex items-center gap-1.5">
+                      <AppButton
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="عرض"
+                        className="rounded-[8px] border border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                        onClick={() => setViewTarget(purchase)}
+                      >
+                        <Eye className="size-4" />
+                      </AppButton>
+                      <AppButton
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="طباعة"
+                        className="rounded-[8px] border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        onClick={() => setPrintTarget(purchase)}
+                      >
+                        <Printer className="size-4" />
+                      </AppButton>
+                    </div>
+                  </AppTableCell>
+                </AppTableRow>
+              )
+            })}
           </AppTableBody>
         </AppTable>
 

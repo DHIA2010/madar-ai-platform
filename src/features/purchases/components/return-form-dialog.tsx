@@ -18,16 +18,8 @@ import {
   type ReturnFormValues,
   returnItemsTotalAmount,
   returnItemsTotalQty,
-  type ReturnStatus,
 } from "../types"
 import { FIELD_CLASS, PurchaseField } from "./purchase-field"
-
-const RETURN_STATUS_OPTIONS: Array<{ value: ReturnStatus; label: string }> = [
-  { value: "pending", label: "معلّق" },
-  { value: "approved", label: "مقبول" },
-  { value: "refunded", label: "مسترد" },
-  { value: "rejected", label: "مرفوض" },
-]
 
 function formatMoney(value: number) {
   return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
@@ -490,23 +482,9 @@ export function ReturnFormDialog({
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-4">
-          <PurchaseField label="حالة الإرجاع" required>
-            <AppSearchableSelect
-              value={values.status}
-              options={RETURN_STATUS_OPTIONS}
-              onChange={(value) => set("status", value as ReturnStatus)}
-              placeholder="اختر الحالة"
-              ariaLabel="حالة الإرجاع"
-            />
-          </PurchaseField>
-          <PurchaseField label="تاريخ الإرجاع" required>
-            <AppDateField
-              value={values.returnDate}
-              onChange={(value) => set("returnDate", value)}
-            />
-          </PurchaseField>
-        </div>
+        <PurchaseField label="تاريخ الإرجاع" required>
+          <AppDateField value={values.returnDate} onChange={(value) => set("returnDate", value)} />
+        </PurchaseField>
 
         <PurchaseField label="ملاحظات الإرجاع">
           <textarea
