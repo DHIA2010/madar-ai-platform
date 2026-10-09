@@ -2,6 +2,9 @@
 
 import { AppButton, AppDialog } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
+import { isSupportedOrgCurrency } from "../services"
 import type { SupplierVoucher } from "../types"
 import { SupplierAvatar } from "./supplier-avatar"
 import {
@@ -26,6 +29,9 @@ export function SupplierVoucherViewDialog({
   voucher: SupplierVoucher | null
   onOpenChange: (open: boolean) => void
 }) {
+  const { currentOrganization } = useWorkspace()
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
   const meta = voucher ? VOUCHER_TYPE_META[voucher.type] : null
 
   return (
@@ -74,7 +80,7 @@ export function SupplierVoucherViewDialog({
               {meta.label}
             </span>
             <p className="text-[13px] font-bold text-[#0b1738]">
-              المبلغ: {formatVoucherAmount(voucher.amount)}
+              المبلغ: {formatVoucherAmount(voucher.amount, orgCurrency)}
             </p>
           </div>
 
@@ -91,7 +97,10 @@ export function SupplierVoucherViewDialog({
             <div className="rounded-[12px] border border-[#e1e7f0] p-4">
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <Field label="يشمل الضريبة" value="نعم" />
-                <Field label="قيمة الضريبة" value={formatVoucherAmount(voucher.taxAmount)} />
+                <Field
+                  label="قيمة الضريبة"
+                  value={formatVoucherAmount(voucher.taxAmount, orgCurrency)}
+                />
               </div>
             </div>
           ) : null}

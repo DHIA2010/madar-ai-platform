@@ -12,6 +12,9 @@ import {
   type AppSearchableSelectOption,
 } from "@/components/app"
 
+import { useWorkspace } from "@/features/workspace"
+
+import { isSupportedOrgCurrency, type SupportedOrgCurrency } from "../services"
 import type { SupplierVoucherPaymentMethod, SupplierVoucherType } from "../types"
 
 // Same design language as CustomerStatement's own سند dialog -- duplicated locally rather than
@@ -52,11 +55,16 @@ export const PAYMENT_METHOD_NAME: Record<SupplierVoucherPaymentMethod, string> =
   PAYMENT_METHOD_OPTIONS.map((method) => [method.code, method.name])
 ) as Record<SupplierVoucherPaymentMethod, string>
 
-export function formatVoucherAmount(value: number): string {
-  return `${new Intl.NumberFormat("ar-SA-u-nu-latn", {
+// Vouchers have no currency field of their own -- their amount is always treated as already being
+// in the organization's default currency, so this only needs to label the number correctly, never
+// convert it (see currency-conversion.service.ts for the suppliers/purchases that do need real
+// cross-currency conversion before they reach this kind of formatter).
+export function formatVoucherAmount(value: number, currency: SupportedOrgCurrency): string {
+  const formatted = new Intl.NumberFormat("ar-SA-u-nu-latn", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value)} ر.س`
+  }).format(value)
+  return currency === "USD" ? `${formatted} $` : `${formatted} ر.س`
 }
 
 // The سند قبض/صرف creation dialog -- shared by SupplierStatement (supplier already fixed by the
@@ -116,6 +124,11 @@ export function SupplierVoucherDialog({
   onCancel: () => void
   onSubmit: () => void
 }) {
+  const { currentOrganization } = useWorkspace()
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency: SupportedOrgCurrency = isSupportedOrgCurrency(rawOrgCurrency)
+    ? rawOrgCurrency
+    : "SAR"
   const meta = VOUCHER_TYPE_META[type]
   const Icon = meta.icon
   const numericAmount = Math.round((Number(amount) || 0) * 100) / 100
@@ -306,14 +319,14 @@ export function SupplierVoucherDialog({
             <div className="flex items-center justify-between">
               <span className={MUTED}>المبلغ</span>
               <span className={cn("font-semibold", HEADING)}>
-                {formatVoucherAmount(numericAmount)}
+                {formatVoucherAmount(numericAmount, orgCurrency)}
               </span>
             </div>
             {taxInclusive ? (
               <div className="flex items-center justify-between">
                 <span className={MUTED}>منها ضريبة القيمة المضافة</span>
                 <span className={cn("font-semibold", HEADING)}>
-                  {formatVoucherAmount(taxAmount)}
+                  {formatVoucherAmount(taxAmount, orgCurrency)}
                 </span>
               </div>
             ) : null}
@@ -329,14 +342,14 @@ export function SupplierVoucherDialog({
               <div className="flex items-center justify-between">
                 <span className={MUTED}>إجمالي الفاتورة</span>
                 <span className={cn("font-semibold", HEADING)}>
-                  {formatVoucherAmount(selectedInvoiceAmount)}
+                  {formatVoucherAmount(selectedInvoiceAmount, orgCurrency)}
                 </span>
               </div>
             ) : null}
             <div className="mt-1 flex items-center justify-between border-t border-[#e8edf3] pt-1.5">
               <span className={MUTED}>رصيد المورد الحالي</span>
               <span className={cn("font-semibold", HEADING)}>
-                {formatVoucherAmount(supplierBalance)}
+                {formatVoucherAmount(supplierBalance, orgCurrency)}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -345,7 +358,7 @@ export function SupplierVoucherDialog({
                 className="font-bold"
                 style={{ color: balanceAfter >= 0 ? "#16a34a" : "#dc2626" }}
               >
-                {formatVoucherAmount(balanceAfter)}
+                {formatVoucherAmount(balanceAfter, orgCurrency)}
               </span>
             </div>
           </div>

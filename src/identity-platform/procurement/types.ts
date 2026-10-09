@@ -195,6 +195,9 @@ export interface SupplierVoucherDto {
   purchaseCode: string | null
   type: SupplierVoucherType
   amount: number
+  // Snapshotted from the organization's currency at creation time, not a live reference -- see
+  // migration 096_supplier_voucher_currency.sql.
+  currency: string
   taxInclusive: boolean
   taxAmount: number
   paymentMethod: SupplierVoucherPaymentMethod

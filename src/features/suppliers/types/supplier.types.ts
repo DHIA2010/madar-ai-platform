@@ -125,6 +125,10 @@ export interface SupplierVoucher {
   purchaseCode: string | null
   type: SupplierVoucherType
   amount: number
+  // Snapshotted server-side from the organization's currency at creation time, never resubmitted
+  // or re-derived -- so a later change to the org's default currency doesn't retroactively
+  // reinterpret what an already-recorded voucher's amount meant.
+  currency: string
   taxInclusive: boolean
   taxAmount: number
   paymentMethod: SupplierVoucherPaymentMethod

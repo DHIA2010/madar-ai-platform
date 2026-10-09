@@ -2,6 +2,7 @@
 
 import { useWorkspace } from "@/features/workspace"
 
+import { isSupportedOrgCurrency } from "../services"
 import type { Supplier, SupplierVoucher } from "../types"
 import {
   formatVoucherAmount,
@@ -30,6 +31,8 @@ export function SupplierVoucherPrintDocument({
   supplier: Supplier | null
 }) {
   const { currentOrganization } = useWorkspace()
+  const rawOrgCurrency = currentOrganization?.currency ?? ""
+  const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
   const meta = VOUCHER_TYPE_META[voucher.type]
 
   return (
@@ -79,12 +82,14 @@ export function SupplierVoucherPrintDocument({
           {voucher.taxInclusive ? (
             <div className="flex items-center justify-between text-[13px]">
               <span>منها ضريبة القيمة المضافة</span>
-              <span>{formatVoucherAmount(voucher.taxAmount)}</span>
+              <span>{formatVoucherAmount(voucher.taxAmount, orgCurrency)}</span>
             </div>
           ) : null}
           <div className="flex items-center justify-between border-b-2 border-[#0b1738] pb-2 text-[16px]">
             <span className="font-extrabold">{meta.label} - المبلغ الإجمالي</span>
-            <span className="font-extrabold">{formatVoucherAmount(voucher.amount)}</span>
+            <span className="font-extrabold">
+              {formatVoucherAmount(voucher.amount, orgCurrency)}
+            </span>
           </div>
         </div>
       </div>

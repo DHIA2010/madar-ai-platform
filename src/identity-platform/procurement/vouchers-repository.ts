@@ -18,6 +18,7 @@ function mapVoucher(row: Record<string, unknown>): SupplierVoucherDto {
     purchaseCode: (row.purchase_code as string | null) ?? null,
     type: row.type as SupplierVoucherDto["type"],
     amount: Number(row.amount),
+    currency: String(row.currency),
     taxInclusive: Boolean(row.tax_inclusive),
     taxAmount: Number(row.tax_amount),
     paymentMethod: row.payment_method as SupplierVoucherDto["paymentMethod"],
@@ -68,11 +69,20 @@ export class VouchersRepository {
       const prefix = input.type === "receipt" ? "RV" : "PV"
       const reference = await nextProcurementCode(this.db, organizationId, codeType, prefix, 4)
 
+      // The amount the user typed is read off the UI in whatever currency the organization's
+      // reports are in right now -- snapshotted here (not re-derived later) so a later change to
+      // the org's default currency doesn't retroactively reinterpret what this voucher means.
+      const orgResult = await this.db.query<{ currency: string }>(
+        `SELECT currency FROM organizations WHERE id = $1`,
+        [organizationId]
+      )
+      const currency = orgResult.rows[0]?.currency ?? "SAR"
+
       await this.db.query(
         `INSERT INTO supplier_vouchers (
            id, organization_id, workspace_id, reference, supplier_id, purchase_id, type, amount,
-           tax_inclusive, tax_amount, payment_method, notes, transaction_date, created_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())`,
+           currency, tax_inclusive, tax_amount, payment_method, notes, transaction_date, created_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, now())`,
         [
           id,
           organizationId,
@@ -82,6 +92,7 @@ export class VouchersRepository {
           input.purchaseId,
           input.type,
           input.amount,
+          currency,
           input.taxInclusive,
           input.taxAmount,
           input.paymentMethod,

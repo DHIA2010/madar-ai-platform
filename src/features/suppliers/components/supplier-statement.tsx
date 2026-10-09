@@ -65,8 +65,12 @@ const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+// Every amount here already arrives converted into the org's default currency (see
+// buildSupplierTransactions), so this only needs to label the number correctly.
+function formatAmount(value: number, currency: SupportedOrgCurrency): string {
+  return currency === "USD"
+    ? `${AMOUNT_FORMAT.format(value)} $`
+    : `${AMOUNT_FORMAT.format(value)} ر.س`
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
@@ -208,10 +212,12 @@ function buildSupplierTransactions(
     const baseDescription =
       voucher.notes ||
       (voucher.type === "receipt" ? `مقبوض عبر ${methodName}` : `مصروف عبر ${methodName}`)
+    // A voucher's own currency is snapshotted server-side at creation time (see
+    // 096_supplier_voucher_currency.sql), never re-derived from the linked purchase or supplier.
     events.push({
       reference: voucher.reference,
       type: voucher.type,
-      amount: voucher.amount,
+      amount: convertToOrgCurrency(voucher.amount, voucher.currency, orgCurrency) ?? voucher.amount,
       description: voucher.purchaseCode
         ? `${baseDescription} (${voucher.purchaseCode})`
         : baseDescription,
@@ -267,7 +273,13 @@ function StatCard({
   )
 }
 
-function StatementTable({ transactions }: { transactions: SupplierTransaction[] }) {
+function StatementTable({
+  transactions,
+  currency,
+}: {
+  transactions: SupplierTransaction[]
+  currency: SupportedOrgCurrency
+}) {
   return (
     <table className="w-full text-right" style={{ borderCollapse: "collapse" }}>
       <thead>
@@ -296,10 +308,10 @@ function StatementTable({ transactions }: { transactions: SupplierTransaction[] 
               <td className="px-3 py-2 text-[#5b6b85]">{transaction.description}</td>
               <td className="px-3 py-2 font-bold" style={{ color: meta.color }}>
                 {meta.direction > 0 ? "+" : "-"}
-                {formatAmount(transaction.amount)}
+                {formatAmount(transaction.amount, currency)}
               </td>
               <td className="px-3 py-2 font-semibold text-[#0d1b3e]">
-                {formatAmount(transaction.balanceAfter)}
+                {formatAmount(transaction.balanceAfter, currency)}
               </td>
               <td className="px-3 py-2 text-[#5b6b85]">{formatDate(transaction.occurredAt)}</td>
             </tr>
@@ -469,19 +481,19 @@ export function SupplierStatement({ supplierId }: { supplierId: string }) {
         <StatCard
           icon={Wallet}
           label={balance >= 0 ? "رصيد المورد (له)" : "رصيد المورد (عليه)"}
-          value={formatAmount(Math.abs(balance))}
+          value={formatAmount(Math.abs(balance), orgCurrency)}
           tone={balanceTone}
         />
         <StatCard
           icon={PackageSearch}
           label="إجمالي المشتريات"
-          value={formatAmount(totalPurchased)}
+          value={formatAmount(totalPurchased, orgCurrency)}
           tone="#16a34a"
         />
         <StatCard
           icon={ArrowUpCircle}
           label="إجمالي المسدد"
-          value={formatAmount(totalPaid)}
+          value={formatAmount(totalPaid, orgCurrency)}
           tone="#dc2626"
         />
         <StatCard
@@ -596,10 +608,10 @@ export function SupplierStatement({ supplierId }: { supplierId: string }) {
                         <td className={cn("px-4 py-3", MUTED)}>{transaction.description}</td>
                         <td className="px-4 py-3 font-bold" style={{ color: meta.color }}>
                           {meta.direction > 0 ? "+" : "-"}
-                          {formatAmount(transaction.amount)}
+                          {formatAmount(transaction.amount, orgCurrency)}
                         </td>
                         <td className={cn("px-4 py-3 font-semibold", HEADING)}>
-                          {formatAmount(transaction.balanceAfter)}
+                          {formatAmount(transaction.balanceAfter, orgCurrency)}
                         </td>
                         <td className={cn("px-4 py-3", MUTED)}>
                           {formatDate(transaction.occurredAt)}
@@ -677,7 +689,7 @@ export function SupplierStatement({ supplierId }: { supplierId: string }) {
                   </div>
                 ) : null}
               </div>
-              <StatementTable transactions={transactions} />
+              <StatementTable transactions={transactions} currency={orgCurrency} />
             </div>,
             document.body
           )

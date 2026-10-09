@@ -1,0 +1,16 @@
+-- A supplier voucher's amount is typed by hand with no currency of its own, so there was
+-- previously no way to tell what currency an existing voucher's number was actually entered in
+-- once the organization's default currency changes later. Going forward this snapshots the
+-- organization's currency at the moment each voucher is created (same "snapshot at creation, not
+-- a live reference" rule purchases.currency already follows for the supplier's bank currency),
+-- so display-time conversion has a real source currency to convert from instead of guessing.
+--
+-- No backfill for existing rows: this migration runner replays every file on every boot (no
+-- per-migration run-once tracking -- see migration-runner.ts), so a backfill UPDATE here would
+-- keep re-stamping every voucher, including ones already correctly snapshotted by the INSERT in
+-- vouchers-repository.ts, with whatever the organization's currency happens to be at restart time
+-- -- silently destroying the very snapshot this column exists to preserve. This table predates
+-- this migration by only days with at most a handful of rows in any environment (same reasoning
+-- 095_return_full_partial_status.sql's own backfill note gives), so there is nothing worth
+-- preserving for the handful of pre-existing rows; they simply get the column default.
+alter table supplier_vouchers add column if not exists currency varchar(8) not null default 'SAR';

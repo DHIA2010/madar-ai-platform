@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { ArrowDownCircle, ArrowUpCircle, Eye, Layers, Loader2, Printer, Users } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 import { createPortal } from "react-dom"
@@ -107,6 +107,28 @@ export function SupplierVouchersPage() {
   const rawOrgCurrency = currentOrganization?.currency ?? ""
   const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
 
+  // A voucher's own currency is snapshotted server-side at creation time (see
+  // 096_supplier_voucher_currency.sql) -- it's never re-derived from the linked purchase or
+  // supplier, since the number was typed by hand in whatever currency the org's reports were in
+  // back then, which can differ from either of those.
+  const purchaseIdToCurrency = useMemo(
+    () => new Map(purchases.map((purchase) => [purchase.id, purchase.currency])),
+    [purchases]
+  )
+  const convertVoucherAmount = useCallback(
+    (voucher: SupplierVoucher, value: number): number =>
+      convertToOrgCurrency(value, voucher.currency, orgCurrency) ?? value,
+    [orgCurrency]
+  )
+  // SupplierVoucherViewDialog/SupplierVoucherPrintDocument only ever see one voucher at a time and
+  // have no access to purchases/suppliers to resolve its source currency themselves, so this hands
+  // them an already-converted copy instead.
+  const toConvertedVoucher = (voucher: SupplierVoucher): SupplierVoucher => ({
+    ...voucher,
+    amount: convertVoucherAmount(voucher, voucher.amount),
+    taxAmount: convertVoucherAmount(voucher, voucher.taxAmount),
+  })
+
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<SupplierVoucherType | "all">("all")
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
@@ -145,12 +167,18 @@ export function SupplierVouchersPage() {
   }, [vouchers, search, typeFilter, dateRange])
 
   const totalReceipts = useMemo(
-    () => vouchers.filter((v) => v.type === "receipt").reduce((sum, v) => sum + v.amount, 0),
-    [vouchers]
+    () =>
+      vouchers
+        .filter((v) => v.type === "receipt")
+        .reduce((sum, v) => sum + convertVoucherAmount(v, v.amount), 0),
+    [vouchers, convertVoucherAmount]
   )
   const totalPayments = useMemo(
-    () => vouchers.filter((v) => v.type === "payment").reduce((sum, v) => sum + v.amount, 0),
-    [vouchers]
+    () =>
+      vouchers
+        .filter((v) => v.type === "payment")
+        .reduce((sum, v) => sum + convertVoucherAmount(v, v.amount), 0),
+    [vouchers, convertVoucherAmount]
   )
   const distinctSuppliers = useMemo(
     () => new Set(vouchers.map((v) => v.supplierId)).size,
@@ -175,12 +203,6 @@ export function SupplierVouchersPage() {
   const [notes, setNotes] = useState("")
   const [isSaving, setIsSaving] = useState(false)
 
-  // Converted into the org's default currency before the balance is summed -- purchases/returns
-  // can carry a different supplier currency (SAR or USD); see currency-conversion.service.ts.
-  const purchaseIdToCurrency = useMemo(
-    () => new Map(purchases.map((purchase) => [purchase.id, purchase.currency])),
-    [purchases]
-  )
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
   const selectedSupplierBalance = selectedSupplier
     ? computeSupplierBalance(
@@ -203,7 +225,11 @@ export function SupplierVouchersPage() {
               orgCurrency
             ) ?? 0,
         })),
-        vouchers
+        vouchers.map((voucher) => ({
+          supplierId: voucher.supplierId,
+          type: voucher.type,
+          amount: convertVoucherAmount(voucher, voucher.amount),
+        }))
       )
     : 0
 
@@ -211,17 +237,27 @@ export function SupplierVouchersPage() {
     if (!supplierId) return []
     return purchases
       .filter((purchase) => purchase.supplierId === supplierId)
-      .map((purchase) => ({
-        value: purchase.id,
-        label: purchase.code,
-        hint: formatVoucherAmount(crossFeaturePurchaseGrandTotal(purchase)),
-      }))
-  }, [purchases, supplierId])
+      .map((purchase) => {
+        const converted =
+          convertToOrgCurrency(
+            crossFeaturePurchaseGrandTotal(purchase),
+            purchase.currency,
+            orgCurrency
+          ) ?? crossFeaturePurchaseGrandTotal(purchase)
+        return {
+          value: purchase.id,
+          label: purchase.code,
+          hint: formatVoucherAmount(converted, orgCurrency),
+        }
+      })
+  }, [purchases, supplierId, orgCurrency])
 
   const selectedInvoiceAmount = useMemo(() => {
     const invoice = purchases.find((purchase) => purchase.id === invoiceId)
-    return invoice ? crossFeaturePurchaseGrandTotal(invoice) : null
-  }, [purchases, invoiceId])
+    if (!invoice) return null
+    const grandTotal = crossFeaturePurchaseGrandTotal(invoice)
+    return convertToOrgCurrency(grandTotal, invoice.currency, orgCurrency) ?? grandTotal
+  }, [purchases, invoiceId, orgCurrency])
 
   function handleSupplierIdChange(id: string) {
     setSupplierId(id)
@@ -323,13 +359,13 @@ export function SupplierVouchersPage() {
         <StatCard
           icon={ArrowDownCircle}
           label="إجمالي سندات القبض"
-          value={formatVoucherAmount(totalReceipts)}
+          value={formatVoucherAmount(totalReceipts, orgCurrency)}
           tone="#16a34a"
         />
         <StatCard
           icon={ArrowUpCircle}
           label="إجمالي سندات الصرف"
-          value={formatVoucherAmount(totalPayments)}
+          value={formatVoucherAmount(totalPayments, orgCurrency)}
           tone="#dc2626"
         />
         <StatCard
@@ -433,7 +469,10 @@ export function SupplierVouchersPage() {
                   </AppTableCell>
                   <AppTableCell className="font-bold" style={{ color: meta.color }}>
                     {meta.verb === "قبض" ? "+" : "-"}
-                    {formatVoucherAmount(voucher.amount)}
+                    {formatVoucherAmount(
+                      convertVoucherAmount(voucher, voucher.amount),
+                      orgCurrency
+                    )}
                   </AppTableCell>
                   <AppTableCell className={MUTED}>{voucher.transactionDate}</AppTableCell>
                   <AppTableCell>
@@ -443,7 +482,7 @@ export function SupplierVouchersPage() {
                         size="icon-sm"
                         aria-label="عرض"
                         className="rounded-[8px] border border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                        onClick={() => setViewTarget(voucher)}
+                        onClick={() => setViewTarget(toConvertedVoucher(voucher))}
                       >
                         <Eye className="size-4" />
                       </AppButton>
@@ -452,7 +491,7 @@ export function SupplierVouchersPage() {
                         size="icon-sm"
                         aria-label="طباعة"
                         className="rounded-[8px] border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        onClick={() => setPrintTarget(voucher)}
+                        onClick={() => setPrintTarget(toConvertedVoucher(voucher))}
                       >
                         <Printer className="size-4" />
                       </AppButton>
