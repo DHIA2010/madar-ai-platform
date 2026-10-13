@@ -110,6 +110,85 @@ export interface SalesByProductDto {
   trend: SalesTrendPoint[]
 }
 
+export interface VatLineAmounts {
+  amount: number
+  adjustmentAmount: number
+  vatAmount: number
+}
+
+export interface VatReturnDto {
+  sales: { standardRated: VatLineAmounts; zeroRated: VatLineAmounts }
+  purchases: { standardRated: VatLineAmounts; zeroRated: VatLineAmounts }
+  expenses: VatLineAmounts
+  totals: {
+    totalSales: number
+    totalPurchases: number
+    totalExpenses: number
+    netVatDue: number
+  }
+}
+
+export interface PurchaseInvoiceRow {
+  purchaseId: string
+  date: string
+  supplierId: string
+  supplierName: string
+  supplierTaxNumber: string | null
+  referenceNumber: string | null
+  itemCount: number
+  amountBeforeTax: number
+  vatAmount: number
+  total: number
+}
+
+export interface PurchaseInvoicesDto {
+  rows: PurchaseInvoiceRow[]
+  kpis: {
+    totalItems: number
+    totalVat: number
+    invoiceCount: number
+    totalPurchases: number
+  }
+}
+
+export interface SalesMovementHourRow {
+  hour: number
+  invoiceCount: number
+  totalSales: number
+  itemsSold: number
+  avgInvoiceValue: number
+}
+
+export interface SalesMovementDto {
+  kpis: {
+    totalSales: { value: number; changePercent: number | null }
+    invoiceCount: { value: number; changePercent: number | null }
+    itemsSold: { value: number; changePercent: number | null }
+    avgInvoiceValue: { value: number; changePercent: number | null }
+  }
+  hours: SalesMovementHourRow[]
+}
+
+export interface SalesByBranchRow {
+  workspaceId: string
+  workspaceName: string
+  totalSales: number
+  orderCount: number
+  avgInvoiceValue: number
+  itemsSold: number
+  contributionPercent: number
+}
+
+export interface SalesByBranchDto {
+  kpis: {
+    totalSales: number
+    itemsSold: number
+    avgInvoiceValue: number
+    orderCount: number
+  }
+  branches: SalesByBranchRow[]
+}
+
 export interface ReadyReportFilters {
   from: string
   to: string

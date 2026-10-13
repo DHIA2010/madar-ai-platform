@@ -466,7 +466,7 @@ export function ConnectionsOverview() {
       {/* Platform cards */}
       {categoryFilteredRecords.length > 0 ? (
         <div className="mb-3.5 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {categoryFilteredRecords.slice(0, 6).map((record) => {
+          {categoryFilteredRecords.map((record) => {
             const statusMeta = CONNECTION_STATUS_META[record.connection.status]
             return (
               <div

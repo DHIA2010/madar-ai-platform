@@ -3,9 +3,11 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type {
   NetIncomeByBranchRow,
   NetIncomePeriodRow,
+  PurchaseInvoiceRow,
   SalesByCustomerRow,
   SalesByProductRow,
   SalesByUserPaymentMethodRow,
+  SalesMovementHourRow,
   SalesTrendPoint,
 } from "./ready-reports-types"
 
@@ -665,5 +667,451 @@ export class ReadyReportsRepository {
         value: toNumber(row.line_total),
       }))
     )
+  }
+
+  // ---- VAT return ----------------------------------------------------------------------------
+
+  async vatReturnSales(
+    range: ReadyReportRange
+  ): Promise<{ standardAmount: number; standardVat: number; zeroAmount: number }> {
+    const { organizationId, workspaceId, from, to } = range
+
+    const standardWhere = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    standardWhere.addOptional("workspace_id = ?", workspaceId)
+    const standardResult = await this.db.query<{ amount: string; vat: string }>(
+      `SELECT coalesce(sum(subtotal_amount),0) AS amount, coalesce(sum(tax_amount),0) AS vat
+       FROM pos_invoices
+       WHERE ${standardWhere.where} AND status != 'cancelled' AND tax_amount > 0`,
+      standardWhere.values
+    )
+
+    const zeroWhere = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    zeroWhere.addOptional("workspace_id = ?", workspaceId)
+    const zeroResult = await this.db.query<{ amount: string }>(
+      `SELECT coalesce(sum(subtotal_amount),0) AS amount
+       FROM pos_invoices
+       WHERE ${zeroWhere.where} AND status != 'cancelled' AND tax_amount = 0`,
+      zeroWhere.values
+    )
+
+    return {
+      standardAmount: toNumber(standardResult.rows[0]?.amount),
+      standardVat: toNumber(standardResult.rows[0]?.vat),
+      zeroAmount: toNumber(zeroResult.rows[0]?.amount),
+    }
+  }
+
+  // A sales return is its own credit-note event with its own subtotal/tax (pos_invoice_returns,
+  // migration 073) -- classified standard/zero the same way as the original sale (by whether
+  // tax_amount is non-zero on the return itself, not the invoice it refers back to), then netted
+  // against the original sales figures in the service layer.
+  async vatReturnSalesReturns(
+    range: ReadyReportRange
+  ): Promise<{ standardAmount: number; standardVat: number; zeroAmount: number }> {
+    const { organizationId, workspaceId, from, to } = range
+
+    const standardWhere = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    standardWhere.addOptional("workspace_id = ?", workspaceId)
+    const standardResult = await this.db.query<{ amount: string; vat: string }>(
+      `SELECT coalesce(sum(subtotal_amount),0) AS amount, coalesce(sum(tax_amount),0) AS vat
+       FROM pos_invoice_returns WHERE ${standardWhere.where} AND tax_amount > 0`,
+      standardWhere.values
+    )
+
+    const zeroWhere = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    zeroWhere.addOptional("workspace_id = ?", workspaceId)
+    const zeroResult = await this.db.query<{ amount: string }>(
+      `SELECT coalesce(sum(subtotal_amount),0) AS amount
+       FROM pos_invoice_returns WHERE ${zeroWhere.where} AND tax_amount = 0`,
+      zeroWhere.values
+    )
+
+    return {
+      standardAmount: toNumber(standardResult.rows[0]?.amount),
+      standardVat: toNumber(standardResult.rows[0]?.vat),
+      zeroAmount: toNumber(zeroResult.rows[0]?.amount),
+    }
+  }
+
+  // A purchase return (purchase_return_items) carries no tax rate of its own -- it's joined back
+  // to the original purchase's own line (same purchase_id + product_id) to find the tax_percent
+  // that line was actually bought at, then netted against the original purchases figures in the
+  // service layer. Filtered by the RETURN's own return_date, not the original purchase's date --
+  // a return can land in a different VAT period than the purchase it refers back to.
+  async vatReturnPurchaseReturns(
+    range: ReadyReportRange
+  ): Promise<{ standardAmount: number; standardVat: number; zeroAmount: number }> {
+    const { organizationId, workspaceId, from, to } = range
+
+    const standardWhere = new WhereBuilder([
+      ["pr.organization_id = ?", organizationId],
+      ["pr.return_date >= ?", from],
+      ["pr.return_date <= ?::date", to],
+    ])
+    standardWhere.addOptional("pr.workspace_id = ?", workspaceId)
+    const standardResult = await this.db.query<{ amount: string; vat: string }>(
+      `SELECT coalesce(sum(pri.unit_cost * pri.qty),0) AS amount,
+              coalesce(sum(pri.unit_cost * pri.qty * pli.tax_percent / 100),0) AS vat
+       FROM purchase_return_items pri
+       JOIN purchase_returns pr ON pr.id = pri.return_id
+       JOIN purchase_line_items pli
+         ON pli.purchase_id = pr.purchase_id AND pli.product_id = pri.product_id
+       WHERE ${standardWhere.where} AND pr.deleted_at IS NULL AND pli.tax_percent > 0`,
+      standardWhere.values
+    )
+
+    const zeroWhere = new WhereBuilder([
+      ["pr.organization_id = ?", organizationId],
+      ["pr.return_date >= ?", from],
+      ["pr.return_date <= ?::date", to],
+    ])
+    zeroWhere.addOptional("pr.workspace_id = ?", workspaceId)
+    const zeroResult = await this.db.query<{ amount: string }>(
+      `SELECT coalesce(sum(pri.unit_cost * pri.qty),0) AS amount
+       FROM purchase_return_items pri
+       JOIN purchase_returns pr ON pr.id = pri.return_id
+       JOIN purchase_line_items pli
+         ON pli.purchase_id = pr.purchase_id AND pli.product_id = pri.product_id
+       WHERE ${zeroWhere.where} AND pr.deleted_at IS NULL AND pli.tax_percent = 0`,
+      zeroWhere.values
+    )
+
+    return {
+      standardAmount: toNumber(standardResult.rows[0]?.amount),
+      standardVat: toNumber(standardResult.rows[0]?.vat),
+      zeroAmount: toNumber(zeroResult.rows[0]?.amount),
+    }
+  }
+
+  // Purchases have no invoice-level tax amount of their own (unlike pos_invoices) -- each
+  // purchase_line_items row carries its own tax_percent, so "contains VAT" is a per-line check,
+  // and the VAT amount is computed here (net_unit_cost * qty - discount) * tax_percent / 100,
+  // the exact same formula purchase-print-document.tsx already uses for a purchase's own printed
+  // tax total.
+  async vatReturnPurchases(range: ReadyReportRange): Promise<{
+    standardAmount: number
+    standardAdjustment: number
+    standardVat: number
+    zeroAmount: number
+    zeroAdjustment: number
+  }> {
+    const { organizationId, workspaceId, from, to } = range
+
+    const standardWhere = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.date >= ?", from],
+      ["p.date <= ?::date", to],
+    ])
+    standardWhere.addOptional("p.workspace_id = ?", workspaceId)
+    const standardResult = await this.db.query<{ amount: string; adjustment: string; vat: string }>(
+      `SELECT coalesce(sum(pli.net_unit_cost * pli.qty),0) AS amount,
+              coalesce(sum(pli.discount),0) AS adjustment,
+              coalesce(sum((pli.net_unit_cost * pli.qty - pli.discount) * pli.tax_percent / 100),0) AS vat
+       FROM purchase_line_items pli
+       JOIN purchases p ON p.id = pli.purchase_id
+       WHERE ${standardWhere.where} AND p.deleted_at IS NULL AND pli.tax_percent > 0`,
+      standardWhere.values
+    )
+
+    const zeroWhere = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.date >= ?", from],
+      ["p.date <= ?::date", to],
+    ])
+    zeroWhere.addOptional("p.workspace_id = ?", workspaceId)
+    const zeroResult = await this.db.query<{ amount: string; adjustment: string }>(
+      `SELECT coalesce(sum(pli.net_unit_cost * pli.qty),0) AS amount,
+              coalesce(sum(pli.discount),0) AS adjustment
+       FROM purchase_line_items pli
+       JOIN purchases p ON p.id = pli.purchase_id
+       WHERE ${zeroWhere.where} AND p.deleted_at IS NULL AND pli.tax_percent = 0`,
+      zeroWhere.values
+    )
+
+    return {
+      standardAmount: toNumber(standardResult.rows[0]?.amount),
+      standardAdjustment: toNumber(standardResult.rows[0]?.adjustment),
+      standardVat: toNumber(standardResult.rows[0]?.vat),
+      zeroAmount: toNumber(zeroResult.rows[0]?.amount),
+      zeroAdjustment: toNumber(zeroResult.rows[0]?.adjustment),
+    }
+  }
+
+  // Only tax_inclusive expenses count toward the VAT return at all -- an expense not marked
+  // tax-inclusive (e.g. a salary or a government fee) carries no VAT to reclaim, and has no
+  // zero-rated equivalent the way a sale/purchase does.
+  async vatReturnExpensesGross(range: ReadyReportRange): Promise<number> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["expense_date >= ?", from],
+      ["expense_date <= ?::date", to],
+    ])
+    where.addOptional("workspace_id = ?", workspaceId)
+    const result = await this.db.query<{ gross: string }>(
+      `SELECT coalesce(sum(amount),0) AS gross FROM expenses
+       WHERE ${where.where} AND deleted_at IS NULL AND tax_inclusive = true`,
+      where.values
+    )
+    return toNumber(result.rows[0]?.gross)
+  }
+
+  // ---- Purchase invoices ----------------------------------------------------------------------
+
+  // Fetches raw purchase+line-item rows (one row per line, a purchase with no lines still gets one
+  // row via the LEFT JOIN with every pli.* column null) and aggregates per purchase in application
+  // code -- avoids a GROUP BY that would need to include suppliers.company_details (a jsonb column,
+  // not a safe GROUP BY key) just to carry the supplier's name/tax number through.
+  async purchaseInvoices(range: ReadyReportRange): Promise<PurchaseInvoiceRow[]> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.date >= ?", from],
+      ["p.date <= ?::date", to],
+    ])
+    where.addOptional("p.workspace_id = ?", workspaceId)
+    const result = await this.db.query<{
+      purchase_id: string
+      date: string
+      reference_number: string | null
+      supplier_id: string
+      supplier_name: string
+      company_details: unknown
+      net_unit_cost: string | null
+      qty: string | null
+      discount: string | null
+      tax_percent: string | null
+    }>(
+      `SELECT p.id AS purchase_id, p.date, p.reference_number, p.supplier_id, s.name AS supplier_name,
+              s.company_details, pli.net_unit_cost, pli.qty, pli.discount, pli.tax_percent
+       FROM purchases p
+       JOIN suppliers s ON s.id = p.supplier_id
+       LEFT JOIN purchase_line_items pli ON pli.purchase_id = p.id
+       WHERE ${where.where} AND p.deleted_at IS NULL`,
+      where.values
+    )
+
+    const purchases = new Map<
+      string,
+      {
+        date: string
+        referenceNumber: string | null
+        supplierId: string
+        supplierName: string
+        supplierTaxNumber: string | null
+        itemCount: number
+        amountBeforeTax: number
+        vatAmount: number
+      }
+    >()
+
+    for (const row of result.rows) {
+      let purchase = purchases.get(row.purchase_id)
+      if (!purchase) {
+        const companyDetails = row.company_details as Record<string, unknown> | null
+        const taxNumber =
+          typeof companyDetails?.taxNumber === "string" ? companyDetails.taxNumber : null
+        purchase = {
+          date: new Date(row.date).toISOString().slice(0, 10),
+          referenceNumber: row.reference_number,
+          supplierId: row.supplier_id,
+          supplierName: row.supplier_name,
+          supplierTaxNumber: taxNumber,
+          itemCount: 0,
+          amountBeforeTax: 0,
+          vatAmount: 0,
+        }
+        purchases.set(row.purchase_id, purchase)
+      }
+      if (row.net_unit_cost === null) continue
+      const lineNet = toNumber(row.net_unit_cost) * toNumber(row.qty) - toNumber(row.discount)
+      purchase.itemCount += 1
+      purchase.amountBeforeTax += lineNet
+      purchase.vatAmount += (lineNet * toNumber(row.tax_percent)) / 100
+    }
+
+    return [...purchases.entries()]
+      .map(([purchaseId, purchase]) => ({
+        purchaseId,
+        date: purchase.date,
+        supplierId: purchase.supplierId,
+        supplierName: purchase.supplierName,
+        supplierTaxNumber: purchase.supplierTaxNumber,
+        referenceNumber: purchase.referenceNumber,
+        itemCount: purchase.itemCount,
+        amountBeforeTax: purchase.amountBeforeTax,
+        vatAmount: purchase.vatAmount,
+        total: purchase.amountBeforeTax + purchase.vatAmount,
+      }))
+      .sort((left, right) => right.date.localeCompare(left.date))
+  }
+
+  // ---- Daily sales movement --------------------------------------------------------------------
+
+  // Always bucketed by hour-of-day (0-23, UTC), zero-filled -- see ready-reports-types.ts's own
+  // comment on SalesMovementDto for why.
+  async salesMovementByHour(range: ReadyReportRange): Promise<SalesMovementHourRow[]> {
+    const { organizationId, workspaceId, from, to } = range
+
+    const invoicesWhere = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    invoicesWhere.addOptional("workspace_id = ?", workspaceId)
+    const invoiceRows = await this.db.query<{ created_at: string; total_amount: string }>(
+      `SELECT created_at, total_amount FROM pos_invoices
+       WHERE ${invoicesWhere.where} AND status != 'cancelled'`,
+      invoicesWhere.values
+    )
+
+    const itemsWhere = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.created_at >= ?", from],
+      ["p.created_at < ?", to],
+    ])
+    itemsWhere.addOptional("p.workspace_id = ?", workspaceId)
+    const itemRows = await this.db.query<{ created_at: string; quantity: string }>(
+      `SELECT p.created_at, i.quantity
+       FROM pos_invoice_items i
+       JOIN pos_invoices p ON p.id = i.invoice_id
+       WHERE ${itemsWhere.where} AND p.status != 'cancelled'`,
+      itemsWhere.values
+    )
+
+    const buckets = new Map<
+      number,
+      { invoiceCount: number; totalSales: number; itemsSold: number }
+    >()
+    for (let hour = 0; hour < 24; hour += 1) {
+      buckets.set(hour, { invoiceCount: 0, totalSales: 0, itemsSold: 0 })
+    }
+    for (const row of invoiceRows.rows) {
+      const bucket = buckets.get(new Date(row.created_at).getUTCHours())!
+      bucket.invoiceCount += 1
+      bucket.totalSales += toNumber(row.total_amount)
+    }
+    for (const row of itemRows.rows) {
+      buckets.get(new Date(row.created_at).getUTCHours())!.itemsSold += toNumber(row.quantity)
+    }
+
+    return [...buckets.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([hour, bucket]) => ({
+        hour,
+        invoiceCount: bucket.invoiceCount,
+        totalSales: bucket.totalSales,
+        itemsSold: bucket.itemsSold,
+        avgInvoiceValue: bucket.invoiceCount > 0 ? bucket.totalSales / bucket.invoiceCount : 0,
+      }))
+  }
+
+  // ---- Sales by branch -------------------------------------------------------------------------
+
+  // Unlike netIncomeByWorkspace, this one DOES respect the page's own branch filter (range
+  // .workspaceId) -- the report's own "الفرع" dropdown is meant to narrow the comparison down to
+  // one branch, not just annotate a fixed organization-wide comparison.
+  async salesByBranch(range: ReadyReportRange): Promise<
+    Array<{
+      workspaceId: string
+      workspaceName: string
+      totalSales: number
+      orderCount: number
+      avgInvoiceValue: number
+      itemsSold: number
+    }>
+  > {
+    const { organizationId, workspaceId, from, to } = range
+
+    const salesWhere = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.created_at >= ?", from],
+      ["p.created_at < ?", to],
+    ])
+    salesWhere.addOptional("p.workspace_id = ?", workspaceId)
+    const salesRows = await this.db.query<{
+      workspace_id: string
+      workspace_name: string
+      order_count: string
+      total_sales: string
+    }>(
+      `SELECT p.workspace_id, w.name AS workspace_name, count(*) AS order_count,
+              coalesce(sum(p.total_amount),0) AS total_sales
+       FROM pos_invoices p
+       JOIN workspaces w ON w.id = p.workspace_id
+       WHERE ${salesWhere.where} AND p.status != 'cancelled'
+       GROUP BY p.workspace_id, w.name`,
+      salesWhere.values
+    )
+
+    const itemsWhere = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.created_at >= ?", from],
+      ["p.created_at < ?", to],
+    ])
+    itemsWhere.addOptional("p.workspace_id = ?", workspaceId)
+    const itemsRows = await this.db.query<{ workspace_id: string; items_sold: string }>(
+      `SELECT p.workspace_id, coalesce(sum(i.quantity),0) AS items_sold
+       FROM pos_invoice_items i
+       JOIN pos_invoices p ON p.id = i.invoice_id
+       WHERE ${itemsWhere.where} AND p.status != 'cancelled'
+       GROUP BY p.workspace_id`,
+      itemsWhere.values
+    )
+
+    const branches = new Map<
+      string,
+      { workspaceName: string; totalSales: number; orderCount: number; itemsSold: number }
+    >()
+    const ensure = (id: string, name?: string) => {
+      const existing = branches.get(id)
+      if (existing) {
+        if (name) existing.workspaceName = name
+        return existing
+      }
+      const created = {
+        workspaceName: name ?? "غير معروف",
+        totalSales: 0,
+        orderCount: 0,
+        itemsSold: 0,
+      }
+      branches.set(id, created)
+      return created
+    }
+    for (const row of salesRows.rows) {
+      const branch = ensure(row.workspace_id, row.workspace_name)
+      branch.totalSales = toNumber(row.total_sales)
+      branch.orderCount = Number(row.order_count)
+    }
+    for (const row of itemsRows.rows) {
+      ensure(row.workspace_id).itemsSold = toNumber(row.items_sold)
+    }
+
+    return [...branches.entries()]
+      .map(([branchWorkspaceId, figures]) => ({
+        workspaceId: branchWorkspaceId,
+        workspaceName: figures.workspaceName,
+        totalSales: figures.totalSales,
+        orderCount: figures.orderCount,
+        avgInvoiceValue: figures.orderCount > 0 ? figures.totalSales / figures.orderCount : 0,
+        itemsSold: figures.itemsSold,
+      }))
+      .sort((left, right) => right.totalSales - left.totalSales)
   }
 }

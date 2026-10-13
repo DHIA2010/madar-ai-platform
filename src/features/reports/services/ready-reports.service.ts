@@ -1,9 +1,13 @@
 import type {
   NetIncomeReportDto,
+  PurchaseInvoicesDto,
   ReadyReportFilters,
+  SalesByBranchDto,
   SalesByCustomerDto,
   SalesByProductDto,
   SalesByUserPaymentMethodDto,
+  SalesMovementDto,
+  VatReturnDto,
 } from "../types/ready-report.types"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
@@ -55,5 +59,25 @@ export const readyReportsService = {
   async salesByProduct(filters: ReadyReportFilters): Promise<SalesByProductDto> {
     const query = buildQuery(filters)
     return client.get<SalesByProductDto>(`${ENDPOINT}/sales-by-product?${query}`)
+  },
+
+  async vatReturn(filters: ReadyReportFilters): Promise<VatReturnDto> {
+    const query = buildQuery(filters)
+    return client.get<VatReturnDto>(`${ENDPOINT}/vat-return?${query}`)
+  },
+
+  async purchaseInvoices(filters: ReadyReportFilters): Promise<PurchaseInvoicesDto> {
+    const query = buildQuery(filters)
+    return client.get<PurchaseInvoicesDto>(`${ENDPOINT}/purchase-invoices?${query}`)
+  },
+
+  async salesMovement(filters: ReadyReportFilters): Promise<SalesMovementDto> {
+    const query = buildQuery(filters)
+    return client.get<SalesMovementDto>(`${ENDPOINT}/sales-movement?${query}`)
+  },
+
+  async salesByBranch(filters: ReadyReportFilters): Promise<SalesByBranchDto> {
+    const query = buildQuery(filters)
+    return client.get<SalesByBranchDto>(`${ENDPOINT}/sales-by-branch?${query}`)
   },
 }

@@ -117,3 +117,109 @@ export interface SalesByProductDto {
   categories: Array<{ category: string; totalSales: number }>
   trend: SalesTrendPoint[]
 }
+
+// ---- VAT return ("الإقرار الضريبي") ------------------------------------------------------------
+// A record only "contains VAT" (counts toward the standard-rated/input-tax figures below) when it
+// carries a real, non-zero VAT marker: pos_invoices.tax_amount > 0 for a sale, purchase_line_items
+// .tax_percent > 0 for a purchase line, expenses.tax_inclusive = true for an expense (expenses have
+// no per-record tax amount of their own -- the VAT is extracted from the tax-inclusive gross amount
+// using the organization's own default tax rate, see ready-reports-service.ts's vatReturn()).
+// Records that don't carry that marker still belong in the return (a zero-rated sale/purchase is a
+// real declared supply, just taxed at 0%) except for expenses, which have no zero-rated concept --
+// an expense not marked tax-inclusive simply isn't part of this VAT return at all.
+//
+// Every figure below is net of the period's own returns: a sales return (pos_invoice_returns) nets
+// against sales, a purchase return (purchase_return_items, joined back to the tax_percent its
+// original purchase line was bought at) nets against purchases -- see ready-reports-service.ts's
+// vatReturn().
+export interface VatLineAmounts {
+  amount: number
+  adjustmentAmount: number
+  vatAmount: number
+}
+
+export interface VatReturnDto {
+  sales: { standardRated: VatLineAmounts; zeroRated: VatLineAmounts }
+  purchases: { standardRated: VatLineAmounts; zeroRated: VatLineAmounts }
+  expenses: VatLineAmounts
+  totals: {
+    totalSales: number
+    totalPurchases: number
+    totalExpenses: number
+    // Output VAT (sales) minus input VAT (purchases + expenses) -- positive is payable, negative
+    // is refundable.
+    netVatDue: number
+  }
+}
+
+// ---- Purchase invoices report ("تقرير فواتير المشتريات") ---------------------------------------
+
+export interface PurchaseInvoiceRow {
+  purchaseId: string
+  date: string
+  supplierId: string
+  supplierName: string
+  supplierTaxNumber: string | null
+  referenceNumber: string | null
+  itemCount: number
+  amountBeforeTax: number
+  vatAmount: number
+  total: number
+}
+
+export interface PurchaseInvoicesDto {
+  rows: PurchaseInvoiceRow[]
+  kpis: {
+    totalItems: number
+    totalVat: number
+    invoiceCount: number
+    totalPurchases: number
+  }
+}
+
+// ---- Daily sales movement report ("تقرير الحركة اليومية للمبيعات") -----------------------------
+// Always bucketed by hour-of-day (0-23, UTC -- same simplification bucketKey() already makes for
+// day/week/month, since this codebase has no per-organization timezone configuration to bucket
+// by instead), summed across every day the selected range spans -- a single-day range (e.g.
+// "اليوم") naturally produces one real hourly timeline; a longer range aggregates the same
+// hour-of-day across all of its days.
+
+export interface SalesMovementHourRow {
+  hour: number
+  invoiceCount: number
+  totalSales: number
+  itemsSold: number
+  avgInvoiceValue: number
+}
+
+export interface SalesMovementDto {
+  kpis: {
+    totalSales: { value: number; changePercent: number | null }
+    invoiceCount: { value: number; changePercent: number | null }
+    itemsSold: { value: number; changePercent: number | null }
+    avgInvoiceValue: { value: number; changePercent: number | null }
+  }
+  hours: SalesMovementHourRow[]
+}
+
+// ---- Sales by branch report ("تقرير المبيعات حسب الفرع") ---------------------------------------
+
+export interface SalesByBranchRow {
+  workspaceId: string
+  workspaceName: string
+  totalSales: number
+  orderCount: number
+  avgInvoiceValue: number
+  itemsSold: number
+  contributionPercent: number
+}
+
+export interface SalesByBranchDto {
+  kpis: {
+    totalSales: number
+    itemsSold: number
+    avgInvoiceValue: number
+    orderCount: number
+  }
+  branches: SalesByBranchRow[]
+}

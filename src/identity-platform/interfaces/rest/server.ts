@@ -2003,8 +2003,9 @@ export function createIdentityApiServer(
         }
       }
 
-      // Ready reports: 5 bespoke dashboards (Net Income, Sales by User & Payment Method, Sales by
-      // Customer, Sales by Product, Sales by Invoice Source) -- hand-written SQL in
+      // Ready reports: 9 bespoke dashboards (Net Income, Sales by User & Payment Method, Sales by
+      // Customer, Sales by Product, Sales by Invoice Source, VAT Return, Purchase Invoices, Daily
+      // Sales Movement, Sales by Branch) -- hand-written SQL in
       // src/identity-platform/reports/ready-reports-*.ts, not the generic KPI catalog/query-
       // builder (which only supports one groupByDimension and a single-aggregate trend, neither
       // of which fits these). "Sales by Invoice Source" reuses the same
@@ -2047,6 +2048,27 @@ export function createIdentityApiServer(
 
           if (method === "GET" && url.pathname === "/v1/reports/ready/sales-by-product") {
             return send(200, await readyReportsService.salesByProduct(range))
+          }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/vat-return") {
+            // Surfaces expense and purchase totals alongside sales -- requires both modules'
+            // view permission too, same pairing rule as net-income's expenses:view requirement.
+            if (!actor.modulePermissions.includes("expenses:view")) throw ERRORS.forbidden()
+            if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+            return send(200, await readyReportsService.vatReturn(range))
+          }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/purchase-invoices") {
+            if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+            return send(200, await readyReportsService.purchaseInvoices(range))
+          }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/sales-movement") {
+            return send(200, await readyReportsService.salesMovement(range))
+          }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/sales-by-branch") {
+            return send(200, await readyReportsService.salesByBranch(range))
           }
         }
       }

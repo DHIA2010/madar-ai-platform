@@ -209,18 +209,22 @@ async function seedReturn(opts: {
   workspaceId: string
   invoiceId: string
   total: number
+  subtotal?: number
+  tax?: number
   createdAt?: string
 }) {
   const id = randomUUID()
   await database.query(
-    `insert into pos_invoice_returns (id, organization_id, workspace_id, invoice_id, return_number, total_amount, created_at)
-     values ($1,$2,$3,$4,$5,$6,$7)`,
+    `insert into pos_invoice_returns (id, organization_id, workspace_id, invoice_id, return_number, subtotal_amount, tax_amount, total_amount, created_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       id,
       opts.organizationId,
       opts.workspaceId,
       opts.invoiceId,
       `RET-${id.slice(0, 8)}`,
+      opts.subtotal ?? opts.total,
+      opts.tax ?? 0,
       opts.total,
       opts.createdAt ?? new Date().toISOString(),
     ]
@@ -258,6 +262,7 @@ async function seedExpense(opts: {
   workspaceId: string
   amount: number
   expenseDate?: string
+  taxInclusive?: boolean
 }) {
   const categoryId = randomUUID()
   await database.query(
@@ -265,16 +270,124 @@ async function seedExpense(opts: {
     [categoryId, opts.organizationId, `Category ${categoryId.slice(0, 6)}`]
   )
   await database.query(
-    `insert into expenses (id, organization_id, workspace_id, category_id, name, amount, payment_method, expense_date, created_at, updated_at)
-     values ($1,$2,$3,$4,'Test expense',$5,'cash',$6, now(), now())`,
+    `insert into expenses (id, organization_id, workspace_id, category_id, name, amount, payment_method, tax_inclusive, expense_date, created_at, updated_at)
+     values ($1,$2,$3,$4,'Test expense',$5,'cash',$6,$7, now(), now())`,
     [
       randomUUID(),
       opts.organizationId,
       opts.workspaceId,
       categoryId,
       opts.amount,
+      opts.taxInclusive ?? false,
       opts.expenseDate ?? new Date().toISOString().slice(0, 10),
     ]
+  )
+}
+
+async function seedSupplier(
+  organizationId: string,
+  workspaceId: string,
+  opts?: { name?: string; taxNumber?: string }
+) {
+  const id = randomUUID()
+  await database.query(
+    `insert into suppliers (id, organization_id, workspace_id, code, name, kind, status, company_details)
+     values ($1,$2,$3,$4,$5,'local','active',$6::jsonb)`,
+    [
+      id,
+      organizationId,
+      workspaceId,
+      `SUP-${id.slice(0, 8)}`,
+      opts?.name ?? "Test Supplier",
+      JSON.stringify(opts?.taxNumber ? { taxNumber: opts.taxNumber } : {}),
+    ]
+  )
+  return id
+}
+
+async function seedPurchase(opts: {
+  organizationId: string
+  workspaceId: string
+  supplierId: string
+  date?: string
+  referenceNumber?: string
+}) {
+  const id = randomUUID()
+  await database.query(
+    `insert into purchases (id, organization_id, workspace_id, code, supplier_id, warehouse_id, date, status, reference_number)
+     values ($1,$2,$3,$4,$5,'main',$6,'pending',$7)`,
+    [
+      id,
+      opts.organizationId,
+      opts.workspaceId,
+      `PUR-${id.slice(0, 8)}`,
+      opts.supplierId,
+      opts.date ?? new Date().toISOString().slice(0, 10),
+      opts.referenceNumber ?? null,
+    ]
+  )
+  return id
+}
+
+async function seedPurchaseLineItem(opts: {
+  purchaseId: string
+  productId: string
+  netUnitCost: number
+  qty: number
+  discount?: number
+  taxPercent?: number
+}) {
+  await database.query(
+    `insert into purchase_line_items (id, purchase_id, product_id, product_name, sku, net_unit_cost, qty, discount, tax_percent, position)
+     values ($1,$2,$3,'Test Product','SKU-TEST',$4,$5,$6,$7,0)`,
+    [
+      randomUUID(),
+      opts.purchaseId,
+      opts.productId,
+      opts.netUnitCost,
+      opts.qty,
+      opts.discount ?? 0,
+      opts.taxPercent ?? 0,
+    ]
+  )
+}
+
+async function seedPurchaseReturn(opts: {
+  organizationId: string
+  workspaceId: string
+  purchaseId: string
+  supplierId: string
+  returnDate?: string
+}) {
+  const id = randomUUID()
+  await database.query(
+    // status is 'full' | 'partial' (migration 095 replaced the old editable workflow states) --
+    // these seeds only ever return part of what was purchased.
+    `insert into purchase_returns (id, organization_id, workspace_id, code, purchase_id, supplier_id, warehouse_id, status, return_date)
+     values ($1,$2,$3,$4,$5,$6,'main','partial',$7)`,
+    [
+      id,
+      opts.organizationId,
+      opts.workspaceId,
+      `RET-${id.slice(0, 8)}`,
+      opts.purchaseId,
+      opts.supplierId,
+      opts.returnDate ?? new Date().toISOString().slice(0, 10),
+    ]
+  )
+  return id
+}
+
+async function seedPurchaseReturnItem(opts: {
+  returnId: string
+  productId: string
+  unitCost: number
+  qty: number
+}) {
+  await database.query(
+    `insert into purchase_return_items (id, return_id, product_id, product_name, sku, qty, unit_cost, position)
+     values ($1,$2,$3,'Test Product','SKU-TEST',$4,$5,0)`,
+    [randomUUID(), opts.returnId, opts.productId, opts.qty, opts.unitCost]
   )
 }
 
@@ -551,6 +664,435 @@ describe("ready reports", () => {
     )
     const body = (await response.json()) as { rows: unknown[] }
     expect(body.rows).toHaveLength(0)
+  })
+
+  it("computes the VAT return, counting only VAT-marked sales/purchases/expenses", async () => {
+    const { token, actor } = await signIn("owner-vat@example.com", "VAT Org")
+    const workspaceId = actor.workspaceId as string
+
+    // Sales: one standard-rated invoice, one zero-rated invoice.
+    const standardInvoiceId = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId,
+      subtotal: 100,
+      tax: 15,
+      total: 115,
+      createdAt: "2026-01-10T10:00:00.000Z",
+    })
+    const zeroInvoiceId = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId,
+      subtotal: 50,
+      tax: 0,
+      total: 50,
+      createdAt: "2026-01-11T10:00:00.000Z",
+    })
+
+    // Sales returns: one against each invoice, netting against the sales figures above.
+    await seedReturn({
+      organizationId: actor.organizationId,
+      workspaceId,
+      invoiceId: standardInvoiceId,
+      subtotal: 20,
+      tax: 3,
+      total: 23,
+      createdAt: "2026-01-16T10:00:00.000Z",
+    })
+    await seedReturn({
+      organizationId: actor.organizationId,
+      workspaceId,
+      invoiceId: zeroInvoiceId,
+      subtotal: 10,
+      tax: 0,
+      total: 10,
+      createdAt: "2026-01-17T10:00:00.000Z",
+    })
+
+    // Purchases: one standard-rated line (with a discount/adjustment), one zero-rated line.
+    const supplierId = await seedSupplier(actor.organizationId, workspaceId)
+    const productId = await seedProduct(actor.organizationId, "Purchased Widget", 0)
+    const standardPurchaseId = await seedPurchase({
+      organizationId: actor.organizationId,
+      workspaceId,
+      supplierId,
+      date: "2026-01-12",
+    })
+    await seedPurchaseLineItem({
+      purchaseId: standardPurchaseId,
+      productId,
+      netUnitCost: 20,
+      qty: 5,
+      discount: 10,
+      taxPercent: 15,
+    })
+    const zeroPurchaseId = await seedPurchase({
+      organizationId: actor.organizationId,
+      workspaceId,
+      supplierId,
+      date: "2026-01-13",
+    })
+    await seedPurchaseLineItem({
+      purchaseId: zeroPurchaseId,
+      productId,
+      netUnitCost: 30,
+      qty: 2,
+      taxPercent: 0,
+    })
+
+    // Purchase returns: 2 units back against the standard-rated purchase (joins back to its
+    // tax_percent=15 line to compute the returned VAT), 1 unit back against the zero-rated one.
+    const standardPurchaseReturnId = await seedPurchaseReturn({
+      organizationId: actor.organizationId,
+      workspaceId,
+      purchaseId: standardPurchaseId,
+      supplierId,
+      returnDate: "2026-01-18",
+    })
+    await seedPurchaseReturnItem({
+      returnId: standardPurchaseReturnId,
+      productId,
+      unitCost: 20,
+      qty: 2,
+    })
+    const zeroPurchaseReturnId = await seedPurchaseReturn({
+      organizationId: actor.organizationId,
+      workspaceId,
+      purchaseId: zeroPurchaseId,
+      supplierId,
+      returnDate: "2026-01-19",
+    })
+    await seedPurchaseReturnItem({
+      returnId: zeroPurchaseReturnId,
+      productId,
+      unitCost: 30,
+      qty: 1,
+    })
+
+    // Expenses: one tax-inclusive (counts toward the VAT return), one not (e.g. a salary --
+    // excluded entirely).
+    await seedExpense({
+      organizationId: actor.organizationId,
+      workspaceId,
+      amount: 115,
+      taxInclusive: true,
+      expenseDate: "2026-01-14",
+    })
+    await seedExpense({
+      organizationId: actor.organizationId,
+      workspaceId,
+      amount: 50,
+      taxInclusive: false,
+      expenseDate: "2026-01-15",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/reports/ready/vat-return?${RANGE}`, {
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      sales: {
+        standardRated: { amount: number; adjustmentAmount: number; vatAmount: number }
+        zeroRated: { amount: number; adjustmentAmount: number; vatAmount: number }
+      }
+      purchases: {
+        standardRated: { amount: number; adjustmentAmount: number; vatAmount: number }
+        zeroRated: { amount: number; adjustmentAmount: number; vatAmount: number }
+      }
+      expenses: { amount: number; adjustmentAmount: number; vatAmount: number }
+      totals: {
+        totalSales: number
+        totalPurchases: number
+        totalExpenses: number
+        netVatDue: number
+      }
+    }
+
+    // Sales net of returns: standard 100-20=80 / 15-3=12 vat; zero 50-10=40.
+    expect(body.sales.standardRated).toEqual({ amount: 80, adjustmentAmount: 0, vatAmount: 12 })
+    expect(body.sales.zeroRated).toEqual({ amount: 40, adjustmentAmount: 0, vatAmount: 0 })
+
+    // Purchases net of returns: standard gross 100 - returned (20*2=40) = 60 / vat 13.5 - (40*15%=6) = 7.5;
+    // zero gross 60 - returned (30*1=30) = 30. The adjustment (discount) column is untouched by returns.
+    expect(body.purchases.standardRated).toEqual({
+      amount: 60,
+      adjustmentAmount: 10,
+      vatAmount: 7.5,
+    })
+    expect(body.purchases.zeroRated).toEqual({ amount: 30, adjustmentAmount: 0, vatAmount: 0 })
+
+    expect(body.expenses).toEqual({ amount: 100, adjustmentAmount: 0, vatAmount: 15 })
+
+    expect(body.totals).toEqual({
+      totalSales: 120,
+      totalPurchases: 90,
+      totalExpenses: 100,
+      netVatDue: -10.5,
+    })
+  })
+
+  it("computes the purchase invoices report, grouping line items per purchase", async () => {
+    const { token, actor } = await signIn("owner-purchase-invoices@example.com", "PI Org")
+    const workspaceId = actor.workspaceId as string
+    const productId = await seedProduct(actor.organizationId, "Widget", 0)
+
+    const supplierA = await seedSupplier(actor.organizationId, workspaceId, {
+      name: "Supplier A",
+      taxNumber: "300123456700003",
+    })
+    const purchaseA = await seedPurchase({
+      organizationId: actor.organizationId,
+      workspaceId,
+      supplierId: supplierA,
+      date: "2026-01-05",
+      referenceNumber: "INV-1001",
+    })
+    await seedPurchaseLineItem({
+      purchaseId: purchaseA,
+      productId,
+      netUnitCost: 20,
+      qty: 5,
+      discount: 10,
+      taxPercent: 15,
+    })
+
+    const supplierB = await seedSupplier(actor.organizationId, workspaceId, { name: "Supplier B" })
+    const purchaseB = await seedPurchase({
+      organizationId: actor.organizationId,
+      workspaceId,
+      supplierId: supplierB,
+      date: "2026-01-06",
+    })
+    await seedPurchaseLineItem({
+      purchaseId: purchaseB,
+      productId,
+      netUnitCost: 10,
+      qty: 2,
+      taxPercent: 15,
+    })
+    await seedPurchaseLineItem({
+      purchaseId: purchaseB,
+      productId,
+      netUnitCost: 5,
+      qty: 4,
+      taxPercent: 0,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/reports/ready/purchase-invoices?${RANGE}`, {
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      rows: Array<{
+        supplierName: string
+        supplierTaxNumber: string | null
+        referenceNumber: string | null
+        itemCount: number
+        amountBeforeTax: number
+        vatAmount: number
+        total: number
+      }>
+      kpis: { totalItems: number; totalVat: number; invoiceCount: number; totalPurchases: number }
+    }
+
+    expect(body.rows).toHaveLength(2)
+    const rowA = body.rows.find((row) => row.supplierName === "Supplier A")
+    const rowB = body.rows.find((row) => row.supplierName === "Supplier B")
+
+    expect(rowA).toMatchObject({
+      supplierTaxNumber: "300123456700003",
+      referenceNumber: "INV-1001",
+      itemCount: 1,
+      amountBeforeTax: 90,
+      vatAmount: 13.5,
+      total: 103.5,
+    })
+    expect(rowB).toMatchObject({
+      supplierTaxNumber: null,
+      referenceNumber: null,
+      itemCount: 2,
+      amountBeforeTax: 40,
+      vatAmount: 3,
+      total: 43,
+    })
+
+    expect(body.kpis).toEqual({
+      totalItems: 3,
+      totalVat: 16.5,
+      invoiceCount: 2,
+      totalPurchases: 146.5,
+    })
+  })
+
+  it("buckets the daily sales movement report by hour", async () => {
+    const { token, actor } = await signIn("owner-sales-movement@example.com", "Movement Org")
+    const workspaceId = actor.workspaceId as string
+    const productId = await seedProduct(actor.organizationId, "Widget", 0)
+
+    const invoice9am = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId,
+      subtotal: 100,
+      tax: 0,
+      total: 100,
+      createdAt: "2026-01-10T09:00:00.000Z",
+    })
+    await seedInvoiceItem({
+      invoiceId: invoice9am,
+      productId,
+      productName: "Widget",
+      unitPrice: 50,
+      quantity: 2,
+      lineTotal: 100,
+    })
+
+    const invoice9amSecond = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId,
+      subtotal: 50,
+      tax: 0,
+      total: 50,
+      createdAt: "2026-01-10T09:30:00.000Z",
+    })
+    await seedInvoiceItem({
+      invoiceId: invoice9amSecond,
+      productId,
+      productName: "Widget",
+      unitPrice: 50,
+      quantity: 1,
+      lineTotal: 50,
+    })
+
+    const invoice2pm = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId,
+      subtotal: 60,
+      tax: 0,
+      total: 60,
+      createdAt: "2026-01-10T14:00:00.000Z",
+    })
+    await seedInvoiceItem({
+      invoiceId: invoice2pm,
+      productId,
+      productName: "Widget",
+      unitPrice: 20,
+      quantity: 3,
+      lineTotal: 60,
+    })
+
+    const singleDayRange = `from=2026-01-10T00:00:00.000Z&to=2026-01-11T00:00:00.000Z`
+    const response = await fetch(`${baseUrl}/v1/reports/ready/sales-movement?${singleDayRange}`, {
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      kpis: {
+        totalSales: { value: number; changePercent: number | null }
+        invoiceCount: { value: number; changePercent: number | null }
+        itemsSold: { value: number; changePercent: number | null }
+        avgInvoiceValue: { value: number; changePercent: number | null }
+      }
+      hours: Array<{
+        hour: number
+        invoiceCount: number
+        totalSales: number
+        itemsSold: number
+        avgInvoiceValue: number
+      }>
+    }
+
+    expect(body.hours).toHaveLength(24)
+    const hour9 = body.hours.find((row) => row.hour === 9)
+    const hour14 = body.hours.find((row) => row.hour === 14)
+    const hour0 = body.hours.find((row) => row.hour === 0)
+
+    expect(hour9).toMatchObject({
+      invoiceCount: 2,
+      totalSales: 150,
+      itemsSold: 3,
+      avgInvoiceValue: 75,
+    })
+    expect(hour14).toMatchObject({ invoiceCount: 1, totalSales: 60, itemsSold: 3 })
+    expect(hour0).toMatchObject({ invoiceCount: 0, totalSales: 0, itemsSold: 0 })
+
+    expect(body.kpis.totalSales.value).toBe(210)
+    expect(body.kpis.invoiceCount.value).toBe(3)
+    expect(body.kpis.itemsSold.value).toBe(6)
+    // No invoices exist in the equal-length preceding day -- changePercent() returns null rather
+    // than divide by zero.
+    expect(body.kpis.totalSales.changePercent).toBeNull()
+  })
+
+  it("groups sales by branch with contribution percentages", async () => {
+    const orgOwner = await signIn("owner-sales-by-branch@example.com", "Branch Org")
+    const { token, actor } = orgOwner
+    const mainWorkspaceId = actor.workspaceId as string
+    const secondWorkspaceId = await seedWorkspace(actor.organizationId, "Second Branch")
+    const productId = await seedProduct(actor.organizationId, "Widget", 0)
+
+    const mainInvoice = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId: mainWorkspaceId,
+      subtotal: 300,
+      tax: 0,
+      total: 300,
+      createdAt: "2026-01-10T10:00:00.000Z",
+    })
+    await seedInvoiceItem({
+      invoiceId: mainInvoice,
+      productId,
+      productName: "Widget",
+      unitPrice: 100,
+      quantity: 3,
+      lineTotal: 300,
+    })
+
+    const secondInvoice = await seedInvoice({
+      organizationId: actor.organizationId,
+      workspaceId: secondWorkspaceId,
+      subtotal: 100,
+      tax: 0,
+      total: 100,
+      createdAt: "2026-01-11T10:00:00.000Z",
+    })
+    await seedInvoiceItem({
+      invoiceId: secondInvoice,
+      productId,
+      productName: "Widget",
+      unitPrice: 50,
+      quantity: 2,
+      lineTotal: 100,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/reports/ready/sales-by-branch?${RANGE}`, {
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      kpis: { totalSales: number; itemsSold: number; avgInvoiceValue: number; orderCount: number }
+      branches: Array<{
+        workspaceId: string
+        totalSales: number
+        orderCount: number
+        itemsSold: number
+        contributionPercent: number
+      }>
+    }
+
+    expect(body.branches).toHaveLength(2)
+    const mainBranch = body.branches.find((branch) => branch.workspaceId === mainWorkspaceId)
+    const secondBranch = body.branches.find((branch) => branch.workspaceId === secondWorkspaceId)
+
+    expect(mainBranch).toMatchObject({ totalSales: 300, orderCount: 1, itemsSold: 3 })
+    expect(mainBranch?.contributionPercent).toBeCloseTo(75, 5)
+    expect(secondBranch).toMatchObject({ totalSales: 100, orderCount: 1, itemsSold: 2 })
+    expect(secondBranch?.contributionPercent).toBeCloseTo(25, 5)
+
+    expect(body.kpis).toEqual({
+      totalSales: 400,
+      itemsSold: 5,
+      avgInvoiceValue: 200,
+      orderCount: 2,
+    })
   })
 
   // A dedicated "missing expenses:view still has reports:view -> 403 on net-income" test isn't

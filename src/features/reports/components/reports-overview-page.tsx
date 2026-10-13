@@ -11,6 +11,7 @@ import {
   Eye,
   FileBarChart2,
   GitBranch,
+  Landmark,
   type LucideIcon,
   MoreHorizontal,
   Package,
@@ -18,6 +19,7 @@ import {
   Plus,
   Tag,
   TrendingUp,
+  Truck,
   Users,
   Warehouse,
 } from "lucide-react"
@@ -100,6 +102,18 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
     icon: TrendingUp,
     iconTileClassName: "bg-[#e6fbfa] text-[#0d9488]",
   },
+  vat: {
+    label: "الضرائب",
+    badgeClassName: "bg-[#fff7e6] text-[#b4700a]",
+    icon: Landmark,
+    iconTileClassName: "bg-[#fff7e6] text-[#b4700a]",
+  },
+  suppliers_purchases: {
+    label: "الموردون والمشتريات",
+    badgeClassName: "bg-[#eef2f8] text-[#475569]",
+    icon: Truck,
+    iconTileClassName: "bg-[#eef2f8] text-[#475569]",
+  },
 }
 
 const DEFAULT_CATEGORY_META: CategoryMeta = {
@@ -123,7 +137,7 @@ function categoryMeta(category: string): CategoryMeta {
   return CATEGORY_META[category] ?? DEFAULT_CATEGORY_META
 }
 
-// 5 bespoke, hand-built dashboards (not backed by the KPI/custom-report system -- see
+// 9 bespoke, hand-built dashboards (not backed by the KPI/custom-report system -- see
 // src/identity-platform/reports/ready-reports-*.ts) merged into the "ready" tab's list so they
 // appear in the one place the user asked for. The rest of the CustomReport shape below is never
 // read for these rows: showOwner is false on the ready tab, and the view button short-circuits
@@ -163,6 +177,34 @@ const BESPOKE_READY_REPORTS: CustomReport[] = [
     description: "توزيع المبيعات حسب المستخدم الذي أصدر الفاتورة.",
     category: "sales",
     viewHref: ROUTES.reportsReadySalesByInvoiceSource,
+  },
+  {
+    id: "ready-vat-return",
+    name: "الإقرار الضريبي",
+    description: "ملخص المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة.",
+    category: "vat",
+    viewHref: ROUTES.reportsReadyVatReturn,
+  },
+  {
+    id: "ready-purchase-invoices",
+    name: "تقرير فواتير المشتريات",
+    description: "عرض جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد.",
+    category: "suppliers_purchases",
+    viewHref: ROUTES.reportsReadyPurchaseInvoices,
+  },
+  {
+    id: "ready-sales-movement",
+    name: "تقرير الحركة اليومية للمبيعات",
+    description: "نشاط المبيعات خلال اليوم حسب الوقت.",
+    category: "sales",
+    viewHref: ROUTES.reportsReadySalesMovement,
+  },
+  {
+    id: "ready-sales-by-branch",
+    name: "تقرير المبيعات حسب الفرع",
+    description: "إجمالي المبيعات وعدد العمليات ومتوسط قيمة الفاتورة لكل فرع.",
+    category: "sales",
+    viewHref: ROUTES.reportsReadySalesByBranch,
   },
 ].map((entry) => ({
   organizationId: "",

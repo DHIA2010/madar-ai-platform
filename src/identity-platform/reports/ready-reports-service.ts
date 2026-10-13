@@ -1,11 +1,16 @@
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { TaxRatesService } from "../tax/tax-rates-service"
 
 import { type ReadyReportRange, ReadyReportsRepository } from "./ready-reports-repository"
 import type {
   NetIncomeReportDto,
+  PurchaseInvoicesDto,
+  SalesByBranchDto,
   SalesByCustomerDto,
   SalesByProductDto,
   SalesByUserPaymentMethodDto,
+  SalesMovementDto,
+  VatReturnDto,
   WaterfallStep,
 } from "./ready-reports-types"
 
@@ -28,9 +33,11 @@ function changePercent(current: number, previous: number): number | null {
 
 export class ReadyReportsService {
   private readonly repository: ReadyReportsRepository
+  private readonly taxRatesService: TaxRatesService
 
   constructor(db: PostgresDatabase) {
     this.repository = new ReadyReportsRepository(db)
+    this.taxRatesService = new TaxRatesService(db)
   }
 
   async netIncome(
@@ -185,6 +192,143 @@ export class ReadyReportsService {
       products,
       categories,
       trend: trendPoints,
+    }
+  }
+
+  async vatReturn(range: ReadyReportRange): Promise<VatReturnDto> {
+    const [sales, salesReturns, purchases, purchaseReturns, expensesGross, defaultRate] =
+      await Promise.all([
+        this.repository.vatReturnSales(range),
+        this.repository.vatReturnSalesReturns(range),
+        this.repository.vatReturnPurchases(range),
+        this.repository.vatReturnPurchaseReturns(range),
+        this.repository.vatReturnExpensesGross(range),
+        this.taxRatesService.getDefaultRatePercent(range.organizationId),
+      ])
+
+    // getDefaultRatePercent returns a decimal fraction (0.15), not a percentage -- VAT is
+    // extracted from the tax-inclusive gross amount as gross * rate / (1 + rate). Rounded to
+    // cents -- unlike every other ready-report figure (a straight SQL sum), this one is a JS
+    // floating-point division and can otherwise land a cent off (e.g. 15.000000000000002).
+    const expensesVat =
+      expensesGross > 0
+        ? Math.round(((expensesGross * defaultRate) / (1 + defaultRate)) * 100) / 100
+        : 0
+    const expenses = {
+      amount: Math.round((expensesGross - expensesVat) * 100) / 100,
+      adjustmentAmount: 0,
+      vatAmount: expensesVat,
+    }
+
+    // Returns net straight against the original figures -- a VAT return is always declared net of
+    // the period's own credit notes, not gross with returns reported separately.
+    const salesStandard = {
+      amount: sales.standardAmount - salesReturns.standardAmount,
+      adjustmentAmount: 0,
+      vatAmount: sales.standardVat - salesReturns.standardVat,
+    }
+    const salesZero = {
+      amount: sales.zeroAmount - salesReturns.zeroAmount,
+      adjustmentAmount: 0,
+      vatAmount: 0,
+    }
+    const purchasesStandard = {
+      amount: purchases.standardAmount - purchaseReturns.standardAmount,
+      adjustmentAmount: purchases.standardAdjustment,
+      vatAmount: purchases.standardVat - purchaseReturns.standardVat,
+    }
+    const purchasesZero = {
+      amount: purchases.zeroAmount - purchaseReturns.zeroAmount,
+      adjustmentAmount: purchases.zeroAdjustment,
+      vatAmount: 0,
+    }
+
+    return {
+      sales: { standardRated: salesStandard, zeroRated: salesZero },
+      purchases: { standardRated: purchasesStandard, zeroRated: purchasesZero },
+      expenses,
+      totals: {
+        totalSales: salesStandard.amount + salesZero.amount,
+        totalPurchases: purchasesStandard.amount + purchasesZero.amount,
+        totalExpenses: expenses.amount,
+        netVatDue: salesStandard.vatAmount - purchasesStandard.vatAmount - expenses.vatAmount,
+      },
+    }
+  }
+
+  async purchaseInvoices(range: ReadyReportRange): Promise<PurchaseInvoicesDto> {
+    const rows = await this.repository.purchaseInvoices(range)
+    return {
+      rows,
+      kpis: {
+        totalItems: rows.reduce((sum, row) => sum + row.itemCount, 0),
+        totalVat: rows.reduce((sum, row) => sum + row.vatAmount, 0),
+        invoiceCount: rows.length,
+        totalPurchases: rows.reduce((sum, row) => sum + row.total, 0),
+      },
+    }
+  }
+
+  async salesMovement(range: ReadyReportRange): Promise<SalesMovementDto> {
+    const previous = previousRange(range.from, range.to)
+    const previousRangeInput: ReadyReportRange = { ...range, from: previous.from, to: previous.to }
+
+    const [hours, previousHours] = await Promise.all([
+      this.repository.salesMovementByHour(range),
+      this.repository.salesMovementByHour(previousRangeInput),
+    ])
+
+    const sum = (list: typeof hours, pick: (row: (typeof hours)[number]) => number) =>
+      list.reduce((total, row) => total + pick(row), 0)
+
+    const totalSales = sum(hours, (row) => row.totalSales)
+    const invoiceCount = sum(hours, (row) => row.invoiceCount)
+    const itemsSold = sum(hours, (row) => row.itemsSold)
+    const avgInvoiceValue = invoiceCount > 0 ? totalSales / invoiceCount : 0
+
+    const previousTotalSales = sum(previousHours, (row) => row.totalSales)
+    const previousInvoiceCount = sum(previousHours, (row) => row.invoiceCount)
+    const previousItemsSold = sum(previousHours, (row) => row.itemsSold)
+    const previousAvgInvoiceValue =
+      previousInvoiceCount > 0 ? previousTotalSales / previousInvoiceCount : 0
+
+    return {
+      kpis: {
+        totalSales: {
+          value: totalSales,
+          changePercent: changePercent(totalSales, previousTotalSales),
+        },
+        invoiceCount: {
+          value: invoiceCount,
+          changePercent: changePercent(invoiceCount, previousInvoiceCount),
+        },
+        itemsSold: { value: itemsSold, changePercent: changePercent(itemsSold, previousItemsSold) },
+        avgInvoiceValue: {
+          value: avgInvoiceValue,
+          changePercent: changePercent(avgInvoiceValue, previousAvgInvoiceValue),
+        },
+      },
+      hours,
+    }
+  }
+
+  async salesByBranch(range: ReadyReportRange): Promise<SalesByBranchDto> {
+    const branches = await this.repository.salesByBranch(range)
+    const totalSales = branches.reduce((sum, branch) => sum + branch.totalSales, 0)
+    const orderCount = branches.reduce((sum, branch) => sum + branch.orderCount, 0)
+    const itemsSold = branches.reduce((sum, branch) => sum + branch.itemsSold, 0)
+
+    return {
+      kpis: {
+        totalSales,
+        itemsSold,
+        avgInvoiceValue: orderCount > 0 ? totalSales / orderCount : 0,
+        orderCount,
+      },
+      branches: branches.map((branch) => ({
+        ...branch,
+        contributionPercent: totalSales > 0 ? (branch.totalSales / totalSales) * 100 : 0,
+      })),
     }
   }
 }
