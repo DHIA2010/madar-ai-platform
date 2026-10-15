@@ -20,9 +20,11 @@ import {
   purchaseItemsSubtotal,
   type PurchaseLineItem,
 } from "../types"
-import { FIELD_CLASS, HEADING, MUTED, PANEL } from "./purchase-field"
+import { FIELD_CLASS, HEADING, LevelToggle, MUTED, PANEL } from "./purchase-field"
 
 const DEFAULT_TAX_PERCENT = 15
+
+export type CalculationLevel = "product" | "invoice"
 
 function formatMoney(value: number, currency: string) {
   try {
@@ -47,6 +49,8 @@ export function PurchaseLineItemsTable({
   shippingAmount,
   otherCosts,
   currency = DEFAULT_PURCHASE_CURRENCY,
+  taxLevel,
+  onTaxLevelChange,
 }: {
   items: PurchaseLineItem[]
   onItemsChange: (items: PurchaseLineItem[]) => void
@@ -55,6 +59,8 @@ export function PurchaseLineItemsTable({
   shippingAmount: number
   otherCosts: number
   currency?: string
+  taxLevel: CalculationLevel
+  onTaxLevelChange: (level: CalculationLevel) => void
 }) {
   // Real products only (useProductCatalog already filters to native "Madar" ones) -- a purchase
   // line item's productId is a real foreign key on the backend, so only products that actually
@@ -100,7 +106,9 @@ export function PurchaseLineItemsTable({
         netUnitCost: product.costPrice ?? 0,
         qty: 1,
         discount: 0,
-        taxPercent: DEFAULT_TAX_PERCENT,
+        // 0% when tax is calculated at the invoice level instead -- a new line shouldn't silently
+        // add its own tax on top of what the invoice-level field is about to apply.
+        taxPercent: taxLevel === "invoice" ? 0 : DEFAULT_TAX_PERCENT,
       },
     ])
   }
@@ -147,6 +155,16 @@ export function PurchaseLineItemsTable({
     shippingAmount,
     otherCosts,
   })
+
+  // Discount is always active at both levels at once (unlike tax) -- a per-line discount and the
+  // invoice-level discountAmount both apply simultaneously, so the summary shows their sum.
+  const lineDiscountTotal = items.reduce((sum, item) => sum + item.discount, 0)
+  const lineTaxTotal = items.reduce(
+    (sum, item) => sum + (item.netUnitCost * item.qty - item.discount) * (item.taxPercent / 100),
+    0
+  )
+  const displayedDiscount = lineDiscountTotal + discountAmount
+  const displayedTax = taxLevel === "product" ? lineTaxTotal : subtotal * (orderTaxPercent / 100)
 
   return (
     <div className="space-y-4">
@@ -202,6 +220,13 @@ export function PurchaseLineItemsTable({
             )}
           </div>
         ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-[12px] border border-[#e1e7f0] bg-[#f7f9fd] px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className={cn("text-[12px] font-semibold", MUTED)}>احتساب الضريبة</span>
+          <LevelToggle value={taxLevel} onChange={onTaxLevelChange} />
+        </div>
       </div>
 
       <div className={cn(PANEL, "overflow-hidden")}>
@@ -291,6 +316,7 @@ export function PurchaseLineItemsTable({
                       min={0}
                       max={100}
                       value={item.taxPercent}
+                      disabled={taxLevel === "invoice"}
                       onChange={(event) =>
                         updateItem(item.id, {
                           taxPercent: Math.min(100, Math.max(0, Number(event.target.value) || 0)),
@@ -299,7 +325,8 @@ export function PurchaseLineItemsTable({
                       className={cn(
                         "h-9 w-full rounded-[8px] border px-2 text-[12.5px]",
                         FIELD_CLASS,
-                        "h-9"
+                        "h-9",
+                        taxLevel === "invoice" && "bg-[#f7f9fd] opacity-60"
                       )}
                     />
                   </td>
@@ -332,15 +359,18 @@ export function PurchaseLineItemsTable({
             <span className={cn("font-semibold", HEADING)}>{formatMoney(subtotal, currency)}</span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>الضريبة على الفاتورة ({orderTaxPercent}%)</span>
+            <span className={MUTED}>الضريبة</span>
             <span className={cn("font-semibold", HEADING)}>
-              {formatMoney(subtotal * (orderTaxPercent / 100), currency)}
+              {formatMoney(displayedTax, currency)}
             </span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>الخصم على الفاتورة</span>
-            <span className="font-semibold text-rose-600">
-              -{formatMoney(discountAmount, currency)}
+            <span className={MUTED}>الخصم</span>
+            <span
+              className={cn("font-semibold", displayedDiscount > 0 ? "text-rose-600" : HEADING)}
+            >
+              {displayedDiscount > 0 ? "-" : ""}
+              {formatMoney(displayedDiscount, currency)}
             </span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">

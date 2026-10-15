@@ -5,6 +5,21 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import type { CreateExpenseInput, ExpenseDto } from "./types"
 
+// node-pg parses a Postgres `date` column (no time/timezone component) into a JS Date built from
+// its LOCAL calendar fields (confirmed empirically: a date stored as 2026-10-15 comes back as a
+// Date whose .toISOString() reads 2026-10-14T21:00:00Z under TZ=Asia/Riyadh -- i.e. local midnight
+// of the 15th). Formatting it via .toISOString().slice(0,10) re-reads that through UTC and can
+// shift the calendar day backward a full day for any timezone ahead of UTC. Reading the same local
+// getters back out undoes nothing and always reproduces the exact day that was stored, regardless
+// of the server process's timezone.
+function formatDateOnly(value: unknown): string {
+  const date = value instanceof Date ? value : new Date(value as string)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 function mapExpense(row: Record<string, unknown>): ExpenseDto {
   return {
     id: String(row.id),
@@ -17,9 +32,10 @@ function mapExpense(row: Record<string, unknown>): ExpenseDto {
     amount: Number(row.amount),
     paymentMethod: row.payment_method as ExpenseDto["paymentMethod"],
     taxInclusive: Boolean(row.tax_inclusive),
-    expenseDate: new Date(row.expense_date as string).toISOString().slice(0, 10),
+    expenseDate: formatDateOnly(row.expense_date),
     referenceNumber: (row.reference_number as string | null) ?? "",
     notes: (row.notes as string | null) ?? "",
+    status: row.status as ExpenseDto["status"],
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   }
@@ -85,6 +101,29 @@ export class ExpensesRepository {
     const result = await this.db.query<Record<string, unknown>>(
       `${SELECT_WITH_JOINS} WHERE e.id = $1`,
       [id]
+    )
+    return mapExpense(result.rows[0])
+  }
+
+  // Cancelling, not deleting -- the record stays visible/auditable in the list, but every
+  // financial total (net income, the VAT return's input-tax figure) excludes it from here on,
+  // same as a cancelled pos_invoice already does. Idempotent: cancelling an already-cancelled
+  // expense is a harmless no-op, not an error.
+  async cancel(organizationId: string, expenseId: string): Promise<ExpenseDto> {
+    const existing = await this.db.query<{ id: string }>(
+      `SELECT id FROM expenses WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
+      [expenseId, organizationId]
+    )
+    if (existing.rows.length === 0) throw ERRORS.notFound("Expense")
+
+    await this.db.query(
+      `UPDATE expenses SET status = 'cancelled', updated_at = now() WHERE id = $1`,
+      [expenseId]
+    )
+
+    const result = await this.db.query<Record<string, unknown>>(
+      `${SELECT_WITH_JOINS} WHERE e.id = $1`,
+      [expenseId]
     )
     return mapExpense(result.rows[0])
   }

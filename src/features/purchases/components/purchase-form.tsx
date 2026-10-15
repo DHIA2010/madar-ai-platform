@@ -21,7 +21,24 @@ import {
   type PurchaseFormValues,
 } from "../types"
 import { FIELD_CLASS, PANEL, PurchaseField, SuffixInput } from "./purchase-field"
+import type { CalculationLevel } from "./purchase-line-items-table"
 import { PurchaseLineItemsTable } from "./purchase-line-items-table"
+
+// Tax can be entered per product line (each row's own "الضريبة %" column) or once for the whole
+// invoice (the "الضريبة على الفاتورة" field below) -- never both at once, to avoid double-counting.
+// There's no persisted "level" field on a purchase: switching the toggle just zeroes out whichever
+// side goes inactive (see handleTaxLevelChange), so the existing orderTaxPercent/per-line
+// taxPercent fields alone fully capture which level was actually used. Editing an existing purchase
+// re-infers the level from whichever side already has a non-zero value.
+//
+// Discount has no such toggle -- a per-line discount and the invoice-level discountAmount are both
+// always active and simply sum together in the summary (see displayedDiscount in
+// purchase-line-items-table.tsx).
+function inferTaxLevel(purchase: PurchaseFormValues): CalculationLevel {
+  if (purchase.items.some((item) => item.taxPercent > 0)) return "product"
+  if (purchase.orderTaxPercent > 0) return "invoice"
+  return "product"
+}
 
 function purchaseToFormValues(purchase: Purchase): PurchaseFormValues {
   return {
@@ -54,10 +71,23 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
       ? purchaseToFormValues(initialPurchase)
       : { ...EMPTY_PURCHASE_FORM_VALUES, date: new Date().toISOString().slice(0, 10) }
   )
+  const [taxLevel, setTaxLevel] = useState<CalculationLevel>(() => inferTaxLevel(values))
   const [submitting, setSubmitting] = useState(false)
 
   function set<K extends keyof PurchaseFormValues>(key: K, value: PurchaseFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }))
+  }
+
+  function handleTaxLevelChange(level: CalculationLevel) {
+    setTaxLevel(level)
+    if (level === "product") {
+      set("orderTaxPercent", 0)
+    } else {
+      setValues((current) => ({
+        ...current,
+        items: current.items.map((item) => ({ ...item, taxPercent: 0 })),
+      }))
+    }
   }
 
   // Only SAR is supported anywhere in procurement, so a purchase's currency is always this fixed
@@ -155,6 +185,8 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
           shippingAmount={values.shippingAmount}
           otherCosts={values.otherCosts}
           currency={values.currency}
+          taxLevel={taxLevel}
+          onTaxLevelChange={handleTaxLevelChange}
         />
       </section>
 
@@ -165,6 +197,7 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
               value={values.orderTaxPercent}
               onChange={(value) => set("orderTaxPercent", value)}
               suffix="%"
+              disabled={taxLevel === "product"}
             />
           </PurchaseField>
           <PurchaseField label="الخصم على الفاتورة">

@@ -144,6 +144,14 @@ async function listExpenses(token: string) {
   }
 }
 
+async function cancelExpense(token: string, expenseId: string) {
+  const response = await fetch(`${baseUrl}/v1/expenses/${expenseId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(token),
+  })
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
 describe("expenses", () => {
   it("lazily seeds default categories exactly once", async () => {
     const { token } = await signIn("owner-seed@example.com", "Seed Org")
@@ -217,6 +225,42 @@ describe("expenses", () => {
     const result = await createExpense(orgA.token, orgB.actor.workspaceId as string, {
       categoryId: categoriesA.body.items[0].id,
     })
+    expect(result.status).toBe(404)
+  })
+
+  it("cancels an expense (status flips but the record stays listed), idempotently", async () => {
+    const { token, actor } = await signIn("owner-cancel@example.com", "Cancel Org")
+    const categories = await listCategories(token)
+    const categoryId = categories.body.items[0].id
+
+    const created = await createExpense(token, actor.workspaceId as string, { categoryId })
+    expect(created.body.status).toBe("active")
+    const expenseId = created.body.id as string
+
+    const cancelled = await cancelExpense(token, expenseId)
+    expect(cancelled.status).toBe(200)
+    expect(cancelled.body.status).toBe("cancelled")
+
+    // Still listed, just marked cancelled -- not deleted.
+    const list = await listExpenses(token)
+    expect(list.body.items.find((item) => item.id === expenseId)?.status).toBe("cancelled")
+
+    // Idempotent: cancelling again is a no-op, not an error.
+    const cancelledAgain = await cancelExpense(token, expenseId)
+    expect(cancelledAgain.status).toBe(200)
+    expect(cancelledAgain.body.status).toBe("cancelled")
+  })
+
+  it("404s cancelling an expense that belongs to a different organization", async () => {
+    const orgA = await signIn("owner-cancel-a@example.com", "Cancel Org A")
+    const orgB = await signIn("owner-cancel-b@example.com", "Cancel Org B")
+    const categoriesA = await listCategories(orgA.token)
+
+    const created = await createExpense(orgA.token, orgA.actor.workspaceId as string, {
+      categoryId: categoriesA.body.items[0].id,
+    })
+
+    const result = await cancelExpense(orgB.token, created.body.id as string)
     expect(result.status).toBe(404)
   })
 

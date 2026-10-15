@@ -56,4 +56,8 @@ export const expenseService = {
       toSavePayload(values)
     )
   },
+
+  async cancel(id: string): Promise<Expense> {
+    return client.post<Record<string, never>, Expense>(`${EXPENSES_ENDPOINT}/${id}/cancel`, {})
+  },
 }

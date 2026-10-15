@@ -1,4 +1,5 @@
 export type ExpensePaymentMethod = "cash" | "bank_transfer" | "card" | "cheque"
+export type ExpenseStatus = "active" | "cancelled"
 
 export const EXPENSE_PAYMENT_METHODS: Array<{ value: ExpensePaymentMethod; label: string }> = [
   { value: "cash", label: "نقدًا" },
@@ -34,6 +35,7 @@ export interface Expense {
   expenseDate: string
   referenceNumber: string
   notes: string
+  status: ExpenseStatus
   createdAt: string
   updatedAt: string
 }

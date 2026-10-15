@@ -6,6 +6,19 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import { nextProcurementCode } from "./code-counter"
 import type { CreateSupplierVoucherInput, SupplierVoucherDto } from "./types"
 
+// node-pg parses a Postgres `date` column (no time/timezone component) into a JS Date built from
+// its LOCAL calendar fields -- formatting it via .toISOString().slice(0,10) re-reads that through
+// UTC and can shift the calendar day backward a full day for any timezone ahead of UTC (see the
+// identical fix/comment in expenses-repository.ts's mapExpense). Local getters undo nothing and
+// always reproduce the exact day that was stored.
+function formatDateOnly(value: unknown): string {
+  const date = value instanceof Date ? value : new Date(value as string)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 function mapVoucher(row: Record<string, unknown>): SupplierVoucherDto {
   return {
     id: String(row.id),
@@ -23,7 +36,7 @@ function mapVoucher(row: Record<string, unknown>): SupplierVoucherDto {
     taxAmount: Number(row.tax_amount),
     paymentMethod: row.payment_method as SupplierVoucherDto["paymentMethod"],
     notes: (row.notes as string | null) ?? "",
-    transactionDate: new Date(row.transaction_date as string).toISOString().slice(0, 10),
+    transactionDate: formatDateOnly(row.transaction_date),
     createdAt: new Date(row.created_at as string).toISOString(),
   }
 }

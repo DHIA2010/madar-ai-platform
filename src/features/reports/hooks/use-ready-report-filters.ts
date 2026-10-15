@@ -12,6 +12,21 @@ function defaultRange(): DateRange {
   return { from, to }
 }
 
+// react-day-picker (the date-range calendar) returns a Date at LOCAL MIDNIGHT for whatever day
+// was clicked -- converting that straight to .toISOString() shifts it into the *previous* UTC
+// calendar day for any timezone ahead of UTC (e.g. Saudi Arabia, UTC+3), which then silently
+// excludes that entire day's records once the backend casts it back to a plain date (expense_date
+// <= '...'::date). Re-anchoring to local start/end-of-day before converting guarantees the
+// intended calendar day is always fully covered in UTC, regardless of the picker's own time-of-day
+// or the viewer's timezone offset.
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+}
+
+function endOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+}
+
 // Shared "الفترة + الفرع" filter state for every ready-report page -- date range defaults to the
 // last 12 months, matching the system-seeded reports' own defaultFilters.dateRange convention
 // (seed.ts). A page can pass its own `getInitialRange` (e.g. the daily sales movement report
@@ -23,8 +38,8 @@ export function useReadyReportFilters(getInitialRange: () => DateRange = default
   const filters: ReadyReportFilters = useMemo(() => {
     const range = dateRange?.from && dateRange?.to ? dateRange : getInitialRange()
     return {
-      from: (range.from as Date).toISOString(),
-      to: (range.to as Date).toISOString(),
+      from: startOfLocalDay(range.from as Date).toISOString(),
+      to: endOfLocalDay(range.to as Date).toISOString(),
       workspaceId: workspaceId === "all" ? null : workspaceId,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

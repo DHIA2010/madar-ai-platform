@@ -33,8 +33,19 @@ function mapPurchase(row: Record<string, unknown>, items: PurchaseLineItemDto[])
   }
 }
 
+// node-pg parses a Postgres `date` column (no time/timezone component) into a JS Date built from
+// its LOCAL calendar fields (confirmed empirically: a date stored as 2026-10-15 comes back as a
+// Date whose .toISOString() reads 2026-10-14T21:00:00Z under TZ=Asia/Riyadh -- i.e. local midnight
+// of the 15th). Formatting it via .toISOString().slice(0,10) re-reads that through UTC and can
+// shift the calendar day backward a full day for any timezone ahead of UTC. Reading the same local
+// getters back out undoes nothing and always reproduces the exact day that was stored, regardless
+// of the server process's timezone.
 function toDateString(value: unknown): string {
-  return new Date(value as string).toISOString().slice(0, 10)
+  const date = value instanceof Date ? value : new Date(value as string)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 function mapLineItem(row: Record<string, unknown>): PurchaseLineItemDto {

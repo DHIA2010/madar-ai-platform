@@ -70,6 +70,28 @@ function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
   ]
 }
 
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+}
+
+function endOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+}
+
+// Every value this component commits is normalized to day boundaries before reaching onChange --
+// a same-day range (one click twice, the أمس/اليوم presets and button) would otherwise leave `to`
+// at local midnight, and consumers that filter with `occurred > dateRange.to` would then exclude
+// nearly every record from that very day, silently zeroing totals.
+function normalizeRange(range: DateRange | undefined): DateRange | undefined {
+  if (!range?.from) {
+    return range
+  }
+  return {
+    from: startOfLocalDay(range.from),
+    to: range.to ? endOfLocalDay(range.to) : undefined,
+  }
+}
+
 function formatDateRangeLabel(range: DateRange | undefined, placeholder: string) {
   if (!range?.from) {
     return placeholder
@@ -220,7 +242,7 @@ export function AppDateRangeFilter({
           selected={value}
           onSelect={(next, selectedDay) => {
             if (!selectedDay) {
-              onChange(next)
+              onChange(normalizeRange(next))
               return
             }
 
@@ -233,7 +255,7 @@ export function AppDateRangeFilter({
             const from = selectedDay < rangeAnchor ? selectedDay : rangeAnchor
             const to = selectedDay < rangeAnchor ? rangeAnchor : selectedDay
 
-            onChange({ from, to })
+            onChange(normalizeRange({ from, to }))
             setRangeAnchor(undefined)
             setOpen(false)
           }}
@@ -284,7 +306,7 @@ export function AppDateRangeFilter({
               type="button"
               className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-all hover:border-sky-400/35 hover:bg-sky-500/10 hover:text-foreground"
               onClick={() => {
-                onChange(preset.range)
+                onChange(normalizeRange(preset.range))
                 setRangeAnchor(undefined)
                 setDisplayMonth(preset.range.from ?? new Date())
                 setOpen(false)
@@ -316,7 +338,7 @@ export function AppDateRangeFilter({
             className="h-9 rounded-xl bg-sky-400 px-3.5 text-sm font-semibold text-foreground shadow-[0_18px_34px_-18px_rgba(14,165,233,0.8)] transition-all hover:bg-sky-300"
             onClick={() => {
               const today = new Date()
-              onChange({ from: today, to: today })
+              onChange(normalizeRange({ from: today, to: today }))
               setRangeAnchor(undefined)
               setDisplayMonth(today)
               setOpen(false)

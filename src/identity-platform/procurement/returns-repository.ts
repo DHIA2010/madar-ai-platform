@@ -11,6 +11,19 @@ import type {
   ReturnStatus,
 } from "./types"
 
+// node-pg parses a Postgres `date` column (no time/timezone component) into a JS Date built from
+// its LOCAL calendar fields -- formatting it via .toISOString().slice(0,10) re-reads that through
+// UTC and can shift the calendar day backward a full day for any timezone ahead of UTC (see the
+// identical fix/comment in expenses-repository.ts's mapExpense). Local getters undo nothing and
+// always reproduce the exact day that was stored.
+function formatDateOnly(value: unknown): string {
+  const date = value instanceof Date ? value : new Date(value as string)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 function mapReturnItem(row: Record<string, unknown>): ReturnLineItemDto {
   return {
     productId: String(row.product_id),
@@ -38,7 +51,7 @@ function mapReturn(row: Record<string, unknown>, items: ReturnLineItemDto[]): Pu
     returnQty,
     returnAmount,
     status: row.status as ReturnStatus,
-    returnDate: new Date(row.return_date as string).toISOString().slice(0, 10),
+    returnDate: formatDateOnly(row.return_date),
     notes: (row.notes as string | null) ?? "",
     createdAt: new Date(row.created_at as string).toISOString(),
   }

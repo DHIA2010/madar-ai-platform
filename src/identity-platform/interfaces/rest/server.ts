@@ -4458,6 +4458,18 @@ export function createIdentityApiServer(
         }
       }
 
+      const cancelExpenseMatch = url.pathname.match(/^\/v1\/expenses\/([^/]+)\/cancel$/)
+      if (cancelExpenseMatch && method === "POST") {
+        if (!expensesService) {
+          return send(503, {
+            code: "EXPENSES_UNAVAILABLE",
+            message: "Expenses are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("expenses:manage")) throw ERRORS.forbidden()
+        return send(200, await expensesService.cancel(actor.organizationId, cancelExpenseMatch[1]))
+      }
+
       const NATIVE_CUSTOMER_ID_PATTERN =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

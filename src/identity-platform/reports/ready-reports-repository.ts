@@ -28,6 +28,21 @@ function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value)
 }
 
+// node-pg parses a Postgres `date` column (no time/timezone component) into a JS Date built from
+// its LOCAL calendar fields -- formatting it via .toISOString().slice(0,10) re-reads that through
+// UTC and can shift the calendar day backward a full day for any timezone ahead of UTC (see the
+// identical fix/comment in expenses-repository.ts's mapExpense). Local getters undo nothing and
+// always reproduce the exact day that was stored. Only for genuine `date`-only columns (e.g.
+// purchases.date) -- bucketKey() below intentionally stays UTC-based, since it buckets real
+// timestamptz instants (created_at/expense_date-as-filter-bound), not a stored calendar date.
+function formatDateOnly(value: unknown): string {
+  const date = value instanceof Date ? value : new Date(value as string)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 // Buckets by date in application code instead of SQL `date_trunc` -- pg-mem (this codebase's test
 // harness) doesn't implement `date_trunc` at all ("implements very few native functions"), and
 // since this is financial-report logic worth actually testing end-to-end, raw per-row values are
@@ -162,7 +177,7 @@ export class ReadyReportsRepository {
     expensesWhere.addOptional("workspace_id = ?", workspaceId)
     const expensesResult = await this.db.query<{ expenses: string }>(
       `SELECT coalesce(sum(amount),0) AS expenses FROM expenses
-       WHERE ${expensesWhere.where} AND deleted_at IS NULL`,
+       WHERE ${expensesWhere.where} AND deleted_at IS NULL AND status != 'cancelled'`,
       expensesWhere.values
     )
 
@@ -232,7 +247,7 @@ export class ReadyReportsRepository {
       `SELECT workspace_id, coalesce(sum(amount),0) AS expenses
        FROM expenses
        WHERE organization_id = $1 AND expense_date >= $2 AND expense_date <= $3::date
-         AND deleted_at IS NULL
+         AND deleted_at IS NULL AND status != 'cancelled'
        GROUP BY workspace_id`,
       [organizationId, from, to]
     )
@@ -361,7 +376,8 @@ export class ReadyReportsRepository {
     ])
     expensesWhere.addOptional("workspace_id = ?", workspaceId)
     const expensesRows = await this.db.query<{ expense_date: string; amount: string }>(
-      `SELECT expense_date, amount FROM expenses WHERE ${expensesWhere.where} AND deleted_at IS NULL`,
+      `SELECT expense_date, amount FROM expenses
+       WHERE ${expensesWhere.where} AND deleted_at IS NULL AND status != 'cancelled'`,
       expensesWhere.values
     )
 
@@ -866,7 +882,7 @@ export class ReadyReportsRepository {
     where.addOptional("workspace_id = ?", workspaceId)
     const result = await this.db.query<{ gross: string }>(
       `SELECT coalesce(sum(amount),0) AS gross FROM expenses
-       WHERE ${where.where} AND deleted_at IS NULL AND tax_inclusive = true`,
+       WHERE ${where.where} AND deleted_at IS NULL AND tax_inclusive = true AND status != 'cancelled'`,
       where.values
     )
     return toNumber(result.rows[0]?.gross)
@@ -928,7 +944,7 @@ export class ReadyReportsRepository {
         const taxNumber =
           typeof companyDetails?.taxNumber === "string" ? companyDetails.taxNumber : null
         purchase = {
-          date: new Date(row.date).toISOString().slice(0, 10),
+          date: formatDateOnly(row.date),
           referenceNumber: row.reference_number,
           supplierId: row.supplier_id,
           supplierName: row.supplier_name,

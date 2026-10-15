@@ -17,4 +17,8 @@ export class ExpensesService {
   create(organizationId: string, input: CreateExpenseInput): Promise<ExpenseDto> {
     return this.repository.create(organizationId, input)
   }
+
+  cancel(organizationId: string, expenseId: string): Promise<ExpenseDto> {
+    return this.repository.cancel(organizationId, expenseId)
+  }
 }

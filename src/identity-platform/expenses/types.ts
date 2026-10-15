@@ -3,6 +3,7 @@
 // (tied to a branch/workspace), never linked to a supplier/vendor.
 
 export type ExpensePaymentMethod = "cash" | "bank_transfer" | "card" | "cheque"
+export type ExpenseStatus = "active" | "cancelled"
 
 export interface ExpenseCategoryDto {
   id: string
@@ -27,6 +28,7 @@ export interface ExpenseDto {
   expenseDate: string
   referenceNumber: string
   notes: string
+  status: ExpenseStatus
   createdAt: string
   updatedAt: string
 }

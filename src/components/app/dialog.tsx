@@ -41,7 +41,7 @@ export function AppDialog({
               <AppButton
                 variant="ghost"
                 size="icon-sm"
-                className="absolute end-2 top-2"
+                className="absolute end-2 top-2 rounded-full text-muted-foreground outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-0 focus-visible:border-transparent"
                 aria-label="Close dialog"
               >
                 <XIcon className="size-4" />
@@ -116,7 +116,10 @@ export function AppConfirmDialog({
             variant="outline"
             onClick={onCancel}
             disabled={loading}
-            className={cancelButtonClassName}
+            className={cn(
+              "h-10 rounded-full border-[#e1e7f0] px-5 text-[13px] font-semibold text-[#5b6b85] hover:bg-[#f7f9fd]",
+              cancelButtonClassName
+            )}
           >
             {cancelLabel}
           </AppButton>
@@ -124,7 +127,13 @@ export function AppConfirmDialog({
             variant={confirmTone === "destructive" ? "destructive" : "default"}
             loading={loading}
             onClick={onConfirm}
-            className={confirmButtonClassName}
+            className={cn(
+              "h-10 rounded-full px-5 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(0,0,0,0.12)]",
+              confirmTone === "destructive"
+                ? "bg-rose-600 hover:bg-rose-700 hover:text-white"
+                : "bg-[#2878ff] hover:bg-[#1f63d6] hover:text-white",
+              confirmButtonClassName
+            )}
           >
             {confirmLabel}
           </AppButton>

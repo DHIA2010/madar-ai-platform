@@ -115,6 +115,7 @@ export function SuffixInput({
   min = 0,
   step = "any",
   placeholder,
+  disabled = false,
 }: {
   value: number
   onChange: (value: number) => void
@@ -122,21 +123,67 @@ export function SuffixInput({
   min?: number
   step?: string | number
   placeholder?: string
+  disabled?: boolean
 }) {
   return (
-    <div className="flex h-11 overflow-hidden rounded-[12px] border border-[#e1e7f0] bg-white">
+    <div
+      className={cn(
+        "flex h-11 overflow-hidden rounded-[12px] border border-[#e1e7f0] bg-white",
+        disabled && "bg-[#f7f9fd] opacity-60"
+      )}
+    >
       <input
         type="number"
         min={min}
         step={step}
         value={Number.isFinite(value) ? value : 0}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value) || 0)}
-        className="h-full w-full border-0 bg-transparent px-3 text-[13px] text-[#0b1738] outline-none"
+        className="h-full w-full border-0 bg-transparent px-3 text-[13px] text-[#0b1738] outline-none disabled:cursor-not-allowed"
       />
       <span className="flex w-14 shrink-0 items-center justify-center border-s border-[#e1e7f0] bg-[#f8fafd] text-[11.5px] font-semibold text-[#6b7b96]">
         {suffix}
       </span>
+    </div>
+  )
+}
+
+// A small two-option segmented control -- "per product" vs "per invoice" -- used for both the tax
+// and discount calculation-level toggles above the line items table.
+export function LevelToggle({
+  value,
+  onChange,
+  productLabel = "حسب المنتج",
+  invoiceLabel = "حسب الفاتورة",
+}: {
+  value: "product" | "invoice"
+  onChange: (value: "product" | "invoice") => void
+  productLabel?: string
+  invoiceLabel?: string
+}) {
+  return (
+    <div className="inline-flex h-9 items-center rounded-[10px] border border-[#e1e7f0] bg-[#f7f9fd] p-0.5">
+      {(
+        [
+          ["product", productLabel],
+          ["invoice", invoiceLabel],
+        ] as const
+      ).map(([option, label]) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={cn(
+            "h-8 rounded-[8px] px-3 text-[11.5px] font-semibold transition-colors",
+            value === option
+              ? "bg-white text-[#2878ff] shadow-sm"
+              : "text-[#6b7b96] hover:text-[#0b1738]"
+          )}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   )
 }

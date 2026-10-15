@@ -263,6 +263,7 @@ async function seedExpense(opts: {
   amount: number
   expenseDate?: string
   taxInclusive?: boolean
+  status?: "active" | "cancelled"
 }) {
   const categoryId = randomUUID()
   await database.query(
@@ -270,8 +271,13 @@ async function seedExpense(opts: {
     [categoryId, opts.organizationId, `Category ${categoryId.slice(0, 6)}`]
   )
   await database.query(
-    `insert into expenses (id, organization_id, workspace_id, category_id, name, amount, payment_method, tax_inclusive, expense_date, created_at, updated_at)
-     values ($1,$2,$3,$4,'Test expense',$5,'cash',$6,$7, now(), now())`,
+    // status is listed last, matching its true physical column position (appended at the end by
+    // migration 098, after deleted_at) -- pg-mem's check-constraint evaluator maps VALUES
+    // positionally against the table's declared column order rather than this INSERT's own
+    // explicit list, so reordering status earlier spuriously trips its check constraint (same
+    // gotcha already hit and documented for purchase_returns.status elsewhere in this file).
+    `insert into expenses (id, organization_id, workspace_id, category_id, name, amount, payment_method, tax_inclusive, expense_date, created_at, updated_at, status)
+     values ($1,$2,$3,$4,'Test expense',$5,'cash',$6,$7, now(), now(), $8)`,
     [
       randomUUID(),
       opts.organizationId,
@@ -280,6 +286,7 @@ async function seedExpense(opts: {
       opts.amount,
       opts.taxInclusive ?? false,
       opts.expenseDate ?? new Date().toISOString().slice(0, 10),
+      opts.status ?? "active",
     ]
   )
 }
@@ -828,6 +835,39 @@ describe("ready reports", () => {
       totalExpenses: 100,
       netVatDue: -10.5,
     })
+  })
+
+  it("excludes a cancelled expense from the VAT return even when it's tax-inclusive", async () => {
+    const { token, actor } = await signIn("owner-vat-cancelled@example.com", "VAT Cancel Org")
+    const workspaceId = actor.workspaceId as string
+
+    await seedExpense({
+      organizationId: actor.organizationId,
+      workspaceId,
+      amount: 115,
+      taxInclusive: true,
+      status: "active",
+      expenseDate: "2026-01-10",
+    })
+    await seedExpense({
+      organizationId: actor.organizationId,
+      workspaceId,
+      amount: 230,
+      taxInclusive: true,
+      status: "cancelled",
+      expenseDate: "2026-01-11",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/reports/ready/vat-return?${RANGE}`, {
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      expenses: { amount: number; vatAmount: number }
+    }
+
+    // Only the active expense counts -- the cancelled one (double the amount) is fully excluded.
+    expect(body.expenses).toEqual({ amount: 100, vatAmount: 15, adjustmentAmount: 0 })
   })
 
   it("computes the purchase invoices report, grouping line items per purchase", async () => {
