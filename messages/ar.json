@@ -2989,7 +2989,10 @@
         "inventory": "المخزون",
         "customers": "العملاء",
         "financial": "المالية",
-        "marketing": "التسويق"
+        "marketing": "التسويق",
+        "vat": "الضرائب",
+        "suppliers_purchases": "الموردون والمشتريات",
+        "other": "أخرى"
       }
     },
     "kpiLibrary": {
@@ -3133,6 +3136,175 @@
         "updated": "تم تحديث المؤشر بنجاح.",
         "created": "تم إنشاء المؤشر بنجاح.",
         "saveFailed": "تعذر حفظ المؤشر."
+      }
+    },
+    "overview": {
+      "title": "التقارير",
+      "subtitle": "اكتشف رؤى أعمالك من خلال التقارير الجاهزة أو أنشئ تقاريرك المخصصة",
+      "tabs": {
+        "ready": "التقارير الجاهزة",
+        "custom": "التقارير المخصصة"
+      },
+      "createCustomReport": "إنشاء تقرير مخصص",
+      "savedKpis": "المؤشرات المحفوظة",
+      "readyTab": {
+        "title": "التقارير الجاهزة",
+        "subtitle": "تقارير معدة مسبقاً وجاهزة للاستخدام",
+        "emptyTitle": "لا توجد تقارير جاهزة بعد",
+        "emptyDescription": "سيتم عرض التقارير الجاهزة هنا فور توفرها."
+      },
+      "customTab": {
+        "title": "التقارير المخصصة",
+        "subtitle": "أنشئ تقاريرك الخاصة وتحكم في بياناتك",
+        "emptyTitle": "لا توجد تقارير مخصصة بعد",
+        "emptyDescription": "أنشئ أول تقرير مخصص لمتابعة البيانات التي تهمك من مؤشراتك المحفوظة."
+      },
+      "table": {
+        "name": "اسم التقرير",
+        "description": "الوصف",
+        "category": "الفئة",
+        "owner": "المالك",
+        "updatedAt": "آخر تحديث",
+        "actions": "الإجراءات",
+        "moreActionsAriaLabel": "المزيد من الإجراءات",
+        "edit": "تعديل",
+        "delete": "حذف",
+        "viewReport": "عرض التقرير",
+        "bySystem": "بواسطة النظام",
+        "byUser": "بواسطة {name}",
+        "unknownUser": "مستخدم"
+      },
+      "categoryFilter": {
+        "all": "الكل"
+      },
+      "pagination": {
+        "noResults": "لا توجد نتائج",
+        "showingRange": "عرض {from} - {to} من {total} تقرير",
+        "pageSizeLabel": "عدد العناصر في الصفحة",
+        "firstPageAriaLabel": "الصفحة الأولى",
+        "previousPageAriaLabel": "الصفحة السابقة",
+        "nextPageAriaLabel": "الصفحة التالية",
+        "lastPageAriaLabel": "الصفحة الأخيرة"
+      },
+      "toasts": {
+        "deleted": "تم حذف التقرير بنجاح.",
+        "deleteFailed": "تعذر حذف التقرير."
+      },
+      "bespokeReports": {
+        "readyNetIncome": {
+          "name": "تقرير صافي الدخل",
+          "description": "تحليل صافي الدخل من المبيعات والمصروفات مع مخطط توزيع الحسابات."
+        },
+        "readySalesByUserPaymentMethod": {
+          "name": "المبيعات حسب المستخدم وطريقة الدفع",
+          "description": "توزيع المبيعات بين المستخدمين وطرق الدفع."
+        },
+        "readySalesByCustomer": {
+          "name": "تقرير المبيعات حسب العميل",
+          "description": "تحليل المبيعات والطلبات لكل عميل."
+        },
+        "readySalesByProduct": {
+          "name": "تقرير المبيعات حسب المنتج",
+          "description": "تحليل المبيعات لكل منتج وفئة."
+        },
+        "readySalesByInvoiceSource": {
+          "name": "المبيعات حسب مصدري الفاتورة",
+          "description": "توزيع المبيعات حسب المستخدم الذي أصدر الفاتورة."
+        },
+        "readyVatReturn": {
+          "name": "الإقرار الضريبي",
+          "description": "ملخص المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة."
+        },
+        "readyPurchaseInvoices": {
+          "name": "تقرير فواتير المشتريات",
+          "description": "عرض جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد."
+        },
+        "readySalesMovement": {
+          "name": "تقرير الحركة اليومية للمبيعات",
+          "description": "نشاط المبيعات خلال اليوم حسب الوقت."
+        },
+        "readySalesByBranch": {
+          "name": "تقرير المبيعات حسب الفرع",
+          "description": "إجمالي المبيعات وعدد العمليات ومتوسط قيمة الفاتورة لكل فرع."
+        }
+      }
+    },
+    "reportBuilder": {
+      "editTitle": "تعديل التقرير المخصص",
+      "createTitle": "إنشاء تقرير مخصص",
+      "subtitle": "أضف مؤشراتك واسحبها أو غيّر حجمها لبناء تقريرك المخصص",
+      "cancel": "إلغاء",
+      "saving": "جارٍ الحفظ...",
+      "save": "حفظ",
+      "addKpiAriaLabel": "إضافة {name} إلى التقرير",
+      "removeKpiAriaLabel": "إزالة المؤشر",
+      "unknownKpi": "مؤشر غير معروف",
+      "kpiLoadFailed": "تعذر تحميل بيانات المؤشر",
+      "canvasHighlights": {
+        "flexibleVisualization": "تصور مرن",
+        "interactiveFilters": "فلاتر تفاعلية",
+        "multipleKpis": "مؤشرات متعددة"
+      },
+      "canvasEmpty": {
+        "title": "أضف مؤشرات هنا لبناء تقريرك المخصص",
+        "description": "اضغط + بجانب أي مؤشر من القائمة لإضافته، ثم اسحبه أو غيّر حجمه بحرية داخل اللوحة."
+      },
+      "createNewKpi": "إنشاء مؤشر جديد",
+      "settingsPanel": {
+        "title": "إعدادات التقرير",
+        "nameLabel": "اسم التقرير *",
+        "descriptionLabel": "الوصف",
+        "showFilterBarLabel": "إظهار شريط الفلاتر",
+        "showComparisonLabel": "عرض أرقام المقارنة",
+        "sharingLabel": "المشاركة",
+        "sharingPrivate": "خاص (لي فقط)",
+        "sharingOrganization": "المؤسسة بالكامل",
+        "defaultFiltersLabel": "الفلاتر الافتراضية",
+        "defaultFiltersDescription": "تُطبّق تلقائياً على هذا التقرير لكل من يفتحه. يمكن لمن يعرضه تعديلها مؤقتاً من شريط الفلاتر، لكنها تعود إلى ما هو محفوظ هنا عند التحديث.",
+        "removeFilterAriaLabel": "حذف الفلتر",
+        "valuePlaceholder": "القيمة",
+        "searchPlaceholder": "ابحث عن قيمة...",
+        "addFilter": "إضافة فلتر",
+        "addFilterHint": "أضف مؤشراً إلى التقرير أولاً لإتاحة فلاتره."
+      },
+      "sidebar": {
+        "title": "المؤشرات المتاحة",
+        "subtitle": "أضف مؤشراً إلى التقرير",
+        "searchPlaceholder": "ابحث عن مؤشر...",
+        "noKpisYet": "لا توجد مؤشرات محفوظة بعد.",
+        "noMatch": "لا توجد نتائج مطابقة."
+      },
+      "toasts": {
+        "validationFailed": "يرجى إدخال اسم التقرير وإضافة مؤشر واحد على الأقل.",
+        "updated": "تم تحديث التقرير بنجاح.",
+        "created": "تم إنشاء التقرير بنجاح.",
+        "saveFailed": "تعذر حفظ التقرير."
+      }
+    },
+    "reportViewer": {
+      "loadFailed": "تعذر تحميل التقرير",
+      "exporting": "جاري التصدير...",
+      "exportPdf": "تصدير PDF",
+      "edit": "تعديل",
+      "appliedFiltersLabel": "الفلاتر المطبقة:",
+      "noFiltersApplied": "لا توجد فلاتر مطبقة حالياً -- يعرض التقرير بياناته الافتراضية.",
+      "valuePlaceholder": "القيمة",
+      "searchPlaceholder": "ابحث عن قيمة...",
+      "removeFilterAriaLabel": "حذف الفلتر",
+      "addFilter": "إضافة فلتر",
+      "apply": "تطبيق",
+      "clearAll": "مسح الكل",
+      "sessionFiltersNote": "هذه الفلاتر مؤقتة لهذه الجلسة فقط ولا يتم حفظها -- لتغييرها بشكل دائم عدّل التقرير.",
+      "noWidgets": "لا توجد مؤشرات في هذا التقرير",
+      "unknownKpi": "مؤشر غير معروف",
+      "toasts": {
+        "applyFiltersFailed": "تعذر تطبيق الفلاتر.",
+        "clearFiltersFailed": "تعذر مسح الفلاتر.",
+        "timeGroupingChangeFailed": "تعذر تغيير التجميع الزمني."
+      },
+      "pdf": {
+        "generatedAt": "تم إنشاؤه في {date}",
+        "appliedFiltersLabel": "الفلاتر المطبقة على هذا التقرير"
       }
     }
   }

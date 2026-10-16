@@ -2989,7 +2989,10 @@
         "inventory": "Inventory",
         "customers": "Customers",
         "financial": "Financial",
-        "marketing": "Marketing"
+        "marketing": "Marketing",
+        "vat": "Taxes",
+        "suppliers_purchases": "Suppliers & purchases",
+        "other": "Other"
       }
     },
     "kpiLibrary": {
@@ -3133,6 +3136,175 @@
         "updated": "KPI updated successfully.",
         "created": "KPI created successfully.",
         "saveFailed": "Couldn't save the KPI."
+      }
+    },
+    "overview": {
+      "title": "Reports",
+      "subtitle": "Discover insights about your business through ready-made reports, or build your own custom reports",
+      "tabs": {
+        "ready": "Ready-made reports",
+        "custom": "Custom reports"
+      },
+      "createCustomReport": "Create custom report",
+      "savedKpis": "Saved KPIs",
+      "readyTab": {
+        "title": "Ready-made reports",
+        "subtitle": "Pre-built reports, ready to use",
+        "emptyTitle": "No ready-made reports yet",
+        "emptyDescription": "Ready-made reports will appear here once available."
+      },
+      "customTab": {
+        "title": "Custom reports",
+        "subtitle": "Build your own reports and control your data",
+        "emptyTitle": "No custom reports yet",
+        "emptyDescription": "Create your first custom report to track the data that matters to you from your saved KPIs."
+      },
+      "table": {
+        "name": "Report name",
+        "description": "Description",
+        "category": "Category",
+        "owner": "Owner",
+        "updatedAt": "Last updated",
+        "actions": "Actions",
+        "moreActionsAriaLabel": "More actions",
+        "edit": "Edit",
+        "delete": "Delete",
+        "viewReport": "View report",
+        "bySystem": "By system",
+        "byUser": "By {name}",
+        "unknownUser": "User"
+      },
+      "categoryFilter": {
+        "all": "All"
+      },
+      "pagination": {
+        "noResults": "No results",
+        "showingRange": "Showing {from} - {to} of {total} reports",
+        "pageSizeLabel": "Items per page",
+        "firstPageAriaLabel": "First page",
+        "previousPageAriaLabel": "Previous page",
+        "nextPageAriaLabel": "Next page",
+        "lastPageAriaLabel": "Last page"
+      },
+      "toasts": {
+        "deleted": "Report deleted successfully.",
+        "deleteFailed": "Couldn't delete the report."
+      },
+      "bespokeReports": {
+        "readyNetIncome": {
+          "name": "Net income report",
+          "description": "Net income analysis from sales and expenses, with an account breakdown chart."
+        },
+        "readySalesByUserPaymentMethod": {
+          "name": "Sales by user and payment method",
+          "description": "Sales distribution across users and payment methods."
+        },
+        "readySalesByCustomer": {
+          "name": "Sales by customer report",
+          "description": "Sales and order analysis per customer."
+        },
+        "readySalesByProduct": {
+          "name": "Sales by product report",
+          "description": "Sales analysis per product and category."
+        },
+        "readySalesByInvoiceSource": {
+          "name": "Sales by invoice source",
+          "description": "Sales distribution by the user who issued the invoice."
+        },
+        "readyVatReturn": {
+          "name": "VAT return",
+          "description": "Summary of sales, purchases, expenses, and VAT for the selected period."
+        },
+        "readyPurchaseInvoices": {
+          "name": "Purchase invoices report",
+          "description": "Shows every purchase invoice with amount and tax details per supplier."
+        },
+        "readySalesMovement": {
+          "name": "Daily sales movement report",
+          "description": "Sales activity throughout the day, by time."
+        },
+        "readySalesByBranch": {
+          "name": "Sales by branch report",
+          "description": "Total sales, transaction count, and average invoice value per branch."
+        }
+      }
+    },
+    "reportBuilder": {
+      "editTitle": "Edit custom report",
+      "createTitle": "Create custom report",
+      "subtitle": "Add your KPIs, drag or resize them to build your custom report",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save",
+      "addKpiAriaLabel": "Add {name} to the report",
+      "removeKpiAriaLabel": "Remove KPI",
+      "unknownKpi": "Unknown KPI",
+      "kpiLoadFailed": "Couldn't load the KPI's data",
+      "canvasHighlights": {
+        "flexibleVisualization": "Flexible visualization",
+        "interactiveFilters": "Interactive filters",
+        "multipleKpis": "Multiple KPIs"
+      },
+      "canvasEmpty": {
+        "title": "Add KPIs here to build your custom report",
+        "description": "Click + next to any KPI in the list to add it, then drag or resize it freely on the canvas."
+      },
+      "createNewKpi": "Create new KPI",
+      "settingsPanel": {
+        "title": "Report settings",
+        "nameLabel": "Report name *",
+        "descriptionLabel": "Description",
+        "showFilterBarLabel": "Show filter bar",
+        "showComparisonLabel": "Show comparison figures",
+        "sharingLabel": "Sharing",
+        "sharingPrivate": "Private (only me)",
+        "sharingOrganization": "Entire organization",
+        "defaultFiltersLabel": "Default filters",
+        "defaultFiltersDescription": "Applied automatically to this report for everyone who opens it. Anyone viewing it can temporarily adjust them from the filter bar, but they revert to what's saved here on refresh.",
+        "removeFilterAriaLabel": "Remove filter",
+        "valuePlaceholder": "Value",
+        "searchPlaceholder": "Search for a value...",
+        "addFilter": "Add filter",
+        "addFilterHint": "Add a KPI to the report first to make its filters available."
+      },
+      "sidebar": {
+        "title": "Available KPIs",
+        "subtitle": "Add a KPI to the report",
+        "searchPlaceholder": "Search for a KPI...",
+        "noKpisYet": "No saved KPIs yet.",
+        "noMatch": "No matching results."
+      },
+      "toasts": {
+        "validationFailed": "Please enter a report name and add at least one KPI.",
+        "updated": "Report updated successfully.",
+        "created": "Report created successfully.",
+        "saveFailed": "Couldn't save the report."
+      }
+    },
+    "reportViewer": {
+      "loadFailed": "Couldn't load the report",
+      "exporting": "Exporting...",
+      "exportPdf": "Export PDF",
+      "edit": "Edit",
+      "appliedFiltersLabel": "Applied filters:",
+      "noFiltersApplied": "No filters applied right now -- the report shows its default data.",
+      "valuePlaceholder": "Value",
+      "searchPlaceholder": "Search for a value...",
+      "removeFilterAriaLabel": "Remove filter",
+      "addFilter": "Add filter",
+      "apply": "Apply",
+      "clearAll": "Clear all",
+      "sessionFiltersNote": "These filters are temporary for this session only and aren't saved -- to change them permanently, edit the report.",
+      "noWidgets": "This report has no KPIs",
+      "unknownKpi": "Unknown KPI",
+      "toasts": {
+        "applyFiltersFailed": "Couldn't apply the filters.",
+        "clearFiltersFailed": "Couldn't clear the filters.",
+        "timeGroupingChangeFailed": "Couldn't change the time grouping."
+      },
+      "pdf": {
+        "generatedAt": "Generated on {date}",
+        "appliedFiltersLabel": "Filters applied to this report"
       }
     }
   }

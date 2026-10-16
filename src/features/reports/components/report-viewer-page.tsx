@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { Calendar, Edit, FileDown, Plus, RotateCcw, Trash2 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
@@ -43,24 +44,30 @@ import {
 import { kpiService } from "../services"
 import { KpiWidgetRenderer } from "./kpi-widget-renderer"
 
-const OPERATOR_LABELS: Record<ReportFilterOperator, string> = {
-  eq: "يساوي (=)",
-  neq: "لا يساوي (≠)",
-  contains: "يحتوي على",
-  not_contains: "لا يحتوي على",
+import { type Locale, localeDirection } from "@/i18n/locales"
+
+type KpiWizardTranslator = ReturnType<typeof useTranslations<"reports.kpiWizard">>
+
+function operatorLabel(op: ReportFilterOperator, t: KpiWizardTranslator): string {
+  return t(`operators.${op}` as "operators.eq")
 }
 
 const FILTER_FIELD_CLASS =
   "h-9 rounded-[8px] border-[#e1e7f0] bg-white text-[12px] text-[#0b1738] shadow-none focus-visible:border-[#2878ff] focus-visible:ring-[3px] focus-visible:ring-[#2878ff]/12"
 
-// Spelled-out month (matches the PDF header's own "تم إنشاؤه في" date style) rather than
+// Spelled-out month (matches the PDF header's own "Generated on" date style) rather than
 // dateStyle: "medium", which renders as plain DD/MM/YYYY digits for this locale -- much easier to
 // read at the small size these chips render at.
-const CHIP_DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
+function chipDateFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(
+    locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory",
+    {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }
+  )
+}
 
 // A widget's `order` field doesn't necessarily match where it actually sits in the drag-grid --
 // x/y are what place it on screen (gridColumn/gridRow below), and order can drift from that once
@@ -81,6 +88,11 @@ function widgetPixelHeight(rowSpan: number): number {
 }
 
 export function ReportViewerPage({ reportId }: { reportId: string }) {
+  const t = useTranslations("reports.reportViewer")
+  const tKpiWizard = useTranslations("reports.kpiWizard")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
+  const CHIP_DATE_FORMAT = chipDateFormatter(locale)
   const router = useRouter()
   const { currentOrganization } = useWorkspace()
   const [data, setData] = useState<CustomReportData | null>(null)
@@ -213,7 +225,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
       setData(refreshed)
       setAppliedOverrides(overrides)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر تطبيق الفلاتر.")
+      toast.error(error instanceof Error ? error.message : t("toasts.applyFiltersFailed"))
     } finally {
       setApplyingFilters(false)
     }
@@ -231,7 +243,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
       setViewerFilters([])
       setAppliedOverrides(undefined)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر مسح الفلاتر.")
+      toast.error(error instanceof Error ? error.message : t("toasts.clearFiltersFailed"))
     } finally {
       setApplyingFilters(false)
     }
@@ -275,7 +287,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
         current ? { ...current, results: { ...current.results, [kpi.id]: result } } : current
       )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر تغيير التجميع الزمني.")
+      toast.error(error instanceof Error ? error.message : t("toasts.timeGroupingChangeFailed"))
     }
   }
 
@@ -446,7 +458,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
     return (
       <AppPage>
         <AppContainer>
-          <AppEmpty title="تعذر تحميل التقرير" />
+          <AppEmpty title={t("loadFailed")} />
         </AppContainer>
       </AppPage>
     )
@@ -459,7 +471,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
       <AppContainer className="space-y-6">
         <AppPageHeader
           breadcrumbItems={[
-            { label: "التقارير", href: ROUTES.reports },
+            { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
             { label: report.name, current: true },
           ]}
           title={report.name}
@@ -477,7 +489,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                 onClick={() => void handleExportPdf()}
                 className="h-11 gap-2 rounded-full border-[#e1e7f0] bg-white px-5 text-[13.5px] font-semibold text-[#0b1738] shadow-none transition-all hover:-translate-y-px hover:border-[#c4d5f0] hover:bg-[#fafbfd] hover:shadow-[0_6px_16px_rgba(11,23,56,0.08)] active:translate-y-0"
               >
-                {exporting ? "جاري التصدير..." : "تصدير PDF"}
+                {exporting ? t("exporting") : t("exportPdf")}
               </AppButton>
               {!report.isSystem ? (
                 <Can permission="reports:manage">
@@ -491,7 +503,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                     onClick={() => router.push(ROUTES.reportsCustomEdit(report.id))}
                     className="h-11 gap-2 rounded-full border-[#e1e7f0] bg-white px-5 text-[13.5px] font-semibold text-[#0b1738] shadow-none transition-all hover:-translate-y-px hover:border-[#c4d5f0] hover:bg-[#fafbfd] hover:shadow-[0_6px_16px_rgba(11,23,56,0.08)] active:translate-y-0"
                   >
-                    تعديل
+                    {t("edit")}
                   </AppButton>
                 </Can>
               ) : null}
@@ -506,7 +518,9 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                 sitting in the (possibly unapplied) draft controls beneath it. */}
             {appliedFilterSummary.from || appliedFilterSummary.filters.length > 0 ? (
               <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-[#5b6b85]">الفلاتر المطبقة:</span>
+                <span className="text-[11px] font-semibold text-[#5b6b85]">
+                  {t("appliedFiltersLabel")}
+                </span>
                 {appliedFilterSummary.from && appliedFilterSummary.to ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf1ff] px-2.5 py-1 text-[11px] font-semibold text-[#2878ff]">
                     <Calendar className="size-3" />
@@ -524,16 +538,14 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                       key={index}
                       className="inline-flex items-center gap-1 rounded-full bg-[#eaf1ff] px-2.5 py-1 text-[11px] font-semibold text-[#2878ff]"
                     >
-                      {option?.label ?? filter.field} {OPERATOR_LABELS[filter.operator]} «
+                      {option?.label ?? filter.field} {operatorLabel(filter.operator, tKpiWizard)} «
                       {filter.value}»
                     </span>
                   )
                 })}
               </div>
             ) : (
-              <p className="mb-3 text-[11px] text-[#95a4bd]">
-                لا توجد فلاتر مطبقة حالياً -- يعرض التقرير بياناته الافتراضية.
-              </p>
+              <p className="mb-3 text-[11px] text-[#95a4bd]">{t("noFiltersApplied")}</p>
             )}
 
             <div className="flex flex-wrap items-end gap-2.5">
@@ -608,7 +620,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                       <AppSelectContent>
                         {fieldOption?.allowedOperators.map((op) => (
                           <AppSelectItem key={op} value={op}>
-                            {OPERATOR_LABELS[op]}
+                            {operatorLabel(op, tKpiWizard)}
                           </AppSelectItem>
                         ))}
                       </AppSelectContent>
@@ -620,7 +632,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                         onChange={(event) =>
                           updateViewerFilter(index, { value: event.target.value })
                         }
-                        placeholder="القيمة"
+                        placeholder={t("valuePlaceholder")}
                         className={cn(FILTER_FIELD_CLASS, "w-40 px-3 placeholder:text-[#95a4bd]")}
                       />
                     ) : (
@@ -629,8 +641,8 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                         onChange={(next) => updateViewerFilter(index, { value: next })}
                         onCreate={(draft) => updateViewerFilter(index, { value: draft })}
                         options={valueOptions.map((value) => ({ value, label: value }))}
-                        placeholder="القيمة"
-                        searchPlaceholder="ابحث عن قيمة..."
+                        placeholder={t("valuePlaceholder")}
+                        searchPlaceholder={t("searchPlaceholder")}
                         compact
                         hideTriggerMark
                         triggerClassName={cn(FILTER_FIELD_CLASS, "w-40 justify-between")}
@@ -641,7 +653,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                       type="button"
                       onClick={() => removeViewerFilter(index)}
                       className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-[#e0484d] transition-colors hover:bg-[#fdeeee]"
-                      aria-label="حذف الفلتر"
+                      aria-label={t("removeFilterAriaLabel")}
                     >
                       <Trash2 className="size-3.5" />
                     </button>
@@ -656,7 +668,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                 className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[#e1e7f0] bg-white px-3.5 text-[12px] font-semibold text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:pointer-events-none disabled:opacity-40"
               >
                 <Plus className="size-3.5" />
-                إضافة فلتر
+                {t("addFilter")}
               </button>
 
               <AppButton
@@ -664,7 +676,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                 onClick={() => void applyViewerFilters()}
                 className="h-9 rounded-full bg-[#2878ff] px-4 text-[12px] font-semibold text-white shadow-none hover:bg-[#1f63d6]"
               >
-                تطبيق
+                {t("apply")}
               </AppButton>
 
               <button
@@ -676,17 +688,15 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                 className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[#e1e7f0] bg-white px-3.5 text-[12px] font-semibold text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:pointer-events-none disabled:opacity-40"
               >
                 <RotateCcw className="size-3.5" />
-                مسح الكل
+                {t("clearAll")}
               </button>
             </div>
-            <p className="mt-2.5 text-[10.5px] text-[#95a4bd]">
-              هذه الفلاتر مؤقتة لهذه الجلسة فقط ولا يتم حفظها -- لتغييرها بشكل دائم عدّل التقرير.
-            </p>
+            <p className="mt-2.5 text-[10.5px] text-[#95a4bd]">{t("sessionFiltersNote")}</p>
           </div>
         ) : null}
 
         {report.widgets.length === 0 ? (
-          <AppEmpty title="لا توجد مؤشرات في هذا التقرير" />
+          <AppEmpty title={t("noWidgets")} />
         ) : (
           // A static CSS grid mirroring the builder's 12-column layout (x/w in columns, y/h in
           // rows) -- read-only here, so no drag/resize library is needed, just the same
@@ -700,7 +710,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                 return (
                   <div
                     key={widget.id}
-                    dir="rtl"
+                    dir={localeDirection(locale)}
                     className="overflow-hidden rounded-xl border bg-card"
                     style={{
                       gridColumn: `${widget.x + 1} / span ${widget.w}`,
@@ -708,7 +718,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                     }}
                   >
                     {!kpi ? (
-                      <p className="p-4 text-sm text-muted-foreground">مؤشر غير معروف</p>
+                      <p className="p-4 text-sm text-muted-foreground">{t("unknownKpi")}</p>
                     ) : !result ? (
                       <AppLoading variant="chart" />
                     ) : (
@@ -764,11 +774,12 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                   <p className="mb-1 text-sm text-[#6b7b96]">{report.description}</p>
                 ) : null}
                 <p className="text-[11px] text-[#95a4bd]">
-                  تم إنشاؤه في{" "}
-                  {new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-                    dateStyle: "long",
-                    timeStyle: "short",
-                  }).format(new Date())}
+                  {t("pdf.generatedAt", {
+                    date: new Intl.DateTimeFormat(
+                      locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory",
+                      { dateStyle: "long", timeStyle: "short" }
+                    ).format(new Date()),
+                  })}
                 </p>
               </div>
               {currentOrganization ? (
@@ -801,7 +812,7 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
             {appliedFilterSummary.from || appliedFilterSummary.filters.length > 0 ? (
               <div className="border-t border-[#f1f4f9] px-4 pb-3 pt-3">
                 <p data-canvas-text className="mb-1.5 text-[10.5px] font-semibold text-[#5b6b85]">
-                  الفلاتر المطبقة على هذا التقرير
+                  {t("pdf.appliedFiltersLabel")}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {appliedFilterSummary.from && appliedFilterSummary.to ? (
@@ -829,8 +840,8 @@ export function ReportViewerPage({ reportId }: { reportId: string }) {
                         data-canvas-text
                         className="inline-flex items-center rounded-full bg-[#eaf1ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]"
                       >
-                        {option?.label ?? filter.field} {OPERATOR_LABELS[filter.operator]} «
-                        {filter.value}»
+                        {option?.label ?? filter.field} {operatorLabel(filter.operator, tKpiWizard)}{" "}
+                        «{filter.value}»
                       </span>
                     )
                   })}

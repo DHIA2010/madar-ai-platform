@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   BarChart3,
   ChevronLeft,
@@ -17,7 +18,6 @@ import {
   Package,
   PieChart,
   Plus,
-  Tag,
   TrendingUp,
   Truck,
   Users,
@@ -45,6 +45,8 @@ import { Can } from "@/features/authentication"
 
 import { type CustomReport, reportService } from "../services"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const HEADING = "text-[#0b1738]"
 const MUTED = "text-[#6b7b96]"
 const PAGER_BUTTON_CLASS =
@@ -59,57 +61,51 @@ const PILL_SECONDARY_CLASS =
   "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-[#e1e7f0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738]"
 
 interface CategoryMeta {
-  label: string
   badgeClassName: string
   icon: LucideIcon
   iconTileClassName: string
 }
 
+type KpiTranslator = ReturnType<typeof useTranslations<"reports.kpi">>
+type OverviewTranslator = ReturnType<typeof useTranslations<"reports.overview">>
+
 const CATEGORY_META: Record<string, CategoryMeta> = {
   sales: {
-    label: "المبيعات",
     badgeClassName: "bg-[#eaf1ff] text-[#2878ff]",
     icon: BarChart3,
     iconTileClassName: "bg-[#eaf1ff] text-[#2878ff]",
   },
   products: {
-    label: "المنتجات",
     badgeClassName: "bg-[#f3ecff] text-[#8b5cf6]",
     icon: Package,
     iconTileClassName: "bg-[#f3ecff] text-[#8b5cf6]",
   },
   inventory: {
-    label: "المخزون",
     badgeClassName: "bg-[#fff7e6] text-[#e08b00]",
     icon: Warehouse,
     iconTileClassName: "bg-[#fff7e6] text-[#e08b00]",
   },
   customers: {
-    label: "العملاء",
     badgeClassName: "bg-[#e9f8ef] text-[#1f9d55]",
     icon: Users,
     iconTileClassName: "bg-[#e9f8ef] text-[#1f9d55]",
   },
   financial: {
-    label: "المالية",
     badgeClassName: "bg-[#fdeeee] text-[#e0484d]",
     icon: PieChart,
     iconTileClassName: "bg-[#fdeeee] text-[#e0484d]",
   },
   marketing: {
-    label: "التسويق",
     badgeClassName: "bg-[#e6fbfa] text-[#0d9488]",
     icon: TrendingUp,
     iconTileClassName: "bg-[#e6fbfa] text-[#0d9488]",
   },
   vat: {
-    label: "الضرائب",
     badgeClassName: "bg-[#fff7e6] text-[#b4700a]",
     icon: Landmark,
     iconTileClassName: "bg-[#fff7e6] text-[#b4700a]",
   },
   suppliers_purchases: {
-    label: "الموردون والمشتريات",
     badgeClassName: "bg-[#eef2f8] text-[#475569]",
     icon: Truck,
     iconTileClassName: "bg-[#eef2f8] text-[#475569]",
@@ -117,7 +113,6 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
 }
 
 const DEFAULT_CATEGORY_META: CategoryMeta = {
-  label: "أخرى",
   badgeClassName: "bg-[#eef2f8] text-[#5b6b85]",
   icon: FileBarChart2,
   iconTileClassName: "bg-[#eef2f8] text-[#5b6b85]",
@@ -126,15 +121,32 @@ const DEFAULT_CATEGORY_META: CategoryMeta = {
 // A handful of the seeded ready-made reports read better with a more specific icon than their
 // category's default (e.g. "sales" defaults to a bar chart, but the branch-comparison report
 // reads more clearly as a share/branch icon) -- purely cosmetic, falls back to the category icon
-// for every custom report a user creates.
-const REPORT_NAME_ICON: Record<string, LucideIcon> = {
-  "تقرير المبيعات حسب الفرع": GitBranch,
-  "تقرير الحركة اليومية": TrendingUp,
-  "تقرير الفئات": Tag,
+// for every custom report a user creates. Keyed by the bespoke report's stable id (not its
+// locale-dependent display name).
+const REPORT_ID_ICON: Record<string, LucideIcon> = {
+  "ready-sales-by-branch": GitBranch,
+  "ready-sales-movement": TrendingUp,
 }
 
 function categoryMeta(category: string): CategoryMeta {
   return CATEGORY_META[category] ?? DEFAULT_CATEGORY_META
+}
+
+function categoryLabel(category: string, t: KpiTranslator): string {
+  const KNOWN_CATEGORIES = [
+    "sales",
+    "products",
+    "inventory",
+    "customers",
+    "financial",
+    "marketing",
+    "vat",
+    "suppliers_purchases",
+  ]
+  if (KNOWN_CATEGORIES.includes(category)) {
+    return t(`categories.${category}` as "categories.sales")
+  }
+  return t("categories.other")
 }
 
 // 9 bespoke, hand-built dashboards (not backed by the KPI/custom-report system -- see
@@ -142,96 +154,97 @@ function categoryMeta(category: string): CategoryMeta {
 // appear in the one place the user asked for. The rest of the CustomReport shape below is never
 // read for these rows: showOwner is false on the ready tab, and the view button short-circuits
 // via viewHref before anything else would need them.
-const BESPOKE_READY_REPORTS: CustomReport[] = [
-  {
-    id: "ready-net-income",
-    name: "تقرير صافي الدخل",
-    description: "تحليل صافي الدخل من المبيعات والمصروفات مع مخطط توزيع الحسابات.",
-    category: "financial",
-    viewHref: ROUTES.reportsReadyNetIncome,
-  },
-  {
-    id: "ready-sales-by-user-payment-method",
-    name: "المبيعات حسب المستخدم وطريقة الدفع",
-    description: "توزيع المبيعات بين المستخدمين وطرق الدفع.",
-    category: "sales",
-    viewHref: ROUTES.reportsReadySalesByUserPaymentMethod,
-  },
-  {
-    id: "ready-sales-by-customer",
-    name: "تقرير المبيعات حسب العميل",
-    description: "تحليل المبيعات والطلبات لكل عميل.",
-    category: "customers",
-    viewHref: ROUTES.reportsReadySalesByCustomer,
-  },
-  {
-    id: "ready-sales-by-product",
-    name: "تقرير المبيعات حسب المنتج",
-    description: "تحليل المبيعات لكل منتج وفئة.",
-    category: "products",
-    viewHref: ROUTES.reportsReadySalesByProduct,
-  },
-  {
-    id: "ready-sales-by-invoice-source",
-    name: "المبيعات حسب مصدري الفاتورة",
-    description: "توزيع المبيعات حسب المستخدم الذي أصدر الفاتورة.",
-    category: "sales",
-    viewHref: ROUTES.reportsReadySalesByInvoiceSource,
-  },
-  {
-    id: "ready-vat-return",
-    name: "الإقرار الضريبي",
-    description: "ملخص المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة.",
-    category: "vat",
-    viewHref: ROUTES.reportsReadyVatReturn,
-  },
-  {
-    id: "ready-purchase-invoices",
-    name: "تقرير فواتير المشتريات",
-    description: "عرض جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد.",
-    category: "suppliers_purchases",
-    viewHref: ROUTES.reportsReadyPurchaseInvoices,
-  },
-  {
-    id: "ready-sales-movement",
-    name: "تقرير الحركة اليومية للمبيعات",
-    description: "نشاط المبيعات خلال اليوم حسب الوقت.",
-    category: "sales",
-    viewHref: ROUTES.reportsReadySalesMovement,
-  },
-  {
-    id: "ready-sales-by-branch",
-    name: "تقرير المبيعات حسب الفرع",
-    description: "إجمالي المبيعات وعدد العمليات ومتوسط قيمة الفاتورة لكل فرع.",
-    category: "sales",
-    viewHref: ROUTES.reportsReadySalesByBranch,
-  },
-].map((entry) => ({
-  organizationId: "",
-  workspaceId: null,
-  defaultFilters: {},
-  displayOptions: {},
-  sharing: "organization",
-  isSystem: true,
-  status: "active",
-  createdByUserId: "",
-  createdByName: null,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  widgets: [],
-  ...entry,
-}))
+function getBespokeReadyReports(t: OverviewTranslator): CustomReport[] {
+  return (
+    [
+      {
+        id: "ready-net-income",
+        key: "readyNetIncome",
+        category: "financial",
+        viewHref: ROUTES.reportsReadyNetIncome,
+      },
+      {
+        id: "ready-sales-by-user-payment-method",
+        key: "readySalesByUserPaymentMethod",
+        category: "sales",
+        viewHref: ROUTES.reportsReadySalesByUserPaymentMethod,
+      },
+      {
+        id: "ready-sales-by-customer",
+        key: "readySalesByCustomer",
+        category: "customers",
+        viewHref: ROUTES.reportsReadySalesByCustomer,
+      },
+      {
+        id: "ready-sales-by-product",
+        key: "readySalesByProduct",
+        category: "products",
+        viewHref: ROUTES.reportsReadySalesByProduct,
+      },
+      {
+        id: "ready-sales-by-invoice-source",
+        key: "readySalesByInvoiceSource",
+        category: "sales",
+        viewHref: ROUTES.reportsReadySalesByInvoiceSource,
+      },
+      {
+        id: "ready-vat-return",
+        key: "readyVatReturn",
+        category: "vat",
+        viewHref: ROUTES.reportsReadyVatReturn,
+      },
+      {
+        id: "ready-purchase-invoices",
+        key: "readyPurchaseInvoices",
+        category: "suppliers_purchases",
+        viewHref: ROUTES.reportsReadyPurchaseInvoices,
+      },
+      {
+        id: "ready-sales-movement",
+        key: "readySalesMovement",
+        category: "sales",
+        viewHref: ROUTES.reportsReadySalesMovement,
+      },
+      {
+        id: "ready-sales-by-branch",
+        key: "readySalesByBranch",
+        category: "sales",
+        viewHref: ROUTES.reportsReadySalesByBranch,
+      },
+    ] as const
+  ).map(({ id, key, category, viewHref }) => ({
+    id,
+    name: t(`bespokeReports.${key}.name` as "bespokeReports.readyNetIncome.name"),
+    description: t(
+      `bespokeReports.${key}.description` as "bespokeReports.readyNetIncome.description"
+    ),
+    category,
+    viewHref,
+    organizationId: "",
+    workspaceId: null,
+    defaultFilters: {},
+    displayOptions: {},
+    sharing: "organization",
+    isSystem: true,
+    status: "active",
+    createdByUserId: "",
+    createdByName: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    widgets: [],
+  }))
+}
 
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(iso))
+function formatDate(iso: string, locale: Locale) {
+  const intlLocale = locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US-u-ca-gregory"
+  return new Intl.DateTimeFormat(intlLocale, { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(iso)
+  )
 }
 
 function ReportRowIcon({ report }: { report: CustomReport }) {
   const meta = categoryMeta(report.category)
-  const Icon = REPORT_NAME_ICON[report.name] ?? meta.icon
+  const Icon = REPORT_ID_ICON[report.id] ?? meta.icon
   return (
     <span
       className={cn(
@@ -263,6 +276,9 @@ function ReportsTable({
   emptyDescription: string
   emptyAction?: ReactNode
 }) {
+  const t = useTranslations("reports.overview")
+  const tKpi = useTranslations("reports.kpi")
+  const locale = useLocale() as Locale
   const router = useRouter()
 
   if (loading) {
@@ -290,12 +306,16 @@ function ReportsTable({
         <thead>
           <tr>
             {[
-              { key: "name", label: "اسم التقرير", align: "text-right" },
-              { key: "description", label: "الوصف", align: "text-right" },
-              { key: "category", label: "الفئة", align: "text-right" },
-              ...(showOwner ? [{ key: "owner", label: "المالك", align: "text-right" }] : []),
-              { key: "updatedAt", label: "آخر تحديث", align: "text-right" },
-              ...(onDelete ? [{ key: "more", label: "الإجراءات", align: "text-center" }] : []),
+              { key: "name", label: t("table.name"), align: "text-right" },
+              { key: "description", label: t("table.description"), align: "text-right" },
+              { key: "category", label: t("table.category"), align: "text-right" },
+              ...(showOwner
+                ? [{ key: "owner", label: t("table.owner"), align: "text-right" }]
+                : []),
+              { key: "updatedAt", label: t("table.updatedAt"), align: "text-right" },
+              ...(onDelete
+                ? [{ key: "more", label: t("table.actions"), align: "text-center" }]
+                : []),
               { key: "actions", label: "", align: "text-center" },
             ].map((column) => (
               <th
@@ -332,7 +352,7 @@ function ReportsTable({
                       meta.badgeClassName
                     )}
                   >
-                    {meta.label}
+                    {categoryLabel(report.category, tKpi)}
                   </span>
                 </td>
                 {showOwner && (
@@ -341,11 +361,13 @@ function ReportsTable({
                   </td>
                 )}
                 <td className="px-3 py-2">
-                  <p className={cn("text-[12px]", HEADING)}>{formatDate(report.updatedAt)}</p>
+                  <p className={cn("text-[12px]", HEADING)}>
+                    {formatDate(report.updatedAt, locale)}
+                  </p>
                   <p className={cn("text-[10.5px]", MUTED)}>
                     {report.isSystem
-                      ? "بواسطة النظام"
-                      : `بواسطة ${report.createdByName ?? "مستخدم"}`}
+                      ? t("table.bySystem")
+                      : t("table.byUser", { name: report.createdByName ?? t("table.unknownUser") })}
                   </p>
                 </td>
                 {onDelete && (
@@ -356,7 +378,7 @@ function ReportsTable({
                           <button
                             type="button"
                             className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] text-black hover:bg-[#f2f5fa]"
-                            aria-label="المزيد من الإجراءات"
+                            aria-label={t("table.moreActionsAriaLabel")}
                           >
                             <MoreHorizontal className="size-4" />
                           </button>
@@ -366,13 +388,13 @@ function ReportsTable({
                             className="cursor-pointer"
                             onClick={() => router.push(ROUTES.reportsCustomEdit(report.id))}
                           >
-                            تعديل
+                            {t("table.edit")}
                           </AppDropdownMenuItem>
                           <AppDropdownMenuItem
                             className="cursor-pointer text-[#e0484d] focus:text-[#e0484d]"
                             onClick={() => onDelete(report)}
                           >
-                            حذف
+                            {t("table.delete")}
                           </AppDropdownMenuItem>
                         </AppDropdownMenuContent>
                       </AppDropdownMenu>
@@ -389,7 +411,7 @@ function ReportsTable({
                       className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#eaf1ff] px-3.5 py-2 text-[12px] font-semibold text-[#2878ff] transition-colors hover:bg-[#2878ff] hover:text-white"
                     >
                       <Eye className="size-3.5" />
-                      عرض التقرير
+                      {t("table.viewReport")}
                     </button>
                   </div>
                 </td>
@@ -411,6 +433,8 @@ function CategoryFilterRow({
   selected: string | null
   onSelect: (category: string | null) => void
 }) {
+  const t = useTranslations("reports.overview")
+  const tKpi = useTranslations("reports.kpi")
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
@@ -423,7 +447,7 @@ function CategoryFilterRow({
             : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
         )}
       >
-        الكل
+        {t("categoryFilter.all")}
       </button>
       {categories.map((category) => (
         <button
@@ -437,7 +461,7 @@ function CategoryFilterRow({
               : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
           )}
         >
-          {categoryMeta(category).label}
+          {categoryLabel(category, tKpi)}
         </button>
       ))}
     </div>
@@ -457,6 +481,7 @@ function PaginationFooter({
   onPageChange: (page: number) => void
   onPageSizeChange: (size: number) => void
 }) {
+  const t = useTranslations("reports.overview.pagination")
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
   return (
@@ -464,11 +489,15 @@ function PaginationFooter({
       <div className="flex items-center gap-3">
         <span className={cn("text-[12px]", MUTED)}>
           {totalCount === 0
-            ? "لا توجد نتائج"
-            : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, totalCount)} من ${totalCount} تقرير`}
+            ? t("noResults")
+            : t("showingRange", {
+                from: (currentPage - 1) * pageSize + 1,
+                to: Math.min(currentPage * pageSize, totalCount),
+                total: totalCount,
+              })}
         </span>
         <div className="flex items-center gap-2">
-          <span className={cn("text-[12px]", MUTED)}>عدد العناصر في الصفحة</span>
+          <span className={cn("text-[12px]", MUTED)}>{t("pageSizeLabel")}</span>
           <AppSelect
             value={String(pageSize)}
             onValueChange={(next) => onPageSizeChange(Number(next))}
@@ -492,19 +521,19 @@ function PaginationFooter({
           type="button"
           className={PAGER_BUTTON_CLASS}
           disabled={currentPage === 1}
-          aria-label="الصفحة الأولى"
+          aria-label={t("firstPageAriaLabel")}
           onClick={() => onPageChange(1)}
         >
-          <ChevronsRight className="size-4" />
+          <ChevronsLeft className="size-4 rtl:rotate-180" />
         </button>
         <button
           type="button"
           className={PAGER_BUTTON_CLASS}
           disabled={currentPage === 1}
-          aria-label="الصفحة السابقة"
+          aria-label={t("previousPageAriaLabel")}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         >
-          <ChevronRight className="size-4" />
+          <ChevronLeft className="size-4 rtl:rotate-180" />
         </button>
 
         {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
@@ -533,19 +562,19 @@ function PaginationFooter({
           type="button"
           className={PAGER_BUTTON_CLASS}
           disabled={currentPage === totalPages}
-          aria-label="الصفحة التالية"
+          aria-label={t("nextPageAriaLabel")}
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         >
-          <ChevronLeft className="size-4" />
+          <ChevronRight className="size-4 rtl:rotate-180" />
         </button>
         <button
           type="button"
           className={PAGER_BUTTON_CLASS}
           disabled={currentPage === totalPages}
-          aria-label="الصفحة الأخيرة"
+          aria-label={t("lastPageAriaLabel")}
           onClick={() => onPageChange(totalPages)}
         >
-          <ChevronsLeft className="size-4" />
+          <ChevronsRight className="size-4 rtl:rotate-180" />
         </button>
       </div>
     </div>
@@ -655,12 +684,15 @@ function ReportsTab({
 }
 
 export function ReportsOverviewPage() {
+  const t = useTranslations("reports.overview")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<"ready" | "custom">("ready")
   const [readyMade, setReadyMade] = useState<CustomReport[]>([])
   const [custom, setCustom] = useState<CustomReport[]>([])
   const [loadingReady, setLoadingReady] = useState(true)
   const [loadingCustom, setLoadingCustom] = useState(true)
+  const bespokeReadyReports = useMemo(() => getBespokeReadyReports(t), [t])
 
   const loadCustom = () => {
     setLoadingCustom(true)
@@ -684,10 +716,10 @@ export function ReportsOverviewPage() {
   const handleDelete = async (report: CustomReport) => {
     try {
       await reportService.remove(report.id)
-      toast.success("تم حذف التقرير بنجاح.")
+      toast.success(t("toasts.deleted"))
       loadCustom()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر حذف التقرير.")
+      toast.error(error instanceof Error ? error.message : t("toasts.deleteFailed"))
     }
   }
 
@@ -700,7 +732,7 @@ export function ReportsOverviewPage() {
           onClick={() => router.push(ROUTES.reportsCustomNew)}
         >
           <Plus className="size-4" />
-          إنشاء تقرير مخصص
+          {t("createCustomReport")}
         </button>
       </Can>
       <button
@@ -708,22 +740,20 @@ export function ReportsOverviewPage() {
         className={PILL_SECONDARY_CLASS}
         onClick={() => router.push(ROUTES.reportsKpis)}
       >
-        المؤشرات المحفوظة
+        {t("savedKpis")}
       </button>
     </>
   )
 
   return (
-    <div dir="rtl" className="space-y-3.5">
+    <div dir={localeDirection(locale)} className="space-y-3.5">
       <div className="flex items-start gap-3">
         <span className="flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[#eaf1ff] text-[#2878ff]">
           <FileBarChart2 className="size-5" />
         </span>
         <div>
-          <h1 className={cn("text-[19px] font-extrabold", HEADING)}>التقارير</h1>
-          <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>
-            اكتشف رؤى أعمالك من خلال التقارير الجاهزة أو أنشئ تقاريرك المخصصة
-          </p>
+          <h1 className={cn("text-[19px] font-extrabold", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
         </div>
       </div>
 
@@ -739,7 +769,7 @@ export function ReportsOverviewPage() {
           )}
         >
           <FileBarChart2 className="size-4" />
-          التقارير الجاهزة
+          {t("tabs.ready")}
         </button>
         <button
           type="button"
@@ -752,33 +782,33 @@ export function ReportsOverviewPage() {
           )}
         >
           <BarChart3 className="size-4" />
-          التقارير المخصصة
+          {t("tabs.custom")}
         </button>
       </div>
 
       {activeTab === "ready" ? (
         <ReportsTab
-          reports={[...BESPOKE_READY_REPORTS, ...readyMade]}
+          reports={[...bespokeReadyReports, ...readyMade]}
           loading={loadingReady}
           showOwner={false}
-          title="التقارير الجاهزة"
-          subtitle="تقارير معدة مسبقاً وجاهزة للاستخدام"
+          title={t("readyTab.title")}
+          subtitle={t("readyTab.subtitle")}
           tileIcon={FileBarChart2}
-          emptyTitle="لا توجد تقارير جاهزة بعد"
-          emptyDescription="سيتم عرض التقارير الجاهزة هنا فور توفرها."
+          emptyTitle={t("readyTab.emptyTitle")}
+          emptyDescription={t("readyTab.emptyDescription")}
         />
       ) : (
         <ReportsTab
           reports={custom}
           loading={loadingCustom}
           showOwner
-          title="التقارير المخصصة"
-          subtitle="أنشئ تقاريرك الخاصة وتحكم في بياناتك"
+          title={t("customTab.title")}
+          subtitle={t("customTab.subtitle")}
           tileIcon={BarChart3}
           onDelete={handleDelete}
           headerActions={customTabActions}
-          emptyTitle="لا توجد تقارير مخصصة بعد"
-          emptyDescription="أنشئ أول تقرير مخصص لمتابعة البيانات التي تهمك من مؤشراتك المحفوظة."
+          emptyTitle={t("customTab.emptyTitle")}
+          emptyDescription={t("customTab.emptyDescription")}
           emptyAction={
             <Can permission="reports:manage">
               <button
@@ -787,7 +817,7 @@ export function ReportsOverviewPage() {
                 onClick={() => router.push(ROUTES.reportsCustomNew)}
               >
                 <Plus className="size-4" />
-                إنشاء تقرير مخصص
+                {t("createCustomReport")}
               </button>
             </Can>
           }

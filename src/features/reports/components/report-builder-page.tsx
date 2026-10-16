@@ -5,6 +5,7 @@ import "react-resizable/css/styles.css"
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   BarChart3,
   GripVertical,
@@ -53,6 +54,8 @@ import {
 } from "../services"
 import { KpiWidgetRenderer } from "./kpi-widget-renderer"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const ResponsiveGridLayout = WidthProvider(GridLayout)
 
 const HEADING = "text-[#0b1738]"
@@ -70,11 +73,11 @@ const FIELD_CLASS =
 const FIELD_TEXTAREA_CLASS =
   "min-h-[92px] resize-none rounded-[10px] border-[#e1e7f0] bg-[#fafbfd] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#0b1738] shadow-none transition-colors placeholder:text-[#95a4bd] hover:border-[#c4d5f0] focus-visible:border-[#2878ff] focus-visible:bg-white focus-visible:ring-[3px] focus-visible:ring-[#2878ff]/12"
 
-const OPERATOR_LABELS: Record<ReportFilterOperator, string> = {
-  eq: "يساوي (=)",
-  neq: "لا يساوي (≠)",
-  contains: "يحتوي على",
-  not_contains: "لا يحتوي على",
+type KpiTranslator = ReturnType<typeof useTranslations<"reports.kpi">>
+type KpiWizardTranslator = ReturnType<typeof useTranslations<"reports.kpiWizard">>
+
+function operatorLabel(op: ReportFilterOperator, t: KpiWizardTranslator): string {
+  return t(`operators.${op}` as "operators.eq")
 }
 
 // Narrower than the viewer's own copy of this class (FILTER_FIELD_CLASS) -- these rows stack
@@ -95,52 +98,51 @@ const DEFAULT_WIDGET_W = 6
 const DEFAULT_WIDGET_H = 8
 
 interface CategoryMeta {
-  label: string
   badgeClassName: string
   iconTileClassName: string
 }
 
-// Kept in step with reports-overview-page.tsx's own CATEGORY_META -- same six data-source
+// Kept in step with reports-overview-page.tsx's own CATEGORY_META -- same data-source
 // categories, same colors, so a KPI's category badge reads the same wherever it shows up.
 const CATEGORY_META: Record<string, CategoryMeta> = {
   sales: {
-    label: "المبيعات",
     badgeClassName: "bg-[#eaf1ff] text-[#2878ff]",
     iconTileClassName: "bg-[#eaf1ff] text-[#2878ff]",
   },
   products: {
-    label: "المنتجات",
     badgeClassName: "bg-[#f3ecff] text-[#8b5cf6]",
     iconTileClassName: "bg-[#f3ecff] text-[#8b5cf6]",
   },
   inventory: {
-    label: "المخزون",
     badgeClassName: "bg-[#fff7e6] text-[#e08b00]",
     iconTileClassName: "bg-[#fff7e6] text-[#e08b00]",
   },
   customers: {
-    label: "العملاء",
     badgeClassName: "bg-[#e9f8ef] text-[#1f9d55]",
     iconTileClassName: "bg-[#e9f8ef] text-[#1f9d55]",
   },
   financial: {
-    label: "المالية",
     badgeClassName: "bg-[#fdeeee] text-[#e0484d]",
     iconTileClassName: "bg-[#fdeeee] text-[#e0484d]",
   },
   marketing: {
-    label: "التسويق",
     badgeClassName: "bg-[#e6fbfa] text-[#0d9488]",
     iconTileClassName: "bg-[#e6fbfa] text-[#0d9488]",
   },
 }
 const DEFAULT_CATEGORY_META: CategoryMeta = {
-  label: "أخرى",
   badgeClassName: "bg-[#eef2f8] text-[#5b6b85]",
   iconTileClassName: "bg-[#eef2f8] text-[#5b6b85]",
 }
 function categoryMeta(category: string): CategoryMeta {
   return CATEGORY_META[category] ?? DEFAULT_CATEGORY_META
+}
+function categoryLabel(category: string, t: KpiTranslator): string {
+  const KNOWN_CATEGORIES = ["sales", "products", "inventory", "customers", "financial", "marketing"]
+  if (KNOWN_CATEGORIES.includes(category)) {
+    return t(`categories.${category}` as "categories.sales")
+  }
+  return t("categories.other")
 }
 
 interface PlacedWidget {
@@ -175,6 +177,8 @@ function PanelHeader({
 }
 
 function SidebarKpiItem({ kpi, onAdd }: { kpi: Kpi; onAdd: () => void }) {
+  const t = useTranslations("reports.reportBuilder")
+  const tKpi = useTranslations("reports.kpi")
   const meta = categoryMeta(kpi.category)
   return (
     <div className="flex items-center gap-2 rounded-[10px] border border-[#e1e7f0] bg-white p-2.5 transition-colors hover:border-[#c4d5f0]">
@@ -194,14 +198,14 @@ function SidebarKpiItem({ kpi, onAdd }: { kpi: Kpi; onAdd: () => void }) {
             meta.badgeClassName
           )}
         >
-          {meta.label}
+          {categoryLabel(kpi.category, tKpi)}
         </span>
       </div>
       <button
         type="button"
         onClick={onAdd}
         className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-[#95a4bd] transition-colors hover:bg-[#eaf1ff] hover:text-[#2878ff]"
-        aria-label={`إضافة ${kpi.name} إلى التقرير`}
+        aria-label={t("addKpiAriaLabel", { name: kpi.name })}
       >
         <Plus className="size-4" />
       </button>
@@ -240,6 +244,8 @@ const CanvasWidget = forwardRef<
   },
   ref
 ) {
+  const t = useTranslations("reports.reportBuilder")
+  const locale = useLocale() as Locale
   return (
     <div
       ref={ref}
@@ -259,14 +265,14 @@ const CanvasWidget = forwardRef<
           type="button"
           onClick={onRemove}
           className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-[#e0484d] transition-colors hover:bg-[#fdeeee]"
-          aria-label="إزالة المؤشر"
+          aria-label={t("removeKpiAriaLabel")}
         >
           <Trash2 className="size-3.5" />
         </button>
       </div>
-      <div dir="rtl" className="min-h-0 flex-1">
+      <div dir={localeDirection(locale)} className="min-h-0 flex-1">
         {!kpi ? (
-          <p className={cn("p-4 text-[12px]", MUTED)}>مؤشر غير معروف</p>
+          <p className={cn("p-4 text-[12px]", MUTED)}>{t("unknownKpi")}</p>
         ) : loading ? (
           <AppLoading variant="chart" />
         ) : result ? (
@@ -287,7 +293,7 @@ const CanvasWidget = forwardRef<
             )}
           />
         ) : (
-          <p className={cn("p-4 text-[12px]", MUTED)}>تعذر تحميل بيانات المؤشر</p>
+          <p className={cn("p-4 text-[12px]", MUTED)}>{t("kpiLoadFailed")}</p>
         )}
       </div>
       {/* react-resizable appends its own corner resize-handle element into `children` -- this
@@ -298,36 +304,40 @@ const CanvasWidget = forwardRef<
   )
 })
 
-const CANVAS_FEATURE_HIGHLIGHTS: Array<{ icon: LucideIcon; label: string }> = [
-  { icon: PieChart, label: "تصور مرن" },
-  { icon: SlidersHorizontal, label: "فلاتر تفاعلية" },
-  { icon: BarChart3, label: "مؤشرات متعددة" },
+const CANVAS_FEATURE_HIGHLIGHT_KEYS: Array<{
+  icon: LucideIcon
+  key: "flexibleVisualization" | "interactiveFilters" | "multipleKpis"
+}> = [
+  { icon: PieChart, key: "flexibleVisualization" },
+  { icon: SlidersHorizontal, key: "interactiveFilters" },
+  { icon: BarChart3, key: "multipleKpis" },
 ]
 
 function CanvasEmptyState() {
+  const t = useTranslations("reports.reportBuilder")
   return (
     <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
       <span className="flex size-16 items-center justify-center rounded-[18px] bg-[#eaf1ff] text-[#2878ff]">
         <Wand2 className="size-7" />
       </span>
       <div>
-        <p className={cn("text-[15px] font-bold", HEADING)}>أضف مؤشرات هنا لبناء تقريرك المخصص</p>
+        <p className={cn("text-[15px] font-bold", HEADING)}>{t("canvasEmpty.title")}</p>
         <p className={cn("mx-auto mt-1.5 max-w-[340px] text-[12px]", MUTED)}>
-          اضغط + بجانب أي مؤشر من القائمة لإضافته، ثم اسحبه أو غيّر حجمه بحرية داخل اللوحة.
+          {t("canvasEmpty.description")}
         </p>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-        {CANVAS_FEATURE_HIGHLIGHTS.map(({ icon: Icon, label }) => (
+        {CANVAS_FEATURE_HIGHLIGHT_KEYS.map(({ icon: Icon, key }) => (
           <span
-            key={label}
+            key={key}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border border-[#e1e7f0] bg-white px-3 py-1.5 text-[11px] font-semibold",
               MUTED
             )}
           >
             <Icon className="size-3.5 text-[#2878ff]" />
-            {label}
+            {t(`canvasHighlights.${key}`)}
           </span>
         ))}
       </div>
@@ -339,13 +349,17 @@ function CanvasEmptyState() {
         className={PILL_PRIMARY_CLASS}
       >
         <Plus className="size-4" />
-        إنشاء مؤشر جديد
+        {t("createNewKpi")}
       </a>
     </div>
   )
 }
 
 export function ReportBuilderPage({ reportId }: { reportId?: string }) {
+  const t = useTranslations("reports.reportBuilder")
+  const tKpi = useTranslations("reports.kpi")
+  const tKpiWizard = useTranslations("reports.kpiWizard")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const isEditing = Boolean(reportId)
 
@@ -427,9 +441,9 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
     const query = kpiSearch.trim()
     if (!query) return kpis
     return kpis.filter(
-      (kpi) => kpi.name.includes(query) || categoryMeta(kpi.category).label.includes(query)
+      (kpi) => kpi.name.includes(query) || categoryLabel(kpi.category, tKpi).includes(query)
     )
-  }, [kpis, kpiSearch])
+  }, [kpis, kpiSearch, tKpi])
 
   // Every filter field usable across this report -- the union of catalog filterFields for each
   // distinct data source a placed widget's KPI actually reads from, deduped by
@@ -566,7 +580,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
 
   const handleSave = async () => {
     if (!name.trim() || widgets.length === 0) {
-      toast.error("يرجى إدخال اسم التقرير وإضافة مؤشر واحد على الأقل.")
+      toast.error(t("toasts.validationFailed"))
       return
     }
     setSaving(true)
@@ -599,15 +613,15 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
       }
       if (isEditing && reportId) {
         await reportService.update(reportId, input)
-        toast.success("تم تحديث التقرير بنجاح.")
+        toast.success(t("toasts.updated"))
         router.push(ROUTES.reportsCustomView(reportId))
       } else {
         const created = await reportService.create(input)
-        toast.success("تم إنشاء التقرير بنجاح.")
+        toast.success(t("toasts.created"))
         router.push(ROUTES.reportsCustomView(created.id))
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر حفظ التقرير.")
+      toast.error(error instanceof Error ? error.message : t("toasts.saveFailed"))
     } finally {
       setSaving(false)
     }
@@ -615,14 +629,14 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
 
   if (loadingKpis || loadingReport) {
     return (
-      <div dir="rtl" className="space-y-3.5">
+      <div dir={localeDirection(locale)} className="space-y-3.5">
         <AppLoading variant="page" />
       </div>
     )
   }
 
   return (
-    <div dir="rtl" className="space-y-3.5">
+    <div dir={localeDirection(locale)} className="space-y-3.5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[#eaf1ff] text-[#2878ff]">
@@ -630,11 +644,9 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
           </span>
           <div>
             <h1 className={cn("text-[19px] font-extrabold", HEADING)}>
-              {isEditing ? "تعديل التقرير المخصص" : "إنشاء تقرير مخصص"}
+              {isEditing ? t("editTitle") : t("createTitle")}
             </h1>
-            <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>
-              أضف مؤشراتك واسحبها أو غيّر حجمها لبناء تقريرك المخصص
-            </p>
+            <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -648,7 +660,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
             }
             className={cn(PILL_SECONDARY_CLASS, saving && "pointer-events-none opacity-60")}
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -657,7 +669,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
             className={PILL_PRIMARY_CLASS}
           >
             <Save className="size-4" />
-            {saving ? "جارٍ الحفظ..." : "حفظ"}
+            {saving ? t("saving") : t("save")}
           </button>
         </div>
       </div>
@@ -665,10 +677,12 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
       <div className="grid gap-3.5 lg:grid-cols-[260px_1fr_300px]">
         {/* Settings panel */}
         <div className={PANEL}>
-          <PanelHeader icon={SlidersHorizontal} title="إعدادات التقرير" />
+          <PanelHeader icon={SlidersHorizontal} title={t("settingsPanel.title")} />
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className={cn("text-[12px] font-semibold", HEADING)}>اسم التقرير *</label>
+              <label className={cn("text-[12px] font-semibold", HEADING)}>
+                {t("settingsPanel.nameLabel")}
+              </label>
               <AppInput
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -676,7 +690,9 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
               />
             </div>
             <div className="space-y-1.5">
-              <label className={cn("text-[12px] font-semibold", HEADING)}>الوصف</label>
+              <label className={cn("text-[12px] font-semibold", HEADING)}>
+                {t("settingsPanel.descriptionLabel")}
+              </label>
               <AppTextarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
@@ -685,15 +701,21 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
               />
             </div>
             <div className="flex items-center justify-between rounded-[10px] border border-[#f1f4f9] bg-[#fafbfd] px-3 py-2.5">
-              <span className={cn("text-[12px] font-semibold", HEADING)}>إظهار شريط الفلاتر</span>
+              <span className={cn("text-[12px] font-semibold", HEADING)}>
+                {t("settingsPanel.showFilterBarLabel")}
+              </span>
               <AppSwitch checked={showFilterBar} onCheckedChange={setShowFilterBar} />
             </div>
             <div className="flex items-center justify-between rounded-[10px] border border-[#f1f4f9] bg-[#fafbfd] px-3 py-2.5">
-              <span className={cn("text-[12px] font-semibold", HEADING)}>عرض أرقام المقارنة</span>
+              <span className={cn("text-[12px] font-semibold", HEADING)}>
+                {t("settingsPanel.showComparisonLabel")}
+              </span>
               <AppSwitch checked={showComparison} onCheckedChange={setShowComparison} />
             </div>
             <div className="space-y-1.5">
-              <label className={cn("text-[12px] font-semibold", HEADING)}>المشاركة</label>
+              <label className={cn("text-[12px] font-semibold", HEADING)}>
+                {t("settingsPanel.sharingLabel")}
+              </label>
               <AppSelect
                 value={sharing}
                 onValueChange={(value) => setSharing(value as ReportSharing)}
@@ -702,17 +724,20 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
                   <AppSelectValue />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  <AppSelectItem value="private">خاص (لي فقط)</AppSelectItem>
-                  <AppSelectItem value="organization">المؤسسة بالكامل</AppSelectItem>
+                  <AppSelectItem value="private">{t("settingsPanel.sharingPrivate")}</AppSelectItem>
+                  <AppSelectItem value="organization">
+                    {t("settingsPanel.sharingOrganization")}
+                  </AppSelectItem>
                 </AppSelectContent>
               </AppSelect>
             </div>
 
             <div className="space-y-2 border-t border-[#f1f4f9] pt-4">
-              <label className={cn("text-[12px] font-semibold", HEADING)}>الفلاتر الافتراضية</label>
+              <label className={cn("text-[12px] font-semibold", HEADING)}>
+                {t("settingsPanel.defaultFiltersLabel")}
+              </label>
               <p className={cn("text-[11px]", MUTED)}>
-                تُطبّق تلقائياً على هذا التقرير لكل من يفتحه. يمكن لمن يعرضه تعديلها مؤقتاً من شريط
-                الفلاتر، لكنها تعود إلى ما هو محفوظ هنا عند التحديث.
+                {t("settingsPanel.defaultFiltersDescription")}
               </p>
 
               <AppDateRangeFilter value={defaultDateRange} onChange={setDefaultDateRange} />
@@ -771,7 +796,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
                         type="button"
                         onClick={() => removeDefaultFilter(index)}
                         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-[#e0484d] transition-colors hover:bg-[#fdeeee]"
-                        aria-label="حذف الفلتر"
+                        aria-label={t("settingsPanel.removeFilterAriaLabel")}
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -796,7 +821,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
                       <AppSelectContent>
                         {fieldOption?.allowedOperators.map((op) => (
                           <AppSelectItem key={op} value={op}>
-                            {OPERATOR_LABELS[op]}
+                            {operatorLabel(op, tKpiWizard)}
                           </AppSelectItem>
                         ))}
                       </AppSelectContent>
@@ -808,7 +833,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
                         onChange={(event) =>
                           updateDefaultFilter(index, { value: event.target.value })
                         }
-                        placeholder="القيمة"
+                        placeholder={t("settingsPanel.valuePlaceholder")}
                         className={cn(
                           DEFAULT_FILTER_FIELD_CLASS,
                           "px-3 placeholder:text-[#95a4bd]"
@@ -820,8 +845,8 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
                         onChange={(next) => updateDefaultFilter(index, { value: next })}
                         onCreate={(draft) => updateDefaultFilter(index, { value: draft })}
                         options={valueOptions.map((value) => ({ value, label: value }))}
-                        placeholder="القيمة"
-                        searchPlaceholder="ابحث عن قيمة..."
+                        placeholder={t("settingsPanel.valuePlaceholder")}
+                        searchPlaceholder={t("settingsPanel.searchPlaceholder")}
                         compact
                         hideTriggerMark
                         triggerClassName={cn(DEFAULT_FILTER_FIELD_CLASS, "justify-between")}
@@ -838,12 +863,10 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
                 className="flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#e1e7f0] bg-white px-3.5 text-[12px] font-semibold text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:pointer-events-none disabled:opacity-40"
               >
                 <Plus className="size-3.5" />
-                إضافة فلتر
+                {t("settingsPanel.addFilter")}
               </button>
               {availableFilterFields.length === 0 ? (
-                <p className={cn("text-[10.5px]", MUTED)}>
-                  أضف مؤشراً إلى التقرير أولاً لإتاحة فلاتره.
-                </p>
+                <p className={cn("text-[10.5px]", MUTED)}>{t("settingsPanel.addFilterHint")}</p>
               ) : null}
             </div>
           </div>
@@ -855,7 +878,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
           className="min-h-[420px] rounded-[14px] border-2 border-dashed border-[#dbe4f3] bg-[#fafbfd] p-3"
         >
           {widgets.length === 0 ? (
-            <div dir="rtl">
+            <div dir={localeDirection(locale)}>
               <CanvasEmptyState />
             </div>
           ) : (
@@ -887,25 +910,23 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
         <div className={PANEL}>
           <PanelHeader
             icon={BarChart3}
-            title="المؤشرات المتاحة"
-            subtitle="أضف مؤشراً إلى التقرير"
+            title={t("sidebar.title")}
+            subtitle={t("sidebar.subtitle")}
           />
           <div className="relative mb-3">
             <Search className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-[#95a4bd]" />
             <input
               value={kpiSearch}
               onChange={(event) => setKpiSearch(event.target.value)}
-              placeholder="ابحث عن مؤشر..."
+              placeholder={t("sidebar.searchPlaceholder")}
               className="h-9 w-full rounded-[10px] border border-[#e1e7f0] bg-[#fafbfd] pe-3 ps-8 text-[12px] text-[#0b1738] shadow-none transition-colors placeholder:text-[#95a4bd] hover:border-[#c4d5f0] focus:border-[#2878ff] focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-[#2878ff]/12"
             />
           </div>
           <div className="max-h-[520px] space-y-2 overflow-y-auto">
             {kpis.length === 0 ? (
-              <p className={cn("py-6 text-center text-[12px]", MUTED)}>
-                لا توجد مؤشرات محفوظة بعد.
-              </p>
+              <p className={cn("py-6 text-center text-[12px]", MUTED)}>{t("sidebar.noKpisYet")}</p>
             ) : filteredKpis.length === 0 ? (
-              <p className={cn("py-6 text-center text-[12px]", MUTED)}>لا توجد نتائج مطابقة.</p>
+              <p className={cn("py-6 text-center text-[12px]", MUTED)}>{t("sidebar.noMatch")}</p>
             ) : (
               filteredKpis.map((kpi) => (
                 <SidebarKpiItem key={kpi.id} kpi={kpi} onAdd={() => addKpiToCanvas(kpi.id)} />
@@ -919,7 +940,7 @@ export function ReportBuilderPage({ reportId }: { reportId?: string }) {
             className={cn(PILL_SECONDARY_CLASS, "mt-3 w-full justify-center")}
           >
             <Plus className="size-4" />
-            إنشاء مؤشر جديد
+            {t("createNewKpi")}
           </a>
         </div>
       </div>
