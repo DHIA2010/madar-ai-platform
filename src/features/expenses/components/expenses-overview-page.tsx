@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Loader2, Plus, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -22,9 +22,12 @@ import { ExpensesByWorkspaceCard } from "./expenses-by-workspace-card"
 import { ExpensesKpiCards } from "./expenses-kpi-cards"
 import { RecentExpensesCard } from "./recent-expenses-card"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 export function ExpensesOverviewPage() {
   const t = useTranslations("expenses")
   const tCommon = useTranslations("common")
+  const locale = useLocale()
   const router = useRouter()
   const { expenses, isLoading } = useExpenses()
   const { categories } = useExpenseCategories()
@@ -35,7 +38,7 @@ export function ExpensesOverviewPage() {
   const overview = useExpensesOverview(list.filteredExpenses)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale as Locale)} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className={cn("text-2xl font-bold", HEADING)}>{t("heading")}</h1>

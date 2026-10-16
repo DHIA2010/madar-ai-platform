@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import {
   CheckCircle2,
@@ -26,6 +26,7 @@ import type { ApplicationCategoryId } from "../types"
 import { PlanComparisonDialog } from "./plan-comparison-dialog"
 
 import type { SubscriptionPlanTier } from "@/application/contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 export interface ActivationRequestTarget {
   applicationId: string
@@ -73,6 +74,8 @@ export function ActivationRequestDialog({
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
   const t = useTranslations("applications.requestDialog")
+  const locale = useLocale()
+  const dir = localeDirection(locale as Locale)
   const router = useRouter()
   const [selectedTier, setSelectedTier] = useState<SubscriptionPlanTier>("growth")
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank_transfer">("card")
@@ -164,7 +167,7 @@ export function ActivationRequestDialog({
         }}
         title={
           target ? (
-            <span dir="rtl" className="flex items-center gap-3.5">
+            <span dir={dir} className="flex items-center gap-3.5">
               {Icon ? (
                 <span
                   className={cn(
@@ -185,12 +188,15 @@ export function ActivationRequestDialog({
         }
         description={
           target ? (
-            <span dir="rtl" className="text-[13.5px] leading-[22px] text-[#6b7b96]">
+            <span dir={dir} className="text-[13.5px] leading-[22px] text-[#6b7b96]">
               {t("description")}
             </span>
           ) : null
         }
-        contentClassName="[direction:rtl] max-w-[34rem] gap-5 p-6"
+        contentClassName={cn(
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+          "max-w-[34rem] gap-5 p-6"
+        )}
         footer={
           <div className="flex w-full gap-2">
             <AppButton
@@ -213,7 +219,7 @@ export function ActivationRequestDialog({
         }
       >
         {target ? (
-          <div dir="rtl" className="space-y-5">
+          <div dir={dir} className="space-y-5">
             {target.trialAvailable ? (
               <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#2878ff] p-4 shadow-[0_6px_16px_rgba(40,120,255,0.3)]">
                 <div className="flex items-center gap-3">

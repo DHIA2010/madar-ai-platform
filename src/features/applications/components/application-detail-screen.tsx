@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useTranslations } from "next-intl"
-import { ArrowRight, Check, Clock, Crown } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
+import { ArrowLeft, Check, Clock, Crown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -20,6 +20,7 @@ import {
 } from "./activation-request-dialog"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const PAGE_TEXT = "text-[#0b1738]"
 const MUTED_TEXT = "text-[#6b7b96]"
@@ -45,17 +46,21 @@ export function ApplicationDetailScreen({
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
   const t = useTranslations("applications")
+  const locale = useLocale()
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
   const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
   const isBundle = isMadarCompleteBundle(entry)
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div
+      className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")}
+      dir={localeDirection(locale as Locale)}
+    >
       <Link
         href={ROUTES.marketplace}
         className="mb-3.5 flex w-fit items-center gap-1.5 text-[12.5px] font-semibold text-[#5b6b85] hover:text-[#2878ff]"
       >
-        <ArrowRight className="size-3.5" />
+        <ArrowLeft className="size-3.5 rtl:rotate-180" />
         {t("backToApplications")}
       </Link>
 

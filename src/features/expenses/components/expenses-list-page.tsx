@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Ban, Download, Loader2, Plus, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -31,6 +31,8 @@ import { expenseService, exportExpensesToCsv } from "../services"
 import { type Expense, EXPENSE_PAYMENT_METHOD_KEYS, EXPENSE_PAYMENT_METHOD_VALUES } from "../types"
 import { ExpensePagination, FIELD_CLASS, HEADING, MUTED, PANEL } from "./expense-field"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 function formatCurrency(value: number, currencyLabel: string) {
   return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(value))} ${currencyLabel}`
 }
@@ -38,6 +40,7 @@ function formatCurrency(value: number, currencyLabel: string) {
 export function ExpensesListPage() {
   const t = useTranslations("expenses")
   const tCommon = useTranslations("common")
+  const locale = useLocale()
   const currencyLabel = tCommon("currency")
   const paymentMethodLabel: Record<string, string> = Object.fromEntries(
     EXPENSE_PAYMENT_METHOD_VALUES.map((value) => [
@@ -70,7 +73,7 @@ export function ExpensesListPage() {
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale as Locale)} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className={cn("text-2xl font-bold", HEADING)}>{t("listHeading")}</h1>

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,9 +23,12 @@ import {
 } from "../types"
 import { ExpenseField, FIELD_CLASS, PANEL } from "./expense-field"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 export function ExpenseForm() {
   const t = useTranslations("expenses")
   const tCommon = useTranslations("common")
+  const locale = useLocale()
   const router = useRouter()
   const { availableWorkspaces } = useWorkspace()
   const { categories, refetch: refetchCategories } = useExpenseCategories()
@@ -89,7 +92,7 @@ export function ExpenseForm() {
   }
 
   return (
-    <AppForm dir="rtl" onSubmit={handleSubmit} className="space-y-5">
+    <AppForm dir={localeDirection(locale as Locale)} onSubmit={handleSubmit} className="space-y-5">
       <section className={cn(PANEL, "p-4 md:p-5")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <ExpenseField label={t("form.nameLabel")} required>

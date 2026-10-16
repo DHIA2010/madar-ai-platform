@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
@@ -9,6 +9,8 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 import { AppConfirmDialog } from "@/components/app"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 export interface ActivationTarget {
   id: string
@@ -36,6 +38,8 @@ export function ActivationConfirmDialog({
   onConfirm: (target: ActivationTarget) => Promise<void>
 }) {
   const t = useTranslations("applications.confirmDialog")
+  const locale = useLocale()
+  const dir = localeDirection(locale as Locale)
   const [loading, setLoading] = useState(false)
 
   const isDeactivate = target?.intent === "deactivate"
@@ -68,7 +72,7 @@ export function ActivationConfirmDialog({
       }}
       title={
         target ? (
-          <span dir="rtl" className="flex items-center gap-3.5">
+          <span dir={dir} className="flex items-center gap-3.5">
             {Icon ? (
               <span
                 className={cn(
@@ -89,7 +93,7 @@ export function ActivationConfirmDialog({
       }
       description={
         target ? (
-          <span dir="rtl" className="text-[13.5px] leading-[22px] text-[#6b7b96]">
+          <span dir={dir} className="text-[13.5px] leading-[22px] text-[#6b7b96]">
             {t(isDeactivate ? "deactivateDescription" : "activateDescription", {
               name: target.name,
             })}
@@ -108,11 +112,14 @@ export function ActivationConfirmDialog({
       loading={loading}
       onConfirm={handleConfirm}
       onCancel={() => onOpenChange(false)}
-      contentClassName="[direction:rtl] max-w-[32rem] gap-5 p-6"
+      contentClassName={cn(
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+        "max-w-[32rem] gap-5 p-6"
+      )}
     >
       {target?.priceLabel ? (
         <div
-          dir="rtl"
+          dir={dir}
           className="flex items-center justify-between rounded-[12px] border border-[#e1e7f0] bg-[#f7f9fd] px-5 py-4"
         >
           <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#6b7b96]">

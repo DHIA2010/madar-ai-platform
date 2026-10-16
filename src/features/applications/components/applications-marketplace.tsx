@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Crown, PlayCircle, Search, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -17,9 +17,11 @@ import { ApplicationCategoryTabs } from "./application-category-tabs"
 import { MadarCompleteCard } from "./madar-complete-card"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 export function ApplicationsMarketplace() {
   const t = useTranslations("applications")
+  const locale = useLocale()
   const {
     searchQuery,
     setSearchQuery,
@@ -76,7 +78,7 @@ export function ApplicationsMarketplace() {
   return (
     <div
       className={cn(cairo.className, "flex h-full min-h-0 flex-col bg-[#f7f9fd] px-6 py-5")}
-      dir="rtl"
+      dir={localeDirection(locale as Locale)}
     >
       {/* Header */}
       <div className="mb-3.5 shrink-0 overflow-hidden rounded-[14px] border border-[#e1e7f0] bg-gradient-to-l from-[#eef4ff] to-white px-6 py-6">
