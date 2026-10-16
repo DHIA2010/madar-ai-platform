@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { productListService, type ProductRecord } from "@/features/products"
 
@@ -9,6 +10,7 @@ import { productListService, type ProductRecord } from "@/features/products"
 // storefront product (Salla/Shopify/Zid) is aggregated read-only from elsewhere and has no row
 // here at all, so it can never be purchased/receipted through this flow.
 export function useProductCatalog() {
+  const t = useTranslations("purchases.errors")
   const [products, setProducts] = useState<ProductRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -20,11 +22,11 @@ export function useProductCatalog() {
       const items = await productListService.listProducts()
       setProducts(items.filter((item) => item.platform === "Madar"))
     } catch {
-      setError("تعذر تحميل المنتجات.")
+      setError(t("loadProducts"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void refetch()

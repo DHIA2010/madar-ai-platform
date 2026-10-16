@@ -738,5 +738,277 @@
       "primaryCtaLabel": "Subscribe to Madar Complete",
       "secondaryCtaLabel": "Learn more"
     }
+  },
+  "purchases": {
+    "status": {
+      "received": "Received",
+      "pending": "Pending"
+    },
+    "paymentStatus": {
+      "paid": "Paid",
+      "partial": "Partially paid",
+      "pending": "Pending",
+      "overdue": "Overdue"
+    },
+    "paymentMethod": {
+      "cash": "Cash",
+      "bankTransfer": "Bank transfer",
+      "card": "Card",
+      "cheque": "Cheque"
+    },
+    "returnStatus": {
+      "full": "Full return",
+      "partial": "Partial return"
+    },
+    "kpis": {
+      "totalPurchases": "Total Purchases",
+      "totalOrders": "Total Orders",
+      "pendingOrders": "Pending Orders",
+      "returnedItems": "Returned Items",
+      "netPurchases": "Net Purchases"
+    },
+    "list": {
+      "heading": "Purchases",
+      "subheading": "View and manage all purchase orders, suppliers, and products.",
+      "searchPlaceholder": "Search for a purchase order...",
+      "addPurchase": "Add Purchase Order",
+      "table": {
+        "code": "Order #",
+        "supplier": "Supplier",
+        "items": "Items",
+        "total": "Total",
+        "date": "Date",
+        "actions": "Actions"
+      },
+      "itemsSuffix": "{count} items",
+      "view": "View",
+      "print": "Print",
+      "emptyTitle": "No matching purchase orders",
+      "emptyDescription": "Try adjusting the filters or search.",
+      "showingCount": "Showing {shown} of {total} results"
+    },
+    "form": {
+      "backToPurchases": "Back to Purchases",
+      "addHeading": "Create Purchase Order",
+      "editHeading": "Edit Purchase Order {code}",
+      "supplier": "Supplier",
+      "supplierPlaceholder": "Choose a supplier",
+      "supplierSearchPlaceholder": "Search for a supplier...",
+      "supplierEmptyLabel": "No suppliers",
+      "date": "Date",
+      "warehouse": "Branch",
+      "warehousePlaceholder": "Choose a branch",
+      "warehouseSearchPlaceholder": "Search...",
+      "warehouseEmptyLabel": "No branches",
+      "dueDate": "Due Date",
+      "deliveryDate": "Delivery Date",
+      "orderTax": "Invoice Tax",
+      "orderDiscount": "Invoice Discount",
+      "shipping": "Shipping",
+      "otherCosts": "Other Costs",
+      "referenceNumber": "Reference / Invoice Number",
+      "referenceNumberPlaceholder": "Invoice or reference number",
+      "notes": "Notes",
+      "notesPlaceholder": "Add a short note...",
+      "saveChanges": "Save Changes",
+      "createPurchase": "Create Purchase Order",
+      "toasts": {
+        "validationRequired": "Please fill in the supplier, date, and branch.",
+        "validationItems": "Please add at least one product.",
+        "updateSuccess": "Purchase order {code} updated.",
+        "createSuccess": "Purchase order {code} created.",
+        "saveError": "Couldn't save the purchase order. Try again."
+      }
+    },
+    "lineItems": {
+      "byProduct": "By Product",
+      "byInvoice": "By Invoice",
+      "searchPlaceholderLoading": "Loading products...",
+      "searchPlaceholder": "Search or scan a barcode / SKU...",
+      "stockLabel": "Stock",
+      "noMatchFound": "No matching product found.",
+      "addFromProducts": "Add it from the Products page",
+      "taxLevelLabel": "Calculate Tax",
+      "table": {
+        "product": "Product",
+        "unitCost": "Unit Cost",
+        "currentStock": "Current Stock",
+        "qty": "Qty",
+        "discount": "Discount",
+        "taxPercent": "Tax %",
+        "subtotal": "Subtotal"
+      },
+      "emptyRow": "No product selected",
+      "remove": "Remove",
+      "summary": {
+        "subtotal": "Subtotal",
+        "tax": "Tax",
+        "discount": "Discount",
+        "shipping": "Shipping",
+        "otherCosts": "Other Costs",
+        "grandTotal": "Grand Total"
+      },
+      "toastNoMatch": "No matching product found for \"{query}\". Add it from the Products page first."
+    },
+    "view": {
+      "close": "Close",
+      "grandTotalLabel": "Grand Total: {total}",
+      "orderDetails": "Order Details",
+      "orderStatus": "Order Status",
+      "warehouse": "Branch",
+      "orderDate": "Order Date",
+      "dueDate": "Due Date",
+      "deliveryDate": "Delivery Date",
+      "currency": "Currency",
+      "paymentMethod": "Payment Method",
+      "referenceNumber": "Reference / Invoice Number",
+      "items": "Items",
+      "totals": "Total",
+      "subtotal": "Subtotal",
+      "orderTax": "Invoice Tax ({pct}%)",
+      "orderDiscount": "Invoice Discount",
+      "shipping": "Shipping",
+      "otherCosts": "Other Costs",
+      "grandTotal": "Grand Total",
+      "paidAmount": "Paid Amount",
+      "remaining": "Remaining",
+      "notes": "Notes"
+    },
+    "print": {
+      "title": "Purchase Order",
+      "orderNumber": "Order #",
+      "orderDate": "Order Date",
+      "dueDate": "Due Date",
+      "deliveryDate": "Delivery Date",
+      "supplierName": "Supplier Name",
+      "supplierPhone": "Supplier Phone",
+      "supplierTaxNumber": "Supplier Tax Number",
+      "warehouse": "Branch",
+      "table": {
+        "product": "Product Name",
+        "sku": "SKU",
+        "priceExclTax": "Price (excl. tax)",
+        "tax": "Tax",
+        "priceInclTax": "Price (incl. tax)",
+        "qty": "Qty",
+        "total": "Total"
+      },
+      "subtotalBeforeTax": "Subtotal before tax",
+      "taxAmount": "VAT amount",
+      "orderTax": "Invoice Tax ({pct}%)",
+      "orderDiscount": "Invoice Discount",
+      "shipping": "Shipping",
+      "otherCosts": "Other Costs",
+      "grandTotal": "Grand Total",
+      "notes": "Notes"
+    },
+    "errors": {
+      "loadPurchases": "Couldn't load purchase orders. Try again.",
+      "loadReturns": "Couldn't load returns. Try again.",
+      "loadProducts": "Couldn't load products."
+    },
+    "returns": {
+      "kpis": {
+        "totalAmount": "Total Returns Amount",
+        "count": "Number of Returns",
+        "returnedItems": "Returned Items",
+        "partialCount": "Partial Returns"
+      },
+      "list": {
+        "heading": "Purchase Returns",
+        "subheading": "Manage all purchase order returns from suppliers.",
+        "searchPlaceholder": "Search returns...",
+        "statusPlaceholder": "Return Status",
+        "allStatuses": "All Return Statuses",
+        "supplierPlaceholder": "Supplier",
+        "allSuppliers": "All Suppliers",
+        "warehousePlaceholder": "Branch",
+        "allWarehouses": "All Branches",
+        "addReturn": "Add Return",
+        "table": {
+          "code": "Return #",
+          "orderNumber": "Order #",
+          "supplier": "Supplier",
+          "returnedItems": "Returned Items",
+          "returnAmount": "Return Amount",
+          "status": "Status",
+          "date": "Date",
+          "warehouse": "Branch",
+          "actions": "Actions"
+        },
+        "itemsSuffix": "{count} items",
+        "view": "View",
+        "print": "Print",
+        "emptyTitle": "No matching returns",
+        "emptyDescription": "Try adjusting the filters or search.",
+        "showingCount": "Showing {shown} of {total} results"
+      },
+      "view": {
+        "close": "Close",
+        "returnAmountLabel": "Return Amount: {amount}",
+        "orderNumber": "Order #",
+        "warehouse": "Branch",
+        "returnedItems": "Returned Items",
+        "itemsSuffix": "{count} items",
+        "returnDate": "Return Date",
+        "returnedItemsSection": "Returned Items",
+        "notes": "Notes"
+      },
+      "print": {
+        "title": "Purchase Return",
+        "returnNumber": "Return #",
+        "orderNumber": "Order #",
+        "returnDate": "Return Date",
+        "returnStatus": "Return Status",
+        "supplierName": "Supplier Name",
+        "supplierPhone": "Supplier Phone",
+        "supplierTaxNumber": "Supplier Tax Number",
+        "warehouse": "Branch",
+        "table": {
+          "product": "Product",
+          "sku": "SKU",
+          "unitCost": "Unit Cost",
+          "qty": "Qty",
+          "total": "Total"
+        },
+        "returnAmount": "Return Amount",
+        "notes": "Notes"
+      },
+      "form": {
+        "title": "Add Purchase Return",
+        "save": "Save Return",
+        "purchaseOrder": "Purchase Order",
+        "purchaseOrderPlaceholder": "Choose a purchase order",
+        "purchaseOrderSearchPlaceholder": "Search by order number...",
+        "purchaseOrderEmptyLabel": "No purchase orders",
+        "supplier": "Supplier",
+        "warehouse": "Branch",
+        "warehousePlaceholder": "Choose a branch",
+        "returnableItems": "Returnable Items",
+        "selectPurchaseFirst": "Choose a purchase order first to view its items.",
+        "itemSearchPlaceholder": "Search or scan a barcode / SKU...",
+        "noMatchingProducts": "No matching products.",
+        "returnableLine": "Returnable {qty}",
+        "selectAll": "Select All",
+        "deselectAll": "Deselect All",
+        "noItemsSelected": "Search for a product to add it, or press \"Select All\" to add every item.",
+        "purchasedAndReturnableLine": "Purchased {purchased} · Returnable {returnable}",
+        "clickToRemove": "Click to remove this item",
+        "totalQty": "Total returned quantity: {qty} items",
+        "totalAmount": "Total amount: {amount}",
+        "returnDate": "Return Date",
+        "notes": "Return Notes",
+        "notesPlaceholder": "Add a short description of the return...",
+        "toasts": {
+          "noProductMatch": "No matching product found for \"{query}\".",
+          "alreadyReturned": "\"{name}\" has already been fully returned.",
+          "itemAdded": "Added {name} (qty {qty}).",
+          "validationRequired": "Please fill in the purchase order, branch, and return date.",
+          "validationQty": "Please set a return quantity for at least one item.",
+          "createSuccess": "Return {code} created.",
+          "saveError": "Couldn't save the return. Try again."
+        }
+      }
+    }
   }
 }

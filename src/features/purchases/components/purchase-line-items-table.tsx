@@ -2,6 +2,7 @@
 
 import { type KeyboardEvent, useMemo, useState } from "react"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { ScanLine, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -62,6 +63,7 @@ export function PurchaseLineItemsTable({
   taxLevel: CalculationLevel
   onTaxLevelChange: (level: CalculationLevel) => void
 }) {
+  const t = useTranslations("purchases.lineItems")
   // Real products only (useProductCatalog already filters to native "Madar" ones) -- a purchase
   // line item's productId is a real foreign key on the backend, so only products that actually
   // exist there can be picked.
@@ -134,9 +136,7 @@ export function PurchaseLineItemsTable({
       handleSelectProduct(filteredProducts[0])
       return
     }
-    toast.error(
-      `لم يتم العثور على منتج مطابق لـ "${searchValue.trim()}". أضفه من صفحة المنتجات أولاً.`
-    )
+    toast.error(t("toastNoMatch", { query: searchValue.trim() }))
   }
 
   function updateItem(id: string, patch: Partial<PurchaseLineItem>) {
@@ -182,9 +182,7 @@ export function PurchaseLineItemsTable({
             setTimeout(() => setResultsOpen(false), 150)
           }}
           onKeyDown={handleSearchKeyDown}
-          placeholder={
-            isLoading ? "جارٍ تحميل المنتجات..." : "ابحث أو امسح الباركود / رمز المنتج (SKU)..."
-          }
+          placeholder={isLoading ? t("searchPlaceholderLoading") : t("searchPlaceholder")}
           disabled={isLoading}
           startIcon={<ScanLine className="size-4" />}
           className={FIELD_CLASS}
@@ -201,20 +199,20 @@ export function PurchaseLineItemsTable({
                 >
                   <span className={cn("font-medium", HEADING)}>{product.name}</span>
                   <span className={cn("shrink-0 text-[11px]", MUTED)}>
-                    {product.sku} · المخزون: {product.availableStock ?? "—"} ·{" "}
+                    {product.sku} · {t("stockLabel")}: {product.availableStock ?? "—"} ·{" "}
                     {formatMoney(product.costPrice ?? 0, currency)}
                   </span>
                 </button>
               ))
             ) : (
               <div className="px-3 py-2.5 text-[12px] text-[#95a4bd]">
-                لم يتم العثور على منتج مطابق.{" "}
+                {t("noMatchFound")}{" "}
                 <Link
                   href={ROUTES.productsAdd}
                   target="_blank"
                   className="font-semibold text-[#2878ff] hover:underline"
                 >
-                  أضفه من صفحة المنتجات
+                  {t("addFromProducts")}
                 </Link>
               </div>
             )}
@@ -224,7 +222,7 @@ export function PurchaseLineItemsTable({
 
       <div className="flex flex-wrap items-center gap-4 rounded-[12px] border border-[#e1e7f0] bg-[#f7f9fd] px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <span className={cn("text-[12px] font-semibold", MUTED)}>احتساب الضريبة</span>
+          <span className={cn("text-[12px] font-semibold", MUTED)}>{t("taxLevelLabel")}</span>
           <LevelToggle value={taxLevel} onChange={onTaxLevelChange} />
         </div>
       </div>
@@ -233,13 +231,27 @@ export function PurchaseLineItemsTable({
         <table className="w-full text-[12.5px]">
           <thead>
             <tr className="border-b border-[#e1e7f0] bg-[#f7f9fd] text-start">
-              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>المنتج</th>
-              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>تكلفة الوحدة</th>
-              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>المخزون الحالي</th>
-              <th className={cn("w-20 px-3 py-2.5 text-start font-semibold", MUTED)}>الكمية</th>
-              <th className={cn("w-24 px-3 py-2.5 text-start font-semibold", MUTED)}>الخصم</th>
-              <th className={cn("w-20 px-3 py-2.5 text-start font-semibold", MUTED)}>الضريبة %</th>
-              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>الإجمالي الفرعي</th>
+              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.product")}
+              </th>
+              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.unitCost")}
+              </th>
+              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.currentStock")}
+              </th>
+              <th className={cn("w-20 px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.qty")}
+              </th>
+              <th className={cn("w-24 px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.discount")}
+              </th>
+              <th className={cn("w-20 px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.taxPercent")}
+              </th>
+              <th className={cn("px-3 py-2.5 text-start font-semibold", MUTED)}>
+                {t("table.subtotal")}
+              </th>
               <th className="w-10 px-3 py-2.5" />
             </tr>
           </thead>
@@ -247,7 +259,7 @@ export function PurchaseLineItemsTable({
             {items.length === 0 ? (
               <tr>
                 <td colSpan={8} className={cn("px-3 py-8 text-center text-[13px]", MUTED)}>
-                  لم يتم اختيار أي منتج
+                  {t("emptyRow")}
                 </td>
               </tr>
             ) : (
@@ -338,7 +350,7 @@ export function PurchaseLineItemsTable({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label="إزالة"
+                      aria-label={t("remove")}
                       className="border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100"
                       onClick={() => removeItem(item.id)}
                     >
@@ -355,17 +367,17 @@ export function PurchaseLineItemsTable({
       <div className="flex justify-end">
         <div className="w-full max-w-[22rem] space-y-2 rounded-[12px] border border-[#e1e7f0] p-4">
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>المجموع الفرعي</span>
+            <span className={MUTED}>{t("summary.subtotal")}</span>
             <span className={cn("font-semibold", HEADING)}>{formatMoney(subtotal, currency)}</span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>الضريبة</span>
+            <span className={MUTED}>{t("summary.tax")}</span>
             <span className={cn("font-semibold", HEADING)}>
               {formatMoney(displayedTax, currency)}
             </span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>الخصم</span>
+            <span className={MUTED}>{t("summary.discount")}</span>
             <span
               className={cn("font-semibold", displayedDiscount > 0 ? "text-rose-600" : HEADING)}
             >
@@ -374,19 +386,19 @@ export function PurchaseLineItemsTable({
             </span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>الشحن</span>
+            <span className={MUTED}>{t("summary.shipping")}</span>
             <span className={cn("font-semibold", HEADING)}>
               {formatMoney(shippingAmount, currency)}
             </span>
           </div>
           <div className="flex items-center justify-between text-[12.5px]">
-            <span className={MUTED}>تكاليف أخرى</span>
+            <span className={MUTED}>{t("summary.otherCosts")}</span>
             <span className={cn("font-semibold", HEADING)}>
               {formatMoney(Number.isFinite(otherCosts) ? otherCosts : 0, currency)}
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between border-t border-[#e1e7f0] pt-2 text-[14px]">
-            <span className={cn("font-extrabold", HEADING)}>الإجمالي الكلي</span>
+            <span className={cn("font-extrabold", HEADING)}>{t("summary.grandTotal")}</span>
             <span className="font-extrabold text-[#2878ff]">
               {formatMoney(grandTotal, currency)}
             </span>

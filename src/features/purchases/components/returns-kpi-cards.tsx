@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { Layers, PackageMinus, RotateCcw, SplitSquareHorizontal } from "lucide-react"
 
@@ -59,6 +60,7 @@ function formatCurrency(value: number) {
 // the full unfiltered list -- so narrowing the filters updates these totals too, matching how the
 // table below it already behaves.
 export function ReturnsKpiCards({ returns }: { returns: PurchaseReturn[] }) {
+  const t = useTranslations("purchases.returns.kpis")
   const totalAmount = returns.reduce((sum, entry) => sum + entry.returnAmount, 0)
   const totalItems = returns.reduce((sum, entry) => sum + entry.returnQty, 0)
   const partialCount = returns.filter((entry) => entry.status === "partial").length
@@ -66,15 +68,15 @@ export function ReturnsKpiCards({ returns }: { returns: PurchaseReturn[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card
-        label="إجمالي مبلغ المرتجعات"
+        label={t("totalAmount")}
         value={formatCurrency(totalAmount)}
         icon={RotateCcw}
         tone="rose"
       />
-      <Card label="عدد المرتجعات" value={String(returns.length)} icon={Layers} tone="violet" />
-      <Card label="عناصر مرتجعة" value={String(totalItems)} icon={PackageMinus} tone="blue" />
+      <Card label={t("count")} value={String(returns.length)} icon={Layers} tone="violet" />
+      <Card label={t("returnedItems")} value={String(totalItems)} icon={PackageMinus} tone="blue" />
       <Card
-        label="مرتجعات جزئية"
+        label={t("partialCount")}
         value={String(partialCount)}
         icon={SplitSquareHorizontal}
         tone="amber"

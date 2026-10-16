@@ -738,5 +738,277 @@
       "primaryCtaLabel": "الاشتراك في مدار الكامل",
       "secondaryCtaLabel": "معرفة المزيد"
     }
+  },
+  "purchases": {
+    "status": {
+      "received": "تم الاستلام",
+      "pending": "قيد الانتظار"
+    },
+    "paymentStatus": {
+      "paid": "مدفوع",
+      "partial": "مدفوع جزئياً",
+      "pending": "معلّق",
+      "overdue": "متأخر"
+    },
+    "paymentMethod": {
+      "cash": "نقدًا",
+      "bankTransfer": "تحويل بنكي",
+      "card": "بطاقة",
+      "cheque": "شيك"
+    },
+    "returnStatus": {
+      "full": "إرجاع كامل",
+      "partial": "إرجاع جزئي"
+    },
+    "kpis": {
+      "totalPurchases": "إجمالي المشتريات",
+      "totalOrders": "إجمالي الطلبات",
+      "pendingOrders": "طلبات معلّقة",
+      "returnedItems": "عناصر مرتجعة",
+      "netPurchases": "إجمالي صافي المشتريات"
+    },
+    "list": {
+      "heading": "المشتريات",
+      "subheading": "عرض وإدارة جميع طلبات الشراء والموردين والمنتجات.",
+      "searchPlaceholder": "البحث عن أمر شراء...",
+      "addPurchase": "إضافة أمر شراء",
+      "table": {
+        "code": "رقم الطلب",
+        "supplier": "المورد",
+        "items": "العناصر",
+        "total": "الإجمالي",
+        "date": "التاريخ",
+        "actions": "الإجراءات"
+      },
+      "itemsSuffix": "{count} صنف",
+      "view": "عرض",
+      "print": "طباعة",
+      "emptyTitle": "لا توجد طلبات شراء مطابقة",
+      "emptyDescription": "جرّب تعديل الفلاتر أو البحث.",
+      "showingCount": "عرض {shown} من {total} نتيجة"
+    },
+    "form": {
+      "backToPurchases": "العودة إلى المشتريات",
+      "addHeading": "إنشاء أمر شراء",
+      "editHeading": "تعديل أمر الشراء {code}",
+      "supplier": "المورد",
+      "supplierPlaceholder": "اختر المورد",
+      "supplierSearchPlaceholder": "ابحث عن مورد...",
+      "supplierEmptyLabel": "لا يوجد موردون",
+      "date": "التاريخ",
+      "warehouse": "الفرع",
+      "warehousePlaceholder": "اختر الفرع",
+      "warehouseSearchPlaceholder": "ابحث...",
+      "warehouseEmptyLabel": "لا توجد فروع",
+      "dueDate": "تاريخ الإستحقاق",
+      "deliveryDate": "تاريخ التوريد",
+      "orderTax": "الضريبة على الفاتورة",
+      "orderDiscount": "الخصم على الفاتورة",
+      "shipping": "الشحن",
+      "otherCosts": "تكاليف أخرى",
+      "referenceNumber": "رقم المرجع / الفاتورة",
+      "referenceNumberPlaceholder": "رقم الفاتورة أو المرجع",
+      "notes": "ملاحظات",
+      "notesPlaceholder": "أضف ملاحظة قصيرة...",
+      "saveChanges": "حفظ التغييرات",
+      "createPurchase": "إنشاء أمر الشراء",
+      "toasts": {
+        "validationRequired": "يرجى تعبئة المورد والتاريخ والفرع.",
+        "validationItems": "يرجى إضافة منتج واحد على الأقل.",
+        "updateSuccess": "تم تحديث أمر الشراء {code}.",
+        "createSuccess": "تم إنشاء أمر الشراء {code}.",
+        "saveError": "تعذر حفظ أمر الشراء. حاول مرة أخرى."
+      }
+    },
+    "lineItems": {
+      "byProduct": "حسب المنتج",
+      "byInvoice": "حسب الفاتورة",
+      "searchPlaceholderLoading": "جارٍ تحميل المنتجات...",
+      "searchPlaceholder": "ابحث أو امسح الباركود / رمز المنتج (SKU)...",
+      "stockLabel": "المخزون",
+      "noMatchFound": "لم يتم العثور على منتج مطابق.",
+      "addFromProducts": "أضفه من صفحة المنتجات",
+      "taxLevelLabel": "احتساب الضريبة",
+      "table": {
+        "product": "المنتج",
+        "unitCost": "تكلفة الوحدة",
+        "currentStock": "المخزون الحالي",
+        "qty": "الكمية",
+        "discount": "الخصم",
+        "taxPercent": "الضريبة %",
+        "subtotal": "الإجمالي الفرعي"
+      },
+      "emptyRow": "لم يتم اختيار أي منتج",
+      "remove": "إزالة",
+      "summary": {
+        "subtotal": "المجموع الفرعي",
+        "tax": "الضريبة",
+        "discount": "الخصم",
+        "shipping": "الشحن",
+        "otherCosts": "تكاليف أخرى",
+        "grandTotal": "الإجمالي الكلي"
+      },
+      "toastNoMatch": "لم يتم العثور على منتج مطابق لـ \"{query}\". أضفه من صفحة المنتجات أولاً."
+    },
+    "view": {
+      "close": "إغلاق",
+      "grandTotalLabel": "الإجمالي الكلي: {total}",
+      "orderDetails": "تفاصيل الطلب",
+      "orderStatus": "حالة الطلب",
+      "warehouse": "الفرع",
+      "orderDate": "تاريخ الطلب",
+      "dueDate": "تاريخ الإستحقاق",
+      "deliveryDate": "تاريخ التوريد",
+      "currency": "العملة",
+      "paymentMethod": "طريقة الدفع",
+      "referenceNumber": "رقم المرجع / الفاتورة",
+      "items": "العناصر",
+      "totals": "الإجمالي",
+      "subtotal": "المجموع الفرعي",
+      "orderTax": "الضريبة على الفاتورة ({pct}%)",
+      "orderDiscount": "الخصم على الفاتورة",
+      "shipping": "الشحن",
+      "otherCosts": "تكاليف أخرى",
+      "grandTotal": "الإجمالي الكلي",
+      "paidAmount": "المبلغ المسدد",
+      "remaining": "المتبقي",
+      "notes": "ملاحظات"
+    },
+    "print": {
+      "title": "أمر شراء",
+      "orderNumber": "رقم الطلب",
+      "orderDate": "تاريخ الطلب",
+      "dueDate": "تاريخ الإستحقاق",
+      "deliveryDate": "تاريخ التوريد",
+      "supplierName": "اسم المورد",
+      "supplierPhone": "رقم جوال المورد",
+      "supplierTaxNumber": "رقم المورد الضريبي",
+      "warehouse": "الفرع",
+      "table": {
+        "product": "إسم المنتج",
+        "sku": "SKU",
+        "priceExclTax": "السعر (بدون الضريبة)",
+        "tax": "الضريبة",
+        "priceInclTax": "السعر (شامل الضريبة)",
+        "qty": "الكمية",
+        "total": "الاجمالي"
+      },
+      "subtotalBeforeTax": "المجموع قبل الضريبة",
+      "taxAmount": "قيمة الضريبة المضافة",
+      "orderTax": "الضريبة على الفاتورة ({pct}%)",
+      "orderDiscount": "الخصم على الفاتورة",
+      "shipping": "الشحن",
+      "otherCosts": "تكاليف أخرى",
+      "grandTotal": "المجموع الكلي",
+      "notes": "ملاحظات"
+    },
+    "errors": {
+      "loadPurchases": "تعذر تحميل أوامر الشراء. حاول مرة أخرى.",
+      "loadReturns": "تعذر تحميل المرتجعات. حاول مرة أخرى.",
+      "loadProducts": "تعذر تحميل المنتجات."
+    },
+    "returns": {
+      "kpis": {
+        "totalAmount": "إجمالي مبلغ المرتجعات",
+        "count": "عدد المرتجعات",
+        "returnedItems": "عناصر مرتجعة",
+        "partialCount": "مرتجعات جزئية"
+      },
+      "list": {
+        "heading": "مرتجعات المشتريات",
+        "subheading": "إدارة جميع مرتجعات طلبات الشراء من الموردين.",
+        "searchPlaceholder": "البحث في المرتجعات...",
+        "statusPlaceholder": "حالة الإرجاع",
+        "allStatuses": "كل حالات الإرجاع",
+        "supplierPlaceholder": "المورد",
+        "allSuppliers": "كل الموردين",
+        "warehousePlaceholder": "الفرع",
+        "allWarehouses": "كل الفروع",
+        "addReturn": "إضافة مرتجع",
+        "table": {
+          "code": "رقم المرتجع",
+          "orderNumber": "رقم الطلب",
+          "supplier": "المورد",
+          "returnedItems": "العناصر المرتجعة",
+          "returnAmount": "مبلغ الإرجاع",
+          "status": "الحالة",
+          "date": "التاريخ",
+          "warehouse": "الفرع",
+          "actions": "الإجراءات"
+        },
+        "itemsSuffix": "{count} صنف",
+        "view": "عرض",
+        "print": "طباعة",
+        "emptyTitle": "لا توجد مرتجعات مطابقة",
+        "emptyDescription": "جرّب تعديل الفلاتر أو البحث.",
+        "showingCount": "عرض {shown} من {total} نتيجة"
+      },
+      "view": {
+        "close": "إغلاق",
+        "returnAmountLabel": "مبلغ الإرجاع: {amount}",
+        "orderNumber": "رقم الطلب",
+        "warehouse": "الفرع",
+        "returnedItems": "العناصر المرتجعة",
+        "itemsSuffix": "{count} صنف",
+        "returnDate": "تاريخ الإرجاع",
+        "returnedItemsSection": "الأصناف المرتجعة",
+        "notes": "ملاحظات"
+      },
+      "print": {
+        "title": "مرتجع مشتريات",
+        "returnNumber": "رقم المرتجع",
+        "orderNumber": "رقم الطلب",
+        "returnDate": "تاريخ الإرجاع",
+        "returnStatus": "حالة الإرجاع",
+        "supplierName": "اسم المورد",
+        "supplierPhone": "رقم جوال المورد",
+        "supplierTaxNumber": "رقم المورد الضريبي",
+        "warehouse": "الفرع",
+        "table": {
+          "product": "المنتج",
+          "sku": "SKU",
+          "unitCost": "تكلفة الوحدة",
+          "qty": "الكمية",
+          "total": "الاجمالي"
+        },
+        "returnAmount": "مبلغ الإرجاع",
+        "notes": "ملاحظات"
+      },
+      "form": {
+        "title": "إضافة مرتجع شراء",
+        "save": "حفظ المرتجع",
+        "purchaseOrder": "أمر الشراء",
+        "purchaseOrderPlaceholder": "اختر أمر الشراء",
+        "purchaseOrderSearchPlaceholder": "ابحث برقم الطلب...",
+        "purchaseOrderEmptyLabel": "لا توجد أوامر شراء",
+        "supplier": "المورد",
+        "warehouse": "الفرع",
+        "warehousePlaceholder": "اختر الفرع",
+        "returnableItems": "العناصر القابلة للإرجاع",
+        "selectPurchaseFirst": "اختر أمر الشراء أولاً لعرض عناصره.",
+        "itemSearchPlaceholder": "ابحث أو امسح الباركود / رمز المنتج (SKU)...",
+        "noMatchingProducts": "لا توجد منتجات مطابقة.",
+        "returnableLine": "القابل للإرجاع {qty}",
+        "selectAll": "تحديد الكل",
+        "deselectAll": "إلغاء التحديد",
+        "noItemsSelected": "ابحث عن منتج لإضافته، أو اضغط \"تحديد الكل\" لإضافة جميع العناصر.",
+        "purchasedAndReturnableLine": "تم شراء {purchased} · القابل للإرجاع {returnable}",
+        "clickToRemove": "اضغط لإزالة الصنف",
+        "totalQty": "إجمالي الكمية المرتجعة: {qty} صنف",
+        "totalAmount": "إجمالي المبلغ: {amount}",
+        "returnDate": "تاريخ الإرجاع",
+        "notes": "ملاحظات الإرجاع",
+        "notesPlaceholder": "أضف وصفًا مختصرًا للإرجاع...",
+        "toasts": {
+          "noProductMatch": "لم يتم العثور على منتج مطابق لـ \"{query}\".",
+          "alreadyReturned": "تم إرجاع \"{name}\" بالكامل مسبقًا.",
+          "itemAdded": "تمت إضافة {name} (الكمية {qty}).",
+          "validationRequired": "يرجى تعبئة أمر الشراء والفرع وتاريخ الإرجاع.",
+          "validationQty": "يرجى تحديد كمية الإرجاع لصنف واحد على الأقل.",
+          "createSuccess": "تم إنشاء المرتجع {code}.",
+          "saveError": "تعذر حفظ المرتجع. حاول مرة أخرى."
+        }
+      }
+    }
   }
 }

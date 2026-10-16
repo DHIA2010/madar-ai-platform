@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 import type { Supplier } from "@/features/suppliers"
 import { useWorkspace } from "@/features/workspace"
 
@@ -66,6 +68,7 @@ export function PurchasePrintDocument({
   purchase: Purchase
   supplier: Supplier | null
 }) {
+  const t = useTranslations("purchases.print")
   const { currentOrganization } = useWorkspace()
   const subtotal = purchaseItemsSubtotal(purchase.items)
   const grandTotal = purchaseGrandTotal(purchase)
@@ -83,7 +86,7 @@ export function PurchasePrintDocument({
       dir="rtl"
     >
       <div className="mb-2 flex items-start justify-between">
-        <h1 className="text-[22px] font-extrabold">أمر شراء</h1>
+        <h1 className="text-[22px] font-extrabold">{t("title")}</h1>
         {currentOrganization?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -101,29 +104,38 @@ export function PurchasePrintDocument({
 
       <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px]">
         <div className="space-y-2 text-right">
-          <DetailLine label="رقم الطلب" value={purchase.code} />
-          <DetailLine label="تاريخ الطلب" value={purchase.date} />
-          <DetailLine label="تاريخ الإستحقاق" value={purchase.dueDate ?? ""} />
-          <DetailLine label="تاريخ التوريد" value={purchase.deliveryDate ?? ""} />
+          <DetailLine label={t("orderNumber")} value={purchase.code} />
+          <DetailLine label={t("orderDate")} value={purchase.date} />
+          <DetailLine label={t("dueDate")} value={purchase.dueDate ?? ""} />
+          <DetailLine label={t("deliveryDate")} value={purchase.deliveryDate ?? ""} />
         </div>
         <div className="space-y-2 text-right">
-          <DetailLine label="اسم المورد" value={purchase.supplierName} />
-          <DetailLine label="رقم جوال المورد" value={supplier?.phone ?? ""} />
-          <DetailLine label="رقم المورد الضريبي" value={supplier?.companyDetails.taxNumber ?? ""} />
-          <DetailLine label="الفرع" value={purchase.warehouseName} />
+          <DetailLine label={t("supplierName")} value={purchase.supplierName} />
+          <DetailLine label={t("supplierPhone")} value={supplier?.phone ?? ""} />
+          <DetailLine
+            label={t("supplierTaxNumber")}
+            value={supplier?.companyDetails.taxNumber ?? ""}
+          />
+          <DetailLine label={t("warehouse")} value={purchase.warehouseName} />
         </div>
       </div>
 
       <table className="mb-8 w-full border-collapse border border-[#0b1738] text-[11.5px]">
         <thead>
           <tr className="bg-[#f1f3f6]">
-            <th className="border border-[#0b1738] px-2 py-2 text-right font-bold">إسم المنتج</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">SKU</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">السعر (بدون الضريبة)</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">الضريبة</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">السعر (شامل الضريبة)</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">الكمية</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">الاجمالي</th>
+            <th className="border border-[#0b1738] px-2 py-2 text-right font-bold">
+              {t("table.product")}
+            </th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.sku")}</th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">
+              {t("table.priceExclTax")}
+            </th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.tax")}</th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">
+              {t("table.priceInclTax")}
+            </th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.qty")}</th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.total")}</th>
           </tr>
         </thead>
         <tbody>
@@ -149,37 +161,37 @@ export function PurchasePrintDocument({
 
       <div className="flex justify-end">
         <div className="w-[95mm] space-y-2.5">
-          <TotalLine label="المجموع قبل الضريبة" value={formatMoney(subtotal, purchase.currency)} />
           <TotalLine
-            label="قيمة الضريبة المضافة"
-            value={formatMoney(itemsTax, purchase.currency)}
+            label={t("subtotalBeforeTax")}
+            value={formatMoney(subtotal, purchase.currency)}
           />
+          <TotalLine label={t("taxAmount")} value={formatMoney(itemsTax, purchase.currency)} />
           {purchase.orderTaxPercent > 0 ? (
             <TotalLine
-              label={`الضريبة على الفاتورة (${purchase.orderTaxPercent}%)`}
+              label={t("orderTax", { pct: purchase.orderTaxPercent })}
               value={formatMoney(orderTax, purchase.currency)}
             />
           ) : null}
           {purchase.discountAmount > 0 ? (
             <TotalLine
-              label="الخصم على الفاتورة"
+              label={t("orderDiscount")}
               value={`-${formatMoney(purchase.discountAmount, purchase.currency)}`}
             />
           ) : null}
           {purchase.shippingAmount > 0 ? (
             <TotalLine
-              label="الشحن"
+              label={t("shipping")}
               value={formatMoney(purchase.shippingAmount, purchase.currency)}
             />
           ) : null}
           {purchase.otherCosts > 0 ? (
             <TotalLine
-              label="تكاليف أخرى"
+              label={t("otherCosts")}
               value={formatMoney(purchase.otherCosts, purchase.currency)}
             />
           ) : null}
           <TotalLine
-            label="المجموع الكلي"
+            label={t("grandTotal")}
             value={formatMoney(grandTotal, purchase.currency)}
             emphasized
           />
@@ -188,7 +200,7 @@ export function PurchasePrintDocument({
 
       {purchase.note ? (
         <div className="mt-6 border-t border-[#e1e7f0] pt-4">
-          <p className="text-[11px] font-semibold text-[#95a4bd]">ملاحظات</p>
+          <p className="text-[11px] font-semibold text-[#95a4bd]">{t("notes")}</p>
           <p className="mt-1 text-[12px]">{purchase.note}</p>
         </div>
       ) : null}

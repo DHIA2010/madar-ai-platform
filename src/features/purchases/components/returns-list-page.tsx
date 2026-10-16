@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { Download, Eye, Loader2, Plus, Printer } from "lucide-react"
 import { createPortal } from "react-dom"
 
@@ -34,17 +35,22 @@ import { ReturnStatusBadge } from "./return-status-badge"
 import { ReturnViewDialog } from "./return-view-dialog"
 import { ReturnsKpiCards } from "./returns-kpi-cards"
 
-const STATUS_OPTIONS = [
-  { value: "all", label: "كل حالات الإرجاع" },
-  { value: "full", label: "إرجاع كامل" },
-  { value: "partial", label: "إرجاع جزئي" },
-]
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 function formatCurrency(value: number) {
   return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
 }
 
 export function ReturnsListPage() {
+  const t = useTranslations("purchases.returns.list")
+  const tCommon = useTranslations("common")
+  const tReturnStatus = useTranslations("purchases.returnStatus")
+  const locale = useLocale()
+  const statusOptions = [
+    { value: "all", label: t("allStatuses") },
+    { value: "full", label: tReturnStatus("full") },
+    { value: "partial", label: tReturnStatus("partial") },
+  ]
   const { returns, isLoading, refetch } = useReturns()
   const { purchases } = usePurchases()
   const { suppliers } = useSuppliers()
@@ -72,17 +78,17 @@ export function ReturnsListPage() {
     : null
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale as Locale)} className="flex flex-col gap-4">
       <div>
-        <h1 className={cn("text-2xl font-bold", HEADING)}>مرتجعات المشتريات</h1>
-        <p className={cn("mt-1 text-sm", MUTED)}>إدارة جميع مرتجعات طلبات الشراء من الموردين.</p>
+        <h1 className={cn("text-2xl font-bold", HEADING)}>{t("heading")}</h1>
+        <p className={cn("mt-1 text-sm", MUTED)}>{t("subheading")}</p>
       </div>
 
       <ReturnsKpiCards returns={list.filteredReturns} />
 
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
         <AppSearchInput
-          placeholder="البحث في المرتجعات..."
+          placeholder={t("searchPlaceholder")}
           value={list.search}
           onChange={(event) => list.setSearch(event.target.value)}
           wrapperClassName="w-full sm:w-64"
@@ -92,35 +98,35 @@ export function ReturnsListPage() {
         <div className="flex flex-wrap items-center gap-2">
           <AppSearchableSelect
             value={list.status}
-            options={STATUS_OPTIONS}
+            options={statusOptions}
             onChange={(value) => list.setStatus(value as typeof list.status)}
-            placeholder="حالة الإرجاع"
-            ariaLabel="حالة الإرجاع"
+            placeholder={t("statusPlaceholder")}
+            ariaLabel={t("statusPlaceholder")}
             triggerClassName="w-[160px]"
           />
           <AppSearchableSelect
             value={list.supplierId}
             options={[
-              { value: "all", label: "كل الموردين" },
+              { value: "all", label: t("allSuppliers") },
               ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })),
             ]}
             onChange={(value) => list.setSupplierId(value)}
-            placeholder="المورد"
-            ariaLabel="المورد"
+            placeholder={t("supplierPlaceholder")}
+            ariaLabel={t("supplierPlaceholder")}
             triggerClassName="w-[160px]"
           />
           <AppSearchableSelect
             value={list.warehouseId}
             options={[
-              { value: "all", label: "كل الفروع" },
+              { value: "all", label: t("allWarehouses") },
               ...availableWorkspaces.map((workspace) => ({
                 value: workspace.id,
                 label: workspace.name,
               })),
             ]}
             onChange={(value) => list.setWarehouseId(value)}
-            placeholder="الفرع"
-            ariaLabel="الفرع"
+            placeholder={t("warehousePlaceholder")}
+            ariaLabel={t("warehousePlaceholder")}
             triggerClassName="w-[160px]"
           />
           <AppDateRangeFilter value={list.dateRange} onChange={list.setDateRange} />
@@ -130,7 +136,7 @@ export function ReturnsListPage() {
             className="h-11 gap-2 rounded-[12px] border-[#c4d5f0] bg-white px-4 text-[12.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
             onClick={() => exportReturnsToCsv(list.filteredReturns)}
           >
-            تصدير
+            {tCommon("export")}
           </AppButton>
           <AppButton
             icon={
@@ -141,7 +147,7 @@ export function ReturnsListPage() {
             onClick={() => setFormOpen(true)}
             className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-semibold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
           >
-            إضافة مرتجع
+            {t("addReturn")}
           </AppButton>
         </div>
       </div>
@@ -150,15 +156,15 @@ export function ReturnsListPage() {
         <AppTable>
           <AppTableHeader>
             <AppTableRow>
-              <AppTableHead>رقم المرتجع</AppTableHead>
-              <AppTableHead>رقم الطلب</AppTableHead>
-              <AppTableHead>المورد</AppTableHead>
-              <AppTableHead>العناصر المرتجعة</AppTableHead>
-              <AppTableHead>مبلغ الإرجاع</AppTableHead>
-              <AppTableHead>الحالة</AppTableHead>
-              <AppTableHead>التاريخ</AppTableHead>
-              <AppTableHead>الفرع</AppTableHead>
-              <AppTableHead className="w-20">الإجراءات</AppTableHead>
+              <AppTableHead>{t("table.code")}</AppTableHead>
+              <AppTableHead>{t("table.orderNumber")}</AppTableHead>
+              <AppTableHead>{t("table.supplier")}</AppTableHead>
+              <AppTableHead>{t("table.returnedItems")}</AppTableHead>
+              <AppTableHead>{t("table.returnAmount")}</AppTableHead>
+              <AppTableHead>{t("table.status")}</AppTableHead>
+              <AppTableHead>{t("table.date")}</AppTableHead>
+              <AppTableHead>{t("table.warehouse")}</AppTableHead>
+              <AppTableHead className="w-20">{t("table.actions")}</AppTableHead>
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
@@ -176,7 +182,9 @@ export function ReturnsListPage() {
                     <span className={cn("font-medium", HEADING)}>{entry.supplierName}</span>
                   </div>
                 </AppTableCell>
-                <AppTableCell className={MUTED}>{entry.returnQty} صنف</AppTableCell>
+                <AppTableCell className={MUTED}>
+                  {t("itemsSuffix", { count: entry.returnQty })}
+                </AppTableCell>
                 <AppTableCell className={cn("font-medium", HEADING)}>
                   {formatCurrency(entry.returnAmount)}
                 </AppTableCell>
@@ -190,7 +198,7 @@ export function ReturnsListPage() {
                     <AppButton
                       variant="ghost"
                       size="icon-sm"
-                      aria-label="عرض"
+                      aria-label={t("view")}
                       className="rounded-[8px] border border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100"
                       onClick={() => setViewTarget(entry)}
                     >
@@ -199,7 +207,7 @@ export function ReturnsListPage() {
                     <AppButton
                       variant="ghost"
                       size="icon-sm"
-                      aria-label="طباعة"
+                      aria-label={t("print")}
                       className="rounded-[8px] border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
                       onClick={() => setPrintTarget(entry)}
                     >
@@ -215,18 +223,15 @@ export function ReturnsListPage() {
         {isLoading ? (
           <div className={cn("flex items-center justify-center gap-2 py-16 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ التحميل...
+            {tCommon("loading")}
           </div>
         ) : list.rows.length === 0 ? (
-          <AppTableEmpty
-            title="لا توجد مرتجعات مطابقة"
-            description="جرّب تعديل الفلاتر أو البحث."
-          />
+          <AppTableEmpty title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
           <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-            عرض {list.rows.length} من {list.totalCount} نتيجة
+            {t("showingCount", { shown: list.rows.length, total: list.totalCount })}
           </p>
           <PurchasePagination
             page={list.page}

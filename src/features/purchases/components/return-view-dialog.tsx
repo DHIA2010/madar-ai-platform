@@ -1,10 +1,16 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
+
+import { cn } from "@/lib/utils"
+
 import { AppButton, AppDialog } from "@/components/app"
 
 import type { PurchaseReturn } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { ReturnStatusBadge } from "./return-status-badge"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 function formatCurrency(value: number) {
   return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
@@ -26,13 +32,16 @@ export function ReturnViewDialog({
   entry: PurchaseReturn | null
   onOpenChange: (open: boolean) => void
 }) {
+  const t = useTranslations("purchases.returns.view")
+  const locale = useLocale()
+  const dir = localeDirection(locale as Locale)
   return (
     <AppDialog
       open={entry !== null}
       onOpenChange={onOpenChange}
       title={
         entry ? (
-          <span dir="rtl" className="flex items-center gap-3.5">
+          <span dir={dir} className="flex items-center gap-3.5">
             <PurchaseAvatar
               name={entry.supplierName}
               imageUrl={entry.supplierImageUrl}
@@ -51,38 +60,46 @@ export function ReturnViewDialog({
           ""
         )
       }
-      contentClassName="[direction:rtl] max-w-[32rem] gap-5 p-6"
+      contentClassName={cn(
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+        "max-w-[32rem] gap-5 p-6"
+      )}
       footer={
         <AppButton
           variant="outline"
           className="h-11 w-full rounded-[10px] text-[13.5px] font-semibold"
           onClick={() => onOpenChange(false)}
         >
-          إغلاق
+          {t("close")}
         </AppButton>
       }
     >
       {entry ? (
-        <div dir="rtl" className="space-y-4">
+        <div dir={dir} className="space-y-4">
           <div className="flex items-center justify-between rounded-[12px] bg-[#f7f9fd] px-4 py-3">
             <ReturnStatusBadge status={entry.status} />
             <p className="text-[13px] font-bold text-[#0b1738]">
-              مبلغ الإرجاع: {formatCurrency(entry.returnAmount)}
+              {t("returnAmountLabel", { amount: formatCurrency(entry.returnAmount) })}
             </p>
           </div>
 
           <div className="rounded-[12px] border border-[#e1e7f0] p-4">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <Field label="رقم الطلب" value={entry.purchaseCode} />
-              <Field label="الفرع" value={entry.warehouseName} />
-              <Field label="العناصر المرتجعة" value={`${entry.returnQty} صنف`} />
-              <Field label="تاريخ الإرجاع" value={entry.returnDate} />
+              <Field label={t("orderNumber")} value={entry.purchaseCode} />
+              <Field label={t("warehouse")} value={entry.warehouseName} />
+              <Field
+                label={t("returnedItems")}
+                value={t("itemsSuffix", { count: entry.returnQty })}
+              />
+              <Field label={t("returnDate")} value={entry.returnDate} />
             </div>
           </div>
 
           {entry.items.length > 0 ? (
             <div className="rounded-[12px] border border-[#e1e7f0] p-4">
-              <p className="mb-2 text-[11px] font-semibold text-[#95a4bd]">الأصناف المرتجعة</p>
+              <p className="mb-2 text-[11px] font-semibold text-[#95a4bd]">
+                {t("returnedItemsSection")}
+              </p>
               <div className="space-y-2">
                 {entry.items.map((item) => (
                   <div
@@ -105,7 +122,7 @@ export function ReturnViewDialog({
           ) : null}
 
           <div className="rounded-[12px] border border-[#e1e7f0] p-4">
-            <p className="mb-1.5 text-[11px] font-semibold text-[#95a4bd]">ملاحظات</p>
+            <p className="mb-1.5 text-[11px] font-semibold text-[#95a4bd]">{t("notes")}</p>
             <p className="text-[13px] font-medium whitespace-pre-wrap text-[#0b1738]">
               {entry.notes || "—"}
             </p>

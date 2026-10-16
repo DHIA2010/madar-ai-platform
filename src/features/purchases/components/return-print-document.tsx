@@ -1,14 +1,11 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 import type { Supplier } from "@/features/suppliers"
 import { useWorkspace } from "@/features/workspace"
 
-import type { PurchaseReturn, ReturnStatus } from "../types"
-
-const STATUS_LABEL: Record<ReturnStatus, string> = {
-  full: "إرجاع كامل",
-  partial: "إرجاع جزئي",
-}
+import type { PurchaseReturn } from "../types"
 
 function formatCurrency(value: number) {
   return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
@@ -34,6 +31,8 @@ export function ReturnPrintDocument({
   entry: PurchaseReturn
   supplier: Supplier | null
 }) {
+  const t = useTranslations("purchases.returns.print")
+  const tStatus = useTranslations("purchases.returnStatus")
   const { currentOrganization } = useWorkspace()
 
   return (
@@ -44,7 +43,7 @@ export function ReturnPrintDocument({
       dir="rtl"
     >
       <div className="mb-2 flex items-start justify-between">
-        <h1 className="text-[22px] font-extrabold">مرتجع مشتريات</h1>
+        <h1 className="text-[22px] font-extrabold">{t("title")}</h1>
         {currentOrganization?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -62,27 +61,32 @@ export function ReturnPrintDocument({
 
       <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px]">
         <div className="space-y-2 text-right">
-          <DetailLine label="رقم المرتجع" value={entry.code} />
-          <DetailLine label="رقم الطلب" value={entry.purchaseCode} />
-          <DetailLine label="تاريخ الإرجاع" value={entry.returnDate} />
-          <DetailLine label="حالة الإرجاع" value={STATUS_LABEL[entry.status]} />
+          <DetailLine label={t("returnNumber")} value={entry.code} />
+          <DetailLine label={t("orderNumber")} value={entry.purchaseCode} />
+          <DetailLine label={t("returnDate")} value={entry.returnDate} />
+          <DetailLine label={t("returnStatus")} value={tStatus(entry.status)} />
         </div>
         <div className="space-y-2 text-right">
-          <DetailLine label="اسم المورد" value={entry.supplierName} />
-          <DetailLine label="رقم جوال المورد" value={supplier?.phone ?? ""} />
-          <DetailLine label="رقم المورد الضريبي" value={supplier?.companyDetails.taxNumber ?? ""} />
-          <DetailLine label="الفرع" value={entry.warehouseName} />
+          <DetailLine label={t("supplierName")} value={entry.supplierName} />
+          <DetailLine label={t("supplierPhone")} value={supplier?.phone ?? ""} />
+          <DetailLine
+            label={t("supplierTaxNumber")}
+            value={supplier?.companyDetails.taxNumber ?? ""}
+          />
+          <DetailLine label={t("warehouse")} value={entry.warehouseName} />
         </div>
       </div>
 
       <table className="mb-8 w-full border-collapse border border-[#0b1738] text-[11.5px]">
         <thead>
           <tr className="bg-[#f1f3f6]">
-            <th className="border border-[#0b1738] px-2 py-2 text-right font-bold">المنتج</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">SKU</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">تكلفة الوحدة</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">الكمية</th>
-            <th className="border border-[#0b1738] px-2 py-2 font-bold">الاجمالي</th>
+            <th className="border border-[#0b1738] px-2 py-2 text-right font-bold">
+              {t("table.product")}
+            </th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.sku")}</th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.unitCost")}</th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.qty")}</th>
+            <th className="border border-[#0b1738] px-2 py-2 font-bold">{t("table.total")}</th>
           </tr>
         </thead>
         <tbody>
@@ -105,7 +109,7 @@ export function ReturnPrintDocument({
       <div className="flex justify-end">
         <div className="w-[95mm] space-y-2.5">
           <div className="flex items-center justify-between border-b-2 border-[#0b1738] pb-2 text-[16px]">
-            <span className="font-extrabold">مبلغ الإرجاع</span>
+            <span className="font-extrabold">{t("returnAmount")}</span>
             <span className="font-extrabold">{formatCurrency(entry.returnAmount)}</span>
           </div>
         </div>
@@ -113,7 +117,7 @@ export function ReturnPrintDocument({
 
       {entry.notes ? (
         <div className="mt-6 border-t border-[#e1e7f0] pt-4">
-          <p className="text-[11px] font-semibold text-[#95a4bd]">ملاحظات</p>
+          <p className="text-[11px] font-semibold text-[#95a4bd]">{t("notes")}</p>
           <p className="mt-1 text-[12px]">{entry.notes}</p>
         </div>
       ) : null}

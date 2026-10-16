@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl"
+
 import { AppSwitch } from "@/components/app"
 
 import type { PurchaseStatus } from "../types"
@@ -12,11 +14,12 @@ export function PurchaseStatusToggle({
   status: PurchaseStatus
   onChange: (status: PurchaseStatus) => void
 }) {
+  const t = useTranslations("purchases.status")
   return (
     <AppSwitch
       checked={status === "received"}
       onCheckedChange={(checked) => onChange(checked ? "received" : "pending")}
-      aria-label={status === "received" ? "تم الاستلام" : "قيد الانتظار"}
+      aria-label={status === "received" ? t("received") : t("pending")}
     />
   )
 }

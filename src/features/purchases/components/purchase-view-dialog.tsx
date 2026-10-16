@@ -1,6 +1,9 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
 import type { ReactNode } from "react"
+
+import { cn } from "@/lib/utils"
 
 import { AppButton, AppDialog } from "@/components/app"
 
@@ -12,22 +15,11 @@ import {
   type Purchase,
   purchaseGrandTotal,
   purchaseItemsSubtotal,
-  type PurchasePaymentMethod,
 } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
 import { PurchasePaymentStatusBadge } from "./purchase-payment-status-badge"
 
-const STATUS_LABEL: Record<Purchase["status"], string> = {
-  received: "تم الاستلام",
-  pending: "قيد الانتظار",
-}
-
-const PAYMENT_METHOD_LABEL: Record<PurchasePaymentMethod, string> = {
-  cash: "نقدًا",
-  bank_transfer: "تحويل بنكي",
-  card: "بطاقة",
-  cheque: "شيك",
-}
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 function formatMoney(value: number, currency: string) {
   try {
@@ -67,6 +59,11 @@ export function PurchaseViewDialog({
   purchase: Purchase | null
   onOpenChange: (open: boolean) => void
 }) {
+  const t = useTranslations("purchases.view")
+  const tStatus = useTranslations("purchases.status")
+  const tPaymentMethod = useTranslations("purchases.paymentMethod")
+  const locale = useLocale()
+  const dir = localeDirection(locale as Locale)
   const { vouchers } = useSupplierVouchers()
   const subtotal = purchase ? purchaseItemsSubtotal(purchase.items) : 0
   const grandTotal = purchase ? purchaseGrandTotal(purchase) : 0
@@ -82,7 +79,7 @@ export function PurchaseViewDialog({
       onOpenChange={onOpenChange}
       title={
         purchase ? (
-          <span dir="rtl" className="flex items-center gap-3.5">
+          <span dir={dir} className="flex items-center gap-3.5">
             <PurchaseAvatar
               name={purchase.supplierName}
               imageUrl={purchase.supplierImageUrl}
@@ -101,43 +98,46 @@ export function PurchaseViewDialog({
           ""
         )
       }
-      contentClassName="[direction:rtl] max-w-[38rem] gap-5 p-6"
+      contentClassName={cn(
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+        "max-w-[38rem] gap-5 p-6"
+      )}
       footer={
         <AppButton
           variant="outline"
           className="h-11 w-full rounded-[10px] text-[13.5px] font-semibold"
           onClick={() => onOpenChange(false)}
         >
-          إغلاق
+          {t("close")}
         </AppButton>
       }
     >
       {purchase ? (
-        <div dir="rtl" className="max-h-[60vh] space-y-4 overflow-y-auto pe-1">
+        <div dir={dir} className="max-h-[60vh] space-y-4 overflow-y-auto pe-1">
           <div className="flex items-center justify-between rounded-[12px] bg-[#f7f9fd] px-4 py-3">
             <PurchasePaymentStatusBadge status={derivePurchasePaymentStatus(purchase, vouchers)} />
             <p className="text-[13px] font-bold text-[#0b1738]">
-              الإجمالي الكلي: {formatMoney(grandTotal, purchase.currency)}
+              {t("grandTotalLabel", { total: formatMoney(grandTotal, purchase.currency) })}
             </p>
           </div>
 
-          <Section title="تفاصيل الطلب">
+          <Section title={t("orderDetails")}>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <Field label="حالة الطلب" value={STATUS_LABEL[purchase.status]} />
-              <Field label="الفرع" value={purchase.warehouseName} />
-              <Field label="تاريخ الطلب" value={purchase.date} />
-              <Field label="تاريخ الإستحقاق" value={purchase.dueDate ?? ""} />
-              <Field label="تاريخ التوريد" value={purchase.deliveryDate ?? ""} />
-              <Field label="العملة" value={purchase.currency} />
+              <Field label={t("orderStatus")} value={tStatus(purchase.status)} />
+              <Field label={t("warehouse")} value={purchase.warehouseName} />
+              <Field label={t("orderDate")} value={purchase.date} />
+              <Field label={t("dueDate")} value={purchase.dueDate ?? ""} />
+              <Field label={t("deliveryDate")} value={purchase.deliveryDate ?? ""} />
+              <Field label={t("currency")} value={purchase.currency} />
               <Field
-                label="طريقة الدفع"
-                value={purchase.paymentMethod ? PAYMENT_METHOD_LABEL[purchase.paymentMethod] : ""}
+                label={t("paymentMethod")}
+                value={purchase.paymentMethod ? tPaymentMethod(purchase.paymentMethod) : ""}
               />
-              <Field label="رقم المرجع / الفاتورة" value={purchase.referenceNumber} />
+              <Field label={t("referenceNumber")} value={purchase.referenceNumber} />
             </div>
           </Section>
 
-          <Section title="العناصر">
+          <Section title={t("items")}>
             <div className="space-y-2">
               {purchase.items.map((item) => (
                 <div
@@ -158,36 +158,36 @@ export function PurchaseViewDialog({
             </div>
           </Section>
 
-          <Section title="الإجمالي">
+          <Section title={t("totals")}>
             <div className="space-y-1.5 text-[12.5px]">
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">المجموع الفرعي</span>
+                <span className="text-[#6b7b96]">{t("subtotal")}</span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(subtotal, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[#6b7b96]">
-                  الضريبة على الفاتورة ({purchase.orderTaxPercent}%)
+                  {t("orderTax", { pct: purchase.orderTaxPercent })}
                 </span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(subtotal * (purchase.orderTaxPercent / 100), purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">الخصم على الفاتورة</span>
+                <span className="text-[#6b7b96]">{t("orderDiscount")}</span>
                 <span className="font-semibold text-rose-600">
                   -{formatMoney(purchase.discountAmount, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">الشحن</span>
+                <span className="text-[#6b7b96]">{t("shipping")}</span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(purchase.shippingAmount, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">تكاليف أخرى</span>
+                <span className="text-[#6b7b96]">{t("otherCosts")}</span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(
                     Number.isFinite(purchase.otherCosts) ? purchase.otherCosts : 0,
@@ -196,19 +196,19 @@ export function PurchaseViewDialog({
                 </span>
               </div>
               <div className="mt-1.5 flex items-center justify-between border-t border-[#e1e7f0] pt-1.5 text-[13.5px]">
-                <span className="font-extrabold text-[#0b1738]">الإجمالي الكلي</span>
+                <span className="font-extrabold text-[#0b1738]">{t("grandTotal")}</span>
                 <span className="font-extrabold text-[#2878ff]">
                   {formatMoney(grandTotal, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">المبلغ المسدد</span>
+                <span className="text-[#6b7b96]">{t("paidAmount")}</span>
                 <span className="font-semibold text-emerald-600">
                   {formatMoney(paidAmount, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">المتبقي</span>
+                <span className="text-[#6b7b96]">{t("remaining")}</span>
                 <span className="font-semibold text-rose-600">
                   {formatMoney(Math.max(0, grandTotal - paidAmount), purchase.currency)}
                 </span>
@@ -217,7 +217,7 @@ export function PurchaseViewDialog({
           </Section>
 
           {purchase.note ? (
-            <Section title="ملاحظات">
+            <Section title={t("notes")}>
               <p className="text-[13px] font-medium whitespace-pre-wrap text-[#0b1738]">
                 {purchase.note}
               </p>

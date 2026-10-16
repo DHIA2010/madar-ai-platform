@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { ClipboardList, Clock, RotateCcw, ShoppingBag, Wallet } from "lucide-react"
 
@@ -73,19 +74,25 @@ export function PurchasesKpiCards({
   returnedAmount: number
   currency: SupportedOrgCurrency
 }) {
+  const t = useTranslations("purchases.kpis")
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Card
-        label="إجمالي المشتريات"
+        label={t("totalPurchases")}
         value={formatCurrency(totalPurchases, currency)}
         icon={ShoppingBag}
         tone="blue"
       />
-      <Card label="إجمالي الطلبات" value={String(totalOrders)} icon={ClipboardList} tone="violet" />
-      <Card label="طلبات معلّقة" value={String(pendingOrders)} icon={Clock} tone="amber" />
-      <Card label="عناصر مرتجعة" value={String(returnedItems)} icon={RotateCcw} tone="rose" />
       <Card
-        label="إجمالي صافي المشتريات"
+        label={t("totalOrders")}
+        value={String(totalOrders)}
+        icon={ClipboardList}
+        tone="violet"
+      />
+      <Card label={t("pendingOrders")} value={String(pendingOrders)} icon={Clock} tone="amber" />
+      <Card label={t("returnedItems")} value={String(returnedItems)} icon={RotateCcw} tone="rose" />
+      <Card
+        label={t("netPurchases")}
         value={formatCurrency(totalPurchases - returnedAmount, currency)}
         icon={Wallet}
         tone="emerald"

@@ -1,6 +1,7 @@
 "use client"
 
 import { type KeyboardEvent, useEffect, useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { CheckCheck, ScanLine, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -21,6 +22,8 @@ import {
   returnItemsTotalQty,
 } from "../types"
 import { FIELD_CLASS, PurchaseField } from "./purchase-field"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 function formatMoney(value: number) {
   return `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(value)}`
@@ -45,6 +48,10 @@ export function ReturnFormDialog({
   allReturns: PurchaseReturn[]
   onCreated: () => void
 }) {
+  const t = useTranslations("purchases.returns.form")
+  const tCommon = useTranslations("common")
+  const locale = useLocale()
+  const dir = localeDirection(locale as Locale)
   const { availableWorkspaces } = useWorkspace()
   const [values, setValues] = useState<ReturnFormValues>(EMPTY_RETURN_FORM_VALUES)
   const [submitting, setSubmitting] = useState(false)
@@ -220,18 +227,18 @@ export function ReturnFormDialog({
       if (filteredSearchItems.length > 0) {
         addItemToSelection(filteredSearchItems[0])
       } else {
-        toast.error(`لم يتم العثور على منتج مطابق لـ "${itemSearch.trim()}".`)
+        toast.error(t("toasts.noProductMatch", { query: itemSearch.trim() }))
       }
       return
     }
     const maxQty = maxReturnableFor(exactMatch.productId, exactMatch.qty)
     if (maxQty <= 0) {
-      toast.error(`تم إرجاع "${exactMatch.productName}" بالكامل مسبقًا.`)
+      toast.error(t("toasts.alreadyReturned", { name: exactMatch.productName }))
       setItemSearch("")
       return
     }
     addItemToSelection(exactMatch)
-    toast.success(`تمت إضافة ${exactMatch.productName} (الكمية ${maxQty}).`)
+    toast.success(t("toasts.itemAdded", { name: exactMatch.productName, qty: maxQty }))
   }
 
   // The always-visible list of currently selected items, independent of search state.
@@ -253,22 +260,22 @@ export function ReturnFormDialog({
 
   async function handleSubmit() {
     if (!values.purchaseId || !values.warehouseId || !values.returnDate.trim()) {
-      toast.error("يرجى تعبئة أمر الشراء والفرع وتاريخ الإرجاع.")
+      toast.error(t("toasts.validationRequired"))
       return
     }
     if (values.items.length === 0 || totalReturnQty <= 0) {
-      toast.error("يرجى تحديد كمية الإرجاع لصنف واحد على الأقل.")
+      toast.error(t("toasts.validationQty"))
       return
     }
 
     setSubmitting(true)
     try {
       const created = await returnService.create(values)
-      toast.success(`تم إنشاء المرتجع ${created.code}.`)
+      toast.success(t("toasts.createSuccess", { code: created.code }))
       onCreated()
       onOpenChange(false)
     } catch {
-      toast.error("تعذر حفظ المرتجع. حاول مرة أخرى.")
+      toast.error(t("toasts.saveError"))
     } finally {
       setSubmitting(false)
     }
@@ -279,11 +286,14 @@ export function ReturnFormDialog({
       open={open}
       onOpenChange={(next) => !submitting && onOpenChange(next)}
       title={
-        <span dir="rtl" className="text-[18px] font-extrabold text-[#0b1738]">
-          إضافة مرتجع شراء
+        <span dir={dir} className="text-[18px] font-extrabold text-[#0b1738]">
+          {t("title")}
         </span>
       }
-      contentClassName="[direction:rtl] max-w-[36rem] gap-5 p-6"
+      contentClassName={cn(
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+        "max-w-[36rem] gap-5 p-6"
+      )}
       footer={
         <div className="flex w-full gap-2">
           <AppButton
@@ -292,20 +302,20 @@ export function ReturnFormDialog({
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
-            إلغاء
+            {tCommon("cancel")}
           </AppButton>
           <AppButton
             loading={submitting}
             className="h-11 flex-1 rounded-[10px] bg-[#2878ff] text-[13.5px] font-bold text-white hover:bg-[#1f63d6]"
             onClick={() => void handleSubmit()}
           >
-            حفظ المرتجع
+            {t("save")}
           </AppButton>
         </div>
       }
     >
-      <div dir="rtl" className="max-h-[70vh] space-y-4 overflow-y-auto pe-1">
-        <PurchaseField label="أمر الشراء" required>
+      <div dir={dir} className="max-h-[70vh] space-y-4 overflow-y-auto pe-1">
+        <PurchaseField label={t("purchaseOrder")} required>
           <AppSearchableSelect
             value={values.purchaseId}
             options={purchases.map((purchase) => ({
@@ -314,22 +324,22 @@ export function ReturnFormDialog({
               hint: purchase.supplierName,
             }))}
             onChange={handlePurchaseChange}
-            placeholder="اختر أمر الشراء"
-            searchPlaceholder="ابحث برقم الطلب..."
-            emptyLabel="لا توجد أوامر شراء"
-            ariaLabel="أمر الشراء"
+            placeholder={t("purchaseOrderPlaceholder")}
+            searchPlaceholder={t("purchaseOrderSearchPlaceholder")}
+            emptyLabel={t("purchaseOrderEmptyLabel")}
+            ariaLabel={t("purchaseOrder")}
           />
         </PurchaseField>
 
         <div className="grid grid-cols-2 gap-4">
-          <PurchaseField label="المورد">
+          <PurchaseField label={t("supplier")}>
             <AppInput
               value={suppliers.find((entry) => entry.id === values.supplierId)?.name ?? ""}
               disabled
               className={cn(FIELD_CLASS, "bg-[#f7f9fd]")}
             />
           </PurchaseField>
-          <PurchaseField label="الفرع" required>
+          <PurchaseField label={t("warehouse")} required>
             <AppSearchableSelect
               value={values.warehouseId}
               options={availableWorkspaces.map((workspace) => ({
@@ -337,23 +347,23 @@ export function ReturnFormDialog({
                 label: workspace.name,
               }))}
               onChange={(value) => set("warehouseId", value)}
-              placeholder="اختر الفرع"
-              ariaLabel="الفرع"
+              placeholder={t("warehousePlaceholder")}
+              ariaLabel={t("warehouse")}
             />
           </PurchaseField>
         </div>
 
-        <PurchaseField label="العناصر القابلة للإرجاع" required>
+        <PurchaseField label={t("returnableItems")} required>
           {!selectedPurchase ? (
             <p className="rounded-[12px] border border-dashed border-[#e1e7f0] p-4 text-center text-[12.5px] text-[#95a4bd]">
-              اختر أمر الشراء أولاً لعرض عناصره.
+              {t("selectPurchaseFirst")}
             </p>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <AppInput
-                    placeholder="ابحث أو امسح الباركود / رمز المنتج (SKU)..."
+                    placeholder={t("itemSearchPlaceholder")}
                     value={itemSearch}
                     onChange={(event) => {
                       setItemSearch(event.target.value)
@@ -385,14 +395,14 @@ export function ReturnFormDialog({
                                 {item.productName}
                               </span>
                               <span className="shrink-0 text-[11px] text-[#95a4bd]">
-                                {item.sku} · القابل للإرجاع {maxQty}
+                                {item.sku} · {t("returnableLine", { qty: maxQty })}
                               </span>
                             </button>
                           )
                         })
                       ) : (
                         <p className="px-3 py-2.5 text-center text-[12px] text-[#95a4bd]">
-                          لا توجد منتجات مطابقة.
+                          {t("noMatchingProducts")}
                         </p>
                       )}
                     </div>
@@ -412,12 +422,12 @@ export function ReturnFormDialog({
                   )}
                   onClick={isAllSelected ? deselectAllItems : selectAllItems}
                 >
-                  {isAllSelected ? "إلغاء التحديد" : "تحديد الكل"}
+                  {isAllSelected ? t("deselectAll") : t("selectAll")}
                 </AppButton>
               </div>
               {selectedRows.length === 0 ? (
                 <p className="rounded-[10px] border border-dashed border-[#e1e7f0] p-4 text-center text-[12px] text-[#95a4bd]">
-                  ابحث عن منتج لإضافته، أو اضغط &quot;تحديد الكل&quot; لإضافة جميع العناصر.
+                  {t("noItemsSelected")}
                 </p>
               ) : (
                 selectedRows.map((item) => (
@@ -432,14 +442,18 @@ export function ReturnFormDialog({
                       removeSelectedItem(item.productId)
                     }}
                     className="flex cursor-pointer items-center justify-between gap-3 rounded-[10px] border border-[#2878ff] bg-[#f3f7ff] p-3 transition-colors hover:border-rose-300 hover:bg-rose-50"
-                    title="اضغط لإزالة الصنف"
+                    title={t("clickToRemove")}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[12.5px] font-semibold text-[#0b1738]">
                         {item.productName}
                       </p>
                       <p className="text-[11px] text-[#95a4bd]">
-                        {item.sku} · تم شراء {item.purchasedQty} · القابل للإرجاع {item.maxQty}
+                        {item.sku} ·{" "}
+                        {t("purchasedAndReturnableLine", {
+                          purchased: item.purchasedQty,
+                          returnable: item.maxQty,
+                        })}
                       </p>
                     </div>
                     <input
@@ -476,23 +490,23 @@ export function ReturnFormDialog({
         {values.items.length > 0 ? (
           <div className="flex items-center justify-between rounded-[10px] bg-[#f7f9fd] px-3 py-2.5 text-[12.5px]">
             <span className="font-semibold text-[#0b1738]">
-              إجمالي الكمية المرتجعة: {totalReturnQty} صنف
+              {t("totalQty", { qty: totalReturnQty })}
             </span>
             <span className="font-bold text-[#2878ff]">
-              إجمالي المبلغ: {formatMoney(totalReturnAmount)}
+              {t("totalAmount", { amount: formatMoney(totalReturnAmount) })}
             </span>
           </div>
         ) : null}
 
-        <PurchaseField label="تاريخ الإرجاع" required>
+        <PurchaseField label={t("returnDate")} required>
           <AppDateField value={values.returnDate} onChange={(value) => set("returnDate", value)} />
         </PurchaseField>
 
-        <PurchaseField label="ملاحظات الإرجاع">
+        <PurchaseField label={t("notes")}>
           <textarea
             value={values.notes}
             onChange={(event) => set("notes", event.target.value)}
-            placeholder="أضف وصفًا مختصرًا للإرجاع..."
+            placeholder={t("notesPlaceholder")}
             rows={3}
             className={cn(
               "w-full resize-none p-3 outline-none focus:border-[#2878ff]",

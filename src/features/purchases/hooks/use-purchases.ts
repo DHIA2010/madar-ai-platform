@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { purchaseService } from "../services"
 import type { Purchase } from "../types"
 
 export function usePurchases() {
+  const t = useTranslations("purchases.errors")
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -16,11 +18,11 @@ export function usePurchases() {
     try {
       setPurchases(await purchaseService.list())
     } catch {
-      setError("تعذر تحميل أوامر الشراء. حاول مرة أخرى.")
+      setError(t("loadPurchases"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void refetch()

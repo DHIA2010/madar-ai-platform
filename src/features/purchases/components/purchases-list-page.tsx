@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { Download, Eye, Loader2, Plus, Printer } from "lucide-react"
 import { createPortal } from "react-dom"
 
@@ -32,6 +33,8 @@ import { PurchasePrintDocument } from "./purchase-print-document"
 import { PurchaseViewDialog } from "./purchase-view-dialog"
 import { PurchasesKpiCards } from "./purchases-kpi-cards"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 function formatCurrency(value: number, currency: string) {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -45,6 +48,9 @@ function formatCurrency(value: number, currency: string) {
 }
 
 export function PurchasesListPage() {
+  const t = useTranslations("purchases.list")
+  const tCommon = useTranslations("common")
+  const locale = useLocale()
   const router = useRouter()
   const { purchases, isLoading } = usePurchases()
   const { returns } = useReturns()
@@ -75,12 +81,10 @@ export function PurchasesListPage() {
     : null
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale as Locale)} className="flex flex-col gap-4">
       <div>
-        <h1 className={cn("text-2xl font-bold", HEADING)}>المشتريات</h1>
-        <p className={cn("mt-1 text-sm", MUTED)}>
-          عرض وإدارة جميع طلبات الشراء والموردين والمنتجات.
-        </p>
+        <h1 className={cn("text-2xl font-bold", HEADING)}>{t("heading")}</h1>
+        <p className={cn("mt-1 text-sm", MUTED)}>{t("subheading")}</p>
       </div>
 
       <PurchasesKpiCards
@@ -100,7 +104,7 @@ export function PurchasesListPage() {
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
         <div className="flex flex-wrap items-center gap-2">
           <AppSearchInput
-            placeholder="البحث عن أمر شراء..."
+            placeholder={t("searchPlaceholder")}
             value={list.search}
             onChange={(event) => list.setSearch(event.target.value)}
             wrapperClassName="w-full sm:w-64"
@@ -115,7 +119,7 @@ export function PurchasesListPage() {
             className="h-11 gap-2 rounded-[12px] border-[#c4d5f0] bg-white px-4 text-[12.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
             onClick={() => exportPurchasesToCsv(list.filteredPurchases, vouchers)}
           >
-            تصدير
+            {tCommon("export")}
           </AppButton>
           <AppButton
             icon={
@@ -126,7 +130,7 @@ export function PurchasesListPage() {
             onClick={() => router.push(ROUTES.purchasesAdd)}
             className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-semibold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
           >
-            إضافة أمر شراء
+            {t("addPurchase")}
           </AppButton>
         </div>
       </div>
@@ -135,12 +139,12 @@ export function PurchasesListPage() {
         <AppTable>
           <AppTableHeader>
             <AppTableRow>
-              <AppTableHead>رقم الطلب</AppTableHead>
-              <AppTableHead>المورد</AppTableHead>
-              <AppTableHead>العناصر</AppTableHead>
-              <AppTableHead>الإجمالي</AppTableHead>
-              <AppTableHead>التاريخ</AppTableHead>
-              <AppTableHead className="w-20">الإجراءات</AppTableHead>
+              <AppTableHead>{t("table.code")}</AppTableHead>
+              <AppTableHead>{t("table.supplier")}</AppTableHead>
+              <AppTableHead>{t("table.items")}</AppTableHead>
+              <AppTableHead>{t("table.total")}</AppTableHead>
+              <AppTableHead>{t("table.date")}</AppTableHead>
+              <AppTableHead className="w-20">{t("table.actions")}</AppTableHead>
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
@@ -159,7 +163,7 @@ export function PurchasesListPage() {
                     </div>
                   </AppTableCell>
                   <AppTableCell className={MUTED}>
-                    {purchaseItemCount(purchase.items)} صنف
+                    {t("itemsSuffix", { count: purchaseItemCount(purchase.items) })}
                   </AppTableCell>
                   <AppTableCell className={cn("font-medium", HEADING)}>
                     {formatCurrency(purchaseGrandTotal(purchase), purchase.currency)}
@@ -170,7 +174,7 @@ export function PurchasesListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="عرض"
+                        aria-label={t("view")}
                         className="rounded-[8px] border border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100"
                         onClick={() => setViewTarget(purchase)}
                       >
@@ -179,7 +183,7 @@ export function PurchasesListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="طباعة"
+                        aria-label={t("print")}
                         className="rounded-[8px] border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
                         onClick={() => setPrintTarget(purchase)}
                       >
@@ -196,18 +200,15 @@ export function PurchasesListPage() {
         {isLoading ? (
           <div className={cn("flex items-center justify-center gap-2 py-16 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ التحميل...
+            {tCommon("loading")}
           </div>
         ) : list.rows.length === 0 ? (
-          <AppTableEmpty
-            title="لا توجد طلبات شراء مطابقة"
-            description="جرّب تعديل الفلاتر أو البحث."
-          />
+          <AppTableEmpty title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
           <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-            عرض {list.rows.length} من {list.totalCount} نتيجة
+            {t("showingCount", { shown: list.rows.length, total: list.totalCount })}
           </p>
           <PurchasePagination
             page={list.page}

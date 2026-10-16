@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,6 +24,8 @@ import {
 import { FIELD_CLASS, PANEL, PurchaseField, SuffixInput } from "./purchase-field"
 import type { CalculationLevel } from "./purchase-line-items-table"
 import { PurchaseLineItemsTable } from "./purchase-line-items-table"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 // Tax can be entered per product line (each row's own "الضريبة %" column) or once for the whole
 // invoice (the "الضريبة على الفاتورة" field below) -- never both at once, to avoid double-counting.
@@ -61,6 +64,9 @@ function purchaseToFormValues(purchase: Purchase): PurchaseFormValues {
 }
 
 export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }) {
+  const t = useTranslations("purchases.form")
+  const tCommon = useTranslations("common")
+  const locale = useLocale()
   const router = useRouter()
   const { suppliers } = useSuppliers()
   const { availableWorkspaces } = useWorkspace()
@@ -103,11 +109,11 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!values.supplierId || !values.date.trim() || !values.warehouseId) {
-      toast.error("يرجى تعبئة المورد والتاريخ والفرع.")
+      toast.error(t("toasts.validationRequired"))
       return
     }
     if (values.items.length === 0) {
-      toast.error("يرجى إضافة منتج واحد على الأقل.")
+      toast.error(t("toasts.validationItems"))
       return
     }
 
@@ -115,24 +121,24 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
     try {
       if (initialPurchase) {
         await purchaseService.update(initialPurchase.id, values)
-        toast.success(`تم تحديث أمر الشراء ${initialPurchase.code}.`)
+        toast.success(t("toasts.updateSuccess", { code: initialPurchase.code }))
       } else {
         const created = await purchaseService.create(values)
-        toast.success(`تم إنشاء أمر الشراء ${created.code}.`)
+        toast.success(t("toasts.createSuccess", { code: created.code }))
       }
       router.push(ROUTES.purchases)
     } catch {
-      toast.error("تعذر حفظ أمر الشراء. حاول مرة أخرى.")
+      toast.error(t("toasts.saveError"))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <AppForm dir="rtl" onSubmit={handleSubmit} className="space-y-5">
+    <AppForm dir={localeDirection(locale as Locale)} onSubmit={handleSubmit} className="space-y-5">
       <section className={cn(PANEL, "p-4 md:p-5")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <PurchaseField label="المورد" required>
+          <PurchaseField label={t("supplier")} required>
             <AppSearchableSelect
               value={values.supplierId}
               options={suppliers.map((supplier) => ({
@@ -141,16 +147,16 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
                 hint: supplier.companyDetails.companyName,
               }))}
               onChange={handleSupplierChange}
-              placeholder="اختر المورد"
-              searchPlaceholder="ابحث عن مورد..."
-              emptyLabel="لا يوجد موردون"
-              ariaLabel="المورد"
+              placeholder={t("supplierPlaceholder")}
+              searchPlaceholder={t("supplierSearchPlaceholder")}
+              emptyLabel={t("supplierEmptyLabel")}
+              ariaLabel={t("supplier")}
             />
           </PurchaseField>
-          <PurchaseField label="التاريخ" required>
+          <PurchaseField label={t("date")} required>
             <AppDateField value={values.date} onChange={(value) => set("date", value)} />
           </PurchaseField>
-          <PurchaseField label="الفرع" required>
+          <PurchaseField label={t("warehouse")} required>
             <AppSearchableSelect
               value={values.warehouseId}
               options={availableWorkspaces.map((workspace) => ({
@@ -158,16 +164,16 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
                 label: workspace.name,
               }))}
               onChange={(value) => set("warehouseId", value)}
-              placeholder="اختر الفرع"
-              searchPlaceholder="ابحث..."
-              emptyLabel="لا توجد فروع"
-              ariaLabel="الفرع"
+              placeholder={t("warehousePlaceholder")}
+              searchPlaceholder={t("warehouseSearchPlaceholder")}
+              emptyLabel={t("warehouseEmptyLabel")}
+              ariaLabel={t("warehouse")}
             />
           </PurchaseField>
-          <PurchaseField label="تاريخ الإستحقاق">
+          <PurchaseField label={t("dueDate")}>
             <AppDateField value={values.dueDate} onChange={(value) => set("dueDate", value)} />
           </PurchaseField>
-          <PurchaseField label="تاريخ التوريد">
+          <PurchaseField label={t("deliveryDate")}>
             <AppDateField
               value={values.deliveryDate}
               onChange={(value) => set("deliveryDate", value)}
@@ -192,7 +198,7 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
 
       <section className={cn(PANEL, "p-4 md:p-5")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <PurchaseField label="الضريبة على الفاتورة">
+          <PurchaseField label={t("orderTax")}>
             <SuffixInput
               value={values.orderTaxPercent}
               onChange={(value) => set("orderTaxPercent", value)}
@@ -200,21 +206,21 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
               disabled={taxLevel === "product"}
             />
           </PurchaseField>
-          <PurchaseField label="الخصم على الفاتورة">
+          <PurchaseField label={t("orderDiscount")}>
             <SuffixInput
               value={values.discountAmount}
               onChange={(value) => set("discountAmount", value)}
               suffix={values.currency}
             />
           </PurchaseField>
-          <PurchaseField label="الشحن">
+          <PurchaseField label={t("shipping")}>
             <SuffixInput
               value={values.shippingAmount}
               onChange={(value) => set("shippingAmount", value)}
               suffix={values.currency}
             />
           </PurchaseField>
-          <PurchaseField label="تكاليف أخرى">
+          <PurchaseField label={t("otherCosts")}>
             <SuffixInput
               value={values.otherCosts}
               onChange={(value) => set("otherCosts", value)}
@@ -224,22 +230,22 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
         </div>
 
         <div className="mt-4">
-          <PurchaseField label="رقم المرجع / الفاتورة">
+          <PurchaseField label={t("referenceNumber")}>
             <AppInput
               value={values.referenceNumber}
               onChange={(event) => set("referenceNumber", event.target.value)}
-              placeholder="رقم الفاتورة أو المرجع"
+              placeholder={t("referenceNumberPlaceholder")}
               className={FIELD_CLASS}
             />
           </PurchaseField>
         </div>
 
         <div className="mt-4">
-          <PurchaseField label="ملاحظات">
+          <PurchaseField label={t("notes")}>
             <textarea
               value={values.note}
               onChange={(event) => set("note", event.target.value)}
-              placeholder="أضف ملاحظة قصيرة..."
+              placeholder={t("notesPlaceholder")}
               rows={3}
               className={cn(
                 "w-full resize-none p-3 outline-none focus:border-[#2878ff]",
@@ -258,7 +264,7 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
           className="h-11 rounded-[12px] border-[#c4d5f0] px-6 text-[13.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
           onClick={() => router.push(ROUTES.purchases)}
         >
-          إلغاء
+          {tCommon("cancel")}
         </AppButton>
         <AppButton
           type="submit"
@@ -272,7 +278,7 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
           }
           className="h-11 gap-2 rounded-full bg-[#2878ff] px-6 text-[13.5px] font-bold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
         >
-          {isEditing ? "حفظ التغييرات" : "إنشاء أمر الشراء"}
+          {isEditing ? t("saveChanges") : t("createPurchase")}
         </AppButton>
       </div>
     </AppForm>
