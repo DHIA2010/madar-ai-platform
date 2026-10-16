@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import QRCode from "qrcode"
+import { useLocale, useTranslations } from "next-intl"
 import {
   BadgePercent,
   Banknote,
@@ -60,6 +61,7 @@ import { AppError } from "@/lib/errors/app-error"
 import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import {
@@ -152,12 +154,14 @@ function playScanBeep() {
   }
 }
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
 // One real icon per real payment kind -- not brand logos (no Visa/Mastercard/mada/Apple mark
@@ -178,16 +182,20 @@ const PAYMENT_KIND_ICON: Record<PaymentKind, typeof Wallet> = {
 // backend tracks anywhere).
 const LAST_PAYMENT_METHOD_STORAGE_KEY = "pos-last-payment-method"
 
-const TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
-  hour: "numeric",
-  minute: "2-digit",
-})
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
+function timeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+function dateFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
 
 interface CartLine {
   productId: string
@@ -248,6 +256,7 @@ function PaymentTile({
   // just focuses/selects its current text, for typing a deliberate split amount.
   onSelectFull: () => void
 }) {
+  const t = useTranslations("pos.cashier")
   const inputRef = useRef<HTMLInputElement>(null)
   return (
     <div
@@ -293,7 +302,7 @@ function PaymentTile({
             MUTED
           )}
         >
-          ر.س
+          {t("common.currency")}
         </span>
       </div>
     </div>
@@ -362,6 +371,8 @@ function CartLineActionsMenu({
   showDiscountOption?: boolean
   showPriceEditOption?: boolean
 }) {
+  const t = useTranslations("pos.cashier")
+  const locale = useLocale() as Locale
   const [open, setOpen] = useState(false)
   if (!showDiscountOption && !showPriceEditOption) {
     return null
@@ -371,7 +382,7 @@ function CartLineActionsMenu({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="خيارات إضافية"
+          aria-label={t("lineActions.moreAriaLabel")}
           className={cn(
             "flex shrink-0 items-center justify-center rounded-md border",
             compact ? "size-6" : "size-7",
@@ -383,7 +394,10 @@ function CartLineActionsMenu({
           <EllipsisVertical className={compact ? "size-3" : "size-3.5"} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-48 gap-1 p-1.5 [direction:rtl]">
+      <PopoverContent
+        align="end"
+        className={cn("w-48 gap-1 p-1.5", locale === "ar" ? "[direction:rtl]" : "[direction:ltr]")}
+      >
         {showDiscountOption ? (
           <button
             type="button"
@@ -397,7 +411,7 @@ function CartLineActionsMenu({
             )}
           >
             <Percent className="size-4 text-[#5b6b85]" />
-            إضافة خصم على الصنف
+            {t("lineActions.addItemDiscount")}
           </button>
         ) : null}
         {showPriceEditOption ? (
@@ -413,7 +427,7 @@ function CartLineActionsMenu({
             )}
           >
             <Pencil className="size-4 text-[#5b6b85]" />
-            تعديل سعر البيع
+            {t("lineActions.editSellPrice")}
           </button>
         ) : null}
       </PopoverContent>
@@ -435,6 +449,10 @@ function readStoredCartPreviewOpen(): boolean {
 }
 
 export default function CashierPage() {
+  const t = useTranslations("pos.cashier")
+  const locale = useLocale() as Locale
+  const TIME_FORMAT = useMemo(() => timeFormatter(locale), [locale])
+  const DATE_FORMAT = useMemo(() => dateFormatter(locale), [locale])
   const { currentUser } = useAuth()
   const { currentOrganization, currentWorkspace } = useWorkspace()
 
@@ -559,12 +577,12 @@ export default function CashierPage() {
         openingCashAmount: Number(openingCashAmount) || 0,
         openingNotes: null,
       })
-      toast.success("تم فتح الوردية.")
+      toast.success(t("toasts.shiftOpened"))
       setIsOpenShiftDialogOpen(false)
       setOpeningCashAmount("")
       await loadShifts()
     } catch {
-      toast.error("تعذر فتح الوردية.")
+      toast.error(t("toasts.shiftOpenFailed"))
     } finally {
       setOpeningShift(false)
     }
@@ -726,7 +744,7 @@ export default function CashierPage() {
       })
       setSearch("")
     } catch {
-      toast.error("تعذر تحميل بيانات هذا المتغير.")
+      toast.error(t("toasts.variantLoadFailed"))
     }
   }
 
@@ -822,22 +840,25 @@ export default function CashierPage() {
         ? [quickAddCategory]
         : []
     return [
-      { value: "", label: "غير محدد" },
+      { value: "", label: t("quickAddDialog.categoryUnspecified") },
       ...[...extra, ...categories].map((category) => ({ value: category, label: category })),
     ]
-  }, [categories, quickAddCategory])
+  }, [categories, quickAddCategory, t])
 
   const submitQuickAddProduct = async () => {
     const name = quickAddName.trim()
     if (!name) {
-      toast.error("أدخل اسم المنتج.")
+      toast.error(t("toasts.productNameRequired"))
       return
     }
     const price = Number(quickAddPrice)
     if (!Number.isFinite(price) || price < 0) {
-      toast.error("أدخل سعراً صحيحاً.")
+      toast.error(t("toasts.priceRequired"))
       return
     }
+    // The persisted category name stays this fixed Arabic string regardless of UI locale when
+    // left unset -- it's stored product data (shows up in every locale's category filters later),
+    // not display text; only the dropdown's own label above is translated.
     const category = quickAddCategory.trim() || "غير محدد"
     const stockQuantity = Math.max(0, Math.trunc(Number(quickAddStock) || 0))
     // A barcode-less walk-in item still needs a stock code for this product type -- generated
@@ -892,12 +913,12 @@ export default function CashierPage() {
       }
       setProducts((current) => [...current, newProduct])
       addToCart(newProduct)
-      toast.success("تمت إضافة المنتج.")
+      toast.success(t("toasts.productAdded"))
       setIsQuickAddProductOpen(false)
       setSearch("")
       searchInputRef.current?.focus()
     } catch {
-      toast.error("تعذر إضافة المنتج.")
+      toast.error(t("toasts.productAddFailed"))
     } finally {
       setSavingQuickAddProduct(false)
     }
@@ -1006,7 +1027,7 @@ export default function CashierPage() {
     try {
       setVariantPickerDetail(await productListService.getProduct(product.id))
     } catch {
-      toast.error("تعذر تحميل أنواع هذا المنتج.")
+      toast.error(t("toasts.variantsLoadFailed"))
       setVariantPickerProduct(null)
     } finally {
       setLoadingVariantPicker(false)
@@ -1105,7 +1126,7 @@ export default function CashierPage() {
     if (!priceEditTargetId) return
     const price = Number(draftSellPrice)
     if (!Number.isFinite(price) || price < 0) {
-      toast.error("أدخل سعراً صحيحاً.")
+      toast.error(t("toasts.priceRequired"))
       return
     }
     setCart((current) =>
@@ -1330,27 +1351,27 @@ export default function CashierPage() {
     // The checkout button itself is only ever shown when myOpenShift exists (see the cart
     // section below) -- this is a second, defensive check against calling this directly.
     if (!myOpenShift) {
-      toast.error("لا توجد وردية مفتوحة.")
+      toast.error(t("toasts.noOpenShift"))
       return
     }
     if (!paymentSettled) {
       toast.error(
         nonCashExcess > 0
-          ? "المبلغ المدخل عبر طريقة أخرى أكبر من الإجمالي."
-          : `المبلغ المتبقي ${formatAmount(stillOwed)}`
+          ? t("toasts.excessOtherMethod")
+          : t("toasts.remainingAmount", { amount: formatAmount(stillOwed, locale) })
       )
       return
     }
     if (needsCustomerForDeferred) {
-      toast.error("اختر عميلاً لتسجيل المبلغ الآجل في حسابه.")
+      toast.error(t("toasts.needCustomerForDeferred"))
       return
     }
     if (needsCustomerForPrepaid) {
-      toast.error("اختر عميلاً للخصم من رصيد محفظته.")
+      toast.error(t("toasts.needCustomerForPrepaid"))
       return
     }
     if (insufficientWallet) {
-      toast.error("رصيد محفظة العميل أقل من المبلغ المطلوب خصمه.")
+      toast.error(t("toasts.insufficientWallet"))
       return
     }
 
@@ -1391,7 +1412,7 @@ export default function CashierPage() {
           discountAmount: resolveLineDiscount(line),
         })),
       })
-      toast.success(`تمت العملية بنجاح — فاتورة ${invoice.invoiceNumber}`)
+      toast.success(t("toasts.saleSuccess", { number: invoice.invoiceNumber }))
       if (posSettings.rememberLastPaymentMethod) {
         const usedCode = nonCashEntries[0]?.code ?? cashEntries[0]?.code
         if (usedCode) window.localStorage.setItem(LAST_PAYMENT_METHOD_STORAGE_KEY, usedCode)
@@ -1436,8 +1457,8 @@ export default function CashierPage() {
       }
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      toast.error(status === 403 ? "لا تملك صلاحية إتمام البيع." : "تعذر إتمام العملية.", {
-        description: status === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية pos:manage." : undefined,
+      toast.error(status === 403 ? t("toasts.salePermissionDenied") : t("toasts.saleFailed"), {
+        description: status === 403 ? t("toasts.salePermissionDescription") : undefined,
       })
     } finally {
       setCheckingOut(false)
@@ -1485,7 +1506,7 @@ export default function CashierPage() {
 
   const createNewCustomer = async () => {
     if (!newCustomerName.trim()) {
-      toast.error("أدخل اسم العميل.")
+      toast.error(t("toasts.customerNameRequired"))
       return
     }
     setSavingCustomer(true)
@@ -1497,7 +1518,7 @@ export default function CashierPage() {
         notes: null,
         region: null,
       })
-      toast.success("تم إضافة العميل.")
+      toast.success(t("toasts.customerAdded"))
       setCustomerName(created.name)
       setCustomerPhone(created.phone ?? "")
       setCustomerId(created.id)
@@ -1507,7 +1528,7 @@ export default function CashierPage() {
       setIsAddCustomerOpen(false)
       setIsCustomerDialogOpen(false)
     } catch {
-      toast.error("تعذر إضافة العميل.")
+      toast.error(t("toasts.customerAddFailed"))
     } finally {
       setSavingCustomer(false)
     }
@@ -1554,11 +1575,11 @@ export default function CashierPage() {
     if (!topUpCustomer) return
     const amount = Math.round((Number(topUpAmount) || 0) * 100) / 100
     if (!(amount > 0)) {
-      toast.error("أدخل مبلغاً صحيحاً.")
+      toast.error(t("toasts.topUpAmountRequired"))
       return
     }
     if (!topUpPaymentMethodCode) {
-      toast.error("اختر طريقة الدفع التي استلمت بها المبلغ.")
+      toast.error(t("toasts.topUpMethodRequired"))
       return
     }
     setToppingUpWallet(true)
@@ -1571,14 +1592,16 @@ export default function CashierPage() {
         notes: null,
         attachments: [],
       })
-      toast.success(`تم شحن محفظة ${updated.name} بمبلغ ${formatAmount(amount)}.`)
+      toast.success(
+        t("toasts.topUpSuccess", { name: updated.name, amount: formatAmount(amount, locale) })
+      )
       setCustomers((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
       setSelectedCustomer((current) => (current?.id === updated.id ? updated : current))
       setTopUpCustomer(null)
       setTopUpAmount("")
       setTopUpPaymentMethodCode("")
     } catch {
-      toast.error("تعذر شحن المحفظة.")
+      toast.error(t("toasts.topUpFailed"))
     } finally {
       setToppingUpWallet(false)
     }
@@ -1621,11 +1644,11 @@ export default function CashierPage() {
         payments: [{ paymentMethodCode: invoice.paymentMethodCode }],
         notes: null,
       })
-      toast.success(`تم تسجيل إرجاع الفاتورة ${invoice.invoiceNumber}`)
+      toast.success(t("toasts.returnSuccess", { number: invoice.invoiceNumber }))
       setReturnCandidates((current) => current.filter((item) => item.id !== invoice.id))
       loadTodaySummary()
     } catch {
-      toast.error("تعذر تسجيل الإرجاع.")
+      toast.error(t("toasts.returnFailed"))
     } finally {
       setReturningId(null)
     }
@@ -1671,7 +1694,7 @@ export default function CashierPage() {
           discountAmount: resolveLineDiscount(line),
         })),
       })
-      toast.success("تم تعليق الطلب.")
+      toast.success(t("toasts.orderHeld"))
       clearCart()
       setCustomerName("")
       setCustomerPhone("")
@@ -1683,7 +1706,7 @@ export default function CashierPage() {
       setOrderNotes("")
       loadHeldOrders()
     } catch {
-      toast.error("تعذر تعليق الطلب.")
+      toast.error(t("toasts.orderHoldFailed"))
     } finally {
       setHoldingOrder(false)
     }
@@ -1730,9 +1753,9 @@ export default function CashierPage() {
       setOrderNotes(held.notes ?? "")
       setHeldOrders((current) => current.filter((order) => order.id !== id))
       setIsHeldOrdersOpen(false)
-      toast.success("تم استئناف الطلب.")
+      toast.success(t("toasts.orderResumed"))
     } catch {
-      toast.error("تعذر استئناف الطلب.")
+      toast.error(t("toasts.orderResumeFailed"))
     } finally {
       setHeldOrderBusyId(null)
     }
@@ -1743,9 +1766,9 @@ export default function CashierPage() {
     try {
       await posHeldOrdersService.remove(id)
       setHeldOrders((current) => current.filter((order) => order.id !== id))
-      toast.success("تم حذف الطلب المعلق.")
+      toast.success(t("toasts.heldOrderDeleted"))
     } catch {
-      toast.error("تعذر حذف الطلب.")
+      toast.error(t("toasts.heldOrderDeleteFailed"))
     } finally {
       setHeldOrderBusyId(null)
     }
@@ -1755,9 +1778,12 @@ export default function CashierPage() {
 
   if (shifts === null) {
     return (
-      <div dir="rtl" className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}
+      >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ التحميل...
+        {t("common.loading")}
       </div>
     )
   }
@@ -1772,7 +1798,10 @@ export default function CashierPage() {
     // browser to show (and let a stray scroll gesture reach) a whole-page scrollbar. Below lg, the
     // three columns stack vertically instead, where a normal scrolling page is what a merchant
     // actually wants on a small screen.
-    <div dir="rtl" className="flex flex-col gap-3 lg:h-[calc(100vh-10.5rem)] lg:overflow-hidden">
+    <div
+      dir={localeDirection(locale)}
+      className="flex flex-col gap-3 lg:h-[calc(100vh-10.5rem)] lg:overflow-hidden"
+    >
       {/* Top bar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-2xl border border-[#e8edf3] bg-white px-3 py-2.5">
         <span
@@ -1801,14 +1830,14 @@ export default function CashierPage() {
           )}
         >
           <Eye className="size-3.5 text-[#8098b4]" />
-          الفواتير
+          {t("topBar.invoices")}
           <span className={HEADING}>{todaySummary?.completedCount ?? "—"}</span>
         </span>
 
         <span className="flex items-center gap-1.5 rounded-full border border-[#e8edf3] bg-[#eff6ff] px-3 py-1.5 text-[11.5px] font-semibold text-[#2563eb]">
           <Wallet className="size-3.5" />
-          مبيعات اليوم
-          {todaySummary ? formatAmount(todaySummary.totalCompletedAmount) : "—"}
+          {t("topBar.todaySales")}
+          {todaySummary ? formatAmount(todaySummary.totalCompletedAmount, locale) : "—"}
         </span>
 
         {myOpenShift ? (
@@ -1819,9 +1848,11 @@ export default function CashierPage() {
               className="flex items-center gap-1.5 rounded-full border border-[#dcfce7] bg-[#f0fdf4] px-3 py-1.5 text-[11.5px] font-semibold text-[#15803d] hover:border-[#bbf7d0]"
             >
               <span className="size-1.5 rounded-full bg-[#22c55e]" />
-              وردية مفتوحة
+              {t("topBar.shiftOpen")}
               <span className={HEADING}>
-                منذ {TIME_FORMAT.format(new Date(myOpenShift.openedAt))}
+                {t("topBar.shiftOpenSince", {
+                  time: TIME_FORMAT.format(new Date(myOpenShift.openedAt)),
+                })}
               </span>
             </button>
             <button
@@ -1830,7 +1861,7 @@ export default function CashierPage() {
               className="flex h-9 items-center gap-1.5 rounded-full border border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff]"
             >
               <Wallet className="size-3.5" />
-              سحب / إيداع
+              {t("topBar.cashMovement")}
             </button>
           </>
         ) : (
@@ -1840,7 +1871,7 @@ export default function CashierPage() {
             className="flex items-center gap-1.5 rounded-full border border-[#fde68a] bg-[#fffbeb] px-3 py-1.5 text-[11.5px] font-semibold text-[#92400e]"
           >
             <span className="size-1.5 rounded-full bg-[#f59e0b]" />
-            لا توجد وردية مفتوحة
+            {t("topBar.noOpenShift")}
           </button>
         )}
 
@@ -1850,11 +1881,11 @@ export default function CashierPage() {
             onClick={() => (window.location.href = ROUTES.dashboard)}
           >
             <LayoutGrid className="size-4" />
-            لوحة التحكم
+            {t("topBar.dashboard")}
           </Button>
           <button
             type="button"
-            aria-label="ملء الشاشة"
+            aria-label={t("topBar.fullscreenAriaLabel")}
             onClick={() => void document.documentElement.requestFullscreen().catch(() => {})}
             className="flex size-10 items-center justify-center rounded-[10px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
           >
@@ -1880,7 +1911,9 @@ export default function CashierPage() {
           <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e8edf3] bg-white p-3">
             <div className="mb-2 flex shrink-0 items-center gap-1.5 px-1">
               <Grid2x2 className="size-4 text-[#8098b4]" />
-              <span className={cn("text-[12.5px] font-bold", HEADING)}>الفئات</span>
+              <span className={cn("text-[12.5px] font-bold", HEADING)}>
+                {t("categories.title")}
+              </span>
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
               <button
@@ -1893,7 +1926,7 @@ export default function CashierPage() {
                     : "text-[#5b6b85] hover:bg-[#f7faff]"
                 )}
               >
-                الكل
+                {t("categories.all")}
               </button>
               {categories.map((category) => (
                 <button
@@ -1925,7 +1958,7 @@ export default function CashierPage() {
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
-                placeholder="امسح الباركود أو ابحث في المنتجات..."
+                placeholder={t("search.placeholder")}
                 className={cn(FIELD_CLASS, "ps-9")}
               />
               {isSearchFocused && search.trim() ? (
@@ -1952,14 +1985,14 @@ export default function CashierPage() {
                           <p className={cn("text-[10.5px]", MUTED)}>SKU: {product.sku || "—"}</p>
                         </div>
                         <span className={cn("shrink-0 text-[12.5px] font-bold", HEADING)}>
-                          {formatAmount(product.sellingPrice)}
+                          {formatAmount(product.sellingPrice, locale)}
                         </span>
                       </button>
                     ))
                   ) : (
                     <div className="flex flex-col items-center gap-2 px-3 py-4 text-center">
                       <p className={cn("text-[12px] font-semibold", MUTED)}>
-                        لا يوجد منتج مطابق لـ &quot;{search.trim()}&quot;
+                        {t("search.noMatch", { query: search.trim() })}
                       </p>
                       <button
                         type="button"
@@ -1967,7 +2000,7 @@ export default function CashierPage() {
                         className="flex items-center gap-1.5 rounded-full bg-[#eff6ff] px-3 py-1.5 text-[12px] font-semibold text-[#2563eb] hover:bg-[#dbeafe]"
                       >
                         <PackagePlus className="size-3.5" />
-                        إضافة منتج جديد
+                        {t("common.addNewProduct")}
                       </button>
                     </div>
                   )}
@@ -1977,7 +2010,7 @@ export default function CashierPage() {
             {posSettings.showGridView ? (
               <button
                 type="button"
-                aria-label="عرض المنتجات"
+                aria-label={t("search.viewProductsAriaLabel")}
                 onClick={() => setIsCartPreviewOpen(false)}
                 className={cn(
                   "flex size-10 items-center justify-center rounded-[10px] border",
@@ -1992,7 +2025,7 @@ export default function CashierPage() {
             {posSettings.showListView ? (
               <button
                 type="button"
-                aria-label="عرض عناصر السلة"
+                aria-label={t("search.viewCartAriaLabel")}
                 onClick={() => setIsCartPreviewOpen(true)}
                 className={cn(
                   "flex size-10 items-center justify-center rounded-[10px] border",
@@ -2013,10 +2046,8 @@ export default function CashierPage() {
                   <span className="flex size-12 items-center justify-center rounded-2xl bg-[#eff6ff] text-[#2563eb]">
                     <ShoppingCart className="size-6" />
                   </span>
-                  <p className={cn("text-[13px] font-bold", HEADING)}>السلة فارغة</p>
-                  <p className={cn("max-w-[220px] text-[11.5px]", MUTED)}>
-                    قم بإضافة منتجات من القائمة لبدء الطلب
-                  </p>
+                  <p className={cn("text-[13px] font-bold", HEADING)}>{t("cart.emptyTitle")}</p>
+                  <p className={cn("max-w-[220px] text-[11.5px]", MUTED)}>{t("cart.emptyHint")}</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -2032,12 +2063,14 @@ export default function CashierPage() {
                             <span className={cn("font-normal", MUTED)}> · {line.variantLabel}</span>
                           ) : null}
                         </p>
-                        <p className={cn("text-[10.5px]", MUTED)}>{formatAmount(line.unitPrice)}</p>
+                        <p className={cn("text-[10.5px]", MUTED)}>
+                          {formatAmount(line.unitPrice, locale)}
+                        </p>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          aria-label="إنقاص الكمية"
+                          aria-label={t("common.decreaseQty")}
                           onClick={() => updateQuantity(lineKey(line), line.quantity - 1)}
                           className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                         >
@@ -2047,7 +2080,7 @@ export default function CashierPage() {
                           type="number"
                           min={1}
                           inputMode="numeric"
-                          aria-label="الكمية"
+                          aria-label={t("common.quantityLabel")}
                           value={quantityDrafts[lineKey(line)] ?? String(line.quantity)}
                           onChange={(event) =>
                             handleQuantityInputChange(lineKey(line), event.target.value)
@@ -2061,7 +2094,7 @@ export default function CashierPage() {
                         />
                         <button
                           type="button"
-                          aria-label="زيادة الكمية"
+                          aria-label={t("common.increaseQty")}
                           onClick={() => updateQuantity(lineKey(line), line.quantity + 1)}
                           className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                         >
@@ -2070,18 +2103,18 @@ export default function CashierPage() {
                       </div>
                       <div className="flex w-20 shrink-0 flex-col items-end gap-0.5">
                         <span className={cn("text-[13px] font-extrabold", HEADING)}>
-                          {formatAmount(line.unitPrice * line.quantity)}
+                          {formatAmount(line.unitPrice * line.quantity, locale)}
                         </span>
                         {resolveLineDiscount(line) > 0 ? (
                           <span className="text-[10px] font-semibold text-[#dc2626]">
-                            -{formatAmount(resolveLineDiscount(line))}
+                            -{formatAmount(resolveLineDiscount(line), locale)}
                           </span>
                         ) : null}
                       </div>
                       <button
                         type="button"
                         onClick={() => updateQuantity(lineKey(line), 0)}
-                        aria-label="حذف"
+                        aria-label={t("common.delete")}
                         className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#dc2626] hover:bg-[#fef2f2]"
                       >
                         <Trash2 className="size-4" />
@@ -2100,11 +2133,11 @@ export default function CashierPage() {
             ) : loadingProducts ? (
               <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
                 <Loader2 className="size-4 animate-spin" />
-                جارٍ تحميل المنتجات...
+                {t("products.loading")}
               </div>
             ) : filteredProducts.length === 0 ? (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[#e8edf3] bg-white p-10 text-center">
-                <p className={cn("text-[12.5px]", MUTED)}>لا توجد منتجات مطابقة.</p>
+                <p className={cn("text-[12.5px]", MUTED)}>{t("products.noMatch")}</p>
                 {search.trim() ? (
                   <button
                     type="button"
@@ -2112,7 +2145,7 @@ export default function CashierPage() {
                     className="flex items-center gap-1.5 rounded-full bg-[#eff6ff] px-3.5 py-2 text-[12.5px] font-semibold text-[#2563eb] hover:bg-[#dbeafe]"
                   >
                     <PackagePlus className="size-4" />
-                    إضافة منتج جديد
+                    {t("common.addNewProduct")}
                   </button>
                 ) : null}
               </div>
@@ -2174,7 +2207,7 @@ export default function CashierPage() {
                           HEADING
                         )}
                       >
-                        {formatAmount(product.sellingPrice)}
+                        {formatAmount(product.sellingPrice, locale)}
                       </span>
                       {posSettings.useCompactMode ? null : (
                         <span className="flex size-7 items-center justify-center rounded-full bg-[#2563eb] text-white">
@@ -2195,7 +2228,7 @@ export default function CashierPage() {
             in the cart. */}
         <section className="flex h-full min-h-0 flex-col gap-3 rounded-2xl border border-[#e8edf3] bg-white p-4">
           <div className="flex shrink-0 items-center justify-between gap-2">
-            <h2 className={cn("text-[14px] font-extrabold", HEADING)}>الطلب الحالي</h2>
+            <h2 className={cn("text-[14px] font-extrabold", HEADING)}>{t("cart.currentOrder")}</h2>
             {cart.length > 0 ? (
               <div className="flex items-center gap-2">
                 <button
@@ -2208,12 +2241,12 @@ export default function CashierPage() {
                   )}
                 >
                   <Layers className="size-3.5" />
-                  {holdingOrder ? "جارٍ التعليق..." : "تعليق"}
+                  {holdingOrder ? t("cart.holding") : t("cart.hold")}
                 </button>
                 <button
                   type="button"
                   onClick={clearCart}
-                  aria-label="مسح الكل"
+                  aria-label={t("cart.clearAllAriaLabel")}
                   className="flex size-8 items-center justify-center rounded-full bg-[#fef2f2] text-[#dc2626] hover:bg-[#fee2e2]"
                 >
                   <Trash2 className="size-4" />
@@ -2225,7 +2258,7 @@ export default function CashierPage() {
           {customerName ? (
             <div className="shrink-0">
               <Label className={cn("mb-1.5 block text-[11px] font-semibold", HEADING)}>
-                العميل
+                {t("cart.customer")}
               </Label>
               <div className="relative">
                 <Input
@@ -2242,7 +2275,7 @@ export default function CashierPage() {
                     setCustomerId(null)
                     setSelectedCustomer(null)
                   }}
-                  aria-label="إزالة العميل"
+                  aria-label={t("cart.removeCustomerAriaLabel")}
                   className="absolute inset-y-0 start-2 my-auto flex size-6 items-center justify-center rounded-full text-[#8098b4] hover:bg-[#fef2f2] hover:text-[#dc2626]"
                 >
                   <X className="size-4" />
@@ -2256,10 +2289,8 @@ export default function CashierPage() {
               <span className="flex size-12 items-center justify-center rounded-2xl bg-[#eff6ff] text-[#2563eb]">
                 <ShoppingCart className="size-6" />
               </span>
-              <p className={cn("text-[13px] font-bold", HEADING)}>السلة فارغة</p>
-              <p className={cn("max-w-[220px] text-[11.5px]", MUTED)}>
-                قم بإضافة منتجات من القائمة لبدء الطلب
-              </p>
+              <p className={cn("text-[13px] font-bold", HEADING)}>{t("cart.emptyTitle")}</p>
+              <p className={cn("max-w-[220px] text-[11.5px]", MUTED)}>{t("cart.emptyHint")}</p>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
@@ -2276,10 +2307,10 @@ export default function CashierPage() {
                       ) : null}
                     </p>
                     <p className={cn("text-[10.5px]", MUTED)}>
-                      {formatAmount(line.unitPrice)}
+                      {formatAmount(line.unitPrice, locale)}
                       {resolveLineDiscount(line) > 0 ? (
                         <span className="ms-1 font-semibold text-[#dc2626]">
-                          -{formatAmount(resolveLineDiscount(line))}
+                          -{formatAmount(resolveLineDiscount(line), locale)}
                         </span>
                       ) : null}
                     </p>
@@ -2287,7 +2318,7 @@ export default function CashierPage() {
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      aria-label="إنقاص الكمية"
+                      aria-label={t("common.decreaseQty")}
                       onClick={() => updateQuantity(lineKey(line), line.quantity - 1)}
                       className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                     >
@@ -2297,7 +2328,7 @@ export default function CashierPage() {
                       type="number"
                       min={1}
                       inputMode="numeric"
-                      aria-label="الكمية"
+                      aria-label={t("common.quantityLabel")}
                       value={quantityDrafts[lineKey(line)] ?? String(line.quantity)}
                       onChange={(event) =>
                         handleQuantityInputChange(lineKey(line), event.target.value)
@@ -2311,7 +2342,7 @@ export default function CashierPage() {
                     />
                     <button
                       type="button"
-                      aria-label="زيادة الكمية"
+                      aria-label={t("common.increaseQty")}
                       onClick={() => updateQuantity(lineKey(line), line.quantity + 1)}
                       className="flex size-10 items-center justify-center rounded-md border border-[#e8edf3] text-[#5b6b85]"
                     >
@@ -2321,7 +2352,7 @@ export default function CashierPage() {
                   <button
                     type="button"
                     onClick={() => updateQuantity(lineKey(line), 0)}
-                    aria-label="حذف"
+                    aria-label={t("common.delete")}
                     className="flex size-6 items-center justify-center rounded-md text-[#dc2626] hover:bg-[#fef2f2]"
                   >
                     <Trash2 className="size-3.5" />
@@ -2342,18 +2373,19 @@ export default function CashierPage() {
           <div className="flex shrink-0 flex-col gap-2 border-t border-[#eef2f8] pt-3 text-[12.5px]">
             <div className="flex items-center justify-between">
               <span className={cn("font-semibold", HEADING)}>
-                الأصناف <span className="text-[#2563eb]">{cart.length}</span>
+                {t("cart.items")} <span className="text-[#2563eb]">{cart.length}</span>
               </span>
               <span className={cn("font-semibold", HEADING)}>
-                المجموع الفرعي <span className="font-bold">{formatAmount(subtotal)}</span>
+                {t("cart.subtotal")}{" "}
+                <span className="font-bold">{formatAmount(subtotal, locale)}</span>
               </span>
             </div>
 
-            <p className={cn("text-[13px] font-extrabold", HEADING)}>الدفع</p>
+            <p className={cn("text-[13px] font-extrabold", HEADING)}>{t("cart.payment")}</p>
 
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                <span className={cn("font-semibold", HEADING)}>الخصم</span>
+                <span className={cn("font-semibold", HEADING)}>{t("cart.discount")}</span>
                 {posSettings.applyDiscounts ? (
                   <button
                     type="button"
@@ -2363,7 +2395,7 @@ export default function CashierPage() {
                       setDraftDiscountIncludesTax(discountIncludesTax)
                       setIsDiscountDialogOpen(true)
                     }}
-                    aria-label="إضافة خصم"
+                    aria-label={t("cart.addDiscountAriaLabel")}
                     className="flex size-6 items-center justify-center rounded-full bg-[#eff6ff] text-[#2563eb] hover:bg-[#dbeafe]"
                   >
                     <Plus className="size-3.5" />
@@ -2377,29 +2409,31 @@ export default function CashierPage() {
                       setDiscountType("percent")
                       setDiscountIncludesTax(true)
                     }}
-                    aria-label="إزالة الخصم"
+                    aria-label={t("cart.removeDiscountAriaLabel")}
                     className="flex size-6 items-center justify-center rounded-full bg-[#fef2f2] text-[#dc2626] hover:bg-[#fee2e2]"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
                 ) : null}
               </div>
-              <span className={HEADING}>{formatAmount(totalDiscount)}</span>
+              <span className={HEADING}>{formatAmount(totalDiscount, locale)}</span>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className={cn("font-semibold", HEADING)}>الإجمالي بعد الخصم</span>
-              <span className={HEADING}>{formatAmount(taxable)}</span>
+              <span className={cn("font-semibold", HEADING)}>{t("cart.totalAfterDiscount")}</span>
+              <span className={HEADING}>{formatAmount(taxable, locale)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className={cn("font-semibold", HEADING)}>
-                الضريبة{cartTaxRatePercent !== null ? ` (${cartTaxRatePercent}٪)` : ""}
+                {cartTaxRatePercent !== null
+                  ? t("cart.taxWithPercent", { percent: cartTaxRatePercent })
+                  : t("cart.tax")}
               </span>
-              <span className={HEADING}>{formatAmount(tax)}</span>
+              <span className={HEADING}>{formatAmount(tax, locale)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-[15px] font-extrabold">
-              <span className={HEADING}>الإجمالي المستحق</span>
-              <span className="text-[#2563eb]">{formatAmount(total)}</span>
+              <span className={HEADING}>{t("cart.totalDue")}</span>
+              <span className="text-[#2563eb]">{formatAmount(total, locale)}</span>
             </div>
           </div>
 
@@ -2410,19 +2444,19 @@ export default function CashierPage() {
               onClick={() => setIsCheckoutOpen(true)}
             >
               <Wallet className="size-4" />
-              المتابعة إلى الدفع
+              {t("cart.proceedToPayment")}
             </Button>
           ) : (
             <div className="flex shrink-0 flex-col gap-2">
               <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2.5 text-center text-[12px] font-semibold text-[#92400e]">
-                لا توجد وردية مفتوحة. افتح وردية قبل البيع.
+                {t("cart.noShiftWarning")}
               </p>
               <Button
                 className="h-12 gap-2 rounded-[12px] bg-[#2563eb] text-[13.5px] font-bold text-white hover:bg-[#1d4ed8]"
                 onClick={() => setIsOpenShiftDialogOpen(true)}
               >
                 <Clock className="size-4" />
-                فتح وردية جديدة
+                {t("cart.openNewShift")}
               </Button>
             </div>
           )}
@@ -2444,7 +2478,7 @@ export default function CashierPage() {
                   </span>
                 ) : null}
               </span>
-              <span className={cn("text-[11px] font-semibold", MUTED)}>معلقة</span>
+              <span className={cn("text-[11px] font-semibold", MUTED)}>{t("cart.heldAction")}</span>
             </button>
 
             <button
@@ -2455,7 +2489,9 @@ export default function CashierPage() {
               <span className="flex size-10 items-center justify-center rounded-[10px] bg-[#f0fdf4] text-[#16a34a]">
                 <UserRound className="size-[18px]" />
               </span>
-              <span className={cn("text-[11px] font-semibold", MUTED)}>عميل</span>
+              <span className={cn("text-[11px] font-semibold", MUTED)}>
+                {t("cart.customerAction")}
+              </span>
             </button>
 
             <button
@@ -2466,7 +2502,9 @@ export default function CashierPage() {
               <span className="flex size-10 items-center justify-center rounded-[10px] bg-[#fef2f2] text-[#dc2626]">
                 <Undo2 className="size-[18px]" />
               </span>
-              <span className={cn("text-[11px] font-semibold", MUTED)}>إرجاع</span>
+              <span className={cn("text-[11px] font-semibold", MUTED)}>
+                {t("cart.returnAction")}
+              </span>
             </button>
 
             <button
@@ -2483,7 +2521,7 @@ export default function CashierPage() {
                   <span className="absolute -top-1 -end-1 size-2 rounded-full bg-[#d97706]" />
                 ) : null}
               </span>
-              <span className={cn("text-[11px] font-semibold", MUTED)}>ملاحظة</span>
+              <span className={cn("text-[11px] font-semibold", MUTED)}>{t("cart.noteAction")}</span>
             </button>
           </div>
         </section>
@@ -2493,18 +2531,23 @@ export default function CashierPage() {
           whichever the cashier notices first. The rest of the screen (browsing, building a cart)
           stays usable without a shift; only the actual sale is gated. */}
       <Dialog open={isOpenShiftDialogOpen} onOpenChange={setIsOpenShiftDialogOpen}>
-        <DialogContent className="sm:max-w-[24rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[24rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              بدء وردية جديدة
+              {t("openShiftDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              أدخل المبلغ النقدي في الدرج عند بداية الوردية.
+              {t("openShiftDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <div>
             <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              المبلغ الافتتاحي
+              {t("openShiftDialog.openingAmount")}
             </Label>
             <div className="relative">
               <Wallet className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
@@ -2525,7 +2568,7 @@ export default function CashierPage() {
               disabled={openingShift}
               onClick={() => void startShift()}
             >
-              {openingShift ? "جارٍ الفتح..." : "بدء الوردية"}
+              {openingShift ? t("openShiftDialog.starting") : t("openShiftDialog.start")}
             </Button>
             <Button
               variant="outline"
@@ -2533,7 +2576,7 @@ export default function CashierPage() {
               disabled={openingShift}
               onClick={() => setIsOpenShiftDialogOpen(false)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2546,19 +2589,24 @@ export default function CashierPage() {
         open={isQuickAddProductOpen}
         onOpenChange={(open) => !savingQuickAddProduct && setIsQuickAddProductOpen(open)}
       >
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              إضافة منتج جديد
+              {t("quickAddDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              يُضاف المنتج إلى الكتالوج ويوضع في السلة الحالية مباشرة.
+              {t("quickAddDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                اسم المنتج
+                {t("quickAddDialog.productName")}
               </Label>
               <Input
                 value={quickAddName}
@@ -2569,36 +2617,36 @@ export default function CashierPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  الباركود / SKU (اختياري)
+                  {t("quickAddDialog.skuLabel")}
                 </Label>
                 <Input
                   value={quickAddSku}
                   onChange={(event) => setQuickAddSku(event.target.value)}
-                  placeholder="يُنشأ تلقائياً إن تُرك فارغاً"
+                  placeholder={t("quickAddDialog.skuPlaceholder")}
                   className={cn(FIELD_CLASS, "h-11")}
                 />
               </div>
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  الفئة
+                  {t("quickAddDialog.category")}
                 </Label>
                 <AppSearchableSelect
                   value={quickAddCategory}
                   options={quickAddCategoryOptions}
                   onChange={setQuickAddCategory}
                   onCreate={setQuickAddCategory}
-                  createLabel={(draft) => `إضافة فئة "${draft}"`}
-                  placeholder="غير محدد"
-                  searchPlaceholder="ابحث أو اكتب فئة جديدة..."
-                  emptyLabel="لا توجد فئة مطابقة"
-                  ariaLabel="الفئة"
+                  createLabel={(draft) => t("quickAddDialog.categoryCreateLabel", { draft })}
+                  placeholder={t("quickAddDialog.categoryUnspecified")}
+                  searchPlaceholder={t("quickAddDialog.categorySearchPlaceholder")}
+                  emptyLabel={t("quickAddDialog.categoryEmptyLabel")}
+                  ariaLabel={t("quickAddDialog.category")}
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  السعر
+                  {t("quickAddDialog.price")}
                 </Label>
                 <div className="relative">
                   <Input
@@ -2616,13 +2664,13 @@ export default function CashierPage() {
                       MUTED
                     )}
                   >
-                    ر.س
+                    {t("common.currency")}
                   </span>
                 </div>
               </div>
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  الكمية بالمخزون
+                  {t("quickAddDialog.stock")}
                 </Label>
                 <Input
                   type="number"
@@ -2642,7 +2690,7 @@ export default function CashierPage() {
                 checked={quickAddPriceIncludesTax}
                 onCheckedChange={(checked) => setQuickAddPriceIncludesTax(checked === true)}
               />
-              السعر يشمل الضريبة
+              {t("quickAddDialog.priceIncludesTax")}
             </label>
           </div>
           <DialogFooter className="gap-2">
@@ -2651,7 +2699,7 @@ export default function CashierPage() {
               disabled={savingQuickAddProduct}
               onClick={() => void submitQuickAddProduct()}
             >
-              {savingQuickAddProduct ? "جارٍ الإضافة..." : "إضافة إلى السلة"}
+              {savingQuickAddProduct ? t("quickAddDialog.adding") : t("quickAddDialog.addToCart")}
             </Button>
             <Button
               variant="outline"
@@ -2659,7 +2707,7 @@ export default function CashierPage() {
               disabled={savingQuickAddProduct}
               onClick={() => setIsQuickAddProductOpen(false)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2687,17 +2735,22 @@ export default function CashierPage() {
         open={isCheckoutOpen}
         onOpenChange={(open) => !checkingOut && setIsCheckoutOpen(open)}
       >
-        <DialogContent className="sm:max-w-[58rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[58rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="flex-row items-start gap-3 text-right">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
               <Wallet className="size-5" />
             </span>
             <div>
               <DialogTitle className={cn("text-[18px] font-extrabold", HEADING)}>
-                الرجاء دفع {formatAmount(total)}
+                {t("checkoutDialog.pleasePay", { amount: formatAmount(total, locale) })}
               </DialogTitle>
               <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-                من خلال الطرق الآتية
+                {t("checkoutDialog.viaMethods")}
               </DialogDescription>
             </div>
           </DialogHeader>
@@ -2705,7 +2758,7 @@ export default function CashierPage() {
           <div className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto pe-1">
             {paymentMethods.length === 0 ? (
               <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2.5 text-center text-[12px] font-semibold text-[#92400e]">
-                لا توجد طريقة دفع مفعّلة لمساحة العمل هذه. فعّل واحدة من إعدادات طرق الدفع.
+                {t("checkoutDialog.noMethodEnabled")}
               </p>
             ) : (
               // flex-wrap, not CSS grid: grid's column tracks are shared across every row, so an
@@ -2745,7 +2798,9 @@ export default function CashierPage() {
                     <UserRound className="size-5" />
                   </span>
                   <div className="min-w-0 text-right">
-                    <p className={cn("text-[11.5px]", MUTED)}>العميل المحدد</p>
+                    <p className={cn("text-[11.5px]", MUTED)}>
+                      {t("checkoutDialog.selectedCustomer")}
+                    </p>
                     <p className={cn("max-w-[220px] truncate text-[15px] font-bold", HEADING)}>
                       {selectedCustomer.name}
                     </p>
@@ -2754,14 +2809,16 @@ export default function CashierPage() {
                 <div className="h-10 w-px shrink-0 bg-[#dfe4ec]" />
                 <div className="flex shrink-0 items-center gap-3">
                   <div className="min-w-0 text-right">
-                    <p className={cn("text-[11.5px]", MUTED)}>رصيد العميل الحالي</p>
+                    <p className={cn("text-[11.5px]", MUTED)}>
+                      {t("checkoutDialog.currentBalance")}
+                    </p>
                     <p
                       className={cn(
                         "text-[15px] font-bold",
                         customerAccountBalance >= 0 ? "text-[#2563eb]" : "text-[#dc2626]"
                       )}
                     >
-                      {formatAmount(customerAccountBalance)}
+                      {formatAmount(customerAccountBalance, locale)}
                     </p>
                   </div>
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-[12px] bg-[#eaf1fe] text-[#2563eb]">
@@ -2771,12 +2828,14 @@ export default function CashierPage() {
                 <div className="h-10 w-px shrink-0 bg-[#dfe4ec]" />
                 <div className="flex shrink-0 items-center gap-3">
                   <div className="min-w-0 text-right">
-                    <p className={cn("text-[11.5px]", MUTED)}>إجمالي فواتير العميل</p>
+                    <p className={cn("text-[11.5px]", MUTED)}>
+                      {t("checkoutDialog.totalInvoices")}
+                    </p>
                     <p className={cn("text-[15px] font-bold", HEADING)}>
-                      {selectedCustomer.totalOrders} فاتورة
+                      {t("checkoutDialog.invoiceCount", { count: selectedCustomer.totalOrders })}
                     </p>
                     <p className={cn("text-[10.5px]", MUTED)}>
-                      {formatAmount(selectedCustomer.totalRevenue)}
+                      {formatAmount(selectedCustomer.totalRevenue, locale)}
                     </p>
                   </div>
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-[12px] bg-[#eaf1fe] text-[#2563eb]">
@@ -2799,12 +2858,13 @@ export default function CashierPage() {
               >
                 <span>
                   {nonCashExcess > 0
-                    ? "المبلغ المدخل عبر طريقة أخرى أكبر من الإجمالي"
-                    : "المبلغ المتبقي"}
+                    ? t("checkoutDialog.excessOtherMethod")
+                    : t("checkoutDialog.remainingAmount")}
                 </span>
                 <span>
                   {formatAmount(
-                    nonCashExcess > 0 ? nonCashExcess : stillOwed > 0 ? stillOwed : changeDue
+                    nonCashExcess > 0 ? nonCashExcess : stillOwed > 0 ? stillOwed : changeDue,
+                    locale
                   )}
                 </span>
               </div>
@@ -2817,7 +2877,7 @@ export default function CashierPage() {
               disabled={checkingOut || checkoutBlocked}
               onClick={() => void completeCheckout()}
             >
-              {checkingOut ? "جارٍ التأكيد..." : "إتمام العملية"}
+              {checkingOut ? t("checkoutDialog.confirming") : t("checkoutDialog.completeSale")}
               {checkingOut ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
@@ -2830,7 +2890,7 @@ export default function CashierPage() {
               disabled={checkingOut}
               onClick={() => setIsCheckoutOpen(false)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2840,11 +2900,16 @@ export default function CashierPage() {
           that setting is on -- the actual sale still happens through performCheckout(), exactly
           the same call this dialog's own confirm button makes. */}
       <Dialog open={isConfirmSaleOpen} onOpenChange={setIsConfirmSaleOpen}>
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
-            <DialogTitle>تأكيد عملية البيع</DialogTitle>
+            <DialogTitle>{t("confirmSaleDialog.title")}</DialogTitle>
             <DialogDescription>
-              سيتم تسجيل عملية بيع بقيمة {formatAmount(total)}. هل تريد المتابعة؟
+              {t("confirmSaleDialog.description", { amount: formatAmount(total, locale) })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -2853,7 +2918,7 @@ export default function CashierPage() {
               disabled={checkingOut}
               onClick={() => void performCheckout()}
             >
-              {checkingOut ? "جارٍ التأكيد..." : "تأكيد البيع"}
+              {checkingOut ? t("confirmSaleDialog.confirming") : t("confirmSaleDialog.confirmSale")}
             </Button>
             <Button
               variant="outline"
@@ -2861,7 +2926,7 @@ export default function CashierPage() {
               disabled={checkingOut}
               onClick={() => setIsConfirmSaleOpen(false)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2871,34 +2936,41 @@ export default function CashierPage() {
           total") or a fixed SAR value (where that toggle actually changes the math, see the
           `discount` memo above). Draft state only commits to the real discount on "تأكيد". */}
       <Dialog open={isDiscountDialogOpen} onOpenChange={setIsDiscountDialogOpen}>
-        <DialogContent className="sm:max-w-[34rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[34rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="flex-row items-start gap-3 text-right">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
               <BadgePercent className="size-5" />
             </span>
             <div>
               <DialogTitle className={cn("text-[17px] font-extrabold", HEADING)}>
-                إضافة خصم على الفاتورة
+                {t("discountDialog.addToInvoice")}
               </DialogTitle>
               <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-                يمكنك إضافة خصم بقيمة محددة أو بنسبة مئوية
+                {t("discountDialog.description")}
               </DialogDescription>
             </div>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
-              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>نوع الخصم</span>
+              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>
+                {t("discountDialog.typeLabel")}
+              </span>
               <div className="grid flex-1 grid-cols-2 gap-2.5">
                 <DiscountTypeOption
                   icon={Percent}
-                  label="نسبة مئوية"
+                  label={t("discountDialog.percentOption")}
                   selected={draftDiscountType === "percent"}
                   onClick={() => setDraftDiscountType("percent")}
                 />
                 <DiscountTypeOption
                   icon={Coins}
-                  label="قيمة محددة"
+                  label={t("discountDialog.fixedOption")}
                   selected={draftDiscountType === "fixed"}
                   onClick={() => setDraftDiscountType("fixed")}
                 />
@@ -2906,7 +2978,9 @@ export default function CashierPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>قيمة الخصم</span>
+              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>
+                {t("discountDialog.valueLabel")}
+              </span>
               <div className="flex-1">
                 <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e8edf3] bg-white">
                   <input
@@ -2921,20 +2995,22 @@ export default function CashierPage() {
                     className="h-12 flex-1 border-0 bg-transparent px-4 text-left text-[15px] font-semibold text-[#0d1b3e] outline-none placeholder:text-[#8098b4]"
                   />
                   <span className="flex h-12 shrink-0 items-center justify-center bg-[#f4f7fc] px-5 text-[15px] font-bold text-[#5b6b85]">
-                    {draftDiscountType === "percent" ? "%" : "ر.س"}
+                    {draftDiscountType === "percent" ? "%" : t("common.currency")}
                   </span>
                 </div>
                 <p className={cn("mt-1.5 text-[11px]", MUTED)}>
                   {draftDiscountType === "percent"
-                    ? "أدخل نسبة الخصم من 0 إلى 100"
-                    : "أدخل قيمة الخصم بالريال السعودي"}
+                    ? t("discountDialog.percentHint")
+                    : t("discountDialog.fixedHint")}
                 </p>
               </div>
             </div>
 
             <div className="rounded-[12px] bg-[#f4f7fc] p-3.5">
               <div className="flex items-center justify-between gap-3">
-                <p className={cn("text-[13px] font-bold", HEADING)}>هل الخصم يشمل الضريبة؟</p>
+                <p className={cn("text-[13px] font-bold", HEADING)}>
+                  {t("discountDialog.includesTaxQuestion")}
+                </p>
                 <button
                   type="button"
                   onClick={() => setDraftDiscountIncludesTax((current) => !current)}
@@ -2951,7 +3027,7 @@ export default function CashierPage() {
                       draftDiscountIncludesTax ? "text-[#2563eb]" : HEADING
                     )}
                   >
-                    يشمل الضريبة
+                    {t("discountDialog.includesTax")}
                   </span>
                   <Checkbox
                     checked={draftDiscountIncludesTax}
@@ -2961,7 +3037,7 @@ export default function CashierPage() {
                 </button>
               </div>
               <p className={cn("mt-1.5 text-[10.5px] leading-5", MUTED)}>
-                في حال التفعيل، سيتم احتساب الخصم على المبلغ شامل الضريبة
+                {t("discountDialog.includesTaxHint")}
               </p>
             </div>
           </div>
@@ -2976,7 +3052,7 @@ export default function CashierPage() {
                 setIsDiscountDialogOpen(false)
               }}
             >
-              تأكيد
+              {t("common.confirm")}
               <Check className="size-4" />
             </Button>
             <Button
@@ -2984,7 +3060,7 @@ export default function CashierPage() {
               className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
               onClick={() => setIsDiscountDialogOpen(false)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2996,14 +3072,19 @@ export default function CashierPage() {
         open={lineDiscountTargetId !== null}
         onOpenChange={(open) => !open && setLineDiscountTargetId(null)}
       >
-        <DialogContent className="sm:max-w-[34rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[34rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="flex-row items-start gap-3 text-right">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
               <BadgePercent className="size-5" />
             </span>
             <div>
               <DialogTitle className={cn("text-[17px] font-extrabold", HEADING)}>
-                خصم على الصنف
+                {t("lineDiscountDialog.title")}
               </DialogTitle>
               <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
                 {cart.find((line) => lineKey(line) === lineDiscountTargetId)?.productName ?? ""}
@@ -3013,17 +3094,19 @@ export default function CashierPage() {
 
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
-              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>نوع الخصم</span>
+              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>
+                {t("discountDialog.typeLabel")}
+              </span>
               <div className="grid flex-1 grid-cols-2 gap-2.5">
                 <DiscountTypeOption
                   icon={Percent}
-                  label="نسبة مئوية"
+                  label={t("discountDialog.percentOption")}
                   selected={draftLineDiscountType === "percent"}
                   onClick={() => setDraftLineDiscountType("percent")}
                 />
                 <DiscountTypeOption
                   icon={Coins}
-                  label="قيمة محددة"
+                  label={t("discountDialog.fixedOption")}
                   selected={draftLineDiscountType === "fixed"}
                   onClick={() => setDraftLineDiscountType("fixed")}
                 />
@@ -3031,7 +3114,9 @@ export default function CashierPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>قيمة الخصم</span>
+              <span className={cn("shrink-0 text-[13px] font-bold", HEADING)}>
+                {t("discountDialog.valueLabel")}
+              </span>
               <div className="flex-1">
                 <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e8edf3] bg-white">
                   <input
@@ -3046,20 +3131,22 @@ export default function CashierPage() {
                     className="h-12 flex-1 border-0 bg-transparent px-4 text-left text-[15px] font-semibold text-[#0d1b3e] outline-none placeholder:text-[#8098b4]"
                   />
                   <span className="flex h-12 shrink-0 items-center justify-center bg-[#f4f7fc] px-5 text-[15px] font-bold text-[#5b6b85]">
-                    {draftLineDiscountType === "percent" ? "%" : "ر.س"}
+                    {draftLineDiscountType === "percent" ? "%" : t("common.currency")}
                   </span>
                 </div>
                 <p className={cn("mt-1.5 text-[11px]", MUTED)}>
                   {draftLineDiscountType === "percent"
-                    ? "أدخل نسبة الخصم من 0 إلى 100"
-                    : "أدخل قيمة الخصم بالريال السعودي"}
+                    ? t("discountDialog.percentHint")
+                    : t("discountDialog.fixedHint")}
                 </p>
               </div>
             </div>
 
             <div className="rounded-[12px] bg-[#f4f7fc] p-3.5">
               <div className="flex items-center justify-between gap-3">
-                <p className={cn("text-[13px] font-bold", HEADING)}>هل الخصم يشمل الضريبة؟</p>
+                <p className={cn("text-[13px] font-bold", HEADING)}>
+                  {t("discountDialog.includesTaxQuestion")}
+                </p>
                 <button
                   type="button"
                   onClick={() => setDraftLineDiscountIncludesTax((current) => !current)}
@@ -3076,7 +3163,7 @@ export default function CashierPage() {
                       draftLineDiscountIncludesTax ? "text-[#2563eb]" : HEADING
                     )}
                   >
-                    يشمل الضريبة
+                    {t("discountDialog.includesTax")}
                   </span>
                   <Checkbox
                     checked={draftLineDiscountIncludesTax}
@@ -3086,7 +3173,7 @@ export default function CashierPage() {
                 </button>
               </div>
               <p className={cn("mt-1.5 text-[10.5px] leading-5", MUTED)}>
-                في حال التفعيل، سيتم احتساب الخصم على المبلغ شامل الضريبة
+                {t("discountDialog.includesTaxHint")}
               </p>
             </div>
           </div>
@@ -3096,7 +3183,7 @@ export default function CashierPage() {
               className="h-11 flex-1 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
               onClick={confirmLineDiscount}
             >
-              تأكيد
+              {t("common.confirm")}
               <Check className="size-4" />
             </Button>
             {lineDiscountTargetId &&
@@ -3109,7 +3196,7 @@ export default function CashierPage() {
                   setLineDiscountTargetId(null)
                 }}
               >
-                إزالة الخصم
+                {t("lineDiscountDialog.removeDiscount")}
               </Button>
             ) : null}
             <Button
@@ -3117,7 +3204,7 @@ export default function CashierPage() {
               className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
               onClick={() => setLineDiscountTargetId(null)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3130,14 +3217,19 @@ export default function CashierPage() {
         open={priceEditTargetId !== null}
         onOpenChange={(open) => !open && setPriceEditTargetId(null)}
       >
-        <DialogContent className="sm:max-w-[24rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[24rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="flex-row items-start gap-3 text-right">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
               <Pencil className="size-5" />
             </span>
             <div>
               <DialogTitle className={cn("text-[17px] font-extrabold", HEADING)}>
-                تعديل سعر البيع
+                {t("priceEditDialog.title")}
               </DialogTitle>
               <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
                 {cart.find((line) => lineKey(line) === priceEditTargetId)?.productName ?? ""}
@@ -3147,7 +3239,7 @@ export default function CashierPage() {
 
           <div>
             <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              السعر الجديد
+              {t("priceEditDialog.newPrice")}
             </Label>
             <div className="relative">
               <Input
@@ -3165,12 +3257,10 @@ export default function CashierPage() {
                   MUTED
                 )}
               >
-                ر.س
+                {t("common.currency")}
               </span>
             </div>
-            <p className={cn("mt-1.5 text-[11px] leading-5", MUTED)}>
-              يسري هذا السعر على هذه الفاتورة فقط، ولا يغيّر سعر المنتج في صفحة المنتجات.
-            </p>
+            <p className={cn("mt-1.5 text-[11px] leading-5", MUTED)}>{t("priceEditDialog.hint")}</p>
           </div>
 
           <DialogFooter className="gap-2">
@@ -3178,7 +3268,7 @@ export default function CashierPage() {
               className="h-11 flex-1 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
               onClick={confirmPriceEdit}
             >
-              تأكيد
+              {t("common.confirm")}
               <Check className="size-4" />
             </Button>
             <Button
@@ -3186,7 +3276,7 @@ export default function CashierPage() {
               className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
               onClick={() => setPriceEditTargetId(null)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3205,10 +3295,15 @@ export default function CashierPage() {
           }
         }}
       >
-        <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "flex max-h-[80vh] flex-col sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              اختر النوع
+              {t("variantDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px]", MUTED)}>
               {variantPickerProduct?.name ?? ""}
@@ -3219,7 +3314,7 @@ export default function CashierPage() {
             {loadingVariantPicker ? (
               <div className={cn("flex items-center gap-2 p-6 text-[13px]", MUTED)}>
                 <Loader2 className="size-4 animate-spin" />
-                جارٍ التحميل...
+                {t("common.loading")}
               </div>
             ) : variantPickerDetail && variantPickerDetail.variants.length > 0 ? (
               variantPickerDetail.variants.map((variant) => {
@@ -3237,18 +3332,23 @@ export default function CashierPage() {
                         {variant.optionValues.join(" / ")}
                       </p>
                       <p className={cn("text-[11px]", outOfStock ? "text-[#dc2626]" : MUTED)}>
-                        {outOfStock ? "نفدت الكمية" : `المتوفر: ${stock}`}
+                        {outOfStock
+                          ? t("variantDialog.outOfStock")
+                          : t("variantDialog.available", { stock })}
                       </p>
                     </div>
                     <span className={cn("text-[13px] font-extrabold", HEADING)}>
-                      {formatAmount(variant.price ?? variantPickerProduct?.sellingPrice ?? 0)}
+                      {formatAmount(
+                        variant.price ?? variantPickerProduct?.sellingPrice ?? 0,
+                        locale
+                      )}
                     </span>
                   </button>
                 )
               })
             ) : (
               <p className={cn("p-6 text-center text-[12.5px]", MUTED)}>
-                لا توجد أنواع متاحة لهذا المنتج.
+                {t("variantDialog.noneAvailable")}
               </p>
             )}
           </div>
@@ -3257,20 +3357,25 @@ export default function CashierPage() {
 
       {/* Order note */}
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
-        <DialogContent className="sm:max-w-[22rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[22rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              ملاحظة على الطلب
+              {t("noteDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              تُحفظ مع الفاتورة عند إتمام الدفع.
+              {t("noteDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <Textarea
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.target.value)}
             rows={4}
-            placeholder="مثال: بدون سكر، تغليف هدية..."
+            placeholder={t("noteDialog.placeholder")}
             className="resize-none text-[13px]"
           />
           <DialogFooter className="gap-2">
@@ -3281,14 +3386,14 @@ export default function CashierPage() {
                 setIsNoteDialogOpen(false)
               }}
             >
-              حفظ
+              {t("common.save")}
             </Button>
             <Button
               variant="outline"
               className="h-11 rounded-[10px] border-[#e8edf3] px-5 text-[13px] font-semibold text-[#5b6b85]"
               onClick={() => setIsNoteDialogOpen(false)}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3302,13 +3407,18 @@ export default function CashierPage() {
           if (!open) setIsAddCustomerOpen(false)
         }}
       >
-        <DialogContent className="sm:max-w-[24rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[24rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              اختيار عميل
+              {t("customerDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              يملأ اسم العميل ورقم الجوال في الفاتورة.
+              {t("customerDialog.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -3316,18 +3426,18 @@ export default function CashierPage() {
             <div className="flex flex-col gap-3">
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  اسم العميل
+                  {t("customerDialog.nameLabel")}
                 </Label>
                 <Input
                   value={newCustomerName}
                   onChange={(event) => setNewCustomerName(event.target.value)}
-                  placeholder="مثال: أحمد محمد"
+                  placeholder={t("customerDialog.namePlaceholder")}
                   className={cn(FIELD_CLASS, "h-11")}
                 />
               </div>
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  رقم الجوال (اختياري)
+                  {t("customerDialog.phoneLabel")}
                 </Label>
                 <Input
                   value={newCustomerPhone}
@@ -3342,7 +3452,7 @@ export default function CashierPage() {
                   disabled={savingCustomer}
                   onClick={() => void createNewCustomer()}
                 >
-                  {savingCustomer ? "جارٍ الحفظ..." : "حفظ العميل"}
+                  {savingCustomer ? t("customerDialog.saving") : t("customerDialog.saveCustomer")}
                 </Button>
                 <Button
                   variant="outline"
@@ -3350,7 +3460,7 @@ export default function CashierPage() {
                   disabled={savingCustomer}
                   onClick={() => setIsAddCustomerOpen(false)}
                 >
-                  رجوع
+                  {t("customerDialog.back")}
                 </Button>
               </div>
             </div>
@@ -3362,14 +3472,14 @@ export default function CashierPage() {
                   <Input
                     value={customerSearch}
                     onChange={(event) => setCustomerSearch(event.target.value)}
-                    placeholder="البحث بالاسم أو الجوال..."
+                    placeholder={t("customerDialog.searchPlaceholder")}
                     className={cn(FIELD_CLASS, "h-11 ps-9")}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsAddCustomerOpen(true)}
-                  aria-label="إضافة عميل جديد"
+                  aria-label={t("customerDialog.addNewAriaLabel")}
                   className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[10px] border border-[#c7d9ff] bg-[#eff6ff] px-3 text-[12px] font-semibold text-[#2563eb]"
                 >
                   <UserPlus className="size-4" />
@@ -3387,11 +3497,11 @@ export default function CashierPage() {
                   }}
                   className="rounded-[10px] border border-dashed border-[#e8edf3] p-2.5 text-right text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff]"
                 >
-                  عميل نقدي (بلا بيانات)
+                  {t("customerDialog.cashCustomerOption")}
                 </button>
                 {filteredCustomers.length === 0 ? (
                   <p className={cn("py-6 text-center text-[12px]", MUTED)}>
-                    لا يوجد عملاء مطابقون.
+                    {t("customerDialog.noMatch")}
                   </p>
                 ) : (
                   filteredCustomers.map((customer) => (
@@ -3429,7 +3539,9 @@ export default function CashierPage() {
                                 : "bg-[#fef2f2] text-[#dc2626]"
                             )}
                           >
-                            رصيد {formatAmount(Math.abs(customer.accountBalance ?? 0))}
+                            {t("customerDialog.balance", {
+                              amount: formatAmount(Math.abs(customer.accountBalance ?? 0), locale),
+                            })}
                           </span>
                         ) : null}
                         {customer.platform === "Madar" ? (
@@ -3448,7 +3560,7 @@ export default function CashierPage() {
                             }}
                             className="rounded-full border border-[#c7d9ff] px-2 py-0.5 text-[10px] font-semibold text-[#2563eb] hover:bg-[#eff6ff]"
                           >
-                            شحن
+                            {t("customerDialog.topUp")}
                           </span>
                         ) : null}
                       </div>
@@ -3473,20 +3585,27 @@ export default function CashierPage() {
           setTopUpPaymentMethodCode("")
         }}
       >
-        <DialogContent className="sm:max-w-[24rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[24rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              شحن محفظة {topUpCustomer?.name}
+              {t("topUpDialog.title", { name: topUpCustomer?.name ?? "" })}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              الرصيد الحالي: {formatAmount(topUpCustomer?.accountBalance ?? 0)}
+              {t("topUpDialog.currentBalance", {
+                amount: formatAmount(topUpCustomer?.accountBalance ?? 0, locale),
+              })}
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                المبلغ
+                {t("topUpDialog.amount")}
               </Label>
               <Input
                 type="number"
@@ -3501,16 +3620,14 @@ export default function CashierPage() {
             </div>
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                استلمت المبلغ عبر
+                {t("topUpDialog.receivedVia")}
               </Label>
               {topUpEligibleMethods.length === 0 ? (
-                <p className="text-[11px] text-[#e0484d]">
-                  لا توجد طريقة دفع مناسبة مفعّلة لمساحة العمل هذه.
-                </p>
+                <p className="text-[11px] text-[#e0484d]">{t("topUpDialog.noMethod")}</p>
               ) : (
                 <AppSelect value={topUpPaymentMethodCode} onValueChange={setTopUpPaymentMethodCode}>
                   <AppSelectTrigger className={cn(FIELD_CLASS, "h-11 w-full")}>
-                    <AppSelectValue placeholder="اختر طريقة الدفع" />
+                    <AppSelectValue placeholder={t("topUpDialog.methodPlaceholder")} />
                   </AppSelectTrigger>
                   <AppSelectContent>
                     {topUpEligibleMethods.map((method) => (
@@ -3530,7 +3647,7 @@ export default function CashierPage() {
               disabled={toppingUpWallet || !(Number(topUpAmount) > 0) || !topUpPaymentMethodCode}
               onClick={() => void submitWalletTopUp()}
             >
-              {toppingUpWallet ? "جارٍ الشحن..." : "شحن المحفظة"}
+              {toppingUpWallet ? t("topUpDialog.charging") : t("topUpDialog.chargeWallet")}
             </Button>
             <Button
               variant="outline"
@@ -3542,7 +3659,7 @@ export default function CashierPage() {
                 setTopUpPaymentMethodCode("")
               }}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3550,13 +3667,18 @@ export default function CashierPage() {
 
       {/* Returns -- reuses the real invoice status change (PATCH /v1/pos/invoices/:id/status) */}
       <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              تسجيل إرجاع
+              {t("returnDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              ابحث عن الفاتورة برقمها أو اسم العميل لتسجيل إرجاعها.
+              {t("returnDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
@@ -3564,7 +3686,7 @@ export default function CashierPage() {
             <Input
               value={returnSearch}
               onChange={(event) => setReturnSearch(event.target.value)}
-              placeholder="رقم الفاتورة أو اسم العميل..."
+              placeholder={t("returnDialog.searchPlaceholder")}
               className={cn(FIELD_CLASS, "h-11 ps-9")}
             />
           </div>
@@ -3574,10 +3696,12 @@ export default function CashierPage() {
                 className={cn("flex items-center justify-center gap-2 py-6 text-[12.5px]", MUTED)}
               >
                 <Loader2 className="size-4 animate-spin" />
-                جارٍ البحث...
+                {t("returnDialog.searching")}
               </div>
             ) : returnCandidates.length === 0 ? (
-              <p className={cn("py-6 text-center text-[12px]", MUTED)}>لا توجد فواتير مطابقة.</p>
+              <p className={cn("py-6 text-center text-[12px]", MUTED)}>
+                {t("returnDialog.noMatch")}
+              </p>
             ) : (
               returnCandidates.map((invoice) => (
                 <div
@@ -3589,7 +3713,8 @@ export default function CashierPage() {
                       {invoice.invoiceNumber}
                     </p>
                     <p className={cn("text-[11px]", MUTED)}>
-                      {invoice.customerName ?? "عميل نقدي"} · {formatAmount(invoice.totalAmount)}
+                      {invoice.customerName ?? t("common.cashCustomer")} ·{" "}
+                      {formatAmount(invoice.totalAmount, locale)}
                     </p>
                   </div>
                   <Button
@@ -3598,7 +3723,9 @@ export default function CashierPage() {
                     className="h-8 rounded-[8px] border-[#fecaca] px-3 text-[11.5px] font-semibold text-[#dc2626] hover:bg-[#fef2f2]"
                     onClick={() => void submitReturn(invoice)}
                   >
-                    {returningId === invoice.id ? "جارٍ..." : "تسجيل إرجاع"}
+                    {returningId === invoice.id
+                      ? t("returnDialog.registering")
+                      : t("returnDialog.registerReturn")}
                   </Button>
                 </div>
               ))
@@ -3609,13 +3736,18 @@ export default function CashierPage() {
 
       {/* Held orders -- real backend-persisted parked carts (pos_held_orders) */}
       <Dialog open={isHeldOrdersOpen} onOpenChange={setIsHeldOrdersOpen}>
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              الطلبات المعلقة
+              {t("heldOrdersDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              علّق الطلب الحالي لخدمة عميل آخر، أو استأنف طلبا معلقا.
+              {t("heldOrdersDialog.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -3627,13 +3759,15 @@ export default function CashierPage() {
               onClick={() => void holdCurrentOrder()}
             >
               <Layers className="size-4" />
-              {holdingOrder ? "جارٍ التعليق..." : "علّق الطلب الحالي"}
+              {holdingOrder ? t("heldOrdersDialog.holding") : t("heldOrdersDialog.holdCurrent")}
             </Button>
           ) : null}
 
           <div className="flex max-h-[18rem] flex-col gap-1.5 overflow-y-auto">
             {heldOrders.length === 0 ? (
-              <p className={cn("py-6 text-center text-[12px]", MUTED)}>لا توجد طلبات معلقة.</p>
+              <p className={cn("py-6 text-center text-[12px]", MUTED)}>
+                {t("heldOrdersDialog.noOrders")}
+              </p>
             ) : (
               heldOrders.map((order) => {
                 const orderTotal = order.items.reduce(
@@ -3648,10 +3782,11 @@ export default function CashierPage() {
                   >
                     <div>
                       <p className={cn("text-[12.5px] font-bold", HEADING)}>
-                        {order.customerName ?? "عميل نقدي"}
+                        {order.customerName ?? t("common.cashCustomer")}
                       </p>
                       <p className={cn("text-[11px]", MUTED)}>
-                        {order.items.length} منتج · {formatAmount(orderTotal)}
+                        {t("heldOrdersDialog.productsCount", { count: order.items.length })} ·{" "}
+                        {formatAmount(orderTotal, locale)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -3660,13 +3795,13 @@ export default function CashierPage() {
                         className="h-8 rounded-[8px] bg-[#2563eb] px-3 text-[11.5px] font-semibold text-white hover:bg-[#1d4ed8]"
                         onClick={() => void resumeHeldOrder(order.id)}
                       >
-                        استئناف
+                        {t("heldOrdersDialog.resume")}
                       </Button>
                       <Button
                         variant="outline"
                         disabled={busy}
                         className="h-8 rounded-[8px] border-[#e8edf3] px-2.5 text-[#dc2626] hover:bg-[#fef2f2]"
-                        aria-label="حذف"
+                        aria-label={t("heldOrdersDialog.deleteAriaLabel")}
                         onClick={() => void discardHeldOrder(order.id)}
                       >
                         <Trash2 className="size-3.5" />

@@ -2377,5 +2377,335 @@
         "summaryBalanceAfter": "Customer balance after"
       }
     }
+  },
+  "pos": {
+    "cashier": {
+      "common": {
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "save": "Save",
+        "loading": "Loading...",
+        "cashCustomer": "Walk-in customer",
+        "addNewProduct": "Add new product",
+        "currency": "SAR",
+        "delete": "Delete",
+        "quantityLabel": "Quantity",
+        "decreaseQty": "Decrease quantity",
+        "increaseQty": "Increase quantity"
+      },
+      "topBar": {
+        "invoices": "Invoices",
+        "todaySales": "Today's sales",
+        "shiftOpen": "Shift open",
+        "shiftOpenSince": "Since {time}",
+        "cashMovement": "Cash in / out",
+        "noOpenShift": "No open shift",
+        "dashboard": "Dashboard",
+        "fullscreenAriaLabel": "Full screen"
+      },
+      "categories": {
+        "title": "Categories",
+        "all": "All"
+      },
+      "search": {
+        "placeholder": "Scan a barcode or search products...",
+        "noMatch": "No product matches \"{query}\"",
+        "viewProductsAriaLabel": "View products",
+        "viewCartAriaLabel": "View cart items"
+      },
+      "products": {
+        "loading": "Loading products...",
+        "noMatch": "No matching products.",
+        "skuLabel": "SKU: {sku}"
+      },
+      "lineActions": {
+        "moreAriaLabel": "More options",
+        "addItemDiscount": "Add item discount",
+        "editSellPrice": "Edit sell price"
+      },
+      "cart": {
+        "emptyTitle": "Cart is empty",
+        "emptyHint": "Add products from the list to start an order",
+        "currentOrder": "Current order",
+        "hold": "Hold",
+        "holding": "Holding...",
+        "clearAllAriaLabel": "Clear all",
+        "customer": "Customer",
+        "removeCustomerAriaLabel": "Remove customer",
+        "items": "Items",
+        "subtotal": "Subtotal",
+        "payment": "Payment",
+        "discount": "Discount",
+        "addDiscountAriaLabel": "Add discount",
+        "removeDiscountAriaLabel": "Remove discount",
+        "totalAfterDiscount": "Total after discount",
+        "tax": "Tax",
+        "taxWithPercent": "Tax ({percent}%)",
+        "totalDue": "Total due",
+        "proceedToPayment": "Proceed to payment",
+        "noShiftWarning": "No open shift. Open a shift before selling.",
+        "openNewShift": "Open a new shift",
+        "heldAction": "Held",
+        "customerAction": "Customer",
+        "returnAction": "Return",
+        "noteAction": "Note"
+      },
+      "openShiftDialog": {
+        "title": "Start a new shift",
+        "description": "Enter the cash amount in the drawer at the start of the shift.",
+        "openingAmount": "Opening amount",
+        "starting": "Opening...",
+        "start": "Start shift"
+      },
+      "quickAddDialog": {
+        "title": "Add new product",
+        "description": "The product is added to the catalog and placed in the current cart right away.",
+        "productName": "Product name",
+        "skuLabel": "Barcode / SKU (optional)",
+        "skuPlaceholder": "Generated automatically if left blank",
+        "category": "Category",
+        "categoryUnspecified": "Unspecified",
+        "categoryCreateLabel": "Add category \"{draft}\"",
+        "categorySearchPlaceholder": "Search or type a new category...",
+        "categoryEmptyLabel": "No matching category",
+        "price": "Price",
+        "stock": "Stock quantity",
+        "priceIncludesTax": "Price includes tax",
+        "adding": "Adding...",
+        "addToCart": "Add to cart"
+      },
+      "checkoutDialog": {
+        "pleasePay": "Please pay {amount}",
+        "viaMethods": "via the following methods",
+        "noMethodEnabled": "No payment method is enabled for this workspace. Enable one from payment method settings.",
+        "selectedCustomer": "Selected customer",
+        "currentBalance": "Current customer balance",
+        "totalInvoices": "Customer's total invoices",
+        "invoiceCount": "{count} invoices",
+        "excessOtherMethod": "The amount entered via another method exceeds the total",
+        "remainingAmount": "Remaining amount",
+        "confirming": "Confirming...",
+        "completeSale": "Complete sale"
+      },
+      "confirmSaleDialog": {
+        "title": "Confirm sale",
+        "description": "A sale of {amount} will be recorded. Do you want to continue?",
+        "confirming": "Confirming...",
+        "confirmSale": "Confirm sale"
+      },
+      "discountDialog": {
+        "addToInvoice": "Add a discount to the invoice",
+        "description": "You can add a discount as a fixed value or a percentage",
+        "typeLabel": "Discount type",
+        "percentOption": "Percentage",
+        "fixedOption": "Fixed value",
+        "valueLabel": "Discount value",
+        "percentHint": "Enter a discount percentage from 0 to 100",
+        "fixedHint": "Enter the discount value in SAR",
+        "includesTaxQuestion": "Does the discount include tax?",
+        "includesTax": "Includes tax",
+        "includesTaxHint": "When enabled, the discount is calculated on the tax-inclusive amount"
+      },
+      "lineDiscountDialog": {
+        "title": "Item discount",
+        "removeDiscount": "Remove discount"
+      },
+      "priceEditDialog": {
+        "title": "Edit sell price",
+        "newPrice": "New price",
+        "hint": "This price applies to this invoice only, and doesn't change the product's price on the Products page."
+      },
+      "variantDialog": {
+        "title": "Choose a variant",
+        "outOfStock": "Out of stock",
+        "available": "Available: {stock}",
+        "noneAvailable": "No variants available for this product."
+      },
+      "noteDialog": {
+        "title": "Note on the order",
+        "description": "Saved with the invoice once payment is completed.",
+        "placeholder": "e.g. no sugar, gift wrap..."
+      },
+      "customerDialog": {
+        "title": "Choose a customer",
+        "description": "Fills the customer name and phone number into the invoice.",
+        "nameLabel": "Customer name",
+        "namePlaceholder": "e.g. Ahmed Mohammed",
+        "phoneLabel": "Phone number (optional)",
+        "saving": "Saving...",
+        "saveCustomer": "Save customer",
+        "back": "Back",
+        "searchPlaceholder": "Search by name or phone...",
+        "addNewAriaLabel": "Add new customer",
+        "cashCustomerOption": "Walk-in customer (no details)",
+        "noMatch": "No matching customers.",
+        "balance": "Balance {amount}",
+        "topUp": "Top up"
+      },
+      "topUpDialog": {
+        "title": "Top up {name}'s wallet",
+        "currentBalance": "Current balance: {amount}",
+        "amount": "Amount",
+        "receivedVia": "Received the amount via",
+        "noMethod": "No suitable payment method is enabled for this workspace.",
+        "methodPlaceholder": "Choose a payment method",
+        "charging": "Charging...",
+        "chargeWallet": "Top up wallet"
+      },
+      "returnDialog": {
+        "title": "Register a return",
+        "description": "Search for the invoice by its number or the customer's name to register a return.",
+        "searchPlaceholder": "Invoice number or customer name...",
+        "searching": "Searching...",
+        "noMatch": "No matching invoices.",
+        "registering": "Working...",
+        "registerReturn": "Register return"
+      },
+      "heldOrdersDialog": {
+        "title": "Held orders",
+        "description": "Hold the current order to serve another customer, or resume a held one.",
+        "holdCurrent": "Hold current order",
+        "holding": "Holding...",
+        "noOrders": "No held orders.",
+        "resume": "Resume",
+        "deleteAriaLabel": "Delete",
+        "productsCount": "{count} products"
+      },
+      "toasts": {
+        "shiftOpened": "Shift opened.",
+        "shiftOpenFailed": "Couldn't open the shift.",
+        "variantLoadFailed": "Couldn't load this variant's data.",
+        "productNameRequired": "Enter the product name.",
+        "priceRequired": "Enter a valid price.",
+        "productAdded": "Product added.",
+        "productAddFailed": "Couldn't add the product.",
+        "variantsLoadFailed": "Couldn't load this product's variants.",
+        "noOpenShift": "No open shift.",
+        "excessOtherMethod": "The amount entered via another method exceeds the total.",
+        "remainingAmount": "Remaining amount {amount}",
+        "needCustomerForDeferred": "Choose a customer to record the deferred amount on their account.",
+        "needCustomerForPrepaid": "Choose a customer to deduct from their wallet balance.",
+        "insufficientWallet": "The customer's wallet balance is less than the amount to deduct.",
+        "saleSuccess": "Sale completed successfully — invoice {number}",
+        "salePermissionDenied": "You don't have permission to complete a sale.",
+        "salePermissionDescription": "Contact the account owner to grant you the pos:manage permission.",
+        "saleFailed": "Couldn't complete the sale.",
+        "customerNameRequired": "Enter the customer's name.",
+        "customerAdded": "Customer added.",
+        "customerAddFailed": "Couldn't add the customer.",
+        "topUpAmountRequired": "Enter a valid amount.",
+        "topUpMethodRequired": "Choose the payment method you received the amount through.",
+        "topUpSuccess": "{name}'s wallet topped up with {amount}.",
+        "topUpFailed": "Couldn't top up the wallet.",
+        "returnSuccess": "Return registered for invoice {number}",
+        "returnFailed": "Couldn't register the return.",
+        "orderHeld": "Order held.",
+        "orderHoldFailed": "Couldn't hold the order.",
+        "orderResumed": "Order resumed.",
+        "orderResumeFailed": "Couldn't resume the order.",
+        "heldOrderDeleted": "Held order deleted.",
+        "heldOrderDeleteFailed": "Couldn't delete the order."
+      }
+    },
+    "creditNoteReceipt": {
+      "title": "Credit note",
+      "sellerNameFallback": "The business",
+      "noteNumber": "Note number: {number}",
+      "saleInvoiceNumber": "Sale invoice number: {number}",
+      "storeAddress": "Store address",
+      "invoiceTime": "Invoice time",
+      "vatNumber": "VAT number",
+      "columns": {
+        "name": "Name",
+        "quantity": "Qty",
+        "price": "Price",
+        "vat": "VAT",
+        "totalWithTax": "Total (incl. tax)"
+      },
+      "totalItems": "Total items",
+      "taxableAmount": "Taxable amount",
+      "discount": "Discount",
+      "taxableAfterDiscount": "Taxable amount after discount",
+      "vat": "VAT",
+      "total": "Total",
+      "paid": "Paid",
+      "qrAlt": "QR code",
+      "qrFailed": "Couldn't generate the QR code for this note."
+    },
+    "thermalInvoiceReceipt": {
+      "sellerNameFallback": "The business",
+      "simplifiedTaxInvoice": "Simplified tax invoice",
+      "invoiceNumber": "Invoice number: {number}",
+      "storeAddress": "Store address",
+      "invoiceTime": "Invoice time",
+      "vatNumber": "VAT number",
+      "customerName": "Customer name",
+      "customerPhone": "Customer phone",
+      "customerVatNumber": "Customer VAT number",
+      "columns": {
+        "name": "Name",
+        "quantity": "Qty",
+        "price": "Price",
+        "vat": "VAT",
+        "totalWithTax": "Total (incl. tax)"
+      },
+      "totalItems": "Total items",
+      "taxableAmount": "Taxable amount",
+      "discount": "Discount",
+      "taxableAfterDiscount": "Taxable amount after discount",
+      "vat": "VAT",
+      "total": "Total",
+      "qrAlt": "QR code",
+      "qrFailed": "Couldn't generate the QR code for this invoice."
+    },
+    "cashMovementDialog": {
+      "title": "Cash withdrawal or deposit",
+      "description": "Recorded against the currently open shift and shown when it's closed.",
+      "withdrawal": "Withdraw from drawer",
+      "deposit": "Deposit to drawer",
+      "amountLabel": "Amount",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "e.g. Moved excess cash to the safe",
+      "saving": "Saving...",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "toasts": {
+        "invalidAmount": "Enter a valid amount.",
+        "withdrawalRecorded": "Withdrawal recorded.",
+        "depositRecorded": "Deposit recorded.",
+        "recordFailed": "Couldn't record the transaction."
+      }
+    },
+    "shiftCloseDialog": {
+      "title": "Close shift",
+      "description": "Count the cash in the drawer and confirm the amount",
+      "summaryTitle": "Shift summary",
+      "computingSales": "Calculating sales...",
+      "openingBalance": "Opening balance",
+      "cashSales": "Cash sales",
+      "otherSales": "Other sales",
+      "returns": "Returns",
+      "withdrawal": "Withdrawal from drawer",
+      "deposit": "Deposit to drawer",
+      "expectedInDrawer": "Expected in drawer",
+      "basedOnAllTransactions": "Based on all transactions",
+      "countedAmountLabel": "Counted amount",
+      "deleteAriaLabel": "Delete",
+      "notesLabel": "Notes (optional)",
+      "notesPlaceholder": "e.g. Handing the shift to the next cashier",
+      "closing": "Closing...",
+      "confirmClose": "Confirm close",
+      "cancel": "Cancel",
+      "invalidAmount": "Enter a valid amount",
+      "variance": {
+        "matches": "The counted amount matches the expected amount",
+        "surplus": "Surplus of {amount}",
+        "shortage": "Shortage of {amount}"
+      },
+      "toasts": {
+        "closed": "Shift closed.",
+        "closeFailed": "Couldn't close the shift."
+      }
+    }
   }
 }

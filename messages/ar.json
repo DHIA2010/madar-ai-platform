@@ -2377,5 +2377,335 @@
         "summaryBalanceAfter": "رصيد العميل بعد العملية"
       }
     }
+  },
+  "pos": {
+    "cashier": {
+      "common": {
+        "cancel": "إلغاء",
+        "confirm": "تأكيد",
+        "save": "حفظ",
+        "loading": "جارٍ التحميل...",
+        "cashCustomer": "عميل نقدي",
+        "addNewProduct": "إضافة منتج جديد",
+        "currency": "ر.س",
+        "delete": "حذف",
+        "quantityLabel": "الكمية",
+        "decreaseQty": "إنقاص الكمية",
+        "increaseQty": "زيادة الكمية"
+      },
+      "topBar": {
+        "invoices": "الفواتير",
+        "todaySales": "مبيعات اليوم",
+        "shiftOpen": "وردية مفتوحة",
+        "shiftOpenSince": "منذ {time}",
+        "cashMovement": "سحب / إيداع",
+        "noOpenShift": "لا توجد وردية مفتوحة",
+        "dashboard": "لوحة التحكم",
+        "fullscreenAriaLabel": "ملء الشاشة"
+      },
+      "categories": {
+        "title": "الفئات",
+        "all": "الكل"
+      },
+      "search": {
+        "placeholder": "امسح الباركود أو ابحث في المنتجات...",
+        "noMatch": "لا يوجد منتج مطابق لـ \"{query}\"",
+        "viewProductsAriaLabel": "عرض المنتجات",
+        "viewCartAriaLabel": "عرض عناصر السلة"
+      },
+      "products": {
+        "loading": "جارٍ تحميل المنتجات...",
+        "noMatch": "لا توجد منتجات مطابقة.",
+        "skuLabel": "SKU: {sku}"
+      },
+      "lineActions": {
+        "moreAriaLabel": "خيارات إضافية",
+        "addItemDiscount": "إضافة خصم على الصنف",
+        "editSellPrice": "تعديل سعر البيع"
+      },
+      "cart": {
+        "emptyTitle": "السلة فارغة",
+        "emptyHint": "قم بإضافة منتجات من القائمة لبدء الطلب",
+        "currentOrder": "الطلب الحالي",
+        "hold": "تعليق",
+        "holding": "جارٍ التعليق...",
+        "clearAllAriaLabel": "مسح الكل",
+        "customer": "العميل",
+        "removeCustomerAriaLabel": "إزالة العميل",
+        "items": "الأصناف",
+        "subtotal": "المجموع الفرعي",
+        "payment": "الدفع",
+        "discount": "الخصم",
+        "addDiscountAriaLabel": "إضافة خصم",
+        "removeDiscountAriaLabel": "إزالة الخصم",
+        "totalAfterDiscount": "الإجمالي بعد الخصم",
+        "tax": "الضريبة",
+        "taxWithPercent": "الضريبة ({percent}٪)",
+        "totalDue": "الإجمالي المستحق",
+        "proceedToPayment": "المتابعة إلى الدفع",
+        "noShiftWarning": "لا توجد وردية مفتوحة. افتح وردية قبل البيع.",
+        "openNewShift": "فتح وردية جديدة",
+        "heldAction": "معلقة",
+        "customerAction": "عميل",
+        "returnAction": "إرجاع",
+        "noteAction": "ملاحظة"
+      },
+      "openShiftDialog": {
+        "title": "بدء وردية جديدة",
+        "description": "أدخل المبلغ النقدي في الدرج عند بداية الوردية.",
+        "openingAmount": "المبلغ الافتتاحي",
+        "starting": "جارٍ الفتح...",
+        "start": "بدء الوردية"
+      },
+      "quickAddDialog": {
+        "title": "إضافة منتج جديد",
+        "description": "يُضاف المنتج إلى الكتالوج ويوضع في السلة الحالية مباشرة.",
+        "productName": "اسم المنتج",
+        "skuLabel": "الباركود / SKU (اختياري)",
+        "skuPlaceholder": "يُنشأ تلقائياً إن تُرك فارغاً",
+        "category": "الفئة",
+        "categoryUnspecified": "غير محدد",
+        "categoryCreateLabel": "إضافة فئة \"{draft}\"",
+        "categorySearchPlaceholder": "ابحث أو اكتب فئة جديدة...",
+        "categoryEmptyLabel": "لا توجد فئة مطابقة",
+        "price": "السعر",
+        "stock": "الكمية بالمخزون",
+        "priceIncludesTax": "السعر يشمل الضريبة",
+        "adding": "جارٍ الإضافة...",
+        "addToCart": "إضافة إلى السلة"
+      },
+      "checkoutDialog": {
+        "pleasePay": "الرجاء دفع {amount}",
+        "viaMethods": "من خلال الطرق الآتية",
+        "noMethodEnabled": "لا توجد طريقة دفع مفعّلة لمساحة العمل هذه. فعّل واحدة من إعدادات طرق الدفع.",
+        "selectedCustomer": "العميل المحدد",
+        "currentBalance": "رصيد العميل الحالي",
+        "totalInvoices": "إجمالي فواتير العميل",
+        "invoiceCount": "{count} فاتورة",
+        "excessOtherMethod": "المبلغ المدخل عبر طريقة أخرى أكبر من الإجمالي",
+        "remainingAmount": "المبلغ المتبقي",
+        "confirming": "جارٍ التأكيد...",
+        "completeSale": "إتمام العملية"
+      },
+      "confirmSaleDialog": {
+        "title": "تأكيد عملية البيع",
+        "description": "سيتم تسجيل عملية بيع بقيمة {amount}. هل تريد المتابعة؟",
+        "confirming": "جارٍ التأكيد...",
+        "confirmSale": "تأكيد البيع"
+      },
+      "discountDialog": {
+        "addToInvoice": "إضافة خصم على الفاتورة",
+        "description": "يمكنك إضافة خصم بقيمة محددة أو بنسبة مئوية",
+        "typeLabel": "نوع الخصم",
+        "percentOption": "نسبة مئوية",
+        "fixedOption": "قيمة محددة",
+        "valueLabel": "قيمة الخصم",
+        "percentHint": "أدخل نسبة الخصم من 0 إلى 100",
+        "fixedHint": "أدخل قيمة الخصم بالريال السعودي",
+        "includesTaxQuestion": "هل الخصم يشمل الضريبة؟",
+        "includesTax": "يشمل الضريبة",
+        "includesTaxHint": "في حال التفعيل، سيتم احتساب الخصم على المبلغ شامل الضريبة"
+      },
+      "lineDiscountDialog": {
+        "title": "خصم على الصنف",
+        "removeDiscount": "إزالة الخصم"
+      },
+      "priceEditDialog": {
+        "title": "تعديل سعر البيع",
+        "newPrice": "السعر الجديد",
+        "hint": "يسري هذا السعر على هذه الفاتورة فقط، ولا يغيّر سعر المنتج في صفحة المنتجات."
+      },
+      "variantDialog": {
+        "title": "اختر النوع",
+        "outOfStock": "نفدت الكمية",
+        "available": "المتوفر: {stock}",
+        "noneAvailable": "لا توجد أنواع متاحة لهذا المنتج."
+      },
+      "noteDialog": {
+        "title": "ملاحظة على الطلب",
+        "description": "تُحفظ مع الفاتورة عند إتمام الدفع.",
+        "placeholder": "مثال: بدون سكر، تغليف هدية..."
+      },
+      "customerDialog": {
+        "title": "اختيار عميل",
+        "description": "يملأ اسم العميل ورقم الجوال في الفاتورة.",
+        "nameLabel": "اسم العميل",
+        "namePlaceholder": "مثال: أحمد محمد",
+        "phoneLabel": "رقم الجوال (اختياري)",
+        "saving": "جارٍ الحفظ...",
+        "saveCustomer": "حفظ العميل",
+        "back": "رجوع",
+        "searchPlaceholder": "البحث بالاسم أو الجوال...",
+        "addNewAriaLabel": "إضافة عميل جديد",
+        "cashCustomerOption": "عميل نقدي (بلا بيانات)",
+        "noMatch": "لا يوجد عملاء مطابقون.",
+        "balance": "رصيد {amount}",
+        "topUp": "شحن"
+      },
+      "topUpDialog": {
+        "title": "شحن محفظة {name}",
+        "currentBalance": "الرصيد الحالي: {amount}",
+        "amount": "المبلغ",
+        "receivedVia": "استلمت المبلغ عبر",
+        "noMethod": "لا توجد طريقة دفع مناسبة مفعّلة لمساحة العمل هذه.",
+        "methodPlaceholder": "اختر طريقة الدفع",
+        "charging": "جارٍ الشحن...",
+        "chargeWallet": "شحن المحفظة"
+      },
+      "returnDialog": {
+        "title": "تسجيل إرجاع",
+        "description": "ابحث عن الفاتورة برقمها أو اسم العميل لتسجيل إرجاعها.",
+        "searchPlaceholder": "رقم الفاتورة أو اسم العميل...",
+        "searching": "جارٍ البحث...",
+        "noMatch": "لا توجد فواتير مطابقة.",
+        "registering": "جارٍ...",
+        "registerReturn": "تسجيل إرجاع"
+      },
+      "heldOrdersDialog": {
+        "title": "الطلبات المعلقة",
+        "description": "علّق الطلب الحالي لخدمة عميل آخر، أو استأنف طلبا معلقا.",
+        "holdCurrent": "علّق الطلب الحالي",
+        "holding": "جارٍ التعليق...",
+        "noOrders": "لا توجد طلبات معلقة.",
+        "resume": "استئناف",
+        "deleteAriaLabel": "حذف",
+        "productsCount": "{count} منتج"
+      },
+      "toasts": {
+        "shiftOpened": "تم فتح الوردية.",
+        "shiftOpenFailed": "تعذر فتح الوردية.",
+        "variantLoadFailed": "تعذر تحميل بيانات هذا المتغير.",
+        "productNameRequired": "أدخل اسم المنتج.",
+        "priceRequired": "أدخل سعراً صحيحاً.",
+        "productAdded": "تمت إضافة المنتج.",
+        "productAddFailed": "تعذر إضافة المنتج.",
+        "variantsLoadFailed": "تعذر تحميل أنواع هذا المنتج.",
+        "noOpenShift": "لا توجد وردية مفتوحة.",
+        "excessOtherMethod": "المبلغ المدخل عبر طريقة أخرى أكبر من الإجمالي.",
+        "remainingAmount": "المبلغ المتبقي {amount}",
+        "needCustomerForDeferred": "اختر عميلاً لتسجيل المبلغ الآجل في حسابه.",
+        "needCustomerForPrepaid": "اختر عميلاً للخصم من رصيد محفظته.",
+        "insufficientWallet": "رصيد محفظة العميل أقل من المبلغ المطلوب خصمه.",
+        "saleSuccess": "تمت العملية بنجاح — فاتورة {number}",
+        "salePermissionDenied": "لا تملك صلاحية إتمام البيع.",
+        "salePermissionDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
+        "saleFailed": "تعذر إتمام العملية.",
+        "customerNameRequired": "أدخل اسم العميل.",
+        "customerAdded": "تم إضافة العميل.",
+        "customerAddFailed": "تعذر إضافة العميل.",
+        "topUpAmountRequired": "أدخل مبلغاً صحيحاً.",
+        "topUpMethodRequired": "اختر طريقة الدفع التي استلمت بها المبلغ.",
+        "topUpSuccess": "تم شحن محفظة {name} بمبلغ {amount}.",
+        "topUpFailed": "تعذر شحن المحفظة.",
+        "returnSuccess": "تم تسجيل إرجاع الفاتورة {number}",
+        "returnFailed": "تعذر تسجيل الإرجاع.",
+        "orderHeld": "تم تعليق الطلب.",
+        "orderHoldFailed": "تعذر تعليق الطلب.",
+        "orderResumed": "تم استئناف الطلب.",
+        "orderResumeFailed": "تعذر استئناف الطلب.",
+        "heldOrderDeleted": "تم حذف الطلب المعلق.",
+        "heldOrderDeleteFailed": "تعذر حذف الطلب."
+      }
+    },
+    "creditNoteReceipt": {
+      "title": "إشعار دائن",
+      "sellerNameFallback": "المنشأة",
+      "noteNumber": "رقم الإشعار: {number}",
+      "saleInvoiceNumber": "رقم فاتورة البيع: {number}",
+      "storeAddress": "عنوان المتجر",
+      "invoiceTime": "وقت الفاتورة",
+      "vatNumber": "الرقم الضريبي",
+      "columns": {
+        "name": "الاسم",
+        "quantity": "الكمية",
+        "price": "السعر",
+        "vat": "ضريبة القيمة المضافة",
+        "totalWithTax": "المجموع (شامل الضريبة)"
+      },
+      "totalItems": "اجمالي الاصناف",
+      "taxableAmount": "المبلغ الخاضع للضريبة",
+      "discount": "الخصم",
+      "taxableAfterDiscount": "المبلغ الخاضع للضريبة بعد الخصم",
+      "vat": "ضريبة القيمة المضافة",
+      "total": "المجموع",
+      "paid": "المدفوع",
+      "qrAlt": "رمز الاستجابة السريع",
+      "qrFailed": "تعذر إنشاء رمز الاستجابة السريع لهذا الإشعار."
+    },
+    "thermalInvoiceReceipt": {
+      "sellerNameFallback": "المنشأة",
+      "simplifiedTaxInvoice": "فاتورة ضريبية مبسطة",
+      "invoiceNumber": "رقم الفاتورة: {number}",
+      "storeAddress": "عنوان المتجر",
+      "invoiceTime": "وقت الفاتورة",
+      "vatNumber": "الرقم الضريبي",
+      "customerName": "اسم العميل",
+      "customerPhone": "جوال العميل",
+      "customerVatNumber": "الرقم الضريبي للعميل",
+      "columns": {
+        "name": "الاسم",
+        "quantity": "الكمية",
+        "price": "السعر",
+        "vat": "ضريبة القيمة المضافة",
+        "totalWithTax": "المجموع (شامل الضريبة)"
+      },
+      "totalItems": "اجمالي الاصناف",
+      "taxableAmount": "المبلغ الخاضع للضريبة",
+      "discount": "الخصم",
+      "taxableAfterDiscount": "المبلغ الخاضع للضريبة بعد الخصم",
+      "vat": "ضريبة القيمة المضافة",
+      "total": "المجموع",
+      "qrAlt": "رمز الاستجابة السريع",
+      "qrFailed": "تعذر إنشاء رمز الاستجابة السريع لهذه الفاتورة."
+    },
+    "cashMovementDialog": {
+      "title": "سحب أو إيداع نقدي",
+      "description": "يُسجَّل على الوردية المفتوحة الآن ويظهر عند إغلاقها.",
+      "withdrawal": "سحب من الصندوق",
+      "deposit": "إيداع في الصندوق",
+      "amountLabel": "المبلغ",
+      "noteLabel": "ملاحظة (اختياري)",
+      "notePlaceholder": "مثال: تحويل نقدية زائدة للخزنة",
+      "saving": "جارٍ الحفظ...",
+      "confirm": "تأكيد",
+      "cancel": "إلغاء",
+      "toasts": {
+        "invalidAmount": "أدخل مبلغا صحيحا.",
+        "withdrawalRecorded": "تم تسجيل السحب.",
+        "depositRecorded": "تم تسجيل الإيداع.",
+        "recordFailed": "تعذر تسجيل العملية."
+      }
+    },
+    "shiftCloseDialog": {
+      "title": "إغلاق الوردية",
+      "description": "عدّ النقدية في الدرج وأكد المبلغ",
+      "summaryTitle": "ملخص الوردية",
+      "computingSales": "جارٍ حساب المبيعات...",
+      "openingBalance": "رصيد الافتتاح",
+      "cashSales": "مبيعات نقدية",
+      "otherSales": "مبيعات أخرى",
+      "returns": "المرتجعات",
+      "withdrawal": "سحب من الصندوق",
+      "deposit": "إيداع في الصندوق",
+      "expectedInDrawer": "المتوقع في الدرج",
+      "basedOnAllTransactions": "حسب جميع العمليات",
+      "countedAmountLabel": "المبلغ المعدود",
+      "deleteAriaLabel": "حذف",
+      "notesLabel": "ملاحظات (اختياري)",
+      "notesPlaceholder": "مثال: تسليم الوردية للمناوبة التالية",
+      "closing": "جارٍ الإغلاق...",
+      "confirmClose": "تأكيد الإغلاق",
+      "cancel": "إلغاء",
+      "invalidAmount": "أدخل مبلغا صحيحا",
+      "variance": {
+        "matches": "المبلغ المعدود مطابق للمتوقع",
+        "surplus": "زيادة بمقدار {amount}",
+        "shortage": "عجز بمقدار {amount}"
+      },
+      "toasts": {
+        "closed": "تم إنهاء الوردية.",
+        "closeFailed": "تعذر إنهاء الوردية."
+      }
+    }
   }
 }

@@ -8,9 +8,11 @@
 
 import { useEffect, useState } from "react"
 import { Wallet } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import type { Locale } from "@/i18n/locales"
 import { posShiftsService, type CashMovementType } from "@/features/pos/services/pos-shifts.service"
 
 import { Button } from "@/components/ui/button"
@@ -46,6 +48,8 @@ export function CashMovementDialog({
   onOpenChange,
   onRecorded,
 }: CashMovementDialogProps) {
+  const t = useTranslations("pos.cashMovementDialog")
+  const locale = useLocale() as Locale
   const [type, setType] = useState<CashMovementType>(initialType)
   const [amount, setAmount] = useState("")
   const [note, setNote] = useState("")
@@ -62,7 +66,7 @@ export function CashMovementDialog({
     if (!shiftId) return
     const parsedAmount = Number(amount)
     if (!parsedAmount || parsedAmount <= 0) {
-      toast.error("أدخل مبلغا صحيحا.")
+      toast.error(t("toasts.invalidAmount"))
       return
     }
     setSaving(true)
@@ -72,10 +76,12 @@ export function CashMovementDialog({
         amount: parsedAmount,
         note: note.trim() || null,
       })
-      toast.success(type === "withdrawal" ? "تم تسجيل السحب." : "تم تسجيل الإيداع.")
+      toast.success(
+        type === "withdrawal" ? t("toasts.withdrawalRecorded") : t("toasts.depositRecorded")
+      )
       onRecorded()
     } catch {
-      toast.error("تعذر تسجيل العملية.")
+      toast.error(t("toasts.recordFailed"))
     } finally {
       setSaving(false)
     }
@@ -83,13 +89,15 @@ export function CashMovementDialog({
 
   return (
     <Dialog open={shiftId !== null} onOpenChange={(open) => !saving && onOpenChange(open)}>
-      <DialogContent className="sm:max-w-[22rem] [direction:rtl]">
+      <DialogContent
+        className={cn("sm:max-w-[22rem]", locale === "ar" ? "[direction:rtl]" : "[direction:ltr]")}
+      >
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-            سحب أو إيداع نقدي
+            {t("title")}
           </DialogTitle>
           <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-            يُسجَّل على الوردية المفتوحة الآن ويظهر عند إغلاقها.
+            {t("description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -105,7 +113,7 @@ export function CashMovementDialog({
                   : "border-[#e8edf3] text-[#5b6b85]"
               )}
             >
-              سحب من الصندوق
+              {t("withdrawal")}
             </button>
             <button
               type="button"
@@ -117,12 +125,14 @@ export function CashMovementDialog({
                   : "border-[#e8edf3] text-[#5b6b85]"
               )}
             >
-              إيداع في الصندوق
+              {t("deposit")}
             </button>
           </div>
 
           <div>
-            <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>المبلغ</Label>
+            <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+              {t("amountLabel")}
+            </Label>
             <div className="relative">
               <Wallet className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
               <Input
@@ -139,12 +149,12 @@ export function CashMovementDialog({
 
           <div>
             <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              ملاحظة (اختياري)
+              {t("noteLabel")}
             </Label>
             <Input
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="مثال: تحويل نقدية زائدة للخزنة"
+              placeholder={t("notePlaceholder")}
               className={FIELD_CLASS}
             />
           </div>
@@ -156,7 +166,7 @@ export function CashMovementDialog({
             disabled={saving}
             onClick={() => void submit()}
           >
-            {saving ? "جارٍ الحفظ..." : "تأكيد"}
+            {saving ? t("saving") : t("confirm")}
           </Button>
           <Button
             variant="outline"
@@ -164,7 +174,7 @@ export function CashMovementDialog({
             disabled={saving}
             onClick={() => onOpenChange(false)}
           >
-            إلغاء
+            {t("cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>

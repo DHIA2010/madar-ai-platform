@@ -6,25 +6,31 @@
 // the real ZATCA TLV QR (see backend zatca-qr-code.ts) -- never a placeholder or mock screen.
 
 import { useEffect, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import QRCode from "qrcode"
 
+import type { Locale } from "@/i18n/locales"
 import type { Invoice } from "@/features/pos/services/pos-invoices.service"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
 
 interface ThermalInvoiceReceiptProps {
   invoice: Invoice
@@ -49,6 +55,10 @@ export function ThermalInvoiceReceipt({
   qrDataUrl: providedQrDataUrl,
   sellerLogoUrl,
 }: ThermalInvoiceReceiptProps) {
+  const t = useTranslations("pos.thermalInvoiceReceipt")
+  const locale = useLocale() as Locale
+  const AMOUNT_FORMAT = amountFormatter(locale)
+  const DATE_TIME_FORMAT = dateTimeFormatter(locale)
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -84,46 +94,48 @@ export function ThermalInvoiceReceipt({
             className="mx-auto mb-2 h-12 max-w-[60%] object-contain"
           />
         )}
-        <div className="text-[15px] font-bold">{invoice.sellerName || "المنشأة"}</div>
-        <div className="mt-2 text-[13px] font-bold">فاتورة ضريبية مبسطة</div>
+        <div className="text-[15px] font-bold">{invoice.sellerName || t("sellerNameFallback")}</div>
+        <div className="mt-2 text-[13px] font-bold">{t("simplifiedTaxInvoice")}</div>
         {/* Its own standalone line, not one more row in the label/value list below -- distinct
             enough to find at a glance, right under the seller's own identity. */}
-        <div className="mt-2 text-[12px] font-bold">رقم الفاتورة: {invoice.invoiceNumber}</div>
+        <div className="mt-2 text-[12px] font-bold">
+          {t("invoiceNumber", { number: invoice.invoiceNumber })}
+        </div>
       </div>
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
       {invoice.sellerAddress && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">عنوان المتجر</span>
+          <span className="text-[#5b6b85]">{t("storeAddress")}</span>
           <span>{invoice.sellerAddress}</span>
         </div>
       )}
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">وقت الفاتورة</span>
+        <span className="text-[#5b6b85]">{t("invoiceTime")}</span>
         <span>{DATE_TIME_FORMAT.format(new Date(invoice.createdAt))}</span>
       </div>
       {invoice.sellerVatNumber && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">الرقم الضريبي</span>
+          <span className="text-[#5b6b85]">{t("vatNumber")}</span>
           <span>{invoice.sellerVatNumber}</span>
         </div>
       )}
       {invoice.customerName && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">اسم العميل</span>
+          <span className="text-[#5b6b85]">{t("customerName")}</span>
           <span>{invoice.customerName}</span>
         </div>
       )}
       {invoice.customerPhone && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">جوال العميل</span>
+          <span className="text-[#5b6b85]">{t("customerPhone")}</span>
           <span>{invoice.customerPhone}</span>
         </div>
       )}
       {invoice.customerVatNumber && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">الرقم الضريبي للعميل</span>
+          <span className="text-[#5b6b85]">{t("customerVatNumber")}</span>
           <span>{invoice.customerVatNumber}</span>
         </div>
       )}
@@ -140,11 +152,11 @@ export function ThermalInvoiceReceipt({
         className="grid gap-x-1 pb-1.5 text-[9px] text-[#5b6b85]"
         style={{ gridTemplateColumns: "30% 12% 18% 19% 21%" }}
       >
-        <span className="px-1 text-start font-bold leading-[1.35]">الاسم</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">الكمية</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">السعر</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">ضريبة القيمة المضافة</span>
-        <span className="px-1 text-end font-bold leading-[1.35]">المجموع (شامل الضريبة)</span>
+        <span className="px-1 text-start font-bold leading-[1.35]">{t("columns.name")}</span>
+        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.quantity")}</span>
+        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.price")}</span>
+        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.vat")}</span>
+        <span className="px-1 text-end font-bold leading-[1.35]">{t("columns.totalWithTax")}</span>
       </div>
       {invoice.items.map((item, index) => (
         <div
@@ -177,27 +189,27 @@ export function ThermalInvoiceReceipt({
       {/* Always shown, unconditionally -- a real tax invoice is legally required to show its VAT
           breakdown, so this is never something a merchant can toggle off. */}
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">اجمالي الاصناف</span>
+        <span className="text-[#5b6b85]">{t("totalItems")}</span>
         <span>{invoice.items.length}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">المبلغ الخاضع للضريبة</span>
+        <span className="text-[#5b6b85]">{t("taxableAmount")}</span>
         <span>{AMOUNT_FORMAT.format(invoice.subtotalAmount)}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">الخصم</span>
+        <span className="text-[#5b6b85]">{t("discount")}</span>
         <span>{AMOUNT_FORMAT.format(invoice.discountAmount)}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">المبلغ الخاضع للضريبة بعد الخصم</span>
+        <span className="text-[#5b6b85]">{t("taxableAfterDiscount")}</span>
         <span>{AMOUNT_FORMAT.format(invoice.subtotalAmount - invoice.discountAmount)}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">ضريبة القيمة المضافة</span>
+        <span className="text-[#5b6b85]">{t("vat")}</span>
         <span>{AMOUNT_FORMAT.format(invoice.taxAmount)}</span>
       </div>
       <div className="mt-1 flex justify-between text-[14px] font-bold">
-        <span>المجموع</span>
+        <span>{t("total")}</span>
         <span>{AMOUNT_FORMAT.format(invoice.totalAmount)}</span>
       </div>
 
@@ -208,7 +220,7 @@ export function ThermalInvoiceReceipt({
           <span className="text-[#5b6b85]">
             {paymentMethodNames[payment.paymentMethodCode] ?? payment.paymentMethodCode}
           </span>
-          <span>{formatAmount(payment.amount)}</span>
+          <span>{formatAmount(payment.amount, locale)}</span>
         </div>
       ))}
 
@@ -216,13 +228,13 @@ export function ThermalInvoiceReceipt({
         {qrDataUrl ? (
           // A locally-generated data: URI, not a remote image -- next/image cannot optimize one.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qrDataUrl} alt="رمز الاستجابة السريع" className="h-[130px] w-[130px]" />
+          <img src={qrDataUrl} alt={t("qrAlt")} className="h-[130px] w-[130px]" />
         ) : (
           // A QR is generated for every sale regardless of the seller's tax profile (see
           // invoices-service.ts's create()), so reaching this branch means the QR image itself
           // failed to render -- a technical hiccup, not a missing VAT number.
           <div className="max-w-[220px] rounded-md border border-[#f0c36d] bg-[#fff8e8] px-2 py-2 text-center text-[10px] text-[#8a6116]">
-            تعذر إنشاء رمز الاستجابة السريع لهذه الفاتورة.
+            {t("qrFailed")}
           </div>
         )}
       </div>

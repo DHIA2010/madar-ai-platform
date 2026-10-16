@@ -20,9 +20,11 @@ import {
   RotateCcw,
   Wallet,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import type { Locale } from "@/i18n/locales"
 import { posShiftsService, type Shift } from "@/features/pos/services/pos-shifts.service"
 import { posInvoicesService } from "@/features/pos/services/pos-invoices.service"
 import { posPaymentMethodsService } from "@/features/pos/services/pos-payment-methods.service"
@@ -44,12 +46,14 @@ const MUTED = "text-[#5b6b85]"
 const FIELD_CLASS =
   "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
 interface CloseShiftSummary {
@@ -68,6 +72,8 @@ export interface ShiftCloseDialogProps {
 }
 
 export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDialogProps) {
+  const t = useTranslations("pos.shiftCloseDialog")
+  const locale = useLocale() as Locale
   const [closingCashAmount, setClosingCashAmount] = useState("")
   const [closingNotes, setClosingNotes] = useState("")
   const [closing, setClosing] = useState(false)
@@ -177,7 +183,7 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
   }
 
   const closeErrors = {
-    amount: closingCashAmount.trim() && Number(closingCashAmount) >= 0 ? null : "أدخل مبلغا صحيحا",
+    amount: closingCashAmount.trim() && Number(closingCashAmount) >= 0 ? null : t("invalidAmount"),
   }
   const isCloseFormValid = Object.values(closeErrors).every((error) => error === null)
 
@@ -192,10 +198,10 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
         closingCashAmount: Number(closingCashAmount),
         closingNotes: closingNotes.trim() || null,
       })
-      toast.success("تم إنهاء الوردية.")
+      toast.success(t("toasts.closed"))
       onClosed(updated)
     } catch {
-      toast.error("تعذر إنهاء الوردية.")
+      toast.error(t("toasts.closeFailed"))
     } finally {
       setClosing(false)
     }
@@ -208,7 +214,9 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
         if (!closing && !open) onOpenChange(false)
       }}
     >
-      <DialogContent className="sm:max-w-[44rem] [direction:rtl]">
+      <DialogContent
+        className={cn("sm:max-w-[44rem]", locale === "ar" ? "[direction:rtl]" : "[direction:ltr]")}
+      >
         <DialogHeader className="text-right">
           {/* RTL: the lock badge is written first so it lands at the physical right (the
               dialog's own default close button stays at its usual spot, the left). */}
@@ -218,10 +226,10 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
             </span>
             <div className="flex-1">
               <DialogTitle className={cn("text-[16px] font-extrabold", HEADING)}>
-                إغلاق الوردية
+                {t("title")}
               </DialogTitle>
               <DialogDescription className={cn("text-[12px]", MUTED)}>
-                عدّ النقدية في الدرج وأكد المبلغ
+                {t("description")}
               </DialogDescription>
             </div>
           </div>
@@ -235,53 +243,59 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
               <span className="flex size-7 items-center justify-center rounded-lg bg-[#eff6ff] text-[#2563eb]">
                 <BarChart3 className="size-4" />
               </span>
-              <p className={cn("text-[13px] font-extrabold", HEADING)}>ملخص الوردية</p>
+              <p className={cn("text-[13px] font-extrabold", HEADING)}>{t("summaryTitle")}</p>
             </div>
 
             {loadingCloseSummary ? (
               <div className={cn("flex items-center gap-2 py-6 text-[12px]", MUTED)}>
                 <Loader2 className="size-3.5 animate-spin" />
-                جارٍ حساب المبيعات...
+                {t("computingSales")}
               </div>
             ) : (
               <>
                 <SummaryRow
                   icon={Wallet}
                   iconClassName="text-[#5b6b85]"
-                  label="رصيد الافتتاح"
+                  label={t("openingBalance")}
                   value={shift?.openingCashAmount ?? 0}
+                  locale={locale}
                 />
                 <SummaryRow
                   icon={Banknote}
                   iconClassName="text-[#16a34a]"
-                  label="مبيعات نقدية"
+                  label={t("cashSales")}
                   value={closeSummary?.cashSales ?? 0}
+                  locale={locale}
                 />
                 <SummaryRow
                   icon={CreditCard}
                   iconClassName="text-[#2563eb]"
-                  label="مبيعات أخرى"
+                  label={t("otherSales")}
                   value={closeSummary?.otherSales ?? 0}
+                  locale={locale}
                 />
                 <SummaryRow
                   icon={RotateCcw}
                   iconClassName="text-[#dc2626]"
-                  label="المرتجعات"
+                  label={t("returns")}
                   value={closeSummary?.cashReturns ?? 0}
                   negative
+                  locale={locale}
                 />
                 <SummaryRow
                   icon={ArrowUpFromLine}
                   iconClassName="text-[#d97706]"
-                  label="سحب من الصندوق"
+                  label={t("withdrawal")}
                   value={closeSummary?.withdrawals ?? 0}
                   negative
+                  locale={locale}
                 />
                 <SummaryRow
                   icon={ArrowDownToLine}
                   iconClassName="text-[#0891b2]"
-                  label="إيداع في الصندوق"
+                  label={t("deposit")}
                   value={closeSummary?.deposits ?? 0}
+                  locale={locale}
                 />
 
                 <div className="mt-1 flex items-center justify-between rounded-[12px] bg-[#eff6ff] px-3.5 py-3">
@@ -289,13 +303,13 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
                     className={cn("flex items-center gap-1.5 text-[12.5px] font-bold", HEADING)}
                   >
                     <Wallet className="size-4 text-[#2563eb]" />
-                    المتوقع في الدرج
+                    {t("expectedInDrawer")}
                   </span>
                   <span className="text-[15px] font-extrabold text-[#2563eb]">
-                    {formatAmount(expectedCashAmount ?? 0)}
+                    {formatAmount(expectedCashAmount ?? 0, locale)}
                   </span>
                 </div>
-                <p className={cn("text-[10.5px]", MUTED)}>حسب جميع العمليات</p>
+                <p className={cn("text-[10.5px]", MUTED)}>{t("basedOnAllTransactions")}</p>
 
                 {closingCashAmount.trim() && expectedCashAmount !== null ? (
                   <VarianceMessage
@@ -308,8 +322,11 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
           </div>
 
           <div dir="ltr" className="order-1 flex flex-col gap-3 sm:order-2">
-            <Label className={cn("block text-right text-[12px] font-semibold", HEADING)} dir="rtl">
-              المبلغ المعدود
+            <Label
+              className={cn("block text-right text-[12px] font-semibold", HEADING)}
+              dir={locale === "ar" ? "rtl" : "ltr"}
+            >
+              {t("countedAmountLabel")}
             </Label>
             <div className="flex h-14 items-center gap-2 rounded-[12px] border-2 border-[#2563eb] bg-white px-3">
               <span className={cn("flex-1 text-right text-[20px] font-extrabold", HEADING)}>
@@ -321,11 +338,14 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
                   HEADING
                 )}
               >
-                ر.س
+                {locale === "ar" ? "ر.س" : "SAR"}
               </span>
             </div>
             {showCloseErrors && closeErrors.amount ? (
-              <p className="text-right text-[10.5px] text-[#e0484d]" dir="rtl">
+              <p
+                className="text-right text-[10.5px] text-[#e0484d]"
+                dir={locale === "ar" ? "rtl" : "ltr"}
+              >
                 {closeErrors.amount}
               </p>
             ) : null}
@@ -380,7 +400,7 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
               <button
                 type="button"
                 onClick={backspaceDigit}
-                aria-label="حذف"
+                aria-label={t("deleteAriaLabel")}
                 className="flex h-11 items-center justify-center rounded-[10px] bg-[#f4f7fc] text-[#5b6b85] hover:bg-[#eef2f8]"
               >
                 <Delete className="size-4" />
@@ -391,12 +411,12 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
 
         <div>
           <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            ملاحظات (اختياري)
+            {t("notesLabel")}
           </Label>
           <Input
             value={closingNotes}
             onChange={(event) => setClosingNotes(event.target.value)}
-            placeholder="مثال: تسليم الوردية للمناوبة التالية"
+            placeholder={t("notesPlaceholder")}
             className={FIELD_CLASS}
           />
         </div>
@@ -408,7 +428,7 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
             onClick={() => void submitCloseShift()}
           >
             <Lock className="size-4" />
-            {closing ? "جارٍ الإغلاق..." : "تأكيد الإغلاق"}
+            {closing ? t("closing") : t("confirmClose")}
             {closing ? <Loader2 className="size-4 animate-spin" /> : null}
           </Button>
           <Button
@@ -417,7 +437,7 @@ export function ShiftCloseDialog({ shift, onOpenChange, onClosed }: ShiftCloseDi
             disabled={closing}
             onClick={() => onOpenChange(false)}
           >
-            إلغاء
+            {t("cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -431,12 +451,14 @@ function SummaryRow({
   label,
   value,
   negative = false,
+  locale,
 }: {
   icon: typeof Wallet
   iconClassName?: string
   label: string
   value: number
   negative?: boolean
+  locale: Locale
 }) {
   return (
     <div className="flex items-center justify-between text-[12.5px]">
@@ -446,7 +468,7 @@ function SummaryRow({
       </span>
       <span className={cn("font-bold", HEADING)}>
         {negative && value > 0 ? "-" : ""}
-        {formatAmount(value)}
+        {formatAmount(value, locale)}
       </span>
     </div>
   )
@@ -456,13 +478,15 @@ function SummaryRow({
 // shown once a count has been typed in, so an empty field never reads as "already short by the
 // full expected amount."
 function VarianceMessage({ expected, counted }: { expected: number; counted: number }) {
+  const t = useTranslations("pos.shiftCloseDialog")
+  const locale = useLocale() as Locale
   const variance = Math.round((counted - expected) * 100) / 100
 
   if (variance === 0) {
     return (
       <p className="flex items-center gap-1.5 rounded-[10px] bg-[#f0fdf4] px-3 py-2 text-[12px] font-semibold text-[#15803d]">
         <CheckCircle2 className="size-4" />
-        المبلغ المعدود مطابق للمتوقع
+        {t("variance.matches")}
       </p>
     )
   }
@@ -476,7 +500,9 @@ function VarianceMessage({ expected, counted }: { expected: number; counted: num
       )}
     >
       {isSurplus ? <ArrowDownToLine className="size-4" /> : <ArrowUpFromLine className="size-4" />}
-      {isSurplus ? "زيادة" : "عجز"} بمقدار {formatAmount(Math.abs(variance))}
+      {t(isSurplus ? "variance.surplus" : "variance.shortage", {
+        amount: formatAmount(Math.abs(variance), locale),
+      })}
     </p>
   )
 }

@@ -9,22 +9,28 @@
 // account credit.
 
 import { useEffect, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import QRCode from "qrcode"
 
+import type { Locale } from "@/i18n/locales"
 import type { InvoiceReturn } from "@/features/pos/services/pos-invoices.service"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
 
 interface CreditNoteReceiptProps {
   creditNote: InvoiceReturn
@@ -44,6 +50,10 @@ export function CreditNoteReceipt({
   sellerLogoUrl,
   paymentMethodNames = {},
 }: CreditNoteReceiptProps) {
+  const t = useTranslations("pos.creditNoteReceipt")
+  const locale = useLocale() as Locale
+  const AMOUNT_FORMAT = amountFormatter(locale)
+  const DATE_TIME_FORMAT = dateTimeFormatter(locale)
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -81,29 +91,35 @@ export function CreditNoteReceipt({
         {/* Document title first, seller name below it -- the inverse hierarchy of the invoice
             receipt (there the seller's own name is the largest text), matching how a credit note
             is a correction document first and foremost, issued BY that seller. */}
-        <div className="text-[16px] font-extrabold">إشعار دائن</div>
-        <div className="mt-1 text-[13px] font-bold">{creditNote.sellerName || "المنشأة"}</div>
-        <div className="mt-2 text-[12px] font-bold">رقم الإشعار: {creditNote.returnNumber}</div>
+        <div className="text-[16px] font-extrabold">{t("title")}</div>
+        <div className="mt-1 text-[13px] font-bold">
+          {creditNote.sellerName || t("sellerNameFallback")}
+        </div>
+        <div className="mt-2 text-[12px] font-bold">
+          {t("noteNumber", { number: creditNote.returnNumber })}
+        </div>
         {/* The one field that makes this a CORRECTION rather than a standalone document -- always
             traceable back to exactly which sale it returns against. */}
-        <div className="text-[12px] font-bold">رقم فاتورة البيع: {creditNote.invoiceNumber}</div>
+        <div className="text-[12px] font-bold">
+          {t("saleInvoiceNumber", { number: creditNote.invoiceNumber })}
+        </div>
       </div>
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
       {creditNote.sellerAddress && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">عنوان المتجر</span>
+          <span className="text-[#5b6b85]">{t("storeAddress")}</span>
           <span>{creditNote.sellerAddress}</span>
         </div>
       )}
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">وقت الفاتورة</span>
+        <span className="text-[#5b6b85]">{t("invoiceTime")}</span>
         <span>{DATE_TIME_FORMAT.format(new Date(creditNote.createdAt))}</span>
       </div>
       {creditNote.sellerVatNumber && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">الرقم الضريبي</span>
+          <span className="text-[#5b6b85]">{t("vatNumber")}</span>
           <span>{creditNote.sellerVatNumber}</span>
         </div>
       )}
@@ -117,11 +133,11 @@ export function CreditNoteReceipt({
         className="grid gap-x-1 pb-1.5 text-[9px] text-[#5b6b85]"
         style={{ gridTemplateColumns: "30% 12% 18% 19% 21%" }}
       >
-        <span className="px-1 text-start font-bold leading-[1.35]">الاسم</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">الكمية</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">السعر</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">ضريبة القيمة المضافة</span>
-        <span className="px-1 text-end font-bold leading-[1.35]">المجموع (شامل الضريبة)</span>
+        <span className="px-1 text-start font-bold leading-[1.35]">{t("columns.name")}</span>
+        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.quantity")}</span>
+        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.price")}</span>
+        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.vat")}</span>
+        <span className="px-1 text-end font-bold leading-[1.35]">{t("columns.totalWithTax")}</span>
       </div>
       {creditNote.items.map((item, index) => (
         <div
@@ -148,33 +164,33 @@ export function CreditNoteReceipt({
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">اجمالي الاصناف</span>
+        <span className="text-[#5b6b85]">{t("totalItems")}</span>
         <span>{creditNote.items.length}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">المبلغ الخاضع للضريبة</span>
+        <span className="text-[#5b6b85]">{t("taxableAmount")}</span>
         <span>{AMOUNT_FORMAT.format(creditNote.subtotalAmount)}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">الخصم</span>
+        <span className="text-[#5b6b85]">{t("discount")}</span>
         <span>{AMOUNT_FORMAT.format(creditNote.discountAmount)}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">المبلغ الخاضع للضريبة بعد الخصم</span>
+        <span className="text-[#5b6b85]">{t("taxableAfterDiscount")}</span>
         <span>{AMOUNT_FORMAT.format(creditNote.subtotalAmount - creditNote.discountAmount)}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">ضريبة القيمة المضافة</span>
+        <span className="text-[#5b6b85]">{t("vat")}</span>
         <span>{AMOUNT_FORMAT.format(creditNote.taxAmount)}</span>
       </div>
       <div className="mt-1 flex justify-between text-[14px] font-bold">
-        <span>المجموع</span>
+        <span>{t("total")}</span>
         <span>{AMOUNT_FORMAT.format(creditNote.totalAmount)}</span>
       </div>
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
-      <p className="text-[12px] font-bold">المدفوع</p>
+      <p className="text-[12px] font-bold">{t("paid")}</p>
       {creditNote.payments.map((payment, index) => (
         <div key={index} className="flex justify-between text-[11px]">
           <span className="text-[#5b6b85]">
@@ -187,10 +203,10 @@ export function CreditNoteReceipt({
       <div className="my-3 flex flex-col items-center">
         {qrDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qrDataUrl} alt="رمز الاستجابة السريع" className="h-[130px] w-[130px]" />
+          <img src={qrDataUrl} alt={t("qrAlt")} className="h-[130px] w-[130px]" />
         ) : (
           <div className="max-w-[220px] rounded-md border border-[#f0c36d] bg-[#fff8e8] px-2 py-2 text-center text-[10px] text-[#8a6116]">
-            تعذر إنشاء رمز الاستجابة السريع لهذا الإشعار.
+            {t("qrFailed")}
           </div>
         )}
       </div>
