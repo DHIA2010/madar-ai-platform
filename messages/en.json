@@ -6823,5 +6823,166 @@
         "viewRecommendations": "View Recommendations"
       }
     }
+  },
+  "integrations": {
+    "connectorLogo": {
+      "alt": "{platform} logo"
+    },
+    "connectionsCenter": {
+      "fallbackConnectedAccount": "Connected account",
+      "errors": {
+        "refreshFailed": "Connection could not be refreshed after sync.",
+        "retryUnavailable": "Retry is unavailable for the latest operation."
+      }
+    },
+    "syncAllDialog": {
+      "title": "Sync All Integrations",
+      "description": "This will run sync for all active integrations in the current workspace.",
+      "closeAria": "Close",
+      "stats": {
+        "activeIntegrations": "Active integrations",
+        "estimatedDuration": "Estimated duration",
+        "estimatedDurationValue": "About {minutes} min",
+        "runsInBackground": "Runs in background",
+        "runsInBackgroundHint": "You can keep working while it syncs."
+      },
+      "listTitle": "Integrations that will be synced",
+      "emptyState": "No active integrations available to sync in the current workspace.",
+      "rowStatus": {
+        "active": "Active",
+        "syncing": "Syncing",
+        "paused": "Paused",
+        "readyToSync": "Ready to sync"
+      },
+      "notice": {
+        "title": "Important",
+        "description": "Sync will update the latest data, including products, orders, customers, and more."
+      },
+      "actions": {
+        "starting": "Starting...",
+        "start": "Start Sync"
+      },
+      "toasts": {
+        "nothingToSync": "No integrations available to sync",
+        "allSucceeded": "{count} integrations synced successfully.",
+        "partialFailure": "{completed} completed and {failed} failed",
+        "retryFailedAction": "Retry failed",
+        "genericError": "Couldn't sync integrations. Try again."
+      },
+      "overlay": {
+        "queued": "Queued",
+        "syncing": "Syncing...",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    },
+    "scheduleSettings": {
+      "breadcrumb": {
+        "integrations": "Integrations",
+        "scheduleSettings": "Schedule Settings"
+      },
+      "backToDetails": "Back to integration details",
+      "connectionNotFound": "Connection not found",
+      "header": {
+        "title": "Schedule Settings",
+        "subtitle": "Control when and how often integration data syncs"
+      },
+      "stats": {
+        "lastSync": {
+          "label": "Last sync",
+          "success": "Succeeded",
+          "failed": "Last attempt failed",
+          "notRunYet": "Not run yet"
+        },
+        "timezone": {
+          "label": "Timezone"
+        },
+        "enabled": "Schedule enabled",
+        "disabled": "Schedule disabled",
+        "enabledHint": "Sync runs automatically based on your settings",
+        "disabledHint": "Sync will not run automatically"
+      },
+      "syncSchedule": {
+        "title": "Sync Schedule",
+        "frequencyLabel": "Sync frequency",
+        "custom": "Custom",
+        "frequencyOptions": {
+          "daily": "Daily",
+          "every6Hours": "Every 6 hours",
+          "everyHour": "Every hour",
+          "every30Minutes": "Every 30 minutes",
+          "every15Minutes": "Every 15 minutes"
+        },
+        "customCronPlaceholder": "*/30 * * * *",
+        "customCronHint": "A standard 5-field cron format (minute, hour, day of month, month, day of week), in the timezone selected below.",
+        "activeDaysLabel": "Active days",
+        "days": {
+          "sunday": "Sunday",
+          "monday": "Monday",
+          "tuesday": "Tuesday",
+          "wednesday": "Wednesday",
+          "thursday": "Thursday",
+          "friday": "Friday",
+          "saturday": "Saturday"
+        },
+        "startTimeLabel": "Start time",
+        "timezoneLabel": "Timezone"
+      },
+      "timezones": {
+        "riyadh": "Riyadh (GMT+3)",
+        "dubai": "Dubai (GMT+4)",
+        "kuwait": "Kuwait (GMT+3)",
+        "cairo": "Cairo (GMT+2)",
+        "istanbul": "Istanbul (GMT+3)",
+        "london": "London (GMT+0)",
+        "newYork": "New York (GMT-5)",
+        "utc": "Universal Time (UTC)"
+      },
+      "advancedSync": {
+        "title": "Advanced Sync",
+        "autoRetryOnConnectionFailure": {
+          "title": "Automatically retry sync on connection failure",
+          "hint": "If the connection fails, sync will automatically be retried"
+        },
+        "retryOnFailure": {
+          "title": "Retry on failure",
+          "hint": "Number of retry attempts when sync fails"
+        },
+        "retryOptions": {
+          "none": "No retry",
+          "once": "Once",
+          "twice": "Twice",
+          "threeTimes": "3 times",
+          "fiveTimes": "5 times"
+        },
+        "notifyOnFailure": {
+          "title": "Sync failure notifications",
+          "hint": "Send a notification when sync fails"
+        }
+      },
+      "nextSync": {
+        "title": "Next Sync",
+        "subtitle": "Next sync time based on current settings",
+        "statusLabel": "Status",
+        "scheduled": "Scheduled",
+        "paused": "Paused",
+        "dateTimeLabel": "Date & time"
+      },
+      "actions": {
+        "save": "Save Settings",
+        "saving": "Saving..."
+      },
+      "toasts": {
+        "saveSuccess": "Schedule settings saved successfully."
+      },
+      "errors": {
+        "loadFailed": "Couldn't load schedule settings.",
+        "saveFailed": "Couldn't save schedule settings."
+      },
+      "validation": {
+        "invalidCron": "Invalid custom schedule format -- it must have 5 fields.",
+        "selectAtLeastOneDay": "Select at least one active day."
+      }
+    }
   }
 }

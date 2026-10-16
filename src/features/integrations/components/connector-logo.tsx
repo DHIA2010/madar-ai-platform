@@ -10,6 +10,7 @@
 // can restyle the frame without the artwork inside it changing.
 
 import Image from "next/image"
+import { useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
@@ -24,11 +25,13 @@ export function ConnectorLogo({
   platformName: string
   className?: string
 }) {
+  const t = useTranslations("integrations")
   const frameClassName = className ?? DEFAULT_FRAME_CLASS
+  const logoAlt = t("connectorLogo.alt", { platform: platformName })
 
   if (platformName === "Google Analytics 4") {
     return (
-      <div className={frameClassName} aria-label="Google Analytics 4 logo">
+      <div className={frameClassName} aria-label={logoAlt}>
         <svg
           viewBox="0 0 36 36"
           width="36"
@@ -47,7 +50,7 @@ export function ConnectorLogo({
 
   if (platformName === "Google Ads") {
     return (
-      <div className={frameClassName} aria-label="Google Ads logo">
+      <div className={frameClassName} aria-label={logoAlt}>
         <svg
           viewBox="0 0 36 36"
           width="36"
@@ -72,7 +75,7 @@ export function ConnectorLogo({
 
   if (platformName === "Meta Ads") {
     return (
-      <div className={cn(frameClassName, "relative")} aria-label="Meta Ads logo">
+      <div className={cn(frameClassName, "relative")} aria-label={logoAlt}>
         <Image src={ASSETS.platforms.meta} alt="Meta Ads" fill className="object-contain p-0.5" />
       </div>
     )
@@ -80,7 +83,7 @@ export function ConnectorLogo({
 
   if (platformName === "TikTok Ads") {
     return (
-      <div className={frameClassName} aria-label="TikTok Ads logo">
+      <div className={frameClassName} aria-label={logoAlt}>
         <svg
           viewBox="0 0 36 36"
           width="36"
@@ -99,7 +102,7 @@ export function ConnectorLogo({
 
   if (platformName === "Snapchat Ads") {
     return (
-      <div className={frameClassName} aria-label="Snapchat Ads logo">
+      <div className={frameClassName} aria-label={logoAlt}>
         <svg
           viewBox="0 0 36 36"
           width="36"
@@ -122,7 +125,7 @@ export function ConnectorLogo({
 
   if (platformName === "Salla") {
     return (
-      <div className={cn(frameClassName, "relative")} aria-label="Salla logo">
+      <div className={cn(frameClassName, "relative")} aria-label={logoAlt}>
         <Image src={ASSETS.platforms.salla} alt="Salla" fill className="object-contain p-0.5" />
       </div>
     )
@@ -130,7 +133,7 @@ export function ConnectorLogo({
 
   if (platformName === "Shopify") {
     return (
-      <div className={cn(frameClassName, "relative")} aria-label="Shopify logo">
+      <div className={cn(frameClassName, "relative")} aria-label={logoAlt}>
         <Image src={ASSETS.platforms.shopify} alt="Shopify" fill className="object-contain p-0.5" />
       </div>
     )
@@ -138,7 +141,7 @@ export function ConnectorLogo({
 
   if (platformName === "Zid") {
     return (
-      <div className={cn(frameClassName, "relative")} aria-label="Zid logo">
+      <div className={cn(frameClassName, "relative")} aria-label={logoAlt}>
         <Image src={ASSETS.platforms.zid} alt="Zid" fill className="object-contain p-0.5" />
       </div>
     )

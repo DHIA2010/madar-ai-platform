@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -23,29 +24,42 @@ import type { ConnectionCenterRecord } from "../types"
 import { ConnectorLogo } from "./connector-logo"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
+
+type SyncAllDialogTranslator = ReturnType<typeof useTranslations<"integrations.syncAllDialog">>
 
 // Only the statuses a runnable connection can actually be in; anything else falls through
 // to the neutral label rather than being asserted as active.
-const ROW_STATUS: Record<string, { label: string; className: string; dot: string }> = {
-  connected: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
-  valid: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
-  authorized: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
-  syncing: {
-    label: "قيد المزامنة",
-    className: "bg-[#eef4ff] text-[#2878ff]",
-    dot: "bg-[#2878ff]",
-  },
-  paused: { label: "متوقف", className: "bg-[#fffbeb] text-[#e08b00]", dot: "bg-[#e08b00]" },
-}
-
-function rowStatus(status: string) {
-  return (
-    ROW_STATUS[status] ?? {
-      label: "جاهز للمزامنة",
-      className: "bg-[#eef2f8] text-[#5b6b85]",
-      dot: "bg-[#95a4bd]",
+function rowStatus(status: string, t: SyncAllDialogTranslator) {
+  if (status === "connected" || status === "valid" || status === "authorized") {
+    return {
+      label: t("rowStatus.active"),
+      className: "bg-[#e9f8ef] text-[#1f9d55]",
+      dot: "bg-[#1f9d55]",
     }
-  )
+  }
+
+  if (status === "syncing") {
+    return {
+      label: t("rowStatus.syncing"),
+      className: "bg-[#eef4ff] text-[#2878ff]",
+      dot: "bg-[#2878ff]",
+    }
+  }
+
+  if (status === "paused") {
+    return {
+      label: t("rowStatus.paused"),
+      className: "bg-[#fffbeb] text-[#e08b00]",
+      dot: "bg-[#e08b00]",
+    }
+  }
+
+  return {
+    label: t("rowStatus.readyToSync"),
+    className: "bg-[#eef2f8] text-[#5b6b85]",
+    dot: "bg-[#95a4bd]",
+  }
 }
 
 interface SyncAllDialogProps {
@@ -69,6 +83,11 @@ export function SyncAllDialog({
   isSyncing,
   onRunSync,
 }: SyncAllDialogProps) {
+  const t = useTranslations("integrations.syncAllDialog")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
+
   const runnableRecords = useMemo(
     () =>
       records.filter(
@@ -103,15 +122,15 @@ export function SyncAllDialog({
 
   const executeSyncAll = async () => {
     if (syncStats.total === 0) {
-      toast.info("لا توجد تكاملات قابلة للمزامنة")
+      toast.info(t("toasts.nothingToSync"))
       onOpenChange(false)
       return
     }
 
     onSyncStart()
-    // The dialog promises "تعمل في الخلفية", so it closes as soon as the run is kicked off
-    // rather than holding the user on a modal until every connection finishes. The async
-    // work below keeps running; only the modal content unmounts.
+    // The dialog promises it "runs in background" (stats.runsInBackground below), so it closes
+    // as soon as the run is kicked off rather than holding the user on a modal until every
+    // connection finishes. The async work below keeps running; only the modal content unmounts.
     onOpenChange(false)
 
     try {
@@ -140,17 +159,20 @@ export function SyncAllDialog({
 
       // Show completion toast
       if (results.failed === 0) {
-        toast.success(`تمت مزامنة ${results.completed} تكاملات بنجاح.`)
+        toast.success(t("toasts.allSucceeded", { count: results.completed }))
       } else {
-        toast.error(`اكتمل ${results.completed} وفشل ${results.failed}`, {
-          action: {
-            label: "إعادة محاولة الفاشلة",
-            onClick: () => retryFailedSyncs(results.failedIds),
-          },
-        })
+        toast.error(
+          t("toasts.partialFailure", { completed: results.completed, failed: results.failed }),
+          {
+            action: {
+              label: t("toasts.retryFailedAction"),
+              onClick: () => retryFailedSyncs(results.failedIds),
+            },
+          }
+        )
       }
     } catch (err) {
-      toast.error("تعذّرت مزامنة التكاملات. حاول مرة أخرى.")
+      toast.error(t("toasts.genericError"))
       console.error("Sync all error:", err)
     } finally {
       onSyncEnd()
@@ -175,9 +197,9 @@ export function SyncAllDialog({
     }
 
     if (failed === 0) {
-      toast.success(`تمت مزامنة ${completed} تكاملات بنجاح.`)
+      toast.success(t("toasts.allSucceeded", { count: completed }))
     } else {
-      toast.error(`اكتمل ${completed} وفشل ${failed}`)
+      toast.error(t("toasts.partialFailure", { completed, failed }))
     }
 
     onSyncEnd()
@@ -189,23 +211,23 @@ export function SyncAllDialog({
       tint: "text-[#2878ff]",
       fill: "bg-[#eaf1ff]",
       value: String(syncStats.total),
-      label: "عدد التكاملات النشطة",
+      label: t("stats.activeIntegrations"),
     },
     {
       icon: Clock,
       tint: "text-[#1f9d55]",
       fill: "bg-[#e9f8ef]",
       // A rough estimate from the connection count, not a measured figure -- the wording
-      // says "حوالي" because that is all it can honestly claim.
-      value: `حوالي ${syncStats.estimatedDuration} دقيقة`,
-      label: "المدة المتوقعة",
+      // says "About" because that is all it can honestly claim.
+      value: t("stats.estimatedDurationValue", { minutes: syncStats.estimatedDuration }),
+      label: t("stats.estimatedDuration"),
     },
     {
       icon: Zap,
       tint: "text-[#8b5cf6]",
       fill: "bg-[#f3eeff]",
-      value: "تعمل في الخلفية",
-      label: "يمكنك مواصلة العمل أثناء المزامنة.",
+      value: t("stats.runsInBackground"),
+      label: t("stats.runsInBackgroundHint"),
     },
   ]
 
@@ -217,8 +239,8 @@ export function SyncAllDialog({
       contentClassName={cn(cairo.className, "max-w-[52rem] gap-0 rounded-[20px] p-0")}
     >
       {/* The dialog portals to the body, so it does not inherit the integrations page's own
-          dir="rtl" wrapper -- it has to declare direction and font for itself. */}
-      <div dir="rtl" className="space-y-5 p-6 text-right md:p-7">
+          dir wrapper -- it has to declare direction and font for itself. */}
+      <div dir={dir} className="space-y-5 p-6 text-right md:p-7">
         {/* RTL: the icon+title group is written first so it lands on the right, close left. */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3.5">
@@ -227,17 +249,15 @@ export function SyncAllDialog({
             </span>
             <div className="space-y-1.5">
               <h2 className="text-[20px] font-extrabold leading-tight text-[#0b1738]">
-                مزامنة جميع التكاملات
+                {t("title")}
               </h2>
-              <p className="text-[12.5px] leading-6 text-[#6b7b96]">
-                سيتم تشغيل المزامنة لجميع التكاملات النشطة في مساحة العمل الحالية.
-              </p>
+              <p className="text-[12.5px] leading-6 text-[#6b7b96]">{t("description")}</p>
             </div>
           </div>
 
           <button
             type="button"
-            aria-label="إغلاق"
+            aria-label={t("closeAria")}
             className="-m-1 shrink-0 cursor-pointer rounded-lg p-1 text-[#95a4bd] transition-colors hover:bg-[#f2f5fa] hover:text-[#0b1738] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40"
             onClick={() => onOpenChange(false)}
           >
@@ -267,18 +287,16 @@ export function SyncAllDialog({
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-[14px] font-extrabold text-[#0b1738]">
-            التكاملات التي سيتم مزامنتها
-          </h3>
+          <h3 className="text-[14px] font-extrabold text-[#0b1738]">{t("listTitle")}</h3>
 
           {runnableRecords.length === 0 ? (
             <div className="rounded-[16px] border border-[#e1e7f0] px-5 py-8 text-center text-[12.5px] text-[#6b7b96]">
-              لا توجد تكاملات نشطة قابلة للمزامنة في مساحة العمل الحالية.
+              {t("emptyState")}
             </div>
           ) : (
             <div className="divide-y divide-[#eef2f8] rounded-[16px] border border-[#e1e7f0]">
               {runnableRecords.map((record) => {
-                const status = rowStatus(record.connection.status)
+                const status = rowStatus(record.connection.status, t)
                 return (
                   <div
                     key={record.connection.connectionId}
@@ -319,10 +337,8 @@ export function SyncAllDialog({
         <div className="flex items-start gap-3 rounded-[14px] border border-[#cfe0ff] bg-[#eef4ff] px-4 py-3.5">
           <Info className="size-5 shrink-0 text-[#2878ff]" />
           <div>
-            <p className="text-[12.5px] font-extrabold text-[#2878ff]">معلومة مهمة</p>
-            <p className="mt-1 text-[12px] leading-5 text-[#6b7b96]">
-              ستقوم المزامنة بتحديث أحدث البيانات بما في ذلك المنتجات، الطلبات، العملاء وغيرها.
-            </p>
+            <p className="text-[12.5px] font-extrabold text-[#2878ff]">{t("notice.title")}</p>
+            <p className="mt-1 text-[12px] leading-5 text-[#6b7b96]">{t("notice.description")}</p>
           </div>
         </div>
 
@@ -334,7 +350,7 @@ export function SyncAllDialog({
             onClick={() => onOpenChange(false)}
             disabled={isSyncing}
           >
-            إلغاء
+            {tCommon("cancel")}
           </AppButton>
           <AppButton
             className="h-11 min-w-[170px] rounded-[12px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
@@ -344,7 +360,7 @@ export function SyncAllDialog({
             icon={<RefreshCcw className="size-4 shrink-0" />}
             iconPosition="end"
           >
-            {isSyncing ? "جارٍ البدء..." : "بدء المزامنة"}
+            {isSyncing ? t("actions.starting") : t("actions.start")}
           </AppButton>
         </div>
       </div>
@@ -357,6 +373,8 @@ interface SyncAllOverlayProps {
 }
 
 export function SyncAllOverlay({ syncState }: SyncAllOverlayProps) {
+  const t = useTranslations("integrations.syncAllDialog")
+
   if (!syncState) return null
 
   return (
@@ -365,25 +383,25 @@ export function SyncAllOverlay({ syncState }: SyncAllOverlayProps) {
         {syncState === "queued" && (
           <>
             <div className="animate-spin rounded-full border-2 border-[#f59e0b] border-l-transparent p-3" />
-            <span className="text-xs font-semibold text-[#f59e0b]">Queued</span>
+            <span className="text-xs font-semibold text-[#f59e0b]">{t("overlay.queued")}</span>
           </>
         )}
         {syncState === "running" && (
           <>
             <Loader2 className="size-6 animate-spin text-[#2563eb]" />
-            <span className="text-xs font-semibold text-[#2563eb]">Syncing...</span>
+            <span className="text-xs font-semibold text-[#2563eb]">{t("overlay.syncing")}</span>
           </>
         )}
         {syncState === "completed" && (
           <>
             <CheckCircle2 className="size-6 text-[#10b981]" />
-            <span className="text-xs font-semibold text-[#10b981]">Completed</span>
+            <span className="text-xs font-semibold text-[#10b981]">{t("overlay.completed")}</span>
           </>
         )}
         {syncState === "failed" && (
           <>
             <AlertTriangle className="size-6 text-[#ef4444]" />
-            <span className="text-xs font-semibold text-[#ef4444]">Failed</span>
+            <span className="text-xs font-semibold text-[#ef4444]">{t("overlay.failed")}</span>
           </>
         )}
       </div>

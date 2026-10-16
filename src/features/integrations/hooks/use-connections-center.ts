@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { toAppError } from "@/lib/app-errors"
 import { traceFrontendExecution } from "@/lib/debug/frontend-execution-trace"
@@ -124,6 +125,7 @@ const DEFAULT_FILTERS: ConnectionsFilterState = {
 }
 
 export function useConnectionsCenter() {
+  const t = useTranslations("integrations.connectionsCenter")
   const { connectionManager, integrationApplicationService } = useApplicationServices()
   const { currentWorkspace } = useWorkspace()
   const currentWorkspaceId = currentWorkspace?.id ?? null
@@ -225,7 +227,7 @@ export function useConnectionsCenter() {
         ? [metadataAccountName]
         : accountsRegistry[connection.connectorDefinitionId]?.length
           ? accountsRegistry[connection.connectorDefinitionId]
-          : [catalogEntry?.connectedAccountLabel ?? "Connected account"]
+          : [catalogEntry?.connectedAccountLabel ?? t("fallbackConnectedAccount")]
       // Falls back to the recent-events timeline only when there's no structured history
       // record of a failure -- but that fallback must match "sync.failed" specifically, not
       // any sync-related action. Matching on startsWith("sync.") also caught "sync.completed"
@@ -245,7 +247,9 @@ export function useConnectionsCenter() {
         workspaceName:
           connection.metadata.workspaceName ?? catalogEntry?.workspaceLabel ?? "Madar Workspace",
         connectedAccount:
-          connectedAccounts[0] ?? catalogEntry?.connectedAccountLabel ?? "Connected account",
+          connectedAccounts[0] ??
+          catalogEntry?.connectedAccountLabel ??
+          t("fallbackConnectedAccount"),
         connectedAccounts,
         connection,
         integrationStatus: statusViewModel.payload,
@@ -270,7 +274,7 @@ export function useConnectionsCenter() {
         healthLabel: connectorHealth.payload.status,
       }
     },
-    [connectionManager, integrationApplicationService, records.length]
+    [connectionManager, integrationApplicationService, records.length, t]
   )
 
   const bootstrap = useCallback(async () => {
@@ -525,12 +529,12 @@ export function useConnectionsCenter() {
       await connectionManager.runSync({ connectionId, trigger: "manual" })
       const refreshed = await refreshConnection(connectionId)
       if (!refreshed) {
-        throw new Error("Connection could not be refreshed after sync.")
+        throw new Error(t("errors.refreshFailed"))
       }
 
       return refreshed
     },
-    [connectionManager, refreshConnection]
+    [connectionManager, refreshConnection, t]
   )
 
   const disconnect = useCallback(
@@ -653,15 +657,13 @@ export function useConnectionsCenter() {
         CONNECTION_ACTION_IDS.RETRY
       )
       if (!retryAction.enabled) {
-        throw new Error(
-          retryAction.disabledReason ?? "Retry is unavailable for the latest operation."
-        )
+        throw new Error(t("errors.retryUnavailable"))
       }
 
       await connectionManager.runRetryQueue(record.connection.connectionId)
       return refreshConnection(record.connection.connectionId)
     },
-    [connectionManager, refreshConnection]
+    [connectionManager, refreshConnection, t]
   )
 
   const filteredRecords = useMemo(

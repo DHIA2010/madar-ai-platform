@@ -6819,5 +6819,166 @@
         "viewRecommendations": "عرض التوصيات"
       }
     }
+  },
+  "integrations": {
+    "connectorLogo": {
+      "alt": "شعار {platform}"
+    },
+    "connectionsCenter": {
+      "fallbackConnectedAccount": "حساب متصل",
+      "errors": {
+        "refreshFailed": "تعذّر تحديث الاتصال بعد المزامنة.",
+        "retryUnavailable": "إعادة المحاولة غير متاحة للعملية الأخيرة."
+      }
+    },
+    "syncAllDialog": {
+      "title": "مزامنة جميع التكاملات",
+      "description": "سيتم تشغيل المزامنة لجميع التكاملات النشطة في مساحة العمل الحالية.",
+      "closeAria": "إغلاق",
+      "stats": {
+        "activeIntegrations": "عدد التكاملات النشطة",
+        "estimatedDuration": "المدة المتوقعة",
+        "estimatedDurationValue": "حوالي {minutes} دقيقة",
+        "runsInBackground": "تعمل في الخلفية",
+        "runsInBackgroundHint": "يمكنك مواصلة العمل أثناء المزامنة."
+      },
+      "listTitle": "التكاملات التي سيتم مزامنتها",
+      "emptyState": "لا توجد تكاملات نشطة قابلة للمزامنة في مساحة العمل الحالية.",
+      "rowStatus": {
+        "active": "نشط",
+        "syncing": "قيد المزامنة",
+        "paused": "متوقف",
+        "readyToSync": "جاهز للمزامنة"
+      },
+      "notice": {
+        "title": "معلومة مهمة",
+        "description": "ستقوم المزامنة بتحديث أحدث البيانات بما في ذلك المنتجات، الطلبات، العملاء وغيرها."
+      },
+      "actions": {
+        "starting": "جارٍ البدء...",
+        "start": "بدء المزامنة"
+      },
+      "toasts": {
+        "nothingToSync": "لا توجد تكاملات قابلة للمزامنة",
+        "allSucceeded": "تمت مزامنة {count} تكاملات بنجاح.",
+        "partialFailure": "اكتمل {completed} وفشل {failed}",
+        "retryFailedAction": "إعادة محاولة الفاشلة",
+        "genericError": "تعذّرت مزامنة التكاملات. حاول مرة أخرى."
+      },
+      "overlay": {
+        "queued": "في الانتظار",
+        "syncing": "جارٍ المزامنة...",
+        "completed": "اكتملت",
+        "failed": "فشلت"
+      }
+    },
+    "scheduleSettings": {
+      "breadcrumb": {
+        "integrations": "التكاملات",
+        "scheduleSettings": "إعدادات الجدولة"
+      },
+      "backToDetails": "العودة إلى تفاصيل التكامل",
+      "connectionNotFound": "لم يتم العثور على الاتصال",
+      "header": {
+        "title": "إعدادات الجدولة",
+        "subtitle": "تحكم في أوقات وتكرار مزامنة بيانات التكاملات"
+      },
+      "stats": {
+        "lastSync": {
+          "label": "آخر مزامنة",
+          "success": "تمت بنجاح",
+          "failed": "فشلت آخر محاولة",
+          "notRunYet": "لم تُنفَّذ بعد"
+        },
+        "timezone": {
+          "label": "المنطقة الزمنية"
+        },
+        "enabled": "الجدولة مفعلة",
+        "disabled": "الجدولة متوقفة",
+        "enabledHint": "يتم تنفيذ المزامنة تلقائيًا حسب الإعدادات",
+        "disabledHint": "لن تعمل المزامنة تلقائيًا"
+      },
+      "syncSchedule": {
+        "title": "جدول المزامنة",
+        "frequencyLabel": "تكرار المزامنة",
+        "custom": "مخصص",
+        "frequencyOptions": {
+          "daily": "يوميًا",
+          "every6Hours": "كل 6 ساعات",
+          "everyHour": "كل ساعة",
+          "every30Minutes": "كل 30 دقيقة",
+          "every15Minutes": "كل 15 دقيقة"
+        },
+        "customCronPlaceholder": "*/30 * * * *",
+        "customCronHint": "صيغة cron قياسية من 5 حقول (دقيقة، ساعة، يوم الشهر، الشهر، يوم الأسبوع)، بتوقيت المنطقة الزمنية المحددة أدناه.",
+        "activeDaysLabel": "أيام التشغيل",
+        "days": {
+          "sunday": "الأحد",
+          "monday": "الاثنين",
+          "tuesday": "الثلاثاء",
+          "wednesday": "الأربعاء",
+          "thursday": "الخميس",
+          "friday": "الجمعة",
+          "saturday": "السبت"
+        },
+        "startTimeLabel": "وقت البدء",
+        "timezoneLabel": "المنطقة الزمنية"
+      },
+      "timezones": {
+        "riyadh": "الرياض (GMT+3)",
+        "dubai": "دبي (GMT+4)",
+        "kuwait": "الكويت (GMT+3)",
+        "cairo": "القاهرة (GMT+2)",
+        "istanbul": "إسطنبول (GMT+3)",
+        "london": "لندن (GMT+0)",
+        "newYork": "نيويورك (GMT-5)",
+        "utc": "التوقيت العالمي (UTC)"
+      },
+      "advancedSync": {
+        "title": "المزامنة المتقدمة",
+        "autoRetryOnConnectionFailure": {
+          "title": "تشغيل المزامنة تلقائيًا عند فشل الاتصال",
+          "hint": "في حال فشل الاتصال، سيتم إعادة محاولة المزامنة تلقائيًا"
+        },
+        "retryOnFailure": {
+          "title": "إعادة المحاولة عند الفشل",
+          "hint": "عدد مرات إعادة المحاولة في حال فشل المزامنة"
+        },
+        "retryOptions": {
+          "none": "بدون إعادة محاولة",
+          "once": "مرة واحدة",
+          "twice": "مرتان",
+          "threeTimes": "3 مرات",
+          "fiveTimes": "5 مرات"
+        },
+        "notifyOnFailure": {
+          "title": "إشعارات فشل المزامنة",
+          "hint": "إرسال إشعار عند فشل المزامنة"
+        }
+      },
+      "nextSync": {
+        "title": "المزامنة القادمة",
+        "subtitle": "موعد المزامنة القادمة وفقًا للإعدادات الحالية",
+        "statusLabel": "الحالة",
+        "scheduled": "مجدولة",
+        "paused": "متوقفة",
+        "dateTimeLabel": "الوقت والتاريخ"
+      },
+      "actions": {
+        "save": "حفظ الإعدادات",
+        "saving": "جارٍ الحفظ..."
+      },
+      "toasts": {
+        "saveSuccess": "تم حفظ إعدادات الجدولة بنجاح."
+      },
+      "errors": {
+        "loadFailed": "تعذر تحميل إعدادات الجدولة.",
+        "saveFailed": "تعذر حفظ إعدادات الجدولة."
+      },
+      "validation": {
+        "invalidCron": "صيغة الجدولة المخصصة غير صحيحة -- يجب أن تتكون من 5 حقول.",
+        "selectAtLeastOneDay": "اختر يومًا واحدًا على الأقل لأيام التشغيل."
+      }
+    }
   }
 }
