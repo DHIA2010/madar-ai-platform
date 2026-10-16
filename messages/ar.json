@@ -8,7 +8,10 @@
     "next": "التالي",
     "back": "رجوع",
     "cancel": "إلغاء",
-    "loading": "جارٍ التحميل..."
+    "loading": "جارٍ التحميل...",
+    "previous": "السابق",
+    "export": "تصدير",
+    "currency": "ر.س"
   },
   "authShowcase": {
     "preview": {
@@ -443,5 +446,117 @@
       "ديسمبر"
     ],
     "weekdaysShort": ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
+  },
+  "expenses": {
+    "heading": "المصروفات",
+    "subheading": "نظرة عامة على مصروفات المنشأة.",
+    "listHeading": "قائمة المصروفات",
+    "listSubheading": "عرض وفلترة جميع مصروفات المنشأة.",
+    "addExpense": "إضافة مصروف",
+    "backToExpenses": "العودة إلى المصروفات",
+    "filters": {
+      "allCategories": "كل الفئات",
+      "allBranches": "كل الفروع",
+      "allPaymentMethods": "كل طرق الدفع",
+      "category": "الفئة",
+      "branch": "الفرع",
+      "paymentMethod": "طريقة الدفع",
+      "clearFilters": "مسح الفلاتر",
+      "searchPlaceholder": "البحث في المصروفات..."
+    },
+    "table": {
+      "name": "اسم المصروف",
+      "category": "الفئة",
+      "branch": "الفرع",
+      "amount": "المبلغ",
+      "paymentMethod": "طريقة الدفع",
+      "tax": "الضريبة",
+      "date": "التاريخ",
+      "status": "الحالة",
+      "actions": "الإجراءات"
+    },
+    "taxInclusive": "شامل الضريبة",
+    "taxExclusive": "غير شامل الضريبة",
+    "statusActive": "نشط",
+    "statusCancelled": "ملغى",
+    "emptyTitle": "لا توجد مصروفات مطابقة",
+    "emptyDescription": "جرّب تعديل الفلاتر أو البحث.",
+    "showingCount": "عرض {shown} من {total} نتيجة",
+    "cancelDialog": {
+      "title": "إلغاء المصروف",
+      "description": "هل أنت متأكد من إلغاء \"{name}\"؟ سيبقى المصروف في القائمة لكن لن يُحتسب ضمن تقارير صافي الدخل والإقرار الضريبي.",
+      "cancelLabel": "تراجع",
+      "confirmLabel": "تأكيد الإلغاء"
+    },
+    "toasts": {
+      "cancelSuccess": "تم إلغاء المصروف بنجاح.",
+      "cancelError": "تعذر إلغاء المصروف. حاول مرة أخرى.",
+      "categoryCreated": "تمت إضافة الفئة \"{name}\".",
+      "categoryCreateError": "تعذر إضافة الفئة. حاول مرة أخرى.",
+      "validationRequired": "يرجى تعبئة اسم المصروف والفئة والفرع والتاريخ.",
+      "validationAmount": "يرجى إدخال مبلغ صحيح.",
+      "createSuccess": "تم إضافة المصروف.",
+      "createError": "تعذر حفظ المصروف. حاول مرة أخرى."
+    },
+    "loadError": "تعذر تحميل المصروفات. حاول مرة أخرى.",
+    "categoriesLoadError": "تعذر تحميل فئات المصروفات. حاول مرة أخرى.",
+    "form": {
+      "nameLabel": "اسم المصروف",
+      "namePlaceholder": "مثال: فاتورة كهرباء",
+      "categoryLabel": "الفئة",
+      "categoryPlaceholder": "اختر الفئة",
+      "categorySearchPlaceholder": "ابحث أو أضف فئة جديدة...",
+      "categoryEmptyLabel": "لا توجد فئات",
+      "createCategoryLabel": "إضافة فئة \"{draft}\"",
+      "branchLabel": "الفرع",
+      "branchPlaceholder": "اختر الفرع",
+      "branchSearchPlaceholder": "ابحث...",
+      "branchEmptyLabel": "لا توجد فروع",
+      "amountLabel": "المبلغ",
+      "paymentMethodLabel": "طريقة الدفع",
+      "paymentMethodPlaceholder": "اختر طريقة الدفع",
+      "taxLabel": "الضريبة",
+      "taxPlaceholder": "اختر",
+      "dateLabel": "تاريخ المصروف",
+      "referenceLabel": "رقم المرجع / الفاتورة",
+      "referencePlaceholder": "رقم الفاتورة أو المرجع",
+      "notesLabel": "ملاحظات",
+      "notesPlaceholder": "أضف ملاحظة قصيرة...",
+      "submit": "إضافة المصروف"
+    },
+    "paymentMethods": {
+      "cash": "نقدًا",
+      "bankTransfer": "حوالة بنكية",
+      "card": "بطاقة",
+      "cheque": "شيك"
+    },
+    "overview": {
+      "byCategory": "المصروفات حسب الفئة",
+      "byCategoryMonthly": "المصروفات الشهرية حسب الفئة",
+      "trend": "اتجاه المصروفات",
+      "byBranch": "المصروفات حسب الفرع",
+      "recent": "آخر المصروفات",
+      "noData": "لا توجد بيانات",
+      "noExpensesYet": "لا توجد مصروفات بعد",
+      "total": "الإجمالي",
+      "insightsTitle": "ملاحظات",
+      "insightsEmpty": "لا توجد ملاحظات كافية بعد.",
+      "other": "أخرى",
+      "kpis": {
+        "totalAmount": "إجمالي المصروفات",
+        "count": "عدد المصروفات",
+        "categoryCount": "عدد الفئات",
+        "average": "متوسط المصروف"
+      },
+      "insightTopCategory": "\"{category}\" هي الفئة الأعلى إنفاقًا بنسبة {pct}% من الإجمالي.",
+      "insightMonthChange": "إنفاق هذا الشهر {direction} بنسبة {pct}% عن الشهر الماضي.",
+      "insightIncreased": "زاد",
+      "insightDecreased": "انخفض",
+      "insightTopBranch": "{branch} هو الفرع الأعلى إنفاقًا بإجمالي {total}."
+    }
+  },
+  "dateField": {
+    "placeholder": "اختر التاريخ",
+    "ariaLabel": "التاريخ"
   }
 }

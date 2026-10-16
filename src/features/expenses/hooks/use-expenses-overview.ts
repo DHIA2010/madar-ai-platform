@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { useLocale, useTranslations } from "next-intl"
 
 import type { Expense } from "../types"
 
@@ -17,9 +18,9 @@ function monthKey(dateString: string): string {
   return dateString.slice(0, 7) // "YYYY-MM"
 }
 
-function monthLabel(key: string): string {
+function monthLabel(key: string, locale: string): string {
   const date = new Date(`${key}-01`)
-  return new Intl.DateTimeFormat(GREGORIAN_MONTH_LOCALE, {
+  return new Intl.DateTimeFormat(locale === "ar" ? GREGORIAN_MONTH_LOCALE : "en-US", {
     month: "short",
     year: "2-digit",
   }).format(date)
@@ -38,6 +39,9 @@ function lastMonthKeys(count: number): string[] {
 // Everything here is organization-level, never tied to a supplier/vendor -- see the backend
 // schema (expenses table has no supplier_id) and the frontend form (no vendor field).
 export function useExpensesOverview(expenses: Expense[]) {
+  const locale = useLocale()
+  const t = useTranslations("expenses.overview")
+
   return useMemo(() => {
     const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0)
 
@@ -51,7 +55,7 @@ export function useExpensesOverview(expenses: Expense[]) {
       }
     }
     const monthlyTrend = months.map((month) => ({
-      label: monthLabel(month),
+      label: monthLabel(month, locale),
       value: totalsByMonth.get(month) ?? 0,
     }))
 
@@ -73,25 +77,28 @@ export function useExpensesOverview(expenses: Expense[]) {
       .map(([label, value]) => ({ label, value }))
       .sort((left, right) => right.value - left.value)
 
-    // Stacked bar: one series per top category (the rest folded into "أخرى") across the same
-    // months as the trend chart.
+    // Stacked bar: one series per top category (the rest folded into the "other" bucket) across
+    // the same months as the trend chart.
+    const otherLabel = t("other")
     const topCategoryNames = categoryBreakdown
       .slice(0, TOP_CATEGORY_SERIES_COUNT)
       .map((c) => c.label)
     const hasOtherBucket = categoryBreakdown.length > TOP_CATEGORY_SERIES_COUNT
-    const stackedSeriesKeys = hasOtherBucket ? [...topCategoryNames, "أخرى"] : topCategoryNames
+    const stackedSeriesKeys = hasOtherBucket ? [...topCategoryNames, otherLabel] : topCategoryNames
     const stackedTotals = new Map<string, Map<string, number>>()
     for (const month of months) stackedTotals.set(month, new Map())
     for (const expense of expenses) {
       const key = monthKey(expense.expenseDate)
       const bucket = stackedTotals.get(key)
       if (!bucket) continue
-      const series = topCategoryNames.includes(expense.categoryName) ? expense.categoryName : "أخرى"
+      const series = topCategoryNames.includes(expense.categoryName)
+        ? expense.categoryName
+        : otherLabel
       bucket.set(series, (bucket.get(series) ?? 0) + expense.amount)
     }
     const categoryByMonthStacked = months.map((month) => {
       const bucket = stackedTotals.get(month) ?? new Map<string, number>()
-      const row: Record<string, string | number> = { label: monthLabel(month) }
+      const row: Record<string, string | number> = { label: monthLabel(month, locale) }
       for (const series of stackedSeriesKeys) row[series] = bucket.get(series) ?? 0
       return row
     })
@@ -118,17 +125,20 @@ export function useExpensesOverview(expenses: Expense[]) {
     if (categoryBreakdown.length > 0) {
       const top = categoryBreakdown[0]
       const pct = totalAmount > 0 ? Math.round((top.value / totalAmount) * 100) : 0
-      insights.push(`"${top.label}" هي الفئة الأعلى إنفاقًا بنسبة ${pct}% من الإجمالي.`)
+      insights.push(t("insightTopCategory", { category: top.label, pct }))
     }
     if (monthOverMonthDelta !== null) {
-      const direction = monthOverMonthDelta >= 0 ? "زاد" : "انخفض"
+      const direction = monthOverMonthDelta >= 0 ? t("insightIncreased") : t("insightDecreased")
       insights.push(
-        `إنفاق هذا الشهر ${direction} بنسبة ${Math.abs(Math.round(monthOverMonthDelta))}% عن الشهر الماضي.`
+        t("insightMonthChange", { direction, pct: Math.abs(Math.round(monthOverMonthDelta)) })
       )
     }
     if (topWorkspaces.length > 1) {
       insights.push(
-        `${topWorkspaces[0].workspaceName} هو الفرع الأعلى إنفاقًا بإجمالي ${Math.round(topWorkspaces[0].total).toLocaleString("en-US")}.`
+        t("insightTopBranch", {
+          branch: topWorkspaces[0].workspaceName,
+          total: Math.round(topWorkspaces[0].total).toLocaleString("en-US"),
+        })
       )
     }
 
@@ -144,5 +154,5 @@ export function useExpensesOverview(expenses: Expense[]) {
       recentExpenses,
       insights,
     }
-  }, [expenses])
+  }, [expenses, locale, t])
 }

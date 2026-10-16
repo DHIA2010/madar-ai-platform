@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { expenseCategoryService } from "../services"
 import type { ExpenseCategory } from "../types"
 
 export function useExpenseCategories() {
+  const t = useTranslations("expenses")
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -16,11 +18,11 @@ export function useExpenseCategories() {
     try {
       setCategories(await expenseCategoryService.list())
     } catch {
-      setError("تعذر تحميل فئات المصروفات. حاول مرة أخرى.")
+      setError(t("categoriesLoadError"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void refetch()

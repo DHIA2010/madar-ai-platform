@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import {
   Area,
   AreaChart,
@@ -16,9 +17,11 @@ import { AXIS_TICK_STYLE, formatCurrencyCompact, TOOLTIP_STYLE } from "./chart-c
 import { HEADING, PANEL } from "./expense-field"
 
 export function ExpenseTrendChartCard({ data }: { data: Array<{ label: string; value: number }> }) {
+  const t = useTranslations("expenses.overview")
+
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>اتجاه المصروفات</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("trend")}</h3>
       <div className="h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>

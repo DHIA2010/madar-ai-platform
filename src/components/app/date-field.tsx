@@ -11,7 +11,8 @@
 // placeholder; and it drew its own calendar glyph beside the one the field already had, so the
 // same affordance appeared twice in one control.
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { addMonths, getMonth, getYear, setMonth, setYear } from "date-fns"
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react"
 
@@ -39,46 +40,35 @@ function toValue(date: Date): string {
   ].join("-")
 }
 
-const MONTH_OPTIONS = [
-  "يناير",
-  "فبراير",
-  "مارس",
-  "أبريل",
-  "مايو",
-  "يونيو",
-  "يوليو",
-  "أغسطس",
-  "سبتمبر",
-  "أكتوبر",
-  "نوفمبر",
-  "ديسمبر",
-]
 const YEAR_OPTIONS = Array.from({ length: 21 }, (_, index) => 2018 + index)
-
-// The Arabic weekday names date-fns supplies are full words that do not fit a calendar cell --
-// they render as one run of overlapping text. These are the conventional two-letter forms,
-// matching AppDateRangeFilter's own calendar header so every date picker in the app reads the
-// same way. Indexed by getDay() (0 = Sunday).
-const WEEKDAY_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
-
-// Latin digits inside Arabic month names, matching how every other date in this app reads.
-const DISPLAY = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
 
 export function AppDateField({
   value,
   onChange,
-  placeholder = "اختر التاريخ",
-  ariaLabel = "التاريخ",
+  placeholder,
+  ariaLabel,
 }: {
   value: string
   onChange: (next: string) => void
   placeholder?: string
   ariaLabel?: string
 }) {
+  const locale = useLocale()
+  const t = useTranslations("dateRangeFilter")
+  const tField = useTranslations("dateField")
+  const monthOptions = t.raw("months") as string[]
+  const weekdayShort = t.raw("weekdaysShort") as string[]
+  // Latin digits inside Arabic month names, matching how every other date in this app reads.
+  const display = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+    [locale]
+  )
+
   const [open, setOpen] = useState(false)
   const selected = parseValue(value)
   const [displayMonth, setDisplayMonth] = useState<Date>(selected ?? new Date())
@@ -97,7 +87,7 @@ export function AppDateField({
         <PopoverTrigger asChild>
           <button
             type="button"
-            aria-label={ariaLabel}
+            aria-label={ariaLabel ?? tField("ariaLabel")}
             className={cn(
               "flex h-11 w-full cursor-pointer items-center gap-2 rounded-[12px] border border-[#e1e7f0] bg-white px-2.5 text-right text-[13px] transition-colors hover:border-[#c4d5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/35",
               selected ? "text-[#0b1738]" : "text-[#95a4bd]"
@@ -109,7 +99,7 @@ export function AppDateField({
               <CalendarDays className="size-4" />
             </span>
             <span className={cn("min-w-0 flex-1 truncate", selected && "font-semibold")}>
-              {selected ? DISPLAY.format(selected) : placeholder}
+              {selected ? display.format(selected) : (placeholder ?? tField("placeholder"))}
             </span>
           </button>
         </PopoverTrigger>
@@ -119,7 +109,7 @@ export function AppDateField({
         {selected ? (
           <button
             type="button"
-            aria-label="مسح التاريخ"
+            aria-label={t("clear")}
             className="absolute end-2 top-1/2 flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-[#95a4bd] transition-colors hover:bg-[#f2f5fa] hover:text-[#e0484d]"
             onClick={() => onChange("")}
           >
@@ -147,7 +137,7 @@ export function AppDateField({
             variant="ghost"
             className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
             onClick={() => setDisplayMonth((current) => addMonths(current, -1))}
-            aria-label="الشهر السابق"
+            aria-label={t("prevMonth")}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -160,7 +150,7 @@ export function AppDateField({
               }}
             >
               <SelectTrigger className="h-9 w-[7.75rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
-                <span>{MONTH_OPTIONS[monthIndex]}</span>
+                <span>{monthOptions[monthIndex]}</span>
               </SelectTrigger>
               <SelectContent
                 position="popper"
@@ -168,7 +158,7 @@ export function AppDateField({
                 align="center"
                 sideOffset={4}
               >
-                {MONTH_OPTIONS.map((monthLabel, index) => (
+                {monthOptions.map((monthLabel, index) => (
                   <SelectItem
                     key={monthLabel}
                     value={String(index)}
@@ -214,7 +204,7 @@ export function AppDateField({
             variant="ghost"
             className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
             onClick={() => setDisplayMonth((current) => addMonths(current, 1))}
-            aria-label="الشهر التالي"
+            aria-label={t("nextMonth")}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -231,7 +221,7 @@ export function AppDateField({
           startMonth={new Date(2018, 0)}
           endMonth={new Date(2038, 11)}
           formatters={{
-            formatWeekdayName: (date) => WEEKDAY_SHORT[date.getDay()],
+            formatWeekdayName: (date) => weekdayShort[date.getDay()],
           }}
           className="rounded-[18px] bg-transparent p-0 [--cell-size:32px]"
           classNames={{
@@ -273,7 +263,7 @@ export function AppDateField({
               setOpen(false)
             }}
           >
-            مسح التاريخ
+            {t("clear")}
           </Button>
           <Button
             type="button"
@@ -286,7 +276,7 @@ export function AppDateField({
               setOpen(false)
             }}
           >
-            اليوم
+            {t("today")}
           </Button>
         </div>
       </PopoverContent>

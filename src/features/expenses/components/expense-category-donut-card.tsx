@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 
 import { cn } from "@/lib/utils"
@@ -13,6 +14,7 @@ export function ExpenseCategoryDonutCard({
 }: {
   data: Array<{ label: string; value: number }>
 }) {
+  const t = useTranslations("expenses.overview")
   const total = data.reduce((sum, row) => sum + row.value, 0)
   // The hover tooltip and the centered total label both render in the chart's dead center --
   // showing both at once was a visual collision. Hiding the center label only while a slice is
@@ -22,9 +24,9 @@ export function ExpenseCategoryDonutCard({
 
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>المصروفات حسب الفئة</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("byCategory")}</h3>
       {data.length === 0 ? (
-        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{t("noData")}</p>
       ) : (
         <div className="flex flex-wrap items-center gap-4">
           <div className="relative mx-auto aspect-square w-full max-w-[200px] flex-1 basis-[160px]">
@@ -57,7 +59,7 @@ export function ExpenseCategoryDonutCard({
             </ResponsiveContainer>
             {hoveredIndex === null ? (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className={cn("text-[10.5px]", MUTED)}>الإجمالي</p>
+                <p className={cn("text-[10.5px]", MUTED)}>{t("total")}</p>
                 <p className={cn("text-[14px] font-extrabold", HEADING)}>
                   {formatCurrencyCompact(total)}
                 </p>

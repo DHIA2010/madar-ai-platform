@@ -1,9 +1,11 @@
+import { useTranslations } from "next-intl"
+
 import { cn } from "@/lib/utils"
 
 import { HEADING, MUTED, PANEL } from "./expense-field"
 
-function formatCurrency(value: number) {
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(value))} ر.س`
+function formatCurrency(value: number, currencyLabel: string) {
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(value))} ${currencyLabel}`
 }
 
 // Organization-level breakdown by branch (workspace) -- never by supplier/vendor.
@@ -12,13 +14,15 @@ export function ExpensesByWorkspaceCard({
 }: {
   workspaces: Array<{ workspaceName: string; total: number }>
 }) {
+  const t = useTranslations("expenses.overview")
+  const currencyLabel = useTranslations("common")("currency")
   const maxTotal = Math.max(...workspaces.map((workspace) => workspace.total), 1)
 
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>المصروفات حسب الفرع</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("byBranch")}</h3>
       {workspaces.length === 0 ? (
-        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{t("noData")}</p>
       ) : (
         <div className="space-y-3">
           {workspaces.map((workspace, index) => (
@@ -32,7 +36,7 @@ export function ExpensesByWorkspaceCard({
                     {workspace.workspaceName}
                   </span>
                   <span className={cn("shrink-0 text-[12px] font-bold", HEADING)}>
-                    {formatCurrency(workspace.total)}
+                    {formatCurrency(workspace.total, currencyLabel)}
                   </span>
                 </div>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#eef2f8]">

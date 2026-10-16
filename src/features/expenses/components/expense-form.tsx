@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 
@@ -16,13 +17,15 @@ import { useExpenseCategories } from "../hooks"
 import { expenseCategoryService, expenseService } from "../services"
 import {
   EMPTY_EXPENSE_FORM_VALUES,
-  EXPENSE_PAYMENT_METHODS,
-  EXPENSE_TAX_OPTIONS,
+  EXPENSE_PAYMENT_METHOD_KEYS,
+  EXPENSE_PAYMENT_METHOD_VALUES,
   type ExpenseFormValues,
 } from "../types"
 import { ExpenseField, FIELD_CLASS, PANEL } from "./expense-field"
 
 export function ExpenseForm() {
+  const t = useTranslations("expenses")
+  const tCommon = useTranslations("common")
   const router = useRouter()
   const { availableWorkspaces } = useWorkspace()
   const { categories, refetch: refetchCategories } = useExpenseCategories()
@@ -33,6 +36,15 @@ export function ExpenseForm() {
   }))
   const [submitting, setSubmitting] = useState(false)
 
+  const paymentMethods = EXPENSE_PAYMENT_METHOD_VALUES.map((value) => ({
+    value,
+    label: t(`paymentMethods.${EXPENSE_PAYMENT_METHOD_KEYS[value]}`),
+  }))
+  const taxOptions = [
+    { value: "exclusive", label: t("taxExclusive") },
+    { value: "inclusive", label: t("taxInclusive") },
+  ]
+
   function set<K extends keyof ExpenseFormValues>(key: K, value: ExpenseFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }))
   }
@@ -42,9 +54,9 @@ export function ExpenseForm() {
       const category = await expenseCategoryService.create(draft)
       await refetchCategories()
       set("categoryId", category.id)
-      toast.success(`تمت إضافة الفئة "${category.name}".`)
+      toast.success(t("toasts.categoryCreated", { name: category.name }))
     } catch {
-      toast.error("تعذر إضافة الفئة. حاول مرة أخرى.")
+      toast.error(t("toasts.categoryCreateError"))
     }
   }
 
@@ -56,21 +68,21 @@ export function ExpenseForm() {
       !values.workspaceId ||
       !values.expenseDate.trim()
     ) {
-      toast.error("يرجى تعبئة اسم المصروف والفئة والفرع والتاريخ.")
+      toast.error(t("toasts.validationRequired"))
       return
     }
     if (!values.amount || values.amount <= 0) {
-      toast.error("يرجى إدخال مبلغ صحيح.")
+      toast.error(t("toasts.validationAmount"))
       return
     }
 
     setSubmitting(true)
     try {
       await expenseService.create(values)
-      toast.success("تم إضافة المصروف.")
+      toast.success(t("toasts.createSuccess"))
       router.push(ROUTES.expenses)
     } catch {
-      toast.error("تعذر حفظ المصروف. حاول مرة أخرى.")
+      toast.error(t("toasts.createError"))
     } finally {
       setSubmitting(false)
     }
@@ -80,30 +92,30 @@ export function ExpenseForm() {
     <AppForm dir="rtl" onSubmit={handleSubmit} className="space-y-5">
       <section className={cn(PANEL, "p-4 md:p-5")}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <ExpenseField label="اسم المصروف" required>
+          <ExpenseField label={t("form.nameLabel")} required>
             <AppInput
               value={values.name}
               onChange={(event) => set("name", event.target.value)}
-              placeholder="مثال: فاتورة كهرباء"
+              placeholder={t("form.namePlaceholder")}
               className={FIELD_CLASS}
             />
           </ExpenseField>
 
-          <ExpenseField label="الفئة" required>
+          <ExpenseField label={t("form.categoryLabel")} required>
             <AppSearchableSelect
               value={values.categoryId}
               options={categories.map((category) => ({ value: category.id, label: category.name }))}
               onChange={(value) => set("categoryId", value)}
               onCreate={handleCreateCategory}
-              createLabel={(draft) => `إضافة فئة "${draft}"`}
-              placeholder="اختر الفئة"
-              searchPlaceholder="ابحث أو أضف فئة جديدة..."
-              emptyLabel="لا توجد فئات"
-              ariaLabel="الفئة"
+              createLabel={(draft) => t("form.createCategoryLabel", { draft })}
+              placeholder={t("form.categoryPlaceholder")}
+              searchPlaceholder={t("form.categorySearchPlaceholder")}
+              emptyLabel={t("form.categoryEmptyLabel")}
+              ariaLabel={t("form.categoryLabel")}
             />
           </ExpenseField>
 
-          <ExpenseField label="الفرع" required>
+          <ExpenseField label={t("form.branchLabel")} required>
             <AppSearchableSelect
               value={values.workspaceId}
               options={availableWorkspaces.map((workspace) => ({
@@ -111,14 +123,14 @@ export function ExpenseForm() {
                 label: workspace.name,
               }))}
               onChange={(value) => set("workspaceId", value)}
-              placeholder="اختر الفرع"
-              searchPlaceholder="ابحث..."
-              emptyLabel="لا توجد فروع"
-              ariaLabel="الفرع"
+              placeholder={t("form.branchPlaceholder")}
+              searchPlaceholder={t("form.branchSearchPlaceholder")}
+              emptyLabel={t("form.branchEmptyLabel")}
+              ariaLabel={t("form.branchLabel")}
             />
           </ExpenseField>
 
-          <ExpenseField label="المبلغ" required>
+          <ExpenseField label={t("form.amountLabel")} required>
             <AppInput
               type="number"
               min={0}
@@ -130,51 +142,51 @@ export function ExpenseForm() {
             />
           </ExpenseField>
 
-          <ExpenseField label="طريقة الدفع" required>
+          <ExpenseField label={t("form.paymentMethodLabel")} required>
             <AppSearchableSelect
               value={values.paymentMethod}
-              options={EXPENSE_PAYMENT_METHODS}
+              options={paymentMethods}
               onChange={(value) =>
                 set("paymentMethod", value as ExpenseFormValues["paymentMethod"])
               }
-              placeholder="اختر طريقة الدفع"
-              ariaLabel="طريقة الدفع"
+              placeholder={t("form.paymentMethodPlaceholder")}
+              ariaLabel={t("form.paymentMethodLabel")}
             />
           </ExpenseField>
 
-          <ExpenseField label="الضريبة" required>
+          <ExpenseField label={t("form.taxLabel")} required>
             <AppSearchableSelect
               value={values.taxInclusive ? "inclusive" : "exclusive"}
-              options={EXPENSE_TAX_OPTIONS}
+              options={taxOptions}
               onChange={(value) => set("taxInclusive", value === "inclusive")}
-              placeholder="اختر"
-              ariaLabel="الضريبة"
+              placeholder={t("form.taxPlaceholder")}
+              ariaLabel={t("form.taxLabel")}
             />
           </ExpenseField>
 
-          <ExpenseField label="تاريخ المصروف" required>
+          <ExpenseField label={t("form.dateLabel")} required>
             <AppDateField
               value={values.expenseDate}
               onChange={(value) => set("expenseDate", value)}
             />
           </ExpenseField>
 
-          <ExpenseField label="رقم المرجع / الفاتورة">
+          <ExpenseField label={t("form.referenceLabel")}>
             <AppInput
               value={values.referenceNumber}
               onChange={(event) => set("referenceNumber", event.target.value)}
-              placeholder="رقم الفاتورة أو المرجع"
+              placeholder={t("form.referencePlaceholder")}
               className={FIELD_CLASS}
             />
           </ExpenseField>
         </div>
 
         <div className="mt-4">
-          <ExpenseField label="ملاحظات">
+          <ExpenseField label={t("form.notesLabel")}>
             <textarea
               value={values.notes}
               onChange={(event) => set("notes", event.target.value)}
-              placeholder="أضف ملاحظة قصيرة..."
+              placeholder={t("form.notesPlaceholder")}
               rows={3}
               className={cn(
                 "w-full resize-none p-3 outline-none focus:border-[#2878ff]",
@@ -193,7 +205,7 @@ export function ExpenseForm() {
           className="h-11 rounded-[12px] border-[#c4d5f0] px-6 text-[13.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
           onClick={() => router.push(ROUTES.expenses)}
         >
-          إلغاء
+          {tCommon("cancel")}
         </AppButton>
         <AppButton
           type="submit"
@@ -205,7 +217,7 @@ export function ExpenseForm() {
           }
           className="h-11 gap-2 rounded-full bg-[#2878ff] px-6 text-[13.5px] font-bold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
         >
-          إضافة المصروف
+          {t("form.submit")}
         </AppButton>
       </div>
     </AppForm>

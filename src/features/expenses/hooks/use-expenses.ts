@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { expenseService } from "../services"
 import type { Expense } from "../types"
 
 export function useExpenses() {
+  const t = useTranslations("expenses")
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -16,11 +18,11 @@ export function useExpenses() {
     try {
       setExpenses(await expenseService.list())
     } catch {
-      setError("تعذر تحميل المصروفات. حاول مرة أخرى.")
+      setError(t("loadError"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void refetch()

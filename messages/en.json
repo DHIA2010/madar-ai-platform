@@ -8,7 +8,10 @@
     "next": "Next",
     "back": "Back",
     "cancel": "Cancel",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "previous": "Previous",
+    "export": "Export",
+    "currency": "SAR"
   },
   "authShowcase": {
     "preview": {
@@ -443,5 +446,117 @@
       "December"
     ],
     "weekdaysShort": ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+  },
+  "expenses": {
+    "heading": "Expenses",
+    "subheading": "Overview of your organization's expenses.",
+    "listHeading": "Expenses List",
+    "listSubheading": "View and filter all of your organization's expenses.",
+    "addExpense": "Add Expense",
+    "backToExpenses": "Back to Expenses",
+    "filters": {
+      "allCategories": "All Categories",
+      "allBranches": "All Branches",
+      "allPaymentMethods": "All Payment Methods",
+      "category": "Category",
+      "branch": "Branch",
+      "paymentMethod": "Payment Method",
+      "clearFilters": "Clear Filters",
+      "searchPlaceholder": "Search expenses..."
+    },
+    "table": {
+      "name": "Expense Name",
+      "category": "Category",
+      "branch": "Branch",
+      "amount": "Amount",
+      "paymentMethod": "Payment Method",
+      "tax": "Tax",
+      "date": "Date",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "taxInclusive": "Tax Inclusive",
+    "taxExclusive": "Tax Exclusive",
+    "statusActive": "Active",
+    "statusCancelled": "Cancelled",
+    "emptyTitle": "No matching expenses",
+    "emptyDescription": "Try adjusting filters or your search.",
+    "showingCount": "Showing {shown} of {total} results",
+    "cancelDialog": {
+      "title": "Cancel Expense",
+      "description": "Are you sure you want to cancel \"{name}\"? It will stay in the list but won't count toward net income or VAT return reports.",
+      "cancelLabel": "Go Back",
+      "confirmLabel": "Confirm Cancellation"
+    },
+    "toasts": {
+      "cancelSuccess": "Expense cancelled successfully.",
+      "cancelError": "Couldn't cancel the expense. Please try again.",
+      "categoryCreated": "Category \"{name}\" added.",
+      "categoryCreateError": "Couldn't add the category. Please try again.",
+      "validationRequired": "Please fill in the expense name, category, branch, and date.",
+      "validationAmount": "Please enter a valid amount.",
+      "createSuccess": "Expense added.",
+      "createError": "Couldn't save the expense. Please try again."
+    },
+    "loadError": "Couldn't load expenses. Please try again.",
+    "categoriesLoadError": "Couldn't load expense categories. Please try again.",
+    "form": {
+      "nameLabel": "Expense Name",
+      "namePlaceholder": "e.g. Electricity bill",
+      "categoryLabel": "Category",
+      "categoryPlaceholder": "Choose category",
+      "categorySearchPlaceholder": "Search or add a new category...",
+      "categoryEmptyLabel": "No categories",
+      "createCategoryLabel": "Add category \"{draft}\"",
+      "branchLabel": "Branch",
+      "branchPlaceholder": "Choose branch",
+      "branchSearchPlaceholder": "Search...",
+      "branchEmptyLabel": "No branches",
+      "amountLabel": "Amount",
+      "paymentMethodLabel": "Payment Method",
+      "paymentMethodPlaceholder": "Choose payment method",
+      "taxLabel": "Tax",
+      "taxPlaceholder": "Choose",
+      "dateLabel": "Expense Date",
+      "referenceLabel": "Reference / Invoice Number",
+      "referencePlaceholder": "Invoice or reference number",
+      "notesLabel": "Notes",
+      "notesPlaceholder": "Add a short note...",
+      "submit": "Add Expense"
+    },
+    "paymentMethods": {
+      "cash": "Cash",
+      "bankTransfer": "Bank Transfer",
+      "card": "Card",
+      "cheque": "Cheque"
+    },
+    "overview": {
+      "byCategory": "Expenses by Category",
+      "byCategoryMonthly": "Monthly Expenses by Category",
+      "trend": "Expense Trend",
+      "byBranch": "Expenses by Branch",
+      "recent": "Recent Expenses",
+      "noData": "No data available",
+      "noExpensesYet": "No expenses yet",
+      "total": "Total",
+      "insightsTitle": "Insights",
+      "insightsEmpty": "Not enough data to show insights yet.",
+      "other": "Other",
+      "kpis": {
+        "totalAmount": "Total Expenses",
+        "count": "Expense Count",
+        "categoryCount": "Category Count",
+        "average": "Average Expense"
+      },
+      "insightTopCategory": "\"{category}\" is the top spending category at {pct}% of the total.",
+      "insightMonthChange": "Spending this month {direction} by {pct}% vs last month.",
+      "insightIncreased": "increased",
+      "insightDecreased": "decreased",
+      "insightTopBranch": "{branch} is the top spending branch with a total of {total}."
+    }
+  },
+  "dateField": {
+    "placeholder": "Select date",
+    "ariaLabel": "Date"
   }
 }

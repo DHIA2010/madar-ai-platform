@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Loader2, Plus, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -11,7 +12,7 @@ import { AppButton, AppDateRangeFilter, AppSearchableSelect } from "@/components
 import { useWorkspace } from "@/features/workspace"
 
 import { useExpenseCategories, useExpenses, useExpensesList, useExpensesOverview } from "../hooks"
-import { EXPENSE_PAYMENT_METHODS } from "../types"
+import { EXPENSE_PAYMENT_METHOD_KEYS, EXPENSE_PAYMENT_METHOD_VALUES } from "../types"
 import { ExpenseCategoryDonutCard } from "./expense-category-donut-card"
 import { ExpenseCategoryStackedBarCard } from "./expense-category-stacked-bar-card"
 import { HEADING, MUTED, PANEL } from "./expense-field"
@@ -22,6 +23,8 @@ import { ExpensesKpiCards } from "./expenses-kpi-cards"
 import { RecentExpensesCard } from "./recent-expenses-card"
 
 export function ExpensesOverviewPage() {
+  const t = useTranslations("expenses")
+  const tCommon = useTranslations("common")
   const router = useRouter()
   const { expenses, isLoading } = useExpenses()
   const { categories } = useExpenseCategories()
@@ -35,8 +38,8 @@ export function ExpensesOverviewPage() {
     <div dir="rtl" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className={cn("text-2xl font-bold", HEADING)}>المصروفات</h1>
-          <p className={cn("mt-1 text-sm", MUTED)}>نظرة عامة على مصروفات المنشأة.</p>
+          <h1 className={cn("text-2xl font-bold", HEADING)}>{t("heading")}</h1>
+          <p className={cn("mt-1 text-sm", MUTED)}>{t("subheading")}</p>
         </div>
         <AppButton
           icon={
@@ -47,7 +50,7 @@ export function ExpensesOverviewPage() {
           className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-bold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6]"
           onClick={() => router.push(ROUTES.expensesAdd)}
         >
-          إضافة مصروف
+          {t("addExpense")}
         </AppButton>
       </div>
 
@@ -56,34 +59,40 @@ export function ExpensesOverviewPage() {
           <AppSearchableSelect
             value={list.categoryId}
             options={[
-              { value: "all", label: "كل الفئات" },
+              { value: "all", label: t("filters.allCategories") },
               ...categories.map((category) => ({ value: category.id, label: category.name })),
             ]}
             onChange={(value) => list.setCategoryId(value)}
-            placeholder="الفئة"
-            ariaLabel="الفئة"
+            placeholder={t("filters.category")}
+            ariaLabel={t("filters.category")}
             triggerClassName="w-[160px]"
           />
           <AppSearchableSelect
             value={list.workspaceId}
             options={[
-              { value: "all", label: "كل الفروع" },
+              { value: "all", label: t("filters.allBranches") },
               ...availableWorkspaces.map((workspace) => ({
                 value: workspace.id,
                 label: workspace.name,
               })),
             ]}
             onChange={(value) => list.setWorkspaceId(value)}
-            placeholder="الفرع"
-            ariaLabel="الفرع"
+            placeholder={t("filters.branch")}
+            ariaLabel={t("filters.branch")}
             triggerClassName="w-[160px]"
           />
           <AppSearchableSelect
             value={list.paymentMethod}
-            options={[{ value: "all", label: "كل طرق الدفع" }, ...EXPENSE_PAYMENT_METHODS]}
+            options={[
+              { value: "all", label: t("filters.allPaymentMethods") },
+              ...EXPENSE_PAYMENT_METHOD_VALUES.map((value) => ({
+                value,
+                label: t(`paymentMethods.${EXPENSE_PAYMENT_METHOD_KEYS[value]}`),
+              })),
+            ]}
             onChange={(value) => list.setPaymentMethod(value as typeof list.paymentMethod)}
-            placeholder="طريقة الدفع"
-            ariaLabel="طريقة الدفع"
+            placeholder={t("filters.paymentMethod")}
+            ariaLabel={t("filters.paymentMethod")}
             triggerClassName="w-[160px]"
           />
           <AppDateRangeFilter value={list.dateRange} onChange={list.setDateRange} />
@@ -94,7 +103,7 @@ export function ExpensesOverviewPage() {
               className="h-11 shrink-0 gap-1.5 rounded-[12px] border-[#e8edf3] px-3 text-[12.5px] font-semibold text-[#5b6b85]"
               onClick={list.resetFilters}
             >
-              مسح الفلاتر
+              {t("filters.clearFilters")}
             </AppButton>
           ) : null}
         </div>
@@ -103,7 +112,7 @@ export function ExpensesOverviewPage() {
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>

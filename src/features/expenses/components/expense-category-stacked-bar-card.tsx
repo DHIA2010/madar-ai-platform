@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { cn } from "@/lib/utils"
@@ -19,11 +20,13 @@ export function ExpenseCategoryStackedBarCard({
   data: Array<Record<string, string | number>>
   seriesKeys: string[]
 }) {
+  const t = useTranslations("expenses.overview")
+
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-1 text-[13.5px] font-bold", HEADING)}>المصروفات الشهرية حسب الفئة</h3>
+      <h3 className={cn("mb-1 text-[13.5px] font-bold", HEADING)}>{t("byCategoryMonthly")}</h3>
       {seriesKeys.length === 0 ? (
-        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{t("noData")}</p>
       ) : (
         <>
           <div className="mb-2 flex flex-wrap items-center gap-3">

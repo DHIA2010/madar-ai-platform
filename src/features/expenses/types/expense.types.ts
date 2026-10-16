@@ -1,17 +1,22 @@
 export type ExpensePaymentMethod = "cash" | "bank_transfer" | "card" | "cheque"
 export type ExpenseStatus = "active" | "cancelled"
 
-export const EXPENSE_PAYMENT_METHODS: Array<{ value: ExpensePaymentMethod; label: string }> = [
-  { value: "cash", label: "نقدًا" },
-  { value: "bank_transfer", label: "حوالة بنكية" },
-  { value: "card", label: "بطاقة" },
-  { value: "cheque", label: "شيك" },
+export const EXPENSE_PAYMENT_METHOD_VALUES: ExpensePaymentMethod[] = [
+  "cash",
+  "bank_transfer",
+  "card",
+  "cheque",
 ]
 
-export const EXPENSE_TAX_OPTIONS: Array<{ value: "inclusive" | "exclusive"; label: string }> = [
-  { value: "exclusive", label: "غير شامل الضريبة" },
-  { value: "inclusive", label: "شامل الضريبة" },
-]
+// Labels are resolved via t("paymentMethods.<key>") at render time rather than stored here --
+// this module has no component/hook scope of its own to call useTranslations from. See
+// expenses-list-page.tsx / expense-form.tsx for the t()-driven label lists built from this.
+export const EXPENSE_PAYMENT_METHOD_KEYS: Record<ExpensePaymentMethod, string> = {
+  cash: "cash",
+  bank_transfer: "bankTransfer",
+  card: "card",
+  cheque: "cheque",
+}
 
 export interface ExpenseCategory {
   id: string

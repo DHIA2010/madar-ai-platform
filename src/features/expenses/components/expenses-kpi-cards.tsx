@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { ArrowDown, ArrowUp, Receipt, Tags, TrendingUp, Wallet } from "lucide-react"
 
@@ -12,8 +13,8 @@ const KPI_TONE = {
   emerald: "bg-emerald-50 text-emerald-600",
 } as const
 
-function formatCurrency(value: number) {
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(value))} ر.س`
+function formatCurrency(value: number, currencyLabel: string) {
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(value))} ${currencyLabel}`
 }
 
 function Card({
@@ -58,11 +59,14 @@ export function ExpensesKpiCards({
   monthOverMonthDelta: number | null
   categoryCount: number
 }) {
+  const t = useTranslations("expenses.overview.kpis")
+  const currencyLabel = useTranslations("common")("currency")
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card
-        label="إجمالي المصروفات"
-        value={formatCurrency(totalAmount)}
+        label={t("totalAmount")}
+        value={formatCurrency(totalAmount, currencyLabel)}
         icon={Wallet}
         tone="blue"
         trailing={
@@ -83,11 +87,11 @@ export function ExpensesKpiCards({
           ) : null
         }
       />
-      <Card label="عدد المصروفات" value={String(expenseCount)} icon={Receipt} tone="violet" />
-      <Card label="عدد الفئات" value={String(categoryCount)} icon={Tags} tone="amber" />
+      <Card label={t("count")} value={String(expenseCount)} icon={Receipt} tone="violet" />
+      <Card label={t("categoryCount")} value={String(categoryCount)} icon={Tags} tone="amber" />
       <Card
-        label="متوسط المصروف"
-        value={formatCurrency(expenseCount > 0 ? totalAmount / expenseCount : 0)}
+        label={t("average")}
+        value={formatCurrency(expenseCount > 0 ? totalAmount / expenseCount : 0, currencyLabel)}
         icon={TrendingUp}
         tone="emerald"
       />
