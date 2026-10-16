@@ -1,6 +1,7 @@
 "use client"
 
 import { type ReactNode, useId, useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import {
   ArrowDown,
   ArrowUp,
@@ -38,6 +39,10 @@ import { AppSelect, AppSelectContent, AppSelectItem, AppSelectTrigger } from "@/
 import type { ReportDisplayType, ReportTimeGrouping } from "../services/catalog.service"
 import type { KpiResult } from "../services/kpi.service"
 
+import type { Locale } from "@/i18n/locales"
+
+type KpiWidgetTranslator = ReturnType<typeof useTranslations<"reports.kpiWidget">>
+
 const HEADING = "text-[#0b1738]"
 const MUTED = "text-[#95a4bd]"
 
@@ -54,7 +59,7 @@ const PIE_COLORS = [
 
 // The demo mockups label English "K"/"M" suffixes even in an otherwise Arabic-RTL UI -- kept as
 // literal Latin suffixes here to match, only the numeral formatting itself is locale-aware.
-function formatCompact(value: number, decimalPlaces = 1): string {
+function formatCompact(value: number, locale: Locale, decimalPlaces = 1): string {
   const abs = Math.abs(value)
   if (abs >= 1_000_000) {
     const millions = value / 1_000_000
@@ -64,19 +69,23 @@ function formatCompact(value: number, decimalPlaces = 1): string {
     const thousands = value / 1_000
     return `${Number.isInteger(thousands) ? thousands : thousands.toFixed(1)}K`
   }
-  return formatNumber(value, decimalPlaces)
+  return formatNumber(value, locale, decimalPlaces)
 }
 
-// ar-SA formats both digits and dates against locale defaults (Eastern Arabic-Indic numerals,
+// ar-SA/en-US format both digits and dates against locale defaults (Eastern Arabic-Indic numerals,
 // the Hijri calendar) in some ICU builds -- the Unicode extensions below force Western digits and
 // the Gregorian calendar so numbers/months match the plain Gregorian data the backend returns.
-const NUMBER_LOCALE = "ar-SA-u-nu-latn"
-const GREGORIAN_LOCALE = "ar-SA-u-ca-gregory-nu-latn"
+function numberLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
+}
+function gregorianLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory"
+}
 
 // decimalPlaces defaults to 1 -- the fixed rounding every KPI used before it became a
-// user-configurable per-KPI setting (see kpi-wizard-page.tsx's "عدد الخانات العشرية" step).
-function formatNumber(value: number, decimalPlaces = 1): string {
-  return new Intl.NumberFormat(NUMBER_LOCALE, {
+// user-configurable per-KPI setting (see kpi-wizard-page.tsx's decimal-places step).
+function formatNumber(value: number, locale: Locale, decimalPlaces = 1): string {
+  return new Intl.NumberFormat(numberLocale(locale), {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimalPlaces,
   }).format(value)
@@ -86,7 +95,11 @@ function roundToPlaces(value: number, decimalPlaces: number): number {
   return Number(value.toFixed(decimalPlaces))
 }
 
-function formatPointLabel(label: string, timeGrouping?: ReportTimeGrouping): string {
+function formatPointLabel(
+  label: string,
+  locale: Locale,
+  timeGrouping?: ReportTimeGrouping
+): string {
   if (!label) return ""
   const date = new Date(label)
   if (Number.isNaN(date.getTime())) {
@@ -94,12 +107,18 @@ function formatPointLabel(label: string, timeGrouping?: ReportTimeGrouping): str
     return label
   }
   if (timeGrouping === "day" || timeGrouping === "week") {
-    return new Intl.DateTimeFormat(GREGORIAN_LOCALE, { month: "long", day: "numeric" }).format(date)
+    return new Intl.DateTimeFormat(gregorianLocale(locale), {
+      month: "long",
+      day: "numeric",
+    }).format(date)
   }
   if (timeGrouping === "quarter" || timeGrouping === "year") {
-    return new Intl.DateTimeFormat(GREGORIAN_LOCALE, { year: "numeric" }).format(date)
+    return new Intl.DateTimeFormat(gregorianLocale(locale), { year: "numeric" }).format(date)
   }
-  return new Intl.DateTimeFormat(GREGORIAN_LOCALE, { month: "long", year: "2-digit" }).format(date)
+  return new Intl.DateTimeFormat(gregorianLocale(locale), {
+    month: "long",
+    year: "2-digit",
+  }).format(date)
 }
 
 // The first table/legend column shows a date bucket for a time-series KPI or a category value for
@@ -108,20 +127,18 @@ function formatPointLabel(label: string, timeGrouping?: ReportTimeGrouping): str
 // still specific to what's actually in the column rather than a generic "الاسم".
 function nameColumnLabel(
   timeGrouping: ReportTimeGrouping | undefined,
-  dimensionLabel: string | undefined
+  dimensionLabel: string | undefined,
+  t: KpiWidgetTranslator
 ): string {
   if (dimensionLabel) return dimensionLabel
-  if (timeGrouping && timeGrouping !== "none") return "التاريخ"
-  return "الفئة"
+  if (timeGrouping && timeGrouping !== "none") return t("dateColumnLabel")
+  return t("categoryColumnLabel")
 }
 
-const TIME_GROUPING_LABELS: Partial<Record<ReportTimeGrouping, string>> = {
-  day: "يومي",
-  week: "أسبوعي",
-  month: "شهري",
-  quarter: "ربع سنوي",
-  year: "سنوي",
+function timeGroupingLabel(timeGrouping: ReportTimeGrouping, t: KpiWidgetTranslator): string {
+  return t(`timeGroupingLabels.${timeGrouping}` as "timeGroupingLabels.day")
 }
+const KNOWN_TIME_GROUPINGS: ReportTimeGrouping[] = ["day", "week", "month", "quarter", "year"]
 
 const PERIOD_PILL_CLASS =
   "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#e1e7f0] bg-[#fafbfd] px-3 py-1.5 text-[11px] font-semibold text-[#5b6b85]"
@@ -138,28 +155,29 @@ function PeriodPill({
   // where clicking anything is meaningless) falls back to the plain static pill.
   onChange?: (next: ReportTimeGrouping) => void
 }) {
-  if (!timeGrouping || timeGrouping === "none" || !TIME_GROUPING_LABELS[timeGrouping]) {
+  const t = useTranslations("reports.kpiWidget")
+  if (!timeGrouping || timeGrouping === "none" || !KNOWN_TIME_GROUPINGS.includes(timeGrouping)) {
     return null
   }
   if (!onChange) {
     return (
       <span className={PERIOD_PILL_CLASS}>
         <Calendar className="size-3.5" />
-        {TIME_GROUPING_LABELS[timeGrouping]}
+        {timeGroupingLabel(timeGrouping, t)}
       </span>
     )
   }
   return (
     <AppSelect value={timeGrouping} onValueChange={(next) => onChange(next as ReportTimeGrouping)}>
       <AppSelectTrigger
-        aria-label="تغيير التجميع الزمني لهذا المؤشر (مؤقت)"
+        aria-label={t("timeGroupingChangeAriaLabel")}
         className={cn(
           PERIOD_PILL_CLASS,
           "h-auto gap-1.5 transition-colors hover:border-[#c4d5f0] [&_svg]:size-3.5 [&_svg]:text-[#5b6b85] [&_svg]:opacity-100"
         )}
       >
         <Calendar className="size-3.5" />
-        {TIME_GROUPING_LABELS[timeGrouping]}
+        {timeGroupingLabel(timeGrouping, t)}
       </AppSelectTrigger>
       <AppSelectContent
         position="popper"
@@ -171,9 +189,9 @@ function PeriodPill({
         // mode every other popover-style menu in this app already uses.
         sideOffset={4}
       >
-        {(Object.keys(TIME_GROUPING_LABELS) as ReportTimeGrouping[]).map((key) => (
+        {KNOWN_TIME_GROUPINGS.map((key) => (
           <AppSelectItem key={key} value={key}>
-            {TIME_GROUPING_LABELS[key]}
+            {timeGroupingLabel(key, t)}
           </AppSelectItem>
         ))}
       </AppSelectContent>
@@ -188,6 +206,8 @@ function ComparisonRow({
   changePercent: number | null
   decimalPlaces: number
 }) {
+  const t = useTranslations("reports.kpiWidget")
+  const locale = useLocale() as Locale
   if (changePercent === null) return null
   const isUp = changePercent >= 0
   return (
@@ -199,9 +219,9 @@ function ComparisonRow({
         )}
       >
         {isUp ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
-        {formatNumber(Math.abs(changePercent), decimalPlaces)}%
+        {formatNumber(Math.abs(changePercent), locale, decimalPlaces)}%
       </span>
-      <span className={MUTED}>مقارنة بالفترة السابقة</span>
+      <span className={MUTED}>{t("comparisonPrevPeriod")}</span>
     </div>
   )
 }
@@ -235,6 +255,7 @@ function CardHeaderRow({
   // anything is meaningless -- falls back to a plain, non-interactive heading.
   onTitleClick?: () => void
 }) {
+  const t = useTranslations("reports.kpiWidget")
   // The side columns size to their own content (auto) and the title takes whatever is left
   // (minmax(0,1fr), so it can shrink to 0 and truncate) -- equal thirds let a wide rightSlot
   // (e.g. the table's search box + export button) overflow its column and visually collide with
@@ -247,7 +268,7 @@ function CardHeaderRow({
           <button
             type="button"
             onClick={onTitleClick}
-            title="فتح المؤشر للتعديل"
+            title={t("openKpiForEdit")}
             data-canvas-text
             className={cn(
               SINGLE_LINE_CLIP,
@@ -275,10 +296,11 @@ function ValueWithComparison({
   result: KpiResult
   decimalPlaces: number
 }) {
+  const locale = useLocale() as Locale
   return (
     <>
       <p className={cn("text-[19px] font-extrabold leading-none", HEADING)}>
-        {formatNumber(result.currentValue, decimalPlaces)}
+        {formatNumber(result.currentValue, locale, decimalPlaces)}
       </p>
       <ComparisonRow changePercent={result.changePercent} decimalPlaces={decimalPlaces} />
     </>
@@ -302,9 +324,11 @@ function NumberCard({
   showAllRows = false,
   onTitleClick,
 }: KpiWidgetRendererProps) {
+  const t = useTranslations("reports.kpiWidget")
+  const locale = useLocale() as Locale
   const gradientId = useId()
   const sparkData = result.points.map((point) => ({
-    label: formatPointLabel(point.label, timeGrouping),
+    label: formatPointLabel(point.label, locale, timeGrouping),
     value: point.value,
   }))
   const lastIndex = sparkData.length - 1
@@ -321,9 +345,10 @@ function NumberCard({
               onClick={() =>
                 downloadCsv(
                   sparkData,
-                  nameColumnLabel(timeGrouping, undefined),
+                  nameColumnLabel(timeGrouping, undefined, t),
                   fieldLabel ?? name,
                   [],
+                  t,
                   { includePercentage: false, filename: `${name}.csv` }
                 )
               }
@@ -344,7 +369,7 @@ function NumberCard({
                 </defs>
                 <Tooltip
                   formatter={(value: number) => [
-                    formatNumber(value, decimalPlaces),
+                    formatNumber(value, locale, decimalPlaces),
                     fieldLabel ?? name,
                   ]}
                   contentStyle={{ ...TOOLTIP_STYLE, fontSize: 11, padding: "4px 8px" }}
@@ -404,13 +429,15 @@ function LineCard({
   onTimeGroupingChange,
   onTitleClick,
 }: KpiWidgetRendererProps) {
+  const t = useTranslations("reports.kpiWidget")
+  const locale = useLocale() as Locale
   const gradientId = useId()
   const extraKeys = Object.keys(extraFieldLabels)
   const seriesKeys = ["value", ...extraKeys]
   const seriesLabel = (key: string) =>
     key === "value" ? (fieldLabel ?? name) : extraFieldLabels[key]
   const chartData = result.points.map((point) => ({
-    label: formatPointLabel(point.label, timeGrouping),
+    label: formatPointLabel(point.label, locale, timeGrouping),
     value: point.value,
     ...point.extraValues,
   }))
@@ -429,9 +456,10 @@ function LineCard({
                 onClick={() =>
                   downloadCsv(
                     chartData,
-                    nameColumnLabel(timeGrouping, undefined),
+                    nameColumnLabel(timeGrouping, undefined, t),
                     fieldLabel ?? name,
                     extraKeys.map((key) => ({ key, label: extraFieldLabels[key] })),
+                    t,
                     { includePercentage: false, filename: `${name}.csv` }
                   )
                 }
@@ -476,14 +504,14 @@ function LineCard({
             <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="#eef2f8" />
             <XAxis dataKey="label" tick={AXIS_TICK_STYLE} axisLine={false} tickLine={false} />
             <YAxis
-              tickFormatter={(value: number) => formatCompact(value, decimalPlaces)}
+              tickFormatter={(value: number) => formatCompact(value, locale, decimalPlaces)}
               tick={AXIS_TICK_STYLE}
               axisLine={false}
               tickLine={false}
               width={40}
             />
             <Tooltip
-              formatter={(value: number) => formatNumber(value, decimalPlaces)}
+              formatter={(value: number) => formatNumber(value, locale, decimalPlaces)}
               contentStyle={TOOLTIP_STYLE}
             />
             {seriesKeys.map((key, index) => (
@@ -542,8 +570,10 @@ function BarCard({
   onTimeGroupingChange,
   onTitleClick,
 }: KpiWidgetRendererProps) {
+  const t = useTranslations("reports.kpiWidget")
+  const locale = useLocale() as Locale
   const chartData = result.points.map((point) => ({
-    label: formatPointLabel(point.label, timeGrouping),
+    label: formatPointLabel(point.label, locale, timeGrouping),
     value: point.value,
   }))
 
@@ -558,7 +588,7 @@ function BarCard({
             {showAllRows ? null : (
               <ChartDownloadButton
                 onClick={() =>
-                  downloadCsv(chartData, nameColumnLabel(timeGrouping, undefined), name, [], {
+                  downloadCsv(chartData, nameColumnLabel(timeGrouping, undefined, t), name, [], t, {
                     includePercentage: false,
                     filename: `${name}.csv`,
                   })
@@ -581,14 +611,17 @@ function BarCard({
             <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="#eef2f8" />
             <XAxis dataKey="label" tick={AXIS_TICK_STYLE} axisLine={false} tickLine={false} />
             <YAxis
-              tickFormatter={(value: number) => formatCompact(value, decimalPlaces)}
+              tickFormatter={(value: number) => formatCompact(value, locale, decimalPlaces)}
               tick={AXIS_TICK_STYLE}
               axisLine={false}
               tickLine={false}
               width={40}
             />
             <Tooltip
-              formatter={(value: number) => [formatNumber(value, decimalPlaces), "القيمة"]}
+              formatter={(value: number) => [
+                formatNumber(value, locale, decimalPlaces),
+                t("valueTooltipLabel"),
+              ]}
               contentStyle={TOOLTIP_STYLE}
               cursor={{ fill: "#f4f7fc" }}
             />
@@ -611,9 +644,12 @@ function PieCard({
   onTimeGroupingChange,
   onTitleClick,
 }: KpiWidgetRendererProps) {
+  const t = useTranslations("reports.kpiWidget")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
   const valueLabel = fieldLabel ?? name
   const chartData = result.points.map((point) => ({
-    label: formatPointLabel(point.label, timeGrouping),
+    label: formatPointLabel(point.label, locale, timeGrouping),
     value: point.value,
   }))
   const total = chartData.reduce((sum, row) => sum + row.value, 0) || result.currentValue
@@ -635,9 +671,10 @@ function PieCard({
                 onClick={() =>
                   downloadCsv(
                     rowsWithPct,
-                    nameColumnLabel(timeGrouping, dimensionLabel),
+                    nameColumnLabel(timeGrouping, dimensionLabel, t),
                     valueLabel,
                     [],
+                    t,
                     { filename: `${name}.csv` }
                   )
                 }
@@ -672,15 +709,15 @@ function PieCard({
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value: number) => formatNumber(value, decimalPlaces)}
+                formatter={(value: number) => formatNumber(value, locale, decimalPlaces)}
                 contentStyle={TOOLTIP_STYLE}
               />
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <p className={cn("text-[10.5px]", MUTED)}>الإجمالي</p>
+            <p className={cn("text-[10.5px]", MUTED)}>{tCommon("total")}</p>
             <p className={cn("text-[16px] font-extrabold", HEADING)}>
-              {formatNumber(total, decimalPlaces)}
+              {formatNumber(total, locale, decimalPlaces)}
             </p>
           </div>
         </div>
@@ -689,9 +726,11 @@ function PieCard({
             <thead>
               <tr className="text-[11px]">
                 <th className={cn("pb-2 text-start font-semibold", HEADING)}>
-                  {nameColumnLabel(timeGrouping, dimensionLabel)}
+                  {nameColumnLabel(timeGrouping, dimensionLabel, t)}
                 </th>
-                <th className={cn("pb-2 text-center font-semibold", HEADING)}>النسبة</th>
+                <th className={cn("pb-2 text-center font-semibold", HEADING)}>
+                  {t("percentShort")}
+                </th>
                 <th className={cn("pb-2 text-end font-semibold", HEADING)}>{valueLabel}</th>
               </tr>
             </thead>
@@ -724,7 +763,7 @@ function PieCard({
                       {pct}%
                     </td>
                     <td className={cn("py-2 text-end font-semibold", HEADING)}>
-                      {formatNumber(row.value, decimalPlaces)}
+                      {formatNumber(row.value, locale, decimalPlaces)}
                     </td>
                   </tr>
                 )
@@ -732,7 +771,7 @@ function PieCard({
               {chartData.length === 0 && (
                 <tr>
                   <td colSpan={3} className={cn("py-6 text-center", MUTED)}>
-                    لا توجد بيانات
+                    {tCommon("noData")}
                   </td>
                 </tr>
               )}
@@ -751,11 +790,12 @@ function downloadCsv(
   nameHeader: string,
   valueHeader: string,
   extraHeaders: Array<{ key: string; label: string }> = [],
+  t: KpiWidgetTranslator,
   // Only a dimension breakdown (table/pie) has a meaningful "share of total" -- a time series
   // (line/bar/number/gauge) doesn't, so that column is opt-in rather than always tacked on.
   {
     includePercentage = true,
-    filename = "تقرير.csv",
+    filename,
   }: {
     includePercentage?: boolean
     filename?: string
@@ -766,7 +806,7 @@ function downloadCsv(
     nameHeader,
     valueHeader,
     ...extraHeaders.map((extra) => extra.label),
-    ...(includePercentage ? ["النسبة من الإجمالي"] : []),
+    ...(includePercentage ? [t("percentOfTotal")] : []),
   ]
   const lines = rows.map((row, index) => [
     String(index + 1),
@@ -782,18 +822,19 @@ function downloadCsv(
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
-  link.download = filename
+  link.download = filename ?? `${t("csvFilenameFallback")}.csv`
   link.click()
   URL.revokeObjectURL(url)
 }
 
 function ChartDownloadButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations("reports.kpiWidget")
   return (
     <button
       type="button"
       onClick={onClick}
       className="flex size-8 shrink-0 items-center justify-center rounded-full border border-[#e1e7f0] text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738]"
-      aria-label="تصدير"
+      aria-label={t("exportAriaLabel")}
     >
       <Download className="size-3.5" />
     </button>
@@ -812,6 +853,9 @@ function TableCard({
   onTimeGroupingChange,
   onTitleClick,
 }: KpiWidgetRendererProps) {
+  const t = useTranslations("reports.kpiWidget")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
   const valueLabel = fieldLabel ?? name
   const extraKeys = Object.keys(extraFieldLabels)
   const [search, setSearch] = useState("")
@@ -821,12 +865,12 @@ function TableCard({
   const rows = useMemo(
     () =>
       result.points.map((point) => ({
-        label: formatPointLabel(point.label, timeGrouping),
+        label: formatPointLabel(point.label, locale, timeGrouping),
         value: point.value,
         pct: total > 0 ? roundToPlaces((point.value / total) * 100, decimalPlaces) : 0,
         extraValues: point.extraValues,
       })),
-    [result.points, total, timeGrouping, decimalPlaces]
+    [result.points, total, timeGrouping, decimalPlaces, locale]
   )
   const filtered = useMemo(
     () => rows.filter((row) => row.label.toLowerCase().includes(search.trim().toLowerCase())),
@@ -866,7 +910,7 @@ function TableCard({
                   setSearch(event.target.value)
                   setPage(1)
                 }}
-                placeholder="البحث..."
+                placeholder={t("searchPlaceholder")}
                 className="h-9 w-64 rounded-full border border-[#e1e7f0] bg-[#fafbfd] pe-3 ps-8 text-[12px] text-[#0b1738] placeholder:text-[#95a4bd] focus:border-[#2878ff] focus:bg-white focus:outline-none"
               />
             </div>
@@ -879,9 +923,10 @@ function TableCard({
                 onClick={() =>
                   downloadCsv(
                     filtered,
-                    nameColumnLabel(timeGrouping, dimensionLabel),
+                    nameColumnLabel(timeGrouping, dimensionLabel, t),
                     valueLabel,
                     extraKeys.map((key) => ({ key, label: extraFieldLabels[key] })),
+                    t,
                     { filename: `${name}.csv` }
                   )
                 }
@@ -898,7 +943,7 @@ function TableCard({
         >
           <span className={cn("text-center", HEADING)}>#</span>
           <span className={cn("text-start", HEADING)}>
-            {nameColumnLabel(timeGrouping, dimensionLabel)}
+            {nameColumnLabel(timeGrouping, dimensionLabel, t)}
           </span>
           <span className={cn("text-center", HEADING)}>{valueLabel}</span>
           {extraKeys.map((key) => (
@@ -906,7 +951,7 @@ function TableCard({
               {extraFieldLabels[key]}
             </span>
           ))}
-          <span className={cn("text-center", HEADING)}>النسبة من الإجمالي</span>
+          <span className={cn("text-center", HEADING)}>{t("percentOfTotal")}</span>
         </div>
         <div className="flex flex-col gap-1.5">
           {pageRows.map((row, index) => (
@@ -925,11 +970,11 @@ function TableCard({
                 {row.label}
               </span>
               <span className={cn("text-center font-semibold", HEADING)}>
-                {formatNumber(row.value, decimalPlaces)}
+                {formatNumber(row.value, locale, decimalPlaces)}
               </span>
               {extraKeys.map((key) => (
                 <span key={key} className={cn("text-center font-semibold", HEADING)}>
-                  {formatNumber(row.extraValues?.[key] ?? 0, decimalPlaces)}
+                  {formatNumber(row.extraValues?.[key] ?? 0, locale, decimalPlaces)}
                 </span>
               ))}
               <div className="flex items-center justify-center gap-2">
@@ -947,7 +992,7 @@ function TableCard({
           ))}
           {pageRows.length === 0 && (
             <div className={cn("rounded-[10px] bg-[#fafbfd] py-6 text-center text-[12px]", MUTED)}>
-              لا توجد بيانات
+              {tCommon("noData")}
             </div>
           )}
         </div>
@@ -957,18 +1002,16 @@ function TableCard({
           entirely for showAllRows rather than shown with just the count and no controls. */}
       {!showAllRows && filtered.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#f1f4f9] pt-3 text-[11.5px] text-[#5b6b85]">
-          <span>
-            عرض {pageRows.length} من {filtered.length} نتائج
-          </span>
+          <span>{t("showingCount", { count: pageRows.length, total: filtered.length })}</span>
           <div className="flex items-center gap-1">
             <button
               type="button"
               disabled={currentPage <= 1}
               onClick={() => setPage(currentPage - 1)}
               className="flex size-7 items-center justify-center rounded-[8px] border border-[#e1e7f0] disabled:opacity-40"
-              aria-label="السابق"
+              aria-label={t("paginationPreviousAriaLabel")}
             >
-              <ChevronRight className="size-3.5" />
+              <ChevronLeft className="size-3.5 rtl:rotate-180" />
             </button>
             {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
               <button
@@ -990,9 +1033,9 @@ function TableCard({
               disabled={currentPage >= pageCount}
               onClick={() => setPage(currentPage + 1)}
               className="flex size-7 items-center justify-center rounded-[8px] border border-[#e1e7f0] disabled:opacity-40"
-              aria-label="التالي"
+              aria-label={t("paginationNextAriaLabel")}
             >
-              <ChevronLeft className="size-3.5" />
+              <ChevronRight className="size-3.5 rtl:rotate-180" />
             </button>
           </div>
         </div>
@@ -1075,13 +1118,15 @@ function GaugeCard({
   onTimeGroupingChange,
   onTitleClick,
 }: KpiWidgetRendererProps) {
+  const t = useTranslations("reports.kpiWidget")
+  const locale = useLocale() as Locale
   const current = result.currentValue
   const goal = target && target > 0 ? target : null
   const progress = goal ? Math.min(current / goal, 1) : 0
   const percent = goal ? roundToPlaces(progress * 100, decimalPlaces) : null
   const remaining = goal ? Math.max(goal - current, 0) : null
   const gaugeRows = result.points.map((point) => ({
-    label: formatPointLabel(point.label, timeGrouping),
+    label: formatPointLabel(point.label, locale, timeGrouping),
     value: point.value,
   }))
 
@@ -1096,7 +1141,7 @@ function GaugeCard({
             {showAllRows ? null : (
               <ChartDownloadButton
                 onClick={() =>
-                  downloadCsv(gaugeRows, nameColumnLabel(timeGrouping, undefined), name, [], {
+                  downloadCsv(gaugeRows, nameColumnLabel(timeGrouping, undefined, t), name, [], t, {
                     includePercentage: false,
                     filename: `${name}.csv`,
                   })
@@ -1110,9 +1155,9 @@ function GaugeCard({
       {!goal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
           <p className={cn("text-[26px] font-extrabold", HEADING)}>
-            {formatNumber(current, decimalPlaces)}
+            {formatNumber(current, locale, decimalPlaces)}
           </p>
-          <p className={cn("text-[11.5px]", MUTED)}>لم يتم تحديد هدف لهذا المؤشر بعد</p>
+          <p className={cn("text-[11.5px]", MUTED)}>{t("noTargetSet")}</p>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col justify-center overflow-auto">
@@ -1120,11 +1165,11 @@ function GaugeCard({
             <SemiGaugeArc progress={progress} />
             <div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex flex-col items-center gap-0.5 text-center">
               <p className={cn("text-[19px] font-extrabold leading-none", HEADING)}>
-                {formatNumber(current, decimalPlaces)}
+                {formatNumber(current, locale, decimalPlaces)}
               </p>
-              <p className={cn("text-[10px]", MUTED)}>القيمة الحالية</p>
+              <p className={cn("text-[10px]", MUTED)}>{t("currentValueLabel")}</p>
               <p className="text-[13px] font-bold text-[#2878ff]">{percent}%</p>
-              <p className={cn("text-[10px]", MUTED)}>من الهدف</p>
+              <p className={cn("text-[10px]", MUTED)}>{t("ofTarget")}</p>
             </div>
           </div>
           {/* flex-wrap (not a grid + viewport breakpoint) so cards wrap based on this widget's
@@ -1133,21 +1178,26 @@ function GaugeCard({
           <div className="mt-3 flex flex-wrap gap-2">
             <GaugeStat
               icon={BarChart3}
-              label="القيمة الحالية"
-              value={formatNumber(current, decimalPlaces)}
+              label={t("currentValueLabel")}
+              value={formatNumber(current, locale, decimalPlaces)}
               tone="blue"
             />
             <GaugeStat
               icon={Target}
-              label="الهدف"
-              value={formatNumber(goal, decimalPlaces)}
+              label={t("targetLabel")}
+              value={formatNumber(goal, locale, decimalPlaces)}
               tone="green"
             />
-            <GaugeStat icon={Percent} label="نسبة الإنجاز" value={`${percent}%`} tone="blue" />
+            <GaugeStat
+              icon={Percent}
+              label={t("achievementRateLabel")}
+              value={`${percent}%`}
+              tone="blue"
+            />
             <GaugeStat
               icon={TrendingUp}
-              label="الفرق المتبقي"
-              value={formatNumber(remaining ?? 0, decimalPlaces)}
+              label={t("remainingDifferenceLabel")}
+              value={formatNumber(remaining ?? 0, locale, decimalPlaces)}
               tone="green"
             />
           </div>

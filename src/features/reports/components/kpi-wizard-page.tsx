@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   BarChart3,
   Check,
@@ -48,6 +49,8 @@ import {
 } from "../services"
 import { KpiWidgetRenderer } from "./kpi-widget-renderer"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const HEADING = "text-[#0b1738]"
 const MUTED = "text-[#6b7b96]"
 const PANEL = "rounded-[14px] border border-[#e1e7f0] bg-white p-4"
@@ -66,52 +69,54 @@ const FIELD_CLASS =
 const FIELD_TEXTAREA_CLASS =
   "min-h-[92px] resize-none rounded-[10px] border-[#e1e7f0] bg-[#fafbfd] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#0b1738] shadow-none transition-colors placeholder:text-[#95a4bd] hover:border-[#c4d5f0] focus-visible:border-[#2878ff] focus-visible:bg-white focus-visible:ring-[3px] focus-visible:ring-[#2878ff]/12"
 
-const STEPS = [
-  { key: "basic", label: "البيانات الأساسية", hint: "اسم المؤشر ومصدر البيانات" },
-  { key: "data", label: "تعريف البيانات", hint: "اختيار الحقول وطريقة الحساب" },
-  { key: "filters", label: "الفلاتر", hint: "تصفية البيانات حسب الشروط" },
-  { key: "grouping", label: "التجميع الزمني", hint: "تحديد طريقة التجميع" },
-  { key: "comparison", label: "المقارنة", hint: "مقارنة مع فترة أخرى" },
-  { key: "display", label: "طريقة العرض", hint: "اختيار نوع العرض" },
-] as const
+const STEP_KEYS = ["basic", "data", "filters", "grouping", "comparison", "display"] as const
 
-const AGGREGATION_LABELS: Record<ReportAggregation, string> = {
-  sum: "المجموع (SUM)",
-  avg: "المتوسط (AVG)",
-  count: "العدد (COUNT)",
-  min: "الأدنى (MIN)",
-  max: "الأعلى (MAX)",
+type KpiWizardTranslator = ReturnType<typeof useTranslations<"reports.kpiWizard">>
+
+function getSteps(t: KpiWizardTranslator) {
+  return STEP_KEYS.map((key) => ({
+    key,
+    label: t(`steps.${key}.label` as "steps.basic.label"),
+    hint: t(`steps.${key}.hint` as "steps.basic.hint"),
+  }))
 }
 
-const OPERATOR_LABELS: Record<ReportFilterOperator, string> = {
-  eq: "يساوي (=)",
-  neq: "لا يساوي (≠)",
-  contains: "يحتوي على",
-  not_contains: "لا يحتوي على",
+function aggregationLabel(agg: ReportAggregation, t: KpiWizardTranslator): string {
+  return t(`aggregations.${agg}` as "aggregations.sum")
 }
 
-const TIME_GROUPING_LABELS: Record<Exclude<ReportTimeGrouping, "none">, string> = {
-  day: "يومي",
-  week: "أسبوعي",
-  month: "شهري",
-  quarter: "ربع سنوي",
-  year: "سنوي",
+function operatorLabel(op: ReportFilterOperator, t: KpiWizardTranslator): string {
+  return t(`operators.${op}` as "operators.eq")
 }
 
-const DISPLAY_TYPES: Array<{ key: ReportDisplayType; label: string; icon: typeof Hash }> = [
-  { key: "number", label: "بطاقة رقمية", icon: Hash },
-  { key: "line", label: "خطي", icon: LineChart },
-  { key: "bar", label: "أعمدة", icon: BarChart3 },
-  { key: "pie", label: "دائري", icon: PieChart },
-  { key: "table", label: "جدول", icon: Table2 },
-  { key: "gauge", label: "مقياس", icon: Gauge },
+const TIME_GROUPING_KEYS: Exclude<ReportTimeGrouping, "none">[] = [
+  "day",
+  "week",
+  "month",
+  "quarter",
+  "year",
 ]
 
-const DECIMAL_PLACES_OPTIONS: Array<{ value: number; label: string; example: string }> = [
-  { value: 0, label: "بدون كسور", example: "32,267" },
-  { value: 1, label: "خانة واحدة", example: "32,266.8" },
-  { value: 2, label: "خانتان", example: "32,266.79" },
-]
+function displayTypeIcon(key: ReportDisplayType): typeof Hash {
+  const icons: Record<ReportDisplayType, typeof Hash> = {
+    number: Hash,
+    line: LineChart,
+    bar: BarChart3,
+    pie: PieChart,
+    table: Table2,
+    gauge: Gauge,
+  }
+  return icons[key]
+}
+const DISPLAY_TYPE_KEYS: ReportDisplayType[] = ["number", "line", "bar", "pie", "table", "gauge"]
+
+function getDecimalPlacesOptions(t: KpiWizardTranslator) {
+  return [
+    { value: 0, label: t("decimalPlaces.none"), example: "32,267" },
+    { value: 1, label: t("decimalPlaces.one"), example: "32,266.8" },
+    { value: 2, label: t("decimalPlaces.two"), example: "32,266.79" },
+  ]
+}
 
 // Adds thousands separators for display -- `target` state itself stays plain digits (no commas)
 // so `Number(target)` in handleSave keeps working unchanged.
@@ -123,14 +128,20 @@ function formatThousands(digits: string): string {
 }
 
 export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
+  const t = useTranslations("reports.kpiWizard")
+  const tKpi = useTranslations("reports.kpi")
+  const tKpiWidget = useTranslations("reports.kpiWidget")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const isEditing = Boolean(kpiId)
+  const STEPS = useMemo(() => getSteps(t), [t])
+  const DECIMAL_PLACES_OPTIONS = useMemo(() => getDecimalPlacesOptions(t), [t])
 
   const [catalog, setCatalog] = useState<CatalogDataSourceOption[]>([])
   const [loadingCatalog, setLoadingCatalog] = useState(true)
   const [loadingKpi, setLoadingKpi] = useState(isEditing)
   const [saving, setSaving] = useState(false)
-  const [activeStep, setActiveStep] = useState<(typeof STEPS)[number]["key"]>("basic")
+  const [activeStep, setActiveStep] = useState<(typeof STEP_KEYS)[number]>("basic")
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -329,7 +340,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
 
   const handleSave = async () => {
     if (!name.trim() || !definitionReady) {
-      toast.error("يرجى إدخال اسم المؤشر واختيار مصدر البيانات والحقل.")
+      toast.error(t("toasts.validationFailed"))
       return
     }
     setSaving(true)
@@ -354,14 +365,14 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
       }
       if (isEditing && kpiId) {
         await kpiService.update(kpiId, input)
-        toast.success("تم تحديث المؤشر بنجاح.")
+        toast.success(t("toasts.updated"))
       } else {
         await kpiService.create(input)
-        toast.success("تم إنشاء المؤشر بنجاح.")
+        toast.success(t("toasts.created"))
       }
       router.push(ROUTES.reportsKpis)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر حفظ المؤشر.")
+      toast.error(error instanceof Error ? error.message : t("toasts.saveFailed"))
     } finally {
       setSaving(false)
     }
@@ -369,7 +380,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
 
   if (loadingCatalog || loadingKpi) {
     return (
-      <div dir="rtl" className="space-y-3.5">
+      <div dir={localeDirection(locale)} className="space-y-3.5">
         <AppLoading variant="page" />
       </div>
     )
@@ -378,7 +389,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
   const activeStepMeta = STEPS.find((step) => step.key === activeStep)!
 
   return (
-    <div dir="rtl" className="space-y-3.5">
+    <div dir={localeDirection(locale)} className="space-y-3.5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[#eaf1ff] text-[#2878ff]">
@@ -386,11 +397,9 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
           </span>
           <div>
             <h1 className={cn("text-[19px] font-extrabold", HEADING)}>
-              {isEditing ? "تعديل المؤشر" : "إنشاء مؤشر جديد"}
+              {isEditing ? t("editTitle") : t("createTitle")}
             </h1>
-            <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>
-              قم بتعريف المؤشر وحدد مصادر البيانات والفلاتر وطريقة الحساب
-            </p>
+            <p className={cn("mt-0.5 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -400,7 +409,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
             onClick={() => router.push(ROUTES.reportsKpis)}
             className={cn(PILL_SECONDARY_CLASS, saving && "pointer-events-none opacity-60")}
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -409,7 +418,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
             className={PILL_PRIMARY_CLASS}
           >
             <Save className="size-4" />
-            {saving ? "جارٍ الحفظ..." : "حفظ المؤشر"}
+            {saving ? t("saving") : t("saveKpi")}
           </button>
         </div>
       </div>
@@ -465,20 +474,24 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
           {activeStep === "basic" && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className={cn("text-[12px] font-semibold", HEADING)}>اسم المؤشر *</label>
+                <label className={cn("text-[12px] font-semibold", HEADING)}>
+                  {t("basicStep.nameLabel")}
+                </label>
                 <AppInput
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="مثال: إجمالي المبيعات"
+                  placeholder={t("basicStep.namePlaceholder")}
                   className={FIELD_CLASS}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={cn("text-[12px] font-semibold", HEADING)}>الوصف</label>
+                <label className={cn("text-[12px] font-semibold", HEADING)}>
+                  {t("basicStep.descriptionLabel")}
+                </label>
                 <AppTextarea
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
-                  placeholder="وصف مختصر لما يقيسه هذا المؤشر"
+                  placeholder={t("basicStep.descriptionPlaceholder")}
                   rows={3}
                   className={FIELD_TEXTAREA_CLASS}
                 />
@@ -489,10 +502,12 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
           {activeStep === "data" && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className={cn("text-[12px] font-semibold", HEADING)}>مصدر البيانات *</label>
+                <label className={cn("text-[12px] font-semibold", HEADING)}>
+                  {t("dataStep.dataSourceLabel")}
+                </label>
                 <AppSelect value={dataSource} onValueChange={setDataSource}>
                   <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                    <AppSelectValue placeholder="اختر مصدر البيانات" />
+                    <AppSelectValue placeholder={t("dataStep.dataSourcePlaceholder")} />
                   </AppSelectTrigger>
                   <AppSelectContent>
                     {catalog.map((source) => (
@@ -505,10 +520,12 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label className={cn("text-[12px] font-semibold", HEADING)}>الحقل *</label>
+                  <label className={cn("text-[12px] font-semibold", HEADING)}>
+                    {t("dataStep.fieldLabel")}
+                  </label>
                   <AppSelect value={field} onValueChange={setField} disabled={!selectedSource}>
                     <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                      <AppSelectValue placeholder="اختر الحقل" />
+                      <AppSelectValue placeholder={t("dataStep.fieldPlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
                       {selectedSource?.fields.map((option) => (
@@ -520,19 +537,21 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                   </AppSelect>
                 </div>
                 <div className="space-y-1.5">
-                  <label className={cn("text-[12px] font-semibold", HEADING)}>طريقة الحساب *</label>
+                  <label className={cn("text-[12px] font-semibold", HEADING)}>
+                    {t("dataStep.aggregationLabel")}
+                  </label>
                   <AppSelect
                     value={aggregation}
                     onValueChange={(value) => setAggregation(value as ReportAggregation)}
                     disabled={!selectedField}
                   >
                     <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                      <AppSelectValue placeholder="اختر طريقة الحساب" />
+                      <AppSelectValue placeholder={t("dataStep.aggregationPlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
                       {selectedField?.allowedAggregations.map((agg) => (
                         <AppSelectItem key={agg} value={agg}>
-                          {AGGREGATION_LABELS[agg]}
+                          {aggregationLabel(agg, t)}
                         </AppSelectItem>
                       ))}
                     </AppSelectContent>
@@ -542,11 +561,10 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
 
               <div className="space-y-2 border-t border-[#f1f4f9] pt-3.5">
                 <div>
-                  <p className={cn("text-[12px] font-semibold", HEADING)}>حقول إضافية (اختياري)</p>
-                  <p className={cn("text-[11px]", MUTED)}>
-                    تظهر فقط في نوعي العرض &quot;جدول&quot; و&quot;خطي&quot; -- عمود/سلسلة إضافية
-                    لكل حقل
+                  <p className={cn("text-[12px] font-semibold", HEADING)}>
+                    {t("dataStep.extraFieldsTitle")}
                   </p>
+                  <p className={cn("text-[11px]", MUTED)}>{t("dataStep.extraFieldsDescription")}</p>
                 </div>
                 {extraFields.map((extra, index) => {
                   const extraField = selectedSource?.fields.find(
@@ -594,7 +612,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                         <AppSelectContent>
                           {extraField?.allowedAggregations.map((agg) => (
                             <AppSelectItem key={agg} value={agg}>
-                              {AGGREGATION_LABELS[agg]}
+                              {aggregationLabel(agg, t)}
                             </AppSelectItem>
                           ))}
                         </AppSelectContent>
@@ -603,7 +621,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                         type="button"
                         onClick={() => removeExtraField(index)}
                         className="flex size-9 shrink-0 cursor-pointer items-center justify-center self-end rounded-[8px] text-[#e0484d] transition-colors hover:bg-[#fdeeee] sm:self-auto"
-                        aria-label="حذف الحقل"
+                        aria-label={t("dataStep.removeFieldAriaLabel")}
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -620,7 +638,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                   )}
                 >
                   <Plus className="size-4" />
-                  إضافة حقل
+                  {t("dataStep.addField")}
                 </button>
               </div>
             </div>
@@ -628,7 +646,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
 
           {activeStep === "filters" && (
             <div className="space-y-3">
-              <p className={cn("text-[12px]", MUTED)}>أضف شروط لتصفية البيانات (اختياري)</p>
+              <p className={cn("text-[12px]", MUTED)}>{t("filtersStep.description")}</p>
               {filters.map((filter, index) => (
                 <div
                   key={index}
@@ -674,7 +692,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                         .find((option) => option.key === filter.field)
                         ?.allowedOperators.map((op) => (
                           <AppSelectItem key={op} value={op}>
-                            {OPERATOR_LABELS[op]}
+                            {operatorLabel(op, t)}
                           </AppSelectItem>
                         ))}
                     </AppSelectContent>
@@ -685,7 +703,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                     <AppInput
                       value={filter.value}
                       onChange={(event) => updateFilter(index, { value: event.target.value })}
-                      placeholder="القيمة"
+                      placeholder={t("filtersStep.valuePlaceholder")}
                       className={cn(FIELD_CLASS, "flex-1")}
                     />
                   ) : (
@@ -701,9 +719,9 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                             : values
                         return withCurrent.map((value) => ({ value, label: value }))
                       })()}
-                      placeholder="القيمة"
-                      searchPlaceholder="ابحث عن قيمة..."
-                      emptyLabel="اكتب لإضافة قيمة"
+                      placeholder={t("filtersStep.valuePlaceholder")}
+                      searchPlaceholder={t("filtersStep.searchPlaceholder")}
+                      emptyLabel={t("filtersStep.emptyLabel")}
                       compact
                       hideTriggerMark
                       triggerClassName={cn(FIELD_CLASS, "flex-1 justify-between")}
@@ -713,7 +731,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                     type="button"
                     onClick={() => removeFilter(index)}
                     className="flex size-9 shrink-0 cursor-pointer items-center justify-center self-end rounded-[8px] text-[#e0484d] transition-colors hover:bg-[#fdeeee] sm:self-auto"
-                    aria-label="حذف الفلتر"
+                    aria-label={t("filtersStep.removeFilterAriaLabel")}
                   >
                     <Trash2 className="size-4" />
                   </button>
@@ -729,7 +747,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                 )}
               >
                 <Plus className="size-4" />
-                إضافة فلتر
+                {t("filtersStep.addFilter")}
               </button>
             </div>
           )}
@@ -747,7 +765,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                       : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
                   )}
                 >
-                  تجميع حسب الوقت
+                  {t("groupingStep.groupByTime")}
                 </button>
                 <button
                   type="button"
@@ -760,12 +778,14 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                       : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
                   )}
                 >
-                  تجميع حسب فئة
+                  {t("groupingStep.groupByDimension")}
                 </button>
               </div>
               {groupingMode === "time" ? (
                 <div className="space-y-1.5">
-                  <label className={cn("text-[12px] font-semibold", HEADING)}>الفترة الزمنية</label>
+                  <label className={cn("text-[12px] font-semibold", HEADING)}>
+                    {t("groupingStep.periodLabel")}
+                  </label>
                   <AppSelect
                     value={timeGrouping}
                     onValueChange={(value) => setTimeGrouping(value as typeof timeGrouping)}
@@ -774,9 +794,9 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                       <AppSelectValue />
                     </AppSelectTrigger>
                     <AppSelectContent>
-                      {Object.entries(TIME_GROUPING_LABELS).map(([key, label]) => (
+                      {TIME_GROUPING_KEYS.map((key) => (
                         <AppSelectItem key={key} value={key}>
-                          {label}
+                          {tKpiWidget(`timeGroupingLabels.${key}` as "timeGroupingLabels.day")}
                         </AppSelectItem>
                       ))}
                     </AppSelectContent>
@@ -784,10 +804,12 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <label className={cn("text-[12px] font-semibold", HEADING)}>التجميع حسب</label>
+                  <label className={cn("text-[12px] font-semibold", HEADING)}>
+                    {t("groupingStep.groupByLabel")}
+                  </label>
                   <AppSelect value={groupByDimension} onValueChange={setGroupByDimension}>
                     <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                      <AppSelectValue placeholder="اختر الفئة" />
+                      <AppSelectValue placeholder={t("groupingStep.groupByPlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
                       {selectedSource?.dimensions.map((dimension) => (
@@ -805,8 +827,10 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
           {activeStep === "comparison" && (
             <div className="flex items-center justify-between rounded-[10px] border border-[#f1f4f9] bg-[#fafbfd] px-3 py-3">
               <div>
-                <p className={cn("text-[12.5px] font-bold", HEADING)}>إظهار المقارنة</p>
-                <p className={cn("mt-0.5 text-[11px]", MUTED)}>مقارنة مع الفترة السابقة</p>
+                <p className={cn("text-[12.5px] font-bold", HEADING)}>
+                  {t("comparisonStep.title")}
+                </p>
+                <p className={cn("mt-0.5 text-[11px]", MUTED)}>{t("comparisonStep.description")}</p>
               </div>
               <AppSwitch checked={compareEnabled} onCheckedChange={setCompareEnabled} />
             </div>
@@ -814,14 +838,14 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
 
           {activeStep === "display" && (
             <div className="grid grid-cols-3 gap-2">
-              {DISPLAY_TYPES.map((option) => {
-                const Icon = option.icon
-                const isActive = displayType === option.key
+              {DISPLAY_TYPE_KEYS.map((key) => {
+                const Icon = displayTypeIcon(key)
+                const isActive = displayType === key
                 return (
                   <button
-                    key={option.key}
+                    key={key}
                     type="button"
-                    onClick={() => setDisplayType(option.key)}
+                    onClick={() => setDisplayType(key)}
                     className={cn(
                       "relative flex flex-col items-center gap-2 rounded-[10px] border p-4 text-[12px] font-semibold transition-colors",
                       isActive
@@ -835,16 +859,16 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                       </span>
                     )}
                     <Icon className="size-5" />
-                    {option.label}
+                    {tKpi(`displayTypes.${key}` as "displayTypes.number")}
                   </button>
                 )
               })}
               <div className="col-span-3 space-y-1.5 border-t border-[#f1f4f9] pt-3.5">
                 <label className={cn("text-[12px] font-semibold", HEADING)}>
-                  عدد الخانات العشرية
+                  {t("displayStep.decimalPlacesLabel")}
                 </label>
                 <p className={cn("text-[11px]", MUTED)}>
-                  التحكم في دقة الأرقام والنسب المعروضة لهذا المؤشر
+                  {t("displayStep.decimalPlacesDescription")}
                 </p>
                 <div className="flex gap-2">
                   {DECIMAL_PLACES_OPTIONS.map((option) => {
@@ -879,7 +903,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
               {displayType === "gauge" && (
                 <div className="col-span-3 space-y-1.5 border-t border-[#f1f4f9] pt-3.5">
                   <label className={cn("text-[12px] font-semibold", HEADING)}>
-                    القيمة المستهدفة (الهدف)
+                    {t("displayStep.targetLabel")}
                   </label>
                   <AppInput
                     type="text"
@@ -889,13 +913,10 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
                       const digits = event.target.value.replace(/[^\d.]/g, "")
                       setTarget(digits)
                     }}
-                    placeholder="مثال: 200,000"
+                    placeholder={t("displayStep.targetPlaceholder")}
                     className={FIELD_CLASS}
                   />
-                  <p className={cn("text-[11px]", MUTED)}>
-                    القيمة التي يقيس المقياس التقدم نحوها. اتركه فارغاً لعرض القيمة الحالية فقط دون
-                    هدف.
-                  </p>
+                  <p className={cn("text-[11px]", MUTED)}>{t("displayStep.targetDescription")}</p>
                 </div>
               )}
             </div>
@@ -905,21 +926,19 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
         {/* Live preview */}
         <div className={PANEL}>
           <div className="mb-3 border-b border-[#f1f4f9] pb-3">
-            <h2 className={cn("text-[13.5px] font-bold", HEADING)}>معاينة المؤشر</h2>
-            <p className={cn("mt-0.5 text-[11px]", MUTED)}>
-              اختر مصدر البيانات والحقل لعرض المعاينة
-            </p>
+            <h2 className={cn("text-[13.5px] font-bold", HEADING)}>{t("preview.title")}</h2>
+            <p className={cn("mt-0.5 text-[11px]", MUTED)}>{t("preview.instructions")}</p>
           </div>
           {!definitionReady ? (
             <p className={cn("py-10 text-center text-[12px]", MUTED)}>
-              اختر مصدر البيانات والحقل لعرض المعاينة
+              {t("preview.noDefinition")}
             </p>
           ) : loadingPreview && !preview ? (
             <AppLoading variant="chart" />
           ) : preview ? (
             <div className="h-[600px] overflow-y-auto rounded-[10px] border border-[#f1f4f9]">
               <KpiWidgetRenderer
-                name={name || "بدون اسم"}
+                name={name || t("preview.unnamedFallback")}
                 displayType={displayType}
                 result={preview}
                 timeGrouping={groupingMode === "time" ? timeGrouping : undefined}
@@ -937,7 +956,7 @@ export function KpiWizardPage({ kpiId }: { kpiId?: string }) {
               />
             </div>
           ) : (
-            <p className={cn("py-10 text-center text-[12px]", MUTED)}>تعذر تحميل المعاينة</p>
+            <p className={cn("py-10 text-center text-[12px]", MUTED)}>{t("preview.loadFailed")}</p>
           )}
         </div>
       </div>

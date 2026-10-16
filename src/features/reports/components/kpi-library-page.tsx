@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { Edit, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -29,38 +30,48 @@ import { Can } from "@/features/authentication"
 
 import { type Kpi, kpiService } from "../services"
 
-const DISPLAY_TYPE_LABELS: Record<string, string> = {
-  number: "بطاقة رقمية",
-  line: "خطي",
-  bar: "أعمدة",
-  pie: "دائري",
-  table: "جدول",
-  gauge: "مقياس",
+import type { Locale } from "@/i18n/locales"
+
+const DISPLAY_TYPE_KEYS = ["number", "line", "bar", "pie", "table", "gauge"] as const
+const CATEGORY_KEYS = [
+  "sales",
+  "products",
+  "inventory",
+  "customers",
+  "financial",
+  "marketing",
+] as const
+
+type KpiTranslator = ReturnType<typeof useTranslations<"reports.kpi">>
+
+function displayTypeLabel(displayType: string, t: KpiTranslator): string {
+  if ((DISPLAY_TYPE_KEYS as readonly string[]).includes(displayType)) {
+    return t(`displayTypes.${displayType}` as "displayTypes.number")
+  }
+  return displayType
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  sales: "المبيعات",
-  products: "المنتجات",
-  inventory: "المخزون",
-  customers: "العملاء",
-  financial: "المالية",
-  marketing: "التسويق",
+function categoryLabel(category: string, t: KpiTranslator): string {
+  if ((CATEGORY_KEYS as readonly string[]).includes(category)) {
+    return t(`categories.${category}` as "categories.sales")
+  }
+  return category
 }
 
-function categoryLabel(category: string) {
-  return CATEGORY_LABELS[category] ?? category
-}
-
-// ar-SA formats both digits and dates against locale defaults (Eastern Arabic-Indic numerals,
-// the Hijri calendar) in some ICU builds -- these Unicode extensions force Western digits and the
-// Gregorian calendar so this matches the plain Gregorian timestamps the backend returns.
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { dateStyle: "medium" }).format(
-    new Date(iso)
-  )
+// ar-SA/en-US format both digits and dates against locale defaults (Eastern Arabic-Indic
+// numerals, the Hijri calendar) in some ICU builds -- these Unicode extensions force Western
+// digits and the Gregorian calendar so this matches the plain Gregorian timestamps the backend
+// returns.
+function formatDate(iso: string, locale: Locale) {
+  const intlLocale = locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory"
+  return new Intl.DateTimeFormat(intlLocale, { dateStyle: "medium" }).format(new Date(iso))
 }
 
 export function KpiLibraryPage() {
+  const t = useTranslations("reports.kpiLibrary")
+  const tKpi = useTranslations("reports.kpi")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const [kpis, setKpis] = useState<Kpi[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,11 +96,11 @@ export function KpiLibraryPage() {
     if (!pendingDeleteId) return
     try {
       await kpiService.remove(pendingDeleteId)
-      toast.success("تم حذف المؤشر بنجاح.")
+      toast.success(t("toasts.deleted"))
       setPendingDeleteId(null)
       refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر حذف المؤشر.")
+      toast.error(error instanceof Error ? error.message : t("toasts.deleteFailed"))
     }
   }
 
@@ -98,11 +109,11 @@ export function KpiLibraryPage() {
       <AppContainer className="space-y-6">
         <AppPageHeader
           breadcrumbItems={[
-            { label: "التقارير", href: ROUTES.reports },
-            { label: "المؤشرات المحفوظة", current: true },
+            { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
+            { label: t("breadcrumbCurrent"), current: true },
           ]}
-          title="المؤشرات المحفوظة"
-          subtitle="جميع المؤشرات التي تم إنشاؤها، جاهزة لإضافتها إلى أي تقرير مخصص"
+          title={t("title")}
+          subtitle={t("subtitle")}
           actions={
             <Can permission="reports:manage">
               <AppButton
@@ -114,47 +125,42 @@ export function KpiLibraryPage() {
                 onClick={() => router.push(ROUTES.reportsKpisNew)}
                 className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-semibold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
               >
-                إنشاء مؤشر جديد
+                {t("createKpi")}
               </AppButton>
             </Can>
           }
         />
 
-        <AppCard title="المؤشرات" subtitle="عدد المؤشرات المحفوظة">
+        <AppCard title={t("cardTitle")} subtitle={t("cardSubtitle")}>
           {loading ? (
             <AppLoading variant="table" rows={5} />
           ) : kpis.length === 0 ? (
-            <AppEmpty
-              title="لا توجد مؤشرات بعد"
-              description="أنشئ أول مؤشر لاستخدامه في تقاريرك المخصصة."
-            />
+            <AppEmpty title={t("emptyTitle")} description={t("emptyDescription")} />
           ) : (
             <AppTable>
               <AppTableHeader>
                 <AppTableRow>
-                  <AppTableHead>اسم المؤشر</AppTableHead>
-                  <AppTableHead>الفئة</AppTableHead>
-                  <AppTableHead>طريقة العرض</AppTableHead>
-                  <AppTableHead>الحالة</AppTableHead>
-                  <AppTableHead>آخر تحديث</AppTableHead>
-                  <AppTableHead>الإجراءات</AppTableHead>
+                  <AppTableHead>{t("table.name")}</AppTableHead>
+                  <AppTableHead>{t("table.category")}</AppTableHead>
+                  <AppTableHead>{t("table.displayType")}</AppTableHead>
+                  <AppTableHead>{t("table.status")}</AppTableHead>
+                  <AppTableHead>{t("table.lastUpdated")}</AppTableHead>
+                  <AppTableHead>{t("table.actions")}</AppTableHead>
                 </AppTableRow>
               </AppTableHeader>
               <AppTableBody>
                 {kpis.map((kpi) => (
                   <AppTableRow key={kpi.id}>
                     <AppTableCell className="font-medium">{kpi.name}</AppTableCell>
-                    <AppTableCell>{categoryLabel(kpi.category)}</AppTableCell>
-                    <AppTableCell>
-                      {DISPLAY_TYPE_LABELS[kpi.displayType] ?? kpi.displayType}
-                    </AppTableCell>
+                    <AppTableCell>{categoryLabel(kpi.category, tKpi)}</AppTableCell>
+                    <AppTableCell>{displayTypeLabel(kpi.displayType, tKpi)}</AppTableCell>
                     <AppTableCell>
                       <AppStatusBadge
                         status={kpi.status === "active" ? "success" : "neutral"}
-                        label={kpi.status === "active" ? "نشط" : "مسودة"}
+                        label={kpi.status === "active" ? t("status.active") : t("status.draft")}
                       />
                     </AppTableCell>
-                    <AppTableCell>{formatDate(kpi.updatedAt)}</AppTableCell>
+                    <AppTableCell>{formatDate(kpi.updatedAt, locale)}</AppTableCell>
                     <AppTableCell>
                       <div className="flex items-center gap-1">
                         <AppButton
@@ -164,7 +170,7 @@ export function KpiLibraryPage() {
                           disabled={kpi.isSystem}
                           onClick={() => router.push(ROUTES.reportsKpisEdit(kpi.id))}
                         >
-                          تعديل
+                          {t("edit")}
                         </AppButton>
                         <Can permission="reports:manage">
                           <AppButton
@@ -174,7 +180,7 @@ export function KpiLibraryPage() {
                             disabled={kpi.isSystem}
                             onClick={() => setPendingDeleteId(kpi.id)}
                           >
-                            حذف
+                            {t("delete")}
                           </AppButton>
                         </Can>
                       </div>
@@ -190,10 +196,10 @@ export function KpiLibraryPage() {
       <AppConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        title="حذف المؤشر"
-        description="سيتم حذف هذا المؤشر نهائياً. لن يعود بإمكانك استخدامه في أي تقرير مخصص."
-        confirmLabel="حذف"
-        cancelLabel="إلغاء"
+        title={t("deleteDialog.title")}
+        description={t("deleteDialog.description")}
+        confirmLabel={t("deleteDialog.confirm")}
+        cancelLabel={t("deleteDialog.cancel")}
         confirmTone="destructive"
         onConfirm={() => void handleDelete()}
         onCancel={() => setPendingDeleteId(null)}

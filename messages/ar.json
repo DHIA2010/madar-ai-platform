@@ -2944,6 +2944,196 @@
         "expensesNote": "تُحتسب ضريبة المصروفات فقط للمصروفات المسجلة كـ \"شامل الضريبة\".",
         "netVatDueRow": "صافي الضريبة المستحقة (أو المستردة)"
       }
+    },
+    "kpiWidget": {
+      "comparisonPrevPeriod": "مقارنة بالفترة السابقة",
+      "timeGroupingChangeAriaLabel": "تغيير التجميع الزمني لهذا المؤشر (مؤقت)",
+      "openKpiForEdit": "فتح المؤشر للتعديل",
+      "percentOfTotal": "النسبة من الإجمالي",
+      "percentShort": "النسبة",
+      "dateColumnLabel": "التاريخ",
+      "categoryColumnLabel": "الفئة",
+      "exportAriaLabel": "تصدير",
+      "searchPlaceholder": "البحث...",
+      "showingCount": "عرض {count} من {total} نتائج",
+      "paginationPreviousAriaLabel": "السابق",
+      "paginationNextAriaLabel": "التالي",
+      "noTargetSet": "لم يتم تحديد هدف لهذا المؤشر بعد",
+      "currentValueLabel": "القيمة الحالية",
+      "targetLabel": "الهدف",
+      "achievementRateLabel": "نسبة الإنجاز",
+      "remainingDifferenceLabel": "الفرق المتبقي",
+      "ofTarget": "من الهدف",
+      "valueTooltipLabel": "القيمة",
+      "csvFilenameFallback": "تقرير",
+      "timeGroupingLabels": {
+        "day": "يومي",
+        "week": "أسبوعي",
+        "month": "شهري",
+        "quarter": "ربع سنوي",
+        "year": "سنوي"
+      }
+    },
+    "kpi": {
+      "displayTypes": {
+        "number": "بطاقة رقمية",
+        "line": "خطي",
+        "bar": "أعمدة",
+        "pie": "دائري",
+        "table": "جدول",
+        "gauge": "مقياس"
+      },
+      "categories": {
+        "sales": "المبيعات",
+        "products": "المنتجات",
+        "inventory": "المخزون",
+        "customers": "العملاء",
+        "financial": "المالية",
+        "marketing": "التسويق"
+      }
+    },
+    "kpiLibrary": {
+      "breadcrumbCurrent": "المؤشرات المحفوظة",
+      "title": "المؤشرات المحفوظة",
+      "subtitle": "جميع المؤشرات التي تم إنشاؤها، جاهزة لإضافتها إلى أي تقرير مخصص",
+      "createKpi": "إنشاء مؤشر جديد",
+      "cardTitle": "المؤشرات",
+      "cardSubtitle": "عدد المؤشرات المحفوظة",
+      "emptyTitle": "لا توجد مؤشرات بعد",
+      "emptyDescription": "أنشئ أول مؤشر لاستخدامه في تقاريرك المخصصة.",
+      "table": {
+        "name": "اسم المؤشر",
+        "category": "الفئة",
+        "displayType": "طريقة العرض",
+        "status": "الحالة",
+        "lastUpdated": "آخر تحديث",
+        "actions": "الإجراءات"
+      },
+      "status": {
+        "active": "نشط",
+        "draft": "مسودة"
+      },
+      "edit": "تعديل",
+      "delete": "حذف",
+      "deleteDialog": {
+        "title": "حذف المؤشر",
+        "description": "سيتم حذف هذا المؤشر نهائياً. لن يعود بإمكانك استخدامه في أي تقرير مخصص.",
+        "confirm": "حذف",
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "deleted": "تم حذف المؤشر بنجاح.",
+        "deleteFailed": "تعذر حذف المؤشر."
+      }
+    },
+    "kpiWizard": {
+      "editTitle": "تعديل المؤشر",
+      "createTitle": "إنشاء مؤشر جديد",
+      "subtitle": "قم بتعريف المؤشر وحدد مصادر البيانات والفلاتر وطريقة الحساب",
+      "cancel": "إلغاء",
+      "saving": "جارٍ الحفظ...",
+      "saveKpi": "حفظ المؤشر",
+      "steps": {
+        "basic": {
+          "label": "البيانات الأساسية",
+          "hint": "اسم المؤشر ومصدر البيانات"
+        },
+        "data": {
+          "label": "تعريف البيانات",
+          "hint": "اختيار الحقول وطريقة الحساب"
+        },
+        "filters": {
+          "label": "الفلاتر",
+          "hint": "تصفية البيانات حسب الشروط"
+        },
+        "grouping": {
+          "label": "التجميع الزمني",
+          "hint": "تحديد طريقة التجميع"
+        },
+        "comparison": {
+          "label": "المقارنة",
+          "hint": "مقارنة مع فترة أخرى"
+        },
+        "display": {
+          "label": "طريقة العرض",
+          "hint": "اختيار نوع العرض"
+        }
+      },
+      "aggregations": {
+        "sum": "المجموع (SUM)",
+        "avg": "المتوسط (AVG)",
+        "count": "العدد (COUNT)",
+        "min": "الأدنى (MIN)",
+        "max": "الأعلى (MAX)"
+      },
+      "operators": {
+        "eq": "يساوي (=)",
+        "neq": "لا يساوي (≠)",
+        "contains": "يحتوي على",
+        "not_contains": "لا يحتوي على"
+      },
+      "decimalPlaces": {
+        "none": "بدون كسور",
+        "one": "خانة واحدة",
+        "two": "خانتان"
+      },
+      "basicStep": {
+        "nameLabel": "اسم المؤشر *",
+        "namePlaceholder": "مثال: إجمالي المبيعات",
+        "descriptionLabel": "الوصف",
+        "descriptionPlaceholder": "وصف مختصر لما يقيسه هذا المؤشر"
+      },
+      "dataStep": {
+        "dataSourceLabel": "مصدر البيانات *",
+        "dataSourcePlaceholder": "اختر مصدر البيانات",
+        "fieldLabel": "الحقل *",
+        "fieldPlaceholder": "اختر الحقل",
+        "aggregationLabel": "طريقة الحساب *",
+        "aggregationPlaceholder": "اختر طريقة الحساب",
+        "extraFieldsTitle": "حقول إضافية (اختياري)",
+        "extraFieldsDescription": "تظهر فقط في نوعي العرض \"جدول\" و\"خطي\" -- عمود/سلسلة إضافية لكل حقل",
+        "removeFieldAriaLabel": "حذف الحقل",
+        "addField": "إضافة حقل"
+      },
+      "filtersStep": {
+        "description": "أضف شروط لتصفية البيانات (اختياري)",
+        "valuePlaceholder": "القيمة",
+        "searchPlaceholder": "ابحث عن قيمة...",
+        "emptyLabel": "اكتب لإضافة قيمة",
+        "removeFilterAriaLabel": "حذف الفلتر",
+        "addFilter": "إضافة فلتر"
+      },
+      "groupingStep": {
+        "groupByTime": "تجميع حسب الوقت",
+        "groupByDimension": "تجميع حسب فئة",
+        "periodLabel": "الفترة الزمنية",
+        "groupByLabel": "التجميع حسب",
+        "groupByPlaceholder": "اختر الفئة"
+      },
+      "comparisonStep": {
+        "title": "إظهار المقارنة",
+        "description": "مقارنة مع الفترة السابقة"
+      },
+      "displayStep": {
+        "decimalPlacesLabel": "عدد الخانات العشرية",
+        "decimalPlacesDescription": "التحكم في دقة الأرقام والنسب المعروضة لهذا المؤشر",
+        "targetLabel": "القيمة المستهدفة (الهدف)",
+        "targetPlaceholder": "مثال: 200,000",
+        "targetDescription": "القيمة التي يقيس المقياس التقدم نحوها. اتركه فارغاً لعرض القيمة الحالية فقط دون هدف."
+      },
+      "preview": {
+        "title": "معاينة المؤشر",
+        "instructions": "اختر مصدر البيانات والحقل لعرض المعاينة",
+        "noDefinition": "اختر مصدر البيانات والحقل لعرض المعاينة",
+        "loadFailed": "تعذر تحميل المعاينة",
+        "unnamedFallback": "بدون اسم"
+      },
+      "toasts": {
+        "validationFailed": "يرجى إدخال اسم المؤشر واختيار مصدر البيانات والحقل.",
+        "updated": "تم تحديث المؤشر بنجاح.",
+        "created": "تم إنشاء المؤشر بنجاح.",
+        "saveFailed": "تعذر حفظ المؤشر."
+      }
     }
   }
 }

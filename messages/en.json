@@ -2944,6 +2944,196 @@
         "expensesNote": "Expense VAT is only calculated for expenses recorded as \"tax inclusive\".",
         "netVatDueRow": "Net VAT due (or refundable)"
       }
+    },
+    "kpiWidget": {
+      "comparisonPrevPeriod": "vs. previous period",
+      "timeGroupingChangeAriaLabel": "Change this KPI's time grouping (temporary)",
+      "openKpiForEdit": "Open this KPI to edit",
+      "percentOfTotal": "% of total",
+      "percentShort": "%",
+      "dateColumnLabel": "Date",
+      "categoryColumnLabel": "Category",
+      "exportAriaLabel": "Export",
+      "searchPlaceholder": "Search...",
+      "showingCount": "Showing {count} of {total} results",
+      "paginationPreviousAriaLabel": "Previous",
+      "paginationNextAriaLabel": "Next",
+      "noTargetSet": "No target set for this KPI yet",
+      "currentValueLabel": "Current value",
+      "targetLabel": "Target",
+      "achievementRateLabel": "Achievement rate",
+      "remainingDifferenceLabel": "Remaining difference",
+      "ofTarget": "of target",
+      "valueTooltipLabel": "Value",
+      "csvFilenameFallback": "report",
+      "timeGroupingLabels": {
+        "day": "Daily",
+        "week": "Weekly",
+        "month": "Monthly",
+        "quarter": "Quarterly",
+        "year": "Yearly"
+      }
+    },
+    "kpi": {
+      "displayTypes": {
+        "number": "Number card",
+        "line": "Line",
+        "bar": "Bar",
+        "pie": "Pie",
+        "table": "Table",
+        "gauge": "Gauge"
+      },
+      "categories": {
+        "sales": "Sales",
+        "products": "Products",
+        "inventory": "Inventory",
+        "customers": "Customers",
+        "financial": "Financial",
+        "marketing": "Marketing"
+      }
+    },
+    "kpiLibrary": {
+      "breadcrumbCurrent": "Saved KPIs",
+      "title": "Saved KPIs",
+      "subtitle": "Every KPI you've created, ready to add to any custom report",
+      "createKpi": "Create new KPI",
+      "cardTitle": "KPIs",
+      "cardSubtitle": "Number of saved KPIs",
+      "emptyTitle": "No KPIs yet",
+      "emptyDescription": "Create your first KPI to use in your custom reports.",
+      "table": {
+        "name": "KPI name",
+        "category": "Category",
+        "displayType": "Display type",
+        "status": "Status",
+        "lastUpdated": "Last updated",
+        "actions": "Actions"
+      },
+      "status": {
+        "active": "Active",
+        "draft": "Draft"
+      },
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteDialog": {
+        "title": "Delete KPI",
+        "description": "This KPI will be permanently deleted. You won't be able to use it in any custom report anymore.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "deleted": "KPI deleted successfully.",
+        "deleteFailed": "Couldn't delete the KPI."
+      }
+    },
+    "kpiWizard": {
+      "editTitle": "Edit KPI",
+      "createTitle": "Create new KPI",
+      "subtitle": "Define the KPI and choose its data source, filters, and calculation method",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "saveKpi": "Save KPI",
+      "steps": {
+        "basic": {
+          "label": "Basic info",
+          "hint": "KPI name and data source"
+        },
+        "data": {
+          "label": "Data definition",
+          "hint": "Choose fields and calculation method"
+        },
+        "filters": {
+          "label": "Filters",
+          "hint": "Filter data by conditions"
+        },
+        "grouping": {
+          "label": "Time grouping",
+          "hint": "Choose how to group the data"
+        },
+        "comparison": {
+          "label": "Comparison",
+          "hint": "Compare against another period"
+        },
+        "display": {
+          "label": "Display type",
+          "hint": "Choose how this is displayed"
+        }
+      },
+      "aggregations": {
+        "sum": "Sum (SUM)",
+        "avg": "Average (AVG)",
+        "count": "Count (COUNT)",
+        "min": "Minimum (MIN)",
+        "max": "Maximum (MAX)"
+      },
+      "operators": {
+        "eq": "Equals (=)",
+        "neq": "Not equals (≠)",
+        "contains": "Contains",
+        "not_contains": "Does not contain"
+      },
+      "decimalPlaces": {
+        "none": "No decimals",
+        "one": "One decimal",
+        "two": "Two decimals"
+      },
+      "basicStep": {
+        "nameLabel": "KPI name *",
+        "namePlaceholder": "e.g. Total sales",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "A short description of what this KPI measures"
+      },
+      "dataStep": {
+        "dataSourceLabel": "Data source *",
+        "dataSourcePlaceholder": "Choose a data source",
+        "fieldLabel": "Field *",
+        "fieldPlaceholder": "Choose a field",
+        "aggregationLabel": "Calculation method *",
+        "aggregationPlaceholder": "Choose a calculation method",
+        "extraFieldsTitle": "Extra fields (optional)",
+        "extraFieldsDescription": "Only shown for the \"table\" and \"line\" display types -- an extra column/series per field",
+        "removeFieldAriaLabel": "Remove field",
+        "addField": "Add field"
+      },
+      "filtersStep": {
+        "description": "Add conditions to filter the data (optional)",
+        "valuePlaceholder": "Value",
+        "searchPlaceholder": "Search for a value...",
+        "emptyLabel": "Type to add a value",
+        "removeFilterAriaLabel": "Remove filter",
+        "addFilter": "Add filter"
+      },
+      "groupingStep": {
+        "groupByTime": "Group by time",
+        "groupByDimension": "Group by category",
+        "periodLabel": "Time period",
+        "groupByLabel": "Group by",
+        "groupByPlaceholder": "Choose a category"
+      },
+      "comparisonStep": {
+        "title": "Show comparison",
+        "description": "Compare against the previous period"
+      },
+      "displayStep": {
+        "decimalPlacesLabel": "Decimal places",
+        "decimalPlacesDescription": "Controls the precision of numbers and percentages shown for this KPI",
+        "targetLabel": "Target value",
+        "targetPlaceholder": "e.g. 200,000",
+        "targetDescription": "The value this gauge measures progress toward. Leave blank to show only the current value with no target."
+      },
+      "preview": {
+        "title": "KPI preview",
+        "instructions": "Choose a data source and field to show the preview",
+        "noDefinition": "Choose a data source and field to show the preview",
+        "loadFailed": "Couldn't load the preview",
+        "unnamedFallback": "Unnamed"
+      },
+      "toasts": {
+        "validationFailed": "Please enter a KPI name and choose a data source and field.",
+        "updated": "KPI updated successfully.",
+        "created": "KPI created successfully.",
+        "saveFailed": "Couldn't save the KPI."
+      }
     }
   }
 }
