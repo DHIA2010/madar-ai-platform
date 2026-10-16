@@ -6260,6 +6260,222 @@
         "swipes": "التمريرات",
         "swipeRate": "معدل التمرير"
       }
+    },
+    "dashboardWidgets": {
+      "timeRanges": {
+        "7d": "7 أيام",
+        "30d": "30 يومًا",
+        "90d": "90 يومًا",
+        "12m": "12 شهرًا"
+      },
+      "otherPlatformLabel": "أخرى",
+      "kpis": {
+        "totalSpend": {
+          "title": "إجمالي الإنفاق",
+          "trend": "{percent} مقارنة بالفترة السابقة"
+        },
+        "revenue": {
+          "title": "الإيرادات",
+          "trend": "{percent} مقارنة بالفترة السابقة"
+        },
+        "activeCampaigns": {
+          "title": "الحملات النشطة",
+          "trend": "{count} إجمالي الحملات"
+        },
+        "roas": {
+          "title": "ROAS",
+          "healthyReturn": "عائد جيد",
+          "belowTarget": "أقل من المستهدف"
+        }
+      },
+      "performanceCard": {
+        "title": "الأداء",
+        "subtitle": "تتبّع اتجاهات أداء الحملات الأساسية مع مرور الوقت."
+      },
+      "spendDistributionCard": {
+        "title": "توزيع الإنفاق",
+        "subtitle": "كيفية توزيع ميزانية الحملات على المنصات."
+      },
+      "topCampaignsCard": {
+        "title": "أفضل الحملات أداءً",
+        "subtitle": "نظرة سريعة على الحملات الأعلى تأثيرًا.",
+        "columns": {
+          "campaign": "الحملة",
+          "quickAction": "إجراء سريع"
+        },
+        "openAction": "فتح"
+      },
+      "aiDecisionCenter": {
+        "title": "مركز قرارات الذكاء الاصطناعي",
+        "subtitle": "توصيات ذات أولوية للإجراء التنفيذي القادم.",
+        "recommendedActionLabel": "الإجراء الموصى به",
+        "topPriorityBadge": "أولوية قصوى",
+        "recommendedAction": {
+          "title": "زيادة ميزانية Meta بنسبة 20%",
+          "summary": "تحقق حملات الاستحواذ على Meta أقوى حجم تحويلات هذا الأسبوع دون رفع تكلفة النقرة فوق المستهدف."
+        },
+        "impactLabel": "الأثر التجاري المتوقع",
+        "impactValue": "+{amount} إيرادات",
+        "confidenceLabel": "مستوى الثقة",
+        "reviewRecommendationAction": "مراجعة التوصية",
+        "growthOpportunitiesHeading": "فرص النمو",
+        "top3Badge": "أفضل 3",
+        "estimatedImpactLabel": "الأثر المتوقع",
+        "opportunities": {
+          "increaseMetaBudget": "زيادة ميزانية Meta",
+          "launchRetargetingCampaign": "إطلاق حملة إعادة تسويق",
+          "duplicateWinningCreative": "تكرار المادة الإبداعية الفائزة"
+        },
+        "risksAlertsHeading": "المخاطر والتنبيهات",
+        "requiresAttentionBadge": "يتطلب الانتباه",
+        "risks": {
+          "highCpc": "ارتفاع تكلفة النقرة",
+          "lowRoas": "انخفاض ROAS",
+          "creativeFatigue": "إجهاد المواد الإبداعية",
+          "budgetEndingSoon": "الميزانية على وشك النفاد",
+          "metaTokenExpiring": "رمز Meta على وشك الانتهاء"
+        },
+        "severity": {
+          "critical": "حرج",
+          "warning": "تحذير",
+          "info": "معلومة"
+        },
+        "viewAllAction": "عرض كل توصيات الذكاء الاصطناعي"
+      }
+    },
+    "detailsView": {
+      "tabsAriaLabel": "علامات تبويب تفاصيل الحملة",
+      "editAction": "تعديل",
+      "notFoundDescription": "تعذّر تحميل تفاصيل الحملة.",
+      "detailLabels": {
+        "status": "الحالة",
+        "objective": "الهدف",
+        "channel": "القناة",
+        "owner": "المسؤول",
+        "audience": "الجمهور",
+        "period": "الفترة"
+      },
+      "tabs": {
+        "overview": "نظرة عامة",
+        "creatives": "المواد الإبداعية",
+        "audience": "الجمهور",
+        "budget": "الميزانية",
+        "performance": "الأداء",
+        "activity": "النشاط",
+        "settings": "الإعدادات"
+      },
+      "kpisCard": {
+        "title": "مؤشرات الأداء الرئيسية",
+        "subtitle": "مؤشرات الأداء التسويقي الأساسية",
+        "labels": {
+          "totalRevenue": "إجمالي الإيرادات",
+          "marketingSpend": "الإنفاق التسويقي",
+          "roas": "ROAS",
+          "cac": "CAC",
+          "conversionRate": "معدل التحويل",
+          "websiteVisitors": "زوار الموقع"
+        }
+      },
+      "aiRecommendationsCard": {
+        "title": "توصيات الذكاء الاصطناعي",
+        "subtitle": "رؤى تجريبية"
+      },
+      "creativesCard": {
+        "title": "المواد الإبداعية",
+        "subtitle": "رفع وإدارة أصول الحملة بعد إعدادها."
+      },
+      "uploadCreativeAction": "رفع مادة إبداعية",
+      "selectExistingAssetAction": "اختيار أصل موجود",
+      "emptyState": {
+        "title": "لا توجد مواد إبداعية مرفوعة بعد.",
+        "description": "ابدأ برفع أول مادة إبداعية لهذه الحملة.",
+        "action": "رفع أول مادة إبداعية"
+      },
+      "removeAction": "إزالة",
+      "actionsForCreativeAriaLabel": "إجراءات {name}",
+      "previewUnavailable": "المعاينة غير متاحة",
+      "creativeMeta": {
+        "dimensions": "الأبعاد",
+        "fileSize": "حجم الملف",
+        "created": "تاريخ الإنشاء"
+      },
+      "creativeTypeOptions": {
+        "image": "صورة",
+        "video": "فيديو",
+        "carousel": "كاروسيل",
+        "html5": "HTML5"
+      },
+      "creativeStatus": {
+        "ready": "جاهز",
+        "needsReview": "يحتاج مراجعة",
+        "draft": "مسودة"
+      },
+      "ctaOptions": {
+        "learnMore": "معرفة المزيد",
+        "shopNow": "تسوق الآن",
+        "getOffer": "الحصول على العرض",
+        "signUp": "سجّل الآن",
+        "contactUs": "تواصل معنا"
+      },
+      "uploadDialog": {
+        "description": "رفع مادة إبداعية وتزويدها بالبيانات الوصفية الخاصة بهذه الحملة.",
+        "dropzoneTitle": "اسحب وأفلت مادتك الإبداعية هنا",
+        "supportedFormats": "المدعوم: JPG, PNG, WEBP, MP4, MOV, WEBM, ZIP (HTML5)",
+        "browseFiles": "تصفح الملفات",
+        "creativePreviewAlt": "معاينة المادة الإبداعية"
+      },
+      "uploadProgressLabel": "تقدّم الرفع",
+      "validation": {
+        "unsupportedFileType": "نوع الملف غير مدعوم لـ {type}.",
+        "fileTooLarge": "الملف كبير جدًا. الحد الأقصى للحجم المسموح به هو {maxSizeMb} ميغابايت.",
+        "unableToReadImageDimensions": "تعذّرت قراءة أبعاد الصورة.",
+        "unableToReadVideoDuration": "تعذّرت قراءة مدة الفيديو.",
+        "videoDurationTooLong": "يجب أن تكون مدة الفيديو {maxSeconds} ثانية أو أقل.",
+        "selectFileRequired": "يرجى اختيار ملف للرفع.",
+        "headlineRequired": "العنوان مطلوب.",
+        "invalidLandingPageUrl": "يجب أن يكون رابط صفحة الوصول رابطًا صحيحًا."
+      },
+      "uploadForm": {
+        "creativeTypePlaceholder": "نوع المادة الإبداعية",
+        "callToActionPlaceholder": "دعوة لاتخاذ إجراء",
+        "headlineLabel": "العنوان",
+        "headlinePlaceholder": "عنوان المادة الإبداعية",
+        "landingPageUrlLabel": "رابط صفحة الوصول",
+        "tagsLabel": "الوسوم",
+        "tagsPlaceholder": "وعي، الربع 3، تجارة إلكترونية",
+        "descriptionLabel": "الوصف",
+        "descriptionPlaceholder": "أضف وصفًا مختصرًا لهذه المادة الإبداعية..."
+      },
+      "assetLibraryDialog": {
+        "description": "تكامل مكتبة الأصول جاهز من حيث البنية وسيتم تفعيله في نسخة قادمة.",
+        "bodyText": "هذه الحملة مهيأة حاليًا لرفع الأصول مباشرة. سيتم ربط اختيار المكتبة المشتركة بهذه النقطة لاحقًا."
+      },
+      "closeAction": "إغلاق",
+      "audienceCard": {
+        "title": "رؤى الجمهور",
+        "subtitle": "توزيع الجمهور والقنوات لهذه الحملة.",
+        "segmentsHeading": "شرائح الجمهور",
+        "contributionHeading": "مساهمة القناة"
+      },
+      "budgetCard": {
+        "title": "توزيع الميزانية",
+        "subtitle": "الميزانية والإنفاق والمتبقي المخصص."
+      },
+      "performanceCard": {
+        "title": "الأداء",
+        "subtitle": "لقطة أداء شهرية.",
+        "leadsSuffix": "{count} عميل محتمل"
+      },
+      "activityTab": {
+        "timelineTitle": "المخطط الزمني",
+        "recentActivityTitle": "النشاط الأخير"
+      },
+      "settingsCard": {
+        "title": "إعدادات الحملة",
+        "subtitle": "يمكن توسيع عناصر التحكم في الإعدادات هنا دون تغيير بنية التبويبات.",
+        "bodyText": "عناصر تحكم الإعدادات مبسطة بشكل متعمد في هذه النسخة وجاهزة للتوسيع مستقبلاً."
+      },
+      "dimensionsNotApplicable": "غير متاح"
     }
   }
 }

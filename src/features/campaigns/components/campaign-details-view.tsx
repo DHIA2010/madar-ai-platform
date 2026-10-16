@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import {
   AlertCircle,
   Edit,
@@ -41,7 +42,11 @@ import {
 } from "@/components/app"
 
 import { useCampaignDetails } from "../hooks"
-import { getCampaignStatusMeta } from "../services"
+import { translatedCampaignStatusMeta } from "../services"
+
+import { type Locale } from "@/i18n/locales"
+
+type CampaignsTranslator = ReturnType<typeof useTranslations<"campaigns">>
 
 type CampaignDetailsTab =
   | "overview"
@@ -72,24 +77,29 @@ interface CreativeAsset {
   previewUrl?: string
 }
 
-const DETAILS_TABS: Array<{ key: CampaignDetailsTab; label: string }> = [
-  { key: "overview", label: "Overview" },
-  { key: "creatives", label: "Creatives" },
-  { key: "audience", label: "Audience" },
-  { key: "budget", label: "Budget" },
-  { key: "performance", label: "Performance" },
-  { key: "activity", label: "Activity" },
-  { key: "settings", label: "Settings" },
+const DETAILS_TABS: CampaignDetailsTab[] = [
+  "overview",
+  "creatives",
+  "audience",
+  "budget",
+  "performance",
+  "activity",
+  "settings",
 ]
 
-const CREATIVE_TYPE_OPTIONS: Array<{ value: CreativeType; label: string }> = [
-  { value: "image", label: "Image" },
-  { value: "video", label: "Video" },
-  { value: "carousel", label: "Carousel" },
-  { value: "html5", label: "HTML5" },
-]
+const CREATIVE_TYPE_OPTIONS: CreativeType[] = ["image", "video", "carousel", "html5"]
 
-const CTA_OPTIONS = ["Learn More", "Shop Now", "Get Offer", "Sign Up", "Contact Us"]
+// The CTA dropdown's `value` is the literal label saved on the creative (and, if this ever wires up
+// to a real ad platform API, the standardized CTA token those platforms expect) -- it stays in
+// English regardless of locale, same as a status enum token. Only the displayed option text is
+// translated, via `key`.
+const CTA_OPTIONS = [
+  { value: "Learn More", key: "learnMore" },
+  { value: "Shop Now", key: "shopNow" },
+  { value: "Get Offer", key: "getOffer" },
+  { value: "Sign Up", key: "signUp" },
+  { value: "Contact Us", key: "contactUs" },
+] as const
 
 const ACCEPTED_MIME = {
   image: ["image/jpeg", "image/png", "image/webp"],
@@ -105,30 +115,40 @@ function getCreativeTypeIcon(type: CreativeType) {
   return FileCode2
 }
 
-function getCreativeStatusMeta(status: CreativeStatus) {
+function getCreativeStatusMeta(status: CreativeStatus, t: CampaignsTranslator) {
   if (status === "ready") {
-    return { label: "Ready", tone: "success" as const }
+    return { label: t("detailsView.creativeStatus.ready"), tone: "success" as const }
   }
   if (status === "needs_review") {
-    return { label: "Needs Review", tone: "warning" as const }
+    return { label: t("detailsView.creativeStatus.needsReview"), tone: "warning" as const }
   }
-  return { label: "Draft", tone: "neutral" as const }
+  return { label: t("detailsView.creativeStatus.draft"), tone: "neutral" as const }
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+// Arabic numerals are forced to Western digits (-u-nu-latn) so they match the plain-number data
+// from the backend, and dates are forced to the Gregorian calendar (-ca-gregory) rather than
+// defaulting to Hijri -- mirrors src/features/reports/components/kpi-widget-renderer.tsx.
+function numberLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
+}
+
+function dateLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US"
+}
+
+function formatCurrency(value: number, locale: Locale) {
+  const amount = new Intl.NumberFormat(numberLocale(locale), {
     maximumFractionDigits: 0,
   }).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(value)
+function formatNumber(value: number, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale)).format(value)
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-US", {
+function formatDate(value: string, locale: Locale) {
+  return new Date(value).toLocaleDateString(dateLocale(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -181,32 +201,38 @@ async function getVideoDuration(file: File): Promise<number | null> {
   })
 }
 
-async function validateCreativeFile(file: File, type: CreativeType) {
+async function validateCreativeFile(file: File, type: CreativeType, t: CampaignsTranslator) {
   const messages: string[] = []
 
   const allowed = ACCEPTED_MIME[type]
   if (!allowed.includes(file.type)) {
-    messages.push(`Unsupported file type for ${type}.`)
+    messages.push(
+      t("detailsView.validation.unsupportedFileType", {
+        type: t(
+          `detailsView.creativeTypeOptions.${type}` as "detailsView.creativeTypeOptions.image"
+        ),
+      })
+    )
   }
 
   const maxSizeMb = type === "video" ? 50 : 10
   if (file.size > maxSizeMb * 1024 * 1024) {
-    messages.push(`File is too large. Maximum allowed size is ${maxSizeMb} MB.`)
+    messages.push(t("detailsView.validation.fileTooLarge", { maxSizeMb }))
   }
 
   if (type === "image" || type === "carousel") {
     const dimensions = await getImageDimensions(file)
     if (!dimensions) {
-      messages.push("Unable to read image dimensions.")
+      messages.push(t("detailsView.validation.unableToReadImageDimensions"))
     }
   }
 
   if (type === "video") {
     const duration = await getVideoDuration(file)
     if (duration === null) {
-      messages.push("Unable to read video duration.")
+      messages.push(t("detailsView.validation.unableToReadVideoDuration"))
     } else if (duration > 120) {
-      messages.push("Video duration must be 120 seconds or less.")
+      messages.push(t("detailsView.validation.videoDurationTooLong", { maxSeconds: 120 }))
     }
   }
 
@@ -222,11 +248,11 @@ function DetailItem({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-function UploadProgress({ value }: { value: number }) {
+function UploadProgress({ value, label }: { value: number; label: string }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Upload Progress</span>
+        <span>{label}</span>
         <span>{value}%</span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -240,6 +266,9 @@ function UploadProgress({ value }: { value: number }) {
 }
 
 export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
+  const t = useTranslations("campaigns")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
   const campaignDetailsQuery = useCampaignDetails(campaignId)
 
   const [activeTab, setActiveTab] = useState<CampaignDetailsTab>("overview")
@@ -270,7 +299,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
   }, [previewUrl])
 
   const details = campaignDetailsQuery.data?.payload
-  const statusMeta = details ? getCampaignStatusMeta(details.status) : null
+  const statusMeta = details ? translatedCampaignStatusMeta(details.status, t) : null
 
   const resetUploadForm = () => {
     setCreativeType("image")
@@ -299,7 +328,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
       URL.revokeObjectURL(previewUrl)
     }
 
-    const validationMessages = await validateCreativeFile(file, creativeType)
+    const validationMessages = await validateCreativeFile(file, creativeType, t)
     setUploadErrors(validationMessages)
     setSelectedFile(file)
 
@@ -314,18 +343,18 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
     const validationMessages: string[] = []
 
     if (!selectedFile) {
-      validationMessages.push("Please select a file to upload.")
+      validationMessages.push(t("detailsView.validation.selectFileRequired"))
     }
 
     if (!headline.trim()) {
-      validationMessages.push("Headline is required.")
+      validationMessages.push(t("detailsView.validation.headlineRequired"))
     }
 
     if (landingPageUrl.trim()) {
       try {
         new URL(landingPageUrl)
       } catch {
-        validationMessages.push("Landing page URL must be a valid URL.")
+        validationMessages.push(t("detailsView.validation.invalidLandingPageUrl"))
       }
     }
 
@@ -357,8 +386,8 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
     const imageDimensions =
       creativeType === "video" || creativeType === "html5"
         ? creativeType === "video"
-          ? "Video"
-          : "N/A"
+          ? t("detailsView.creativeTypeOptions.video")
+          : t("detailsView.dimensionsNotApplicable")
         : ((await getImageDimensions(selectedFile)) ?? "—")
 
     setUploadProgress(100)
@@ -397,7 +426,12 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
   }
 
   if (!details || !statusMeta) {
-    return <AppEmpty title="Campaign not found" description="Unable to load campaign details." />
+    return (
+      <AppEmpty
+        title={t("editScreen.notFoundTitle")}
+        description={t("detailsView.notFoundDescription")}
+      />
+    )
   }
 
   return (
@@ -407,20 +441,23 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
         subtitle={details.overview}
         actions={
           <AppButton asChild icon={<Edit className="size-4" />}>
-            <Link href={ROUTES.campaignsEdit(details.id)}>Edit</Link>
+            <Link href={ROUTES.campaignsEdit(details.id)}>{t("detailsView.editAction")}</Link>
           </AppButton>
         }
       >
         <div className="grid gap-4 md:grid-cols-3">
-          <DetailItem label="Status">
+          <DetailItem label={t("detailsView.detailLabels.status")}>
             <AppStatusBadge status={statusMeta.tone} label={statusMeta.label} />
           </DetailItem>
-          <DetailItem label="Objective">{details.objective}</DetailItem>
-          <DetailItem label="Channel">{details.channel}</DetailItem>
-          <DetailItem label="Owner">{details.owner}</DetailItem>
-          <DetailItem label="Audience">{details.audience}</DetailItem>
-          <DetailItem label="Period">
-            {details.startDate} → {details.endDate}
+          <DetailItem label={t("detailsView.detailLabels.objective")}>
+            {details.objective}
+          </DetailItem>
+          <DetailItem label={t("detailsView.detailLabels.channel")}>{details.channel}</DetailItem>
+          <DetailItem label={t("detailsView.detailLabels.owner")}>{details.owner}</DetailItem>
+          <DetailItem label={t("detailsView.detailLabels.audience")}>{details.audience}</DetailItem>
+          <DetailItem label={t("detailsView.detailLabels.period")}>
+            {details.startDate} <span className="inline-block rtl:rotate-180">→</span>{" "}
+            {details.endDate}
           </DetailItem>
         </div>
       </AppCard>
@@ -429,25 +466,25 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
         <div className="overflow-x-auto">
           <div
             role="tablist"
-            aria-label="Campaign details tabs"
+            aria-label={t("detailsView.tabsAriaLabel")}
             className="inline-flex min-w-full gap-2 rounded-xl border border-border/70 bg-card p-1"
           >
             {DETAILS_TABS.map((tab) => (
               <button
-                key={tab.key}
-                id={`tab-${tab.key}`}
+                key={tab}
+                id={`tab-${tab}`}
                 type="button"
                 role="tab"
-                aria-controls={`panel-${tab.key}`}
-                aria-selected={activeTab === tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                aria-controls={`panel-${tab}`}
+                aria-selected={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
                 className={
-                  activeTab === tab.key
+                  activeTab === tab
                     ? "cursor-pointer rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
                     : "cursor-pointer rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
                 }
               >
-                {tab.label}
+                {t(`detailsView.tabs.${tab}` as "detailsView.tabs.overview")}
               </button>
             ))}
           </div>
@@ -461,26 +498,36 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
         >
           {activeTab === "overview" ? (
             <>
-              <AppCard title="KPIs" subtitle="Core marketing performance indicators">
+              <AppCard
+                title={t("detailsView.kpisCard.title")}
+                subtitle={t("detailsView.kpisCard.subtitle")}
+              >
                 <div className="grid gap-4 md:grid-cols-3">
-                  <DetailItem label="Total Revenue">
-                    {formatCurrency(details.kpis.totalRevenue)}
+                  <DetailItem label={t("detailsView.kpisCard.labels.totalRevenue")}>
+                    {formatCurrency(details.kpis.totalRevenue, locale)}
                   </DetailItem>
-                  <DetailItem label="Marketing Spend">
-                    {formatCurrency(details.kpis.marketingSpend)}
+                  <DetailItem label={t("detailsView.kpisCard.labels.marketingSpend")}>
+                    {formatCurrency(details.kpis.marketingSpend, locale)}
                   </DetailItem>
-                  <DetailItem label="ROAS">{details.kpis.roas.toFixed(2)}x</DetailItem>
-                  <DetailItem label="CAC">{formatCurrency(details.kpis.cac)}</DetailItem>
-                  <DetailItem label="Conversion Rate">
+                  <DetailItem label={t("detailsView.kpisCard.labels.roas")}>
+                    {details.kpis.roas.toFixed(2)}x
+                  </DetailItem>
+                  <DetailItem label={t("detailsView.kpisCard.labels.cac")}>
+                    {formatCurrency(details.kpis.cac, locale)}
+                  </DetailItem>
+                  <DetailItem label={t("detailsView.kpisCard.labels.conversionRate")}>
                     {details.kpis.conversionRate.toFixed(2)}%
                   </DetailItem>
-                  <DetailItem label="Website Visitors">
-                    {formatNumber(details.kpis.websiteVisitors)}
+                  <DetailItem label={t("detailsView.kpisCard.labels.websiteVisitors")}>
+                    {formatNumber(details.kpis.websiteVisitors, locale)}
                   </DetailItem>
                 </div>
               </AppCard>
 
-              <AppCard title="AI Recommendations" subtitle="Mock insights">
+              <AppCard
+                title={t("detailsView.aiRecommendationsCard.title")}
+                subtitle={t("detailsView.aiRecommendationsCard.subtitle")}
+              >
                 <ul className="list-disc space-y-2 ps-6 text-sm">
                   {details.aiRecommendations.map((recommendation) => (
                     <li key={recommendation}>{recommendation}</li>
@@ -493,22 +540,22 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
           {activeTab === "creatives" ? (
             <>
               <AppCard
-                title="Creatives"
-                subtitle="Upload and manage campaign assets after campaign setup."
+                title={t("detailsView.creativesCard.title")}
+                subtitle={t("detailsView.creativesCard.subtitle")}
                 actions={
                   <div className="flex items-center gap-2">
                     <AppButton
                       icon={<Upload className="size-4" />}
                       onClick={() => setIsUploadOpen(true)}
                     >
-                      Upload Creative
+                      {t("detailsView.uploadCreativeAction")}
                     </AppButton>
                     <AppButton
                       variant="outline"
                       icon={<Library className="size-4" />}
                       onClick={() => setIsAssetLibraryOpen(true)}
                     >
-                      Select Existing Asset
+                      {t("detailsView.selectExistingAssetAction")}
                     </AppButton>
                   </div>
                 }
@@ -517,15 +564,15 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                   <div className="rounded-xl border border-dashed p-10">
                     <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
                       <ImageIcon className="size-10 text-muted-foreground/50" />
-                      <p className="text-base font-medium">No creatives uploaded yet.</p>
+                      <p className="text-base font-medium">{t("detailsView.emptyState.title")}</p>
                       <p className="text-sm text-muted-foreground">
-                        Start by uploading your first creative asset for this campaign.
+                        {t("detailsView.emptyState.description")}
                       </p>
                       <AppButton
                         icon={<Plus className="size-4" />}
                         onClick={() => setIsUploadOpen(true)}
                       >
-                        Upload your first creative
+                        {t("detailsView.emptyState.action")}
                       </AppButton>
                     </div>
                   </div>
@@ -533,7 +580,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {creatives.map((creative) => {
                       const TypeIcon = getCreativeTypeIcon(creative.type)
-                      const status = getCreativeStatusMeta(creative.status)
+                      const status = getCreativeStatusMeta(creative.status, t)
 
                       return (
                         <article
@@ -558,7 +605,9 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                                 <AppButton
                                   variant="ghost"
                                   size="icon-sm"
-                                  aria-label={`Actions for ${creative.name}`}
+                                  aria-label={t("detailsView.actionsForCreativeAriaLabel", {
+                                    name: creative.name,
+                                  })}
                                 >
                                   <MoreHorizontal className="size-4" />
                                 </AppButton>
@@ -566,7 +615,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                               <AppDropdownMenuContent align="end">
                                 <AppDropdownMenuItem>
                                   <Eye className="size-4" />
-                                  Preview
+                                  {t("creativeLibrary.actions.preview")}
                                 </AppDropdownMenuItem>
                                 <AppDropdownMenuItem
                                   className="text-destructive"
@@ -577,7 +626,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                                   }
                                 >
                                   <Trash2 className="size-4" />
-                                  Remove
+                                  {t("detailsView.removeAction")}
                                 </AppDropdownMenuItem>
                               </AppDropdownMenuContent>
                             </AppDropdownMenu>
@@ -593,24 +642,24 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                               />
                             ) : (
                               <div className="flex h-32 items-center justify-center rounded-md bg-background text-xs text-muted-foreground">
-                                Preview unavailable
+                                {t("detailsView.previewUnavailable")}
                               </div>
                             )}
                           </div>
 
                           <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                             <div className="flex items-center justify-between">
-                              <span>Dimensions</span>
+                              <span>{t("detailsView.creativeMeta.dimensions")}</span>
                               <span className="text-foreground">{creative.dimensions}</span>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span>File size</span>
+                              <span>{t("detailsView.creativeMeta.fileSize")}</span>
                               <span className="text-foreground">{creative.fileSize}</span>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span>Created</span>
+                              <span>{t("detailsView.creativeMeta.created")}</span>
                               <span className="text-foreground">
-                                {formatDate(creative.createdAt)}
+                                {formatDate(creative.createdAt, locale)}
                               </span>
                             </div>
                           </div>
@@ -633,8 +682,8 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                     resetUploadForm()
                   }
                 }}
-                title="Upload Creative"
-                description="Upload a creative asset and provide delivery metadata for this campaign."
+                title={t("detailsView.uploadCreativeAction")}
+                description={t("detailsView.uploadDialog.description")}
                 contentClassName="sm:max-w-2xl"
                 footer={
                   <>
@@ -643,10 +692,10 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                       onClick={() => setIsUploadOpen(false)}
                       disabled={isUploading}
                     >
-                      Cancel
+                      {tCommon("cancel")}
                     </AppButton>
                     <AppButton onClick={handleUpload} loading={isUploading} disabled={isUploading}>
-                      Upload Creative
+                      {t("detailsView.uploadCreativeAction")}
                     </AppButton>
                   </>
                 }
@@ -662,9 +711,11 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                   >
                     <div className="flex flex-col items-center gap-2 text-center">
                       <Upload className="size-6 text-muted-foreground" />
-                      <p className="text-sm font-medium">Drag and drop your creative here</p>
+                      <p className="text-sm font-medium">
+                        {t("detailsView.uploadDialog.dropzoneTitle")}
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Supported: JPG, PNG, WEBP, MP4, MOV, WEBM, ZIP (HTML5)
+                        {t("detailsView.uploadDialog.supportedFormats")}
                       </p>
                       <label>
                         <input
@@ -676,7 +727,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                           }}
                         />
                         <span className="inline-flex cursor-pointer items-center gap-1 rounded-lg border px-3 py-1.5 text-sm hover:bg-muted/30">
-                          Browse Files
+                          {t("detailsView.uploadDialog.browseFiles")}
                         </span>
                       </label>
                     </div>
@@ -696,14 +747,19 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={previewUrl}
-                          alt="Creative preview"
+                          alt={t("detailsView.uploadDialog.creativePreviewAlt")}
                           className="h-36 w-full rounded-lg object-cover"
                         />
                       ) : null}
                     </div>
                   ) : null}
 
-                  {isUploading ? <UploadProgress value={uploadProgress} /> : null}
+                  {isUploading ? (
+                    <UploadProgress
+                      value={uploadProgress}
+                      label={t("detailsView.uploadProgressLabel")}
+                    />
+                  ) : null}
 
                   {uploadErrors.length > 0 ? (
                     <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
@@ -724,12 +780,16 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                       onValueChange={(value) => setCreativeType(value as CreativeType)}
                     >
                       <AppSelectTrigger className="h-9 rounded-xl">
-                        <AppSelectValue placeholder="Creative type" />
+                        <AppSelectValue
+                          placeholder={t("detailsView.uploadForm.creativeTypePlaceholder")}
+                        />
                       </AppSelectTrigger>
                       <AppSelectContent align="start" position="popper">
                         {CREATIVE_TYPE_OPTIONS.map((option) => (
-                          <AppSelectItem key={option.value} value={option.value}>
-                            {option.label}
+                          <AppSelectItem key={option} value={option}>
+                            {t(
+                              `detailsView.creativeTypeOptions.${option}` as "detailsView.creativeTypeOptions.image"
+                            )}
                           </AppSelectItem>
                         ))}
                       </AppSelectContent>
@@ -737,47 +797,51 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
 
                     <AppSelect value={callToAction} onValueChange={setCallToAction}>
                       <AppSelectTrigger className="h-9 rounded-xl">
-                        <AppSelectValue placeholder="Call to action" />
+                        <AppSelectValue
+                          placeholder={t("detailsView.uploadForm.callToActionPlaceholder")}
+                        />
                       </AppSelectTrigger>
                       <AppSelectContent align="start" position="popper">
                         {CTA_OPTIONS.map((option) => (
-                          <AppSelectItem key={option} value={option}>
-                            {option}
+                          <AppSelectItem key={option.value} value={option.value}>
+                            {t(
+                              `detailsView.ctaOptions.${option.key}` as "detailsView.ctaOptions.learnMore"
+                            )}
                           </AppSelectItem>
                         ))}
                       </AppSelectContent>
                     </AppSelect>
 
                     <AppInput
-                      label="Headline"
+                      label={t("detailsView.uploadForm.headlineLabel")}
                       required
                       value={headline}
                       onChange={(event) => setHeadline(event.target.value)}
-                      placeholder="Creative headline"
+                      placeholder={t("detailsView.uploadForm.headlinePlaceholder")}
                     />
 
                     <AppInput
-                      label="Landing Page URL"
+                      label={t("detailsView.uploadForm.landingPageUrlLabel")}
                       value={landingPageUrl}
                       onChange={(event) => setLandingPageUrl(event.target.value)}
                       placeholder="https://example.com/page"
                     />
 
                     <AppInput
-                      label="Tags"
+                      label={t("detailsView.uploadForm.tagsLabel")}
                       wrapperClassName="md:col-span-2"
                       value={tags}
                       onChange={(event) => setTags(event.target.value)}
-                      placeholder="awareness, q3, ecommerce"
+                      placeholder={t("detailsView.uploadForm.tagsPlaceholder")}
                     />
 
                     <AppTextarea
-                      label="Description"
+                      label={t("detailsView.uploadForm.descriptionLabel")}
                       wrapperClassName="md:col-span-2"
                       className="min-h-[84px]"
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
-                      placeholder="Add a short description for this creative..."
+                      placeholder={t("detailsView.uploadForm.descriptionPlaceholder")}
                     />
                   </div>
                 </div>
@@ -786,13 +850,16 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
               <AppDialog
                 open={isAssetLibraryOpen}
                 onOpenChange={setIsAssetLibraryOpen}
-                title="Select Existing Asset"
-                description="Asset Library integration is ready in structure and will be enabled in a future sprint."
-                footer={<AppButton onClick={() => setIsAssetLibraryOpen(false)}>Close</AppButton>}
+                title={t("detailsView.selectExistingAssetAction")}
+                description={t("detailsView.assetLibraryDialog.description")}
+                footer={
+                  <AppButton onClick={() => setIsAssetLibraryOpen(false)}>
+                    {t("detailsView.closeAction")}
+                  </AppButton>
+                }
               >
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  This campaign is currently configured to upload assets directly. Shared library
-                  selection will plug into this entry point.
+                  {t("detailsView.assetLibraryDialog.bodyText")}
                 </div>
               </AppDialog>
             </>
@@ -800,12 +867,14 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
 
           {activeTab === "audience" ? (
             <AppCard
-              title="Audience Insights"
-              subtitle="Audience and channel distribution for this campaign."
+              title={t("detailsView.audienceCard.title")}
+              subtitle={t("detailsView.audienceCard.subtitle")}
             >
               <div className="grid gap-6 md:grid-cols-2">
                 <div>
-                  <h3 className="mb-2 text-sm font-medium">Audience Segments</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("detailsView.audienceCard.segmentsHeading")}
+                  </h3>
                   <ul className="space-y-2 text-sm">
                     {details.audienceSummary.map((item) => (
                       <li
@@ -819,7 +888,9 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                   </ul>
                 </div>
                 <div>
-                  <h3 className="mb-2 text-sm font-medium">Channel Contribution</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("detailsView.audienceCard.contributionHeading")}
+                  </h3>
                   <ul className="space-y-2 text-sm">
                     {details.channelsSummary.map((item) => (
                       <li
@@ -837,7 +908,10 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
           ) : null}
 
           {activeTab === "budget" ? (
-            <AppCard title="Budget Allocation" subtitle="Budget, spend, and remaining allocation.">
+            <AppCard
+              title={t("detailsView.budgetCard.title")}
+              subtitle={t("detailsView.budgetCard.subtitle")}
+            >
               <ul className="space-y-2 text-sm">
                 {details.budgetSummary.map((item) => (
                   <li
@@ -845,7 +919,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                     className="flex items-center justify-between rounded-lg border px-3 py-2"
                   >
                     <span>{item.label}</span>
-                    <span>{formatCurrency(item.value)}</span>
+                    <span>{formatCurrency(item.value, locale)}</span>
                   </li>
                 ))}
               </ul>
@@ -853,7 +927,10 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
           ) : null}
 
           {activeTab === "performance" ? (
-            <AppCard title="Performance" subtitle="Monthly performance snapshot.">
+            <AppCard
+              title={t("detailsView.performanceCard.title")}
+              subtitle={t("detailsView.performanceCard.subtitle")}
+            >
               <ul className="space-y-2 text-sm">
                 {details.performance.map((item) => (
                   <li
@@ -861,9 +938,13 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                     className="flex items-center justify-between rounded-lg border px-3 py-2"
                   >
                     <span>{item.month}</span>
-                    <span>{formatCurrency(item.spend)}</span>
-                    <span>{formatCurrency(item.revenue)}</span>
-                    <span>{formatNumber(item.leads)} leads</span>
+                    <span>{formatCurrency(item.spend, locale)}</span>
+                    <span>{formatCurrency(item.revenue, locale)}</span>
+                    <span>
+                      {t("detailsView.performanceCard.leadsSuffix", {
+                        count: formatNumber(item.leads, locale),
+                      })}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -872,7 +953,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
 
           {activeTab === "activity" ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <AppCard title="Timeline">
+              <AppCard title={t("detailsView.activityTab.timelineTitle")}>
                 <ul className="space-y-2 text-sm">
                   {details.timeline.map((entry) => (
                     <li
@@ -887,7 +968,7 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
                 </ul>
               </AppCard>
 
-              <AppCard title="Recent Activity">
+              <AppCard title={t("detailsView.activityTab.recentActivityTitle")}>
                 <ul className="space-y-2 text-sm">
                   {details.activity.map((entry) => (
                     <li key={entry.id} className="rounded-lg border px-3 py-2">
@@ -904,12 +985,11 @@ export function CampaignDetailsView({ campaignId }: { campaignId: string }) {
 
           {activeTab === "settings" ? (
             <AppCard
-              title="Campaign Settings"
-              subtitle="Settings controls can be expanded here without changing tab structure."
+              title={t("detailsView.settingsCard.title")}
+              subtitle={t("detailsView.settingsCard.subtitle")}
             >
               <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                Settings controls are intentionally lightweight in this sprint and ready for future
-                expansion.
+                {t("detailsView.settingsCard.bodyText")}
               </div>
             </AppCard>
           ) : null}

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Activity,
   ArrowRight,
@@ -39,6 +40,8 @@ import { useWorkspace } from "@/features/workspace"
 import { useCampaignList } from "../hooks"
 import { CampaignStatusBadge } from "./campaign-status-badge"
 
+import { type Locale } from "@/i18n/locales"
+
 const CampaignPerformanceChart = dynamic(
   () => import("./campaign-performance-chart").then((module) => module.CampaignPerformanceChart),
   {
@@ -58,20 +61,13 @@ const CampaignSpendDonut = dynamic(
 type MetricKey = "spend" | "revenue" | "roas" | "ctr" | "cpc" | "conversions"
 type TimeRange = "7d" | "30d" | "90d" | "12m"
 
-const PERFORMANCE_METRICS: Array<{ key: MetricKey; label: string }> = [
-  { key: "spend", label: "Spend" },
-  { key: "revenue", label: "Revenue" },
-  { key: "roas", label: "ROAS" },
-  { key: "ctr", label: "CTR" },
-  { key: "cpc", label: "CPC" },
-  { key: "conversions", label: "Conversions" },
-]
+const PERFORMANCE_METRICS: MetricKey[] = ["spend", "revenue", "roas", "ctr", "cpc", "conversions"]
 
-const TIME_RANGE_OPTIONS: Array<{ key: TimeRange; label: string; points: number }> = [
-  { key: "7d", label: "7 days", points: 7 },
-  { key: "30d", label: "30 days", points: 8 },
-  { key: "90d", label: "90 days", points: 9 },
-  { key: "12m", label: "12 months", points: 12 },
+const TIME_RANGE_OPTIONS: Array<{ key: TimeRange; points: number }> = [
+  { key: "7d", points: 7 },
+  { key: "30d", points: 8 },
+  { key: "90d", points: 9 },
+  { key: "12m", points: 12 },
 ]
 
 const DISTRIBUTION_COLORS = [
@@ -83,44 +79,36 @@ const DISTRIBUTION_COLORS = [
   "hsl(var(--primary))",
 ]
 
-const AI_DECISION_CENTER = {
-  recommendedAction: {
-    title: "Increase Meta Budget by 20%",
-    summary:
-      "Meta prospecting is capturing the strongest conversion volume this week without pushing CPC above target.",
-    impactLabel: "Expected Business Impact",
-    impactValue: "+SAR 18,500 Revenue",
-    confidence: "92%",
-  },
-  opportunities: [
-    { value: "SAR 18,500", title: "Increase Meta Budget", icon: Rocket },
-    { value: "SAR 9,200", title: "Launch Retargeting Campaign", icon: Megaphone },
-    { value: "SAR 6,400", title: "Duplicate Winning Creative", icon: Repeat2 },
-  ],
-  risks: [
-    { title: "High CPC", severity: "critical" },
-    { title: "Low ROAS", severity: "critical" },
-    { title: "Creative Fatigue", severity: "warning" },
-    { title: "Budget Ending Soon", severity: "warning" },
-    { title: "Meta Token Expiring", severity: "info" },
-  ],
+// Mock AI Decision Center data: the AI-facing title/summary copy and risk/opportunity labels are
+// translated inline in CampaignAiDecisionCenterCard (via useTranslations), while the amounts below
+// stay as plain numbers so they can be run through the locale-aware formatCurrency helper. Only the
+// tone/color styling (not used solely for display text) stays as a module-level constant.
+const AI_OPPORTUNITY_AMOUNTS = {
+  increaseMetaBudget: 18500,
+  launchRetargetingCampaign: 9200,
+  duplicateWinningCreative: 6400,
 } as const
+
+const AI_RISK_SEVERITIES = [
+  { key: "highCpc", severity: "critical" as const },
+  { key: "lowRoas", severity: "critical" as const },
+  { key: "creativeFatigue", severity: "warning" as const },
+  { key: "budgetEndingSoon", severity: "warning" as const },
+  { key: "metaTokenExpiring", severity: "info" as const },
+]
 
 const AI_RISK_STYLES = {
   critical: {
     badge: "destructive" as const,
     dot: "bg-destructive",
-    label: "Critical",
   },
   warning: {
     badge: "secondary" as const,
     dot: "bg-chart-4",
-    label: "Warning",
   },
   info: {
     badge: "outline" as const,
     dot: "bg-chart-2",
-    label: "Info",
   },
 }
 
@@ -132,15 +120,23 @@ function hash(value: string) {
   return h
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+// Mirrors LiveVisitorsPage's locale-aware SAR formatting: Arabic numerals (forced to Western
+// digits via -u-nu-latn so they match the plain-number data from the backend) with a trailing
+// "ر.س", English numerals with a leading "SAR ".
+function numberLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
+}
+
+function formatCurrency(value: number, locale: Locale) {
+  const amount = new Intl.NumberFormat(numberLocale(locale), {
     maximumFractionDigits: 0,
   }).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
 export function useCampaignDashboardData() {
+  const t = useTranslations("campaigns")
+  const locale = useLocale() as Locale
   const { currentWorkspace } = useWorkspace()
   const campaignListQuery = useCampaignList({
     page: 1,
@@ -166,34 +162,45 @@ export function useCampaignDashboardData() {
 
     return [
       {
-        title: "Total Spend",
-        value: formatCurrency(totalSpend),
-        trend: "+6.2% vs last period",
+        title: t("dashboardWidgets.kpis.totalSpend.title"),
+        value: formatCurrency(totalSpend, locale),
+        trend: t("dashboardWidgets.kpis.totalSpend.trend", { percent: "+6.2%" }),
         icon: DollarSign,
       },
       {
-        title: "Revenue",
-        value: formatCurrency(totalRevenue),
-        trend: "+8.4% vs last period",
+        title: t("dashboardWidgets.kpis.revenue.title"),
+        value: formatCurrency(totalRevenue, locale),
+        trend: t("dashboardWidgets.kpis.revenue.trend", { percent: "+8.4%" }),
         icon: ArrowUpRight,
       },
       {
-        title: "Active Campaigns",
+        title: t("dashboardWidgets.kpis.activeCampaigns.title"),
         value: String(active),
-        trend: `${campaigns.length} total campaigns`,
+        trend: t("dashboardWidgets.kpis.activeCampaigns.trend", { count: campaigns.length }),
         icon: Activity,
       },
       {
-        title: "ROAS",
+        title: t("dashboardWidgets.kpis.roas.title"),
         value: `${avgRoas.toFixed(2)}x`,
-        trend: avgRoas >= 2 ? "Healthy return" : "Below target",
+        trend:
+          avgRoas >= 2
+            ? t("dashboardWidgets.kpis.roas.healthyReturn")
+            : t("dashboardWidgets.kpis.roas.belowTarget"),
         icon: Gauge,
       },
     ]
-  }, [campaigns])
+  }, [campaigns, t, locale])
 
   const distribution = useMemo(() => {
-    const platforms = ["Meta", "Google", "TikTok", "Snapchat", "LinkedIn", "Other"]
+    // Platform names are brand names and stay untranslated; only the "Other" bucket is UI copy.
+    const platforms = [
+      "Meta",
+      "Google",
+      "TikTok",
+      "Snapchat",
+      "LinkedIn",
+      t("dashboardWidgets.otherPlatformLabel"),
+    ]
     const totalSpend = campaigns.reduce((sum, item) => sum + item.spend, 0)
 
     if (totalSpend <= 0) {
@@ -212,7 +219,7 @@ export function useCampaignDashboardData() {
 
       return { label, value: weight, color: DISTRIBUTION_COLORS[index] }
     })
-  }, [campaigns])
+  }, [campaigns, t])
 
   const topCampaigns = useMemo(() => {
     return [...campaigns].sort((a, b) => b.roas - a.roas).slice(0, 6)
@@ -256,6 +263,7 @@ export function CampaignRevenueTrendCard({
 }: {
   campaigns: ReturnType<typeof useCampaignDashboardData>["campaigns"]
 }) {
+  const t = useTranslations("campaigns")
   const [metric, setMetric] = useState<MetricKey>("revenue")
   const [timeRange, setTimeRange] = useState<TimeRange>("30d")
   const timeRangeConfig =
@@ -311,8 +319,8 @@ export function CampaignRevenueTrendCard({
 
   return (
     <AppCard
-      title="Performance"
-      subtitle="Track core campaign performance trends over time."
+      title={t("dashboardWidgets.performanceCard.title")}
+      subtitle={t("dashboardWidgets.performanceCard.subtitle")}
       actions={
         <div className="flex items-center gap-2">
           <AppSelect value={metric} onValueChange={(value) => setMetric(value as MetricKey)}>
@@ -320,9 +328,9 @@ export function CampaignRevenueTrendCard({
               <AppSelectValue />
             </AppSelectTrigger>
             <AppSelectContent>
-              {PERFORMANCE_METRICS.map((item) => (
-                <AppSelectItem key={item.key} value={item.key}>
-                  {item.label}
+              {PERFORMANCE_METRICS.map((key) => (
+                <AppSelectItem key={key} value={key}>
+                  {t(`metrics.columns.${key}` as "metrics.columns.spend")}
                 </AppSelectItem>
               ))}
             </AppSelectContent>
@@ -335,7 +343,7 @@ export function CampaignRevenueTrendCard({
             <AppSelectContent>
               {TIME_RANGE_OPTIONS.map((item) => (
                 <AppSelectItem key={item.key} value={item.key}>
-                  {item.label}
+                  {t(`dashboardWidgets.timeRanges.${item.key}` as "dashboardWidgets.timeRanges.7d")}
                 </AppSelectItem>
               ))}
             </AppSelectContent>
@@ -357,10 +365,12 @@ export function CampaignSpendDistributionCard({
 }: {
   distribution: ReturnType<typeof useCampaignDashboardData>["distribution"]
 }) {
+  const t = useTranslations("campaigns")
+
   return (
     <AppCard
-      title="Spend Distribution"
-      subtitle="How campaign budget is distributed across platforms."
+      title={t("dashboardWidgets.spendDistributionCard.title")}
+      subtitle={t("dashboardWidgets.spendDistributionCard.subtitle")}
       className="h-full"
     >
       <CampaignSpendDonut distribution={distribution} />
@@ -373,32 +383,36 @@ export function CampaignTopCampaignsCard({
 }: {
   topCampaigns: ReturnType<typeof useCampaignDashboardData>["topCampaigns"]
 }) {
+  const t = useTranslations("campaigns")
+  const locale = useLocale() as Locale
   const router = useRouter()
 
   return (
     <AppCard
-      title="Top Performing Campaigns"
-      subtitle="Quick view of highest-impact campaigns."
+      title={t("dashboardWidgets.topCampaignsCard.title")}
+      subtitle={t("dashboardWidgets.topCampaignsCard.subtitle")}
       className="h-full"
     >
       <AppTable>
         <AppTableHeader>
           <AppTableRow>
-            <AppTableHead>Campaign</AppTableHead>
-            <AppTableHead>Spend</AppTableHead>
-            <AppTableHead>Revenue</AppTableHead>
-            <AppTableHead>ROAS</AppTableHead>
-            <AppTableHead>CTR</AppTableHead>
-            <AppTableHead>Status</AppTableHead>
-            <AppTableHead className="text-right">Quick Action</AppTableHead>
+            <AppTableHead>{t("dashboardWidgets.topCampaignsCard.columns.campaign")}</AppTableHead>
+            <AppTableHead>{t("metrics.columns.spend")}</AppTableHead>
+            <AppTableHead>{t("metrics.columns.revenue")}</AppTableHead>
+            <AppTableHead>{t("metrics.columns.roas")}</AppTableHead>
+            <AppTableHead>{t("metrics.columns.ctr")}</AppTableHead>
+            <AppTableHead>{t("metrics.columns.status")}</AppTableHead>
+            <AppTableHead className="text-right">
+              {t("dashboardWidgets.topCampaignsCard.columns.quickAction")}
+            </AppTableHead>
           </AppTableRow>
         </AppTableHeader>
         <AppTableBody>
           {topCampaigns.map((campaign) => (
             <AppTableRow key={campaign.id}>
               <AppTableCell>{campaign.name}</AppTableCell>
-              <AppTableCell>{formatCurrency(campaign.spend)}</AppTableCell>
-              <AppTableCell>{formatCurrency(campaign.revenue)}</AppTableCell>
+              <AppTableCell>{formatCurrency(campaign.spend, locale)}</AppTableCell>
+              <AppTableCell>{formatCurrency(campaign.revenue, locale)}</AppTableCell>
               <AppTableCell>{campaign.roas.toFixed(2)}x</AppTableCell>
               <AppTableCell>{campaign.ctr.toFixed(2)}%</AppTableCell>
               <AppTableCell>
@@ -410,7 +424,7 @@ export function CampaignTopCampaignsCard({
                   variant="ghost"
                   onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
                 >
-                  Open
+                  {t("dashboardWidgets.topCampaignsCard.openAction")}
                 </AppButton>
               </AppTableCell>
             </AppTableRow>
@@ -422,69 +436,112 @@ export function CampaignTopCampaignsCard({
 }
 
 export function CampaignAiDecisionCenterCard() {
+  const t = useTranslations("campaigns")
+  const locale = useLocale() as Locale
+
+  const opportunities = [
+    {
+      id: "increaseMetaBudget" as const,
+      amount: AI_OPPORTUNITY_AMOUNTS.increaseMetaBudget,
+      title: t("dashboardWidgets.aiDecisionCenter.opportunities.increaseMetaBudget"),
+      icon: Rocket,
+    },
+    {
+      id: "launchRetargetingCampaign" as const,
+      amount: AI_OPPORTUNITY_AMOUNTS.launchRetargetingCampaign,
+      title: t("dashboardWidgets.aiDecisionCenter.opportunities.launchRetargetingCampaign"),
+      icon: Megaphone,
+    },
+    {
+      id: "duplicateWinningCreative" as const,
+      amount: AI_OPPORTUNITY_AMOUNTS.duplicateWinningCreative,
+      title: t("dashboardWidgets.aiDecisionCenter.opportunities.duplicateWinningCreative"),
+      icon: Repeat2,
+    },
+  ]
+
+  const risks = AI_RISK_SEVERITIES.map((risk) => ({
+    ...risk,
+    title: t(
+      `dashboardWidgets.aiDecisionCenter.risks.${risk.key}` as "dashboardWidgets.aiDecisionCenter.risks.highCpc"
+    ),
+  }))
+
   return (
     <AppCard
-      title="AI Decision Center"
-      subtitle="Prioritized recommendations for the next executive action."
+      title={t("dashboardWidgets.aiDecisionCenter.title")}
+      subtitle={t("dashboardWidgets.aiDecisionCenter.subtitle")}
     >
       <div className="space-y-4">
         <section className="rounded-xl border border-border/70 bg-background p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                Recommended Action
+                {t("dashboardWidgets.aiDecisionCenter.recommendedActionLabel")}
               </p>
               <h3 className="mt-2 text-base font-semibold tracking-tight">
-                {AI_DECISION_CENTER.recommendedAction.title}
+                {t("dashboardWidgets.aiDecisionCenter.recommendedAction.title")}
               </h3>
               <p className="mt-2 max-w-[30rem] text-sm text-muted-foreground">
-                {AI_DECISION_CENTER.recommendedAction.summary}
+                {t("dashboardWidgets.aiDecisionCenter.recommendedAction.summary")}
               </p>
             </div>
-            <AppBadge variant="secondary">Top Priority</AppBadge>
+            <AppBadge variant="secondary">
+              {t("dashboardWidgets.aiDecisionCenter.topPriorityBadge")}
+            </AppBadge>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-border/60 bg-card p-3">
               <p className="text-xs text-muted-foreground">
-                {AI_DECISION_CENTER.recommendedAction.impactLabel}
+                {t("dashboardWidgets.aiDecisionCenter.impactLabel")}
               </p>
               <p className="mt-1 text-sm font-semibold">
-                {AI_DECISION_CENTER.recommendedAction.impactValue}
+                {t("dashboardWidgets.aiDecisionCenter.impactValue", {
+                  amount: formatCurrency(AI_OPPORTUNITY_AMOUNTS.increaseMetaBudget, locale),
+                })}
               </p>
             </div>
             <div className="rounded-lg border border-border/60 bg-card p-3">
-              <p className="text-xs text-muted-foreground">Confidence</p>
-              <p className="mt-1 text-sm font-semibold">
-                {AI_DECISION_CENTER.recommendedAction.confidence}
+              <p className="text-xs text-muted-foreground">
+                {t("dashboardWidgets.aiDecisionCenter.confidenceLabel")}
               </p>
+              <p className="mt-1 text-sm font-semibold">92%</p>
             </div>
           </div>
 
           <AppButton asChild size="sm" className="mt-4">
-            <Link href={ROUTES.ai}>Review Recommendation</Link>
+            <Link href={ROUTES.ai}>
+              {t("dashboardWidgets.aiDecisionCenter.reviewRecommendationAction")}
+            </Link>
           </AppButton>
         </section>
 
         <section>
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Growth Opportunities</h3>
-            <span className="text-xs text-muted-foreground">Top 3</span>
+            <h3 className="text-sm font-semibold">
+              {t("dashboardWidgets.aiDecisionCenter.growthOpportunitiesHeading")}
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {t("dashboardWidgets.aiDecisionCenter.top3Badge")}
+            </span>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
-            {AI_DECISION_CENTER.opportunities.map((opportunity) => {
+            {opportunities.map((opportunity) => {
               const Icon = opportunity.icon
 
               return (
                 <div
-                  key={opportunity.title}
+                  key={opportunity.id}
                   className="rounded-lg border border-border/70 bg-background p-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs text-muted-foreground">Estimated Impact</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("dashboardWidgets.aiDecisionCenter.estimatedImpactLabel")}
+                      </p>
                       <p className="mt-1 text-sm font-semibold tracking-tight">
-                        {opportunity.value}
+                        {formatCurrency(opportunity.amount, locale)}
                       </p>
                     </div>
                     <span className="rounded-md border border-border/60 bg-card p-1.5 text-muted-foreground">
@@ -500,23 +557,31 @@ export function CampaignAiDecisionCenterCard() {
 
         <section>
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Risks & Alerts</h3>
-            <span className="text-xs text-muted-foreground">Requires attention</span>
+            <h3 className="text-sm font-semibold">
+              {t("dashboardWidgets.aiDecisionCenter.risksAlertsHeading")}
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {t("dashboardWidgets.aiDecisionCenter.requiresAttentionBadge")}
+            </span>
           </div>
           <div className="space-y-2">
-            {AI_DECISION_CENTER.risks.map((risk) => {
+            {risks.map((risk) => {
               const style = AI_RISK_STYLES[risk.severity]
 
               return (
                 <div
-                  key={risk.title}
+                  key={risk.key}
                   className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5"
                 >
                   <div className="flex items-center gap-2">
                     <span className={`size-2 rounded-full ${style.dot}`} aria-hidden="true" />
                     <p className="text-sm">{risk.title}</p>
                   </div>
-                  <AppBadge variant={style.badge}>{style.label}</AppBadge>
+                  <AppBadge variant={style.badge}>
+                    {t(
+                      `dashboardWidgets.aiDecisionCenter.severity.${risk.severity}` as "dashboardWidgets.aiDecisionCenter.severity.critical"
+                    )}
+                  </AppBadge>
                 </div>
               )
             })}
@@ -528,8 +593,8 @@ export function CampaignAiDecisionCenterCard() {
             href={ROUTES.ai}
             className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/80"
           >
-            View All AI Recommendations
-            <ArrowRight className="size-4" />
+            {t("dashboardWidgets.aiDecisionCenter.viewAllAction")}
+            <ArrowRight className="size-4 rtl:rotate-180" />
           </Link>
         </div>
       </div>

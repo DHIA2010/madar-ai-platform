@@ -6264,6 +6264,222 @@
         "swipes": "Swipes",
         "swipeRate": "Swipe Rate"
       }
+    },
+    "dashboardWidgets": {
+      "timeRanges": {
+        "7d": "7 days",
+        "30d": "30 days",
+        "90d": "90 days",
+        "12m": "12 months"
+      },
+      "otherPlatformLabel": "Other",
+      "kpis": {
+        "totalSpend": {
+          "title": "Total Spend",
+          "trend": "{percent} vs last period"
+        },
+        "revenue": {
+          "title": "Revenue",
+          "trend": "{percent} vs last period"
+        },
+        "activeCampaigns": {
+          "title": "Active Campaigns",
+          "trend": "{count} total campaigns"
+        },
+        "roas": {
+          "title": "ROAS",
+          "healthyReturn": "Healthy return",
+          "belowTarget": "Below target"
+        }
+      },
+      "performanceCard": {
+        "title": "Performance",
+        "subtitle": "Track core campaign performance trends over time."
+      },
+      "spendDistributionCard": {
+        "title": "Spend Distribution",
+        "subtitle": "How campaign budget is distributed across platforms."
+      },
+      "topCampaignsCard": {
+        "title": "Top Performing Campaigns",
+        "subtitle": "Quick view of highest-impact campaigns.",
+        "columns": {
+          "campaign": "Campaign",
+          "quickAction": "Quick Action"
+        },
+        "openAction": "Open"
+      },
+      "aiDecisionCenter": {
+        "title": "AI Decision Center",
+        "subtitle": "Prioritized recommendations for the next executive action.",
+        "recommendedActionLabel": "Recommended Action",
+        "topPriorityBadge": "Top Priority",
+        "recommendedAction": {
+          "title": "Increase Meta Budget by 20%",
+          "summary": "Meta prospecting is capturing the strongest conversion volume this week without pushing CPC above target."
+        },
+        "impactLabel": "Expected Business Impact",
+        "impactValue": "+{amount} Revenue",
+        "confidenceLabel": "Confidence",
+        "reviewRecommendationAction": "Review Recommendation",
+        "growthOpportunitiesHeading": "Growth Opportunities",
+        "top3Badge": "Top 3",
+        "estimatedImpactLabel": "Estimated Impact",
+        "opportunities": {
+          "increaseMetaBudget": "Increase Meta Budget",
+          "launchRetargetingCampaign": "Launch Retargeting Campaign",
+          "duplicateWinningCreative": "Duplicate Winning Creative"
+        },
+        "risksAlertsHeading": "Risks & Alerts",
+        "requiresAttentionBadge": "Requires attention",
+        "risks": {
+          "highCpc": "High CPC",
+          "lowRoas": "Low ROAS",
+          "creativeFatigue": "Creative Fatigue",
+          "budgetEndingSoon": "Budget Ending Soon",
+          "metaTokenExpiring": "Meta Token Expiring"
+        },
+        "severity": {
+          "critical": "Critical",
+          "warning": "Warning",
+          "info": "Info"
+        },
+        "viewAllAction": "View All AI Recommendations"
+      }
+    },
+    "detailsView": {
+      "tabsAriaLabel": "Campaign details tabs",
+      "editAction": "Edit",
+      "notFoundDescription": "Unable to load campaign details.",
+      "detailLabels": {
+        "status": "Status",
+        "objective": "Objective",
+        "channel": "Channel",
+        "owner": "Owner",
+        "audience": "Audience",
+        "period": "Period"
+      },
+      "tabs": {
+        "overview": "Overview",
+        "creatives": "Creatives",
+        "audience": "Audience",
+        "budget": "Budget",
+        "performance": "Performance",
+        "activity": "Activity",
+        "settings": "Settings"
+      },
+      "kpisCard": {
+        "title": "KPIs",
+        "subtitle": "Core marketing performance indicators",
+        "labels": {
+          "totalRevenue": "Total Revenue",
+          "marketingSpend": "Marketing Spend",
+          "roas": "ROAS",
+          "cac": "CAC",
+          "conversionRate": "Conversion Rate",
+          "websiteVisitors": "Website Visitors"
+        }
+      },
+      "aiRecommendationsCard": {
+        "title": "AI Recommendations",
+        "subtitle": "Mock insights"
+      },
+      "creativesCard": {
+        "title": "Creatives",
+        "subtitle": "Upload and manage campaign assets after campaign setup."
+      },
+      "uploadCreativeAction": "Upload Creative",
+      "selectExistingAssetAction": "Select Existing Asset",
+      "emptyState": {
+        "title": "No creatives uploaded yet.",
+        "description": "Start by uploading your first creative asset for this campaign.",
+        "action": "Upload your first creative"
+      },
+      "removeAction": "Remove",
+      "actionsForCreativeAriaLabel": "Actions for {name}",
+      "previewUnavailable": "Preview unavailable",
+      "creativeMeta": {
+        "dimensions": "Dimensions",
+        "fileSize": "File size",
+        "created": "Created"
+      },
+      "creativeTypeOptions": {
+        "image": "Image",
+        "video": "Video",
+        "carousel": "Carousel",
+        "html5": "HTML5"
+      },
+      "creativeStatus": {
+        "ready": "Ready",
+        "needsReview": "Needs Review",
+        "draft": "Draft"
+      },
+      "ctaOptions": {
+        "learnMore": "Learn More",
+        "shopNow": "Shop Now",
+        "getOffer": "Get Offer",
+        "signUp": "Sign Up",
+        "contactUs": "Contact Us"
+      },
+      "uploadDialog": {
+        "description": "Upload a creative asset and provide delivery metadata for this campaign.",
+        "dropzoneTitle": "Drag and drop your creative here",
+        "supportedFormats": "Supported: JPG, PNG, WEBP, MP4, MOV, WEBM, ZIP (HTML5)",
+        "browseFiles": "Browse Files",
+        "creativePreviewAlt": "Creative preview"
+      },
+      "uploadProgressLabel": "Upload Progress",
+      "validation": {
+        "unsupportedFileType": "Unsupported file type for {type}.",
+        "fileTooLarge": "File is too large. Maximum allowed size is {maxSizeMb} MB.",
+        "unableToReadImageDimensions": "Unable to read image dimensions.",
+        "unableToReadVideoDuration": "Unable to read video duration.",
+        "videoDurationTooLong": "Video duration must be {maxSeconds} seconds or less.",
+        "selectFileRequired": "Please select a file to upload.",
+        "headlineRequired": "Headline is required.",
+        "invalidLandingPageUrl": "Landing page URL must be a valid URL."
+      },
+      "uploadForm": {
+        "creativeTypePlaceholder": "Creative type",
+        "callToActionPlaceholder": "Call to action",
+        "headlineLabel": "Headline",
+        "headlinePlaceholder": "Creative headline",
+        "landingPageUrlLabel": "Landing Page URL",
+        "tagsLabel": "Tags",
+        "tagsPlaceholder": "awareness, q3, ecommerce",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Add a short description for this creative..."
+      },
+      "assetLibraryDialog": {
+        "description": "Asset Library integration is ready in structure and will be enabled in a future sprint.",
+        "bodyText": "This campaign is currently configured to upload assets directly. Shared library selection will plug into this entry point."
+      },
+      "closeAction": "Close",
+      "audienceCard": {
+        "title": "Audience Insights",
+        "subtitle": "Audience and channel distribution for this campaign.",
+        "segmentsHeading": "Audience Segments",
+        "contributionHeading": "Channel Contribution"
+      },
+      "budgetCard": {
+        "title": "Budget Allocation",
+        "subtitle": "Budget, spend, and remaining allocation."
+      },
+      "performanceCard": {
+        "title": "Performance",
+        "subtitle": "Monthly performance snapshot.",
+        "leadsSuffix": "{count} leads"
+      },
+      "activityTab": {
+        "timelineTitle": "Timeline",
+        "recentActivityTitle": "Recent Activity"
+      },
+      "settingsCard": {
+        "title": "Campaign Settings",
+        "subtitle": "Settings controls can be expanded here without changing tab structure.",
+        "bodyText": "Settings controls are intentionally lightweight in this sprint and ready for future expansion."
+      },
+      "dimensionsNotApplicable": "N/A"
     }
   }
 }
