@@ -31,7 +31,7 @@ function SectionHeaderRow({ label, tone }: { label: string; tone: "blue" | "ambe
   return (
     <tr>
       <td
-        colSpan={4}
+        colSpan={5}
         className={cn(
           "px-4 py-2 text-[12.5px] font-bold",
           tone === "blue" ? "bg-[#eef4ff] text-[#2878ff]" : "bg-[#fff7e6] text-[#b4700a]"
@@ -48,7 +48,8 @@ function DataRow({ label, line }: { label: string; line: VatLineAmounts }) {
     <tr className="border-b border-[#f1f4f9]">
       <td className={cn(TD_CLASS, HEADING)}>{label}</td>
       <td className={cn(TD_CLASS, "text-center")}>{formatAmount(line.amount)}</td>
-      <td className={cn(TD_CLASS, "text-center")}>{formatAmount(line.adjustmentAmount)}</td>
+      <td className={cn(TD_CLASS, "text-center")}>{formatSigned(line.adjustmentAmount)}</td>
+      <td className={cn(TD_CLASS, "text-center")}>{formatAmount(line.amountAfterAdjustment)}</td>
       <td className={cn(TD_CLASS, "text-center font-semibold", HEADING)}>
         {formatAmount(line.vatAmount)}
       </td>
@@ -64,7 +65,10 @@ function SubtotalRow({ label, line }: { label: string; line: VatLineAmounts }) {
         {formatAmount(line.amount)}
       </td>
       <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
-        {formatAmount(line.adjustmentAmount)}
+        {formatSigned(line.adjustmentAmount)}
+      </td>
+      <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
+        {formatAmount(line.amountAfterAdjustment)}
       </td>
       <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
         {formatAmount(line.vatAmount)}
@@ -77,6 +81,7 @@ function sumLines(a: VatLineAmounts, b: VatLineAmounts): VatLineAmounts {
   return {
     amount: a.amount + b.amount,
     adjustmentAmount: a.adjustmentAmount + b.adjustmentAmount,
+    amountAfterAdjustment: a.amountAfterAdjustment + b.amountAfterAdjustment,
     vatAmount: a.vatAmount + b.vatAmount,
   }
 }
@@ -184,6 +189,9 @@ export function VatReturnReportPage() {
                       مبلغ التعديل (ر.س)
                     </th>
                     <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
+                      المبلغ بعد التعديل (ر.س)
+                    </th>
+                    <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
                       ضريبة القيمة المضافة (ر.س)
                     </th>
                   </tr>
@@ -217,7 +225,7 @@ export function VatReturnReportPage() {
                   <SectionHeaderRow label="المصروفات" tone="amber" />
                   <DataRow label="المصروفات" line={data.expenses} />
                   <tr>
-                    <td colSpan={4} className="px-4 py-2 text-[11px] text-[#95a4bd]">
+                    <td colSpan={5} className="px-4 py-2 text-[11px] text-[#95a4bd]">
                       تُحتسب ضريبة المصروفات فقط للمصروفات المسجلة كـ &quot;شامل الضريبة&quot;.
                     </td>
                   </tr>
@@ -230,6 +238,9 @@ export function VatReturnReportPage() {
                   >
                     <td className={cn("px-4 py-3 text-[13px] font-extrabold", HEADING)}>
                       صافي الضريبة المستحقة (أو المستردة)
+                    </td>
+                    <td className="px-4 py-3 text-center text-[13px] font-bold text-[#95a4bd]">
+                      -
                     </td>
                     <td className="px-4 py-3 text-center text-[13px] font-bold text-[#95a4bd]">
                       -

@@ -134,7 +134,10 @@ export interface SalesByProductDto {
 // vatReturn().
 export interface VatLineAmounts {
   amount: number
+  // Negative when a return/cancellation/discount reduces the declared value -- see
+  // ready-reports-service.ts's vatReturn() for why this is no longer netted into `amount` itself.
   adjustmentAmount: number
+  amountAfterAdjustment: number
   vatAmount: number
 }
 

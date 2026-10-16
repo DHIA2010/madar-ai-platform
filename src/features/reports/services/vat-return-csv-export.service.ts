@@ -23,39 +23,44 @@ function downloadCsv(
 export function exportVatReturnToCsv(data: VatReturnDto) {
   downloadCsv(
     "vat-return",
-    ["Item", "Amount", "Adjustment Amount", "VAT Amount"],
+    ["Item", "Amount", "Adjustment Amount", "Amount After Adjustment", "VAT Amount"],
     [
       [
         "Sales - Standard Rated",
         data.sales.standardRated.amount.toFixed(2),
         data.sales.standardRated.adjustmentAmount.toFixed(2),
+        data.sales.standardRated.amountAfterAdjustment.toFixed(2),
         data.sales.standardRated.vatAmount.toFixed(2),
       ],
       [
         "Sales - Zero Rated",
         data.sales.zeroRated.amount.toFixed(2),
         data.sales.zeroRated.adjustmentAmount.toFixed(2),
+        data.sales.zeroRated.amountAfterAdjustment.toFixed(2),
         data.sales.zeroRated.vatAmount.toFixed(2),
       ],
       [
         "Purchases - Standard Rated",
         data.purchases.standardRated.amount.toFixed(2),
         data.purchases.standardRated.adjustmentAmount.toFixed(2),
+        data.purchases.standardRated.amountAfterAdjustment.toFixed(2),
         data.purchases.standardRated.vatAmount.toFixed(2),
       ],
       [
         "Purchases - Zero Rated",
         data.purchases.zeroRated.amount.toFixed(2),
         data.purchases.zeroRated.adjustmentAmount.toFixed(2),
+        data.purchases.zeroRated.amountAfterAdjustment.toFixed(2),
         data.purchases.zeroRated.vatAmount.toFixed(2),
       ],
       [
         "Expenses",
         data.expenses.amount.toFixed(2),
         data.expenses.adjustmentAmount.toFixed(2),
+        data.expenses.amountAfterAdjustment.toFixed(2),
         data.expenses.vatAmount.toFixed(2),
       ],
-      ["Net VAT Due (or Refundable)", "-", "-", data.totals.netVatDue.toFixed(2)],
+      ["Net VAT Due (or Refundable)", "-", "-", "-", data.totals.netVatDue.toFixed(2)],
     ]
   )
 }

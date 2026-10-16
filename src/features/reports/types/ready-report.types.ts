@@ -112,7 +112,9 @@ export interface SalesByProductDto {
 
 export interface VatLineAmounts {
   amount: number
+  // Negative when a return/cancellation/discount reduces the declared value.
   adjustmentAmount: number
+  amountAfterAdjustment: number
   vatAmount: number
 }
 

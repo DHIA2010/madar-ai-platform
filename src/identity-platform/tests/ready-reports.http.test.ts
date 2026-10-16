@@ -15,6 +15,13 @@ import { runIdentityMigrations } from "../infrastructure/postgres/migration-runn
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createIdentityApiServer } from "../interfaces/rest/server"
 
+interface VatLineAmounts {
+  amount: number
+  adjustmentAmount: number
+  amountAfterAdjustment: number
+  vatAmount: number
+}
+
 let database: PostgresDatabase
 let server: ReturnType<typeof createIdentityApiServer>
 let baseUrl = ""
@@ -318,11 +325,12 @@ async function seedPurchase(opts: {
   supplierId: string
   date?: string
   referenceNumber?: string
+  orderTaxPercent?: number
 }) {
   const id = randomUUID()
   await database.query(
-    `insert into purchases (id, organization_id, workspace_id, code, supplier_id, warehouse_id, date, status, reference_number)
-     values ($1,$2,$3,$4,$5,'main',$6,'pending',$7)`,
+    `insert into purchases (id, organization_id, workspace_id, code, supplier_id, warehouse_id, date, status, reference_number, order_tax_percent)
+     values ($1,$2,$3,$4,$5,'main',$6,'pending',$7,$8)`,
     [
       id,
       opts.organizationId,
@@ -331,6 +339,7 @@ async function seedPurchase(opts: {
       opts.supplierId,
       opts.date ?? new Date().toISOString().slice(0, 10),
       opts.referenceNumber ?? null,
+      opts.orderTaxPercent ?? 0,
     ]
   )
   return id
@@ -798,14 +807,14 @@ describe("ready reports", () => {
     expect(response.status).toBe(200)
     const body = (await response.json()) as {
       sales: {
-        standardRated: { amount: number; adjustmentAmount: number; vatAmount: number }
-        zeroRated: { amount: number; adjustmentAmount: number; vatAmount: number }
+        standardRated: VatLineAmounts
+        zeroRated: VatLineAmounts
       }
       purchases: {
-        standardRated: { amount: number; adjustmentAmount: number; vatAmount: number }
-        zeroRated: { amount: number; adjustmentAmount: number; vatAmount: number }
+        standardRated: VatLineAmounts
+        zeroRated: VatLineAmounts
       }
-      expenses: { amount: number; adjustmentAmount: number; vatAmount: number }
+      expenses: VatLineAmounts
       totals: {
         totalSales: number
         totalPurchases: number
@@ -814,30 +823,57 @@ describe("ready reports", () => {
       }
     }
 
-    // Sales net of returns: standard 100-20=80 / 15-3=12 vat; zero 50-10=40.
-    expect(body.sales.standardRated).toEqual({ amount: 80, adjustmentAmount: 0, vatAmount: 12 })
-    expect(body.sales.zeroRated).toEqual({ amount: 40, adjustmentAmount: 0, vatAmount: 0 })
+    // amount is always the full gross figure -- returns/discounts show up as a negative
+    // adjustmentAmount instead of being netted straight out of amount. Sales: gross 100, returned
+    // 20 -> adjustment -20, after-adjustment 80 / vat 15-3=12; zero gross 50, returned 10.
+    expect(body.sales.standardRated).toEqual({
+      amount: 100,
+      adjustmentAmount: -20,
+      amountAfterAdjustment: 80,
+      vatAmount: 12,
+    })
+    expect(body.sales.zeroRated).toEqual({
+      amount: 50,
+      adjustmentAmount: -10,
+      amountAfterAdjustment: 40,
+      vatAmount: 0,
+    })
 
-    // Purchases net of returns: standard gross 100 - returned (20*2=40) = 60 / vat 13.5 - (40*15%=6) = 7.5;
-    // zero gross 60 - returned (30*1=30) = 30. The adjustment (discount) column is untouched by returns.
+    // Purchases: standard gross 100, adjustment = -(discount 10 + returned 20*2=40) = -50, so
+    // after-adjustment 50 -- vat 13.5 - (40*15%=6) = 7.5 (7.5 / 50 = 15%, the taxable base the VAT
+    // is actually computed from). Zero: gross 60, adjustment = -(0 + returned 30*1=30) = -30.
     expect(body.purchases.standardRated).toEqual({
-      amount: 60,
-      adjustmentAmount: 10,
+      amount: 100,
+      adjustmentAmount: -50,
+      amountAfterAdjustment: 50,
       vatAmount: 7.5,
     })
-    expect(body.purchases.zeroRated).toEqual({ amount: 30, adjustmentAmount: 0, vatAmount: 0 })
+    expect(body.purchases.zeroRated).toEqual({
+      amount: 60,
+      adjustmentAmount: -30,
+      amountAfterAdjustment: 30,
+      vatAmount: 0,
+    })
 
-    expect(body.expenses).toEqual({ amount: 100, adjustmentAmount: 0, vatAmount: 15 })
+    expect(body.expenses).toEqual({
+      amount: 100,
+      adjustmentAmount: 0,
+      amountAfterAdjustment: 100,
+      vatAmount: 15,
+    })
 
+    // Totals are now sourced from amountAfterAdjustment (the true net taxable base), not the old
+    // discount-untouched "amount" -- totalPurchases is 80 (50+30), not 90, since the old figure
+    // never subtracted the purchase discount from the headline total.
     expect(body.totals).toEqual({
       totalSales: 120,
-      totalPurchases: 90,
+      totalPurchases: 80,
       totalExpenses: 100,
       netVatDue: -10.5,
     })
   })
 
-  it("excludes a cancelled expense from the VAT return even when it's tax-inclusive", async () => {
+  it("surfaces a cancelled expense as a negative adjustment, not an exclusion from amount", async () => {
     const { token, actor } = await signIn("owner-vat-cancelled@example.com", "VAT Cancel Org")
     const workspaceId = actor.workspaceId as string
 
@@ -862,12 +898,74 @@ describe("ready reports", () => {
       headers: authHeaders(token),
     })
     expect(response.status).toBe(200)
+    const body = (await response.json()) as { expenses: VatLineAmounts }
+
+    // amount stays the full gross (active 100 net + cancelled 200 net = 300) instead of the
+    // cancelled expense vanishing -- it shows up as a -200 adjustment instead, landing back at the
+    // same 100/15 after-adjustment/VAT figures the VAT return has always declared.
+    expect(body.expenses).toEqual({
+      amount: 300,
+      adjustmentAmount: -200,
+      amountAfterAdjustment: 100,
+      vatAmount: 15,
+    })
+  })
+
+  it("treats a purchase using order-level (invoice) tax as standard-rated, not zero-rated", async () => {
+    const { token, actor } = await signIn("owner-vat-order-tax@example.com", "VAT Order Tax Org")
+    const workspaceId = actor.workspaceId as string
+
+    // Invoice-level tax (purchase-form.tsx's taxLevel toggle): the order carries its own
+    // order_tax_percent and every line's own tax_percent is left at 0, unlike the usual per-line
+    // tax case the rest of this file's purchases exercise.
+    const supplierId = await seedSupplier(actor.organizationId, workspaceId)
+    const productId = await seedProduct(actor.organizationId, "Invoice-Tax Widget", 0)
+    const purchaseId = await seedPurchase({
+      organizationId: actor.organizationId,
+      workspaceId,
+      supplierId,
+      date: "2026-01-12",
+      orderTaxPercent: 15,
+    })
+    await seedPurchaseLineItem({
+      purchaseId,
+      productId,
+      netUnitCost: 100,
+      qty: 1,
+      taxPercent: 0,
+    })
+
+    const returnId = await seedPurchaseReturn({
+      organizationId: actor.organizationId,
+      workspaceId,
+      purchaseId,
+      supplierId,
+      returnDate: "2026-01-18",
+    })
+    await seedPurchaseReturnItem({ returnId, productId, unitCost: 100, qty: 0.4 })
+
+    const response = await fetch(`${baseUrl}/v1/reports/ready/vat-return?${RANGE}`, {
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
     const body = (await response.json()) as {
-      expenses: { amount: number; vatAmount: number }
+      purchases: { standardRated: VatLineAmounts; zeroRated: VatLineAmounts }
     }
 
-    // Only the active expense counts -- the cancelled one (double the amount) is fully excluded.
-    expect(body.expenses).toEqual({ amount: 100, vatAmount: 15, adjustmentAmount: 0 })
+    // gross 100, returned 40 (0.4*100) -> adjustment -40, after-adjustment 60; vat 15 - (40*15%=6) = 9.
+    // Without the order_tax_percent fix this would land entirely in zeroRated with vatAmount 0.
+    expect(body.purchases.standardRated).toEqual({
+      amount: 100,
+      adjustmentAmount: -40,
+      amountAfterAdjustment: 60,
+      vatAmount: 9,
+    })
+    expect(body.purchases.zeroRated).toEqual({
+      amount: 0,
+      adjustmentAmount: 0,
+      amountAfterAdjustment: 0,
+      vatAmount: 0,
+    })
   })
 
   it("computes the purchase invoices report, grouping line items per purchase", async () => {

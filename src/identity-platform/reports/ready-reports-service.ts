@@ -210,36 +210,52 @@ export class ReadyReportsService {
     // extracted from the tax-inclusive gross amount as gross * rate / (1 + rate). Rounded to
     // cents -- unlike every other ready-report figure (a straight SQL sum), this one is a JS
     // floating-point division and can otherwise land a cent off (e.g. 15.000000000000002).
-    const expensesVat =
-      expensesGross > 0
-        ? Math.round(((expensesGross * defaultRate) / (1 + defaultRate)) * 100) / 100
-        : 0
-    const expenses = {
-      amount: Math.round((expensesGross - expensesVat) * 100) / 100,
-      adjustmentAmount: 0,
-      vatAmount: expensesVat,
+    const splitExclusiveOfVat = (grossInclusive: number) => {
+      const vat =
+        grossInclusive > 0
+          ? Math.round(((grossInclusive * defaultRate) / (1 + defaultRate)) * 100) / 100
+          : 0
+      return { net: Math.round((grossInclusive - vat) * 100) / 100, vat }
     }
+    const activeExpenses = splitExclusiveOfVat(expensesGross.active)
+    const cancelledExpenses = splitExclusiveOfVat(expensesGross.cancelled)
 
-    // Returns net straight against the original figures -- a VAT return is always declared net of
-    // the period's own credit notes, not gross with returns reported separately.
+    // A line's "amount" is always the full gross figure before anything is taken back out of it
+    // (a return, a cancellation, a discount) -- those are surfaced in "adjustmentAmount" (negative,
+    // since they reduce the declared value) instead of being silently netted out of "amount"
+    // itself, so a cancelled expense or a returned purchase/sale stays visible in the return rather
+    // than disappearing. "amountAfterAdjustment" (amount + adjustmentAmount) is the actual taxable
+    // base the VAT figures below are computed from.
+    const expenses = {
+      amount: activeExpenses.net + cancelledExpenses.net,
+      adjustmentAmount: -cancelledExpenses.net,
+      amountAfterAdjustment: activeExpenses.net,
+      vatAmount: activeExpenses.vat,
+    }
     const salesStandard = {
-      amount: sales.standardAmount - salesReturns.standardAmount,
-      adjustmentAmount: 0,
+      amount: sales.standardAmount,
+      adjustmentAmount: -salesReturns.standardAmount,
+      amountAfterAdjustment: sales.standardAmount - salesReturns.standardAmount,
       vatAmount: sales.standardVat - salesReturns.standardVat,
     }
     const salesZero = {
-      amount: sales.zeroAmount - salesReturns.zeroAmount,
-      adjustmentAmount: 0,
+      amount: sales.zeroAmount,
+      adjustmentAmount: -salesReturns.zeroAmount,
+      amountAfterAdjustment: sales.zeroAmount - salesReturns.zeroAmount,
       vatAmount: 0,
     }
     const purchasesStandard = {
-      amount: purchases.standardAmount - purchaseReturns.standardAmount,
-      adjustmentAmount: purchases.standardAdjustment,
+      amount: purchases.standardAmount,
+      adjustmentAmount: -(purchases.standardAdjustment + purchaseReturns.standardAmount),
+      amountAfterAdjustment:
+        purchases.standardAmount - purchases.standardAdjustment - purchaseReturns.standardAmount,
       vatAmount: purchases.standardVat - purchaseReturns.standardVat,
     }
     const purchasesZero = {
-      amount: purchases.zeroAmount - purchaseReturns.zeroAmount,
-      adjustmentAmount: purchases.zeroAdjustment,
+      amount: purchases.zeroAmount,
+      adjustmentAmount: -(purchases.zeroAdjustment + purchaseReturns.zeroAmount),
+      amountAfterAdjustment:
+        purchases.zeroAmount - purchases.zeroAdjustment - purchaseReturns.zeroAmount,
       vatAmount: 0,
     }
 
@@ -248,9 +264,10 @@ export class ReadyReportsService {
       purchases: { standardRated: purchasesStandard, zeroRated: purchasesZero },
       expenses,
       totals: {
-        totalSales: salesStandard.amount + salesZero.amount,
-        totalPurchases: purchasesStandard.amount + purchasesZero.amount,
-        totalExpenses: expenses.amount,
+        totalSales: salesStandard.amountAfterAdjustment + salesZero.amountAfterAdjustment,
+        totalPurchases:
+          purchasesStandard.amountAfterAdjustment + purchasesZero.amountAfterAdjustment,
+        totalExpenses: expenses.amountAfterAdjustment,
         netVatDue: salesStandard.vatAmount - purchasesStandard.vatAmount - expenses.vatAmount,
       },
     }

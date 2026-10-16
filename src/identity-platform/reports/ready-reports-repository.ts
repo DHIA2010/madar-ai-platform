@@ -769,7 +769,10 @@ export class ReadyReportsRepository {
   // to the original purchase's own line (same purchase_id + product_id) to find the tax_percent
   // that line was actually bought at, then netted against the original purchases figures in the
   // service layer. Filtered by the RETURN's own return_date, not the original purchase's date --
-  // a return can land in a different VAT period than the purchase it refers back to.
+  // a return can land in a different VAT period than the purchase it refers back to. A return
+  // against a purchase that used order-level tax (order_tax_percent > 0, every line's own
+  // tax_percent left at 0 -- see vatReturnPurchases's own comment) is pulled into its own query
+  // and bucketed standard using that order-level rate, for the same reason.
   async vatReturnPurchaseReturns(
     range: ReadyReportRange
   ): Promise<{ standardAmount: number; standardVat: number; zeroAmount: number }> {
@@ -786,9 +789,11 @@ export class ReadyReportsRepository {
               coalesce(sum(pri.unit_cost * pri.qty * pli.tax_percent / 100),0) AS vat
        FROM purchase_return_items pri
        JOIN purchase_returns pr ON pr.id = pri.return_id
+       JOIN purchases p ON p.id = pr.purchase_id
        JOIN purchase_line_items pli
          ON pli.purchase_id = pr.purchase_id AND pli.product_id = pri.product_id
-       WHERE ${standardWhere.where} AND pr.deleted_at IS NULL AND pli.tax_percent > 0`,
+       WHERE ${standardWhere.where} AND pr.deleted_at IS NULL AND p.order_tax_percent = 0
+         AND pli.tax_percent > 0`,
       standardWhere.values
     )
 
@@ -802,24 +807,47 @@ export class ReadyReportsRepository {
       `SELECT coalesce(sum(pri.unit_cost * pri.qty),0) AS amount
        FROM purchase_return_items pri
        JOIN purchase_returns pr ON pr.id = pri.return_id
+       JOIN purchases p ON p.id = pr.purchase_id
        JOIN purchase_line_items pli
          ON pli.purchase_id = pr.purchase_id AND pli.product_id = pri.product_id
-       WHERE ${zeroWhere.where} AND pr.deleted_at IS NULL AND pli.tax_percent = 0`,
+       WHERE ${zeroWhere.where} AND pr.deleted_at IS NULL AND p.order_tax_percent = 0
+         AND pli.tax_percent = 0`,
       zeroWhere.values
     )
 
+    const orderTaxWhere = new WhereBuilder([
+      ["pr.organization_id = ?", organizationId],
+      ["pr.return_date >= ?", from],
+      ["pr.return_date <= ?::date", to],
+    ])
+    orderTaxWhere.addOptional("pr.workspace_id = ?", workspaceId)
+    const orderTaxResult = await this.db.query<{ amount: string; vat: string }>(
+      `SELECT coalesce(sum(pri.unit_cost * pri.qty),0) AS amount,
+              coalesce(sum(pri.unit_cost * pri.qty * p.order_tax_percent / 100),0) AS vat
+       FROM purchase_return_items pri
+       JOIN purchase_returns pr ON pr.id = pri.return_id
+       JOIN purchases p ON p.id = pr.purchase_id
+       WHERE ${orderTaxWhere.where} AND pr.deleted_at IS NULL AND p.order_tax_percent > 0`,
+      orderTaxWhere.values
+    )
+
     return {
-      standardAmount: toNumber(standardResult.rows[0]?.amount),
-      standardVat: toNumber(standardResult.rows[0]?.vat),
+      standardAmount:
+        toNumber(standardResult.rows[0]?.amount) + toNumber(orderTaxResult.rows[0]?.amount),
+      standardVat: toNumber(standardResult.rows[0]?.vat) + toNumber(orderTaxResult.rows[0]?.vat),
       zeroAmount: toNumber(zeroResult.rows[0]?.amount),
     }
   }
 
-  // Purchases have no invoice-level tax amount of their own (unlike pos_invoices) -- each
-  // purchase_line_items row carries its own tax_percent, so "contains VAT" is a per-line check,
-  // and the VAT amount is computed here (net_unit_cost * qty - discount) * tax_percent / 100,
+  // Purchases have no invoice-level tax amount of their own in the common case -- each
+  // purchase_line_items row carries its own tax_percent, so "contains VAT" is normally a per-line
+  // check, and the VAT amount is computed here (net_unit_cost * qty - discount) * tax_percent / 100,
   // the exact same formula purchase-print-document.tsx already uses for a purchase's own printed
-  // tax total.
+  // tax total. A purchase entered with the order-level tax toggle (see purchase-form.tsx's
+  // taxLevel) instead has every line's tax_percent zeroed and the real rate living on
+  // purchases.order_tax_percent -- those purchases are pulled out into their own query (third
+  // below) and bucketed standard, since per-line tax_percent alone would otherwise misclassify
+  // them as zero-rated and silently drop their VAT.
   async vatReturnPurchases(range: ReadyReportRange): Promise<{
     standardAmount: number
     standardAdjustment: number
@@ -841,7 +869,8 @@ export class ReadyReportsRepository {
               coalesce(sum((pli.net_unit_cost * pli.qty - pli.discount) * pli.tax_percent / 100),0) AS vat
        FROM purchase_line_items pli
        JOIN purchases p ON p.id = pli.purchase_id
-       WHERE ${standardWhere.where} AND p.deleted_at IS NULL AND pli.tax_percent > 0`,
+       WHERE ${standardWhere.where} AND p.deleted_at IS NULL AND p.order_tax_percent = 0
+         AND pli.tax_percent > 0`,
       standardWhere.values
     )
 
@@ -856,14 +885,39 @@ export class ReadyReportsRepository {
               coalesce(sum(pli.discount),0) AS adjustment
        FROM purchase_line_items pli
        JOIN purchases p ON p.id = pli.purchase_id
-       WHERE ${zeroWhere.where} AND p.deleted_at IS NULL AND pli.tax_percent = 0`,
+       WHERE ${zeroWhere.where} AND p.deleted_at IS NULL AND p.order_tax_percent = 0
+         AND pli.tax_percent = 0`,
       zeroWhere.values
     )
 
+    const orderTaxWhere = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.date >= ?", from],
+      ["p.date <= ?::date", to],
+    ])
+    orderTaxWhere.addOptional("p.workspace_id = ?", workspaceId)
+    const orderTaxResult = await this.db.query<{ amount: string; adjustment: string; vat: string }>(
+      `SELECT coalesce(sum(t.gross),0) AS amount,
+              coalesce(sum(t.discount),0) AS adjustment,
+              coalesce(sum((t.gross - t.discount) * t.order_tax_percent / 100),0) AS vat
+       FROM (
+         SELECT p.id, p.order_tax_percent,
+                sum(pli.net_unit_cost * pli.qty) AS gross,
+                sum(pli.discount) AS discount
+         FROM purchases p
+         JOIN purchase_line_items pli ON pli.purchase_id = p.id
+         WHERE ${orderTaxWhere.where} AND p.deleted_at IS NULL AND p.order_tax_percent > 0
+         GROUP BY p.id, p.order_tax_percent
+       ) t`,
+      orderTaxWhere.values
+    )
+
     return {
-      standardAmount: toNumber(standardResult.rows[0]?.amount),
-      standardAdjustment: toNumber(standardResult.rows[0]?.adjustment),
-      standardVat: toNumber(standardResult.rows[0]?.vat),
+      standardAmount:
+        toNumber(standardResult.rows[0]?.amount) + toNumber(orderTaxResult.rows[0]?.amount),
+      standardAdjustment:
+        toNumber(standardResult.rows[0]?.adjustment) + toNumber(orderTaxResult.rows[0]?.adjustment),
+      standardVat: toNumber(standardResult.rows[0]?.vat) + toNumber(orderTaxResult.rows[0]?.vat),
       zeroAmount: toNumber(zeroResult.rows[0]?.amount),
       zeroAdjustment: toNumber(zeroResult.rows[0]?.adjustment),
     }
@@ -871,8 +925,12 @@ export class ReadyReportsRepository {
 
   // Only tax_inclusive expenses count toward the VAT return at all -- an expense not marked
   // tax-inclusive (e.g. a salary or a government fee) carries no VAT to reclaim, and has no
-  // zero-rated equivalent the way a sale/purchase does.
-  async vatReturnExpensesGross(range: ReadyReportRange): Promise<number> {
+  // zero-rated equivalent the way a sale/purchase does. Cancelled expenses are reported too (as a
+  // negative adjustment in the service layer, see vatReturn()) rather than silently vanishing from
+  // the return, so both the active and cancelled totals are fetched here.
+  async vatReturnExpensesGross(
+    range: ReadyReportRange
+  ): Promise<{ active: number; cancelled: number }> {
     const { organizationId, workspaceId, from, to } = range
     const where = new WhereBuilder([
       ["organization_id = ?", organizationId],
@@ -880,12 +938,20 @@ export class ReadyReportsRepository {
       ["expense_date <= ?::date", to],
     ])
     where.addOptional("workspace_id = ?", workspaceId)
-    const result = await this.db.query<{ gross: string }>(
-      `SELECT coalesce(sum(amount),0) AS gross FROM expenses
-       WHERE ${where.where} AND deleted_at IS NULL AND tax_inclusive = true AND status != 'cancelled'`,
+    const result = await this.db.query<{ active: string; cancelled: string }>(
+      // sum(case when ...) rather than FILTER (WHERE ...) -- pg-mem (the test harness's in-memory
+      // Postgres) doesn't implement FILTER, see invoices-service.ts's identical note.
+      `SELECT
+         coalesce(sum(CASE WHEN status != 'cancelled' THEN amount ELSE 0 END),0) AS active,
+         coalesce(sum(CASE WHEN status = 'cancelled' THEN amount ELSE 0 END),0) AS cancelled
+       FROM expenses
+       WHERE ${where.where} AND deleted_at IS NULL AND tax_inclusive = true`,
       where.values
     )
-    return toNumber(result.rows[0]?.gross)
+    return {
+      active: toNumber(result.rows[0]?.active),
+      cancelled: toNumber(result.rows[0]?.cancelled),
+    }
   }
 
   // ---- Purchase invoices ----------------------------------------------------------------------
