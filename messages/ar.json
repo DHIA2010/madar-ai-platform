@@ -5098,5 +5098,48 @@
         "noAdditionalMembers": "لم يتم اختيار أعضاء إضافيين."
       }
     }
+  },
+  "billing": {
+    "moyasar": {
+      "common": {
+        "backToMarketplace": "العودة إلى المتجر",
+        "retry": "إعادة المحاولة"
+      },
+      "checkoutPage": {
+        "invalidLink": {
+          "title": "رابط غير صالح",
+          "description": "تعذر العثور على بيانات الباقة المطلوبة. ارجع إلى المتجر وحاول مرة أخرى."
+        },
+        "planLabel": "باقة {tier}"
+      },
+      "paymentPanel": {
+        "startFailedFallback": "تعذر بدء عملية الدفع.",
+        "preparingForm": "جاري تجهيز نموذج الدفع..."
+      },
+      "checkout": {
+        "subscriptionDescription": "اشتراك {applicationName}",
+        "paymentFailed": "فشلت عملية الدفع. تحقق من بيانات البطاقة وحاول مرة أخرى.",
+        "startFailed": "تعذر بدء عملية الدفع. حاول مرة أخرى."
+      },
+      "callback": {
+        "verifying": "جاري التحقق من عملية الدفع...",
+        "paid": {
+          "title": "تم الدفع بنجاح",
+          "description": "تم تفعيل التطبيق فورًا."
+        },
+        "failed": {
+          "title": "فشلت عملية الدفع",
+          "description": "لم يتم خصم أي مبلغ. يمكنك المحاولة مرة أخرى من صفحة المتجر."
+        },
+        "invalidLink": {
+          "title": "رابط غير صالح",
+          "description": "تعذر العثور على بيانات عملية الدفع في هذا الرابط."
+        },
+        "error": {
+          "title": "تعذر التحقق من عملية الدفع",
+          "description": "قد تكون عملية الدفع قد تمت -- حاول التحقق مرة أخرى قبل إعادة الدفع."
+        }
+      }
+    }
   }
 }

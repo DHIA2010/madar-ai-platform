@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import type { ApplicationCategoryId } from "@/features/applications"
 
@@ -29,50 +30,54 @@ export interface StartMoyasarCheckoutInput {
 // the browser comes back is a separate step (moyasarBillingService.confirmCheckout), handled by
 // the /marketplace/billing/callback page this redirects to -- this hook's job ends at redirect.
 export function useMoyasarCheckout() {
+  const t = useTranslations("billing.moyasar.checkout")
   const [stage, setStage] = useState<MoyasarCheckoutStage>("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const start = useCallback(async (input: StartMoyasarCheckoutInput) => {
-    setStage("creating")
-    setErrorMessage(null)
-    try {
-      const [intent] = await Promise.all([
-        moyasarBillingService.createCheckout({
-          application: input.application,
-          planTier: input.planTier,
-        }),
-        loadMoyasarWidget(),
-      ])
+  const start = useCallback(
+    async (input: StartMoyasarCheckoutInput) => {
+      setStage("creating")
+      setErrorMessage(null)
+      try {
+        const [intent] = await Promise.all([
+          moyasarBillingService.createCheckout({
+            application: input.application,
+            planTier: input.planTier,
+          }),
+          loadMoyasarWidget(),
+        ])
 
-      if (!window.Moyasar) {
-        throw new Error("MOYASAR_WIDGET_UNAVAILABLE")
+        if (!window.Moyasar) {
+          throw new Error("MOYASAR_WIDGET_UNAVAILABLE")
+        }
+
+        const callbackUrl = new URL(input.returnPath, window.location.origin)
+        callbackUrl.searchParams.set("checkout_id", intent.checkoutId)
+
+        window.Moyasar.init({
+          element: input.formElement,
+          publishable_api_key: intent.publishableKey,
+          amount: intent.amount,
+          currency: intent.currency,
+          description: t("subscriptionDescription", { applicationName: input.applicationName }),
+          callback_url: callbackUrl.toString(),
+          methods: ["creditcard"],
+          // Round-trips to the webhook's payload.data.metadata.checkout_id -- see
+          // billing/moyasar/service.ts's handleWebhookEvent on the backend. The synchronous confirm
+          // path (the callback page) doesn't need this; it gets checkoutId from the URL directly.
+          metadata: { checkout_id: intent.checkoutId },
+          on_failure: () => {
+            input.onFailure?.(t("paymentFailed"))
+          },
+        })
+        setStage("ready")
+      } catch {
+        setStage("error")
+        setErrorMessage(t("startFailed"))
       }
-
-      const callbackUrl = new URL(input.returnPath, window.location.origin)
-      callbackUrl.searchParams.set("checkout_id", intent.checkoutId)
-
-      window.Moyasar.init({
-        element: input.formElement,
-        publishable_api_key: intent.publishableKey,
-        amount: intent.amount,
-        currency: intent.currency,
-        description: `اشتراك ${input.applicationName}`,
-        callback_url: callbackUrl.toString(),
-        methods: ["creditcard"],
-        // Round-trips to the webhook's payload.data.metadata.checkout_id -- see
-        // billing/moyasar/service.ts's handleWebhookEvent on the backend. The synchronous confirm
-        // path (the callback page) doesn't need this; it gets checkoutId from the URL directly.
-        metadata: { checkout_id: intent.checkoutId },
-        on_failure: () => {
-          input.onFailure?.("فشلت عملية الدفع. تحقق من بيانات البطاقة وحاول مرة أخرى.")
-        },
-      })
-      setStage("ready")
-    } catch {
-      setStage("error")
-      setErrorMessage("تعذر بدء عملية الدفع. حاول مرة أخرى.")
-    }
-  }, [])
+    },
+    [t]
+  )
 
   const reset = useCallback(() => {
     setStage("idle")

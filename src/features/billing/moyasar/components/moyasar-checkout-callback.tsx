@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { AlertCircle, CheckCircle2, Loader2, XCircle } from "lucide-react"
 
 import { ROUTES } from "@/constants/routes"
@@ -9,6 +10,8 @@ import { ROUTES } from "@/constants/routes"
 import { AppButton } from "@/components/app"
 
 import { moyasarBillingService } from "../services"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 type CallbackState = "verifying" | "paid" | "failed" | "invalid_link" | "error"
 
@@ -18,6 +21,9 @@ type CallbackState = "verifying" | "paid" | "failed" | "invalid_link" | "error"
 // address bar before this page even loads, so the only thing trusted from the URL is the payment
 // id, which confirmCheckout re-verifies server-side against Moyasar's API with the secret key.
 export function MoyasarCheckoutCallback() {
+  const t = useTranslations("billing.moyasar.callback")
+  const tCommon = useTranslations("billing.moyasar.common")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const searchParams = useSearchParams()
   const moyasarPaymentId = searchParams.get("id")
@@ -57,27 +63,28 @@ export function MoyasarCheckoutCallback() {
   }, [])
 
   return (
-    <div dir="rtl" className="flex min-h-[70vh] items-center justify-center p-6">
+    <div
+      dir={localeDirection(locale)}
+      className="flex min-h-[70vh] items-center justify-center p-6"
+    >
       <div className="w-full max-w-[26rem] rounded-[16px] border border-[#e1e7f0] bg-white p-8 text-center shadow-sm">
         {state === "verifying" ? (
           <>
             <Loader2 className="mx-auto size-10 animate-spin text-[#2878ff]" />
-            <p className="mt-4 text-[14px] font-semibold text-[#0b1738]">
-              جاري التحقق من عملية الدفع...
-            </p>
+            <p className="mt-4 text-[14px] font-semibold text-[#0b1738]">{t("verifying")}</p>
           </>
         ) : null}
 
         {state === "paid" ? (
           <>
             <CheckCircle2 className="mx-auto size-12 text-[#16a34a]" />
-            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">تم الدفع بنجاح</p>
-            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">تم تفعيل التطبيق فورًا.</p>
+            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">{t("paid.title")}</p>
+            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">{t("paid.description")}</p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
               onClick={() => router.push(ROUTES.marketplace)}
             >
-              العودة إلى المتجر
+              {tCommon("backToMarketplace")}
             </AppButton>
           </>
         ) : null}
@@ -85,15 +92,13 @@ export function MoyasarCheckoutCallback() {
         {state === "failed" ? (
           <>
             <XCircle className="mx-auto size-12 text-[#dc2626]" />
-            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">فشلت عملية الدفع</p>
-            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">
-              لم يتم خصم أي مبلغ. يمكنك المحاولة مرة أخرى من صفحة المتجر.
-            </p>
+            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">{t("failed.title")}</p>
+            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">{t("failed.description")}</p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
               onClick={() => router.push(ROUTES.marketplace)}
             >
-              العودة إلى المتجر
+              {tCommon("backToMarketplace")}
             </AppButton>
           </>
         ) : null}
@@ -101,15 +106,15 @@ export function MoyasarCheckoutCallback() {
         {state === "invalid_link" ? (
           <>
             <AlertCircle className="mx-auto size-12 text-[#d97706]" />
-            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">رابط غير صالح</p>
-            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">
-              تعذر العثور على بيانات عملية الدفع في هذا الرابط.
+            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">
+              {t("invalidLink.title")}
             </p>
+            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">{t("invalidLink.description")}</p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
               onClick={() => router.push(ROUTES.marketplace)}
             >
-              العودة إلى المتجر
+              {tCommon("backToMarketplace")}
             </AppButton>
           </>
         ) : null}
@@ -117,17 +122,13 @@ export function MoyasarCheckoutCallback() {
         {state === "error" ? (
           <>
             <AlertCircle className="mx-auto size-12 text-[#d97706]" />
-            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">
-              تعذر التحقق من عملية الدفع
-            </p>
-            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">
-              قد تكون عملية الدفع قد تمت -- حاول التحقق مرة أخرى قبل إعادة الدفع.
-            </p>
+            <p className="mt-4 text-[15px] font-extrabold text-[#0b1738]">{t("error.title")}</p>
+            <p className="mt-1.5 text-[12.5px] text-[#6b7b96]">{t("error.description")}</p>
             <AppButton
               className="mt-5 h-11 w-full rounded-[10px] text-[13.5px] font-bold"
               onClick={retry}
             >
-              إعادة المحاولة
+              {tCommon("retry")}
             </AppButton>
           </>
         ) : null}

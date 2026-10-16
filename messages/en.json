@@ -5102,5 +5102,48 @@
         "noAdditionalMembers": "No additional members selected."
       }
     }
+  },
+  "billing": {
+    "moyasar": {
+      "common": {
+        "backToMarketplace": "Back to marketplace",
+        "retry": "Retry"
+      },
+      "checkoutPage": {
+        "invalidLink": {
+          "title": "Invalid link",
+          "description": "Couldn't find the requested plan's details. Go back to the marketplace and try again."
+        },
+        "planLabel": "{tier} plan"
+      },
+      "paymentPanel": {
+        "startFailedFallback": "Couldn't start the payment.",
+        "preparingForm": "Preparing the payment form..."
+      },
+      "checkout": {
+        "subscriptionDescription": "{applicationName} subscription",
+        "paymentFailed": "The payment failed. Check your card details and try again.",
+        "startFailed": "Couldn't start the payment. Try again."
+      },
+      "callback": {
+        "verifying": "Verifying the payment...",
+        "paid": {
+          "title": "Payment successful",
+          "description": "The application has been activated immediately."
+        },
+        "failed": {
+          "title": "Payment failed",
+          "description": "No amount was charged. You can try again from the marketplace page."
+        },
+        "invalidLink": {
+          "title": "Invalid link",
+          "description": "Couldn't find this payment's details in this link."
+        },
+        "error": {
+          "title": "Couldn't verify the payment",
+          "description": "The payment may have gone through -- try verifying again before paying again."
+        }
+      }
+    }
   }
 }
