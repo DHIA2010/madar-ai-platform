@@ -22,10 +22,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
+  ArrowLeft,
   Building2,
   CheckCircle2,
   CheckCircle,
-  ChevronRight,
   Loader2,
   Lightbulb,
   MapPin,
@@ -38,9 +38,11 @@ import {
   Smartphone,
   Store,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { useWorkspace, type Workspace } from "@/features/workspace"
@@ -72,12 +74,8 @@ import { Switch } from "@/components/ui/switch"
 
 const PHONE_CODES = ["+966", "+971", "+973", "+965", "+974"]
 
-const WORKSPACE_TIPS = [
-  "تأكد من صحة بيانات العنوان ورقم الجوال.",
-  "بإمكانك إضافة أكثر من مساحة عمل لنفس المتجر.",
-  "بعد إنشاء مساحة العمل بإمكانك ربطها بأجهزة نقاط البيع والموظفين.",
-  "ستكون مساحة العمل متاحة مباشرة بعد التفعيل.",
-]
+type WorkspacesTranslator = ReturnType<typeof useTranslations<"settings.workspaces">>
+type GeneralTranslator = ReturnType<typeof useTranslations<"settings.general">>
 
 const PANEL =
   "rounded-2xl border border-[#e8edf3] bg-white shadow-[0_1px_4px_rgba(15,30,62,0.07),0_0_1px_rgba(15,30,62,0.05)]"
@@ -102,22 +100,26 @@ const CITY_OPTIONS = [
   "الأحساء",
 ]
 
-const CURRENCY_OPTIONS = [
-  { code: "SAR", label: "الريال السعودي (SAR)" },
-  { code: "USD", label: "الدولار الأمريكي (USD)" },
-]
+const CURRENCY_CODES = ["SAR", "USD"] as const
+const TIMEZONE_CODES = ["Asia/Riyadh", "Asia/Dubai", "Africa/Cairo"] as const
 
-const TIMEZONE_OPTIONS = [
-  { code: "Asia/Riyadh", label: "الرياض (GMT+3)" },
-  { code: "Asia/Dubai", label: "دبي (GMT+4)" },
-  { code: "Africa/Cairo", label: "القاهرة (GMT+2)" },
-]
+function currencyOptions(t: GeneralTranslator) {
+  return CURRENCY_CODES.map((code) => ({
+    code,
+    label: t(`currencies.${code}` as "currencies.SAR"),
+  }))
+}
+function timezoneOptions(t: GeneralTranslator) {
+  return TIMEZONE_CODES.map((code) => ({
+    code,
+    label: t(`timezones.${code}` as "timezones.Asia/Riyadh"),
+  }))
+}
 
 type StatusFilter = "all" | "active" | "archived"
 
-const STATUS_LABEL: Record<"active" | "archived", string> = {
-  active: "نشط",
-  archived: "متوقف",
+function statusLabel(status: "active" | "archived", t: WorkspacesTranslator): string {
+  return t(`statuses.${status}` as "statuses.active")
 }
 
 interface WorkspaceDraft {
@@ -179,19 +181,24 @@ function draftFromWorkspace(workspace: Workspace): WorkspaceDraft {
   }
 }
 
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-})
+function dateFormatter(locale: Locale): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+}
 
-function formatDate(value: string | undefined): string {
+function formatDate(value: string | undefined, locale: Locale): string {
   if (!value) return "—"
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "—" : DATE_FORMAT.format(date)
+  return Number.isNaN(date.getTime()) ? "—" : dateFormatter(locale).format(date)
 }
 
 export default function WorkspacesPage() {
+  const t = useTranslations("settings.workspaces")
+  const tGeneral = useTranslations("settings.general")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const searchParams = useSearchParams()
   const {
@@ -336,7 +343,7 @@ export default function WorkspacesPage() {
   async function handleSave() {
     if (!currentOrganization) return
     if (!draft.name.trim()) {
-      toast.error("اسم مساحة العمل مطلوب.")
+      toast.error(t("toasts.nameRequired"))
       return
     }
 
@@ -370,7 +377,7 @@ export default function WorkspacesPage() {
           metadata,
           settings: { currency: draft.currency, timezone: draft.timezone },
         })
-        toast.success("تم تحديث بيانات مساحة العمل.")
+        toast.success(t("toasts.updated"))
       } else {
         const created = await createWorkspace({
           organizationId: currentOrganization.id,
@@ -396,7 +403,7 @@ export default function WorkspacesPage() {
           await archiveWorkspace(created.id)
         }
         workspaceId = created.id
-        toast.success("تم إضافة مساحة العمل.")
+        toast.success(t("toasts.created"))
       }
 
       const newlyGranted = assignedUserIds.filter((id) => !existingUserIds.has(id))
@@ -412,13 +419,13 @@ export default function WorkspacesPage() {
             )
           )
         } catch {
-          toast.error("تم حفظ مساحة العمل، لكن تعذر منح الوصول لبعض المستخدمين.")
+          toast.error(t("toasts.accessPartialFailure"))
         }
       }
 
       setIsFormOpen(false)
     } catch (error) {
-      toast.error(error instanceof AppError ? error.message : "تعذر حفظ بيانات مساحة العمل.")
+      toast.error(error instanceof AppError ? error.message : t("toasts.saveFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -429,13 +436,13 @@ export default function WorkspacesPage() {
     try {
       if ((workspace.status ?? "active") === "active") {
         await archiveWorkspace(workspace.id)
-        toast.success(`تم إيقاف ${workspace.name}.`)
+        toast.success(t("toasts.deactivated", { name: workspace.name }))
       } else {
         await restoreWorkspace(workspace.id)
-        toast.success(`تم تنشيط ${workspace.name}.`)
+        toast.success(t("toasts.activated", { name: workspace.name }))
       }
     } catch (error) {
-      toast.error(error instanceof AppError ? error.message : "تعذر تحديث حالة مساحة العمل.")
+      toast.error(error instanceof AppError ? error.message : t("toasts.statusUpdateFailed"))
     } finally {
       setPendingActionId(null)
     }
@@ -454,6 +461,9 @@ export default function WorkspacesPage() {
         assignedUserIds={assignedUserIds}
         setAssignedUserIds={setAssignedUserIds}
         existingUserIds={existingUserIds}
+        locale={locale}
+        t={t}
+        tGeneral={tGeneral}
         onCancel={() => setIsFormOpen(false)}
         onSave={handleSave}
       />
@@ -461,7 +471,7 @@ export default function WorkspacesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5" dir="rtl">
+    <div className="flex flex-col gap-5" dir={localeDirection(locale)}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -470,43 +480,40 @@ export default function WorkspacesPage() {
             >
               <Store className="size-[18px]" />
             </span>
-            <h1 className={cn("text-[20px] font-extrabold", HEADING)}>مساحات العمل</h1>
+            <h1 className={cn("text-[20px] font-extrabold", HEADING)}>{t("title")}</h1>
           </div>
-          <p className={cn("mt-1 text-[12.5px]", MUTED)}>
-            إدارة مساحات عمل المؤسسة -- تُستخدم أيضاً في إعدادات الأجهزة وطرق الدفع الخاصة بكل
-            مساحة.
-          </p>
+          <p className={cn("mt-1 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <Button
           className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1d4ed8]"
           onClick={openCreate}
         >
           <Plus className="size-4" />
-          إضافة مساحة عمل
+          {t("addWorkspace")}
         </Button>
       </div>
 
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="إجمالي مساحات العمل"
+          label={t("stats.total")}
           value={workspaces.length}
           icon={Store}
           tint={BLUE_TINT}
         />
         <StatCard
-          label="مساحات العمل النشطة"
+          label={t("stats.active")}
           value={activeCount}
           icon={CheckCircle2}
           tint="bg-[#f0fdf4] text-[#16a34a]"
         />
         <StatCard
-          label="مساحات العمل المتوقفة"
+          label={t("stats.archived")}
           value={archivedCount}
           icon={PauseCircle}
           tint="bg-[#fff7ed] text-[#ea580c]"
         />
         <StatCard
-          label="المدن"
+          label={t("stats.cities")}
           value={cities.length}
           icon={MapPin}
           tint="bg-[#f0fdfa] text-[#0d9488]"
@@ -521,7 +528,7 @@ export default function WorkspacesPage() {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="البحث في مساحات العمل بالاسم أو العنوان..."
+                placeholder={t("search.placeholder")}
                 className={cn(FIELD_CLASS, "ps-9")}
               />
             </div>
@@ -532,13 +539,13 @@ export default function WorkspacesPage() {
               <thead>
                 <tr className="bg-[#f8faff]">
                   {[
-                    "اسم مساحة العمل",
-                    "المدينة",
-                    "العنوان",
-                    "عدد نقاط البيع",
-                    "الحالة",
-                    "تاريخ الإنشاء",
-                    "الإجراءات",
+                    t("table.columns.name"),
+                    t("table.columns.city"),
+                    t("table.columns.address"),
+                    t("table.columns.posCount"),
+                    t("table.columns.status"),
+                    t("table.columns.createdAt"),
+                    t("table.columns.actions"),
                   ].map((label) => (
                     <th
                       key={label}
@@ -601,18 +608,18 @@ export default function WorkspacesPage() {
                               status === "active" ? "bg-[#16a34a]" : "bg-[#ea580c]"
                             )}
                           />
-                          {STATUS_LABEL[status]}
+                          {statusLabel(status, t)}
                         </span>
                       </td>
                       <td className={cn("px-4 py-3.5 text-[13px]", MUTED)}>
-                        {formatDate(workspace.createdAt)}
+                        {formatDate(workspace.createdAt, locale)}
                       </td>
                       <td className="px-4 py-3.5">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              aria-label="إجراءات مساحة العمل"
+                              aria-label={t("table.rowActions.ariaLabel")}
                               disabled={pendingActionId === workspace.id}
                               className="flex size-8 items-center justify-center rounded-[8px] text-[#8098b4] hover:bg-[#f4f7fc] hover:text-[#0d1b3e] disabled:opacity-50"
                             >
@@ -625,10 +632,12 @@ export default function WorkspacesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
                             <DropdownMenuItem onSelect={() => openEdit(workspace)}>
-                              تعديل
+                              {t("table.rowActions.edit")}
                             </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => handleToggleStatus(workspace)}>
-                              {status === "active" ? "إيقاف مساحة العمل" : "تنشيط مساحة العمل"}
+                              {status === "active"
+                                ? t("table.rowActions.deactivate")
+                                : t("table.rowActions.activate")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -644,37 +653,37 @@ export default function WorkspacesPage() {
                 <Store className="size-8 text-[#c7d3e3]" />
                 <p className={cn("text-[13px] font-semibold", HEADING)}>
                   {workspaces.length === 0
-                    ? "لا توجد مساحات عمل بعد"
-                    : "لا توجد مساحات عمل مطابقة لهذا البحث"}
+                    ? t("table.empty.noneTitle")
+                    : t("table.empty.noMatchTitle")}
                 </p>
                 <p className={cn("text-[12px]", MUTED)}>
                   {workspaces.length === 0
-                    ? "ابدأ بإضافة أول مساحة عمل لمؤسستك."
-                    : "جرّب تعديل البحث أو التصفية."}
+                    ? t("table.empty.noneDescription")
+                    : t("table.empty.noMatchDescription")}
                 </p>
               </div>
             ) : null}
           </div>
 
           <div className={cn("mt-3 text-[12px]", MUTED)}>
-            عرض {filtered.length} من {workspaces.length} مساحة عمل
+            {t("table.showingCount", { filtered: filtered.length, total: workspaces.length })}
           </div>
         </section>
 
         <aside className="flex flex-col gap-4">
           <section className={cn(PANEL, "p-4")}>
-            <h2 className={cn("mb-3 text-[13px] font-bold", HEADING)}>تصفية مساحات العمل</h2>
+            <h2 className={cn("mb-3 text-[13px] font-bold", HEADING)}>{t("filters.title")}</h2>
 
             <div className="mb-3">
               <Label className={cn("mb-1.5 block text-[11.5px] font-semibold", HEADING)}>
-                المدينة
+                {t("filters.cityLabel")}
               </Label>
               <AppSelect value={cityFilter} onValueChange={setCityFilter}>
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
                   <AppSelectValue />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  <AppSelectItem value="all">جميع المدن</AppSelectItem>
+                  <AppSelectItem value="all">{t("filters.allCities")}</AppSelectItem>
                   {cities.map((city) => (
                     <AppSelectItem key={city} value={city}>
                       {city}
@@ -686,7 +695,7 @@ export default function WorkspacesPage() {
 
             <div className="mb-1">
               <Label className={cn("mb-1.5 block text-[11.5px] font-semibold", HEADING)}>
-                الحالة
+                {t("filters.statusLabel")}
               </Label>
               <AppSelect
                 value={statusFilter}
@@ -696,9 +705,9 @@ export default function WorkspacesPage() {
                   <AppSelectValue />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  <AppSelectItem value="all">جميع الحالات</AppSelectItem>
-                  <AppSelectItem value="active">نشط</AppSelectItem>
-                  <AppSelectItem value="archived">متوقف</AppSelectItem>
+                  <AppSelectItem value="all">{t("filters.allStatuses")}</AppSelectItem>
+                  <AppSelectItem value="active">{statusLabel("active", t)}</AppSelectItem>
+                  <AppSelectItem value="archived">{statusLabel("archived", t)}</AppSelectItem>
                 </AppSelectContent>
               </AppSelect>
             </div>
@@ -714,17 +723,14 @@ export default function WorkspacesPage() {
                 }}
               >
                 <RotateCcw className="size-3.5" />
-                إعادة تعيين
+                {t("filters.reset")}
               </Button>
             ) : null}
           </section>
 
           <div className="rounded-2xl border border-[#e0eaf8] bg-[#f8faff] p-4">
-            <p className={cn("mb-1 text-[12.5px] font-bold", HEADING)}>معلومة</p>
-            <p className={cn("text-[11.5px] leading-6", MUTED)}>
-              كل مساحة عمل تنشئها هنا مستقلة بإعداداتها -- يمكنك ضبط أجهزتها وطرق الدفع الخاصة بها
-              من نفس رواق الإعدادات.
-            </p>
+            <p className={cn("mb-1 text-[12.5px] font-bold", HEADING)}>{t("infoNote.title")}</p>
+            <p className={cn("text-[11.5px] leading-6", MUTED)}>{t("infoNote.description")}</p>
           </div>
         </aside>
       </div>
@@ -790,6 +796,9 @@ function WorkspaceFormView({
   assignedUserIds,
   setAssignedUserIds,
   existingUserIds,
+  locale,
+  t,
+  tGeneral,
   onCancel,
   onSave,
 }: {
@@ -803,6 +812,9 @@ function WorkspaceFormView({
   assignedUserIds: string[]
   setAssignedUserIds: (updater: (prev: string[]) => string[]) => void
   existingUserIds: Set<string>
+  locale: Locale
+  t: WorkspacesTranslator
+  tGeneral: GeneralTranslator
   onCancel: () => void
   onSave: () => void
 }) {
@@ -815,15 +827,15 @@ function WorkspaceFormView({
   }
 
   return (
-    <div className="flex flex-col gap-5" dir="rtl">
+    <div className="flex flex-col gap-5" dir={localeDirection(locale)}>
       <div>
         <Button
           variant="outline"
           onClick={onCancel}
           className="h-10 gap-1.5 rounded-[10px] border-[#e8edf3] px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
         >
-          <ChevronRight className="size-4" />
-          العودة إلى مساحات العمل
+          <ArrowLeft className="size-4 rtl:rotate-180" />
+          {t("form.backToList")}
         </Button>
       </div>
 
@@ -832,23 +844,23 @@ function WorkspaceFormView({
           <section className={cn(PANEL, "p-5")}>
             <FormCardHeader
               icon={Store}
-              title="المعلومات الأساسية"
-              subtitle="معلومات مساحة العمل الأساسية التي ستظهر في النظام"
+              title={t("form.basicInfo.sectionTitle")}
+              subtitle={t("form.basicInfo.sectionSubtitle")}
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="اسم مساحة العمل" required>
+              <Field label={t("form.basicInfo.nameLabel")} required>
                 <Input
                   value={draft.name}
                   onChange={(event) => set("name", event.target.value)}
-                  placeholder="مثال: مساحة عمل السلام"
+                  placeholder={t("form.basicInfo.namePlaceholder")}
                   className={FIELD_CLASS}
                 />
               </Field>
-              <Field label="المدينة" required>
+              <Field label={t("form.basicInfo.cityLabel")} required>
                 <AppSelect value={draft.city} onValueChange={(value) => set("city", value)}>
                   <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                    <AppSelectValue placeholder="اختر المدينة" />
+                    <AppSelectValue placeholder={t("form.basicInfo.cityPlaceholder")} />
                   </AppSelectTrigger>
                   <AppSelectContent>
                     {CITY_OPTIONS.map((city) => (
@@ -862,37 +874,35 @@ function WorkspaceFormView({
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="العنوان" required>
+              <Field label={t("form.basicInfo.addressLabel")} required>
                 <Input
                   value={draft.address}
                   onChange={(event) => set("address", event.target.value)}
-                  placeholder="أدخل العنوان التفصيلي لمساحة العمل"
+                  placeholder={t("form.basicInfo.addressPlaceholder")}
                   className={FIELD_CLASS}
                 />
               </Field>
-              <Field label="الحي / المنطقة">
+              <Field label={t("form.basicInfo.districtLabel")}>
                 <Input
                   value={draft.district}
                   onChange={(event) => set("district", event.target.value)}
-                  placeholder="مثال: حي النخيل"
+                  placeholder={t("form.basicInfo.districtPlaceholder")}
                   className={FIELD_CLASS}
                 />
               </Field>
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="رمز مساحة العمل" required>
+              <Field label={t("form.basicInfo.codeLabel")} required>
                 <Input
                   value={draft.code}
                   onChange={(event) => set("code", event.target.value)}
-                  placeholder="مثال: BR-001"
+                  placeholder={t("form.basicInfo.codePlaceholder")}
                   className={cn(FIELD_CLASS, "[direction:ltr]")}
                 />
-                <p className={cn("mt-1 text-[10.5px]", MUTED)}>
-                  رمز فريد يستخدم للتعريف بمساحة العمل في النظام.
-                </p>
+                <p className={cn("mt-1 text-[10.5px]", MUTED)}>{t("form.basicInfo.codeHint")}</p>
               </Field>
-              <Field label="رقم الجوال">
+              <Field label={t("form.basicInfo.phoneLabel")}>
                 <div className="flex gap-2">
                   <div className="w-[100px] shrink-0">
                     <AppSelect
@@ -914,7 +924,7 @@ function WorkspaceFormView({
                   <Input
                     value={draft.phone}
                     onChange={(event) => set("phone", event.target.value)}
-                    placeholder="5X XXX XXXX"
+                    placeholder={t("form.basicInfo.phonePlaceholder")}
                     className={cn(FIELD_CLASS, "flex-1 [direction:ltr]")}
                   />
                 </div>
@@ -925,24 +935,26 @@ function WorkspaceFormView({
           <section className={cn(PANEL, "p-5")}>
             <FormCardHeader
               icon={Smartphone}
-              title="معلومات إضافية"
-              subtitle="معلومات اختيارية تساعد في إدارة مساحة العمل."
+              title={t("form.additionalInfo.sectionTitle")}
+              subtitle={t("form.additionalInfo.sectionSubtitle")}
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="مدير مساحة العمل">
+              <Field label={t("form.additionalInfo.managerLabel")}>
                 <AppSelect
                   value={draft.managerId || "none"}
                   onValueChange={(value) => set("managerId", value === "none" ? "" : value)}
                 >
                   <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                    <AppSelectValue placeholder="اختر الموظف" />
+                    <AppSelectValue placeholder={t("form.additionalInfo.managerPlaceholder")} />
                   </AppSelectTrigger>
                   <AppSelectContent>
-                    <AppSelectItem value="none">بدون</AppSelectItem>
+                    <AppSelectItem value="none">
+                      {t("form.additionalInfo.managerNone")}
+                    </AppSelectItem>
                     {employees.length === 0 ? (
                       <div className={cn("px-2 py-2 text-[12px]", MUTED)}>
-                        لا يوجد موظفو نقطة بيع مسجلون بعد
+                        {t("form.additionalInfo.noEmployees")}
                       </div>
                     ) : (
                       employees.map((employee) => (
@@ -954,7 +966,7 @@ function WorkspaceFormView({
                   </AppSelectContent>
                 </AppSelect>
               </Field>
-              <Field label="البريد الإلكتروني">
+              <Field label={t("form.additionalInfo.emailLabel")}>
                 <Input
                   value={draft.email}
                   onChange={(event) => set("email", event.target.value)}
@@ -965,13 +977,13 @@ function WorkspaceFormView({
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="العملة الافتراضية">
+              <Field label={t("form.additionalInfo.currencyLabel")}>
                 <AppSelect value={draft.currency} onValueChange={(value) => set("currency", value)}>
                   <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
                     <AppSelectValue />
                   </AppSelectTrigger>
                   <AppSelectContent>
-                    {CURRENCY_OPTIONS.map((option) => (
+                    {currencyOptions(tGeneral).map((option) => (
                       <AppSelectItem key={option.code} value={option.code}>
                         {option.label}
                       </AppSelectItem>
@@ -979,13 +991,13 @@ function WorkspaceFormView({
                   </AppSelectContent>
                 </AppSelect>
               </Field>
-              <Field label="المنطقة الزمنية">
+              <Field label={t("form.additionalInfo.timezoneLabel")}>
                 <AppSelect value={draft.timezone} onValueChange={(value) => set("timezone", value)}>
                   <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
                     <AppSelectValue />
                   </AppSelectTrigger>
                   <AppSelectContent>
-                    {TIMEZONE_OPTIONS.map((option) => (
+                    {timezoneOptions(tGeneral).map((option) => (
                       <AppSelectItem key={option.code} value={option.code}>
                         {option.label}
                       </AppSelectItem>
@@ -999,12 +1011,12 @@ function WorkspaceFormView({
           <section className={cn(PANEL, "p-5")}>
             <FormCardHeader
               icon={Smartphone}
-              title="الموظفون المصرح لهم"
-              subtitle="حدد الموظفين الذين يمكنهم الوصول إلى مساحة العمل هذه وأجهزتها."
+              title={t("form.employees.sectionTitle")}
+              subtitle={t("form.employees.sectionSubtitle")}
             />
 
             {employees.length === 0 ? (
-              <p className={cn("text-[12.5px]", MUTED)}>لا يوجد موظفون مسجلون بعد.</p>
+              <p className={cn("text-[12.5px]", MUTED)}>{t("form.employees.none")}</p>
             ) : (
               <div className="flex flex-col gap-1">
                 {employees.map((employee) => {
@@ -1028,30 +1040,32 @@ function WorkspaceFormView({
                       />
                       <span className={cn("flex-1 text-[13px]", HEADING)}>{employee.fullName}</span>
                       {alreadyAssigned ? (
-                        <span className={cn("text-[11px]", MUTED)}>لديه وصول بالفعل</span>
+                        <span className={cn("text-[11px]", MUTED)}>
+                          {t("form.employees.alreadyHasAccess")}
+                        </span>
                       ) : null}
                     </label>
                   )
                 })}
               </div>
             )}
-            <p className={cn("mt-2 text-[10.5px]", MUTED)}>
-              منح الوصول هنا دائم ولا يمكن التراجع عنه من هذه الصفحة حالياً.
-            </p>
+            <p className={cn("mt-2 text-[10.5px]", MUTED)}>{t("form.employees.hint")}</p>
           </section>
 
           <section className={cn(PANEL, "p-5")}>
             <FormCardHeader
               icon={Settings2}
-              title="حالة مساحة العمل"
-              subtitle="حدد حالة مساحة العمل والصلاحيات."
+              title={t("form.status.sectionTitle")}
+              subtitle={t("form.status.sectionSubtitle")}
             />
 
             <div className="mb-4 flex items-center justify-between border-b border-[#f1f4f9] pb-4">
               <div>
-                <p className={cn("text-[13.5px] font-semibold", HEADING)}>تفعيل مساحة العمل</p>
+                <p className={cn("text-[13.5px] font-semibold", HEADING)}>
+                  {t("form.status.activateLabel")}
+                </p>
                 <p className={cn("mt-0.5 text-[11.5px]", MUTED)}>
-                  ستكون مساحة العمل متاحة للبيع والاستخدام في النظام
+                  {t("form.status.activateDescription")}
                 </p>
               </div>
               <Switch
@@ -1063,13 +1077,13 @@ function WorkspaceFormView({
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                تاريخ الافتتاح
+                {t("form.status.openedAtLabel")}
               </Label>
               <div className="ms-auto max-w-[220px]">
                 <AppDateField
                   value={draft.openedAt}
                   onChange={(value: string) => set("openedAt", value)}
-                  ariaLabel="تاريخ افتتاح مساحة العمل"
+                  ariaLabel={t("form.status.openedAtAriaLabel")}
                 />
               </div>
             </div>
@@ -1077,7 +1091,7 @@ function WorkspaceFormView({
 
           <div className="flex items-center justify-between">
             <Button variant="outline" onClick={onCancel} disabled={isSaving}>
-              إلغاء
+              {t("form.cancel")}
             </Button>
             <Button
               onClick={onSave}
@@ -1089,7 +1103,7 @@ function WorkspaceFormView({
               ) : (
                 <CheckCircle className="size-4" />
               )}
-              {editingId ? "حفظ التغييرات" : "حفظ مساحة العمل"}
+              {editingId ? t("form.saveChanges") : t("form.saveNew")}
             </Button>
           </div>
         </div>
@@ -1103,10 +1117,10 @@ function WorkspaceFormView({
               </span>
             </div>
             <p className={cn("text-[14px] font-bold", HEADING)}>
-              {editingId ? "تعديل بيانات مساحة العمل" : "إضافة مساحة عمل جديدة"}
+              {editingId ? t("form.sidebar.editTitle") : t("form.sidebar.addTitle")}
             </p>
             <p className={cn("mt-1.5 text-[11.5px] leading-6", MUTED)}>
-              قم بإضافة معلومات مساحة العمل وربطها بالنظام لتمكين البيع وإدارة المخزون والموظفين.
+              {t("form.sidebar.description")}
             </p>
           </section>
 
@@ -1115,10 +1129,10 @@ function WorkspaceFormView({
               <span className="flex size-7 items-center justify-center rounded-[8px] bg-[#fffbe6]">
                 <Lightbulb className="size-3.5 text-[#f5a623]" />
               </span>
-              <h2 className={cn("text-[13.5px] font-bold", HEADING)}>نصائح مهمة</h2>
+              <h2 className={cn("text-[13.5px] font-bold", HEADING)}>{t("form.tips.title")}</h2>
             </div>
             <ol className="flex flex-col gap-2.5">
-              {WORKSPACE_TIPS.map((tip, index) => (
+              {(t.raw("form.tips.items") as string[]).map((tip, index) => (
                 <li key={tip} className="flex items-start gap-2.5">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-[#2563eb] text-[11px] font-bold text-white">
                     {index + 1}

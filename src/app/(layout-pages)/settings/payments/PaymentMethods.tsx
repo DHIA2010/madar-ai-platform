@@ -28,9 +28,11 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 import {
   posPaymentMethodsService,
@@ -75,40 +77,41 @@ const KIND_MARK: Record<PaymentKind, { icon: LucideIcon; tint: string }> = {
   prepaid: { icon: PiggyBank, tint: "bg-[#eafaf0] text-[#0f9d58]" },
 }
 
-const KIND_LABEL: Record<PaymentKind, string> = {
-  cash: "نقدي",
-  card: "بطاقة",
-  wallet: "محفظة رقمية",
-  transfer: "تحويل بنكي",
-  bnpl: "دفع لاحق",
-  credit: "آجل على حساب العميل",
-  prepaid: "محفظة العميل المسبقة",
+type PaymentsTranslator = ReturnType<typeof useTranslations<"settings.payments">>
+
+function paymentKindLabel(kind: PaymentKind, t: PaymentsTranslator): string {
+  return t(`kinds.${kind}` as "kinds.cash")
 }
 
-const NOTES = [
-  "يمكنك تفعيل أو إيقاف أي طريقة دفع حسب احتياجات فرعك.",
-  "قد تختلف رسوم المعاملة حسب اتفاقك مع مزود الخدمة.",
-  "تأكد من ضبط إعدادات الأجهزة لربط أجهزة الدفع (مثل أجهزة مدى).",
-]
-
-const ADD_NOTES = [
-  "تأكد من صحة بيانات الربط قبل التفعيل.",
-  "قد تختلف رسوم المعاملة حسب مزود الخدمة.",
-  "يمكنك تعديل الإعدادات لاحقاً من صفحة طرق الدفع.",
-]
-
-const PERCENT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-})
+function percentFormatter(locale: Locale): Intl.NumberFormat {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
 
 // Quick-fill tiles for the add-method dialog -- picking one presets the kind and a starting
 // name/subtitle, which the fields below stay fully editable after. Icons are the same per-kind
 // marks the table already uses (see KIND_MARK's own note): no mada/STC/Apple artwork exists in
 // this repo, so brand-distinct tiles fall back to sharing their kind's generic icon rather than
 // an invented logo.
+interface PaymentPresetData {
+  key: "cash" | "transfer" | "mada" | "stc_pay" | "apple_pay" | "card"
+  kind: PaymentKind
+  hasNameAndDescription: boolean
+}
+
+const PAYMENT_PRESET_DATA: PaymentPresetData[] = [
+  { key: "cash", kind: "cash", hasNameAndDescription: true },
+  { key: "transfer", kind: "transfer", hasNameAndDescription: true },
+  { key: "mada", kind: "card", hasNameAndDescription: true },
+  { key: "stc_pay", kind: "wallet", hasNameAndDescription: true },
+  { key: "apple_pay", kind: "wallet", hasNameAndDescription: true },
+  { key: "card", kind: "card", hasNameAndDescription: false },
+]
+
 interface PaymentPreset {
-  key: string
+  key: PaymentPresetData["key"]
   kind: PaymentKind
   label: string
   tileSubtitle: string
@@ -116,56 +119,20 @@ interface PaymentPreset {
   description: string
 }
 
-const PAYMENT_PRESETS: PaymentPreset[] = [
-  {
-    key: "cash",
-    kind: "cash",
-    label: "دفع نقدي",
-    tileSubtitle: "المدفوعات النقدية",
-    name: "نقدي",
-    description: "الدفع النقدي عند الاستلام",
-  },
-  {
-    key: "transfer",
-    kind: "transfer",
-    label: "تحويل بنكي",
-    tileSubtitle: "تحويل مباشر",
-    name: "تحويل بنكي",
-    description: "الدفع عبر التحويل البنكي المباشر",
-  },
-  {
-    key: "mada",
-    kind: "card",
-    label: "مدى",
-    tileSubtitle: "بطاقات مدى",
-    name: "مدى",
-    description: "الدفع باستخدام بطاقات مدى البنكية",
-  },
-  {
-    key: "stc_pay",
-    kind: "wallet",
-    label: "STC Pay",
-    tileSubtitle: "الدفع عبر STC Pay",
-    name: "STC Pay",
-    description: "الدفع عبر تطبيق STC Pay",
-  },
-  {
-    key: "apple_pay",
-    kind: "wallet",
-    label: "Apple Pay",
-    tileSubtitle: "الدفع عبر آبل باي",
-    name: "Apple Pay",
-    description: "الدفع عبر Apple Pay",
-  },
-  {
-    key: "card",
-    kind: "card",
-    label: "بطاقة بنكية",
-    tileSubtitle: "مدى، فيزا، ماستركارد",
-    name: "",
-    description: "",
-  },
-]
+function paymentPresets(t: PaymentsTranslator): PaymentPreset[] {
+  return PAYMENT_PRESET_DATA.map((preset) => ({
+    key: preset.key,
+    kind: preset.kind,
+    label: t(`presets.${preset.key}.label` as "presets.cash.label"),
+    tileSubtitle: t(`presets.${preset.key}.tileSubtitle` as "presets.cash.tileSubtitle"),
+    name: preset.hasNameAndDescription
+      ? t(`presets.${preset.key}.name` as "presets.cash.name")
+      : "",
+    description: preset.hasNameAndDescription
+      ? t(`presets.${preset.key}.description` as "presets.cash.description")
+      : "",
+  }))
+}
 
 // The dialog never asks for a technical code -- one is derived from the name so the field list
 // matches the design exactly. Arabic (or any non-ASCII) collapses to nothing, so the fallback and
@@ -204,6 +171,8 @@ function buildEditDraft(method: PaymentMethod | null) {
 }
 
 export default function PaymentMethods() {
+  const t = useTranslations("settings.payments")
+  const locale = useLocale() as Locale
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -230,13 +199,11 @@ export default function PaymentMethods() {
       setMethods(await posPaymentMethodsService.list())
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      setLoadError(
-        status === 403 ? "لا تملك صلاحية عرض طرق الدفع." : "تعذر تحميل طرق الدفع. حاول مرة أخرى."
-      )
+      setLoadError(status === 403 ? t("loadError.forbidden") : t("loadError.generic"))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void load()
@@ -244,8 +211,8 @@ export default function PaymentMethods() {
 
   const failed = (error: unknown, fallback: string) => {
     const status = error instanceof AppError ? error.status : undefined
-    toast.error(status === 403 ? "لا تملك صلاحية تعديل طرق الدفع." : fallback, {
-      description: status === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية pos:manage." : undefined,
+    toast.error(status === 403 ? t("toasts.forbiddenEdit") : fallback, {
+      description: status === 403 ? t("toasts.forbiddenDescription") : undefined,
     })
   }
 
@@ -271,7 +238,7 @@ export default function PaymentMethods() {
           entry.code === method.code ? { ...entry, enabled: !enabled } : entry
         )
       )
-      failed(error, "تعذر تغيير حالة طريقة الدفع.")
+      failed(error, t("toasts.statusChangeFailed"))
     } finally {
       setBusyCode(null)
     }
@@ -282,11 +249,11 @@ export default function PaymentMethods() {
 
     const parsed = Number(editDraft.feePercent)
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      toast.error("أدخل نسبة رسوم بين 0 و 100.")
+      toast.error(t("validation.feeInvalid"))
       return
     }
     if (editing.isCustom && !editDraft.name.trim()) {
-      toast.error("أدخل اسم طريقة الدفع.")
+      toast.error(t("validation.nameRequired"))
       return
     }
 
@@ -306,10 +273,10 @@ export default function PaymentMethods() {
             : {}),
         })
       )
-      toast.success("تم حفظ إعدادات طريقة الدفع.")
+      toast.success(t("toasts.settingsSaved"))
       setEditing(null)
     } catch (error) {
-      failed(error, "تعذر حفظ الإعدادات.")
+      failed(error, t("toasts.settingsSaveFailed"))
     } finally {
       setBusyCode(null)
     }
@@ -318,11 +285,11 @@ export default function PaymentMethods() {
   const createCustom = async () => {
     const parsed = Number(custom.feePercent)
     if (!custom.name.trim()) {
-      toast.error("أدخل اسم طريقة الدفع.")
+      toast.error(t("validation.nameRequired"))
       return
     }
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      toast.error("أدخل نسبة رسوم بين 0 و 100.")
+      toast.error(t("validation.feeInvalid"))
       return
     }
 
@@ -340,15 +307,17 @@ export default function PaymentMethods() {
           apiKey: custom.apiKey.trim() || null,
         })
       )
-      toast.success("تمت إضافة طريقة الدفع.")
+      toast.success(t("toasts.methodAdded"))
       setCreating(false)
       setCustom(EMPTY_CUSTOM)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
       if (status === 409) {
-        toast.error("طريقة بهذا الاسم موجودة بالفعل.", { description: "جرّب اسماً مختلفاً." })
+        toast.error(t("toasts.duplicateName"), {
+          description: t("toasts.duplicateNameDescription"),
+        })
       } else {
-        failed(error, "تعذر إضافة طريقة الدفع.")
+        failed(error, t("toasts.methodAddFailed"))
       }
     } finally {
       setBusyCode(null)
@@ -361,11 +330,11 @@ export default function PaymentMethods() {
     setBusyCode(pendingDelete.code)
     try {
       await posPaymentMethodsService.remove(pendingDelete.id)
-      toast.success("تم حذف طريقة الدفع.", { description: pendingDelete.name })
+      toast.success(t("toasts.deleted"), { description: pendingDelete.name })
       setPendingDelete(null)
       setMethods(await posPaymentMethodsService.list())
     } catch (error) {
-      failed(error, "تعذر حذف طريقة الدفع.")
+      failed(error, t("toasts.deleteFailed"))
     } finally {
       setBusyCode(null)
     }
@@ -375,7 +344,7 @@ export default function PaymentMethods() {
     return (
       <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل طرق الدفع...
+        {t("loading")}
       </div>
     )
   }
@@ -386,7 +355,7 @@ export default function PaymentMethods() {
         <p className={cn("text-[13px]", HEADING)}>{loadError}</p>
         <Button variant="outline" onClick={() => void load()}>
           <RotateCcw className="size-4" />
-          إعادة المحاولة
+          {t("retry")}
         </Button>
       </div>
     )
@@ -398,8 +367,8 @@ export default function PaymentMethods() {
           to the far left of the row. */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>طرق الدفع</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>إدارة طرق الدفع المتاحة في نقطة البيع</p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
 
         <Button
@@ -407,7 +376,7 @@ export default function PaymentMethods() {
           onClick={() => setCreating(true)}
         >
           <Plus className="size-4" />
-          إضافة طريقة دفع
+          {t("addMethod")}
         </Button>
       </div>
 
@@ -417,11 +386,11 @@ export default function PaymentMethods() {
             <thead>
               <tr className="bg-[#f1f5fc]">
                 {[
-                  { key: "method", label: "طريقة الدفع", align: "text-right" },
-                  { key: "status", label: "الحالة", align: "text-center" },
-                  { key: "settings", label: "الإعدادات", align: "text-center" },
-                  { key: "fee", label: "رسوم المعاملة", align: "text-center" },
-                  { key: "actions", label: "الإجراءات", align: "text-center" },
+                  { key: "method", label: t("table.columns.method"), align: "text-right" },
+                  { key: "status", label: t("table.columns.status"), align: "text-center" },
+                  { key: "settings", label: t("table.columns.settings"), align: "text-center" },
+                  { key: "fee", label: t("table.columns.fee"), align: "text-center" },
+                  { key: "actions", label: t("table.columns.actions"), align: "text-center" },
                 ].map((column) => (
                   <th
                     key={column.key}
@@ -465,7 +434,7 @@ export default function PaymentMethods() {
                             {method.name}
                           </p>
                           <p className={cn("mt-0.5 truncate text-[12px]", MUTED)}>
-                            {method.subtitle || KIND_LABEL[method.kind]}
+                            {method.subtitle || paymentKindLabel(method.kind, t)}
                           </p>
                         </div>
                       </div>
@@ -488,7 +457,7 @@ export default function PaymentMethods() {
                         onClick={() => openSettings(method)}
                       >
                         <Settings2 className="size-3.5" />
-                        إعدادات
+                        {t("table.settingsButton")}
                       </Button>
                     </td>
 
@@ -501,11 +470,13 @@ export default function PaymentMethods() {
                             : cn("bg-[#eff6ff]", HEADING)
                         )}
                       >
-                        {PERCENT.format(method.feePercent)}%
+                        {percentFormatter(locale).format(method.feePercent)}%
                       </span>
                       {/* A fee nobody has confirmed is a placeholder, not the provider's rate. */}
                       {!method.configured ? (
-                        <span className="mt-0.5 block text-[10px] text-[#98A2B3]">غير مؤكدة</span>
+                        <span className="mt-0.5 block text-[10px] text-[#98A2B3]">
+                          {t("table.unconfirmed")}
+                        </span>
                       ) : null}
                     </td>
 
@@ -513,6 +484,8 @@ export default function PaymentMethods() {
                       <RowActions
                         method={method}
                         busy={busy}
+                        locale={locale}
+                        t={t}
                         onSettings={() => openSettings(method)}
                         onDelete={() => setPendingDelete(method)}
                       />
@@ -531,10 +504,10 @@ export default function PaymentMethods() {
           <span className="flex size-5 items-center justify-center rounded-full bg-[#2563eb] text-white">
             <Info className="size-3" />
           </span>
-          <h2 className={cn("text-[13px] font-bold", HEADING)}>معلومات مهمة</h2>
+          <h2 className={cn("text-[13px] font-bold", HEADING)}>{t("notes.title")}</h2>
         </div>
         <ul className="flex flex-col gap-1.5">
-          {NOTES.map((note) => (
+          {(t.raw("notes.items") as string[]).map((note) => (
             <li key={note} className="flex gap-2 text-[12.5px] leading-[1.6] text-[#334155]">
               <span className="mt-[7px] size-[5px] shrink-0 rounded-full bg-[#2563eb]" />
               {note}
@@ -552,15 +525,20 @@ export default function PaymentMethods() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[36rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "max-h-[90vh] overflow-y-auto sm:max-w-[36rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              إعدادات {editing?.name}
+              {t("editDialog.title", { name: editing?.name ?? "" })}
             </DialogTitle>
             <DialogDescription className={cn("text-[12px]", MUTED)}>
               {editing?.isCustom
-                ? "طريقة الدفع الخاصة بفرعك -- يمكنك تعديل بياناتها بالكامل"
-                : "رسوم المعاملة وبيانات الربط التي يخصمها مزود الخدمة من كل عملية"}
+                ? t("editDialog.descriptionCustom")
+                : t("editDialog.descriptionBuiltIn")}
             </DialogDescription>
           </DialogHeader>
 
@@ -569,22 +547,22 @@ export default function PaymentMethods() {
               <>
                 <div>
                   <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                    اسم طريقة الدفع <span className="text-[#e0484d]">*</span>
+                    {t("editDialog.nameLabel")} <span className="text-[#e0484d]">*</span>
                   </Label>
                   <Input
                     value={editDraft.name}
-                    aria-label="اسم طريقة الدفع"
+                    aria-label={t("editDialog.nameLabel")}
                     className={FIELD_CLASS}
                     onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })}
                   />
                 </div>
                 <div>
                   <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                    الوصف (اختياري)
+                    {t("editDialog.subtitleLabel")}
                   </Label>
                   <Input
                     value={editDraft.subtitle}
-                    aria-label="وصف طريقة الدفع"
+                    aria-label={t("editDialog.subtitleAriaLabel")}
                     maxLength={200}
                     className={FIELD_CLASS}
                     onChange={(event) =>
@@ -597,7 +575,7 @@ export default function PaymentMethods() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الحالة
+                {t("editDialog.statusLabel")}
               </Label>
               <div className="flex h-11 items-center gap-2.5">
                 <Switch
@@ -616,10 +594,10 @@ export default function PaymentMethods() {
                   {editDraft.enabled ? (
                     <>
                       <Check className="size-3" strokeWidth={3} />
-                      مفعل
+                      {t("editDialog.enabled")}
                     </>
                   ) : (
-                    "معطل"
+                    t("editDialog.disabled")
                   )}
                 </span>
               </div>
@@ -627,7 +605,7 @@ export default function PaymentMethods() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                رسوم المعاملة (%)
+                {t("editDialog.feeLabel")}
               </Label>
               {/* RTL: the field is written first so the unit chip sits on its left. */}
               <div className="flex overflow-hidden rounded-[12px] border border-[#E8EBF0] bg-white">
@@ -637,7 +615,7 @@ export default function PaymentMethods() {
                   max={100}
                   step="0.01"
                   value={editDraft.feePercent}
-                  aria-label="رسوم المعاملة"
+                  aria-label={t("editDialog.feeAriaLabel")}
                   className="h-11 rounded-none border-0 bg-transparent text-[13px] focus-visible:ring-0"
                   onChange={(event) =>
                     setEditDraft({ ...editDraft, feePercent: event.target.value })
@@ -652,18 +630,16 @@ export default function PaymentMethods() {
                   %
                 </span>
               </div>
-              <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>
-                اتركها 0 إذا لم يكن هناك رسوم على هذه الطريقة
-              </p>
+              <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>{t("editDialog.feeHint")}</p>
             </div>
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                رقم الحساب التجاري (Merchant ID)
+                {t("editDialog.merchantIdLabel")}
               </Label>
               <Input
                 value={editDraft.merchantId}
-                aria-label="رقم الحساب التجاري"
+                aria-label={t("editDialog.merchantIdAriaLabel")}
                 className={cn(FIELD_CLASS, "[direction:ltr]")}
                 onChange={(event) => setEditDraft({ ...editDraft, merchantId: event.target.value })}
               />
@@ -671,12 +647,14 @@ export default function PaymentMethods() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                مفتاح API (اختياري)
+                {t("editDialog.apiKeyLabel")}
               </Label>
               <div className="relative">
                 <button
                   type="button"
-                  aria-label={editApiKeyVisible ? "إخفاء مفتاح API" : "إظهار مفتاح API"}
+                  aria-label={
+                    editApiKeyVisible ? t("editDialog.hideApiKey") : t("editDialog.showApiKey")
+                  }
                   onClick={() => setEditApiKeyVisible((value) => !value)}
                   className="absolute inset-y-0 start-3 flex items-center text-[#98A2B3] hover:text-[#0b1738]"
                 >
@@ -685,7 +663,7 @@ export default function PaymentMethods() {
                 <Input
                   type={editApiKeyVisible ? "text" : "password"}
                   value={editDraft.apiKey}
-                  aria-label="مفتاح API"
+                  aria-label={t("editDialog.apiKeyAriaLabel")}
                   className={cn(FIELD_CLASS, "ps-9 [direction:ltr]")}
                   onChange={(event) => setEditDraft({ ...editDraft, apiKey: event.target.value })}
                 />
@@ -699,10 +677,10 @@ export default function PaymentMethods() {
               disabled={busyCode !== null}
               onClick={() => void saveSettings()}
             >
-              حفظ
+              {t("editDialog.save")}
             </Button>
             <Button variant="outline" onClick={() => setEditing(null)}>
-              إلغاء
+              {t("editDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -718,19 +696,24 @@ export default function PaymentMethods() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[44rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "max-h-[90vh] overflow-y-auto sm:max-w-[44rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[16px] font-extrabold", HEADING)}>
-              إضافة طريقة دفع جديدة
+              {t("createDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px]", MUTED)}>
-              اختر طريقة الدفع وقم بإعداد البيانات المطلوبة
+              {t("createDialog.description")}
             </DialogDescription>
           </DialogHeader>
 
           {/* Preset tiles */}
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
-            {PAYMENT_PRESETS.map((preset) => {
+            {paymentPresets(t).map((preset) => {
               const selected = preset.key === custom.presetKey
               const mark = KIND_MARK[preset.kind]
               const Icon = mark.icon
@@ -780,33 +763,33 @@ export default function PaymentMethods() {
           {/* معلومات طريقة الدفع */}
           <div className="border-t border-[#EEF1F6] pt-4">
             <h3 className={cn("mb-3 text-[13.5px] font-extrabold", HEADING)}>
-              معلومات طريقة الدفع
+              {t("createDialog.infoSectionTitle")}
             </h3>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  اسم طريقة الدفع <span className="text-[#e0484d]">*</span>
+                  {t("createDialog.nameLabel")} <span className="text-[#e0484d]">*</span>
                 </Label>
                 <Input
                   value={custom.name}
-                  aria-label="اسم طريقة الدفع"
-                  placeholder="مثال: مدى"
+                  aria-label={t("createDialog.nameLabel")}
+                  placeholder={t("createDialog.namePlaceholder")}
                   className={FIELD_CLASS}
                   onChange={(event) => setCustom({ ...custom, name: event.target.value })}
                 />
-                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>سيظهر هذا الاسم في شاشة الدفع</p>
+                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>{t("createDialog.nameHint")}</p>
               </div>
 
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  الوصف (اختياري)
+                  {t("createDialog.subtitleLabel")}
                 </Label>
                 <Input
                   value={custom.subtitle}
-                  aria-label="وصف طريقة الدفع"
+                  aria-label={t("createDialog.subtitleAriaLabel")}
                   maxLength={200}
-                  placeholder="مثال: الدفع باستخدام بطاقات مدى البنكية"
+                  placeholder={t("createDialog.subtitlePlaceholder")}
                   className={FIELD_CLASS}
                   onChange={(event) => setCustom({ ...custom, subtitle: event.target.value })}
                 />
@@ -817,7 +800,7 @@ export default function PaymentMethods() {
 
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  الحالة
+                  {t("createDialog.statusLabel")}
                 </Label>
                 <div className="flex h-11 items-center gap-2.5">
                   <Switch
@@ -834,21 +817,19 @@ export default function PaymentMethods() {
                     {custom.enabled ? (
                       <>
                         <Check className="size-3" strokeWidth={3} />
-                        مفعل
+                        {t("editDialog.enabled")}
                       </>
                     ) : (
-                      "معطل"
+                      t("editDialog.disabled")
                     )}
                   </span>
                 </div>
-                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>
-                  سيتم إظهار هذه الطريقة في شاشة الدفع
-                </p>
+                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>{t("createDialog.statusHint")}</p>
               </div>
 
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  رسوم المعاملة (%)
+                  {t("createDialog.feeLabel")}
                 </Label>
                 <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-[12px] text-[#98A2B3]">
@@ -860,47 +841,49 @@ export default function PaymentMethods() {
                     max={100}
                     step="0.01"
                     value={custom.feePercent}
-                    aria-label="رسوم المعاملة للطريقة الجديدة"
+                    aria-label={t("createDialog.feeAriaLabel")}
                     className={cn(FIELD_CLASS, "ps-7")}
                     onChange={(event) => setCustom({ ...custom, feePercent: event.target.value })}
                   />
                 </div>
-                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>
-                  نسبة الرسوم التي تضاف على كل عملية دفع
-                </p>
+                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>{t("createDialog.feeHint")}</p>
               </div>
             </div>
           </div>
 
           {/* إعدادات إضافية */}
           <div className="border-t border-[#EEF1F6] pt-4">
-            <h3 className={cn("mb-3 text-[13.5px] font-extrabold", HEADING)}>إعدادات إضافية</h3>
+            <h3 className={cn("mb-3 text-[13.5px] font-extrabold", HEADING)}>
+              {t("createDialog.additionalSectionTitle")}
+            </h3>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  رقم الحساب التجاري (Merchant ID)
+                  {t("createDialog.merchantIdLabel")}
                 </Label>
                 <Input
                   value={custom.merchantId}
-                  aria-label="رقم الحساب التجاري"
-                  placeholder="12345678"
+                  aria-label={t("createDialog.merchantIdAriaLabel")}
+                  placeholder={t("createDialog.merchantIdPlaceholder")}
                   className={cn(FIELD_CLASS, "[direction:ltr]")}
                   onChange={(event) => setCustom({ ...custom, merchantId: event.target.value })}
                 />
                 <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>
-                  يمكنك الحصول على رقم الحساب من مزود الخدمة
+                  {t("createDialog.merchantIdHint")}
                 </p>
               </div>
 
               <div>
                 <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                  مفتاح API (اختياري)
+                  {t("createDialog.apiKeyLabel")}
                 </Label>
                 <div className="relative">
                   <button
                     type="button"
-                    aria-label={apiKeyVisible ? "إخفاء مفتاح API" : "إظهار مفتاح API"}
+                    aria-label={
+                      apiKeyVisible ? t("editDialog.hideApiKey") : t("editDialog.showApiKey")
+                    }
                     onClick={() => setApiKeyVisible((value) => !value)}
                     className="absolute inset-y-0 start-3 flex items-center text-[#98A2B3] hover:text-[#0b1738]"
                   >
@@ -909,12 +892,12 @@ export default function PaymentMethods() {
                   <Input
                     type={apiKeyVisible ? "text" : "password"}
                     value={custom.apiKey}
-                    aria-label="مفتاح API"
+                    aria-label={t("createDialog.apiKeyAriaLabel")}
                     className={cn(FIELD_CLASS, "ps-9 [direction:ltr]")}
                     onChange={(event) => setCustom({ ...custom, apiKey: event.target.value })}
                   />
                 </div>
-                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>يستخدم للربط مع مزود الخدمة</p>
+                <p className={cn("mt-1.5 text-[10.5px]", MUTED)}>{t("createDialog.apiKeyHint")}</p>
               </div>
             </div>
           </div>
@@ -924,11 +907,11 @@ export default function PaymentMethods() {
             <div className="mb-2 flex items-center gap-2">
               <Info className="size-4 text-[#2878ff]" />
               <span className={cn("text-[12.5px] font-extrabold", "text-[#2878ff]")}>
-                ملاحظات مهمة
+                {t("createDialog.notesTitle")}
               </span>
             </div>
             <ul className="flex flex-col gap-1.5">
-              {ADD_NOTES.map((note) => (
+              {(t.raw("createDialog.notes") as string[]).map((note) => (
                 <li
                   key={note}
                   className={cn("flex items-start gap-2 text-[12px] leading-6", MUTED)}
@@ -947,7 +930,7 @@ export default function PaymentMethods() {
               onClick={() => void createCustom()}
             >
               <Plus className="size-4" />
-              إضافة طريقة الدفع
+              {t("createDialog.submit")}
             </Button>
             <Button
               variant="outline"
@@ -957,7 +940,7 @@ export default function PaymentMethods() {
                 setApiKeyVisible(false)
               }}
             >
-              إلغاء
+              {t("createDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -967,14 +950,21 @@ export default function PaymentMethods() {
         open={pendingDelete !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
       >
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              حذف طريقة الدفع؟
+              {t("deleteDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              سيتم حذف <span className={cn("font-bold", HEADING)}>{pendingDelete?.name}</span> من
-              طرق الدفع المتاحة في نقطة البيع.
+              {t.rich("deleteDialog.description", {
+                name: pendingDelete?.name ?? "",
+                b: (chunks) => <span className={cn("font-bold", HEADING)}>{chunks}</span>,
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -983,10 +973,10 @@ export default function PaymentMethods() {
               disabled={busyCode !== null}
               onClick={() => void remove()}
             >
-              حذف
+              {t("deleteDialog.confirm")}
             </Button>
             <Button variant="outline" onClick={() => setPendingDelete(null)}>
-              إلغاء
+              {t("deleteDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -998,11 +988,15 @@ export default function PaymentMethods() {
 function RowActions({
   method,
   busy,
+  locale,
+  t,
   onSettings,
   onDelete,
 }: {
   method: PaymentMethod
   busy: boolean
+  locale: Locale
+  t: PaymentsTranslator
   onSettings: () => void
   onDelete: () => void
 }) {
@@ -1016,31 +1010,37 @@ function RowActions({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`إجراءات ${method.name}`}
+          aria-label={t("rowActions.ariaLabel", { name: method.name })}
           disabled={busy}
           className="mx-auto flex size-8 cursor-pointer items-center justify-center rounded-lg text-[#98A2B3] transition-colors hover:bg-[#F2F5FA] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-4" />}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 rounded-[12px] [direction:rtl]">
+      <DropdownMenuContent
+        align="end"
+        className={cn(
+          "w-48 rounded-[12px]",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
+      >
         <DropdownMenuItem
           className="cursor-pointer gap-2 text-[12.5px]"
           onSelect={afterClose(onSettings)}
         >
           <Settings2 className="size-4" />
-          تعديل الرسوم
+          {t("rowActions.editFee")}
         </DropdownMenuItem>
         <DropdownMenuItem
           className="cursor-pointer gap-2 text-[12.5px] text-[#e0484d] focus:text-[#e0484d]"
           // A built-in method is disabled rather than deleted -- it still exists as a way to
           // pay, this branch just does not take it.
           disabled={!method.isCustom}
-          title={method.isCustom ? undefined : "الطرق المدمجة تُوقف بدل حذفها"}
+          title={method.isCustom ? undefined : t("rowActions.builtInDeleteTitle")}
           onSelect={afterClose(onDelete)}
         >
           <Trash2 className="size-4" />
-          حذف الطريقة
+          {t("rowActions.delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

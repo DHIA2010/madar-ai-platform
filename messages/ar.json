@@ -3866,6 +3866,491 @@
         "saved": "تم حفظ إعدادات الكاشير بنجاح.",
         "saveFailed": "تعذر حفظ إعدادات الكاشير."
       }
+    },
+    "zatca": {
+      "title": "الفوترة الإلكترونية (هيئة الزكاة والضريبة والجمارك)",
+      "subtitle": "ربط أجهزة نقاط البيع بمنصة فاتورة -- المرحلة الثانية (Integration Phase)",
+      "addDevice": "إضافة جهاز جديد",
+      "infoBanner": "توليد الجهاز وطلب التوقيع (CSR) لا يحتاج أي اتصال بمنصة فاتورة. خطوة \"الربط عبر OTP\" وحدها تحتاج رمز تحقق حقيقياً من حساب المنشأة على بوابة فاتورة (Fatoora) -- بعدها تُشغَّل فحوصات التوافق ثم يُصدر جهازك شهادة الإنتاج، ومن تلك اللحظة تُوقَّع كل عملية بيع تلقائياً ويمكن إبلاغها للهيئة من تفاصيل الفاتورة.",
+      "loading": "جارٍ تحميل إعدادات الفوترة الإلكترونية...",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض إعدادات الفوترة الإلكترونية.",
+        "generic": "تعذر تحميل الأجهزة."
+      },
+      "retry": "إعادة المحاولة",
+      "empty": {
+        "title": "لا يوجد جهاز مسجّل بعد",
+        "description": "أضف جهازاً لتوليد طلب توقيع (CSR) وبدء الربط مع منصة فاتورة."
+      },
+      "statuses": {
+        "draft": "بانتظار الربط (OTP)",
+        "compliance": "التوافق (Compliance)",
+        "production": "مُفعَّل للإنتاج"
+      },
+      "environments": {
+        "sandbox": "بيئة تجريبية (Sandbox)",
+        "simulation": "بيئة محاكاة (Simulation)",
+        "production": "بيئة الإنتاج (Production)"
+      },
+      "device": {
+        "createdAt": "أُنشئ {date} -- آخر عداد ICV: {icv}",
+        "csrLabel": "طلب التوقيع (CSR)",
+        "copy": "نسخ",
+        "copied": "تم النسخ",
+        "otpLabel": "رمز التحقق (OTP) من بوابة فاتورة",
+        "otpPlaceholder": "أدخل رمز OTP",
+        "submitOtp": "الربط عبر OTP",
+        "runComplianceChecks": "تشغيل فحوصات التوافق (Compliance Checks)",
+        "getProductionCert": "الحصول على شهادة الإنتاج",
+        "productionBanner": "الجهاز مفعَّل -- تُوقَّع كل عملية بيع جديدة تلقائياً ويمكن إبلاغها للهيئة من تفاصيل الفاتورة."
+      },
+      "validation": {
+        "deviceNameRequired": "أدخل اسماً لهذا الجهاز.",
+        "vatNumberInvalid": "الرقم الضريبي يجب أن يتكون من 15 رقماً.",
+        "organizationNameRequired": "أدخل اسم المنشأة المسجّل.",
+        "organizationUnitRequired": "أدخل اسم مساحة العمل أو الوحدة.",
+        "locationRequired": "أدخل عنوان الجهاز/مساحة العمل.",
+        "industryRequired": "أدخل النشاط التجاري.",
+        "currentOrganizationRequired": "تعذر تحديد المنشأة الحالية."
+      },
+      "toasts": {
+        "forbiddenManage": "لا تملك صلاحية إدارة الفوترة الإلكترونية.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
+        "wrongStatus": "حالة الجهاز الحالية لا تسمح بهذا الإجراء.",
+        "createFailed": "تعذر إنشاء الجهاز.",
+        "created": "تم إنشاء الجهاز وتوليد طلب التوقيع (CSR).",
+        "csrCopied": "تم نسخ طلب التوقيع (CSR).",
+        "otpRequired": "أدخل رمز التحقق (OTP) من بوابة فاتورة.",
+        "otpSuccess": "تم الربط بنجاح -- تم الحصول على شهادة التوافق (Compliance CSID).",
+        "otpFailed": "تعذر التحقق من رمز OTP. تأكد من صحته وحاول مجدداً.",
+        "complianceChecksRun": "تم تشغيل فحوصات التوافق.",
+        "complianceChecksFailed": "تعذر تشغيل فحوصات التوافق.",
+        "productionActivated": "تم تفعيل الجهاز للإنتاج -- ستُوقَّع الفواتير القادمة تلقائياً.",
+        "productionFailed": "تعذر الحصول على شهادة الإنتاج."
+      },
+      "dialog": {
+        "title": "إضافة جهاز جديد",
+        "deviceNameLabel": "اسم الجهاز *",
+        "deviceNamePlaceholder": "مثال: نقطة بيع -- المساحة الرئيسية",
+        "environmentLabel": "البيئة *",
+        "vatNumberLabel": "الرقم الضريبي (15 رقماً) *",
+        "vatNumberPlaceholder": "3XXXXXXXXXXXXX3",
+        "organizationNameLabel": "اسم المنشأة المسجّل *",
+        "organizationUnitLabel": "مساحة العمل / الوحدة *",
+        "organizationUnitPlaceholder": "مثال: المساحة الرئيسية",
+        "locationLabel": "عنوان الجهاز/مساحة العمل *",
+        "industryLabel": "النشاط التجاري *",
+        "industryPlaceholder": "مثال: تجزئة، مطاعم",
+        "cancel": "إلغاء",
+        "create": "إنشاء الجهاز",
+        "creating": "جارٍ الإنشاء..."
+      }
+    },
+    "taxes": {
+      "title": "الضرائب",
+      "subtitle": "إدارة معدلات الضرائب وإعدادات ضريبة القيمة المضافة",
+      "addTax": "إضافة ضريبة",
+      "loading": "جارٍ تحميل إعدادات الضرائب...",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض إعدادات الضرائب.",
+        "generic": "تعذر تحميل معدلات الضرائب."
+      },
+      "retry": "إعادة المحاولة",
+      "types": {
+        "sales_tax": "ضريبة مبيعات",
+        "exempt": "معفاة",
+        "zero_rate": "نسبة صفرية",
+        "custom": "مخصصة"
+      },
+      "stats": {
+        "activeTaxes": "الضرائب النشطة",
+        "activeCountOf": "{active} من أصل {total}",
+        "defaultRate": "معدل الضريبة الافتراضي",
+        "totalTaxes": "إجمالي الضرائب المسجّلة"
+      },
+      "table": {
+        "columns": {
+          "name": "اسم الضريبة",
+          "type": "النوع",
+          "rate": "النسبة",
+          "status": "الحالة",
+          "updated": "آخر تحديث",
+          "actions": "الإجراءات"
+        },
+        "defaultBadge": "افتراضية",
+        "active": "نشطة",
+        "inactive": "متوقفة",
+        "editAria": "تعديل",
+        "deleteAria": "حذف"
+      },
+      "invoiceSettings": {
+        "sectionTitle": "إعدادات الفاتورة الضريبية",
+        "autoApply": {
+          "title": "تطبيق الضريبة تلقائياً على المنتجات",
+          "description": "عند الإيقاف، تُحتسب المبيعات بدون ضريبة (٪٠) بغض النظر عن المعدل الافتراضي."
+        },
+        "priceConvention": {
+          "title": "الأسعار تشمل الضريبة",
+          "description": "يحدد هذا الإعداد كيف تُقرأ أسعار المنتجات: شاملة للضريبة، غير شاملة، أو حسب اختيار يدوي لكل منتج. اختيار وضع شامل/غير شامل مختلف يسألك بعد ذلك أين يُطبَّق.",
+          "options": {
+            "inclusive": "شامل الضريبة",
+            "exclusive": "غير شامل",
+            "manual": "يدوي لكل منتج"
+          }
+        }
+      },
+      "infoBanner": "معدل ضريبة القيمة المضافة الأساسي في المملكة العربية السعودية هو 15%. تأكد من التوافق مع الأنظمة واللوائح الضريبية المعمول بها.",
+      "categories": {
+        "sectionTitle": "تصنيفات الضريبة",
+        "countSuffix": "{count} ضريبة"
+      },
+      "dialog": {
+        "addTitle": "إضافة ضريبة",
+        "editTitle": "تعديل الضريبة",
+        "save": "حفظ",
+        "saveChanges": "حفظ التغييرات",
+        "nameLabel": "اسم الضريبة *",
+        "namePlaceholder": "مثال: ضريبة القيمة المضافة",
+        "typeLabel": "نوع الضريبة *",
+        "rateLabel": "نسبة الضريبة *",
+        "ratePlaceholder": "أدخل نسبة الضريبة",
+        "setDefault": "اجعلها الضريبة الافتراضية",
+        "activate": "تفعيل الضريبة",
+        "activateHint": "يمكنك إيقاف الضريبة مؤقتاً دون حذفها",
+        "saving": "جارٍ الحفظ...",
+        "cancel": "إلغاء"
+      },
+      "deleteDialog": {
+        "title": "حذف الضريبة؟",
+        "description": "سيتم حذف <b>{name}</b> من معدلات الضرائب.",
+        "confirm": "حذف",
+        "cancel": "إلغاء"
+      },
+      "conventionDialog": {
+        "enableTitle": "تفعيل: الأسعار تشمل الضريبة",
+        "disableTitle": "إيقاف: الأسعار تشمل الضريبة",
+        "enableDescription": "سيُعتبر السعر المعروض لكل منتج شاملاً للضريبة من الآن فصاعداً بدلاً من إضافة الضريبة عليه عند البيع.",
+        "disableDescription": "سيُعتبر السعر المعروض لكل منتج غير شامل للضريبة من الآن فصاعداً، وتُضاف الضريبة عليه عند البيع.",
+        "allProducts": {
+          "title": "جميع المنتجات الحالية",
+          "applying": "جارٍ تعديل أسعار المنتجات...",
+          "enableHint": "يُعدَّل السعر المخزّن لكل منتج تلقائياً بحيث يبقى المبلغ الذي يدفعه العميل كما هو دون تغيير.",
+          "disableHint": "يُعدَّل السعر المخزّن لكل منتج تلقائياً بإزالة الضريبة منه، دون أن يتغيّر المبلغ الذي يدفعه العميل عند البيع."
+        },
+        "newOnly": {
+          "title": "المنتجات الجديدة فقط",
+          "applying": "جارٍ حفظ الإعداد...",
+          "hint": "المنتجات الحالية تبقى بأسعارها وطريقة احتسابها كما هي؛ يُطبَّق الإعداد الجديد على أي منتج يُضاف من الآن فقط."
+        },
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "added": "تمت إضافة الضريبة.",
+        "addFailed": "تعذر إضافة الضريبة.",
+        "saved": "تم حفظ الضريبة.",
+        "saveFailed": "تعذر حفظ الضريبة.",
+        "statusChangeFailed": "تعذر تغيير حالة الضريبة. الضريبة الافتراضية لا يمكن إيقافها.",
+        "deleted": "تم حذف الضريبة.",
+        "deleteFailedInUse": "لا يمكن حذف هذه الضريبة -- منتج واحد أو أكثر لا يزال مرتبطاً بها. غيّر ضريبة تلك المنتجات أولاً.",
+        "deleteFailedGeneric": "تعذر حذف الضريبة. اجعل ضريبة أخرى هي الافتراضية أولاً.",
+        "settingSaveFailed": "تعذر حفظ الإعداد.",
+        "conventionNewOnlySaved": "تم حفظ الإعداد -- سيُطبَّق على المنتجات الجديدة فقط.",
+        "conventionAllUpdated": "تم تحديث سعر {count} منتج والإعداد الجديد.",
+        "conventionAllSavedNoProducts": "تم حفظ الإعداد الجديد.",
+        "conventionApplyFailed": "تعذر تطبيق التغيير على المنتجات.",
+        "conventionManualSaved": "تم الحفظ -- سيتم اختيار شمول الضريبة لكل منتج عند إضافته.",
+        "forbiddenManage": "لا تملك صلاحية إدارة الضرائب.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية tax:manage."
+      },
+      "validation": {
+        "nameRequired": "أدخل اسم الضريبة.",
+        "rateInvalid": "أدخل نسبة ضريبة بين 0 و 100."
+      }
+    },
+    "payments": {
+      "title": "طرق الدفع",
+      "subtitle": "إدارة طرق الدفع المتاحة في نقطة البيع",
+      "addMethod": "إضافة طريقة دفع",
+      "loading": "جارٍ تحميل طرق الدفع...",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض طرق الدفع.",
+        "generic": "تعذر تحميل طرق الدفع. حاول مرة أخرى."
+      },
+      "retry": "إعادة المحاولة",
+      "kinds": {
+        "cash": "نقدي",
+        "card": "بطاقة",
+        "wallet": "محفظة رقمية",
+        "transfer": "تحويل بنكي",
+        "bnpl": "دفع لاحق",
+        "credit": "آجل على حساب العميل",
+        "prepaid": "محفظة العميل المسبقة"
+      },
+      "table": {
+        "columns": {
+          "method": "طريقة الدفع",
+          "status": "الحالة",
+          "settings": "الإعدادات",
+          "fee": "رسوم المعاملة",
+          "actions": "الإجراءات"
+        },
+        "settingsButton": "إعدادات",
+        "unconfirmed": "غير مؤكدة"
+      },
+      "notes": {
+        "title": "معلومات مهمة",
+        "items": [
+          "يمكنك تفعيل أو إيقاف أي طريقة دفع حسب احتياجات فرعك.",
+          "قد تختلف رسوم المعاملة حسب اتفاقك مع مزود الخدمة.",
+          "تأكد من ضبط إعدادات الأجهزة لربط أجهزة الدفع (مثل أجهزة مدى)."
+        ]
+      },
+      "editDialog": {
+        "title": "إعدادات {name}",
+        "descriptionCustom": "طريقة الدفع الخاصة بفرعك -- يمكنك تعديل بياناتها بالكامل",
+        "descriptionBuiltIn": "رسوم المعاملة وبيانات الربط التي يخصمها مزود الخدمة من كل عملية",
+        "nameLabel": "اسم طريقة الدفع",
+        "subtitleLabel": "الوصف (اختياري)",
+        "subtitleAriaLabel": "وصف طريقة الدفع",
+        "statusLabel": "الحالة",
+        "enabled": "مفعل",
+        "disabled": "معطل",
+        "feeLabel": "رسوم المعاملة (%)",
+        "feeAriaLabel": "رسوم المعاملة",
+        "feeHint": "اتركها 0 إذا لم يكن هناك رسوم على هذه الطريقة",
+        "merchantIdLabel": "رقم الحساب التجاري (Merchant ID)",
+        "merchantIdAriaLabel": "رقم الحساب التجاري",
+        "apiKeyLabel": "مفتاح API (اختياري)",
+        "apiKeyAriaLabel": "مفتاح API",
+        "showApiKey": "إظهار مفتاح API",
+        "hideApiKey": "إخفاء مفتاح API",
+        "save": "حفظ",
+        "cancel": "إلغاء"
+      },
+      "createDialog": {
+        "title": "إضافة طريقة دفع جديدة",
+        "description": "اختر طريقة الدفع وقم بإعداد البيانات المطلوبة",
+        "infoSectionTitle": "معلومات طريقة الدفع",
+        "nameLabel": "اسم طريقة الدفع",
+        "namePlaceholder": "مثال: مدى",
+        "nameHint": "سيظهر هذا الاسم في شاشة الدفع",
+        "subtitleLabel": "الوصف (اختياري)",
+        "subtitleAriaLabel": "وصف طريقة الدفع",
+        "subtitlePlaceholder": "مثال: الدفع باستخدام بطاقات مدى البنكية",
+        "statusLabel": "الحالة",
+        "statusHint": "سيتم إظهار هذه الطريقة في شاشة الدفع",
+        "feeLabel": "رسوم المعاملة (%)",
+        "feeAriaLabel": "رسوم المعاملة للطريقة الجديدة",
+        "feeHint": "نسبة الرسوم التي تضاف على كل عملية دفع",
+        "additionalSectionTitle": "إعدادات إضافية",
+        "merchantIdLabel": "رقم الحساب التجاري (Merchant ID)",
+        "merchantIdAriaLabel": "رقم الحساب التجاري",
+        "merchantIdPlaceholder": "12345678",
+        "merchantIdHint": "يمكنك الحصول على رقم الحساب من مزود الخدمة",
+        "apiKeyLabel": "مفتاح API (اختياري)",
+        "apiKeyAriaLabel": "مفتاح API",
+        "apiKeyHint": "يستخدم للربط مع مزود الخدمة",
+        "notesTitle": "ملاحظات مهمة",
+        "notes": [
+          "تأكد من صحة بيانات الربط قبل التفعيل.",
+          "قد تختلف رسوم المعاملة حسب مزود الخدمة.",
+          "يمكنك تعديل الإعدادات لاحقاً من صفحة طرق الدفع."
+        ],
+        "submit": "إضافة طريقة الدفع",
+        "cancel": "إلغاء"
+      },
+      "presets": {
+        "cash": {
+          "label": "دفع نقدي",
+          "tileSubtitle": "المدفوعات النقدية",
+          "name": "نقدي",
+          "description": "الدفع النقدي عند الاستلام"
+        },
+        "transfer": {
+          "label": "تحويل بنكي",
+          "tileSubtitle": "تحويل مباشر",
+          "name": "تحويل بنكي",
+          "description": "الدفع عبر التحويل البنكي المباشر"
+        },
+        "mada": {
+          "label": "مدى",
+          "tileSubtitle": "بطاقات مدى",
+          "name": "مدى",
+          "description": "الدفع باستخدام بطاقات مدى البنكية"
+        },
+        "stc_pay": {
+          "label": "STC Pay",
+          "tileSubtitle": "الدفع عبر STC Pay",
+          "name": "STC Pay",
+          "description": "الدفع عبر تطبيق STC Pay"
+        },
+        "apple_pay": {
+          "label": "Apple Pay",
+          "tileSubtitle": "الدفع عبر آبل باي",
+          "name": "Apple Pay",
+          "description": "الدفع عبر Apple Pay"
+        },
+        "card": {
+          "label": "بطاقة بنكية",
+          "tileSubtitle": "مدى، فيزا، ماستركارد"
+        }
+      },
+      "deleteDialog": {
+        "title": "حذف طريقة الدفع؟",
+        "description": "سيتم حذف <b>{name}</b> من طرق الدفع المتاحة في نقطة البيع.",
+        "confirm": "حذف",
+        "cancel": "إلغاء"
+      },
+      "rowActions": {
+        "ariaLabel": "إجراءات {name}",
+        "editFee": "تعديل الرسوم",
+        "delete": "حذف الطريقة",
+        "builtInDeleteTitle": "الطرق المدمجة تُوقف بدل حذفها"
+      },
+      "toasts": {
+        "statusChangeFailed": "تعذر تغيير حالة طريقة الدفع.",
+        "settingsSaveFailed": "تعذر حفظ الإعدادات.",
+        "settingsSaved": "تم حفظ إعدادات طريقة الدفع.",
+        "methodAdded": "تمت إضافة طريقة الدفع.",
+        "methodAddFailed": "تعذر إضافة طريقة الدفع.",
+        "duplicateName": "طريقة بهذا الاسم موجودة بالفعل.",
+        "duplicateNameDescription": "جرّب اسماً مختلفاً.",
+        "deleted": "تم حذف طريقة الدفع.",
+        "deleteFailed": "تعذر حذف طريقة الدفع.",
+        "forbiddenEdit": "لا تملك صلاحية تعديل طرق الدفع.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage."
+      },
+      "validation": {
+        "feeInvalid": "أدخل نسبة رسوم بين 0 و 100.",
+        "nameRequired": "أدخل اسم طريقة الدفع."
+      }
+    },
+    "workspaces": {
+      "title": "مساحات العمل",
+      "subtitle": "إدارة مساحات عمل المؤسسة -- تُستخدم أيضاً في إعدادات الأجهزة وطرق الدفع الخاصة بكل مساحة.",
+      "addWorkspace": "إضافة مساحة عمل",
+      "stats": {
+        "total": "إجمالي مساحات العمل",
+        "active": "مساحات العمل النشطة",
+        "archived": "مساحات العمل المتوقفة",
+        "cities": "المدن"
+      },
+      "search": {
+        "placeholder": "البحث في مساحات العمل بالاسم أو العنوان..."
+      },
+      "table": {
+        "columns": {
+          "name": "اسم مساحة العمل",
+          "city": "المدينة",
+          "address": "العنوان",
+          "posCount": "عدد نقاط البيع",
+          "status": "الحالة",
+          "createdAt": "تاريخ الإنشاء",
+          "actions": "الإجراءات"
+        },
+        "empty": {
+          "noneTitle": "لا توجد مساحات عمل بعد",
+          "noneDescription": "ابدأ بإضافة أول مساحة عمل لمؤسستك.",
+          "noMatchTitle": "لا توجد مساحات عمل مطابقة لهذا البحث",
+          "noMatchDescription": "جرّب تعديل البحث أو التصفية."
+        },
+        "showingCount": "عرض {filtered} من {total} مساحة عمل",
+        "rowActions": {
+          "ariaLabel": "إجراءات مساحة العمل",
+          "edit": "تعديل",
+          "deactivate": "إيقاف مساحة العمل",
+          "activate": "تنشيط مساحة العمل"
+        }
+      },
+      "statuses": {
+        "active": "نشط",
+        "archived": "متوقف"
+      },
+      "filters": {
+        "title": "تصفية مساحات العمل",
+        "cityLabel": "المدينة",
+        "allCities": "جميع المدن",
+        "statusLabel": "الحالة",
+        "allStatuses": "جميع الحالات",
+        "reset": "إعادة تعيين"
+      },
+      "infoNote": {
+        "title": "معلومة",
+        "description": "كل مساحة عمل تنشئها هنا مستقلة بإعداداتها -- يمكنك ضبط أجهزتها وطرق الدفع الخاصة بها من نفس رواق الإعدادات."
+      },
+      "form": {
+        "backToList": "العودة إلى مساحات العمل",
+        "basicInfo": {
+          "sectionTitle": "المعلومات الأساسية",
+          "sectionSubtitle": "معلومات مساحة العمل الأساسية التي ستظهر في النظام",
+          "nameLabel": "اسم مساحة العمل",
+          "namePlaceholder": "مثال: مساحة عمل السلام",
+          "cityLabel": "المدينة",
+          "cityPlaceholder": "اختر المدينة",
+          "addressLabel": "العنوان",
+          "addressPlaceholder": "أدخل العنوان التفصيلي لمساحة العمل",
+          "districtLabel": "الحي / المنطقة",
+          "districtPlaceholder": "مثال: حي النخيل",
+          "codeLabel": "رمز مساحة العمل",
+          "codePlaceholder": "مثال: BR-001",
+          "codeHint": "رمز فريد يستخدم للتعريف بمساحة العمل في النظام.",
+          "phoneLabel": "رقم الجوال",
+          "phonePlaceholder": "5X XXX XXXX"
+        },
+        "additionalInfo": {
+          "sectionTitle": "معلومات إضافية",
+          "sectionSubtitle": "معلومات اختيارية تساعد في إدارة مساحة العمل.",
+          "managerLabel": "مدير مساحة العمل",
+          "managerPlaceholder": "اختر الموظف",
+          "managerNone": "بدون",
+          "noEmployees": "لا يوجد موظفو نقطة بيع مسجلون بعد",
+          "emailLabel": "البريد الإلكتروني",
+          "currencyLabel": "العملة الافتراضية",
+          "timezoneLabel": "المنطقة الزمنية"
+        },
+        "employees": {
+          "sectionTitle": "الموظفون المصرح لهم",
+          "sectionSubtitle": "حدد الموظفين الذين يمكنهم الوصول إلى مساحة العمل هذه وأجهزتها.",
+          "none": "لا يوجد موظفون مسجلون بعد.",
+          "alreadyHasAccess": "لديه وصول بالفعل",
+          "hint": "منح الوصول هنا دائم ولا يمكن التراجع عنه من هذه الصفحة حالياً."
+        },
+        "status": {
+          "sectionTitle": "حالة مساحة العمل",
+          "sectionSubtitle": "حدد حالة مساحة العمل والصلاحيات.",
+          "activateLabel": "تفعيل مساحة العمل",
+          "activateDescription": "ستكون مساحة العمل متاحة للبيع والاستخدام في النظام",
+          "openedAtLabel": "تاريخ الافتتاح",
+          "openedAtAriaLabel": "تاريخ افتتاح مساحة العمل"
+        },
+        "cancel": "إلغاء",
+        "saveChanges": "حفظ التغييرات",
+        "saveNew": "حفظ مساحة العمل",
+        "sidebar": {
+          "editTitle": "تعديل بيانات مساحة العمل",
+          "addTitle": "إضافة مساحة عمل جديدة",
+          "description": "قم بإضافة معلومات مساحة العمل وربطها بالنظام لتمكين البيع وإدارة المخزون والموظفين."
+        },
+        "tips": {
+          "title": "نصائح مهمة",
+          "items": [
+            "تأكد من صحة بيانات العنوان ورقم الجوال.",
+            "بإمكانك إضافة أكثر من مساحة عمل لنفس المتجر.",
+            "بعد إنشاء مساحة العمل بإمكانك ربطها بأجهزة نقاط البيع والموظفين.",
+            "ستكون مساحة العمل متاحة مباشرة بعد التفعيل."
+          ]
+        }
+      },
+      "toasts": {
+        "nameRequired": "اسم مساحة العمل مطلوب.",
+        "updated": "تم تحديث بيانات مساحة العمل.",
+        "created": "تم إضافة مساحة العمل.",
+        "accessPartialFailure": "تم حفظ مساحة العمل، لكن تعذر منح الوصول لبعض المستخدمين.",
+        "saveFailed": "تعذر حفظ بيانات مساحة العمل.",
+        "deactivated": "تم إيقاف {name}.",
+        "activated": "تم تنشيط {name}.",
+        "statusUpdateFailed": "تعذر تحديث حالة مساحة العمل."
+      }
     }
   }
 }

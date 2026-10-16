@@ -7,9 +7,11 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { CheckCircle2, Info, Loader2, Pencil, Percent, Plus, RotateCcw, Trash2 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/features/workspace"
 import {
@@ -46,11 +48,10 @@ const MUTED = "text-[#667085]"
 const FIELD_CLASS =
   "h-11 rounded-[12px] border-[#E8EBF0] bg-white text-[13px] text-[#0b1738] placeholder:text-[#98A2B3]"
 
-const TYPE_LABEL: Record<TaxRateType, string> = {
-  sales_tax: "ضريبة مبيعات",
-  exempt: "معفاة",
-  zero_rate: "نسبة صفرية",
-  custom: "مخصصة",
+type TaxesTranslator = ReturnType<typeof useTranslations<"settings.taxes">>
+
+function taxTypeLabel(type: TaxRateType, t: TaxesTranslator): string {
+  return t(`types.${type}` as "types.sales_tax")
 }
 const TYPE_OPTIONS: TaxRateType[] = ["sales_tax", "custom", "zero_rate", "exempt"]
 const TYPE_TINT: Record<TaxRateType, string> = {
@@ -60,13 +61,15 @@ const TYPE_TINT: Record<TaxRateType, string> = {
   exempt: "bg-[#eef2f8] text-[#5b6b85]",
 }
 
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-})
+function dateFormatter(locale: Locale): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
 
 interface Draft {
   name: string
@@ -94,6 +97,8 @@ function buildDraft(rate: TaxRate | null): Draft {
 }
 
 export default function TaxesSettings() {
+  const t = useTranslations("settings.taxes")
+  const locale = useLocale() as Locale
   const { currentOrganization, updateOrganization } = useWorkspace()
 
   const [rates, setRates] = useState<TaxRate[]>([])
@@ -126,13 +131,11 @@ export default function TaxesSettings() {
       setRates(await taxRatesService.list())
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      setLoadError(
-        status === 403 ? "لا تملك صلاحية عرض إعدادات الضرائب." : "تعذر تحميل معدلات الضرائب."
-      )
+      setLoadError(status === 403 ? t("loadError.forbidden") : t("loadError.generic"))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void load()
@@ -140,19 +143,19 @@ export default function TaxesSettings() {
 
   const failed = (error: unknown, fallback: string) => {
     const status = error instanceof AppError ? error.status : undefined
-    toast.error(status === 403 ? "لا تملك صلاحية إدارة الضرائب." : fallback, {
-      description: status === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية tax:manage." : undefined,
+    toast.error(status === 403 ? t("toasts.forbiddenManage") : fallback, {
+      description: status === 403 ? t("toasts.forbiddenDescription") : undefined,
     })
   }
 
   const validateDraft = (value: Draft): number | null => {
     if (!value.name.trim()) {
-      toast.error("أدخل اسم الضريبة.")
+      toast.error(t("validation.nameRequired"))
       return null
     }
     const parsed = Number(value.ratePercent)
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      toast.error("أدخل نسبة ضريبة بين 0 و 100.")
+      toast.error(t("validation.rateInvalid"))
       return null
     }
     return parsed
@@ -172,12 +175,12 @@ export default function TaxesSettings() {
         isActive: draft.isActive,
       }
       await taxRatesService.create(input)
-      toast.success("تمت إضافة الضريبة.")
+      toast.success(t("toasts.added"))
       setCreating(false)
       setDraft(EMPTY_DRAFT)
       await load()
     } catch (error) {
-      failed(error, "تعذر إضافة الضريبة.")
+      failed(error, t("toasts.addFailed"))
     } finally {
       setBusyId(null)
     }
@@ -197,11 +200,11 @@ export default function TaxesSettings() {
         isDefault: draft.isDefault,
         isActive: draft.isActive,
       })
-      toast.success("تم حفظ الضريبة.")
+      toast.success(t("toasts.saved"))
       setEditing(null)
       await load()
     } catch (error) {
-      failed(error, "تعذر حفظ الضريبة.")
+      failed(error, t("toasts.saveFailed"))
     } finally {
       setBusyId(null)
     }
@@ -213,7 +216,7 @@ export default function TaxesSettings() {
       await taxRatesService.update(rate.id, { isActive: !rate.isActive })
       await load()
     } catch (error) {
-      failed(error, "تعذر تغيير حالة الضريبة. الضريبة الافتراضية لا يمكن إيقافها.")
+      failed(error, t("toasts.statusChangeFailed"))
     } finally {
       setBusyId(null)
     }
@@ -224,16 +227,14 @@ export default function TaxesSettings() {
     setBusyId(pendingDelete.id)
     try {
       await taxRatesService.remove(pendingDelete.id)
-      toast.success("تم حذف الضريبة.")
+      toast.success(t("toasts.deleted"))
       setPendingDelete(null)
       await load()
     } catch (error) {
       const code = error instanceof AppError ? error.code : undefined
       failed(
         error,
-        code === "TAX_RATE_IN_USE"
-          ? "لا يمكن حذف هذه الضريبة -- منتج واحد أو أكثر لا يزال مرتبطاً بها. غيّر ضريبة تلك المنتجات أولاً."
-          : "تعذر حذف الضريبة. اجعل ضريبة أخرى هي الافتراضية أولاً."
+        code === "TAX_RATE_IN_USE" ? t("toasts.deleteFailedInUse") : t("toasts.deleteFailedGeneric")
       )
     } finally {
       setBusyId(null)
@@ -250,7 +251,7 @@ export default function TaxesSettings() {
       await updateOrganization(currentOrganization.id, { settings: { [key]: value } })
     } catch {
       revert()
-      toast.error("تعذر حفظ الإعداد.")
+      toast.error(t("toasts.settingSaveFailed"))
     }
   }
 
@@ -275,10 +276,10 @@ export default function TaxesSettings() {
       })
       setPricesIncludeTax(next)
       setTaxPriceEntryMode("auto")
-      toast.success("تم حفظ الإعداد -- سيُطبَّق على المنتجات الجديدة فقط.")
+      toast.success(t("toasts.conventionNewOnlySaved"))
       setPendingConvention(null)
     } catch {
-      toast.error("تعذر حفظ الإعداد.")
+      toast.error(t("toasts.settingSaveFailed"))
     } finally {
       setApplyingConvention(null)
     }
@@ -301,12 +302,12 @@ export default function TaxesSettings() {
       setTaxPriceEntryMode("auto")
       toast.success(
         result.updated > 0
-          ? `تم تحديث سعر ${result.updated} منتج والإعداد الجديد.`
-          : "تم حفظ الإعداد الجديد."
+          ? t("toasts.conventionAllUpdated", { count: result.updated })
+          : t("toasts.conventionAllSavedNoProducts")
       )
       setPendingConvention(null)
     } catch {
-      toast.error("تعذر تطبيق التغيير على المنتجات.")
+      toast.error(t("toasts.conventionApplyFailed"))
     } finally {
       setApplyingConvention(null)
     }
@@ -324,10 +325,10 @@ export default function TaxesSettings() {
         settings: { taxPriceEntryMode: "manual" },
       })
       setTaxPriceEntryMode("manual")
-      toast.success("تم الحفظ -- سيتم اختيار شمول الضريبة لكل منتج عند إضافته.")
+      toast.success(t("toasts.conventionManualSaved"))
       setPendingConvention(null)
     } catch {
-      toast.error("تعذر حفظ الإعداد.")
+      toast.error(t("toasts.settingSaveFailed"))
     } finally {
       setApplyingConvention(null)
     }
@@ -337,7 +338,7 @@ export default function TaxesSettings() {
     return (
       <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل إعدادات الضرائب...
+        {t("loading")}
       </div>
     )
   }
@@ -348,7 +349,7 @@ export default function TaxesSettings() {
         <p className={cn("text-[13px]", HEADING)}>{loadError}</p>
         <Button variant="outline" onClick={() => void load()}>
           <RotateCcw className="size-4" />
-          إعادة المحاولة
+          {t("retry")}
         </Button>
       </div>
     )
@@ -362,13 +363,11 @@ export default function TaxesSettings() {
   })).filter((group) => group.rates.length > 0)
 
   return (
-    <div className="flex flex-col gap-5" dir="rtl">
+    <div className="flex flex-col gap-5" dir={localeDirection(locale)}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الضرائب</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            إدارة معدلات الضرائب وإعدادات ضريبة القيمة المضافة
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
 
         <Button
@@ -379,7 +378,7 @@ export default function TaxesSettings() {
           }}
         >
           <Plus className="size-4" />
-          إضافة ضريبة
+          {t("addTax")}
         </Button>
       </div>
 
@@ -389,9 +388,9 @@ export default function TaxesSettings() {
             <CheckCircle2 className="size-5" />
           </span>
           <div className="min-w-0">
-            <p className={cn("text-[12px]", MUTED)}>الضرائب النشطة</p>
+            <p className={cn("text-[12px]", MUTED)}>{t("stats.activeTaxes")}</p>
             <p className={cn("text-[18px] font-extrabold", HEADING)}>
-              {activeCount} من أصل {rates.length}
+              {t("stats.activeCountOf", { active: activeCount, total: rates.length })}
             </p>
           </div>
         </div>
@@ -400,7 +399,7 @@ export default function TaxesSettings() {
             <Percent className="size-5" />
           </span>
           <div className="min-w-0">
-            <p className={cn("text-[12px]", MUTED)}>معدل الضريبة الافتراضي</p>
+            <p className={cn("text-[12px]", MUTED)}>{t("stats.defaultRate")}</p>
             <p className={cn("text-[18px] font-extrabold", HEADING)}>
               {defaultRate ? `${defaultRate.ratePercent}%` : "—"}
             </p>
@@ -411,7 +410,7 @@ export default function TaxesSettings() {
             <Info className="size-5" />
           </span>
           <div className="min-w-0">
-            <p className={cn("text-[12px]", MUTED)}>إجمالي الضرائب المسجّلة</p>
+            <p className={cn("text-[12px]", MUTED)}>{t("stats.totalTaxes")}</p>
             <p className={cn("text-[18px] font-extrabold", HEADING)}>{rates.length}</p>
           </div>
         </div>
@@ -424,12 +423,12 @@ export default function TaxesSettings() {
               <thead>
                 <tr className="bg-[#f1f5fc]">
                   {[
-                    { key: "name", label: "اسم الضريبة", align: "text-right" },
-                    { key: "type", label: "النوع", align: "text-center" },
-                    { key: "rate", label: "النسبة", align: "text-center" },
-                    { key: "status", label: "الحالة", align: "text-center" },
-                    { key: "updated", label: "آخر تحديث", align: "text-center" },
-                    { key: "actions", label: "الإجراءات", align: "text-center" },
+                    { key: "name", label: t("table.columns.name"), align: "text-right" },
+                    { key: "type", label: t("table.columns.type"), align: "text-center" },
+                    { key: "rate", label: t("table.columns.rate"), align: "text-center" },
+                    { key: "status", label: t("table.columns.status"), align: "text-center" },
+                    { key: "updated", label: t("table.columns.updated"), align: "text-center" },
+                    { key: "actions", label: t("table.columns.actions"), align: "text-center" },
                   ].map((column) => (
                     <th
                       key={column.key}
@@ -454,7 +453,7 @@ export default function TaxesSettings() {
                           <span className={HEADING}>{rate.name}</span>
                           {rate.isDefault ? (
                             <span className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[10.5px] font-bold text-[#2878ff]">
-                              افتراضية
+                              {t("table.defaultBadge")}
                             </span>
                           ) : null}
                         </div>
@@ -466,7 +465,7 @@ export default function TaxesSettings() {
                             TYPE_TINT[rate.type]
                           )}
                         >
-                          {TYPE_LABEL[rate.type]}
+                          {taxTypeLabel(rate.type, t)}
                         </span>
                       </td>
                       <td className={cn("px-4 py-3 font-bold", HEADING)}>{rate.ratePercent}%</td>
@@ -488,17 +487,17 @@ export default function TaxesSettings() {
                               rate.isActive ? "bg-[#1f9d55]" : "bg-[#98A2B3]"
                             )}
                           />
-                          {rate.isActive ? "نشطة" : "متوقفة"}
+                          {rate.isActive ? t("table.active") : t("table.inactive")}
                         </button>
                       </td>
                       <td className={cn("px-4 py-3 text-[12px]", MUTED)}>
-                        {DATE_FORMAT.format(new Date(rate.updatedAt))}
+                        {dateFormatter(locale).format(new Date(rate.updatedAt))}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"
-                            aria-label="تعديل"
+                            aria-label={t("table.editAria")}
                             className="flex size-8 items-center justify-center rounded-[8px] text-[#667085] transition-colors hover:bg-[#eef2f8] hover:text-[#0b1738]"
                             onClick={() => {
                               setEditing(rate)
@@ -509,7 +508,7 @@ export default function TaxesSettings() {
                           </button>
                           <button
                             type="button"
-                            aria-label="حذف"
+                            aria-label={t("table.deleteAria")}
                             disabled={rate.isDefault}
                             className="flex size-8 items-center justify-center rounded-[8px] text-[#e0484d] transition-colors hover:bg-[#fdeeee] disabled:cursor-not-allowed disabled:opacity-40"
                             onClick={() => setPendingDelete(rate)}
@@ -529,12 +528,12 @@ export default function TaxesSettings() {
         <div className="flex flex-col gap-5">
           <section className={cn(PANEL, "p-4")}>
             <h2 className={cn("mb-3 text-[14px] font-extrabold", HEADING)}>
-              إعدادات الفاتورة الضريبية
+              {t("invoiceSettings.sectionTitle")}
             </h2>
             <div className="flex flex-col divide-y divide-[#f0f3f8]">
               <ToggleRow
-                title="تطبيق الضريبة تلقائياً على المنتجات"
-                description="عند الإيقاف، تُحتسب المبيعات بدون ضريبة (٪٠) بغض النظر عن المعدل الافتراضي."
+                title={t("invoiceSettings.autoApply.title")}
+                description={t("invoiceSettings.autoApply.description")}
                 checked={autoApply}
                 onChange={(next) => {
                   const previous = autoApply
@@ -547,8 +546,12 @@ export default function TaxesSettings() {
               {/* No "show tax on invoice" toggle -- a real tax invoice is legally required to
                   show its VAT breakdown, so this can never be a merchant preference. */}
               <PriceConventionRow
-                title="الأسعار تشمل الضريبة"
-                description="يحدد هذا الإعداد كيف تُقرأ أسعار المنتجات: شاملة للضريبة، غير شاملة، أو حسب اختيار يدوي لكل منتج. اختيار وضع شامل/غير شامل مختلف يسألك بعد ذلك أين يُطبَّق."
+                title={t("invoiceSettings.priceConvention.title")}
+                description={t("invoiceSettings.priceConvention.description")}
+                options={PRICE_CONVENTION_OPTIONS.map((value) => ({
+                  value,
+                  label: t(`invoiceSettings.priceConvention.options.${value}`),
+                }))}
                 mode={
                   taxPriceEntryMode === "manual"
                     ? "manual"
@@ -568,16 +571,15 @@ export default function TaxesSettings() {
             </div>
             <div className="mt-3 flex items-start gap-2 rounded-[12px] bg-[#eef4ff] p-3">
               <Info className="mt-0.5 size-4 shrink-0 text-[#2878ff]" />
-              <p className="text-[11.5px] leading-6 text-[#2878ff]">
-                معدل ضريبة القيمة المضافة الأساسي في المملكة العربية السعودية هو 15%. تأكد من
-                التوافق مع الأنظمة واللوائح الضريبية المعمول بها.
-              </p>
+              <p className="text-[11.5px] leading-6 text-[#2878ff]">{t("infoBanner")}</p>
             </div>
           </section>
 
           {byType.length > 0 ? (
             <section className={cn(PANEL, "p-4")}>
-              <h2 className={cn("mb-3 text-[14px] font-extrabold", HEADING)}>تصنيفات الضريبة</h2>
+              <h2 className={cn("mb-3 text-[14px] font-extrabold", HEADING)}>
+                {t("categories.sectionTitle")}
+              </h2>
               <div className="grid grid-cols-2 gap-2.5">
                 {byType.map((group) => (
                   <div
@@ -593,9 +595,11 @@ export default function TaxesSettings() {
                       <Percent className="size-4" />
                     </span>
                     <p className={cn("mt-1.5 text-[12px] font-bold", HEADING)}>
-                      {TYPE_LABEL[group.type]}
+                      {taxTypeLabel(group.type, t)}
                     </p>
-                    <p className={cn("text-[11px]", MUTED)}>{group.rates.length} ضريبة</p>
+                    <p className={cn("text-[11px]", MUTED)}>
+                      {t("categories.countSuffix", { count: group.rates.length })}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -606,22 +610,30 @@ export default function TaxesSettings() {
 
       <TaxRateDialog
         open={creating}
-        title="إضافة ضريبة"
-        submitLabel="حفظ"
+        title={t("dialog.addTitle")}
+        submitLabel={t("dialog.save")}
+        savingLabel={t("dialog.saving")}
+        cancelLabel={t("dialog.cancel")}
         draft={draft}
         setDraft={setDraft}
         busy={busyId === "new"}
+        locale={locale}
+        t={t}
         onCancel={() => setCreating(false)}
         onSubmit={() => void submitCreate()}
       />
 
       <TaxRateDialog
         open={editing !== null}
-        title="تعديل الضريبة"
-        submitLabel="حفظ التغييرات"
+        title={t("dialog.editTitle")}
+        submitLabel={t("dialog.saveChanges")}
+        savingLabel={t("dialog.saving")}
+        cancelLabel={t("dialog.cancel")}
         draft={draft}
         setDraft={setDraft}
         busy={editing !== null && busyId === editing.id}
+        locale={locale}
+        t={t}
         onCancel={() => setEditing(null)}
         onSubmit={() => void submitEdit()}
       />
@@ -630,14 +642,21 @@ export default function TaxesSettings() {
         open={pendingDelete !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
       >
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              حذف الضريبة؟
+              {t("deleteDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              سيتم حذف <span className={cn("font-bold", HEADING)}>{pendingDelete?.name}</span> من
-              معدلات الضرائب.
+              {t.rich("deleteDialog.description", {
+                name: pendingDelete?.name ?? "",
+                b: (chunks) => <span className={cn("font-bold", HEADING)}>{chunks}</span>,
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -646,10 +665,10 @@ export default function TaxesSettings() {
               disabled={busyId !== null}
               onClick={() => void remove()}
             >
-              حذف
+              {t("deleteDialog.confirm")}
             </Button>
             <Button variant="outline" onClick={() => setPendingDelete(null)}>
-              إلغاء
+              {t("deleteDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -659,15 +678,22 @@ export default function TaxesSettings() {
         open={pendingConvention !== null}
         onOpenChange={(open) => !open && applyingConvention === null && setPendingConvention(null)}
       >
-        <DialogContent className="sm:max-w-[30rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[30rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              {pendingConvention ? "تفعيل: الأسعار تشمل الضريبة" : "إيقاف: الأسعار تشمل الضريبة"}
+              {pendingConvention
+                ? t("conventionDialog.enableTitle")
+                : t("conventionDialog.disableTitle")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
               {pendingConvention
-                ? "سيُعتبر السعر المعروض لكل منتج شاملاً للضريبة من الآن فصاعداً بدلاً من إضافة الضريبة عليه عند البيع."
-                : "سيُعتبر السعر المعروض لكل منتج غير شامل للضريبة من الآن فصاعداً، وتُضاف الضريبة عليه عند البيع."}
+                ? t("conventionDialog.enableDescription")
+                : t("conventionDialog.disableDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -680,13 +706,15 @@ export default function TaxesSettings() {
               }
               className="flex flex-col items-start gap-1 rounded-[12px] border border-[#2878ff] bg-[#eef4ff] p-3.5 text-right transition-colors hover:bg-[#e3edff] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span className={cn("text-[13px] font-bold", HEADING)}>جميع المنتجات الحالية</span>
+              <span className={cn("text-[13px] font-bold", HEADING)}>
+                {t("conventionDialog.allProducts.title")}
+              </span>
               <span className="text-[11.5px] leading-5 text-[#2878ff]">
                 {applyingConvention === "all"
-                  ? "جارٍ تعديل أسعار المنتجات..."
+                  ? t("conventionDialog.allProducts.applying")
                   : pendingConvention
-                    ? "يُعدَّل السعر المخزّن لكل منتج تلقائياً بحيث يبقى المبلغ الذي يدفعه العميل كما هو دون تغيير."
-                    : "يُعدَّل السعر المخزّن لكل منتج تلقائياً بإزالة الضريبة منه، دون أن يتغيّر المبلغ الذي يدفعه العميل عند البيع."}
+                    ? t("conventionDialog.allProducts.enableHint")
+                    : t("conventionDialog.allProducts.disableHint")}
               </span>
             </button>
 
@@ -698,11 +726,13 @@ export default function TaxesSettings() {
               }
               className="flex flex-col items-start gap-1 rounded-[12px] border border-[#E8EBF0] bg-white p-3.5 text-right transition-colors hover:bg-[#f7f9fc] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span className={cn("text-[13px] font-bold", HEADING)}>المنتجات الجديدة فقط</span>
+              <span className={cn("text-[13px] font-bold", HEADING)}>
+                {t("conventionDialog.newOnly.title")}
+              </span>
               <span className={cn("text-[11.5px] leading-5", MUTED)}>
                 {applyingConvention === "new"
-                  ? "جارٍ حفظ الإعداد..."
-                  : "المنتجات الحالية تبقى بأسعارها وطريقة احتسابها كما هي؛ يُطبَّق الإعداد الجديد على أي منتج يُضاف من الآن فقط."}
+                  ? t("conventionDialog.newOnly.applying")
+                  : t("conventionDialog.newOnly.hint")}
               </span>
             </button>
           </div>
@@ -713,7 +743,7 @@ export default function TaxesSettings() {
               disabled={applyingConvention !== null}
               onClick={() => setPendingConvention(null)}
             >
-              إلغاء
+              {t("conventionDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -746,11 +776,7 @@ function ToggleRow({
 
 type PriceConvention = "inclusive" | "exclusive" | "manual"
 
-const PRICE_CONVENTION_OPTIONS: Array<{ value: PriceConvention; label: string }> = [
-  { value: "inclusive", label: "شامل الضريبة" },
-  { value: "exclusive", label: "غير شامل" },
-  { value: "manual", label: "يدوي لكل منتج" },
-]
+const PRICE_CONVENTION_OPTIONS: PriceConvention[] = ["inclusive", "exclusive", "manual"]
 
 // A three-way segmented control, not a Switch -- this setting has three real, standing states
 // (always price-inclusive, always price-exclusive, or left to a per-product choice), and a
@@ -763,12 +789,14 @@ const PRICE_CONVENTION_OPTIONS: Array<{ value: PriceConvention; label: string }>
 function PriceConventionRow({
   title,
   description,
+  options,
   mode,
   busy,
   onSelect,
 }: {
   title: string
   description: string
+  options: Array<{ value: PriceConvention; label: string }>
   mode: PriceConvention
   busy: boolean
   onSelect: (next: PriceConvention) => void
@@ -780,7 +808,7 @@ function PriceConventionRow({
         <p className={cn("mt-0.5 text-[11px] leading-5", MUTED)}>{description}</p>
       </div>
       <div className="flex items-center gap-1 rounded-[12px] bg-[#f4f6fa] p-1">
-        {PRICE_CONVENTION_OPTIONS.map((option) => (
+        {options.map((option) => (
           <button
             key={option.value}
             type="button"
@@ -805,24 +833,34 @@ function TaxRateDialog({
   open,
   title,
   submitLabel,
+  savingLabel,
+  cancelLabel,
   draft,
   setDraft,
   busy,
+  locale,
+  t,
   onCancel,
   onSubmit,
 }: {
   open: boolean
   title: string
   submitLabel: string
+  savingLabel: string
+  cancelLabel: string
   draft: Draft
   setDraft: (next: Draft) => void
   busy: boolean
+  locale: Locale
+  t: TaxesTranslator
   onCancel: () => void
   onSubmit: () => void
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
-      <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+      <DialogContent
+        className={cn("sm:max-w-[26rem]", locale === "ar" ? "[direction:rtl]" : "[direction:ltr]")}
+      >
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>{title}</DialogTitle>
         </DialogHeader>
@@ -830,11 +868,11 @@ function TaxRateDialog({
         <div className="flex flex-col gap-3.5">
           <div>
             <Label className={cn("mb-1.5 block text-[12.5px] font-bold", HEADING)}>
-              اسم الضريبة *
+              {t("dialog.nameLabel")}
             </Label>
             <Input
               value={draft.name}
-              placeholder="مثال: ضريبة القيمة المضافة"
+              placeholder={t("dialog.namePlaceholder")}
               className={FIELD_CLASS}
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             />
@@ -842,7 +880,7 @@ function TaxRateDialog({
 
           <div>
             <Label className={cn("mb-1.5 block text-[12.5px] font-bold", HEADING)}>
-              نوع الضريبة *
+              {t("dialog.typeLabel")}
             </Label>
             <Select
               value={draft.type}
@@ -854,7 +892,7 @@ function TaxRateDialog({
               <SelectContent>
                 {TYPE_OPTIONS.map((type) => (
                   <SelectItem key={type} value={type}>
-                    {TYPE_LABEL[type]}
+                    {taxTypeLabel(type, t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -863,7 +901,7 @@ function TaxRateDialog({
 
           <div>
             <Label className={cn("mb-1.5 block text-[12.5px] font-bold", HEADING)}>
-              نسبة الضريبة *
+              {t("dialog.rateLabel")}
             </Label>
             <div className="relative">
               <Percent className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#98A2B3]" />
@@ -873,7 +911,7 @@ function TaxRateDialog({
                 max={100}
                 step="0.001"
                 value={draft.ratePercent}
-                placeholder="أدخل نسبة الضريبة"
+                placeholder={t("dialog.ratePlaceholder")}
                 className={cn(FIELD_CLASS, "ps-9")}
                 onChange={(event) => setDraft({ ...draft, ratePercent: event.target.value })}
               />
@@ -888,7 +926,7 @@ function TaxRateDialog({
               className="size-4 rounded border-[#c7d3e3] accent-[#2563eb]"
             />
             <span className={cn("text-[12.5px] font-semibold", HEADING)}>
-              اجعلها الضريبة الافتراضية
+              {t("dialog.setDefault")}
             </span>
           </label>
 
@@ -901,11 +939,9 @@ function TaxRateDialog({
             />
             <span>
               <span className={cn("block text-[12.5px] font-semibold", HEADING)}>
-                تفعيل الضريبة
+                {t("dialog.activate")}
               </span>
-              <span className={cn("block text-[10.5px]", MUTED)}>
-                يمكنك إيقاف الضريبة مؤقتاً دون حذفها
-              </span>
+              <span className={cn("block text-[10.5px]", MUTED)}>{t("dialog.activateHint")}</span>
             </span>
           </label>
         </div>
@@ -916,10 +952,10 @@ function TaxRateDialog({
             disabled={busy}
             onClick={onSubmit}
           >
-            {busy ? "جارٍ الحفظ..." : submitLabel}
+            {busy ? savingLabel : submitLabel}
           </Button>
           <Button variant="outline" disabled={busy} onClick={onCancel}>
-            إلغاء
+            {cancelLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

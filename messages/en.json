@@ -3866,6 +3866,491 @@
         "saved": "Cashier settings saved successfully.",
         "saveFailed": "Couldn't save cashier settings."
       }
+    },
+    "zatca": {
+      "title": "E-invoicing (ZATCA)",
+      "subtitle": "Link point-of-sale devices to the Fatoora platform -- Integration Phase",
+      "addDevice": "Add new device",
+      "infoBanner": "Generating the device and its signing request (CSR) needs no connection to the Fatoora platform at all. Only the \"Onboard via OTP\" step needs a real verification code from the organization's Fatoora account -- after that, compliance checks run and your device issues its production certificate, and from that moment every sale is signed automatically and can be reported to the authority from the invoice detail panel.",
+      "loading": "Loading e-invoicing settings...",
+      "loadError": {
+        "forbidden": "You don't have permission to view e-invoicing settings.",
+        "generic": "Couldn't load devices."
+      },
+      "retry": "Retry",
+      "empty": {
+        "title": "No device registered yet",
+        "description": "Add a device to generate a signing request (CSR) and start onboarding with Fatoora."
+      },
+      "statuses": {
+        "draft": "Awaiting onboarding (OTP)",
+        "compliance": "Compliance",
+        "production": "Activated for production"
+      },
+      "environments": {
+        "sandbox": "Sandbox",
+        "simulation": "Simulation",
+        "production": "Production"
+      },
+      "device": {
+        "createdAt": "Created {date} -- last ICV counter: {icv}",
+        "csrLabel": "Signing request (CSR)",
+        "copy": "Copy",
+        "copied": "Copied",
+        "otpLabel": "Verification code (OTP) from the Fatoora portal",
+        "otpPlaceholder": "Enter the OTP code",
+        "submitOtp": "Onboard via OTP",
+        "runComplianceChecks": "Run compliance checks",
+        "getProductionCert": "Get production certificate",
+        "productionBanner": "Device activated -- every new sale is signed automatically and can be reported to the authority from the invoice detail panel."
+      },
+      "validation": {
+        "deviceNameRequired": "Enter a name for this device.",
+        "vatNumberInvalid": "The VAT number must be 15 digits.",
+        "organizationNameRequired": "Enter the registered organization name.",
+        "organizationUnitRequired": "Enter the workspace or unit name.",
+        "locationRequired": "Enter the device/workspace address.",
+        "industryRequired": "Enter the business activity.",
+        "currentOrganizationRequired": "Couldn't determine the current organization."
+      },
+      "toasts": {
+        "forbiddenManage": "You don't have permission to manage e-invoicing.",
+        "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission.",
+        "wrongStatus": "The device's current status doesn't allow this action.",
+        "createFailed": "Couldn't create the device.",
+        "created": "Device created and signing request (CSR) generated.",
+        "csrCopied": "Signing request (CSR) copied.",
+        "otpRequired": "Enter the verification code (OTP) from the Fatoora portal.",
+        "otpSuccess": "Onboarded successfully -- compliance certificate (Compliance CSID) obtained.",
+        "otpFailed": "Couldn't verify the OTP code. Check it and try again.",
+        "complianceChecksRun": "Compliance checks ran.",
+        "complianceChecksFailed": "Couldn't run compliance checks.",
+        "productionActivated": "Device activated for production -- upcoming invoices will be signed automatically.",
+        "productionFailed": "Couldn't get the production certificate."
+      },
+      "dialog": {
+        "title": "Add new device",
+        "deviceNameLabel": "Device name *",
+        "deviceNamePlaceholder": "e.g. POS -- Main space",
+        "environmentLabel": "Environment *",
+        "vatNumberLabel": "VAT number (15 digits) *",
+        "vatNumberPlaceholder": "3XXXXXXXXXXXXX3",
+        "organizationNameLabel": "Registered organization name *",
+        "organizationUnitLabel": "Workspace / unit *",
+        "organizationUnitPlaceholder": "e.g. Main space",
+        "locationLabel": "Device/workspace address *",
+        "industryLabel": "Business activity *",
+        "industryPlaceholder": "e.g. Retail, restaurants",
+        "cancel": "Cancel",
+        "create": "Create device",
+        "creating": "Creating..."
+      }
+    },
+    "taxes": {
+      "title": "Taxes",
+      "subtitle": "Manage tax rates and VAT settings",
+      "addTax": "Add tax",
+      "loading": "Loading tax settings...",
+      "loadError": {
+        "forbidden": "You don't have permission to view tax settings.",
+        "generic": "Couldn't load tax rates."
+      },
+      "retry": "Retry",
+      "types": {
+        "sales_tax": "Sales tax",
+        "exempt": "Exempt",
+        "zero_rate": "Zero-rated",
+        "custom": "Custom"
+      },
+      "stats": {
+        "activeTaxes": "Active taxes",
+        "activeCountOf": "{active} of {total}",
+        "defaultRate": "Default tax rate",
+        "totalTaxes": "Total registered taxes"
+      },
+      "table": {
+        "columns": {
+          "name": "Tax name",
+          "type": "Type",
+          "rate": "Rate",
+          "status": "Status",
+          "updated": "Last updated",
+          "actions": "Actions"
+        },
+        "defaultBadge": "Default",
+        "active": "Active",
+        "inactive": "Inactive",
+        "editAria": "Edit",
+        "deleteAria": "Delete"
+      },
+      "invoiceSettings": {
+        "sectionTitle": "Tax invoice settings",
+        "autoApply": {
+          "title": "Apply tax to products automatically",
+          "description": "When off, sales are calculated with no tax (0%) regardless of the default rate."
+        },
+        "priceConvention": {
+          "title": "Prices include tax",
+          "description": "This setting determines how product prices are read: tax-inclusive, tax-exclusive, or chosen manually per product. Picking a different inclusive/exclusive mode then asks where it should apply.",
+          "options": {
+            "inclusive": "Tax-inclusive",
+            "exclusive": "Tax-exclusive",
+            "manual": "Manual per product"
+          }
+        }
+      },
+      "infoBanner": "The standard VAT rate in Saudi Arabia is 15%. Make sure you comply with applicable tax laws and regulations.",
+      "categories": {
+        "sectionTitle": "Tax categories",
+        "countSuffix": "{count} tax(es)"
+      },
+      "dialog": {
+        "addTitle": "Add tax",
+        "editTitle": "Edit tax",
+        "save": "Save",
+        "saveChanges": "Save changes",
+        "nameLabel": "Tax name *",
+        "namePlaceholder": "e.g. Value Added Tax",
+        "typeLabel": "Tax type *",
+        "rateLabel": "Tax rate *",
+        "ratePlaceholder": "Enter the tax rate",
+        "setDefault": "Make this the default tax",
+        "activate": "Activate tax",
+        "activateHint": "You can pause a tax temporarily without deleting it",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      },
+      "deleteDialog": {
+        "title": "Delete this tax?",
+        "description": "<b>{name}</b> will be removed from the tax rates.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "conventionDialog": {
+        "enableTitle": "Enable: prices include tax",
+        "disableTitle": "Disable: prices include tax",
+        "enableDescription": "Each product's displayed price will be treated as tax-inclusive from now on, instead of adding tax to it at the point of sale.",
+        "disableDescription": "Each product's displayed price will be treated as tax-exclusive from now on, with tax added to it at the point of sale.",
+        "allProducts": {
+          "title": "All existing products",
+          "applying": "Updating product prices...",
+          "enableHint": "Each product's stored price is adjusted automatically so the amount the customer pays stays exactly the same.",
+          "disableHint": "Each product's stored price is adjusted automatically by removing tax from it, with no change to the amount the customer pays at the point of sale."
+        },
+        "newOnly": {
+          "title": "New products only",
+          "applying": "Saving setting...",
+          "hint": "Existing products keep their current prices and convention; the new setting applies only to products added from now on."
+        },
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "added": "Tax added.",
+        "addFailed": "Couldn't add the tax.",
+        "saved": "Tax saved.",
+        "saveFailed": "Couldn't save the tax.",
+        "statusChangeFailed": "Couldn't change the tax's status. The default tax can't be paused.",
+        "deleted": "Tax deleted.",
+        "deleteFailedInUse": "This tax can't be deleted -- one or more products are still linked to it. Change those products' tax first.",
+        "deleteFailedGeneric": "Couldn't delete the tax. Make another tax the default first.",
+        "settingSaveFailed": "Couldn't save the setting.",
+        "conventionNewOnlySaved": "Setting saved -- it will apply to new products only.",
+        "conventionAllUpdated": "Updated the price of {count} product(s) and the new setting.",
+        "conventionAllSavedNoProducts": "New setting saved.",
+        "conventionApplyFailed": "Couldn't apply the change to products.",
+        "conventionManualSaved": "Saved -- tax inclusion will be chosen for each product when it's added.",
+        "forbiddenManage": "You don't have permission to manage taxes.",
+        "forbiddenDescription": "Contact the account owner to grant you the tax:manage permission."
+      },
+      "validation": {
+        "nameRequired": "Enter the tax name.",
+        "rateInvalid": "Enter a tax rate between 0 and 100."
+      }
+    },
+    "payments": {
+      "title": "Payment methods",
+      "subtitle": "Manage the payment methods available at the point of sale",
+      "addMethod": "Add payment method",
+      "loading": "Loading payment methods...",
+      "loadError": {
+        "forbidden": "You don't have permission to view payment methods.",
+        "generic": "Couldn't load payment methods. Try again."
+      },
+      "retry": "Retry",
+      "kinds": {
+        "cash": "Cash",
+        "card": "Card",
+        "wallet": "Digital wallet",
+        "transfer": "Bank transfer",
+        "bnpl": "Buy now, pay later",
+        "credit": "Credit on customer account",
+        "prepaid": "Customer prepaid wallet"
+      },
+      "table": {
+        "columns": {
+          "method": "Payment method",
+          "status": "Status",
+          "settings": "Settings",
+          "fee": "Transaction fee",
+          "actions": "Actions"
+        },
+        "settingsButton": "Settings",
+        "unconfirmed": "Unconfirmed"
+      },
+      "notes": {
+        "title": "Important information",
+        "items": [
+          "You can enable or disable any payment method based on your branch's needs.",
+          "Transaction fees may vary based on your agreement with the service provider.",
+          "Make sure device settings are configured to pair payment devices (such as mada terminals)."
+        ]
+      },
+      "editDialog": {
+        "title": "{name} settings",
+        "descriptionCustom": "Your branch's own payment method -- you can edit all of its details",
+        "descriptionBuiltIn": "The transaction fee and connection details the service provider deducts from each sale",
+        "nameLabel": "Payment method name",
+        "subtitleLabel": "Description (optional)",
+        "subtitleAriaLabel": "Payment method description",
+        "statusLabel": "Status",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "feeLabel": "Transaction fee (%)",
+        "feeAriaLabel": "Transaction fee",
+        "feeHint": "Leave it at 0 if there's no fee for this method",
+        "merchantIdLabel": "Merchant ID",
+        "merchantIdAriaLabel": "Merchant ID",
+        "apiKeyLabel": "API key (optional)",
+        "apiKeyAriaLabel": "API key",
+        "showApiKey": "Show API key",
+        "hideApiKey": "Hide API key",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "createDialog": {
+        "title": "Add new payment method",
+        "description": "Choose a payment method and set up the required details",
+        "infoSectionTitle": "Payment method information",
+        "nameLabel": "Payment method name",
+        "namePlaceholder": "e.g. mada",
+        "nameHint": "This name will appear on the payment screen",
+        "subtitleLabel": "Description (optional)",
+        "subtitleAriaLabel": "Payment method description",
+        "subtitlePlaceholder": "e.g. Pay using mada bank cards",
+        "statusLabel": "Status",
+        "statusHint": "This method will be shown on the payment screen",
+        "feeLabel": "Transaction fee (%)",
+        "feeAriaLabel": "Transaction fee for the new method",
+        "feeHint": "The fee percentage added to each payment",
+        "additionalSectionTitle": "Additional settings",
+        "merchantIdLabel": "Merchant ID",
+        "merchantIdAriaLabel": "Merchant ID",
+        "merchantIdPlaceholder": "12345678",
+        "merchantIdHint": "You can get the account number from the service provider",
+        "apiKeyLabel": "API key (optional)",
+        "apiKeyAriaLabel": "API key",
+        "apiKeyHint": "Used to connect with the service provider",
+        "notesTitle": "Important notes",
+        "notes": [
+          "Make sure the connection details are correct before activating.",
+          "Transaction fees may vary by service provider.",
+          "You can edit the settings later from the payment methods page."
+        ],
+        "submit": "Add payment method",
+        "cancel": "Cancel"
+      },
+      "presets": {
+        "cash": {
+          "label": "Cash payment",
+          "tileSubtitle": "Cash payments",
+          "name": "Cash",
+          "description": "Cash payment on receipt"
+        },
+        "transfer": {
+          "label": "Bank transfer",
+          "tileSubtitle": "Direct transfer",
+          "name": "Bank transfer",
+          "description": "Payment via direct bank transfer"
+        },
+        "mada": {
+          "label": "mada",
+          "tileSubtitle": "mada cards",
+          "name": "mada",
+          "description": "Payment using mada bank cards"
+        },
+        "stc_pay": {
+          "label": "STC Pay",
+          "tileSubtitle": "Pay via STC Pay",
+          "name": "STC Pay",
+          "description": "Payment via the STC Pay app"
+        },
+        "apple_pay": {
+          "label": "Apple Pay",
+          "tileSubtitle": "Pay via Apple Pay",
+          "name": "Apple Pay",
+          "description": "Payment via Apple Pay"
+        },
+        "card": {
+          "label": "Bank card",
+          "tileSubtitle": "mada, Visa, Mastercard"
+        }
+      },
+      "deleteDialog": {
+        "title": "Delete this payment method?",
+        "description": "<b>{name}</b> will be removed from the payment methods available at the point of sale.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "rowActions": {
+        "ariaLabel": "{name} actions",
+        "editFee": "Edit fee",
+        "delete": "Delete method",
+        "builtInDeleteTitle": "Built-in methods are disabled instead of deleted"
+      },
+      "toasts": {
+        "statusChangeFailed": "Couldn't change the payment method's status.",
+        "settingsSaveFailed": "Couldn't save the settings.",
+        "settingsSaved": "Payment method settings saved.",
+        "methodAdded": "Payment method added.",
+        "methodAddFailed": "Couldn't add the payment method.",
+        "duplicateName": "A method with this name already exists.",
+        "duplicateNameDescription": "Try a different name.",
+        "deleted": "Payment method deleted.",
+        "deleteFailed": "Couldn't delete the payment method.",
+        "forbiddenEdit": "You don't have permission to edit payment methods.",
+        "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission."
+      },
+      "validation": {
+        "feeInvalid": "Enter a fee percentage between 0 and 100.",
+        "nameRequired": "Enter the payment method name."
+      }
+    },
+    "workspaces": {
+      "title": "Workspaces",
+      "subtitle": "Manage the organization's workspaces -- also used in device settings and each workspace's own payment methods.",
+      "addWorkspace": "Add workspace",
+      "stats": {
+        "total": "Total workspaces",
+        "active": "Active workspaces",
+        "archived": "Archived workspaces",
+        "cities": "Cities"
+      },
+      "search": {
+        "placeholder": "Search workspaces by name or address..."
+      },
+      "table": {
+        "columns": {
+          "name": "Workspace name",
+          "city": "City",
+          "address": "Address",
+          "posCount": "POS devices",
+          "status": "Status",
+          "createdAt": "Created",
+          "actions": "Actions"
+        },
+        "empty": {
+          "noneTitle": "No workspaces yet",
+          "noneDescription": "Start by adding your organization's first workspace.",
+          "noMatchTitle": "No workspaces match this search",
+          "noMatchDescription": "Try adjusting the search or filters."
+        },
+        "showingCount": "Showing {filtered} of {total} workspace(s)",
+        "rowActions": {
+          "ariaLabel": "Workspace actions",
+          "edit": "Edit",
+          "deactivate": "Deactivate workspace",
+          "activate": "Activate workspace"
+        }
+      },
+      "statuses": {
+        "active": "Active",
+        "archived": "Archived"
+      },
+      "filters": {
+        "title": "Filter workspaces",
+        "cityLabel": "City",
+        "allCities": "All cities",
+        "statusLabel": "Status",
+        "allStatuses": "All statuses",
+        "reset": "Reset"
+      },
+      "infoNote": {
+        "title": "Note",
+        "description": "Every workspace you create here has its own independent settings -- you can configure its devices and payment methods from the same settings corridor."
+      },
+      "form": {
+        "backToList": "Back to workspaces",
+        "basicInfo": {
+          "sectionTitle": "Basic information",
+          "sectionSubtitle": "The workspace's basic information that will appear in the system",
+          "nameLabel": "Workspace name",
+          "namePlaceholder": "e.g. Al-Salam workspace",
+          "cityLabel": "City",
+          "cityPlaceholder": "Choose a city",
+          "addressLabel": "Address",
+          "addressPlaceholder": "Enter the workspace's detailed address",
+          "districtLabel": "District / area",
+          "districtPlaceholder": "e.g. Al-Nakheel district",
+          "codeLabel": "Workspace code",
+          "codePlaceholder": "e.g. BR-001",
+          "codeHint": "A unique code used to identify the workspace in the system.",
+          "phoneLabel": "Phone number",
+          "phonePlaceholder": "5X XXX XXXX"
+        },
+        "additionalInfo": {
+          "sectionTitle": "Additional information",
+          "sectionSubtitle": "Optional information that helps manage the workspace.",
+          "managerLabel": "Workspace manager",
+          "managerPlaceholder": "Choose an employee",
+          "managerNone": "None",
+          "noEmployees": "No point-of-sale employees registered yet",
+          "emailLabel": "Email",
+          "currencyLabel": "Default currency",
+          "timezoneLabel": "Time zone"
+        },
+        "employees": {
+          "sectionTitle": "Authorized employees",
+          "sectionSubtitle": "Choose the employees who can access this workspace and its devices.",
+          "none": "No employees registered yet.",
+          "alreadyHasAccess": "Already has access",
+          "hint": "Granting access here is permanent and can't currently be undone from this page."
+        },
+        "status": {
+          "sectionTitle": "Workspace status",
+          "sectionSubtitle": "Set the workspace's status and permissions.",
+          "activateLabel": "Activate workspace",
+          "activateDescription": "The workspace will be available for sales and use in the system",
+          "openedAtLabel": "Opening date",
+          "openedAtAriaLabel": "Workspace opening date"
+        },
+        "cancel": "Cancel",
+        "saveChanges": "Save changes",
+        "saveNew": "Save workspace",
+        "sidebar": {
+          "editTitle": "Edit workspace details",
+          "addTitle": "Add new workspace",
+          "description": "Add the workspace's information and link it to the system to enable sales and manage inventory and employees."
+        },
+        "tips": {
+          "title": "Important tips",
+          "items": [
+            "Make sure the address and phone number are correct.",
+            "You can add more than one workspace for the same store.",
+            "After creating the workspace you can link it to POS devices and employees.",
+            "The workspace will be available immediately after activation."
+          ]
+        }
+      },
+      "toasts": {
+        "nameRequired": "The workspace name is required.",
+        "updated": "Workspace details updated.",
+        "created": "Workspace added.",
+        "accessPartialFailure": "The workspace was saved, but access couldn't be granted to some users.",
+        "saveFailed": "Couldn't save the workspace details.",
+        "deactivated": "{name} deactivated.",
+        "activated": "{name} activated.",
+        "statusUpdateFailed": "Couldn't update the workspace's status."
+      }
     }
   }
 }
