@@ -160,7 +160,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         </div>
       ) : null}
 
-      <AppForm onSubmit={onSubmit} className="space-y-3">
+      <AppForm onSubmit={onSubmit} className="space-y-3 [&_input]:h-11 [&_input]:text-[15px]">
         <AppInput
           type="email"
           label={t("emailLabel")}
@@ -207,7 +207,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           type="submit"
           fullWidth
           loading={form.formState.isSubmitting || authStatus === "loading"}
-          className="h-9 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+          className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-[15px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
         >
           {t("submit")}
         </AppButton>
@@ -222,21 +222,21 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <GoogleIcon />
           </button>
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <MicrosoftIcon />
           </button>
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <AppleIcon />
           </button>

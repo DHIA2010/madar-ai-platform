@@ -308,7 +308,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
 
       <StepIndicator current={step} steps={steps} />
 
-      <AppForm onSubmit={onSubmit} className="space-y-3">
+      <AppForm onSubmit={onSubmit} className="space-y-3 [&_input]:h-11 [&_input]:text-[15px]">
         {step === 1 ? (
           <>
             <AppInput
@@ -364,7 +364,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 name="jobRole"
                 render={({ field }) => (
                   <AppSelect value={field.value} onValueChange={field.onChange}>
-                    <AppSelectTrigger className="h-10 w-full">
+                    <AppSelectTrigger className="h-11 w-full text-[15px]">
                       <Briefcase className="size-4 shrink-0 text-muted-foreground" />
                       <AppSelectValue placeholder={t("jobRolePlaceholder")} />
                     </AppSelectTrigger>
@@ -419,7 +419,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               type="button"
               onClick={goNext}
               fullWidth
-              className="h-9 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+              className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-[15px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
             >
               {t("next")}
             </AppButton>
@@ -446,7 +446,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 name="industry"
                 render={({ field }) => (
                   <AppSelect value={field.value} onValueChange={field.onChange}>
-                    <AppSelectTrigger className="h-10 w-full">
+                    <AppSelectTrigger className="h-11 w-full text-[15px]">
                       <AppSelectValue placeholder={t("industryPlaceholder")} />
                     </AppSelectTrigger>
                     <AppSelectContent>
@@ -473,7 +473,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 name="companySize"
                 render={({ field }) => (
                   <AppSelect value={field.value} onValueChange={field.onChange}>
-                    <AppSelectTrigger className="h-10 w-full">
+                    <AppSelectTrigger className="h-11 w-full text-[15px]">
                       <Users className="size-4 shrink-0 text-muted-foreground" />
                       <AppSelectValue placeholder={t("companySizePlaceholder")} />
                     </AppSelectTrigger>
@@ -499,14 +499,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 type="button"
                 variant="outline"
                 onClick={goBack}
-                className="h-9 flex-1 text-[14px] font-semibold"
+                className="h-11 flex-1 text-[15px] font-semibold"
               >
                 {t("back")}
               </AppButton>
               <AppButton
                 type="button"
                 onClick={goNext}
-                className="h-9 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+                className="h-11 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-[15px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
               >
                 {t("next")}
               </AppButton>
@@ -557,14 +557,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 type="button"
                 variant="outline"
                 onClick={goBack}
-                className="h-9 flex-1 text-[14px] font-semibold"
+                className="h-11 flex-1 text-[15px] font-semibold"
               >
                 {t("back")}
               </AppButton>
               <AppButton
                 type="submit"
                 loading={form.formState.isSubmitting}
-                className="h-9 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+                className="h-11 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-[15px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
               >
                 {t("submit")}
               </AppButton>
