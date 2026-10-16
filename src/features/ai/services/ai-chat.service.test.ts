@@ -7,7 +7,24 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { aiChatService, type ChatStreamCallbacks } from "./ai-chat.service"
+import { aiChatService, type AiChatTranslator, type ChatStreamCallbacks } from "./ai-chat.service"
+
+// sendMessageStream now takes a translator (same pattern as plan-tiers.ts's
+// translatedPlanTierMeta(tier, t) -- see ai-chat.service.ts's own comment) instead of hardcoding
+// its error strings, since the real one can only come from a component/hook's useTranslations("ai")
+// call. This fake mirrors the ai.errors.* messages/ar.json values so the existing assertions below
+// (e.g. the 429 "عدة رسائل" substring check) keep passing unchanged.
+const AI_ERROR_MESSAGES: Record<string, string> = {
+  "errors.noStream": "تعذر الاتصال بالمساعد الذكي.",
+  "errors.streamInterrupted": "انقطع الاتصال بالمساعد الذكي. حاول مرة أخرى.",
+  "errors.networkError": "تعذر الاتصال بالمساعد الذكي. تحقق من الاتصال بالإنترنت.",
+  "errors.rateLimited": "لقد أرسلت عدة رسائل خلال وقت قصير. حاول مرة أخرى بعد قليل.",
+  "errors.generic": "تعذر إكمال الإجابة. حاول مرة أخرى.",
+}
+
+function fakeTranslator(): AiChatTranslator {
+  return ((key: string) => AI_ERROR_MESSAGES[key] ?? key) as AiChatTranslator
+}
 
 function sseBody(frames: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
@@ -90,7 +107,8 @@ describe("aiChatService.sendMessageStream", () => {
       "session-1",
       "لماذا انخفضت المبيعات؟",
       callbacks,
-      new AbortController().signal
+      new AbortController().signal,
+      fakeTranslator()
     )
 
     expect(callbacks.statuses).toEqual([{ stage: "tool_call", tool: "get_pos_invoices_summary" }])
@@ -134,7 +152,8 @@ describe("aiChatService.sendMessageStream", () => {
       "session-1",
       "لماذا انخفضت الإيرادات؟",
       callbacks,
-      new AbortController().signal
+      new AbortController().signal,
+      fakeTranslator()
     )
 
     expect(order).toEqual(["structured", "message_complete"])
@@ -157,7 +176,8 @@ describe("aiChatService.sendMessageStream", () => {
       "session-1",
       "سؤال",
       callbacks,
-      new AbortController().signal
+      new AbortController().signal,
+      fakeTranslator()
     )
 
     expect(callbacks.deltas).toEqual(["جزء من النص"])
@@ -168,7 +188,13 @@ describe("aiChatService.sendMessageStream", () => {
 
     const callbacks = collectingCallbacks()
     await expect(
-      aiChatService.sendMessageStream("session-1", "سؤال", callbacks, new AbortController().signal)
+      aiChatService.sendMessageStream(
+        "session-1",
+        "سؤال",
+        callbacks,
+        new AbortController().signal,
+        fakeTranslator()
+      )
     ).resolves.toBeUndefined()
 
     expect(callbacks.errors).toHaveLength(1)
@@ -183,7 +209,8 @@ describe("aiChatService.sendMessageStream", () => {
       "session-1",
       "سؤال",
       callbacks,
-      new AbortController().signal
+      new AbortController().signal,
+      fakeTranslator()
     )
 
     expect(callbacks.errors[0]).toContain("عدة رسائل")
@@ -200,7 +227,8 @@ describe("aiChatService.sendMessageStream", () => {
       "session-1",
       "سؤال",
       callbacks,
-      new AbortController().signal
+      new AbortController().signal,
+      fakeTranslator()
     )
 
     expect(callbacks.cancelledCount).toBe(1)
@@ -217,7 +245,8 @@ describe("aiChatService.sendMessageStream", () => {
       "session-1",
       "سؤال",
       callbacks,
-      new AbortController().signal
+      new AbortController().signal,
+      fakeTranslator()
     )
 
     expect(callbacks.cancelledCount).toBe(1)

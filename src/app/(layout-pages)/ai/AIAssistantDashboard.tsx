@@ -23,7 +23,9 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 
 import {
@@ -54,16 +56,29 @@ import type {
   ChatReportTableColumn,
 } from "@/features/ai/types/ai-chat.types"
 
-function formatKpiValue(card: ChatKpiCard): string {
+type AiTranslator = ReturnType<typeof useTranslations<"ai">>
+
+function formatLocaleNumber(value: number, locale: Locale): string {
+  return value.toLocaleString(locale === "ar" ? "ar" : "en-US")
+}
+
+// Mirrors LiveVisitorsPage.tsx's formatCurrency convention exactly: ar gets a "ر.س" suffix, en
+// gets a "SAR " prefix -- the one currency-string convention used across this whole rollout.
+function formatCurrencyValue(value: number, locale: Locale): string {
+  const amount = formatLocaleNumber(value, locale)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
+}
+
+function formatKpiValue(card: ChatKpiCard, locale: Locale): string {
   switch (card.format) {
     case "currency":
-      return `${card.value.toLocaleString("ar")} ر.س`
+      return formatCurrencyValue(card.value, locale)
     case "multiple":
       return `${card.value.toFixed(2)}x`
     case "percent":
       return `${card.value.toFixed(1)}%`
     default:
-      return card.value.toLocaleString("ar")
+      return formatLocaleNumber(card.value, locale)
   }
 }
 
@@ -71,6 +86,7 @@ function formatKpiValue(card: ChatKpiCard): string {
 // server-side (ai-chat/response-formatter.ts) -- never a chat redesign, just a small KPI strip
 // under an assistant reply that has analytics-shaped data attached.
 function ChatKpiRow({ cards }: { cards: ChatKpiCard[] }) {
+  const locale = useLocale() as Locale
   if (cards.length === 0) return null
   return (
     <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -83,7 +99,9 @@ function ChatKpiRow({ cards }: { cards: ChatKpiCard[] }) {
             className="rounded-xl border border-border/60 bg-background/60 px-3 py-2"
           >
             <p className="text-[11px] text-muted-foreground">{card.title}</p>
-            <p className="mt-0.5 text-sm font-bold text-foreground">{formatKpiValue(card)}</p>
+            <p className="mt-0.5 text-sm font-bold text-foreground">
+              {formatKpiValue(card, locale)}
+            </p>
             {card.changePercent !== null ? (
               <p
                 className={cn(
@@ -112,6 +130,7 @@ function ChatKpiRow({ cards }: { cards: ChatKpiCard[] }) {
 // either a plain table (chartType "table") or a simple proportional bar list (everything else),
 // per the explicit "simple tables/bars, not a redesign" scope for this pass.
 function ChatChartBlock({ chart }: { chart: ChatChartSpec }) {
+  const locale = useLocale() as Locale
   const series = chart.series[0]
   if (!series || series.data.length === 0) return null
 
@@ -127,7 +146,7 @@ function ChatChartBlock({ chart }: { chart: ChatChartSpec }) {
               <tr key={point.label} className="border-t border-border/40 first:border-t-0">
                 <td className="px-3 py-1.5 text-muted-foreground">{point.label}</td>
                 <td className="px-3 py-1.5 text-end font-semibold text-foreground">
-                  {point.value.toLocaleString("ar")}
+                  {formatLocaleNumber(point.value, locale)}
                 </td>
               </tr>
             ))}
@@ -154,7 +173,7 @@ function ChatChartBlock({ chart }: { chart: ChatChartSpec }) {
               />
             </div>
             <span className="w-16 shrink-0 text-end text-[11px] font-semibold text-foreground">
-              {point.value.toLocaleString("ar")}
+              {formatLocaleNumber(point.value, locale)}
             </span>
           </div>
         ))}
@@ -166,7 +185,8 @@ function ChatChartBlock({ chart }: { chart: ChatChartSpec }) {
 // Problem states first (so "غير متصل" never matches the "متصل" pattern below it), then positive
 // states, everything else falls to a neutral badge -- this is purely a visual classification of an
 // already-final Arabic label from the backend, never a translation or a judgment call about the
-// underlying data.
+// underlying data. The backend always returns these status labels in Arabic regardless of UI
+// locale (see the comment above), so this regex intentionally stays Arabic-only.
 function statusBadgeClass(label: string): string {
   if (/ملغي|خطأ|غير متصل|متعثر|متوقف/.test(label)) return "bg-rose-50 text-rose-700"
   if (/مفتوحة|نشط|متصل|مكتمل/.test(label)) return "bg-emerald-50 text-emerald-700"
@@ -175,16 +195,17 @@ function statusBadgeClass(label: string): string {
 
 function formatReportCell(
   value: string | number | null,
-  format: ChatReportTableColumn["format"]
+  format: ChatReportTableColumn["format"],
+  locale: Locale
 ): string {
   if (value === null) return "—"
   switch (format) {
     case "currency":
-      return `${Number(value).toLocaleString("ar")} ر.س`
+      return formatCurrencyValue(Number(value), locale)
     case "percent":
       return `${Number(value).toFixed(1)}%`
     case "number":
-      return Number(value).toLocaleString("ar")
+      return formatLocaleNumber(Number(value), locale)
     default:
       return String(value)
   }
@@ -196,6 +217,7 @@ function formatReportCell(
 // (response-formatter.ts) -- this component only lays it out and applies the per-column visual
 // treatment (status badge vs. plain text vs. right-aligned number).
 function ReportTableBlock({ table }: { table: ChatReportTable }) {
+  const locale = useLocale() as Locale
   if (table.rows.length === 0) return null
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-border/60">
@@ -237,7 +259,7 @@ function ReportTableBlock({ table }: { table: ChatReportTable }) {
                   }
                   return (
                     <td key={column.key} className="whitespace-nowrap px-3 py-1.5 text-foreground">
-                      {formatReportCell(value, column.format)}
+                      {formatReportCell(value, column.format, locale)}
                     </td>
                   )
                 })}
@@ -293,16 +315,23 @@ function ChatFactsInsightsPanel({
   )
 }
 
-const DRIVER_METRIC_LABEL: Record<string, string> = {
-  orders: "عدد الطلبات",
-  aov: "متوسط قيمة الطلب",
-  revenue: "الإيرادات",
-  spend: "الإنفاق",
-  roas: "ROAS",
-  cpa: "تكلفة الاكتساب",
-  ctr: "معدل النقر",
-  cpc: "تكلفة النقرة",
-  conversions: "التحويلات",
+const DRIVER_METRIC_KEYS = [
+  "orders",
+  "aov",
+  "revenue",
+  "spend",
+  "roas",
+  "cpa",
+  "ctr",
+  "cpc",
+  "conversions",
+] as const
+
+function driverMetricLabel(metric: string, t: AiTranslator): string {
+  if ((DRIVER_METRIC_KEYS as readonly string[]).includes(metric)) {
+    return t(`metricLabels.${metric}` as "metricLabels.orders")
+  }
+  return metric
 }
 
 // Analysis Orchestration audit (Genie-upgrade, round 2) section 11/12: a dedicated callout for
@@ -310,10 +339,11 @@ const DRIVER_METRIC_LABEL: Record<string, string> = {
 // "primary driver" framing (section 4's "Revenue ↓ 79% / Orders ↓ 65% ... Primary driver:
 // Orders") needs its own visual weight, not to be buried as one bullet among many.
 function ChatDriversPanel({ drivers }: { drivers: ChatDriverFinding[] }) {
+  const t = useTranslations("ai")
   if (drivers.length === 0) return null
   return (
     <div className="mt-2 space-y-1.5 rounded-xl border border-border/60 bg-background/40 p-3">
-      <p className="text-[11px] font-semibold text-foreground">العوامل الرئيسية</p>
+      <p className="text-[11px] font-semibold text-foreground">{t("chat.drivers.title")}</p>
       {drivers.map((driver, index) => {
         const TrendIcon = driver.direction === "up" ? ArrowUpRight : ArrowDownRight
         return (
@@ -326,8 +356,11 @@ function ChatDriversPanel({ drivers }: { drivers: ChatDriverFinding[] }) {
             />
             <span className="text-foreground">
               <span className="font-medium">
-                {driver.role === "primary" ? "العامل الأساسي" : "عامل إضافي"} —{" "}
-                {DRIVER_METRIC_LABEL[driver.metric] ?? driver.metric}:
+                {driver.role === "primary"
+                  ? t("chat.drivers.primary")
+                  : t("chat.drivers.secondary")}
+                {" — "}
+                {driverMetricLabel(driver.metric, t)}:
               </span>{" "}
               <span className="text-muted-foreground">{driver.statement}</span>
             </span>
@@ -348,11 +381,13 @@ function ChatContributionsPanel({
   contributions: ChatContributionFinding[]
   title: string | null
 }) {
+  const t = useTranslations("ai")
+  const locale = useLocale() as Locale
   if (contributions.length === 0) return null
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-border/60">
       <p className="border-b border-border/60 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-foreground">
-        {title ?? "أكبر المساهمين في التغيّر"}
+        {title ?? t("chat.contributions.defaultTitle")}
       </p>
       <div className="divide-y divide-border/40">
         {contributions.slice(0, 5).map((contribution, index) => (
@@ -364,7 +399,7 @@ function ChatContributionsPanel({
             <span className="flex shrink-0 items-center gap-2">
               <span className={contribution.delta >= 0 ? "text-emerald-600" : "text-rose-600"}>
                 {contribution.delta >= 0 ? "+" : ""}
-                {contribution.delta.toLocaleString("ar")}
+                {formatLocaleNumber(contribution.delta, locale)}
               </span>
               {contribution.contributionSharePercent !== null ? (
                 <span className="text-muted-foreground">
@@ -379,16 +414,11 @@ function ChatContributionsPanel({
   )
 }
 
-const RECOMMENDATION_PRIORITY_LABEL: Record<ChatRecommendation["priority"], string> = {
-  high: "أولوية عالية",
-  medium: "أولوية متوسطة",
-  low: "أولوية منخفضة",
-}
-
 // Section 10: evidence-gated recommendations (generate_campaign_recommendations) were already
 // computed and transmitted by the backend but had no rendering at all on this dashboard -- the
 // type itself didn't declare the field (see ai-chat.types.ts's own comment). This closes that.
 function ChatRecommendationsPanel({ recommendations }: { recommendations: ChatRecommendation[] }) {
+  const t = useTranslations("ai")
   if (recommendations.length === 0) return null
   return (
     <div className="mt-2 space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
@@ -399,7 +429,9 @@ function ChatRecommendationsPanel({ recommendations }: { recommendations: ChatRe
               💡 {recommendation.entityName}
             </p>
             <span className="shrink-0 rounded-full bg-background/60 px-2 py-0.5 text-[10px] text-muted-foreground">
-              {RECOMMENDATION_PRIORITY_LABEL[recommendation.priority]}
+              {t(
+                `chat.recommendationsPanel.priority.${recommendation.priority}` as "chat.recommendationsPanel.priority.high"
+              )}
             </span>
           </div>
           <p className="text-[11px] text-foreground">{recommendation.recommendedAction}</p>
@@ -408,13 +440,6 @@ function ChatRecommendationsPanel({ recommendations }: { recommendations: ChatRe
       ))}
     </div>
   )
-}
-
-const CONFIDENCE_LABEL: Record<ChatConfidenceLevel, string> = {
-  high: "عالية",
-  medium: "متوسطة",
-  low: "منخفضة",
-  insufficient: "غير كافية",
 }
 
 const CONFIDENCE_TINT: Record<ChatConfidenceLevel, string> = {
@@ -436,11 +461,13 @@ function ChatConfidenceBadge({
   confidence: ChatConfidenceLevel | null
   hasAnalysis: boolean
 }) {
+  const t = useTranslations("ai")
   if (!confidence || !hasAnalysis) return null
+  const level = t(`chat.confidence.levels.${confidence}` as "chat.confidence.levels.high")
   return (
     <p className="mt-2 flex items-center gap-1.5 text-[11px]">
       <span className={cn("rounded-full px-2 py-0.5 font-medium", CONFIDENCE_TINT[confidence])}>
-        ثقة التحليل: {CONFIDENCE_LABEL[confidence]}
+        {t("chat.confidence.label", { level })}
       </span>
     </p>
   )
@@ -491,7 +518,10 @@ function ChatFollowUpChips({
 }
 
 // --- Mock data for the "التوصيات المقترحة" panel -- a separate, proactive-insights feature
-// (background analysis + notification) from the reactive chat below, not built in this pass. ---
+// (background analysis + notification) from the reactive chat below, not built in this pass.
+// title/description/impactMetric come from the `ai` namespace; platform/platformLabel stay as
+// literal brand names (Google Ads/Snapchat/Meta Ads/TikTok Ads), same principle as elsewhere in
+// this rollout, and impactValue/the ROAS/CPA acronyms are literal data values, not UI prose. ---
 
 type RecommendationCategory = "growth" | "optimization" | "alert"
 
@@ -506,71 +536,63 @@ interface Recommendation {
   impactMetric: string
 }
 
-const CATEGORY_META: Record<RecommendationCategory, { label: string; className: string }> = {
-  growth: { label: "فرصة نمو", className: "bg-emerald-50 text-emerald-600" },
-  optimization: { label: "تحسين الأداء", className: "bg-blue-50 text-blue-600" },
-  alert: { label: "تنبيه", className: "bg-rose-50 text-rose-600" },
+const CATEGORY_META: Record<RecommendationCategory, { className: string }> = {
+  growth: { className: "bg-emerald-50 text-emerald-600" },
+  optimization: { className: "bg-blue-50 text-blue-600" },
+  alert: { className: "bg-rose-50 text-rose-600" },
 }
 
-const recommendations: Recommendation[] = [
-  {
-    id: "1",
-    platform: "Google Ads",
-    platformLabel: "Google Ads",
-    category: "growth",
-    title: "زيادة الميزانية للحملات ذات الأداء العالي",
-    description:
-      "حملات البحث تحقق 5.8x ROAS مرتفع. نقترح زيادة الميزانية بنسبة 15% للحصول على نتائج أفضل.",
-    impactValue: 24.5,
-    impactMetric: "ROAS",
-  },
-  {
-    id: "2",
-    platform: "Snapchat",
-    platformLabel: "Snapchat Ads",
-    category: "optimization",
-    title: "تحسين استهداف الجمهور",
-    description: "معدل التحويل منخفض بنسبة 28% عن المتوسط. تحسين الاستهداف قد يخفض التكلفة.",
-    impactValue: -18.3,
-    impactMetric: "CPA",
-  },
-  {
-    id: "3",
-    platform: "Meta Ads",
-    platformLabel: "Meta Ads",
-    category: "growth",
-    title: "فرصة لزيادة التحويلات",
-    description:
-      "معدل النقر الفعال مرتفع 2.4x لكن التحويلات منخفضة. تحسين صفحة الهبوط قد يزيد التحويلات.",
-    impactValue: 31.2,
-    impactMetric: "التحويلات",
-  },
-  {
-    id: "4",
-    platform: "TikTok Ads",
-    platformLabel: "TikTok Ads",
-    category: "alert",
-    title: "تكلفة التحويل مرتفعة",
-    description:
-      "ارتفع CPA بنسبة 32% خلال 7 أيام الأخيرة. ننصح بمراجعة الإعلانات أو تقليل الميزانية المؤقتة.",
-    impactValue: -32.0,
-    impactMetric: "CPA",
-  },
-]
-
-const TABS: Array<{ key: "all" | RecommendationCategory; label: string; icon?: LucideIcon }> = [
-  { key: "all", label: "الكل" },
-  { key: "growth", label: "فرص النمو", icon: TrendingUp },
-  { key: "optimization", label: "تحسين الأداء", icon: Gauge },
-  { key: "alert", label: "تنبيهات", icon: AlertTriangle },
-]
-
-const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
-  advertising: "الحملات الإعلانية",
-  ecommerce: "المتاجر الإلكترونية",
-  pos: "نقطة البيع",
-  madarApps: "تطبيقات مدار",
+function buildRecommendationsMock(t: AiTranslator): Recommendation[] {
+  return [
+    {
+      id: "1",
+      platform: "Google Ads",
+      platformLabel: "Google Ads",
+      category: "growth",
+      title: t("recommendationsView.items.1.title"),
+      description: t("recommendationsView.items.1.description"),
+      impactValue: 24.5,
+      impactMetric: "ROAS",
+    },
+    {
+      id: "2",
+      platform: "Snapchat",
+      platformLabel: "Snapchat Ads",
+      category: "optimization",
+      title: t("recommendationsView.items.2.title"),
+      description: t("recommendationsView.items.2.description"),
+      impactValue: -18.3,
+      impactMetric: "CPA",
+    },
+    {
+      id: "3",
+      platform: "Meta Ads",
+      platformLabel: "Meta Ads",
+      category: "growth",
+      title: t("recommendationsView.items.3.title"),
+      description: t("recommendationsView.items.3.description"),
+      impactValue: 31.2,
+      impactMetric: t("metricLabels.conversions"),
+    },
+    {
+      id: "4",
+      platform: "TikTok Ads",
+      platformLabel: "TikTok Ads",
+      category: "alert",
+      title: t("recommendationsView.items.4.title"),
+      description: t("recommendationsView.items.4.description"),
+      impactValue: -32.0,
+      impactMetric: "CPA",
+    },
+  ]
 }
+
+const RECOMMENDATION_TABS: Array<{ key: "all" | RecommendationCategory; icon?: LucideIcon }> = [
+  { key: "all" },
+  { key: "growth", icon: TrendingUp },
+  { key: "optimization", icon: Gauge },
+  { key: "alert", icon: AlertTriangle },
+]
 
 const CATEGORY_ICON: Record<ApplicationCategoryId, { icon: LucideIcon; tint: string }> = {
   advertising: { icon: Megaphone, tint: "bg-[#eef4ff] text-[#2878ff]" },
@@ -579,28 +601,32 @@ const CATEGORY_ICON: Record<ApplicationCategoryId, { icon: LucideIcon; tint: str
   madarApps: { icon: LayoutGrid, tint: "bg-amber-50 text-amber-600" },
 }
 
-const SUGGESTED_QUESTIONS: Record<
+const SUGGESTED_QUESTION_CONFIG: Record<
   ApplicationCategoryId,
-  Array<{ label: string; icon: LucideIcon }>
+  Array<{ key: string; icon: LucideIcon }>
 > = {
   advertising: [
-    { label: "ما هي القناة التي تحقق أفضل عائد على الاستثمار؟", icon: BarChart3 },
-    { label: "أين يجب أن أزيد الميزانية للحصول على نتائج أفضل؟", icon: Target },
-    { label: "أعطني ملخص لأداء حملاتي هذا الشهر", icon: FileText },
+    { key: "bestRoas", icon: BarChart3 },
+    { key: "increaseBudget", icon: Target },
+    { key: "monthlySummary", icon: FileText },
   ],
   pos: [
-    { label: "ما هو إجمالي المبيعات المكتملة هذا الشهر؟", icon: BarChart3 },
-    { label: "كم عدد الفواتير المرتجعة؟", icon: AlertCircle },
+    { key: "totalSales", icon: BarChart3 },
+    { key: "returnedInvoices", icon: AlertCircle },
   ],
   ecommerce: [
-    { label: "ما هو متوسط قيمة الطلب هذا الأسبوع؟", icon: BarChart3 },
-    { label: "ما حالة اتصال متاجري؟", icon: AlertCircle },
+    { key: "avgOrderValue", icon: BarChart3 },
+    { key: "storeConnectionStatus", icon: AlertCircle },
   ],
-  madarApps: [{ label: "أعطني ملخصًا لأهم المؤشرات (KPIs)", icon: FileText }],
+  madarApps: [{ key: "kpiSummary", icon: FileText }],
 }
 
 function RecommendationCard({ item }: { item: Recommendation }) {
+  const t = useTranslations("ai")
   const category = CATEGORY_META[item.category]
+  const categoryLabel = t(
+    `recommendationsView.categoryMeta.${item.category}` as "recommendationsView.categoryMeta.growth"
+  )
   const isPositive = item.impactValue >= 0
 
   return (
@@ -616,7 +642,7 @@ function RecommendationCard({ item }: { item: Recommendation }) {
             category.className
           )}
         >
-          {category.label}
+          {categoryLabel}
         </span>
       </div>
 
@@ -625,7 +651,7 @@ function RecommendationCard({ item }: { item: Recommendation }) {
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
         <div>
-          <p className="text-xs text-muted-foreground">التأثير المتوقع</p>
+          <p className="text-xs text-muted-foreground">{t("recommendationsView.expectedImpact")}</p>
           <p className={cn("text-lg font-bold", isPositive ? "text-emerald-600" : "text-rose-600")}>
             {isPositive ? "+" : ""}
             {item.impactValue.toFixed(1)}%
@@ -633,7 +659,7 @@ function RecommendationCard({ item }: { item: Recommendation }) {
           <p className="text-xs text-muted-foreground">{item.impactMetric}</p>
         </div>
         <AppButton variant="outline" size="sm">
-          عرض التفاصيل
+          {t("recommendationsView.viewDetails")}
         </AppButton>
       </div>
     </div>
@@ -642,12 +668,14 @@ function RecommendationCard({ item }: { item: Recommendation }) {
 
 type PageView = "chat" | "recommendations"
 
-const PAGE_VIEWS: Array<{ key: PageView; label: string; icon: LucideIcon }> = [
-  { key: "chat", label: "المساعد الذكي", icon: Sparkles },
-  { key: "recommendations", label: "التوصيات المقترحة", icon: TrendingUp },
+const PAGE_VIEW_CONFIG: Array<{ key: PageView; icon: LucideIcon }> = [
+  { key: "chat", icon: Sparkles },
+  { key: "recommendations", icon: TrendingUp },
 ]
 
 export default function AIAssistantDashboard() {
+  const t = useTranslations("ai")
+  const locale = useLocale() as Locale
   const [view, setView] = useState<PageView>("chat")
   const [activeTab, setActiveTab] = useState<"all" | RecommendationCategory>("all")
   const [period, setPeriod] = useState("30")
@@ -657,22 +685,27 @@ export default function AIAssistantDashboard() {
 
   const [selectedCategory, setSelectedCategory] = useState<ApplicationCategoryId | null>(null)
   const activeCategory = selectedCategory ?? availableCategories[0] ?? null
+  const activeCategoryLabel = activeCategory
+    ? t(`categories.${activeCategory}` as "categories.advertising")
+    : ""
 
   const categoryOptions = useMemo<AppSearchableSelectOption[]>(
     () =>
       availableCategories.map((category) => ({
         value: category,
-        label: CATEGORY_LABEL[category],
+        label: t(`categories.${category}` as "categories.advertising"),
         icon: CATEGORY_ICON[category].icon,
         tint: CATEGORY_ICON[category].tint,
       })),
-    [availableCategories]
+    [availableCategories, t]
   )
 
+  const recommendationsMock = useMemo(() => buildRecommendationsMock(t), [t])
+
   const filteredRecommendations = useMemo(() => {
-    if (activeTab === "all") return recommendations
-    return recommendations.filter((item) => item.category === activeTab)
-  }, [activeTab])
+    if (activeTab === "all") return recommendationsMock
+    return recommendationsMock.filter((item) => item.category === activeTab)
+  }, [activeTab, recommendationsMock])
 
   async function handleSend(text: string) {
     const content = text.trim()
@@ -694,16 +727,14 @@ export default function AIAssistantDashboard() {
   }
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={localeDirection(locale)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Sparkles className="size-6 text-primary" />
-            الذكاء الاصطناعي
+            {t("page.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            مساعدك الذكي لتحسين الأداء التسويقي واتخاذ قرارات أفضل
-          </p>
+          <p className="text-sm text-muted-foreground">{t("page.subtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
           {view === "recommendations" ? (
@@ -713,9 +744,9 @@ export default function AIAssistantDashboard() {
                 <AppSelectValue />
               </AppSelectTrigger>
               <AppSelectContent align="end">
-                <AppSelectItem value="7">آخر 7 أيام</AppSelectItem>
-                <AppSelectItem value="30">آخر 30 يومًا</AppSelectItem>
-                <AppSelectItem value="90">آخر 90 يومًا</AppSelectItem>
+                <AppSelectItem value="7">{t("period.last7Days")}</AppSelectItem>
+                <AppSelectItem value="30">{t("period.last30Days")}</AppSelectItem>
+                <AppSelectItem value="90">{t("period.last90Days")}</AppSelectItem>
               </AppSelectContent>
             </AppSelect>
           ) : null}
@@ -723,7 +754,7 @@ export default function AIAssistantDashboard() {
       </div>
 
       <div className="flex gap-2 rounded-xl border border-border/60 bg-card p-1">
-        {PAGE_VIEWS.map((pageView) => {
+        {PAGE_VIEW_CONFIG.map((pageView) => {
           const Icon = pageView.icon
           const isActive = view === pageView.key
           return (
@@ -739,24 +770,24 @@ export default function AIAssistantDashboard() {
               )}
             >
               <Icon className="size-4" />
-              {pageView.label}
+              {t(`pageViews.${pageView.key}` as "pageViews.chat")}
             </button>
           )
         })}
       </div>
 
       {view === "chat" ? (
-        <AppCard title="المساعد الذكي" className="rounded-2xl border-border/60 shadow-sm">
+        <AppCard title={t("pageViews.chat")} className="rounded-2xl border-border/60 shadow-sm">
           {availableCategories.length === 0 ? (
             <div className="flex flex-col items-center px-1 py-6 text-center">
               <div className="flex size-14 items-center justify-center rounded-full bg-muted text-2xl">
                 🤖
               </div>
               <p className="mt-4 text-sm font-semibold text-foreground">
-                فعّل أحد التطبيقات أولاً لاستخدام المساعد الذكي
+                {t("chat.emptyState.title")}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                المساعد متاح فقط لبيانات التطبيقات التي تم تفعيلها لمؤسستك.
+                {t("chat.emptyState.description")}
               </p>
             </div>
           ) : (
@@ -764,16 +795,16 @@ export default function AIAssistantDashboard() {
               {availableCategories.length > 1 ? (
                 <div className="mb-3 flex items-center gap-2">
                   <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                    نطاق المحادثة:
+                    {t("chat.scopeLabel")}
                   </span>
                   <AppSearchableSelect
                     value={activeCategory ?? ""}
                     options={categoryOptions}
                     onChange={(value) => setSelectedCategory(value as ApplicationCategoryId)}
-                    placeholder="اختر نطاق المحادثة"
-                    searchPlaceholder="ابحث عن قسم..."
-                    emptyLabel="لا يوجد قسم مطابق"
-                    ariaLabel="نطاق المحادثة"
+                    placeholder={t("chat.scopeSelect.placeholder")}
+                    searchPlaceholder={t("chat.scopeSelect.searchPlaceholder")}
+                    emptyLabel={t("chat.scopeSelect.emptyLabel")}
+                    ariaLabel={t("chat.scopeSelect.ariaLabel")}
                     compact
                     triggerClassName="w-56"
                   />
@@ -786,25 +817,30 @@ export default function AIAssistantDashboard() {
                     <div className="flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-blue-100 text-3xl">
                       🤖
                     </div>
-                    <p className="mt-4 text-lg font-bold text-foreground">مرحبًا! 👋</p>
+                    <p className="mt-4 text-lg font-bold text-foreground">
+                      {t("chat.welcome.greeting")}
+                    </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      أنا مساعدك الذكي في مدار لقسم{" "}
-                      {activeCategory ? CATEGORY_LABEL[activeCategory] : ""}، كيف يمكنني مساعدتك
-                      اليوم؟
+                      {t("chat.welcome.subtitle", { category: activeCategoryLabel })}
                     </p>
 
                     <div className="mt-5 w-full space-y-2.5">
-                      {(activeCategory ? SUGGESTED_QUESTIONS[activeCategory] : []).map(
+                      {(activeCategory ? SUGGESTED_QUESTION_CONFIG[activeCategory] : []).map(
                         (question) => {
                           const Icon = question.icon
+                          const label = activeCategory
+                            ? t(
+                                `chat.suggestedQuestions.${activeCategory}.${question.key}` as "chat.suggestedQuestions.advertising.bestRoas"
+                              )
+                            : ""
                           return (
                             <button
-                              key={question.label}
+                              key={question.key}
                               type="button"
-                              onClick={() => setChatInput(question.label)}
+                              onClick={() => setChatInput(label)}
                               className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 text-start text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
                             >
-                              <span>{question.label}</span>
+                              <span>{label}</span>
                               <Icon className="size-4 shrink-0 text-muted-foreground" />
                             </button>
                           )
@@ -846,7 +882,7 @@ export default function AIAssistantDashboard() {
                                 <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
                                 <span className="size-1.5 animate-bounce rounded-full bg-current" />
                               </span>
-                              {message.statusLabel ?? "جاري التفكير..."}
+                              {message.statusLabel ?? t("status.thinking")}
                             </span>
                           ) : (
                             <>
@@ -856,7 +892,7 @@ export default function AIAssistantDashboard() {
                               ) : null}
                               {isCancelled ? (
                                 <span className="mt-1 block text-xs text-muted-foreground">
-                                  تم إيقاف الإجابة.
+                                  {t("chat.cancelled")}
                                 </span>
                               ) : null}
                             </>
@@ -915,13 +951,13 @@ export default function AIAssistantDashboard() {
                         void handleSend(chatInput)
                       }
                     }}
-                    placeholder="اكتب سؤالك هنا..."
+                    placeholder={t("chat.input.placeholder")}
                     className="h-8 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                   />
                   {isSending ? (
                     <button
                       type="button"
-                      aria-label="إيقاف الإجابة"
+                      aria-label={t("chat.input.stopLabel")}
                       onClick={handleCancel}
                       className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-muted/70"
                     >
@@ -930,21 +966,18 @@ export default function AIAssistantDashboard() {
                   ) : (
                     <button
                       type="button"
-                      aria-label="إرسال"
+                      aria-label={t("chat.input.sendLabel")}
                       disabled={!chatInput.trim()}
                       onClick={() => void handleSend(chatInput)}
                       className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                     >
-                      <Send className="size-4 -scale-x-100" />
+                      <Send className="size-4 rtl:-scale-x-100" />
                     </button>
                   )}
                 </div>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Sparkles className="size-3.5 shrink-0" />
-                  يمكنك سؤال أي شيء عن بيانات {activeCategory
-                    ? CATEGORY_LABEL[activeCategory]
-                    : ""}{" "}
-                  الحقيقية لمؤسستك
+                  {t("chat.footerHint", { category: activeCategoryLabel })}
                 </p>
               </div>
             </>
@@ -952,12 +985,12 @@ export default function AIAssistantDashboard() {
         </AppCard>
       ) : (
         <AppCard
-          title="التوصيات المقترحة"
+          title={t("pageViews.recommendations")}
           icon={<Sparkles className="size-4 text-primary" />}
           className="rounded-2xl border-border/60 shadow-sm"
         >
           <div className="mb-4 flex flex-wrap items-center gap-5 border-b border-border/60">
-            {TABS.map((tab) => {
+            {RECOMMENDATION_TABS.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.key
               return (
@@ -971,7 +1004,7 @@ export default function AIAssistantDashboard() {
                   )}
                 >
                   {Icon ? <Icon className="size-3.5" /> : null}
-                  {tab.label}
+                  {t(`recommendationsView.tabs.${tab.key}` as "recommendationsView.tabs.all")}
                   {isActive ? (
                     <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground" />
                   ) : null}
@@ -988,7 +1021,7 @@ export default function AIAssistantDashboard() {
 
           <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="size-3.5 shrink-0" />
-            التوصيات أدناه توضيحية حاليًا وغير مرتبطة بالمساعد الذكي أعلاه
+            {t("recommendationsView.disclaimer")}
           </p>
         </AppCard>
       )}

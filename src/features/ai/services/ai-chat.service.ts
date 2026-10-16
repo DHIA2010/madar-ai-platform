@@ -1,3 +1,5 @@
+import type { useTranslations } from "next-intl"
+
 import type { ApplicationCategoryId } from "@/features/applications"
 
 import type { ChatMessageDto, ChatSessionDto, ChatStructuredResponse } from "../types"
@@ -5,6 +7,12 @@ import type { ChatMessageDto, ChatSessionDto, ChatStructuredResponse } from "../
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { getClientEnvironment } from "@/infrastructure/environment/app-environment"
 import { createSessionManager } from "@/infrastructure/identity"
+
+// This is a plain exported service object (not a hook or component), so it can't call
+// useTranslations() itself -- same pattern as plan-tiers.ts's translatedPlanTierMeta(tier, t):
+// the caller (use-ai-chat.ts, a real hook) owns the useTranslations("ai") call and passes its
+// own `t` down into sendMessageStream/consumeSseStream below.
+export type AiChatTranslator = ReturnType<typeof useTranslations<"ai">>
 
 // Same per-feature duplication convention as campaign-performance.service.ts's own copy of this
 // helper -- each feature keeps its own rather than sharing one.
@@ -81,10 +89,14 @@ async function buildStreamHeaders(): Promise<Record<string, string>> {
 // Frames can split across chunk boundaries (TCP/HTTP chunking has no relationship to SSE frame
 // boundaries), so partial text is buffered across reads and only parsed once a full blank-line-
 // terminated frame is available.
-async function consumeSseStream(response: Response, callbacks: ChatStreamCallbacks): Promise<void> {
+async function consumeSseStream(
+  response: Response,
+  callbacks: ChatStreamCallbacks,
+  t: AiChatTranslator
+): Promise<void> {
   const reader = response.body?.getReader()
   if (!reader) {
-    callbacks.onError("تعذر الاتصال بالمساعد الذكي.")
+    callbacks.onError(t("errors.noStream"))
     return
   }
   const decoder = new TextDecoder()
@@ -150,7 +162,7 @@ async function consumeSseStream(response: Response, callbacks: ChatStreamCallbac
       callbacks.onCancelled()
       return
     }
-    callbacks.onError("انقطع الاتصال بالمساعد الذكي. حاول مرة أخرى.")
+    callbacks.onError(t("errors.streamInterrupted"))
   }
 }
 
@@ -188,7 +200,8 @@ export const aiChatService = {
     sessionId: string,
     content: string,
     callbacks: ChatStreamCallbacks,
-    signal: AbortSignal
+    signal: AbortSignal,
+    t: AiChatTranslator
   ): Promise<void> {
     let response: Response
     try {
@@ -203,19 +216,15 @@ export const aiChatService = {
         callbacks.onCancelled()
         return
       }
-      callbacks.onError("تعذر الاتصال بالمساعد الذكي. تحقق من الاتصال بالإنترنت.")
+      callbacks.onError(t("errors.networkError"))
       return
     }
 
     if (!response.ok) {
-      callbacks.onError(
-        response.status === 429
-          ? "لقد أرسلت عدة رسائل خلال وقت قصير. حاول مرة أخرى بعد قليل."
-          : "تعذر إكمال الإجابة. حاول مرة أخرى."
-      )
+      callbacks.onError(response.status === 429 ? t("errors.rateLimited") : t("errors.generic"))
       return
     }
 
-    await consumeSseStream(response, callbacks)
+    await consumeSseStream(response, callbacks, t)
   },
 }

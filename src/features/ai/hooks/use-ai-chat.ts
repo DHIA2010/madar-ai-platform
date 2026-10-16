@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { APPLICATION_SETTINGS_KEY, type ApplicationCategoryId } from "@/features/applications"
 import { useWorkspace } from "@/features/workspace"
@@ -29,6 +30,7 @@ function toStreamingMessage(message: ChatMessageDto): ChatStreamingMessageDto {
 // answer arriving well before any timeout could matter, and each session's own AbortController
 // means one request's failure/cancellation can never bleed into another's state.
 export function useAiChat() {
+  const t = useTranslations("ai")
   const { currentOrganization } = useWorkspace()
 
   const [sessions, setSessions] = useState<ChatSessionDto[]>([])
@@ -142,7 +144,7 @@ export function useAiChat() {
           model: null,
           createdAt: nowIso,
           status: "pending",
-          statusLabel: "جاري التفكير...",
+          statusLabel: t("status.thinking"),
         },
       ])
 
@@ -161,7 +163,7 @@ export function useAiChat() {
               updateMessage(assistantMessageId, (message) => ({
                 ...message,
                 status: "streaming",
-                statusLabel: tool ? `جاري تنفيذ: ${tool}` : "جاري تحليل البيانات...",
+                statusLabel: tool ? t("status.runningTool", { tool }) : t("status.analyzing"),
               }))
             },
             onTextDelta: (delta) => {
@@ -198,14 +200,15 @@ export function useAiChat() {
               }))
             },
           },
-          controller.signal
+          controller.signal,
+          t
         )
       } finally {
         activeRequestsRef.current.delete(sessionId)
         setSessionStreaming(sessionId, false)
       }
     },
-    [activeSessionId, createSession, setSessionStreaming, updateMessage]
+    [activeSessionId, createSession, setSessionStreaming, t, updateMessage]
   )
 
   // Part 7: stops the fetch (and, through it, the backend's in-flight model call -- see the SSE

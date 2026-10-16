@@ -5964,5 +5964,149 @@
         "unattributed": "Unattributed"
       }
     }
+  },
+  "ai": {
+    "page": {
+      "title": "AI",
+      "subtitle": "Your smart assistant for improving marketing performance and making better decisions"
+    },
+    "pageViews": {
+      "chat": "AI Assistant",
+      "recommendations": "Suggested Recommendations"
+    },
+    "period": {
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "last90Days": "Last 90 days"
+    },
+    "categories": {
+      "advertising": "Ad Campaigns",
+      "ecommerce": "Online Stores",
+      "pos": "Point of Sale",
+      "madarApps": "Madar Apps"
+    },
+    "metricLabels": {
+      "orders": "Orders",
+      "aov": "Average Order Value",
+      "revenue": "Revenue",
+      "spend": "Spend",
+      "roas": "ROAS",
+      "cpa": "Cost per Acquisition",
+      "ctr": "Click-through Rate",
+      "cpc": "Cost per Click",
+      "conversions": "Conversions"
+    },
+    "status": {
+      "thinking": "Thinking...",
+      "runningTool": "Running: {tool}",
+      "analyzing": "Analyzing data..."
+    },
+    "errors": {
+      "noStream": "Could not connect to the AI assistant.",
+      "streamInterrupted": "The connection to the AI assistant was interrupted. Please try again.",
+      "networkError": "Could not connect to the AI assistant. Check your internet connection.",
+      "rateLimited": "You've sent several messages in a short time. Please try again shortly.",
+      "generic": "Couldn't complete the answer. Please try again."
+    },
+    "chat": {
+      "emptyState": {
+        "title": "Activate an app first to use the AI assistant",
+        "description": "The assistant is only available for data from apps activated for your organization."
+      },
+      "scopeLabel": "Conversation scope:",
+      "scopeSelect": {
+        "placeholder": "Select conversation scope",
+        "searchPlaceholder": "Search for a section...",
+        "emptyLabel": "No matching section",
+        "ariaLabel": "Conversation scope"
+      },
+      "welcome": {
+        "greeting": "Hello! 👋",
+        "subtitle": "I'm your Madar AI assistant for the {category} section. How can I help you today?"
+      },
+      "cancelled": "The answer was stopped.",
+      "input": {
+        "placeholder": "Type your question here...",
+        "stopLabel": "Stop answer",
+        "sendLabel": "Send"
+      },
+      "footerHint": "You can ask anything about your organization's real {category} data",
+      "suggestedQuestions": {
+        "advertising": {
+          "bestRoas": "Which channel is delivering the best return on investment?",
+          "increaseBudget": "Where should I increase budget to get better results?",
+          "monthlySummary": "Give me a summary of my campaigns' performance this month"
+        },
+        "pos": {
+          "totalSales": "What are my total completed sales this month?",
+          "returnedInvoices": "How many invoices were returned?"
+        },
+        "ecommerce": {
+          "avgOrderValue": "What is the average order value this week?",
+          "storeConnectionStatus": "What is the connection status of my stores?"
+        },
+        "madarApps": {
+          "kpiSummary": "Give me a summary of the key KPIs"
+        }
+      },
+      "drivers": {
+        "title": "Key Drivers",
+        "primary": "Primary driver",
+        "secondary": "Additional driver"
+      },
+      "contributions": {
+        "defaultTitle": "Top contributors to the change"
+      },
+      "recommendationsPanel": {
+        "priority": {
+          "high": "High priority",
+          "medium": "Medium priority",
+          "low": "Low priority"
+        }
+      },
+      "confidence": {
+        "label": "Analysis confidence: {level}",
+        "levels": {
+          "high": "High",
+          "medium": "Medium",
+          "low": "Low",
+          "insufficient": "Insufficient"
+        }
+      }
+    },
+    "recommendationsView": {
+      "tabs": {
+        "all": "All",
+        "growth": "Growth opportunities",
+        "optimization": "Performance optimization",
+        "alert": "Alerts"
+      },
+      "categoryMeta": {
+        "growth": "Growth opportunity",
+        "optimization": "Performance optimization",
+        "alert": "Alert"
+      },
+      "expectedImpact": "Expected impact",
+      "viewDetails": "View details",
+      "disclaimer": "The recommendations below are illustrative for now and not connected to the AI assistant above",
+      "items": {
+        "1": {
+          "title": "Increase budget for high-performing campaigns",
+          "description": "Search campaigns are achieving a high 5.8x ROAS. We suggest increasing the budget by 15% for better results."
+        },
+        "2": {
+          "title": "Improve audience targeting",
+          "description": "The conversion rate is 28% below average. Improving targeting could lower the cost."
+        },
+        "3": {
+          "title": "An opportunity to increase conversions",
+          "description": "The effective click-through rate is a high 2.4x, but conversions are low. Improving the landing page could increase conversions."
+        },
+        "4": {
+          "title": "High cost per conversion",
+          "description": "CPA has risen by 32% over the last 7 days. We recommend reviewing the ads or temporarily reducing the budget."
+        }
+      }
+    }
   }
 }
