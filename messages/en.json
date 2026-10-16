@@ -2008,5 +2008,89 @@
       "optionOrdinals": ["First option", "Second option", "Third option", "Fourth option"],
       "optionOrdinalFallback": "Option {n}"
     }
+  },
+  "orders": {
+    "heading": "Orders",
+    "subheading": "Manage and track every order in your store",
+    "export": "Export",
+    "loadError": "Couldn't load orders from your connected stores.",
+    "loadingOrders": "Loading orders from your connected stores...",
+    "noResultsTitle": "No orders match these filters",
+    "noResultsHint": "Try changing the channel, status, or date range.",
+    "searchPlaceholder": "Search by order number or customer name...",
+    "allChannels": "All Channels",
+    "status": {
+      "all": "All order statuses",
+      "completed": "Completed",
+      "processing": "Processing",
+      "cancelled": "Cancelled",
+      "refunded": "Refunded"
+    },
+    "paymentStatus": {
+      "all": "All payment statuses",
+      "paid": "Paid",
+      "pending": "Pending",
+      "refunded": "Refunded"
+    },
+    "kpis": {
+      "totalOrders": "Total orders",
+      "totalSales": "Total sales",
+      "averageOrderValue": "Average order value",
+      "completedOrders": "Completed orders",
+      "processingOrders": "Processing",
+      "cancelledOrders": "Cancelled orders",
+      "comparedToPreviousPeriod": "vs. previous period",
+      "currentPeriod": "Current period"
+    },
+    "table": {
+      "columns": {
+        "index": "#",
+        "order": "Order number",
+        "date": "Date & time",
+        "customer": "Customer",
+        "products": "Products",
+        "channel": "Channel",
+        "amount": "Order value",
+        "payment": "Payment status",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "rowActionsAriaLabel": "Actions for order {orderNumber}",
+      "viewProducts": "View products"
+    },
+    "pagination": {
+      "itemsPerPage": "Items per page",
+      "noResults": "No results",
+      "showingRange": "Showing {from} - {to} of {total} orders",
+      "first": "First page",
+      "previous": "Previous page",
+      "next": "Next page",
+      "last": "Last page"
+    },
+    "csv": {
+      "orderNumber": "Order number",
+      "date": "Date",
+      "customer": "Customer",
+      "channel": "Channel",
+      "productCount": "Product count",
+      "amount": "Order value",
+      "paymentStatus": "Payment status",
+      "status": "Status"
+    },
+    "dialog": {
+      "titleWithNumber": "Products for order #{orderNumber}",
+      "loadingDetails": "Loading product details...",
+      "summaryTotal": "Total",
+      "summaryDiscount": "Discount",
+      "summaryTax": "Tax",
+      "summaryProductCount": "Product count",
+      "columnProduct": "Product",
+      "columnSku": "SKU",
+      "columnUnitPrice": "Unit price",
+      "columnQuantity": "Quantity",
+      "columnTotal": "Total",
+      "noDetailsForOrder": "No product details available for this order.",
+      "pricesUnavailable": "Pricing details aren't available for this order."
+    }
   }
 }

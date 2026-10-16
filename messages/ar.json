@@ -2008,5 +2008,89 @@
       "optionOrdinals": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
       "optionOrdinalFallback": "الخيار {n}"
     }
+  },
+  "orders": {
+    "heading": "الطلبات",
+    "subheading": "إدارة ومتابعة جميع الطلبات في متجرك",
+    "export": "تصدير",
+    "loadError": "تعذر تحميل الطلبات من متاجرك المتصلة.",
+    "loadingOrders": "جارٍ تحميل الطلبات من متاجرك المتصلة...",
+    "noResultsTitle": "لا توجد طلبات مطابقة للفلاتر",
+    "noResultsHint": "جرّب تغيير القناة أو الحالة أو الفترة الزمنية.",
+    "searchPlaceholder": "ابحث برقم الطلب أو اسم العميل...",
+    "allChannels": "جميع القنوات",
+    "status": {
+      "all": "جميع حالات الطلب",
+      "completed": "مكتمل",
+      "processing": "قيد المعالجة",
+      "cancelled": "ملغى",
+      "refunded": "مسترجع"
+    },
+    "paymentStatus": {
+      "all": "جميع حالات الدفع",
+      "paid": "مدفوع",
+      "pending": "معلق",
+      "refunded": "مسترجع"
+    },
+    "kpis": {
+      "totalOrders": "إجمالي الطلبات",
+      "totalSales": "إجمالي المبيعات",
+      "averageOrderValue": "متوسط قيمة الطلب",
+      "completedOrders": "الطلبات المكتملة",
+      "processingOrders": "قيد المعالجة",
+      "cancelledOrders": "الطلبات الملغاة",
+      "comparedToPreviousPeriod": "مقارنة بالفترة السابقة",
+      "currentPeriod": "الفترة الحالية"
+    },
+    "table": {
+      "columns": {
+        "index": "#",
+        "order": "رقم الطلب",
+        "date": "التاريخ والوقت",
+        "customer": "العميل",
+        "products": "المنتجات",
+        "channel": "القناة",
+        "amount": "قيمة الطلب",
+        "payment": "حالة الدفع",
+        "status": "الحالة",
+        "actions": "الإجراءات"
+      },
+      "rowActionsAriaLabel": "إجراءات الطلب {orderNumber}",
+      "viewProducts": "عرض المنتجات"
+    },
+    "pagination": {
+      "itemsPerPage": "عدد العناصر في الصفحة",
+      "noResults": "لا توجد نتائج",
+      "showingRange": "عرض {from} - {to} من {total} طلب",
+      "first": "الصفحة الأولى",
+      "previous": "الصفحة السابقة",
+      "next": "الصفحة التالية",
+      "last": "الصفحة الأخيرة"
+    },
+    "csv": {
+      "orderNumber": "رقم الطلب",
+      "date": "التاريخ",
+      "customer": "العميل",
+      "channel": "القناة",
+      "productCount": "عدد المنتجات",
+      "amount": "قيمة الطلب",
+      "paymentStatus": "حالة الدفع",
+      "status": "الحالة"
+    },
+    "dialog": {
+      "titleWithNumber": "منتجات الطلب #{orderNumber}",
+      "loadingDetails": "جارٍ تحميل تفاصيل المنتجات...",
+      "summaryTotal": "الإجمالي",
+      "summaryDiscount": "الخصم",
+      "summaryTax": "الضريبة",
+      "summaryProductCount": "عدد المنتجات",
+      "columnProduct": "المنتج",
+      "columnSku": "SKU",
+      "columnUnitPrice": "سعر الوحدة",
+      "columnQuantity": "الكمية",
+      "columnTotal": "الإجمالي",
+      "noDetailsForOrder": "لا تتوفر تفاصيل منتجات لهذا الطلب.",
+      "pricesUnavailable": "لم تتوفر تفاصيل الأسعار لهذا الطلب."
+    }
   }
 }

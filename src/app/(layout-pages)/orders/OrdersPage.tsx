@@ -14,6 +14,7 @@
 //   separate, on-demand order-detail endpoint opened via "عرض المنتجات".
 
 import { useEffect, useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import {
   CheckCircle2,
   ChevronLeft,
@@ -42,6 +43,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { cairo } from "@/components/design/fonts"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import {
   orderListService,
   type OrderDetail,
@@ -76,40 +78,51 @@ const FILTER_TRIGGER_CLASS =
 const PAGER_BUTTON_CLASS =
   "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
-function formatDateTime(value: string): string {
-  return DATE_TIME_FORMAT.format(new Date(value))
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+function formatDateTime(value: string, locale: Locale): string {
+  return dateTimeFormatter(locale).format(new Date(value))
 }
 
-const ORDER_STATUS_AR: Record<OrderRecord["orderStatus"], { label: string; className: string }> = {
-  Completed: { label: "مكتمل", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  Processing: { label: "قيد المعالجة", className: "bg-[#fff3e3] text-[#e08b00]" },
-  Cancelled: { label: "ملغى", className: "bg-[#fdeeee] text-[#e0484d]" },
-  Refunded: { label: "مسترجع", className: "bg-[#f3eeff] text-[#8b5cf6]" },
+type OrdersTranslator = ReturnType<typeof useTranslations<"orders">>
+
+function getOrderStatusMeta(
+  t: OrdersTranslator
+): Record<OrderRecord["orderStatus"], { label: string; className: string }> {
+  return {
+    Completed: { label: t("status.completed"), className: "bg-[#e9f8ef] text-[#1f9d55]" },
+    Processing: { label: t("status.processing"), className: "bg-[#fff3e3] text-[#e08b00]" },
+    Cancelled: { label: t("status.cancelled"), className: "bg-[#fdeeee] text-[#e0484d]" },
+    Refunded: { label: t("status.refunded"), className: "bg-[#f3eeff] text-[#8b5cf6]" },
+  }
 }
 
 // Real payment STATUS, not a method -- see the module comment above.
-const PAYMENT_STATUS_AR: Record<
-  OrderRecord["paymentStatus"],
-  { label: string; className: string }
-> = {
-  Paid: { label: "مدفوع", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  Pending: { label: "معلق", className: "bg-[#fff3e3] text-[#e08b00]" },
-  Refunded: { label: "مسترجع", className: "bg-[#f3eeff] text-[#8b5cf6]" },
+function getPaymentStatusMeta(
+  t: OrdersTranslator
+): Record<OrderRecord["paymentStatus"], { label: string; className: string }> {
+  return {
+    Paid: { label: t("paymentStatus.paid"), className: "bg-[#e9f8ef] text-[#1f9d55]" },
+    Pending: { label: t("paymentStatus.pending"), className: "bg-[#fff3e3] text-[#e08b00]" },
+    Refunded: { label: t("paymentStatus.refunded"), className: "bg-[#f3eeff] text-[#8b5cf6]" },
+  }
 }
 
 const PLATFORM_TINT: Record<OrderRecord["platform"], string> = {
@@ -124,19 +137,23 @@ function PlatformIcon({ platform }: { platform: OrderRecord["platform"] }) {
   return <Store className="size-3.5" />
 }
 
-const statusFilterOptions = [
-  { value: "All Status", label: "جميع حالات الطلب" },
-  { value: "Completed", label: "مكتمل" },
-  { value: "Processing", label: "قيد المعالجة" },
-  { value: "Cancelled", label: "ملغى" },
-  { value: "Refunded", label: "مسترجع" },
-]
-const paymentFilterOptions = [
-  { value: "All Payment", label: "جميع حالات الدفع" },
-  { value: "Paid", label: "مدفوع" },
-  { value: "Pending", label: "معلق" },
-  { value: "Refunded", label: "مسترجع" },
-]
+function getStatusFilterOptions(t: OrdersTranslator) {
+  return [
+    { value: "All Status", label: t("status.all") },
+    { value: "Completed", label: t("status.completed") },
+    { value: "Processing", label: t("status.processing") },
+    { value: "Cancelled", label: t("status.cancelled") },
+    { value: "Refunded", label: t("status.refunded") },
+  ]
+}
+function getPaymentFilterOptions(t: OrdersTranslator) {
+  return [
+    { value: "All Payment", label: t("paymentStatus.all") },
+    { value: "Paid", label: t("paymentStatus.paid") },
+    { value: "Pending", label: t("paymentStatus.pending") },
+    { value: "Refunded", label: t("paymentStatus.refunded") },
+  ]
+}
 
 interface OrderKpiCardData {
   label: string
@@ -161,6 +178,7 @@ function formatChangePct(value: number | null): string | null {
 }
 
 function OrderKpiCard({ kpi }: { kpi: OrderKpiCardData }) {
+  const t = useTranslations("orders")
   const Icon = kpi.icon
   const changeLabel = formatChangePct(kpi.changePct)
 
@@ -201,10 +219,10 @@ function OrderKpiCard({ kpi }: { kpi: OrderKpiCardData }) {
             )}
             {changeLabel}
           </span>
-          <span className={cn("text-[10.5px]", MUTED)}>مقارنة بالفترة السابقة</span>
+          <span className={cn("text-[10.5px]", MUTED)}>{t("kpis.comparedToPreviousPeriod")}</span>
         </div>
       ) : (
-        <p className={cn("mt-3 text-[10.5px]", MUTED)}>الفترة الحالية</p>
+        <p className={cn("mt-3 text-[10.5px]", MUTED)}>{t("kpis.currentPeriod")}</p>
       )}
     </div>
   )
@@ -273,6 +291,8 @@ function OrderProductsDialog({
   order: OrderRecord | null
   onClose: () => void
 }) {
+  const t = useTranslations("orders")
+  const locale = useLocale() as Locale
   const [detail, setDetail] = useState<OrderDetail | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [detailLoadFailed, setDetailLoadFailed] = useState(false)
@@ -306,10 +326,15 @@ function OrderProductsDialog({
 
   return (
     <Dialog open={order !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-[36rem] [direction:rtl]">
+      <DialogContent
+        className={cn(
+          "flex max-h-[85vh] flex-col sm:max-w-[36rem]",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
+      >
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-            منتجات الطلب #{order?.orderNumber ?? ""}
+            {t("dialog.titleWithNumber", { orderNumber: order?.orderNumber ?? "" })}
           </DialogTitle>
           <DialogDescription className={cn("text-[12px]", MUTED)}>
             {order?.customerName ?? ""}
@@ -320,20 +345,28 @@ function OrderProductsDialog({
           {isLoadingDetail ? (
             <div className={cn("flex items-center justify-center gap-2 py-10 text-[13px]", MUTED)}>
               <Loader2 className="size-4 animate-spin" />
-              جارٍ تحميل تفاصيل المنتجات...
+              {t("dialog.loadingDetails")}
             </div>
           ) : detail ? (
             <>
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                <SummaryStat label="الإجمالي" value={formatAmount(detail.total)} tone="blue" />
                 <SummaryStat
-                  label="الخصم"
-                  value={formatAmount(detail.discountTotal)}
+                  label={t("dialog.summaryTotal")}
+                  value={formatAmount(detail.total, locale)}
+                  tone="blue"
+                />
+                <SummaryStat
+                  label={t("dialog.summaryDiscount")}
+                  value={formatAmount(detail.discountTotal, locale)}
                   tone="green"
                 />
-                <SummaryStat label="الضريبة" value={formatAmount(detail.taxTotal)} tone="violet" />
                 <SummaryStat
-                  label="عدد المنتجات"
+                  label={t("dialog.summaryTax")}
+                  value={formatAmount(detail.taxTotal, locale)}
+                  tone="violet"
+                />
+                <SummaryStat
+                  label={t("dialog.summaryProductCount")}
                   value={String(detail.items.length)}
                   tone="amber"
                 />
@@ -343,7 +376,13 @@ function OrderProductsDialog({
                 <table className="w-full text-center">
                   <thead>
                     <tr className="bg-[#f7f9fc]">
-                      {["المنتج", "SKU", "سعر الوحدة", "الكمية", "الإجمالي"].map((label) => (
+                      {[
+                        t("dialog.columnProduct"),
+                        t("dialog.columnSku"),
+                        t("dialog.columnUnitPrice"),
+                        t("dialog.columnQuantity"),
+                        t("dialog.columnTotal"),
+                      ].map((label) => (
                         <th
                           key={label}
                           className={cn(
@@ -382,7 +421,7 @@ function OrderProductsDialog({
                           {item.sku ?? "—"}
                         </td>
                         <td className={cn("px-2.5 py-2.5 text-[12px] tabular-nums", HEADING)}>
-                          {item.unitPrice === null ? "—" : formatAmount(item.unitPrice)}
+                          {item.unitPrice === null ? "—" : formatAmount(item.unitPrice, locale)}
                         </td>
                         <td className={cn("px-2.5 py-2.5 text-[12px] tabular-nums", HEADING)}>
                           {item.quantity}
@@ -393,7 +432,7 @@ function OrderProductsDialog({
                             HEADING
                           )}
                         >
-                          {formatAmount(item.total)}
+                          {formatAmount(item.total, locale)}
                         </td>
                       </tr>
                     ))}
@@ -404,7 +443,7 @@ function OrderProductsDialog({
           ) : (
             <div className="flex flex-col gap-2">
               {order?.items.length === 0 ? (
-                <p className={cn("text-[12.5px]", MUTED)}>لا تتوفر تفاصيل منتجات لهذا الطلب.</p>
+                <p className={cn("text-[12.5px]", MUTED)}>{t("dialog.noDetailsForOrder")}</p>
               ) : (
                 order?.items.map((item: OrderItemRecord, index: number) => (
                   <div
@@ -424,7 +463,7 @@ function OrderProductsDialog({
                 ))
               )}
               {detailLoadFailed ? (
-                <p className={cn("text-[11px]", MUTED)}>لم تتوفر تفاصيل الأسعار لهذا الطلب.</p>
+                <p className={cn("text-[11px]", MUTED)}>{t("dialog.pricesUnavailable")}</p>
               ) : null}
             </div>
           )}
@@ -435,6 +474,8 @@ function OrderProductsDialog({
 }
 
 export default function OrdersPage() {
+  const t = useTranslations("orders")
+  const locale = useLocale() as Locale
   const [orders, setOrders] = useState<OrderRecord[]>([])
   const [summary, setSummary] = useState<OrdersSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -465,7 +506,7 @@ export default function OrdersPage() {
         }
       } catch (error) {
         console.error("Failed to load orders", error)
-        if (!cancelled) setLoadError("تعذر تحميل الطلبات من متاجرك المتصلة.")
+        if (!cancelled) setLoadError(t("loadError"))
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -475,6 +516,9 @@ export default function OrdersPage() {
     return () => {
       cancelled = true
     }
+    // Only re-runs when the date range changes -- re-running on every locale toggle would
+    // refetch the whole order list just from switching the language.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange])
 
   const dynamicChannelOptions = useMemo(() => {
@@ -499,51 +543,57 @@ export default function OrdersPage() {
 
   const kpiCards = useMemo<OrderKpiCardData[]>(() => {
     if (!summary) return []
+    const numberLocale = locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
     return [
       {
-        label: "إجمالي الطلبات",
-        value: summary.totalOrders.toLocaleString("ar-SA-u-nu-latn"),
+        label: t("kpis.totalOrders"),
+        value: summary.totalOrders.toLocaleString(numberLocale),
         changePct: summary.totalOrdersChangePct,
         icon: ShoppingCart,
         tone: "blue",
       },
       {
-        label: "إجمالي المبيعات",
-        value: formatAmount(summary.totalSales),
+        label: t("kpis.totalSales"),
+        value: formatAmount(summary.totalSales, locale),
         changePct: summary.totalSalesChangePct,
         icon: Wallet,
         tone: "violet",
       },
       {
-        label: "متوسط قيمة الطلب",
-        value: formatAmount(summary.averageOrderValue),
+        label: t("kpis.averageOrderValue"),
+        value: formatAmount(summary.averageOrderValue, locale),
         changePct: summary.averageOrderValueChangePct,
         icon: Receipt,
         tone: "blue",
       },
       {
-        label: "الطلبات المكتملة",
-        value: summary.completedOrders.toLocaleString("ar-SA-u-nu-latn"),
+        label: t("kpis.completedOrders"),
+        value: summary.completedOrders.toLocaleString(numberLocale),
         changePct: summary.completedOrdersChangePct,
         icon: CheckCircle2,
         tone: "green",
       },
       {
-        label: "قيد المعالجة",
-        value: summary.processingOrders.toLocaleString("ar-SA-u-nu-latn"),
+        label: t("kpis.processingOrders"),
+        value: summary.processingOrders.toLocaleString(numberLocale),
         changePct: summary.processingOrdersChangePct,
         icon: Clock,
         tone: "amber",
       },
       {
-        label: "الطلبات الملغاة",
-        value: summary.cancelledOrders.toLocaleString("ar-SA-u-nu-latn"),
+        label: t("kpis.cancelledOrders"),
+        value: summary.cancelledOrders.toLocaleString(numberLocale),
         changePct: summary.cancelledOrdersChangePct,
         icon: XCircle,
         tone: "rose",
       },
     ]
-  }, [summary])
+  }, [summary, locale, t])
+
+  const orderStatusMeta = useMemo(() => getOrderStatusMeta(t), [t])
+  const paymentStatusMeta = useMemo(() => getPaymentStatusMeta(t), [t])
+  const statusFilterOptions = useMemo(() => getStatusFilterOptions(t), [t])
+  const paymentFilterOptions = useMemo(() => getPaymentFilterOptions(t), [t])
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -551,27 +601,27 @@ export default function OrdersPage() {
 
   function exportToCSV(rows: OrderRecord[]) {
     const headers = [
-      "رقم الطلب",
-      "التاريخ",
-      "العميل",
-      "القناة",
-      "عدد المنتجات",
-      "قيمة الطلب",
-      "حالة الدفع",
-      "الحالة",
+      t("csv.orderNumber"),
+      t("csv.date"),
+      t("csv.customer"),
+      t("csv.channel"),
+      t("csv.productCount"),
+      t("csv.amount"),
+      t("csv.paymentStatus"),
+      t("csv.status"),
     ]
     const csvContent = [
       headers.join(","),
       ...rows.map((row) =>
         [
           row.orderNumber,
-          formatDateTime(row.createdAt),
+          formatDateTime(row.createdAt, locale),
           row.customerName,
           row.channel,
           row.productCount,
           row.amount,
-          PAYMENT_STATUS_AR[row.paymentStatus].label,
-          ORDER_STATUS_AR[row.orderStatus].label,
+          paymentStatusMeta[row.paymentStatus].label,
+          orderStatusMeta[row.orderStatus].label,
         ]
           .map((value) => `"${String(value).replace(/"/g, '""')}"`)
           .join(",")
@@ -588,7 +638,10 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div
+      className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")}
+      dir={localeDirection(locale)}
+    >
       <div className="mx-auto w-full max-w-[1500px] space-y-4">
         {/* RTL: the title block is written first so it lands on the right, actions left. */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -597,10 +650,10 @@ export default function OrdersPage() {
               <ShoppingCart className="size-5" />
             </span>
             <div>
-              <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>الطلبات</h1>
-              <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>
-                إدارة ومتابعة جميع الطلبات في متجرك
-              </p>
+              <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
+                {t("heading")}
+              </h1>
+              <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>{t("subheading")}</p>
             </div>
           </div>
 
@@ -610,7 +663,7 @@ export default function OrdersPage() {
             disabled={filteredOrders.length === 0}
             onClick={() => exportToCSV(filteredOrders)}
           >
-            تصدير
+            {t("export")}
             <Download className="size-4" />
           </Button>
         </div>
@@ -627,7 +680,7 @@ export default function OrdersPage() {
             <div className="relative w-full sm:w-[240px]">
               <Search className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-[#95a4bd]" />
               <Input
-                placeholder="ابحث برقم الطلب أو اسم العميل..."
+                placeholder={t("searchPlaceholder")}
                 className="h-10 rounded-[10px] border-[#e1e7f0] bg-white pe-9 text-[12.5px] placeholder:text-[#95a4bd]"
                 value={search}
                 onChange={(event) => {
@@ -667,7 +720,7 @@ export default function OrdersPage() {
               }}
               options={dynamicChannelOptions.map((option) => ({
                 value: option,
-                label: option === "All Channels" ? "جميع القنوات" : option,
+                label: option === "All Channels" ? t("allChannels") : option,
               }))}
               triggerClassName={FILTER_TRIGGER_CLASS}
             />
@@ -681,7 +734,7 @@ export default function OrdersPage() {
               )}
             >
               <Loader2 className="size-4 animate-spin" />
-              جارٍ تحميل الطلبات من متاجرك المتصلة...
+              {t("loadingOrders")}
             </div>
           ) : loadError ? (
             <div className="rounded-[12px] border border-[#f7c9ca] bg-[#fdeeee] px-4 py-8 text-center text-[12.5px] text-[#e0484d]">
@@ -689,10 +742,8 @@ export default function OrdersPage() {
             </div>
           ) : paginatedOrders.length === 0 ? (
             <div className="rounded-[12px] border border-[#eef2f8] px-4 py-12 text-center">
-              <p className={cn("text-[13.5px] font-bold", HEADING)}>لا توجد طلبات مطابقة للفلاتر</p>
-              <p className={cn("mt-2 text-[12px]", MUTED)}>
-                جرّب تغيير القناة أو الحالة أو الفترة الزمنية.
-              </p>
+              <p className={cn("text-[13.5px] font-bold", HEADING)}>{t("noResultsTitle")}</p>
+              <p className={cn("mt-2 text-[12px]", MUTED)}>{t("noResultsHint")}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -700,16 +751,16 @@ export default function OrdersPage() {
                 <thead>
                   <tr className="bg-[#f1f5fc]">
                     {[
-                      { key: "index", label: "#" },
-                      { key: "order", label: "رقم الطلب" },
-                      { key: "date", label: "التاريخ والوقت" },
-                      { key: "customer", label: "العميل" },
-                      { key: "products", label: "المنتجات" },
-                      { key: "channel", label: "القناة" },
-                      { key: "amount", label: "قيمة الطلب" },
-                      { key: "payment", label: "حالة الدفع" },
-                      { key: "status", label: "الحالة" },
-                      { key: "actions", label: "الإجراءات" },
+                      { key: "index", label: t("table.columns.index") },
+                      { key: "order", label: t("table.columns.order") },
+                      { key: "date", label: t("table.columns.date") },
+                      { key: "customer", label: t("table.columns.customer") },
+                      { key: "products", label: t("table.columns.products") },
+                      { key: "channel", label: t("table.columns.channel") },
+                      { key: "amount", label: t("table.columns.amount") },
+                      { key: "payment", label: t("table.columns.payment") },
+                      { key: "status", label: t("table.columns.status") },
+                      { key: "actions", label: t("table.columns.actions") },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -735,7 +786,7 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td className={cn("px-3 py-3 text-[12px]", MUTED)}>
-                        {formatDateTime(order.createdAt)}
+                        {formatDateTime(order.createdAt, locale)}
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-center gap-2">
@@ -764,26 +815,26 @@ export default function OrdersPage() {
                         </div>
                       </td>
                       <td className={cn("px-3 py-3 text-[12.5px] font-bold tabular-nums", HEADING)}>
-                        {formatAmount(order.amount)}
+                        {formatAmount(order.amount, locale)}
                       </td>
                       <td className="px-3 py-3">
                         <span
                           className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold",
-                            PAYMENT_STATUS_AR[order.paymentStatus].className
+                            paymentStatusMeta[order.paymentStatus].className
                           )}
                         >
-                          {PAYMENT_STATUS_AR[order.paymentStatus].label}
+                          {paymentStatusMeta[order.paymentStatus].label}
                         </span>
                       </td>
                       <td className="px-3 py-3">
                         <span
                           className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold",
-                            ORDER_STATUS_AR[order.orderStatus].className
+                            orderStatusMeta[order.orderStatus].className
                           )}
                         >
-                          {ORDER_STATUS_AR[order.orderStatus].label}
+                          {orderStatusMeta[order.orderStatus].label}
                         </span>
                       </td>
                       <td className="px-3 py-3">
@@ -791,7 +842,9 @@ export default function OrdersPage() {
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              aria-label={`إجراءات الطلب ${order.orderNumber}`}
+                              aria-label={t("table.rowActionsAriaLabel", {
+                                orderNumber: order.orderNumber,
+                              })}
                               className="mx-auto flex size-8 items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:bg-[#f4f7fc]"
                             >
                               <MoreHorizontal className="size-4" />
@@ -801,7 +854,11 @@ export default function OrdersPage() {
                               page's dir. */}
                           <DropdownMenuContent
                             align="end"
-                            className={cn(cairo.className, "w-44 rounded-[12px] [direction:rtl]")}
+                            className={cn(
+                              cairo.className,
+                              "w-44 rounded-[12px]",
+                              locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+                            )}
                           >
                             <DropdownMenuItem
                               className="cursor-pointer gap-2 text-[12.5px]"
@@ -813,7 +870,7 @@ export default function OrdersPage() {
                               }}
                             >
                               <Eye className="size-4" />
-                              عرض المنتجات
+                              {t("table.viewProducts")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -831,11 +888,15 @@ export default function OrdersPage() {
               <div className="flex items-center gap-3">
                 <span className={cn("text-[12px]", MUTED)}>
                   {filteredOrders.length === 0
-                    ? "لا توجد نتائج"
-                    : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, filteredOrders.length)} من ${filteredOrders.length} طلب`}
+                    ? t("pagination.noResults")
+                    : t("pagination.showingRange", {
+                        from: (currentPage - 1) * pageSize + 1,
+                        to: Math.min(currentPage * pageSize, filteredOrders.length),
+                        total: filteredOrders.length,
+                      })}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-[12px]", MUTED)}>عدد العناصر في الصفحة</span>
+                  <span className={cn("text-[12px]", MUTED)}>{t("pagination.itemsPerPage")}</span>
                   <AppSearchableSelect
                     value={String(pageSize)}
                     onChange={(next) => {
@@ -856,19 +917,19 @@ export default function OrdersPage() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة الأولى"
+                  aria-label={t("pagination.first")}
                   onClick={() => setPage(1)}
                 >
-                  <ChevronsRight className="size-4" />
+                  <ChevronsLeft className="size-4 rtl:rotate-180" />
                 </button>
                 <button
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("pagination.previous")}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronLeft className="size-4 rtl:rotate-180" />
                 </button>
 
                 {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
@@ -897,19 +958,19 @@ export default function OrdersPage() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("pagination.next")}
                   onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 >
-                  <ChevronLeft className="size-4" />
+                  <ChevronRight className="size-4 rtl:rotate-180" />
                 </button>
                 <button
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة الأخيرة"
+                  aria-label={t("pagination.last")}
                   onClick={() => setPage(totalPages)}
                 >
-                  <ChevronsLeft className="size-4" />
+                  <ChevronsRight className="size-4 rtl:rotate-180" />
                 </button>
               </div>
             </div>
