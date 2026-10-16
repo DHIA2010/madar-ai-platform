@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale } from "next-intl"
 import {
   ArrowRight,
   Loader2,
@@ -27,6 +28,8 @@ import { formatCurrency, HEADING, MUTED, PANEL, ReadyReportKpiCard } from "./rea
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 import { WaterfallChart } from "./waterfall-chart"
 
+import type { Locale } from "@/i18n/locales"
+
 const TIME_GROUPING_OPTIONS = [
   { value: "month", label: "شهري" },
   { value: "week", label: "أسبوعي" },
@@ -34,6 +37,11 @@ const TIME_GROUPING_OPTIONS = [
 ]
 
 export function NetIncomeReportPage() {
+  // NOTE: this page is not yet translated (deferred to its own i18n pass, alongside
+  // WaterfallChart/NetIncomeByBranchChart/NetIncomeSuggestionsPanel) -- `locale` here only feeds
+  // the now-locale-aware shared formatCurrency() from ready-report-field.tsx, so this file keeps
+  // compiling against that shared helper's new signature.
+  const locale = useLocale() as Locale
   const router = useRouter()
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const [timeGrouping, setTimeGrouping] = useState<"day" | "week" | "month">("month")
@@ -74,49 +82,49 @@ export function NetIncomeReportPage() {
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
             <ReadyReportKpiCard
               label="المبيعات"
-              value={formatCurrency(data.totals.sales)}
+              value={formatCurrency(data.totals.sales, locale)}
               icon={Receipt}
               tone="blue"
             />
             <ReadyReportKpiCard
               label="المرتجعات"
-              value={formatCurrency(data.totals.returns)}
+              value={formatCurrency(data.totals.returns, locale)}
               icon={RotateCcw}
               tone="rose"
             />
             <ReadyReportKpiCard
               label="صافي المبيعات"
-              value={formatCurrency(data.totals.netSales)}
+              value={formatCurrency(data.totals.netSales, locale)}
               icon={ShoppingBag}
               tone="emerald"
             />
             <ReadyReportKpiCard
               label="الضريبة"
-              value={formatCurrency(data.totals.tax)}
+              value={formatCurrency(data.totals.tax, locale)}
               icon={Percent}
               tone="amber"
             />
             <ReadyReportKpiCard
               label="تكلفة المنتجات المباعة"
-              value={formatCurrency(data.totals.cogs)}
+              value={formatCurrency(data.totals.cogs, locale)}
               icon={Package}
               tone="blue"
             />
             <ReadyReportKpiCard
               label="تكلفة المنتجات المسترجعة"
-              value={formatCurrency(data.totals.returnedCogs)}
+              value={formatCurrency(data.totals.returnedCogs, locale)}
               icon={RotateCcw}
               tone="violet"
             />
             <ReadyReportKpiCard
               label="المصروفات"
-              value={formatCurrency(data.totals.expenses)}
+              value={formatCurrency(data.totals.expenses, locale)}
               icon={Wallet}
               tone="amber"
             />
             <ReadyReportKpiCard
               label="صافي الدخل"
-              value={formatCurrency(data.totals.netIncome)}
+              value={formatCurrency(data.totals.netIncome, locale)}
               icon={data.totals.netIncome >= 0 ? TrendingUp : TrendingDown}
               tone={data.totals.netIncome >= 0 ? "emerald" : "rose"}
               emphasis={data.totals.netIncome >= 0 ? "positive" : "negative"}
@@ -174,28 +182,28 @@ export function NetIncomeReportPage() {
                         {period.label.slice(0, 10)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.sales)}
+                        {formatCurrency(period.sales, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.returns)}
+                        {formatCurrency(period.returns, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.netSales)}
+                        {formatCurrency(period.netSales, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.tax)}
+                        {formatCurrency(period.tax, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.cogs)}
+                        {formatCurrency(period.cogs, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.returnedCogs)}
+                        {formatCurrency(period.returnedCogs, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-black">
-                        {formatCurrency(period.expenses)}
+                        {formatCurrency(period.expenses, locale)}
                       </td>
                       <td className="px-3 py-2 text-[12px] font-bold text-black">
-                        {formatCurrency(period.netIncome)}
+                        {formatCurrency(period.netIncome, locale)}
                       </td>
                     </tr>
                   ))}

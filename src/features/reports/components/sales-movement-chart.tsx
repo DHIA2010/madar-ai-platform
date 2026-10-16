@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import {
   Area,
   AreaChart,
@@ -16,18 +17,18 @@ import type { SalesMovementHourRow } from "../types"
 import { AXIS_TICK_STYLE, formatCurrencyCompact, TOOLTIP_STYLE } from "./chart-constants"
 import { HEADING, PANEL } from "./ready-report-field"
 
-function formatHourLabel(hour: number): string {
-  const period = hour < 12 ? "ص" : "م"
-  const twelveHour = hour % 12 === 0 ? 12 : hour % 12
-  return `${twelveHour} ${period}`
-}
-
 export function SalesMovementChart({ hours }: { hours: SalesMovementHourRow[] }) {
+  const t = useTranslations("reports.salesMovement")
+  function formatHourLabel(hour: number): string {
+    const period = hour < 12 ? t("amLabel") : t("pmLabel")
+    const twelveHour = hour % 12 === 0 ? 12 : hour % 12
+    return `${twelveHour} ${period}`
+  }
   const data = hours.map((row) => ({ ...row, label: formatHourLabel(row.hour) }))
 
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>المبيعات خلال اليوم</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("chartTitle")}</h3>
       <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
@@ -48,7 +49,7 @@ export function SalesMovementChart({ hours }: { hours: SalesMovementHourRow[] })
             />
             <Tooltip
               contentStyle={TOOLTIP_STYLE}
-              formatter={(value: number) => [formatCurrencyCompact(value), "المبيعات"]}
+              formatter={(value: number) => [formatCurrencyCompact(value), t("tooltipSales")]}
             />
             <Area
               type="monotone"

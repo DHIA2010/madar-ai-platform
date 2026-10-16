@@ -1,5 +1,6 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
 import {
   Bar,
   BarChart,
@@ -24,16 +25,20 @@ import {
 } from "./chart-constants"
 import { HEADING, MUTED, PANEL } from "./ready-report-field"
 
-function formatCurrency(value: number): string {
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)} ر.س`
+import type { Locale } from "@/i18n/locales"
+
+function formatCurrency(value: number, locale: Locale): string {
+  return `${new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
 export function SalesByBranchBarChart({ branches }: { branches: SalesByBranchRow[] }) {
+  const t = useTranslations("reports.salesByBranch.charts")
+  const tCommon = useTranslations("reports.common")
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>المبيعات حسب الفرع</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("barTitle")}</h3>
       {branches.length === 0 ? (
-        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{tCommon("noData")}</p>
       ) : (
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -55,7 +60,7 @@ export function SalesByBranchBarChart({ branches }: { branches: SalesByBranchRow
               <Tooltip
                 cursor={{ fill: "#f4f7fb" }}
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number) => [formatCurrencyCompact(value), "المبيعات"]}
+                formatter={(value: number) => [formatCurrencyCompact(value), t("tooltipSales")]}
               />
               <Bar dataKey="totalSales" radius={[6, 6, 0, 0]} isAnimationActive={false}>
                 {branches.map((branch, index) => (
@@ -71,13 +76,16 @@ export function SalesByBranchBarChart({ branches }: { branches: SalesByBranchRow
 }
 
 export function SalesByBranchDonutChart({ branches }: { branches: SalesByBranchRow[] }) {
+  const t = useTranslations("reports.salesByBranch.charts")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
   const total = branches.reduce((sum, branch) => sum + branch.totalSales, 0)
 
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>توزيع المبيعات حسب الفرع</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("donutTitle")}</h3>
       {branches.length === 0 ? (
-        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{tCommon("noData")}</p>
       ) : (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="relative mx-auto aspect-square w-full max-w-[200px] shrink-0">
@@ -111,7 +119,7 @@ export function SalesByBranchDonutChart({ branches }: { branches: SalesByBranchR
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <p className={cn("text-[10.5px]", MUTED)}>الإجمالي</p>
+              <p className={cn("text-[10.5px]", MUTED)}>{tCommon("total")}</p>
               <p className={cn("text-[13px] font-extrabold", HEADING)}>
                 {formatCurrencyCompact(total)}
               </p>
@@ -129,7 +137,8 @@ export function SalesByBranchDonutChart({ branches }: { branches: SalesByBranchR
                   {branch.workspaceName}
                 </span>
                 <span className={cn("shrink-0 font-semibold", MUTED)}>
-                  {formatCurrency(branch.totalSales)} ({branch.contributionPercent.toFixed(1)}%)
+                  {formatCurrency(branch.totalSales, locale)} (
+                  {branch.contributionPercent.toFixed(1)}%)
                 </span>
               </div>
             ))}

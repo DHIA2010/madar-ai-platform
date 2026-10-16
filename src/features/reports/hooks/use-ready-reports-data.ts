@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { readyReportsService } from "../services"
 import type {
@@ -19,6 +20,7 @@ export function useNetIncomeReport(
   filters: ReadyReportFilters,
   timeGrouping: "day" | "week" | "month"
 ) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<NetIncomeReportDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +31,7 @@ export function useNetIncomeReport(
     try {
       setData(await readyReportsService.netIncome(filters, timeGrouping))
     } catch {
-      setError("تعذر تحميل تقرير صافي الدخل. حاول مرة أخرى.")
+      setError(t("netIncomeLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -44,6 +46,7 @@ export function useNetIncomeReport(
 }
 
 export function useSalesByUserPaymentMethodReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<SalesByUserPaymentMethodDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +57,7 @@ export function useSalesByUserPaymentMethodReport(filters: ReadyReportFilters) {
     try {
       setData(await readyReportsService.salesByUserAndPaymentMethod(filters))
     } catch {
-      setError("تعذر تحميل التقرير. حاول مرة أخرى.")
+      setError(t("genericLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -69,6 +72,7 @@ export function useSalesByUserPaymentMethodReport(filters: ReadyReportFilters) {
 }
 
 export function useSalesByCustomerReport(filters: ReadyReportFilters, customerId: string | null) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<SalesByCustomerDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -79,7 +83,7 @@ export function useSalesByCustomerReport(filters: ReadyReportFilters, customerId
     try {
       setData(await readyReportsService.salesByCustomer(filters, customerId))
     } catch {
-      setError("تعذر تحميل التقرير. حاول مرة أخرى.")
+      setError(t("genericLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -94,6 +98,7 @@ export function useSalesByCustomerReport(filters: ReadyReportFilters, customerId
 }
 
 export function useVatReturnReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<VatReturnDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -104,7 +109,7 @@ export function useVatReturnReport(filters: ReadyReportFilters) {
     try {
       setData(await readyReportsService.vatReturn(filters))
     } catch {
-      setError("تعذر تحميل الإقرار الضريبي. حاول مرة أخرى.")
+      setError(t("vatReturnLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -119,6 +124,7 @@ export function useVatReturnReport(filters: ReadyReportFilters) {
 }
 
 export function useSalesByProductReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<SalesByProductDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +135,7 @@ export function useSalesByProductReport(filters: ReadyReportFilters) {
     try {
       setData(await readyReportsService.salesByProduct(filters))
     } catch {
-      setError("تعذر تحميل التقرير. حاول مرة أخرى.")
+      setError(t("genericLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -144,6 +150,7 @@ export function useSalesByProductReport(filters: ReadyReportFilters) {
 }
 
 export function usePurchaseInvoicesReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<PurchaseInvoicesDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -154,7 +161,7 @@ export function usePurchaseInvoicesReport(filters: ReadyReportFilters) {
     try {
       setData(await readyReportsService.purchaseInvoices(filters))
     } catch {
-      setError("تعذر تحميل التقرير. حاول مرة أخرى.")
+      setError(t("genericLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -169,6 +176,7 @@ export function usePurchaseInvoicesReport(filters: ReadyReportFilters) {
 }
 
 export function useSalesMovementReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<SalesMovementDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -179,7 +187,7 @@ export function useSalesMovementReport(filters: ReadyReportFilters) {
     try {
       setData(await readyReportsService.salesMovement(filters))
     } catch {
-      setError("تعذر تحميل التقرير. حاول مرة أخرى.")
+      setError(t("genericLoadFailed"))
     } finally {
       setIsLoading(false)
     }
@@ -194,6 +202,7 @@ export function useSalesMovementReport(filters: ReadyReportFilters) {
 }
 
 export function useSalesByBranchReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
   const [data, setData] = useState<SalesByBranchDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -204,7 +213,7 @@ export function useSalesByBranchReport(filters: ReadyReportFilters) {
     try {
       setData(await readyReportsService.salesByBranch(filters))
     } catch {
-      setError("تعذر تحميل التقرير. حاول مرة أخرى.")
+      setError(t("genericLoadFailed"))
     } finally {
       setIsLoading(false)
     }

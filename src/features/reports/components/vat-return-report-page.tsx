@@ -1,5 +1,6 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
 import { Download, Loader2, Package, Receipt, ShoppingCart, Wallet } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -13,14 +14,19 @@ import type { VatLineAmounts } from "../types"
 import { HEADING, MUTED, PANEL, ReadyReportKpiCard } from "./ready-report-field"
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 
-function formatAmount(value: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+import { type Locale, localeDirection } from "@/i18n/locales"
+
+function formatAmount(value: number, locale: Locale): string {
+  return value.toLocaleString(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 // Accounting convention -- negative values (a refund, a net-refundable VAT position) are wrapped
 // in parentheses instead of carrying a leading minus sign.
-function formatSigned(value: number): string {
-  const formatted = formatAmount(Math.abs(value))
+function formatSigned(value: number, locale: Locale): string {
+  const formatted = formatAmount(Math.abs(value), locale)
   return value < 0 ? `(${formatted})` : formatted
 }
 
@@ -43,35 +49,45 @@ function SectionHeaderRow({ label, tone }: { label: string; tone: "blue" | "ambe
   )
 }
 
-function DataRow({ label, line }: { label: string; line: VatLineAmounts }) {
+function DataRow({ label, line, locale }: { label: string; line: VatLineAmounts; locale: Locale }) {
   return (
     <tr className="border-b border-[#f1f4f9]">
       <td className={cn(TD_CLASS, HEADING)}>{label}</td>
-      <td className={cn(TD_CLASS, "text-center")}>{formatAmount(line.amount)}</td>
-      <td className={cn(TD_CLASS, "text-center")}>{formatSigned(line.adjustmentAmount)}</td>
-      <td className={cn(TD_CLASS, "text-center")}>{formatAmount(line.amountAfterAdjustment)}</td>
+      <td className={cn(TD_CLASS, "text-center")}>{formatAmount(line.amount, locale)}</td>
+      <td className={cn(TD_CLASS, "text-center")}>{formatSigned(line.adjustmentAmount, locale)}</td>
+      <td className={cn(TD_CLASS, "text-center")}>
+        {formatAmount(line.amountAfterAdjustment, locale)}
+      </td>
       <td className={cn(TD_CLASS, "text-center font-semibold", HEADING)}>
-        {formatAmount(line.vatAmount)}
+        {formatAmount(line.vatAmount, locale)}
       </td>
     </tr>
   )
 }
 
-function SubtotalRow({ label, line }: { label: string; line: VatLineAmounts }) {
+function SubtotalRow({
+  label,
+  line,
+  locale,
+}: {
+  label: string
+  line: VatLineAmounts
+  locale: Locale
+}) {
   return (
     <tr className="border-b border-[#e1e7f0] bg-[#f7f9fd]">
       <td className={cn("px-4 py-2.5 text-[12.5px] font-bold", HEADING)}>{label}</td>
       <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
-        {formatAmount(line.amount)}
+        {formatAmount(line.amount, locale)}
       </td>
       <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
-        {formatSigned(line.adjustmentAmount)}
+        {formatSigned(line.adjustmentAmount, locale)}
       </td>
       <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
-        {formatAmount(line.amountAfterAdjustment)}
+        {formatAmount(line.amountAfterAdjustment, locale)}
       </td>
       <td className={cn("px-4 py-2.5 text-center text-[12.5px] font-bold", HEADING)}>
-        {formatAmount(line.vatAmount)}
+        {formatAmount(line.vatAmount, locale)}
       </td>
     </tr>
   )
@@ -87,20 +103,24 @@ function sumLines(a: VatLineAmounts, b: VatLineAmounts): VatLineAmounts {
 }
 
 export function VatReturnReportPage() {
+  const t = useTranslations("reports.vatReturn")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
+  const currency = locale === "ar" ? "ر.س" : "SAR"
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const { data, isLoading } = useVatReturnReport(filters)
 
   const isRefundable = (data?.totals.netVatDue ?? 0) < 0
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <AppPageHeader
         breadcrumbItems={[
-          { label: "التقارير", href: ROUTES.reports },
-          { label: "الإقرار الضريبي", current: true },
+          { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
+          { label: t("breadcrumbCurrent"), current: true },
         ]}
-        title="الإقرار الضريبي"
-        subtitle="تعرض هذه الصفحة ملخص المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة."
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <AppButton
             icon={
@@ -112,7 +132,7 @@ export function VatReturnReportPage() {
             disabled={!data}
             onClick={() => data && exportVatReturnToCsv(data)}
           >
-            تصدير التقرير
+            {tCommon("exportReport")}
           </AppButton>
         }
       />
@@ -127,14 +147,14 @@ export function VatReturnReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>
           <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
             <ReadyReportKpiCard
-              label="صافي الضريبة المستحقة (أو المستردة)"
-              value={`${formatSigned(data.totals.netVatDue)} ر.س`}
+              label={t("kpis.netVatDue")}
+              value={`${formatSigned(data.totals.netVatDue, locale)} ${currency}`}
               icon={Wallet}
               tone={isRefundable ? "emerald" : "rose"}
               emphasis={isRefundable ? "positive" : "negative"}
@@ -145,25 +165,25 @@ export function VatReturnReportPage() {
                     isRefundable ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
                   )}
                 >
-                  {isRefundable ? "قابل للاسترداد" : "مستحق الدفع"}
+                  {isRefundable ? t("kpis.refundable") : t("kpis.payable")}
                 </span>
               }
             />
             <ReadyReportKpiCard
-              label="إجمالي المصروفات"
-              value={`${formatAmount(data.totals.totalExpenses)} ر.س`}
+              label={t("kpis.totalExpenses")}
+              value={`${formatAmount(data.totals.totalExpenses, locale)} ${currency}`}
               icon={Receipt}
               tone="amber"
             />
             <ReadyReportKpiCard
-              label="إجمالي المشتريات"
-              value={`${formatAmount(data.totals.totalPurchases)} ر.س`}
+              label={t("kpis.totalPurchases")}
+              value={`${formatAmount(data.totals.totalPurchases, locale)} ${currency}`}
               icon={Package}
               tone="violet"
             />
             <ReadyReportKpiCard
-              label="إجمالي المبيعات"
-              value={`${formatAmount(data.totals.totalSales)} ر.س`}
+              label={t("kpis.totalSales")}
+              value={`${formatAmount(data.totals.totalSales, locale)} ${currency}`}
               icon={ShoppingCart}
               tone="blue"
             />
@@ -171,62 +191,69 @@ export function VatReturnReportPage() {
 
           <div className={cn(PANEL, "overflow-hidden")}>
             <div className="border-b border-[#e1e7f0] px-5 py-4">
-              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>تفاصيل الإقرار الضريبي</h2>
-              <p className={cn("mt-1 text-[12px]", MUTED)}>
-                يوضح هذا الجدول المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة.
-              </p>
+              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>{t("table.sectionTitle")}</h2>
+              <p className={cn("mt-1 text-[12px]", MUTED)}>{t("table.sectionSubtitle")}</p>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-right">
                 <thead>
                   <tr className="border-b border-[#e1e7f0]">
-                    <th className={cn(TH_CLASS, "font-bold text-black")}>البند</th>
+                    <th className={cn(TH_CLASS, "font-bold text-black")}>{t("table.item")}</th>
                     <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
-                      المبلغ (ر.س)
+                      {t("table.amount", { currency })}
                     </th>
                     <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
-                      مبلغ التعديل (ر.س)
+                      {t("table.adjustmentAmount", { currency })}
                     </th>
                     <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
-                      المبلغ بعد التعديل (ر.س)
+                      {t("table.amountAfterAdjustment", { currency })}
                     </th>
                     <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
-                      ضريبة القيمة المضافة (ر.س)
+                      {t("table.vatAmount", { currency })}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <SectionHeaderRow label="المبيعات" tone="blue" />
+                  <SectionHeaderRow label={t("table.salesSection")} tone="blue" />
                   <DataRow
-                    label="المبيعات الخاضعة للنسبة الأساسية"
+                    label={t("table.salesStandardRated")}
                     line={data.sales.standardRated}
+                    locale={locale}
                   />
-                  <DataRow label="المبيعات الخاضعة للنسبة الصفرية" line={data.sales.zeroRated} />
+                  <DataRow
+                    label={t("table.salesZeroRated")}
+                    line={data.sales.zeroRated}
+                    locale={locale}
+                  />
                   <SubtotalRow
-                    label="إجمالي المبيعات"
+                    label={t("table.salesTotal")}
                     line={sumLines(data.sales.standardRated, data.sales.zeroRated)}
+                    locale={locale}
                   />
 
-                  <SectionHeaderRow label="المشتريات" tone="blue" />
+                  <SectionHeaderRow label={t("table.purchasesSection")} tone="blue" />
                   <DataRow
-                    label="المشتريات الخاضعة للنسبة الأساسية"
+                    label={t("table.purchasesStandardRated")}
                     line={data.purchases.standardRated}
+                    locale={locale}
                   />
                   <DataRow
-                    label="المشتريات الخاضعة للنسبة الصفرية"
+                    label={t("table.purchasesZeroRated")}
                     line={data.purchases.zeroRated}
+                    locale={locale}
                   />
                   <SubtotalRow
-                    label="إجمالي المشتريات"
+                    label={t("table.purchasesTotal")}
                     line={sumLines(data.purchases.standardRated, data.purchases.zeroRated)}
+                    locale={locale}
                   />
 
-                  <SectionHeaderRow label="المصروفات" tone="amber" />
-                  <DataRow label="المصروفات" line={data.expenses} />
+                  <SectionHeaderRow label={t("table.expensesSection")} tone="amber" />
+                  <DataRow label={t("table.expensesLabel")} line={data.expenses} locale={locale} />
                   <tr>
                     <td colSpan={5} className="px-4 py-2 text-[11px] text-[#95a4bd]">
-                      تُحتسب ضريبة المصروفات فقط للمصروفات المسجلة كـ &quot;شامل الضريبة&quot;.
+                      {t("table.expensesNote")}
                     </td>
                   </tr>
 
@@ -237,7 +264,7 @@ export function VatReturnReportPage() {
                     )}
                   >
                     <td className={cn("px-4 py-3 text-[13px] font-extrabold", HEADING)}>
-                      صافي الضريبة المستحقة (أو المستردة)
+                      {t("table.netVatDueRow")}
                     </td>
                     <td className="px-4 py-3 text-center text-[13px] font-bold text-[#95a4bd]">
                       -
@@ -254,7 +281,7 @@ export function VatReturnReportPage() {
                         isRefundable ? "text-emerald-600" : "text-rose-600"
                       )}
                     >
-                      {formatSigned(data.totals.netVatDue)}
+                      {formatSigned(data.totals.netVatDue, locale)}
                     </td>
                   </tr>
                 </tbody>

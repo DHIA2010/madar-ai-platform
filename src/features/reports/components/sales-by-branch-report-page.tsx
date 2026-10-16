@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { Download, Loader2, Package, ShoppingCart, Wallet } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -14,11 +15,20 @@ import { FIELD_CLASS, HEADING, MUTED, PANEL, ReadyReportKpiCard } from "./ready-
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 import { SalesByBranchBarChart, SalesByBranchDonutChart } from "./sales-by-branch-charts"
 
-function formatPlainNumber(value: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+import { type Locale, localeDirection } from "@/i18n/locales"
+
+function formatPlainNumber(value: number, locale: Locale): string {
+  return value.toLocaleString(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 export function SalesByBranchReportPage() {
+  const t = useTranslations("reports.salesByBranch")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
+  const currency = locale === "ar" ? "ر.س" : "SAR"
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const { data, isLoading } = useSalesByBranchReport(filters)
   const [search, setSearch] = useState("")
@@ -32,14 +42,14 @@ export function SalesByBranchReportPage() {
   }, [data, search])
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <AppPageHeader
         breadcrumbItems={[
-          { label: "التقارير", href: ROUTES.reports },
-          { label: "تقرير المبيعات حسب الفرع", current: true },
+          { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
+          { label: t("breadcrumbCurrent"), current: true },
         ]}
-        title="تقرير المبيعات حسب الفرع"
-        subtitle="يعرض إجمالي المبيعات وعدد العمليات ومتوسط قيمة الفاتورة لكل فرع."
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <AppButton
             icon={
@@ -51,7 +61,7 @@ export function SalesByBranchReportPage() {
             disabled={!data}
             onClick={() => data && exportSalesByBranchToCsv(data.branches)}
           >
-            تصدير التقرير
+            {tCommon("exportReport")}
           </AppButton>
         }
       />
@@ -66,32 +76,32 @@ export function SalesByBranchReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>
           <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
             <ReadyReportKpiCard
-              label="عدد العمليات"
+              label={t("kpis.orderCount")}
               value={String(data.kpis.orderCount)}
               icon={ShoppingCart}
               tone="blue"
             />
             <ReadyReportKpiCard
-              label="متوسط قيمة الفاتورة"
-              value={`${formatPlainNumber(data.kpis.avgInvoiceValue)} ر.س`}
+              label={t("kpis.avgInvoiceValue")}
+              value={`${formatPlainNumber(data.kpis.avgInvoiceValue, locale)} ${currency}`}
               icon={Wallet}
               tone="amber"
             />
             <ReadyReportKpiCard
-              label="عدد الأصناف المباعة"
+              label={t("kpis.itemsSold")}
               value={String(data.kpis.itemsSold)}
               icon={Package}
               tone="violet"
             />
             <ReadyReportKpiCard
-              label="إجمالي المبيعات"
-              value={`${formatPlainNumber(data.kpis.totalSales)} ر.س`}
+              label={t("kpis.totalSales")}
+              value={`${formatPlainNumber(data.kpis.totalSales, locale)} ${currency}`}
               icon={Wallet}
               tone="emerald"
             />
@@ -104,9 +114,9 @@ export function SalesByBranchReportPage() {
 
           <div className={cn(PANEL, "overflow-hidden")}>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e1e7f0] px-5 py-4">
-              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>تفاصيل المبيعات حسب الفرع</h2>
+              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>{t("table.sectionTitle")}</h2>
               <AppSearchInput
-                placeholder="ابحث باسم الفرع..."
+                placeholder={t("searchPlaceholder")}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 wrapperClassName="w-full sm:w-64"
@@ -118,21 +128,23 @@ export function SalesByBranchReportPage() {
               <table className="w-full min-w-[800px] text-right">
                 <thead>
                   <tr className="border-b border-[#e1e7f0]">
-                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">الفرع</th>
-                    <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      إجمالي المبيعات (ر.س)
+                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">
+                      {t("table.branch")}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      عدد العمليات
+                      {t("table.totalSales", { currency })}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      متوسط قيمة الفاتورة (ر.س)
+                      {t("table.orderCount")}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      عدد الأصناف المباعة
+                      {t("table.avgInvoiceValue", { currency })}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      نسبة المساهمة
+                      {t("table.itemsSold")}
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
+                      {t("table.contributionPercent")}
                     </th>
                   </tr>
                 </thead>
@@ -140,7 +152,7 @@ export function SalesByBranchReportPage() {
                   {filteredBranches.length === 0 ? (
                     <tr>
                       <td colSpan={6} className={cn("py-10 text-center text-[12.5px]", MUTED)}>
-                        لا توجد بيانات
+                        {tCommon("noData")}
                       </td>
                     </tr>
                   ) : (
@@ -152,7 +164,7 @@ export function SalesByBranchReportPage() {
                         <td
                           className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
                         >
-                          {formatPlainNumber(branch.totalSales)}
+                          {formatPlainNumber(branch.totalSales, locale)}
                         </td>
                         <td className={cn("px-3 py-2.5 text-center text-[12px]", MUTED)}>
                           {branch.orderCount}
@@ -160,7 +172,7 @@ export function SalesByBranchReportPage() {
                         <td
                           className={cn("px-3 py-2.5 text-center text-[12px] font-bold", HEADING)}
                         >
-                          {formatPlainNumber(branch.avgInvoiceValue)}
+                          {formatPlainNumber(branch.avgInvoiceValue, locale)}
                         </td>
                         <td className={cn("px-3 py-2.5 text-center text-[12px]", MUTED)}>
                           {branch.itemsSold}
@@ -176,13 +188,14 @@ export function SalesByBranchReportPage() {
                   {filteredBranches.length > 0 ? (
                     <tr className="bg-[#f7f9fd]">
                       <td className={cn("px-3 py-2.5 text-[12.5px] font-bold", HEADING)}>
-                        الإجمالي
+                        {t("table.totalRow")}
                       </td>
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
                       >
                         {formatPlainNumber(
-                          filteredBranches.reduce((sum, branch) => sum + branch.totalSales, 0)
+                          filteredBranches.reduce((sum, branch) => sum + branch.totalSales, 0),
+                          locale
                         )}
                       </td>
                       <td
@@ -193,7 +206,7 @@ export function SalesByBranchReportPage() {
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
                       >
-                        {formatPlainNumber(data.kpis.avgInvoiceValue)}
+                        {formatPlainNumber(data.kpis.avgInvoiceValue, locale)}
                       </td>
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}

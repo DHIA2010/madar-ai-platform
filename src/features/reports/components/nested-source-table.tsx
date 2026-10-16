@@ -1,12 +1,15 @@
 "use client"
 
 import { Fragment, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { Banknote, ChevronDown, CreditCard, Landmark, MoreHorizontal, Wallet } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 import { HEADING, MUTED } from "./ready-report-field"
+
+import type { Locale } from "@/i18n/locales"
 
 export interface SourceGroup {
   sourceId: string
@@ -24,43 +27,39 @@ export interface SourceGroup {
 
 // payment_method_code is a raw code on pos_invoices (e.g. "cash", "stc_pay", "customer_wallet") --
 // no per-org display-name lookup exists in the schema, so every raw code is bucketed into this
-// fixed set of Arabic-labeled categories (matching the reference design's own taxonomy) instead of
-// showing the raw snake_case code. Unrecognized codes fall into "أخرى". Each bucket also carries a
-// distinct tone (icon badge + row tint) so the 6 categories are visually distinguishable at a
-// glance, matching the tone pattern already used for KPI cards elsewhere in this feature.
+// fixed set of categories (matching the reference design's own taxonomy, labels resolved via
+// t("buckets.<key>") rather than stored here) instead of showing the raw snake_case code.
+// Unrecognized codes fall into "other". Each bucket also carries a distinct tone (icon badge + row
+// tint) so the 6 categories are visually distinguishable at a glance, matching the tone pattern
+// already used for KPI cards elsewhere in this feature.
 export const PAYMENT_METHOD_BUCKETS = [
-  { key: "cash", label: "نقدي", icon: Banknote, codes: ["cash"], tone: "bg-blue-50 text-blue-600" },
+  { key: "cash", icon: Banknote, codes: ["cash"], tone: "bg-blue-50 text-blue-600" },
   {
     key: "mada",
-    label: "مدى",
     icon: CreditCard,
     codes: ["mada"],
     tone: "bg-emerald-50 text-emerald-600",
   },
   {
     key: "credit_card",
-    label: "بطاقة ائتمان",
     icon: CreditCard,
     codes: ["card", "credit_card", "visa", "mastercard"],
     tone: "bg-violet-50 text-violet-600",
   },
   {
     key: "wallet",
-    label: "محفظة إلكترونية",
     icon: Wallet,
     codes: ["wallet", "e_wallet", "customer_wallet", "apple_pay", "stc_pay"],
     tone: "bg-amber-50 text-amber-600",
   },
   {
     key: "bank_transfer",
-    label: "تحويل بنكي",
     icon: Landmark,
     codes: ["bank_transfer", "transfer"],
     tone: "bg-cyan-50 text-cyan-600",
   },
   {
     key: "other",
-    label: "أخرى",
     icon: MoreHorizontal,
     codes: [],
     tone: "bg-slate-100 text-slate-600",
@@ -79,8 +78,11 @@ function bucketIcon(key: string): LucideIcon {
   return PAYMENT_METHOD_BUCKETS.find((bucket) => bucket.key === key)?.icon ?? MoreHorizontal
 }
 
-function bucketLabel(key: string): string {
-  return PAYMENT_METHOD_BUCKETS.find((bucket) => bucket.key === key)?.label ?? "أخرى"
+type SourceTranslator = ReturnType<typeof useTranslations<"reports.salesByInvoiceSource">>
+
+function bucketLabel(key: string, t: SourceTranslator): string {
+  const bucketKey = PAYMENT_METHOD_BUCKETS.find((bucket) => bucket.key === key)?.key ?? "other"
+  return t(`buckets.${bucketKey}` as "buckets.other")
 }
 
 function bucketTone(key: string): string {
@@ -90,10 +92,13 @@ function bucketTone(key: string): string {
   )
 }
 
-// Plain 2-decimal number, no currency suffix -- the column header already states "(ر.س)", so
-// repeating "ر.س" on every cell (what formatCurrency does) doesn't match the reference design.
-function formatPlainNumber(value: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Plain 2-decimal number, no currency suffix -- the column header already states the currency, so
+// repeating it on every cell (what formatCurrency does) doesn't match the reference design.
+function formatPlainNumber(value: number, locale: Locale): string {
+  return value.toLocaleString(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 const TH_CLASS = "px-3 py-2.5 text-[11px] font-semibold"
@@ -103,6 +108,10 @@ const TH_CLASS = "px-3 py-2.5 text-[11px] font-semibold"
 const DATA_MUTED = "text-[#44546b] font-bold"
 
 export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
+  const t = useTranslations("reports.salesByInvoiceSource")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
+  const currency = locale === "ar" ? "ر.س" : "SAR"
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   function toggle(sourceId: string) {
@@ -115,7 +124,7 @@ export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
   }
 
   if (groups.length === 0) {
-    return <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+    return <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{tCommon("noData")}</p>
   }
 
   return (
@@ -126,13 +135,15 @@ export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
       <thead>
         <tr className="border-b border-[#e1e7f0]">
           <th className={cn(TH_CLASS, "w-10")} />
-          <th className={cn(TH_CLASS, "font-bold text-black")}>الاسم</th>
+          <th className={cn(TH_CLASS, "font-bold text-black")}>{t("table.name")}</th>
           <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
-            إجمالي المبيعات (ر.س)
+            {t("table.totalSales", { currency })}
           </th>
-          <th className={cn(TH_CLASS, "text-center font-bold text-black")}>عدد الفواتير</th>
           <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
-            متوسط قيمة الفاتورة (ر.س)
+            {t("table.invoiceCount")}
+          </th>
+          <th className={cn(TH_CLASS, "text-center font-bold text-black")}>
+            {t("table.avgInvoiceValue", { currency })}
           </th>
         </tr>
       </thead>
@@ -165,13 +176,13 @@ export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
                   {group.sourceName}
                 </td>
                 <td className={cn("px-3 py-3 text-center text-[12.5px] font-bold", HEADING)}>
-                  {formatPlainNumber(group.totalSales)}
+                  {formatPlainNumber(group.totalSales, locale)}
                 </td>
                 <td className={cn("px-3 py-3 text-center text-[12.5px]", DATA_MUTED)}>
                   {group.invoiceCount}
                 </td>
                 <td className={cn("px-3 py-3 text-center text-[12.5px]", DATA_MUTED)}>
-                  {formatPlainNumber(group.avgInvoiceValue)}
+                  {formatPlainNumber(group.avgInvoiceValue, locale)}
                 </td>
               </tr>
               {isOpen ? (
@@ -185,7 +196,7 @@ export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
                           <span className="flex size-6 items-center justify-center rounded-full bg-[#eef4ff] text-[#2878ff]">
                             <Wallet className="size-3.5" />
                           </span>
-                          طرق الدفع ({group.sourceName})
+                          {t("table.paymentMethodsTitle", { name: group.sourceName })}
                         </h4>
                       </div>
                       <table
@@ -195,16 +206,16 @@ export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
                         <thead>
                           <tr>
                             <th className="px-3 py-1 text-[11px] font-bold text-black">
-                              طريقة الدفع
+                              {t("table.paymentMethodColumn")}
                             </th>
                             <th className="px-3 py-1 text-center text-[11px] font-bold text-black">
-                              عدد الفواتير
+                              {t("table.invoiceCount")}
                             </th>
                             <th className="px-3 py-1 text-center text-[11px] font-bold text-black">
-                              إجمالي المبيعات (ر.س)
+                              {t("table.totalSales", { currency })}
                             </th>
                             <th className="px-3 py-1 text-center text-[11px] font-bold text-black">
-                              النسبة من المصدر
+                              {t("table.pctOfSource")}
                             </th>
                           </tr>
                         </thead>
@@ -229,14 +240,14 @@ export function NestedSourceTable({ groups }: { groups: SourceGroup[] }) {
                                     >
                                       <Icon className="size-3.5" />
                                     </span>
-                                    {bucketLabel(method.paymentMethod)}
+                                    {bucketLabel(method.paymentMethod, t)}
                                   </span>
                                 </td>
                                 <td className={cn("px-3 py-2 text-center", DATA_MUTED)}>
                                   {method.invoiceCount}
                                 </td>
                                 <td className={cn("px-3 py-2 text-center font-bold", HEADING)}>
-                                  {formatPlainNumber(method.totalSales)}
+                                  {formatPlainNumber(method.totalSales, locale)}
                                 </td>
                                 <td className="rounded-e-[8px] px-3 py-2">
                                   <div className="flex items-center justify-center gap-2">

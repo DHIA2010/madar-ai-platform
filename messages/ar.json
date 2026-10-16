@@ -2707,5 +2707,243 @@
         "closeFailed": "تعذر إنهاء الوردية."
       }
     }
+  },
+  "reports": {
+    "common": {
+      "pagination": {
+        "previous": "السابق",
+        "next": "التالي"
+      },
+      "filters": {
+        "allBranches": "كل الفروع",
+        "branchLabel": "الفرع"
+      },
+      "noData": "لا توجد بيانات",
+      "total": "الإجمالي",
+      "errors": {
+        "genericLoadFailed": "تعذر تحميل التقرير. حاول مرة أخرى.",
+        "netIncomeLoadFailed": "تعذر تحميل تقرير صافي الدخل. حاول مرة أخرى.",
+        "vatReturnLoadFailed": "تعذر تحميل الإقرار الضريبي. حاول مرة أخرى."
+      },
+      "breadcrumbReports": "التقارير",
+      "exportReport": "تصدير التقرير",
+      "loading": "جارٍ التحميل...",
+      "showingRange": "عرض {from} - {to} من {total} نتيجة",
+      "noMatchingResults": "لا توجد نتائج مطابقة"
+    },
+    "salesByInvoiceSource": {
+      "breadcrumbCurrent": "المبيعات حسب مصدري الفاتورة",
+      "title": "المبيعات حسب مصدري الفاتورة",
+      "subtitle": "إجمالي المبيعات وعدد الفواتير ومتوسط قيمة الفاتورة لكل مصدر فاتورة مع تفاصيل طرق الدفع.",
+      "searchPlaceholder": "بحث باسم المصدر أو الرمز...",
+      "table": {
+        "name": "الاسم",
+        "totalSales": "إجمالي المبيعات ({currency})",
+        "invoiceCount": "عدد الفواتير",
+        "avgInvoiceValue": "متوسط قيمة الفاتورة ({currency})",
+        "paymentMethodsTitle": "طرق الدفع ({name})",
+        "paymentMethodColumn": "طريقة الدفع",
+        "pctOfSource": "النسبة من المصدر"
+      },
+      "buckets": {
+        "cash": "نقدي",
+        "mada": "مدى",
+        "credit_card": "بطاقة ائتمان",
+        "wallet": "محفظة إلكترونية",
+        "bank_transfer": "تحويل بنكي",
+        "other": "أخرى"
+      }
+    },
+    "salesByBranch": {
+      "breadcrumbCurrent": "تقرير المبيعات حسب الفرع",
+      "title": "تقرير المبيعات حسب الفرع",
+      "subtitle": "يعرض إجمالي المبيعات وعدد العمليات ومتوسط قيمة الفاتورة لكل فرع.",
+      "searchPlaceholder": "ابحث باسم الفرع...",
+      "kpis": {
+        "orderCount": "عدد العمليات",
+        "avgInvoiceValue": "متوسط قيمة الفاتورة",
+        "itemsSold": "عدد الأصناف المباعة",
+        "totalSales": "إجمالي المبيعات"
+      },
+      "charts": {
+        "barTitle": "المبيعات حسب الفرع",
+        "donutTitle": "توزيع المبيعات حسب الفرع",
+        "tooltipSales": "المبيعات"
+      },
+      "table": {
+        "sectionTitle": "تفاصيل المبيعات حسب الفرع",
+        "branch": "الفرع",
+        "totalSales": "إجمالي المبيعات ({currency})",
+        "orderCount": "عدد العمليات",
+        "avgInvoiceValue": "متوسط قيمة الفاتورة ({currency})",
+        "itemsSold": "عدد الأصناف المباعة",
+        "contributionPercent": "نسبة المساهمة",
+        "totalRow": "الإجمالي"
+      }
+    },
+    "salesByUserPaymentMethod": {
+      "backToReports": "العودة إلى التقارير",
+      "title": "المبيعات حسب المستخدم وطريقة الدفع",
+      "subtitle": "توزيع المبيعات بين المستخدمين وطرق الدفع.",
+      "allPaymentMethods": "كل طرق الدفع",
+      "kpis": {
+        "avgTransaction": "متوسط العملية",
+        "paymentMethodCount": "طرق الدفع",
+        "userCount": "عدد المستخدمين",
+        "totalPayments": "إجمالي المدفوعات"
+      },
+      "donutTitle": "توزيع المبيعات حسب طريقة الدفع",
+      "table": {
+        "sectionTitle": "تفاصيل المبيعات حسب المستخدم وطريقة الدفع",
+        "searchPlaceholder": "بحث باسم المستخدم...",
+        "paymentMethodAriaLabel": "طريقة الدفع",
+        "columns": {
+          "userName": "اسم المستخدم",
+          "paymentMethod": "طريقة الدفع",
+          "orderCount": "عدد العمليات",
+          "totalAmount": "المبلغ الإجمالي",
+          "pctOfTotal": "النسبة من الإجمالي"
+        },
+        "noMatch": "لا توجد نتائج مطابقة"
+      }
+    },
+    "salesByCustomer": {
+      "backToReports": "العودة إلى التقارير",
+      "title": "تقرير المبيعات حسب العميل",
+      "subtitle": "تحليل المبيعات والطلبات لكل عميل.",
+      "kpis": {
+        "newCustomers": "العملاء الجدد",
+        "avgOrderValue": "متوسط قيمة الطلب للعميل",
+        "customerCount": "عدد العملاء",
+        "totalSales": "إجمالي المبيعات"
+      },
+      "topCustomersChartTitle": "توزيع المبيعات حسب العميل (أعلى 10 عملاء)",
+      "trendChartTitle": "اتجاه المبيعات حسب العميل",
+      "topFiveTitle": "أهم العملاء",
+      "table": {
+        "sectionTitle": "تفاصيل المبيعات حسب العميل",
+        "searchPlaceholder": "بحث عن عميل...",
+        "columns": {
+          "customer": "العميل",
+          "totalSales": "إجمالي المبيعات",
+          "orderCount": "عدد الطلبات",
+          "avgOrderValue": "متوسط قيمة الطلب",
+          "lastOrder": "آخر طلب"
+        },
+        "showingCount": "عرض {count} من {total} عميل"
+      }
+    },
+    "salesByProduct": {
+      "backToReports": "العودة إلى التقارير",
+      "title": "تقرير المبيعات حسب المنتج",
+      "subtitle": "تحليل المبيعات لكل منتج وفئة.",
+      "kpis": {
+        "productsSoldCount": "عدد المنتجات المباعة",
+        "avgProductPrice": "متوسط سعر المنتج",
+        "productCount": "عدد المنتجات",
+        "netSales": "صافي المبيعات",
+        "totalSales": "إجمالي المبيعات"
+      },
+      "topProductsChartTitle": "أعلى المنتجات مبيعاً",
+      "trendChartTitle": "اتجاه المبيعات حسب المنتج",
+      "topCategoriesTitle": "أهم الفئات",
+      "table": {
+        "sectionTitle": "تفاصيل المبيعات حسب المنتج",
+        "searchPlaceholder": "بحث عن منتج...",
+        "columns": {
+          "product": "المنتج",
+          "category": "الفئة",
+          "quantitySold": "الكمية المباعة",
+          "orderCount": "عدد الطلبات",
+          "totalSales": "إجمالي المبيعات"
+        },
+        "showingCount": "عرض {count} من {total} منتج"
+      }
+    },
+    "salesMovement": {
+      "breadcrumbCurrent": "تقرير الحركة اليومية للمبيعات",
+      "title": "تقرير الحركة اليومية للمبيعات",
+      "subtitle": "نشاط المبيعات خلال اليوم حسب الوقت.",
+      "kpis": {
+        "totalSales": "إجمالي المبيعات",
+        "invoiceCount": "عدد الفواتير",
+        "itemsSold": "عدد الأصناف المباعة",
+        "avgInvoiceValue": "متوسط قيمة الفاتورة"
+      },
+      "chartTitle": "المبيعات خلال اليوم",
+      "tooltipSales": "المبيعات",
+      "amLabel": "ص",
+      "pmLabel": "م",
+      "table": {
+        "sectionTitle": "تفاصيل الحركة حسب الساعة",
+        "hour": "الساعة",
+        "invoiceCount": "عدد الفواتير",
+        "sales": "المبيعات ({currency})",
+        "itemsSold": "عدد الأصناف المباعة",
+        "avgInvoiceValue": "متوسط قيمة الفاتورة ({currency})",
+        "totalRow": "الإجمالي"
+      }
+    },
+    "purchaseInvoices": {
+      "breadcrumbCurrent": "تقرير فواتير المشتريات",
+      "title": "تقرير فواتير المشتريات",
+      "subtitle": "عرض جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد.",
+      "allSuppliers": "كل الموردين",
+      "referenceSearchPlaceholder": "بحث برقم فاتورة المورد...",
+      "taxNumberSearchPlaceholder": "بحث بالرقم الضريبي للمورد...",
+      "supplierAriaLabel": "المورد",
+      "kpis": {
+        "totalItems": "إجمالي الأصناف",
+        "totalVat": "إجمالي ضريبة القيمة المضافة",
+        "invoiceCount": "عدد الفواتير",
+        "totalPurchases": "إجمالي فواتير المشتريات"
+      },
+      "table": {
+        "sectionTitle": "تفاصيل فواتير المشتريات",
+        "sectionSubtitle": "يوضح هذا الجدول جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد.",
+        "date": "التاريخ",
+        "supplierName": "اسم المورد",
+        "referenceNumber": "رقم فاتورة المورد",
+        "supplierTaxNumber": "الرقم الضريبي للمورد",
+        "itemCount": "عدد الأصناف",
+        "amountBeforeTax": "المبلغ قبل الضريبة ({currency})",
+        "vatAmount": "ضريبة القيمة المضافة ({currency})",
+        "total": "الإجمالي ({currency})"
+      }
+    },
+    "vatReturn": {
+      "breadcrumbCurrent": "الإقرار الضريبي",
+      "title": "الإقرار الضريبي",
+      "subtitle": "تعرض هذه الصفحة ملخص المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة.",
+      "kpis": {
+        "netVatDue": "صافي الضريبة المستحقة (أو المستردة)",
+        "refundable": "قابل للاسترداد",
+        "payable": "مستحق الدفع",
+        "totalExpenses": "إجمالي المصروفات",
+        "totalPurchases": "إجمالي المشتريات",
+        "totalSales": "إجمالي المبيعات"
+      },
+      "table": {
+        "sectionTitle": "تفاصيل الإقرار الضريبي",
+        "sectionSubtitle": "يوضح هذا الجدول المبيعات والمشتريات والمصروفات وضريبة القيمة المضافة للفترة المحددة.",
+        "item": "البند",
+        "amount": "المبلغ ({currency})",
+        "adjustmentAmount": "مبلغ التعديل ({currency})",
+        "amountAfterAdjustment": "المبلغ بعد التعديل ({currency})",
+        "vatAmount": "ضريبة القيمة المضافة ({currency})",
+        "salesSection": "المبيعات",
+        "salesStandardRated": "المبيعات الخاضعة للنسبة الأساسية",
+        "salesZeroRated": "المبيعات الخاضعة للنسبة الصفرية",
+        "salesTotal": "إجمالي المبيعات",
+        "purchasesSection": "المشتريات",
+        "purchasesStandardRated": "المشتريات الخاضعة للنسبة الأساسية",
+        "purchasesZeroRated": "المشتريات الخاضعة للنسبة الصفرية",
+        "purchasesTotal": "إجمالي المشتريات",
+        "expensesSection": "المصروفات",
+        "expensesLabel": "المصروفات",
+        "expensesNote": "تُحتسب ضريبة المصروفات فقط للمصروفات المسجلة كـ \"شامل الضريبة\".",
+        "netVatDueRow": "صافي الضريبة المستحقة (أو المستردة)"
+      }
+    }
   }
 }

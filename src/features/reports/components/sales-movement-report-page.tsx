@@ -1,5 +1,6 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
 import { Loader2, Package, Receipt, ShoppingCart, Wallet } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -18,6 +19,8 @@ import {
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 import { SalesMovementChart } from "./sales-movement-chart"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 function todayRange() {
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
@@ -25,17 +28,23 @@ function todayRange() {
   return { from, to }
 }
 
-function formatPlainNumber(value: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function formatHourLabel(hour: number): string {
-  const period = hour < 12 ? "ص" : "م"
-  const twelveHour = hour % 12 === 0 ? 12 : hour % 12
-  return `${twelveHour} ${period}`
+function formatPlainNumber(value: number, locale: Locale): string {
+  return value.toLocaleString(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 export function SalesMovementReportPage() {
+  const t = useTranslations("reports.salesMovement")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
+  const currency = locale === "ar" ? "ر.س" : "SAR"
+  function formatHourLabel(hour: number): string {
+    const period = hour < 12 ? t("amLabel") : t("pmLabel")
+    const twelveHour = hour % 12 === 0 ? 12 : hour % 12
+    return `${twelveHour} ${period}`
+  }
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } =
     useReadyReportFilters(todayRange)
   const { data, isLoading } = useSalesMovementReport(filters)
@@ -50,14 +59,14 @@ export function SalesMovementReportPage() {
   )
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <AppPageHeader
         breadcrumbItems={[
-          { label: "التقارير", href: ROUTES.reports },
-          { label: "تقرير الحركة اليومية للمبيعات", current: true },
+          { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
+          { label: t("breadcrumbCurrent"), current: true },
         ]}
-        title="تقرير الحركة اليومية للمبيعات"
-        subtitle="نشاط المبيعات خلال اليوم حسب الوقت."
+        title={t("title")}
+        subtitle={t("subtitle")}
       />
 
       <ReadyReportFilterBar
@@ -70,14 +79,14 @@ export function SalesMovementReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>
           <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
             <ReadyReportKpiCard
-              label="إجمالي المبيعات"
-              value={`${formatPlainNumber(data.kpis.totalSales.value)} ر.س`}
+              label={t("kpis.totalSales")}
+              value={`${formatPlainNumber(data.kpis.totalSales.value, locale)} ${currency}`}
               icon={ShoppingCart}
               tone="emerald"
               trailing={
@@ -85,7 +94,7 @@ export function SalesMovementReportPage() {
               }
             />
             <ReadyReportKpiCard
-              label="عدد الفواتير"
+              label={t("kpis.invoiceCount")}
               value={String(data.kpis.invoiceCount.value)}
               icon={Receipt}
               tone="violet"
@@ -94,15 +103,15 @@ export function SalesMovementReportPage() {
               }
             />
             <ReadyReportKpiCard
-              label="عدد الأصناف المباعة"
+              label={t("kpis.itemsSold")}
               value={String(data.kpis.itemsSold.value)}
               icon={Package}
               tone="blue"
               trailing={<ReadyReportTrendBadge changePercent={data.kpis.itemsSold.changePercent} />}
             />
             <ReadyReportKpiCard
-              label="متوسط قيمة الفاتورة"
-              value={`${formatPlainNumber(data.kpis.avgInvoiceValue.value)} ر.س`}
+              label={t("kpis.avgInvoiceValue")}
+              value={`${formatPlainNumber(data.kpis.avgInvoiceValue.value, locale)} ${currency}`}
               icon={Wallet}
               tone="amber"
               trailing={
@@ -115,24 +124,26 @@ export function SalesMovementReportPage() {
 
           <div className={cn(PANEL, "overflow-hidden")}>
             <div className="border-b border-[#e1e7f0] px-5 py-4">
-              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>تفاصيل الحركة حسب الساعة</h2>
+              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>{t("table.sectionTitle")}</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-right">
                 <thead>
                   <tr className="border-b border-[#e1e7f0]">
-                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">الساعة</th>
-                    <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      عدد الفواتير
+                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">
+                      {t("table.hour")}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      المبيعات (ر.س)
+                      {t("table.invoiceCount")}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      عدد الأصناف المباعة
+                      {t("table.sales", { currency })}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      متوسط قيمة الفاتورة (ر.س)
+                      {t("table.itemsSold")}
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
+                      {t("table.avgInvoiceValue", { currency })}
                     </th>
                   </tr>
                 </thead>
@@ -146,20 +157,20 @@ export function SalesMovementReportPage() {
                         {row.invoiceCount}
                       </td>
                       <td className={cn("px-3 py-2 text-center text-[12px] font-bold", HEADING)}>
-                        {formatPlainNumber(row.totalSales)}
+                        {formatPlainNumber(row.totalSales, locale)}
                       </td>
                       <td className={cn("px-3 py-2 text-center text-[12px]", MUTED)}>
                         {row.itemsSold}
                       </td>
                       <td className={cn("px-3 py-2 text-center text-[12px] font-bold", HEADING)}>
-                        {formatPlainNumber(row.avgInvoiceValue)}
+                        {formatPlainNumber(row.avgInvoiceValue, locale)}
                       </td>
                     </tr>
                   ))}
                   {totals ? (
                     <tr className="bg-[#f7f9fd]">
                       <td className={cn("px-3 py-2.5 text-[12.5px] font-bold", HEADING)}>
-                        الإجمالي
+                        {t("table.totalRow")}
                       </td>
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
@@ -169,7 +180,7 @@ export function SalesMovementReportPage() {
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
                       >
-                        {formatPlainNumber(totals.totalSales)}
+                        {formatPlainNumber(totals.totalSales, locale)}
                       </td>
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
@@ -179,7 +190,7 @@ export function SalesMovementReportPage() {
                       <td
                         className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
                       >
-                        {formatPlainNumber(data.kpis.avgInvoiceValue.value)}
+                        {formatPlainNumber(data.kpis.avgInvoiceValue.value, locale)}
                       </td>
                     </tr>
                   ) : null}

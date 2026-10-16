@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { Download, Loader2, Package, Percent, Receipt, ShoppingBag } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -20,13 +21,22 @@ import {
 } from "./ready-report-field"
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const PAGE_SIZE = 10
 
-function formatPlainNumber(value: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function formatPlainNumber(value: number, locale: Locale): string {
+  return value.toLocaleString(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 export function PurchaseInvoicesReportPage() {
+  const t = useTranslations("reports.purchaseInvoices")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
+  const currency = locale === "ar" ? "ر.س" : "SAR"
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const { data, isLoading } = usePurchaseInvoicesReport(filters)
   const [referenceQuery, setReferenceQuery] = useState("")
@@ -38,10 +48,10 @@ export function PurchaseInvoicesReportPage() {
     const unique = new Map<string, string>()
     for (const row of data?.rows ?? []) unique.set(row.supplierId, row.supplierName)
     return [
-      { value: "all", label: "كل الموردين" },
+      { value: "all", label: t("allSuppliers") },
       ...[...unique.entries()].map(([value, label]) => ({ value, label })),
     ]
-  }, [data])
+  }, [data, t])
 
   const filteredRows = useMemo(() => {
     const referenceNeedle = referenceQuery.trim().toLowerCase()
@@ -65,14 +75,14 @@ export function PurchaseInvoicesReportPage() {
   const rangeEnd = Math.min(currentPage * PAGE_SIZE, filteredRows.length)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <AppPageHeader
         breadcrumbItems={[
-          { label: "التقارير", href: ROUTES.reports },
-          { label: "تقرير فواتير المشتريات", current: true },
+          { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
+          { label: t("breadcrumbCurrent"), current: true },
         ]}
-        title="تقرير فواتير المشتريات"
-        subtitle="عرض جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد."
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <AppButton
             icon={
@@ -84,7 +94,7 @@ export function PurchaseInvoicesReportPage() {
             disabled={!data}
             onClick={() => data && exportPurchaseInvoicesToCsv(filteredRows)}
           >
-            تصدير التقرير
+            {tCommon("exportReport")}
           </AppButton>
         }
       />
@@ -96,7 +106,7 @@ export function PurchaseInvoicesReportPage() {
         onWorkspaceChange={setWorkspaceId}
       >
         <AppSearchInput
-          placeholder="بحث برقم فاتورة المورد..."
+          placeholder={t("referenceSearchPlaceholder")}
           value={referenceQuery}
           onChange={(event) => {
             setReferenceQuery(event.target.value)
@@ -106,7 +116,7 @@ export function PurchaseInvoicesReportPage() {
           className={FIELD_CLASS}
         />
         <AppSearchInput
-          placeholder="بحث بالرقم الضريبي للمورد..."
+          placeholder={t("taxNumberSearchPlaceholder")}
           value={taxNumberQuery}
           onChange={(event) => {
             setTaxNumberQuery(event.target.value)
@@ -122,7 +132,7 @@ export function PurchaseInvoicesReportPage() {
             setSupplierId(value as string | "all")
             setPage(1)
           }}
-          ariaLabel="المورد"
+          ariaLabel={t("supplierAriaLabel")}
           triggerClassName="w-[160px]"
         />
       </ReadyReportFilterBar>
@@ -130,32 +140,32 @@ export function PurchaseInvoicesReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>
           <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
             <ReadyReportKpiCard
-              label="إجمالي الأصناف"
+              label={t("kpis.totalItems")}
               value={String(data.kpis.totalItems)}
               icon={Package}
               tone="amber"
             />
             <ReadyReportKpiCard
-              label="إجمالي ضريبة القيمة المضافة"
-              value={`${formatPlainNumber(data.kpis.totalVat)} ر.س`}
+              label={t("kpis.totalVat")}
+              value={`${formatPlainNumber(data.kpis.totalVat, locale)} ${currency}`}
               icon={Percent}
               tone="emerald"
             />
             <ReadyReportKpiCard
-              label="عدد الفواتير"
+              label={t("kpis.invoiceCount")}
               value={String(data.kpis.invoiceCount)}
               icon={Receipt}
               tone="violet"
             />
             <ReadyReportKpiCard
-              label="إجمالي فواتير المشتريات"
-              value={`${formatPlainNumber(data.kpis.totalPurchases)} ر.س`}
+              label={t("kpis.totalPurchases")}
+              value={`${formatPlainNumber(data.kpis.totalPurchases, locale)} ${currency}`}
               icon={ShoppingBag}
               tone="blue"
             />
@@ -163,35 +173,37 @@ export function PurchaseInvoicesReportPage() {
 
           <div className={cn(PANEL, "overflow-hidden")}>
             <div className="border-b border-[#e1e7f0] px-5 py-4">
-              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>تفاصيل فواتير المشتريات</h2>
-              <p className={cn("mt-1 text-[12px]", MUTED)}>
-                يوضح هذا الجدول جميع فواتير المشتريات مع تفاصيل المبالغ والضريبة لكل مورد.
-              </p>
+              <h2 className={cn("text-[15.5px] font-bold", HEADING)}>{t("table.sectionTitle")}</h2>
+              <p className={cn("mt-1 text-[12px]", MUTED)}>{t("table.sectionSubtitle")}</p>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-right">
                 <thead>
                   <tr className="border-b border-[#e1e7f0]">
-                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">التاريخ</th>
-                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">اسم المورد</th>
                     <th className="px-3 py-2.5 text-[11px] font-bold text-black">
-                      رقم فاتورة المورد
+                      {t("table.date")}
                     </th>
                     <th className="px-3 py-2.5 text-[11px] font-bold text-black">
-                      الرقم الضريبي للمورد
+                      {t("table.supplierName")}
+                    </th>
+                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">
+                      {t("table.referenceNumber")}
+                    </th>
+                    <th className="px-3 py-2.5 text-[11px] font-bold text-black">
+                      {t("table.supplierTaxNumber")}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      عدد الأصناف
+                      {t("table.itemCount")}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      المبلغ قبل الضريبة (ر.س)
+                      {t("table.amountBeforeTax", { currency })}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      ضريبة القيمة المضافة (ر.س)
+                      {t("table.vatAmount", { currency })}
                     </th>
                     <th className="px-3 py-2.5 text-center text-[11px] font-bold text-black">
-                      الإجمالي (ر.س)
+                      {t("table.total", { currency })}
                     </th>
                   </tr>
                 </thead>
@@ -199,7 +211,7 @@ export function PurchaseInvoicesReportPage() {
                   {pagedRows.length === 0 ? (
                     <tr>
                       <td colSpan={8} className={cn("py-10 text-center text-[12.5px]", MUTED)}>
-                        لا توجد بيانات
+                        {tCommon("noData")}
                       </td>
                     </tr>
                   ) : (
@@ -223,17 +235,17 @@ export function PurchaseInvoicesReportPage() {
                         <td
                           className={cn("px-3 py-2.5 text-center text-[12px] font-bold", HEADING)}
                         >
-                          {formatPlainNumber(row.amountBeforeTax)}
+                          {formatPlainNumber(row.amountBeforeTax, locale)}
                         </td>
                         <td
                           className={cn("px-3 py-2.5 text-center text-[12px] font-bold", HEADING)}
                         >
-                          {formatPlainNumber(row.vatAmount)}
+                          {formatPlainNumber(row.vatAmount, locale)}
                         </td>
                         <td
                           className={cn("px-3 py-2.5 text-center text-[12.5px] font-bold", HEADING)}
                         >
-                          {formatPlainNumber(row.total)}
+                          {formatPlainNumber(row.total, locale)}
                         </td>
                       </tr>
                     ))
@@ -244,7 +256,11 @@ export function PurchaseInvoicesReportPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
               <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-                عرض {rangeStart} - {rangeEnd} من {filteredRows.length} نتيجة
+                {tCommon("showingRange", {
+                  from: rangeStart,
+                  to: rangeEnd,
+                  total: filteredRows.length,
+                })}
               </p>
               <ReadyReportPagination
                 page={currentPage}

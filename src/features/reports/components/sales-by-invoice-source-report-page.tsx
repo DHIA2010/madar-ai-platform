@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { Download, Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -19,6 +20,8 @@ import {
 import { FIELD_CLASS, MUTED, PANEL, ReadyReportPagination } from "./ready-report-field"
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const PAGE_SIZE = 10
 
 // Reuses the exact same backend aggregation as "Sales by User & Payment Method" -- "invoice
@@ -26,6 +29,9 @@ const PAGE_SIZE = 10
 // "invoice source" column exists anywhere in the schema). The flat rows are grouped client-side
 // by cashier into an expandable per-source payment-method breakdown instead of a flat table.
 export function SalesByInvoiceSourceReportPage() {
+  const t = useTranslations("reports.salesByInvoiceSource")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const { data, isLoading } = useSalesByUserPaymentMethodReport(filters)
   const [search, setSearch] = useState("")
@@ -90,14 +96,14 @@ export function SalesByInvoiceSourceReportPage() {
   const rangeEnd = Math.min(currentPage * PAGE_SIZE, filteredGroups.length)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <AppPageHeader
         breadcrumbItems={[
-          { label: "التقارير", href: ROUTES.reports },
-          { label: "المبيعات حسب مصدري الفاتورة", current: true },
+          { label: tCommon("breadcrumbReports"), href: ROUTES.reports },
+          { label: t("breadcrumbCurrent"), current: true },
         ]}
-        title="المبيعات حسب مصدري الفاتورة"
-        subtitle="إجمالي المبيعات وعدد الفواتير ومتوسط قيمة الفاتورة لكل مصدر فاتورة مع تفاصيل طرق الدفع."
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <AppButton
             icon={
@@ -108,7 +114,7 @@ export function SalesByInvoiceSourceReportPage() {
             className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-bold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6]"
             onClick={() => exportInvoiceSourceToCsv(filteredGroups)}
           >
-            تصدير التقرير
+            {tCommon("exportReport")}
           </AppButton>
         }
       />
@@ -123,13 +129,13 @@ export function SalesByInvoiceSourceReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <div className={cn(PANEL, "overflow-hidden")}>
           <div className="border-b border-[#e1e7f0] p-4">
             <AppSearchInput
-              placeholder="بحث باسم المصدر أو الرمز..."
+              placeholder={t("searchPlaceholder")}
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -148,7 +154,11 @@ export function SalesByInvoiceSourceReportPage() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
             <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-              عرض {rangeStart} - {rangeEnd} من {filteredGroups.length} نتيجة
+              {tCommon("showingRange", {
+                from: rangeStart,
+                to: rangeEnd,
+                total: filteredGroups.length,
+              })}
             </p>
             <ReadyReportPagination
               page={currentPage}

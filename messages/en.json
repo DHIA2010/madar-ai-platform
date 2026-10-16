@@ -2707,5 +2707,243 @@
         "closeFailed": "Couldn't close the shift."
       }
     }
+  },
+  "reports": {
+    "common": {
+      "pagination": {
+        "previous": "Previous",
+        "next": "Next"
+      },
+      "filters": {
+        "allBranches": "All branches",
+        "branchLabel": "Branch"
+      },
+      "noData": "No data",
+      "total": "Total",
+      "errors": {
+        "genericLoadFailed": "Couldn't load the report. Try again.",
+        "netIncomeLoadFailed": "Couldn't load the net income report. Try again.",
+        "vatReturnLoadFailed": "Couldn't load the VAT return. Try again."
+      },
+      "breadcrumbReports": "Reports",
+      "exportReport": "Export report",
+      "loading": "Loading...",
+      "showingRange": "Showing {from} - {to} of {total} results",
+      "noMatchingResults": "No matching results"
+    },
+    "salesByInvoiceSource": {
+      "breadcrumbCurrent": "Sales by invoice source",
+      "title": "Sales by invoice source",
+      "subtitle": "Total sales, invoice count, and average invoice value per invoice source, with a payment-method breakdown.",
+      "searchPlaceholder": "Search by source name or code...",
+      "table": {
+        "name": "Name",
+        "totalSales": "Total sales ({currency})",
+        "invoiceCount": "Invoice count",
+        "avgInvoiceValue": "Avg. invoice value ({currency})",
+        "paymentMethodsTitle": "Payment methods ({name})",
+        "paymentMethodColumn": "Payment method",
+        "pctOfSource": "% of source"
+      },
+      "buckets": {
+        "cash": "Cash",
+        "mada": "mada",
+        "credit_card": "Credit card",
+        "wallet": "E-wallet",
+        "bank_transfer": "Bank transfer",
+        "other": "Other"
+      }
+    },
+    "salesByBranch": {
+      "breadcrumbCurrent": "Sales by branch report",
+      "title": "Sales by branch report",
+      "subtitle": "Shows total sales, transaction count, and average invoice value per branch.",
+      "searchPlaceholder": "Search by branch name...",
+      "kpis": {
+        "orderCount": "Order count",
+        "avgInvoiceValue": "Avg. invoice value",
+        "itemsSold": "Items sold",
+        "totalSales": "Total sales"
+      },
+      "charts": {
+        "barTitle": "Sales by branch",
+        "donutTitle": "Sales distribution by branch",
+        "tooltipSales": "Sales"
+      },
+      "table": {
+        "sectionTitle": "Sales by branch details",
+        "branch": "Branch",
+        "totalSales": "Total sales ({currency})",
+        "orderCount": "Order count",
+        "avgInvoiceValue": "Avg. invoice value ({currency})",
+        "itemsSold": "Items sold",
+        "contributionPercent": "Contribution %",
+        "totalRow": "Total"
+      }
+    },
+    "salesByUserPaymentMethod": {
+      "backToReports": "Back to reports",
+      "title": "Sales by user and payment method",
+      "subtitle": "Sales distribution across users and payment methods.",
+      "allPaymentMethods": "All payment methods",
+      "kpis": {
+        "avgTransaction": "Avg. transaction",
+        "paymentMethodCount": "Payment methods",
+        "userCount": "User count",
+        "totalPayments": "Total payments"
+      },
+      "donutTitle": "Sales distribution by payment method",
+      "table": {
+        "sectionTitle": "Sales by user and payment method details",
+        "searchPlaceholder": "Search by user name...",
+        "paymentMethodAriaLabel": "Payment method",
+        "columns": {
+          "userName": "User name",
+          "paymentMethod": "Payment method",
+          "orderCount": "Order count",
+          "totalAmount": "Total amount",
+          "pctOfTotal": "% of total"
+        },
+        "noMatch": "No matching results"
+      }
+    },
+    "salesByCustomer": {
+      "backToReports": "Back to reports",
+      "title": "Sales by customer report",
+      "subtitle": "Sales and order analysis per customer.",
+      "kpis": {
+        "newCustomers": "New customers",
+        "avgOrderValue": "Avg. order value per customer",
+        "customerCount": "Customer count",
+        "totalSales": "Total sales"
+      },
+      "topCustomersChartTitle": "Sales distribution by customer (top 10)",
+      "trendChartTitle": "Sales trend by customer",
+      "topFiveTitle": "Top customers",
+      "table": {
+        "sectionTitle": "Sales by customer details",
+        "searchPlaceholder": "Search for a customer...",
+        "columns": {
+          "customer": "Customer",
+          "totalSales": "Total sales",
+          "orderCount": "Order count",
+          "avgOrderValue": "Avg. order value",
+          "lastOrder": "Last order"
+        },
+        "showingCount": "Showing {count} of {total} customers"
+      }
+    },
+    "salesByProduct": {
+      "backToReports": "Back to reports",
+      "title": "Sales by product report",
+      "subtitle": "Sales analysis per product and category.",
+      "kpis": {
+        "productsSoldCount": "Products sold",
+        "avgProductPrice": "Avg. product price",
+        "productCount": "Product count",
+        "netSales": "Net sales",
+        "totalSales": "Total sales"
+      },
+      "topProductsChartTitle": "Top-selling products",
+      "trendChartTitle": "Sales trend by product",
+      "topCategoriesTitle": "Top categories",
+      "table": {
+        "sectionTitle": "Sales by product details",
+        "searchPlaceholder": "Search for a product...",
+        "columns": {
+          "product": "Product",
+          "category": "Category",
+          "quantitySold": "Quantity sold",
+          "orderCount": "Order count",
+          "totalSales": "Total sales"
+        },
+        "showingCount": "Showing {count} of {total} products"
+      }
+    },
+    "salesMovement": {
+      "breadcrumbCurrent": "Daily sales movement report",
+      "title": "Daily sales movement report",
+      "subtitle": "Sales activity throughout the day, by time.",
+      "kpis": {
+        "totalSales": "Total sales",
+        "invoiceCount": "Invoice count",
+        "itemsSold": "Items sold",
+        "avgInvoiceValue": "Avg. invoice value"
+      },
+      "chartTitle": "Sales throughout the day",
+      "tooltipSales": "Sales",
+      "amLabel": "AM",
+      "pmLabel": "PM",
+      "table": {
+        "sectionTitle": "Hourly movement details",
+        "hour": "Hour",
+        "invoiceCount": "Invoice count",
+        "sales": "Sales ({currency})",
+        "itemsSold": "Items sold",
+        "avgInvoiceValue": "Avg. invoice value ({currency})",
+        "totalRow": "Total"
+      }
+    },
+    "purchaseInvoices": {
+      "breadcrumbCurrent": "Purchase invoices report",
+      "title": "Purchase invoices report",
+      "subtitle": "Shows every purchase invoice with amount and tax details per supplier.",
+      "allSuppliers": "All suppliers",
+      "referenceSearchPlaceholder": "Search by supplier invoice number...",
+      "taxNumberSearchPlaceholder": "Search by supplier tax number...",
+      "supplierAriaLabel": "Supplier",
+      "kpis": {
+        "totalItems": "Total items",
+        "totalVat": "Total VAT",
+        "invoiceCount": "Invoice count",
+        "totalPurchases": "Total purchase invoices"
+      },
+      "table": {
+        "sectionTitle": "Purchase invoice details",
+        "sectionSubtitle": "Shows every purchase invoice with amount and tax details per supplier.",
+        "date": "Date",
+        "supplierName": "Supplier name",
+        "referenceNumber": "Supplier invoice number",
+        "supplierTaxNumber": "Supplier tax number",
+        "itemCount": "Item count",
+        "amountBeforeTax": "Amount before tax ({currency})",
+        "vatAmount": "VAT ({currency})",
+        "total": "Total ({currency})"
+      }
+    },
+    "vatReturn": {
+      "breadcrumbCurrent": "VAT return",
+      "title": "VAT return",
+      "subtitle": "This page summarizes sales, purchases, expenses, and VAT for the selected period.",
+      "kpis": {
+        "netVatDue": "Net VAT due (or refundable)",
+        "refundable": "Refundable",
+        "payable": "Payable",
+        "totalExpenses": "Total expenses",
+        "totalPurchases": "Total purchases",
+        "totalSales": "Total sales"
+      },
+      "table": {
+        "sectionTitle": "VAT return details",
+        "sectionSubtitle": "This table shows sales, purchases, expenses, and VAT for the selected period.",
+        "item": "Item",
+        "amount": "Amount ({currency})",
+        "adjustmentAmount": "Adjustment amount ({currency})",
+        "amountAfterAdjustment": "Amount after adjustment ({currency})",
+        "vatAmount": "VAT ({currency})",
+        "salesSection": "Sales",
+        "salesStandardRated": "Standard-rated sales",
+        "salesZeroRated": "Zero-rated sales",
+        "salesTotal": "Total sales",
+        "purchasesSection": "Purchases",
+        "purchasesStandardRated": "Standard-rated purchases",
+        "purchasesZeroRated": "Zero-rated purchases",
+        "purchasesTotal": "Total purchases",
+        "expensesSection": "Expenses",
+        "expensesLabel": "Expenses",
+        "expensesNote": "Expense VAT is only calculated for expenses recorded as \"tax inclusive\".",
+        "netVatDueRow": "Net VAT due (or refundable)"
+      }
+    }
   }
 }

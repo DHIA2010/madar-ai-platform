@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Loader2, Receipt, ShoppingBag, UserPlus, Users } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
+import { ArrowLeft, Loader2, Receipt, ShoppingBag, UserPlus, Users } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
@@ -24,6 +25,8 @@ import {
 } from "./ready-report-field"
 import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const PAGE_SIZE = 10
 
 function pivotTrend(points: Array<{ name: string; bucket: string; value: number }>) {
@@ -39,6 +42,9 @@ function pivotTrend(points: Array<{ name: string; bucket: string; value: number 
 }
 
 export function SalesByCustomerReportPage() {
+  const t = useTranslations("reports.salesByCustomer")
+  const tCommon = useTranslations("reports.common")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const { data, isLoading } = useSalesByCustomerReport(filters, null)
@@ -75,19 +81,19 @@ export function SalesByCustomerReportPage() {
   const topFive = topCustomers.slice(0, 5)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <button
         type="button"
         onClick={() => router.push(ROUTES.reports)}
         className="flex w-fit items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground hover:text-foreground"
       >
-        <ArrowRight className="size-3.5" />
-        العودة إلى التقارير
+        <ArrowLeft className="size-3.5 rtl:rotate-180" />
+        {t("backToReports")}
       </button>
 
       <div>
-        <h1 className={cn("text-2xl font-bold", HEADING)}>تقرير المبيعات حسب العميل</h1>
-        <p className={cn("mt-1 text-sm", MUTED)}>تحليل المبيعات والطلبات لكل عميل.</p>
+        <h1 className={cn("text-2xl font-bold", HEADING)}>{t("title")}</h1>
+        <p className={cn("mt-1 text-sm", MUTED)}>{t("subtitle")}</p>
       </div>
 
       <ReadyReportFilterBar
@@ -100,13 +106,13 @@ export function SalesByCustomerReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <ReadyReportKpiCard
-              label="العملاء الجدد"
+              label={t("kpis.newCustomers")}
               value={String(data.kpis.newCustomers.value)}
               icon={UserPlus}
               tone="emerald"
@@ -115,8 +121,8 @@ export function SalesByCustomerReportPage() {
               }
             />
             <ReadyReportKpiCard
-              label="متوسط قيمة الطلب للعميل"
-              value={formatCurrency(data.kpis.avgOrderValue.value)}
+              label={t("kpis.avgOrderValue")}
+              value={formatCurrency(data.kpis.avgOrderValue.value, locale)}
               icon={ShoppingBag}
               tone="blue"
               trailing={
@@ -124,7 +130,7 @@ export function SalesByCustomerReportPage() {
               }
             />
             <ReadyReportKpiCard
-              label="عدد العملاء"
+              label={t("kpis.customerCount")}
               value={String(data.kpis.customerCount.value)}
               icon={Users}
               tone="violet"
@@ -133,8 +139,8 @@ export function SalesByCustomerReportPage() {
               }
             />
             <ReadyReportKpiCard
-              label="إجمالي المبيعات"
-              value={formatCurrency(data.kpis.totalSales.value)}
+              label={t("kpis.totalSales")}
+              value={formatCurrency(data.kpis.totalSales.value, locale)}
               icon={Receipt}
               tone="amber"
               trailing={
@@ -144,12 +150,9 @@ export function SalesByCustomerReportPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <RankedListCard
-              title="توزيع المبيعات حسب العميل (أعلى 10 عملاء)"
-              entries={topCustomers}
-            />
+            <RankedListCard title={t("topCustomersChartTitle")} entries={topCustomers} />
             <MultiSeriesTrendChart
-              title="اتجاه المبيعات حسب العميل"
+              title={t("trendChartTitle")}
               data={trendData}
               seriesKeys={trendSeriesKeys}
             />
@@ -159,10 +162,10 @@ export function SalesByCustomerReportPage() {
             <div className={cn(PANEL, "overflow-hidden lg:col-span-2")}>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e1e7f0] p-4">
                 <h3 className={cn("text-[13.5px] font-bold", HEADING)}>
-                  تفاصيل المبيعات حسب العميل
+                  {t("table.sectionTitle")}
                 </h3>
                 <AppSearchInput
-                  placeholder="بحث عن عميل..."
+                  placeholder={t("table.searchPlaceholder")}
                   value={search}
                   onChange={(event) => {
                     setSearch(event.target.value)
@@ -177,11 +180,11 @@ export function SalesByCustomerReportPage() {
                   <thead>
                     <tr>
                       {[
-                        "العميل",
-                        "إجمالي المبيعات",
-                        "عدد الطلبات",
-                        "متوسط قيمة الطلب",
-                        "آخر طلب",
+                        t("table.columns.customer"),
+                        t("table.columns.totalSales"),
+                        t("table.columns.orderCount"),
+                        t("table.columns.avgOrderValue"),
+                        t("table.columns.lastOrder"),
                       ].map((heading) => (
                         <th
                           key={heading}
@@ -199,11 +202,11 @@ export function SalesByCustomerReportPage() {
                           {customer.customerName}
                         </td>
                         <td className="px-3 py-2 text-[12px] font-bold text-black">
-                          {formatCurrency(customer.totalSales)}
+                          {formatCurrency(customer.totalSales, locale)}
                         </td>
                         <td className="px-3 py-2 text-[12px] text-black">{customer.orderCount}</td>
                         <td className="px-3 py-2 text-[12px] text-black">
-                          {formatCurrency(customer.avgOrderValue)}
+                          {formatCurrency(customer.avgOrderValue, locale)}
                         </td>
                         <td className="px-3 py-2 text-[12px] text-black">
                           {customer.lastOrderDate ?? "—"}
@@ -213,7 +216,7 @@ export function SalesByCustomerReportPage() {
                     {pagedCustomers.length === 0 ? (
                       <tr>
                         <td colSpan={5} className={cn("py-10 text-center text-[12.5px]", MUTED)}>
-                          لا توجد نتائج مطابقة
+                          {tCommon("noMatchingResults")}
                         </td>
                       </tr>
                     ) : null}
@@ -222,7 +225,10 @@ export function SalesByCustomerReportPage() {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
                 <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-                  عرض {pagedCustomers.length} من {filteredCustomers.length} عميل
+                  {t("table.showingCount", {
+                    count: pagedCustomers.length,
+                    total: filteredCustomers.length,
+                  })}
                 </p>
                 <ReadyReportPagination
                   page={currentPage}
@@ -231,7 +237,7 @@ export function SalesByCustomerReportPage() {
                 />
               </div>
             </div>
-            <RankedListCard title="أهم العملاء" entries={topFive} />
+            <RankedListCard title={t("topFiveTitle")} entries={topFive} />
           </div>
         </>
       )}

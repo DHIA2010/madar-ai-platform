@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import type { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
@@ -25,6 +26,7 @@ export function ReadyReportFilterBar({
   // rendered inline after the shared ones.
   children?: React.ReactNode
 }) {
+  const t = useTranslations("reports.common.filters")
   const { availableWorkspaces } = useWorkspace()
 
   return (
@@ -33,15 +35,15 @@ export function ReadyReportFilterBar({
       <AppSearchableSelect
         value={workspaceId}
         options={[
-          { value: "all", label: "كل الفروع" },
+          { value: "all", label: t("allBranches") },
           ...availableWorkspaces.map((workspace) => ({
             value: workspace.id,
             label: workspace.name,
           })),
         ]}
         onChange={(value) => onWorkspaceChange(value)}
-        placeholder="الفرع"
-        ariaLabel="الفرع"
+        placeholder={t("branchLabel")}
+        ariaLabel={t("branchLabel")}
         triggerClassName="w-[160px]"
       />
       {children}
