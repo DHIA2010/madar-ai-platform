@@ -6677,6 +6677,99 @@
         "pageInputPlaceholder": "Page",
         "go": "Go"
       }
+    },
+    "dashboardScreen": {
+      "title": "Marketing Campaigns",
+      "subtitle": "Manage your marketing campaigns, monitor performance, and get the best results from one place.",
+      "loadError": "Couldn't load campaign performance from your connected ad accounts. Please try again.",
+      "loadingPerformance": "Loading performance data...",
+      "kpis": {
+        "comparedToPreviousPeriod": "vs previous period",
+        "noPreviousPeriod": "No previous period to compare"
+      },
+      "searchPlaceholder": {
+        "platforms": "Search platforms...",
+        "campaigns": "Search campaigns...",
+        "adGroups": "Search ad groups...",
+        "keywords": "Search keywords...",
+        "ads": "Search ads..."
+      },
+      "filters": {
+        "objective": {
+          "allObjectives": "All Objectives",
+          "awareness": "Awareness",
+          "traffic": "Traffic",
+          "leads": "Leads",
+          "conversions": "Conversions",
+          "sales": "Sales"
+        },
+        "status": {
+          "allStatuses": "All Statuses",
+          "active": "Active",
+          "paused": "Paused",
+          "other": "Other"
+        },
+        "platform": {
+          "allPlatforms": "All Platforms",
+          "googleSearch": "Google Search",
+          "googleDisplay": "Google Display"
+        }
+      },
+      "viewMode": {
+        "table": "Table",
+        "chart": "Chart"
+      },
+      "tabs": {
+        "disabledReason": {
+          "keywordsRequireSearch": "Keyword analysis is only available for Search campaigns.",
+          "selectHigherLevelFirst": "Go to the level above first."
+        }
+      },
+      "statusPill": {
+        "active": "Active",
+        "paused": "Paused",
+        "removed": "Removed",
+        "ended": "Ended"
+      },
+      "entityDescription": {
+        "withActivity": "{status} · Last activity {date}",
+        "activeCampaignsCount": "{count} active campaigns"
+      },
+      "chart": {
+        "noSpendData": "No spend recorded in this period to chart."
+      },
+      "table": {
+        "emptyTitle": "No data matches the selected filters",
+        "emptyDescription": "Change the platform, status, objective, or date range to view another segment."
+      },
+      "pagination": {
+        "noResults": "No results",
+        "rangeSummary": "Showing {start} - {end} of {total}",
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
+      },
+      "recommendations": {
+        "heading": "Smart Campaign Recommendations",
+        "emptyState": "No recommendations yet — platforms need performance data for this period first.",
+        "viewDetails": "View Details",
+        "budget": {
+          "title": "Increase budget for {entity} campaigns",
+          "body": "{entity} is achieving the highest ROAS ({roas}x) this period."
+        },
+        "reactivate": {
+          "title": "Reactivate {entity} campaigns",
+          "body": "{entity} has no active campaigns despite recording {impressions} impressions this period."
+        },
+        "targeting": {
+          "title": "Improve audience targeting",
+          "body": "{entity} has the lowest click-through rate ({ctr}%) among active platforms."
+        }
+      },
+      "aiPromo": {
+        "title": "Make your campaigns more effective with AI",
+        "description": "Get deeper analysis of your marketing campaigns' performance from the AI center.",
+        "viewRecommendations": "View Recommendations"
+      }
     }
   }
 }

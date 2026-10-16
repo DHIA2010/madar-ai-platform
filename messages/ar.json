@@ -6673,6 +6673,99 @@
         "pageInputPlaceholder": "الصفحة",
         "go": "انتقال"
       }
+    },
+    "dashboardScreen": {
+      "title": "الحملات التسويقية",
+      "subtitle": "أدر حملاتك التسويقية، راقب الأداء وحقق أفضل النتائج من مكان واحد.",
+      "loadError": "تعذّر تحميل أداء الحملات من حساباتك الإعلانية المتصلة. حاول مرة أخرى.",
+      "loadingPerformance": "جارٍ تحميل بيانات الأداء...",
+      "kpis": {
+        "comparedToPreviousPeriod": "مقارنة بالفترة السابقة",
+        "noPreviousPeriod": "لا توجد فترة سابقة للمقارنة"
+      },
+      "searchPlaceholder": {
+        "platforms": "البحث في المنصات...",
+        "campaigns": "البحث في الحملات...",
+        "adGroups": "البحث في المجموعات الإعلانية...",
+        "keywords": "البحث في الكلمات المفتاحية...",
+        "ads": "البحث في الإعلانات..."
+      },
+      "filters": {
+        "objective": {
+          "allObjectives": "جميع الأهداف",
+          "awareness": "الوعي",
+          "traffic": "الزيارات",
+          "leads": "العملاء المحتملون",
+          "conversions": "التحويلات",
+          "sales": "المبيعات"
+        },
+        "status": {
+          "allStatuses": "جميع الحالات",
+          "active": "نشطة",
+          "paused": "متوقفة",
+          "other": "أخرى"
+        },
+        "platform": {
+          "allPlatforms": "جميع المنصات",
+          "googleSearch": "بحث Google",
+          "googleDisplay": "شبكة Google الإعلانية"
+        }
+      },
+      "viewMode": {
+        "table": "جدول",
+        "chart": "مخطط بياني"
+      },
+      "tabs": {
+        "disabledReason": {
+          "keywordsRequireSearch": "تحليل الكلمات المفتاحية متاح لحملات البحث فقط.",
+          "selectHigherLevelFirst": "انتقل إلى المستوى الأعلى أولاً."
+        }
+      },
+      "statusPill": {
+        "active": "نشطة",
+        "paused": "متوقفة",
+        "removed": "محذوفة",
+        "ended": "منتهية"
+      },
+      "entityDescription": {
+        "withActivity": "{status} · آخر نشاط {date}",
+        "activeCampaignsCount": "{count} حملة نشطة"
+      },
+      "chart": {
+        "noSpendData": "لا يوجد إنفاق مسجل في هذه الفترة لعرضه على المخطط."
+      },
+      "table": {
+        "emptyTitle": "لا توجد بيانات مطابقة للفلاتر المحددة",
+        "emptyDescription": "غيّر المنصة أو الحالة أو الهدف أو الفترة الزمنية لاستعراض شريحة أخرى."
+      },
+      "pagination": {
+        "noResults": "لا توجد نتائج",
+        "rangeSummary": "عرض {start} - {end} من {total}",
+        "previousPage": "الصفحة السابقة",
+        "nextPage": "الصفحة التالية"
+      },
+      "recommendations": {
+        "heading": "توصيات الحملات الذكية",
+        "emptyState": "لا توجد توصيات بعد — تحتاج المنصات إلى بيانات أداء في هذه الفترة أولاً.",
+        "viewDetails": "عرض التفاصيل",
+        "budget": {
+          "title": "زيادة الميزانية لحملات {entity}",
+          "body": "تحقق {entity} أعلى عائد على الإنفاق ({roas}x) في هذه الفترة."
+        },
+        "reactivate": {
+          "title": "إعادة تفعيل حملات {entity}",
+          "body": "لا توجد حملات نشطة على {entity} رغم تسجيل {impressions} ظهور في هذه الفترة."
+        },
+        "targeting": {
+          "title": "تحسين استهداف الجمهور",
+          "body": "{entity} يسجل أدنى معدل نقر ({ctr}%) بين المنصات النشطة."
+        }
+      },
+      "aiPromo": {
+        "title": "اجعل حملاتك أكثر فعالية مع الذكاء الاصطناعي",
+        "description": "احصل على تحليل أعمق لأداء حملاتك التسويقية من مركز الذكاء الاصطناعي.",
+        "viewRecommendations": "عرض التوصيات"
+      }
     }
   }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { format, subDays } from "date-fns"
 import {
   ArrowDownRight,
@@ -52,16 +53,18 @@ import {
   type ExplorerLevel,
   type ExplorerPlatformFilter,
   getAvailableTabsForPlatforms,
-  getMetricsColumns,
   getNextHierarchyLevel,
   type MetricColumn,
   PLATFORM_NODE_CONFIG,
   type PlatformNodeKey,
+  translatedAnalysisTabs,
+  translatedMetricsColumns,
 } from "./campaign-metrics"
 import { CampaignSpendDonut } from "./campaign-spend-donut"
 
 import { cairo } from "@/components/design/fonts"
 import { PlatformBadge } from "@/components/platform-badge"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 // One row per entity level, real data from campaignPerformanceService plus the display-only
 // fields (nodeId/entityName/entityDescription) the table rendering needs.
@@ -133,84 +136,105 @@ const FILTER_TRIGGER_CLASS =
 const PAGER_BUTTON_CLASS =
   "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
 
-// The table's column labels live in campaign-metrics.ts, which the drill-down levels and other
-// screens share. Rather than translating that file (and every screen reading it), the Arabic
-// shown on this page is a display-only overlay: an unmapped label falls through in English so a
-// new column is visibly untranslated instead of silently missing.
-const COLUMN_LABEL_AR: Record<string, string> = {
-  Platform: "المنصة",
-  "Active Campaigns": "الحملات النشطة",
-  Impressions: "مرات الظهور",
-  Clicks: "النقرات",
-  CTR: "معدل النقر إلى الظهور",
-  Spend: "الإنفاق (SAR)",
-  Revenue: "الإيرادات (SAR)",
-  ROAS: "ROAS",
-  Conversions: "التحويلات",
-  Status: "الحالة",
-  Campaign: "الحملة",
-  "Ad Group": "المجموعة الإعلانية",
-  "Ad Set": "مجموعة الإعلانات",
-  Ad: "الإعلان",
-  Keyword: "الكلمة المفتاحية",
-  CPC: "تكلفة النقرة",
-  CPA: "تكلفة الاكتساب",
-  "Conversion Rate": "معدل التحويل",
-  Reach: "الوصول",
-  Frequency: "التكرار",
+// Shared translator shape for every module-level helper below that needs to translate -- same
+// pattern as translatedCampaignStatusMeta (campaign-status.service.ts) and
+// translatedPlanTierMeta (applications/services/plan-tiers.ts): these helpers can't call
+// useTranslations() themselves, so the caller's `t` is threaded through instead.
+type CampaignsTranslator = ReturnType<typeof useTranslations<"campaigns">>
+
+// Objective/status/platform filter options are this screen's own enums (not covered by
+// campaign-metrics.ts's translated exports, which only cover columns/entity labels/tabs), so
+// each gets a small local label-key map + translator, following the same shape as
+// campaign-metrics.ts's METRIC_COLUMN_LABEL_KEYS. Brand/platform names (Google/YouTube/Meta/
+// TikTok/Snapchat) are never translated -- platform options with no entry here fall through to
+// the raw literal value.
+const OBJECTIVE_OPTION_KEYS: Record<CampaignTypeFilter, string> = {
+  "All Objectives": "allObjectives",
+  Awareness: "awareness",
+  Traffic: "traffic",
+  Leads: "leads",
+  Conversions: "conversions",
+  Sales: "sales",
 }
 
-const FILTER_LABEL_AR: Record<string, string> = {
-  "All Platforms": "جميع المنصات",
-  "All Statuses": "جميع الحالات",
-  "All Objectives": "جميع الأهداف",
-  "Google Search": "بحث Google",
-  "Google Display": "شبكة Google الإعلانية",
-  YouTube: "YouTube",
-  Meta: "Meta",
-  TikTok: "TikTok",
-  Snapchat: "Snapchat",
-  Active: "نشطة",
-  Paused: "متوقفة",
-  Other: "أخرى",
-  Awareness: "الوعي",
-  Traffic: "الزيارات",
-  Leads: "العملاء المحتملون",
-  Conversions: "التحويلات",
-  Sales: "المبيعات",
-}
-
-const LEVEL_LABEL_AR: Record<string, string> = {
-  platforms: "المنصات",
-  campaigns: "الحملات",
-  adGroups: "المجموعات الإعلانية",
-  ads: "الإعلانات",
-  keywords: "الكلمات المفتاحية",
-}
-
-const STATUS_PILL_AR: Record<string, { label: string; className: string }> = {
-  active: { label: "نشطة", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  enabled: { label: "نشطة", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  paused: { label: "متوقفة", className: "bg-[#fff7e6] text-[#e08b00]" },
-  removed: { label: "محذوفة", className: "bg-[#fdeeee] text-[#e0484d]" },
-  ended: { label: "منتهية", className: "bg-[#eef2f8] text-[#5b6b85]" },
-}
-
-function statusPill(status: string) {
-  return (
-    STATUS_PILL_AR[status.toLowerCase()] ?? {
-      label: status,
-      className: "bg-[#eef2f8] text-[#5b6b85]",
-    }
+function translatedObjectiveOption(option: CampaignTypeFilter, t: CampaignsTranslator) {
+  return t(
+    `dashboardScreen.filters.objective.${OBJECTIVE_OPTION_KEYS[option]}` as "dashboardScreen.filters.objective.allObjectives"
   )
 }
 
-function formatCurrency(value: number) {
-  return `SAR ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)}`
+const STATUS_OPTION_KEYS: Record<(typeof statusOptions)[number], string> = {
+  "All Statuses": "allStatuses",
+  Active: "active",
+  Paused: "paused",
+  Other: "other",
 }
 
-function formatSar(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)
+function translatedStatusOption(option: (typeof statusOptions)[number], t: CampaignsTranslator) {
+  return t(
+    `dashboardScreen.filters.status.${STATUS_OPTION_KEYS[option]}` as "dashboardScreen.filters.status.allStatuses"
+  )
+}
+
+// "Google Search"/"Google Display" need the surrounding words translated while "Google" itself
+// stays a brand name (matches the convention already established for these two options). The
+// other platforms (YouTube/Meta/TikTok/Snapchat) are pure brand names with no entry below, so
+// translatedPlatformOption falls through to the raw value for them.
+const PLATFORM_OPTION_KEYS: Partial<Record<ExplorerPlatformFilter, string>> = {
+  "All Platforms": "allPlatforms",
+  "Google Search": "googleSearch",
+  "Google Display": "googleDisplay",
+}
+
+function translatedPlatformOption(option: ExplorerPlatformFilter, t: CampaignsTranslator) {
+  const key = PLATFORM_OPTION_KEYS[option]
+  return key
+    ? t(
+        `dashboardScreen.filters.platform.${key}` as "dashboardScreen.filters.platform.allPlatforms"
+      )
+    : option
+}
+
+// Raw ad-platform status text (enabled/active/paused/removed/ended) -- a different vocabulary
+// than the internal CampaignStatus enum CampaignStatusBadge/translatedCampaignStatusMeta cover
+// (draft/scheduled/active/paused/completed/archived), so this stays its own small translated map
+// rather than reusing those.
+const STATUS_PILL_KEYS: Record<string, { key: string; className: string }> = {
+  active: { key: "active", className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  enabled: { key: "active", className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  paused: { key: "paused", className: "bg-[#fff7e6] text-[#e08b00]" },
+  removed: { key: "removed", className: "bg-[#fdeeee] text-[#e0484d]" },
+  ended: { key: "ended", className: "bg-[#eef2f8] text-[#5b6b85]" },
+}
+
+function statusPill(status: string, t: CampaignsTranslator) {
+  const entry = STATUS_PILL_KEYS[status.toLowerCase()]
+  if (!entry) {
+    return { label: status, className: "bg-[#eef2f8] text-[#5b6b85]" }
+  }
+  return {
+    label: t(`dashboardScreen.statusPill.${entry.key}` as "dashboardScreen.statusPill.active"),
+    className: entry.className,
+  }
+}
+
+// Mirrors campaign-list-table.tsx/campaign-details-view.tsx's locale-aware number/currency
+// helpers in this same feature: Arabic numerals are forced to Western digits via -u-nu-latn so
+// they match the plain numbers coming from the backend, and the currency amount gets a trailing
+// "ر.س" (Arabic) or a leading "SAR " (English).
+function numberLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
+}
+
+function formatNumber(value: number, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale)).format(value)
+}
+
+function formatCurrency(value: number, locale: Locale) {
+  const amount = new Intl.NumberFormat(numberLocale(locale), {
+    maximumFractionDigits: 0,
+  }).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
 function formatChangePct(value: number | null) {
@@ -236,6 +260,7 @@ const KPI_TONE_CLASSNAMES: Record<CampaignKpiCardData["tone"], string> = {
 }
 
 function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
+  const t = useTranslations("campaigns")
   const Icon = kpi.icon
   const changeLabel = formatChangePct(kpi.changePct)
   const trend = (kpi.changePct ?? 0) >= 0 ? "up" : "down"
@@ -267,7 +292,9 @@ function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
       <div className="mt-3 flex items-center justify-end gap-1.5 border-t border-[#f1f4f9] pt-2.5">
         {changeLabel ? (
           <>
-            <span className={cn("text-[10.5px]", MUTED)}>مقارنة بالفترة السابقة</span>
+            <span className={cn("text-[10.5px]", MUTED)}>
+              {t("dashboardScreen.kpis.comparedToPreviousPeriod")}
+            </span>
             <span
               className={cn(
                 "inline-flex items-center gap-0.5 text-[11px] font-bold",
@@ -279,7 +306,9 @@ function CampaignKpiCard({ kpi }: { kpi: CampaignKpiCardData }) {
             </span>
           </>
         ) : (
-          <span className={cn("text-[10.5px]", MUTED)}>لا توجد فترة سابقة للمقارنة</span>
+          <span className={cn("text-[10.5px]", MUTED)}>
+            {t("dashboardScreen.kpis.noPreviousPeriod")}
+          </span>
         )}
       </div>
     </div>
@@ -293,12 +322,12 @@ function getRoasClasses(roas: number) {
   return "text-[#95a4bd]"
 }
 
-function getSearchPlaceholder(level: ExplorerLevel) {
-  if (level === "platforms") return "البحث في المنصات..."
-  if (level === "campaigns") return "البحث في الحملات..."
-  if (level === "adGroups") return "البحث في المجموعات الإعلانية..."
-  if (level === "keywords") return "البحث في الكلمات المفتاحية..."
-  return "البحث في الإعلانات..."
+function getSearchPlaceholder(level: ExplorerLevel, t: CampaignsTranslator) {
+  if (level === "platforms") return t("dashboardScreen.searchPlaceholder.platforms")
+  if (level === "campaigns") return t("dashboardScreen.searchPlaceholder.campaigns")
+  if (level === "adGroups") return t("dashboardScreen.searchPlaceholder.adGroups")
+  if (level === "keywords") return t("dashboardScreen.searchPlaceholder.keywords")
+  return t("dashboardScreen.searchPlaceholder.ads")
 }
 
 function formatDuration(value: number) {
@@ -330,21 +359,28 @@ function bucketObjective(rawObjective: string | null): CampaignTypeFilter {
   return "Sales"
 }
 
-function toEntityRow(row: CampaignPerformanceRow): EntityRow {
+function toEntityRow(row: CampaignPerformanceRow, t: CampaignsTranslator): EntityRow {
+  const statusLabel = statusPill(row.status, t).label
   return {
     ...row,
     nodeId: row.id,
     entityName: row.name,
     entityDescription: row.activityDate
-      ? `${statusPill(row.status).label} · آخر نشاط ${row.activityDate}`
-      : statusPill(row.status).label,
+      ? t("dashboardScreen.entityDescription.withActivity", {
+          status: statusLabel,
+          date: row.activityDate,
+        })
+      : statusLabel,
   }
 }
 
 // Groups the backend's per-CampaignPerformancePlatform rows (Google Search/Display/YouTube/
 // Meta/TikTok/Snapchat, one each) into one row per PlatformNodeKey ("Google" combines Search +
 // Display) -- matches the product's original platform-overview hierarchy.
-function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatformRow[] {
+function groupPlatformRows(
+  rows: CampaignPerformancePlatformRow[],
+  t: CampaignsTranslator
+): GroupedPlatformRow[] {
   return (
     (Object.keys(PLATFORM_NODE_CONFIG) as PlatformNodeKey[])
       .map((platformNodeKey) => {
@@ -363,7 +399,9 @@ function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatf
             nodeId: `platform-${platformNodeKey.toLowerCase()}`,
             platformNodeKey,
             entityName: platformNodeKey,
-            entityDescription: `${activeCampaigns} حملة نشطة`,
+            entityDescription: t("dashboardScreen.entityDescription.activeCampaignsCount", {
+              count: activeCampaigns,
+            }),
             activeCampaigns,
             spend,
             revenue,
@@ -392,6 +430,11 @@ function groupPlatformRows(rows: CampaignPerformancePlatformRow[]): GroupedPlatf
 }
 
 export function CampaignDashboardScreen() {
+  const t = useTranslations("campaigns")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
+
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [viewMode, setViewMode] = useState<"table" | "chart">("table")
@@ -496,9 +539,7 @@ export function CampaignDashboardScreen() {
       } catch (error) {
         console.error("Failed to load campaign performance", error)
         if (!cancelled) {
-          setLoadError(
-            "Couldn't load campaign performance from your connected ad accounts. Please try again."
-          )
+          setLoadError(t("dashboardScreen.loadError"))
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -520,6 +561,7 @@ export function CampaignDashboardScreen() {
     status,
     objective,
     search,
+    t,
   ])
 
   const filteredPlatformRows = useMemo(
@@ -527,8 +569,8 @@ export function CampaignDashboardScreen() {
     [platformRows, platform]
   )
   const groupedPlatformRows = useMemo(
-    () => groupPlatformRows(filteredPlatformRows),
-    [filteredPlatformRows]
+    () => groupPlatformRows(filteredPlatformRows, t),
+    [filteredPlatformRows, t]
   )
 
   const applyCommonFilters = (rows: CampaignPerformanceRow[]) =>
@@ -551,20 +593,20 @@ export function CampaignDashboardScreen() {
           PLATFORM_NODE_CONFIG[selectedPlatformNode].campaignPlatforms.includes(row.platform)
         )
       : campaignRows
-    return applyCommonFilters(scoped).map(toEntityRow)
+    return applyCommonFilters(scoped).map((row) => toEntityRow(row, t))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- applyCommonFilters closes over platform/status/objective/search, already deps below
-  }, [campaignRows, selectedPlatformNode, platform, status, objective, search])
+  }, [campaignRows, selectedPlatformNode, platform, status, objective, search, t])
 
   const adGroupsLevelRows = useMemo(
-    () => applyCommonFilters(adGroupRows).map(toEntityRow),
+    () => applyCommonFilters(adGroupRows).map((row) => toEntityRow(row, t)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [adGroupRows, platform, status, objective, search]
+    [adGroupRows, platform, status, objective, search, t]
   )
 
   const leafLevelRows = useMemo(
-    () => applyCommonFilters(leafRows).map(toEntityRow),
+    () => applyCommonFilters(leafRows).map((row) => toEntityRow(row, t)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [leafRows, platform, status, objective, search]
+    [leafRows, platform, status, objective, search, t]
   )
 
   const searchedRows = useMemo<ExplorerRow[]>(() => {
@@ -602,6 +644,11 @@ export function CampaignDashboardScreen() {
     [contextPlatforms]
   )
 
+  // getAvailableTabsForPlatforms above only decides WHICH tabs are available (filtering logic
+  // specific to this screen) -- the actual displayed label for each comes from here, the
+  // translated counterpart of the same ANALYSIS_TABS list.
+  const translatedTabs = useMemo(() => translatedAnalysisTabs(t), [t])
+
   const contextCampaignPlatform = useMemo(() => {
     if (selectedCampaign) {
       return selectedCampaign.platform
@@ -620,61 +667,64 @@ export function CampaignDashboardScreen() {
 
   const columns = useMemo(
     () =>
-      getMetricsColumns({
-        level: currentLevel,
-        campaignPlatform: contextCampaignPlatform,
-        campaignType: contextCampaignType,
-      }),
-    [contextCampaignPlatform, contextCampaignType, currentLevel]
+      translatedMetricsColumns(
+        {
+          level: currentLevel,
+          campaignPlatform: contextCampaignPlatform,
+          campaignType: contextCampaignType,
+        },
+        t
+      ),
+    [contextCampaignPlatform, contextCampaignType, currentLevel, t]
   )
 
   const campaignKpiCards = useMemo<CampaignKpiCardData[]>(() => {
     if (!summary) return []
     return [
       {
-        label: "مرات الظهور",
-        value: summary.impressions.toLocaleString(),
+        label: t("metrics.columns.impressions"),
+        value: formatNumber(summary.impressions, locale),
         changePct: summary.impressionsChangePct,
         icon: Eye,
         tone: "violet",
       },
       {
-        label: "النقرات",
-        value: summary.clicks.toLocaleString(),
+        label: t("metrics.columns.clicks"),
+        value: formatNumber(summary.clicks, locale),
         changePct: summary.clicksChangePct,
         icon: MousePointerClick,
         tone: "orange",
       },
       {
-        label: "معدل النقر إلى الظهور",
+        label: t("metrics.columns.ctr"),
         value: `${summary.ctr.toFixed(2)}%`,
         changePct: summary.ctrChangePct,
         icon: Percent,
         tone: "rose",
       },
       {
-        label: "الإنفاق",
-        value: `SAR ${formatSar(summary.spend)}`,
+        label: t("metrics.columns.spend"),
+        value: formatCurrency(summary.spend, locale),
         changePct: summary.spendChangePct,
         icon: CreditCard,
         tone: "green",
       },
       {
-        label: "الإيرادات",
-        value: `SAR ${formatSar(summary.revenue)}`,
+        label: t("metrics.columns.revenue"),
+        value: formatCurrency(summary.revenue, locale),
         changePct: summary.revenueChangePct,
         icon: FileText,
         tone: "blue",
       },
       {
-        label: "العائد على الإنفاق (ROAS)",
+        label: t("metrics.columns.roas"),
         value: `${summary.roas.toFixed(2)}x`,
         changePct: summary.roasChangePct,
         icon: TrendingUp,
         tone: "blue",
       },
     ]
-  }, [summary])
+  }, [summary, t, locale])
 
   const totalPages = Math.max(1, Math.ceil(searchedRows.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -714,8 +764,11 @@ export function CampaignDashboardScreen() {
     if (bestRoas) {
       cards.push({
         key: "budget",
-        title: `زيادة الميزانية لحملات ${bestRoas.entityName}`,
-        body: `تحقق ${bestRoas.entityName} أعلى عائد على الإنفاق (${bestRoas.roas.toFixed(2)}x) في هذه الفترة.`,
+        title: t("dashboardScreen.recommendations.budget.title", { entity: bestRoas.entityName }),
+        body: t("dashboardScreen.recommendations.budget.body", {
+          entity: bestRoas.entityName,
+          roas: bestRoas.roas.toFixed(2),
+        }),
         icon: TrendingUp,
         className: "border-[#bfe8cf] bg-[#f2fbf6]",
         iconClassName: "bg-[#e9f8ef] text-[#1f9d55]",
@@ -726,8 +779,13 @@ export function CampaignDashboardScreen() {
     if (dormant) {
       cards.push({
         key: "reactivate",
-        title: `إعادة تفعيل حملات ${dormant.entityName}`,
-        body: `لا توجد حملات نشطة على ${dormant.entityName} رغم تسجيل ${dormant.impressions.toLocaleString()} ظهور في هذه الفترة.`,
+        title: t("dashboardScreen.recommendations.reactivate.title", {
+          entity: dormant.entityName,
+        }),
+        body: t("dashboardScreen.recommendations.reactivate.body", {
+          entity: dormant.entityName,
+          impressions: formatNumber(dormant.impressions, locale),
+        }),
         icon: RefreshCcw,
         className: "border-[#f7ddab] bg-[#fffaf0]",
         iconClassName: "bg-[#fff3e3] text-[#e08b00]",
@@ -740,8 +798,11 @@ export function CampaignDashboardScreen() {
     if (weakestCtr) {
       cards.push({
         key: "targeting",
-        title: "تحسين استهداف الجمهور",
-        body: `${weakestCtr.entityName} يسجل أدنى معدل نقر (${weakestCtr.ctr.toFixed(2)}%) بين المنصات النشطة.`,
+        title: t("dashboardScreen.recommendations.targeting.title"),
+        body: t("dashboardScreen.recommendations.targeting.body", {
+          entity: weakestCtr.entityName,
+          ctr: weakestCtr.ctr.toFixed(2),
+        }),
         icon: Target,
         className: "border-[#e1e7f0] bg-white",
         iconClassName: "bg-[#eef4ff] text-[#2878ff]",
@@ -749,12 +810,12 @@ export function CampaignDashboardScreen() {
     }
 
     return cards
-  }, [groupedPlatformRows])
+  }, [groupedPlatformRows, t, locale])
 
   // Exports exactly what is on screen -- the current columns, the current filters, the rows
   // the table is showing -- so the file and the page can never disagree.
   const handleExport = () => {
-    const header = columns.map((column) => COLUMN_LABEL_AR[column.label] ?? column.label)
+    const header = columns.map((column) => column.label)
     const body = searchedRows.map((row) =>
       columns.map((column) => {
         if (column.key === "entity") return row.entityName
@@ -806,7 +867,7 @@ export function CampaignDashboardScreen() {
     }
 
     if (column.key === "status") {
-      const pill = statusPill(row.status)
+      const pill = statusPill(row.status, t)
       return (
         <span
           className={cn(
@@ -833,7 +894,7 @@ export function CampaignDashboardScreen() {
     )
 
     if (column.kind === "currency") {
-      return formatCurrency(numericValue)
+      return formatCurrency(numericValue, locale)
     }
 
     if (column.kind === "ratio") {
@@ -848,7 +909,7 @@ export function CampaignDashboardScreen() {
       return formatDuration(numericValue)
     }
 
-    return numericValue.toLocaleString()
+    return formatNumber(numericValue, locale)
   }
 
   const navigateToRow = (row: ExplorerRow) => {
@@ -916,17 +977,15 @@ export function CampaignDashboardScreen() {
   }
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir={dir}>
       <div className="mx-auto w-full max-w-[1500px] space-y-4">
         {/* RTL: the title block is written first so it lands on the right, actions left. */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
-              الحملات التسويقية
+              {t("dashboardScreen.title")}
             </h1>
-            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>
-              أدر حملاتك التسويقية، راقب الأداء وحقق أفضل النتائج من مكان واحد.
-            </p>
+            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>{t("dashboardScreen.subtitle")}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
@@ -938,7 +997,7 @@ export function CampaignDashboardScreen() {
               disabled={searchedRows.length === 0}
               onClick={handleExport}
             >
-              تصدير
+              {tCommon("export")}
             </AppButton>
             <AppDateRangeFilter
               value={dateRange}
@@ -962,7 +1021,7 @@ export function CampaignDashboardScreen() {
             <div className="w-full md:w-[380px] lg:w-[420px]">
               <AppSearchInput
                 startIcon={<Search className="size-4 text-[#95a4bd]" />}
-                placeholder={getSearchPlaceholder(currentLevel)}
+                placeholder={getSearchPlaceholder(currentLevel, t)}
                 className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] placeholder:text-[#95a4bd]"
                 value={searchInput}
                 onChange={(event) => {
@@ -986,7 +1045,7 @@ export function CampaignDashboardScreen() {
                 <AppSelectContent>
                   {objectiveOptions.map((option) => (
                     <AppSelectItem key={option} value={option}>
-                      {FILTER_LABEL_AR[option] ?? option}
+                      {translatedObjectiveOption(option, t)}
                     </AppSelectItem>
                   ))}
                 </AppSelectContent>
@@ -1005,7 +1064,7 @@ export function CampaignDashboardScreen() {
                 <AppSelectContent>
                   {statusOptions.map((option) => (
                     <AppSelectItem key={option} value={option}>
-                      {FILTER_LABEL_AR[option] ?? option}
+                      {translatedStatusOption(option, t)}
                     </AppSelectItem>
                   ))}
                 </AppSelectContent>
@@ -1028,7 +1087,7 @@ export function CampaignDashboardScreen() {
                 <AppSelectContent>
                   {platformOptions.map((option) => (
                     <AppSelectItem key={option} value={option}>
-                      {FILTER_LABEL_AR[option] ?? option}
+                      {translatedPlatformOption(option, t)}
                     </AppSelectItem>
                   ))}
                 </AppSelectContent>
@@ -1038,8 +1097,8 @@ export function CampaignDashboardScreen() {
             <div className="ms-auto flex items-center gap-1 rounded-[10px] bg-[#f2f5fa] p-1">
               {(
                 [
-                  { key: "table", label: "جدول", icon: LayoutGrid },
-                  { key: "chart", label: "مخطط بياني", icon: BarChart3 },
+                  { key: "table", label: t("dashboardScreen.viewMode.table"), icon: LayoutGrid },
+                  { key: "chart", label: t("dashboardScreen.viewMode.chart"), icon: BarChart3 },
                 ] as const
               ).map((option) => (
                 <button
@@ -1070,7 +1129,7 @@ export function CampaignDashboardScreen() {
               disabled={!canGoBack}
               onClick={handleBack}
             >
-              رجوع
+              {tCommon("back")}
             </AppButton>
 
             {availableTabs.map((tab) => {
@@ -1086,17 +1145,14 @@ export function CampaignDashboardScreen() {
                     : Boolean(selectedAdGroup)
 
               const disabledReason = !platformAllowsTab
-                ? "تحليل الكلمات المفتاحية متاح لحملات البحث فقط."
+                ? t("dashboardScreen.tabs.disabledReason.keywordsRequireSearch")
                 : !contextAllowsTab
-                  ? "انتقل إلى المستوى الأعلى أولاً."
+                  ? t("dashboardScreen.tabs.disabledReason.selectHigherLevelFirst")
                   : undefined
 
               const isActive = currentLevel === tab.key
               const label =
-                tab.key === "adGroups"
-                  ? CAMPAIGN_PLATFORM_HIERARCHY[contextCampaignPlatform ?? "Google Search"]
-                      .adGroupLabel
-                  : tab.label
+                translatedTabs.find((entry) => entry.key === tab.key)?.label ?? tab.label
 
               return (
                 <button
@@ -1119,7 +1175,7 @@ export function CampaignDashboardScreen() {
                     setPage(1)
                   }}
                 >
-                  {LEVEL_LABEL_AR[tab.key] ?? label}
+                  {label}
                 </button>
               )
             })}
@@ -1129,15 +1185,17 @@ export function CampaignDashboardScreen() {
             <div className="rounded-[12px] border border-[#eef2f8] p-5">
               {isLoading ? (
                 <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>
-                  جارٍ تحميل بيانات الأداء...
+                  {t("dashboardScreen.loadingPerformance")}
                 </p>
               ) : spendDistribution.length === 0 ? (
                 <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>
-                  لا يوجد إنفاق مسجل في هذه الفترة لعرضه على المخطط.
+                  {t("dashboardScreen.chart.noSpendData")}
                 </p>
               ) : (
                 <>
-                  <h3 className={cn("mb-4 text-[14px] font-extrabold", HEADING)}>توزيع الإنفاق</h3>
+                  <h3 className={cn("mb-4 text-[14px] font-extrabold", HEADING)}>
+                    {t("dashboardWidgets.spendDistributionCard.title")}
+                  </h3>
                   <CampaignSpendDonut distribution={spendDistribution} />
                 </>
               )}
@@ -1156,7 +1214,7 @@ export function CampaignDashboardScreen() {
                           column.key === "entity" ? "text-right" : "text-center"
                         )}
                       >
-                        {COLUMN_LABEL_AR[column.label] ?? column.label}
+                        {column.label}
                       </th>
                     ))}
                   </tr>
@@ -1165,7 +1223,9 @@ export function CampaignDashboardScreen() {
                   {isLoading ? (
                     <tr>
                       <td colSpan={columns.length} className="py-10 text-center">
-                        <p className={cn("text-[12.5px]", MUTED)}>جارٍ تحميل بيانات الأداء...</p>
+                        <p className={cn("text-[12.5px]", MUTED)}>
+                          {t("dashboardScreen.loadingPerformance")}
+                        </p>
                       </td>
                     </tr>
                   ) : loadError ? (
@@ -1178,10 +1238,10 @@ export function CampaignDashboardScreen() {
                     <tr>
                       <td colSpan={columns.length} className="px-4 py-12 text-center">
                         <p className={cn("text-[13.5px] font-bold", HEADING)}>
-                          لا توجد بيانات مطابقة للفلاتر المحددة
+                          {t("dashboardScreen.table.emptyTitle")}
                         </p>
                         <p className={cn("mt-2 text-[12px]", MUTED)}>
-                          غيّر المنصة أو الحالة أو الهدف أو الفترة الزمنية لاستعراض شريحة أخرى.
+                          {t("dashboardScreen.table.emptyDescription")}
                         </p>
                       </td>
                     </tr>
@@ -1231,11 +1291,17 @@ export function CampaignDashboardScreen() {
               <div className="flex items-center gap-3">
                 <span className={cn("text-[12px]", MUTED)}>
                   {searchedRows.length === 0
-                    ? "لا توجد نتائج"
-                    : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, searchedRows.length)} من ${searchedRows.length}`}
+                    ? t("dashboardScreen.pagination.noResults")
+                    : t("dashboardScreen.pagination.rangeSummary", {
+                        start: (currentPage - 1) * pageSize + 1,
+                        end: Math.min(currentPage * pageSize, searchedRows.length),
+                        total: searchedRows.length,
+                      })}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-[12px]", MUTED)}>عدد النتائج في الصفحة</span>
+                  <span className={cn("text-[12px]", MUTED)}>
+                    {t("listTable.pagination.rowsPerPage")}
+                  </span>
                   <AppSelect
                     value={String(pageSize)}
                     onValueChange={(next) => {
@@ -1262,10 +1328,10 @@ export function CampaignDashboardScreen() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("dashboardScreen.pagination.previousPage")}
                   onClick={() => setPage((previous) => Math.max(1, previous - 1))}
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronLeft className="size-4 rtl:rotate-180" />
                 </button>
                 <span
                   className={cn(
@@ -1279,10 +1345,10 @@ export function CampaignDashboardScreen() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("dashboardScreen.pagination.nextPage")}
                   onClick={() => setPage((previous) => Math.min(totalPages, previous + 1))}
                 >
-                  <ChevronLeft className="size-4" />
+                  <ChevronRight className="size-4 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -1291,7 +1357,9 @@ export function CampaignDashboardScreen() {
 
         <div className={cn(PANEL, "p-4 md:p-5")}>
           <div className="flex items-center justify-between gap-3">
-            <h2 className={cn("text-[15px] font-extrabold", HEADING)}>توصيات الحملات الذكية</h2>
+            <h2 className={cn("text-[15px] font-extrabold", HEADING)}>
+              {t("dashboardScreen.recommendations.heading")}
+            </h2>
             <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#eef4ff] text-[11px] font-extrabold text-[#2878ff]">
               AI
             </span>
@@ -1302,7 +1370,7 @@ export function CampaignDashboardScreen() {
             {recommendations.length === 0 ? (
               <div className="rounded-[12px] border border-[#eef2f8] bg-[#fafbfe] px-5 py-8 text-center">
                 <p className={cn("text-[12.5px]", MUTED)}>
-                  لا توجد توصيات بعد — تحتاج المنصات إلى بيانات أداء في هذه الفترة أولاً.
+                  {t("dashboardScreen.recommendations.emptyState")}
                 </p>
               </div>
             ) : (
@@ -1328,7 +1396,9 @@ export function CampaignDashboardScreen() {
                       variant="outline"
                       className="mt-3.5 h-9 w-full rounded-[10px] border-[#e1e7f0] bg-white text-[12px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
                     >
-                      <Link href={ROUTES.ai}>عرض التفاصيل</Link>
+                      <Link href={ROUTES.ai}>
+                        {t("dashboardScreen.recommendations.viewDetails")}
+                      </Link>
                     </AppButton>
                   </div>
                 ))}
@@ -1340,10 +1410,10 @@ export function CampaignDashboardScreen() {
                 <Lightbulb className="size-5" />
               </span>
               <h3 className={cn("mt-3.5 text-[13.5px] font-extrabold leading-5", HEADING)}>
-                اجعل حملاتك أكثر فعالية مع الذكاء الاصطناعي
+                {t("dashboardScreen.aiPromo.title")}
               </h3>
               <p className={cn("mt-2 text-[11.5px] leading-[19px]", MUTED)}>
-                احصل على تحليل أعمق لأداء حملاتك التسويقية من مركز الذكاء الاصطناعي.
+                {t("dashboardScreen.aiPromo.description")}
               </p>
               <AppButton
                 asChild
@@ -1351,7 +1421,7 @@ export function CampaignDashboardScreen() {
               >
                 <Link href={ROUTES.ai}>
                   <span className="flex items-center justify-center gap-2">
-                    عرض التوصيات
+                    {t("dashboardScreen.aiPromo.viewRecommendations")}
                     <Sparkles className="size-4" />
                   </span>
                 </Link>
