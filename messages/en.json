@@ -3366,5 +3366,506 @@
         }
       }
     }
+  },
+  "settings": {
+    "nav": {
+      "heading": "Settings",
+      "sections": {
+        "general": "General settings",
+        "devices": "Device settings",
+        "cashier": "Cashier settings",
+        "workspaces": "Workspace management",
+        "payments": "Payment methods",
+        "tax": "Taxes",
+        "zatca": "E-invoicing (ZATCA)",
+        "backup": "Backup"
+      },
+      "backupPendingReason": "Backup isn't available yet"
+    },
+    "general": {
+      "title": "General settings",
+      "subtitle": "Manage account information and core system configuration",
+      "initialsFallback": "?",
+      "currencies": {
+        "SAR": "Saudi Riyal (SAR)",
+        "USD": "US Dollar (USD)"
+      },
+      "timezones": {
+        "Asia/Riyadh": "Riyadh (GMT+3)",
+        "Asia/Dubai": "Dubai (GMT+4)",
+        "Asia/Kuwait": "Kuwait (GMT+3)",
+        "Asia/Qatar": "Doha (GMT+3)",
+        "Asia/Bahrain": "Manama (GMT+3)",
+        "Asia/Muscat": "Muscat (GMT+4)",
+        "Africa/Cairo": "Cairo (GMT+2)",
+        "Asia/Baghdad": "Baghdad (GMT+3)",
+        "Asia/Amman": "Amman (GMT+3)",
+        "UTC": "Universal time (UTC)"
+      },
+      "locales": {
+        "ar": "العربية",
+        "en": "English"
+      },
+      "countries": {
+        "SA": "Saudi Arabia",
+        "AE": "United Arab Emirates",
+        "KW": "Kuwait",
+        "QA": "Qatar",
+        "BH": "Bahrain",
+        "OM": "Oman",
+        "EG": "Egypt",
+        "JO": "Jordan",
+        "IQ": "Iraq",
+        "MA": "Morocco"
+      },
+      "validation": {
+        "taxNumber": "The tax number must be 15 digits.",
+        "commercialRegistration": "The commercial registration number must be 10 digits.",
+        "buildingNumber": "The building number must be 4 digits.",
+        "secondaryNumber": "The secondary number must be 4 digits.",
+        "postalCode": "The postal code must be 5 digits.",
+        "nameRequired": "Account name is required.",
+        "invalidEmail": "Invalid email format.",
+        "reviewFields": "Review the highlighted fields before saving."
+      },
+      "password": {
+        "changeTitle": "Change password",
+        "changeSubtitle": "Update your account's password",
+        "change": "Change",
+        "currentPassword": "Current password",
+        "newPassword": "New password",
+        "confirmPassword": "Confirm new password",
+        "newPasswordHint": "At least 12 characters.",
+        "cancel": "Cancel",
+        "saving": "Saving…",
+        "save": "Save password",
+        "tooShort": "The new password must be at least 12 characters.",
+        "mismatch": "The new passwords don't match.",
+        "success": "Password changed. You'll be signed out now.",
+        "currentIncorrect": "The current password is incorrect."
+      },
+      "accountInfo": {
+        "title": "Account information",
+        "subtitle": "Account details that will appear on invoices and official documents",
+        "changingLogo": "Uploading…",
+        "changeLogo": "Change logo",
+        "accountName": "Account name",
+        "commercialRegistration": "Commercial registration number",
+        "taxNumber": "Tax number",
+        "phone": "Phone number",
+        "email": "Email",
+        "website": "Website"
+      },
+      "nationalAddress": {
+        "title": "National address information",
+        "subtitle": "Enter your national address details to use on invoices and documents",
+        "addressShort": "Short address",
+        "addressShortPlaceholder": "Al Olaya District",
+        "buildingNumber": "Building number",
+        "street": "Street",
+        "streetPlaceholder": "King Fahd Road",
+        "secondaryNumber": "Secondary number",
+        "district": "District",
+        "districtPlaceholder": "Al Olaya",
+        "postalCode": "Postal code",
+        "city": "City",
+        "cityPlaceholder": "Riyadh"
+      },
+      "regional": {
+        "title": "Regional settings",
+        "subtitle": "Set the language, timezone, and currency",
+        "languageLabel": "Language",
+        "languagePlaceholder": "Choose a language",
+        "timezoneLabel": "Timezone",
+        "timezonePlaceholder": "Choose a timezone",
+        "currencyLabel": "Currency (reporting currency)",
+        "currencyPlaceholder": "Choose a currency",
+        "countryLabel": "Country",
+        "countryPlaceholder": "Choose a country"
+      },
+      "notifications": {
+        "title": "Notification settings",
+        "subtitle": "Enable important notifications across different channels",
+        "emailNotifications": "Email notifications",
+        "emailNotificationsDescription": "Receive notifications by email",
+        "notReadyNote": "Your preference is saved now, and sending will begin once the platform's notification service is enabled."
+      },
+      "security": {
+        "title": "Security and password",
+        "subtitle": "Manage your account's security and change your password"
+      },
+      "deleteAccount": {
+        "title": "Delete account",
+        "description": "All data will be permanently deleted and this action cannot be undone",
+        "dialogTitle": "Permanently delete account",
+        "dialogDescription": "The account <b>{name}</b> and all its data will be deleted. This action cannot be undone. Type the account name to confirm.",
+        "unnamedFallback": "—",
+        "confirmLabel": "Account name",
+        "cancel": "Cancel",
+        "deleting": "Deleting…",
+        "confirmDelete": "Delete account"
+      },
+      "saveChanges": "Save changes",
+      "saving": "Saving…",
+      "unsavedChanges": "You have unsaved changes.",
+      "allSaved": "All changes are saved.",
+      "footer": {
+        "copyright": "© {year} Madar. All rights reserved",
+        "privacyPolicy": "Privacy policy",
+        "termsOfService": "Terms of service"
+      },
+      "toasts": {
+        "logoUpdated": "Logo updated",
+        "logoUploadFailed": "Couldn't upload the logo",
+        "settingsSaved": "Settings saved",
+        "saveFailed": "Couldn't save. Try again.",
+        "deleteFailed": "Couldn't delete the account. Try again."
+      }
+    },
+    "devices": {
+      "breadcrumbCurrent": "Device settings",
+      "title": "Device settings",
+      "subtitle": "Manage and configure every device connected to Madar, such as scales, receipt printers, barcode scanners, and more.",
+      "loading": "Loading device settings...",
+      "loadErrors": {
+        "forbidden": "You don't have permission to view device settings.",
+        "generic": "Couldn't load device settings. Try again."
+      },
+      "retry": "Retry",
+      "types": {
+        "scale": {
+          "label": "Scale",
+          "definite": "The scale",
+          "plural": "Scales",
+          "addLabel": "Add scale"
+        },
+        "receipt_printer": {
+          "label": "Receipt printer",
+          "definite": "The receipt printer",
+          "plural": "Receipt printers",
+          "addLabel": "Add printer"
+        },
+        "barcode_scanner": {
+          "label": "Barcode scanner",
+          "definite": "The barcode scanner",
+          "plural": "Barcode scanners",
+          "addLabel": "Add barcode scanner"
+        },
+        "cash_drawer": {
+          "label": "Cash drawer",
+          "definite": "The cash drawer",
+          "plural": "Cash drawers",
+          "addLabel": "Add cash drawer"
+        },
+        "customer_display": {
+          "label": "Customer display",
+          "definite": "The customer display",
+          "plural": "Customer displays",
+          "addLabel": "Add customer display"
+        },
+        "card_reader": {
+          "label": "Card reader",
+          "definite": "The card reader",
+          "plural": "Card readers",
+          "addLabel": "Add card reader"
+        }
+      },
+      "printerRoles": {
+        "receipt": "Receipts",
+        "kitchen": "Kitchen",
+        "bar": "Bar"
+      },
+      "connections": {
+        "usb": "USB",
+        "network": "Network",
+        "bluetooth": "Bluetooth",
+        "serial": "Serial port"
+      },
+      "lastSeen": {
+        "now": "Now",
+        "never": "—"
+      },
+      "allDevicesTile": {
+        "label": "All devices",
+        "sub": "View all connected devices"
+      },
+      "tileSub": "{plural} settings",
+      "section": {
+        "allHeading": "Connected devices",
+        "typeHeading": "Connected {plural}",
+        "allSubtitle": "A list of every device, its settings, and connection status.",
+        "typeSubtitle": "A list of every {plural}, its settings, and connection status."
+      },
+      "search": {
+        "allPlaceholder": "Search by device, model, or connection port...",
+        "typePlaceholder": "Search {label} by name, model, or port..."
+      },
+      "filters": {
+        "allTypes": "All types",
+        "allStatuses": "All statuses",
+        "online": "Online",
+        "offline": "Offline"
+      },
+      "empty": {
+        "noDevicesYet": "No devices registered yet.",
+        "allNoMatch": "No devices match this search or filter.",
+        "typeNoMatch": "No {plural} match this search or filter."
+      },
+      "table": {
+        "name": "Device name",
+        "type": "Type",
+        "model": "Model",
+        "port": "Connection port",
+        "status": "Status",
+        "lastSeen": "Last seen",
+        "actions": "Actions"
+      },
+      "pagination": {
+        "showingRange": "Showing {from} - {to} of {total} devices",
+        "previousAriaLabel": "Previous page",
+        "nextAriaLabel": "Next page"
+      },
+      "rowActions": {
+        "ariaLabel": "Device actions",
+        "edit": "Edit device",
+        "delete": "Delete device"
+      },
+      "deleteDialog": {
+        "title": "Delete device?",
+        "description": "<b>{name}</b> will be removed from the device list.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "deleted": "Device deleted.",
+        "deleteFailed": "Couldn't delete the device."
+      }
+    },
+    "deviceForm": {
+      "loading": "Loading device...",
+      "editTitle": "Edit device",
+      "addTypeTitle": "Add {type}",
+      "addGenericTitle": "Add new device",
+      "subtitle": "Set up a new device and connect it to the right port to work with Madar.",
+      "backToDevices": "Back to devices",
+      "basicInfo": {
+        "sectionTitle": "Basic device information",
+        "deviceTypeLabel": "Device type",
+        "nameLabel": "Device name",
+        "namePlaceholder": "Produce section scale",
+        "modelLabel": "Model",
+        "modelPlaceholder": "CAS SW-1",
+        "descriptionLabel": "Optional description",
+        "descriptionPlaceholder": "The scale used in the produce section",
+        "portLabel": "Port",
+        "portPlaceholder": "COM3",
+        "connectionTypeLabel": "Connection type",
+        "baudRateLabel": "Speed (Baud Rate)",
+        "baudRateAriaLabel": "Speed"
+      },
+      "validation": {
+        "nameRequired": "Device name is required",
+        "modelRequired": "Model is required",
+        "portRequired": "Port is required",
+        "baudRateRequired": "Speed is required",
+        "completeRequiredFields": "Complete the required fields before saving."
+      },
+      "scale": {
+        "sectionTitle": "Scale settings",
+        "defaultWeightUnitLabel": "Default weight unit",
+        "kg": "Kilogram (kg)",
+        "g": "Gram",
+        "trailingDigitsLabel": "Trailing digits represent",
+        "price": "Price",
+        "weight": "Weight",
+        "indicatorStartLabel": "Scale indicator start",
+        "decimalsLabel": "Decimal places",
+        "autoZeroLabel": "Auto-zero weight",
+        "autoZeroHint": "Re-zero the scale before reading the weight.",
+        "blockUnstableLabel": "Block adding to cashier",
+        "blockUnstableHint": "Prevent adding the product if the weight is unstable."
+      },
+      "printer": {
+        "sectionTitle": "Printer settings",
+        "roleLabel": "Printer role",
+        "roles": {
+          "receipt": "Customer receipts",
+          "kitchen": "Kitchen display",
+          "bar": "Bar"
+        },
+        "paperWidthLabel": "Paper width",
+        "paperWidths": {
+          "58mm": "58 mm",
+          "80mm": "80 mm"
+        },
+        "printDirectionLabel": "Print direction",
+        "directions": {
+          "vertical": "Vertical",
+          "horizontal": "Horizontal"
+        },
+        "printDensityLabel": "Print density",
+        "densities": {
+          "light": "Light",
+          "normal": "Normal",
+          "dark": "Dark"
+        },
+        "charsetLabel": "Character encoding",
+        "charsets": {
+          "utf8": "UTF-8",
+          "cp1256": "CP1256 (Arabic)",
+          "iso88596": "ISO-8859-6 (Arabic)"
+        },
+        "networkAddressLabel": "Network address (IP)",
+        "footerTextLabel": "Receipt footer text",
+        "footerTextPlaceholder": "Thank you for your visit",
+        "autoCutLabel": "Auto-cut paper",
+        "autoCutHint": "Automatically cut the receipt after printing finishes.",
+        "printLogoLabel": "Print store logo",
+        "printLogoHint": "Add the store logo to the top of the receipt.",
+        "extraCopyLabel": "Print extra copy",
+        "extraCopyHint": "Print a second copy of every receipt."
+      },
+      "testDevice": {
+        "title": "Test device",
+        "description": "After saving the device, you can test the connection to make sure it's working correctly.",
+        "buttonTitle": "Testing the connection requires the POS app on the till itself",
+        "buttonLabel": "Test connection",
+        "availabilityNote": "Available from the cashier app on the device itself"
+      },
+      "quickSteps": {
+        "title": "Quick instructions",
+        "steps": [
+          "Choose the device type and model.",
+          "Make sure the device is connected to the right port.",
+          "Click Test connection to confirm the device works.",
+          "Save the settings."
+        ]
+      },
+      "saving": "Saving...",
+      "save": "Save device",
+      "cancel": "Cancel",
+      "toasts": {
+        "loadFailed": "Couldn't load the device.",
+        "updated": "Device saved.",
+        "created": "Device added.",
+        "forbidden": "You don't have permission to manage devices.",
+        "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission.",
+        "saveFailed": "Couldn't save the device."
+      }
+    },
+    "cashier": {
+      "title": "Cashier settings",
+      "subtitle": "Manage point-of-sale settings to match your business",
+      "loading": "Loading...",
+      "loadError": "Couldn't load cashier settings.",
+      "sale": {
+        "sectionTitle": "Sale settings",
+        "allowBelowCostSale": {
+          "title": "Allow selling below cost",
+          "description": "Allow completing a sale when the selling price is below the product's cost"
+        },
+        "allowOutOfStockSale": {
+          "title": "Allow selling out-of-stock items",
+          "description": "Allow completing a sale even when the product's stock quantity is zero"
+        },
+        "confirmSale": {
+          "title": "Confirm sale",
+          "description": "Show a confirmation message before completing a sale"
+        },
+        "autoOpenCashDrawer": {
+          "title": "Open cash drawer automatically",
+          "description": "Open the cash drawer right after payment completes (requires a device paired via Chrome)"
+        },
+        "allowManualPriceEdit": {
+          "title": "Allow manual price edits",
+          "description": "Allow the cashier to edit a product's price during the sale"
+        },
+        "applyDiscounts": {
+          "title": "Apply discounts",
+          "description": "Allow discounts to be applied to sales"
+        }
+      },
+      "print": {
+        "sectionTitle": "Print settings",
+        "defaultPrinterLabel": "Default printer",
+        "noDefaultPrinter": "No default printer",
+        "paperWidthLabel": "Paper size",
+        "autoPrintInvoice": {
+          "title": "Print invoice automatically",
+          "description": "Print the invoice after the sale completes"
+        },
+        "printKitchenCopy": {
+          "title": "Print a kitchen copy",
+          "description": "Add a kitchen copy (for restaurants and cafes)"
+        },
+        "copiesCountLabel": "Number of copies",
+        "testPrint": "Test print",
+        "testingPrint": "Testing...",
+        "toasts": {
+          "unsupported": "This browser doesn't support Web Serial (use Chrome or Edge).",
+          "success": "Test command sent to the device successfully.",
+          "failed": "Couldn't connect to the device."
+        }
+      },
+      "payment": {
+        "sectionTitle": "Payment settings",
+        "showQuickPaymentScreen": {
+          "title": "Quick payment",
+          "description": "When the payment screen opens, the first enabled payment method is pre-filled with the full amount"
+        },
+        "allowSplitPayment": {
+          "title": "Allow more than one payment method",
+          "description": "Allow splitting the amount across more than one payment method"
+        },
+        "rememberLastPaymentMethod": {
+          "title": "Remember last payment method",
+          "description": "Remember the last payment method used"
+        },
+        "requirePaymentMethodSelection": {
+          "title": "Require a payment method",
+          "description": "A payment method must be selected to complete the sale"
+        }
+      },
+      "interface": {
+        "sectionTitle": "Interface settings",
+        "showProductImages": {
+          "title": "Show product images",
+          "description": "Show product images on the cashier screen"
+        },
+        "useCompactMode": {
+          "title": "Use compact mode",
+          "description": "A denser product grid (smaller cards) to show more items without scrolling"
+        },
+        "showCategoryPanel": {
+          "title": "Show categories panel",
+          "description": "Show product categories on the main screen"
+        },
+        "showGridView": {
+          "title": "Grid view button",
+          "description": "Show a button to switch to a grid view of products next to the search box"
+        },
+        "showListView": {
+          "title": "List view button",
+          "description": "Show a button to switch to a list view of cart items next to the search box"
+        }
+      },
+      "scanner": {
+        "sectionTitle": "Barcode scanner settings",
+        "enableBarcodeScanner": {
+          "title": "Enable barcode scanner",
+          "description": "Use the barcode scanner at the cashier"
+        },
+        "playScanSound": {
+          "title": "Play scan sound",
+          "description": "Play a sound when a barcode is scanned"
+        }
+      },
+      "saving": "Saving...",
+      "save": "Save settings",
+      "toasts": {
+        "saved": "Cashier settings saved successfully.",
+        "saveFailed": "Couldn't save cashier settings."
+      }
+    }
   }
 }

@@ -38,9 +38,11 @@ import {
 import type { LucideIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 import {
@@ -89,69 +91,31 @@ const BLUE_TINT = "bg-[#eff6ff] text-[#2563eb]"
 
 type DeviceFilter = DeviceType | "all"
 
-// `label` names the kind in a table cell/filter option; `definite` is the same name with the
-// article, which is how the settings panel heading reads it ("إعدادات الميزان الإلكتروني").
-const DEVICE_META: Record<
-  DeviceType,
-  { label: string; definite: string; plural: string; icon: LucideIcon }
-> = {
-  scale: {
-    label: "ميزان إلكتروني",
-    definite: "الميزان الإلكتروني",
-    plural: "الموازين الإلكترونية",
-    icon: ScaleIcon,
-  },
-  receipt_printer: {
-    label: "طابعة فواتير",
-    definite: "طابعة الفواتير",
-    plural: "طابعات الفواتير",
-    icon: Printer,
-  },
-  barcode_scanner: {
-    label: "ماسح باركود",
-    definite: "ماسح الباركود",
-    plural: "ماسحات الباركود",
-    icon: ScanLine,
-  },
-  cash_drawer: {
-    label: "درج نقود",
-    definite: "درج النقود",
-    plural: "أدراج النقود",
-    icon: Inbox,
-  },
-  customer_display: {
-    label: "شاشة عميل",
-    definite: "شاشة العميل",
-    plural: "شاشات العملاء",
-    icon: Monitor,
-  },
-  card_reader: {
-    label: "قارئ بطاقات",
-    definite: "قارئ البطاقات",
-    plural: "قارئات البطاقات",
-    icon: CreditCard,
-  },
+type DevicesTranslator = ReturnType<typeof useTranslations<"settings.devices">>
+
+const DEVICE_ICON: Record<DeviceType, LucideIcon> = {
+  scale: ScaleIcon,
+  receipt_printer: Printer,
+  barcode_scanner: ScanLine,
+  cash_drawer: Inbox,
+  customer_display: Monitor,
+  card_reader: CreditCard,
 }
 
-// A restaurant routes the same sale to more than one printer -- a receipt with prices, a kitchen
-// ticket without them. This badge is only a label so an admin can tell which printer is which at
-// a glance; nothing in the platform dispatches a print job to a role yet.
-const PRINTER_ROLE_BADGE: Record<PrinterRole, string> = {
-  receipt: "إيصالات",
-  kitchen: "مطبخ",
-  bar: "بار",
+function deviceLabel(type: DeviceType, t: DevicesTranslator): string {
+  return t(`types.${type}.label` as "types.scale.label")
 }
-
-// The noun each type's "إضافة" button reads naturally with -- shorter than DEVICE_META's plural/
-// definite forms, matching the Figma source's own per-type button copy ("إضافة ميزان", not
-// "إضافة الموازين الإلكترونية").
-const ADD_LABEL: Record<DeviceType, string> = {
-  scale: "إضافة ميزان",
-  receipt_printer: "إضافة طابعة",
-  barcode_scanner: "إضافة ماسح باركود",
-  cash_drawer: "إضافة درج نقود",
-  customer_display: "إضافة شاشة عميل",
-  card_reader: "إضافة قارئ بطاقات",
+function devicePlural(type: DeviceType, t: DevicesTranslator): string {
+  return t(`types.${type}.plural` as "types.scale.plural")
+}
+function deviceAddLabel(type: DeviceType, t: DevicesTranslator): string {
+  return t(`types.${type}.addLabel` as "types.scale.addLabel")
+}
+function printerRoleLabel(role: PrinterRole, t: DevicesTranslator): string {
+  return t(`printerRoles.${role}` as "printerRoles.receipt")
+}
+function connectionLabel(connection: DeviceConnection, t: DevicesTranslator): string {
+  return t(`connections.${connection}` as "connections.usb")
 }
 
 // Figma's own card order: all devices, then scale / printer / scanner / cash drawer / display /
@@ -165,37 +129,32 @@ const TILE_ORDER: DeviceType[] = [
   "card_reader",
 ]
 
-const CONNECTION_LABEL: Record<DeviceConnection, string> = {
-  usb: "USB",
-  network: "شبكة",
-  bluetooth: "بلوتوث",
-  serial: "منفذ تسلسلي",
-}
-
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
-const RELATIVE = new Intl.RelativeTimeFormat("ar", { numeric: "auto" })
-
-// "منذ 5 دقائق" from a timestamp. Anything older than a day reads as a date, since the exact
+// "5 minutes ago" from a timestamp. Anything older than a day reads as a date, since the exact
 // minute stops mattering.
-function lastSeenLabel(value: string | null): string {
-  if (!value) return "—"
+function lastSeenLabel(value: string | null, t: DevicesTranslator, locale: Locale): string {
+  if (!value) return t("lastSeen.never")
 
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
   const diffMs = Date.now() - new Date(value).getTime()
   const minutes = Math.round(diffMs / 60000)
-  if (minutes < 1) return "الآن"
-  if (minutes < 60) return RELATIVE.format(-minutes, "minute")
+  if (minutes < 1) return t("lastSeen.now")
+  if (minutes < 60) return relative.format(-minutes, "minute")
 
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return RELATIVE.format(-hours, "hour")
+  if (hours < 24) return relative.format(-hours, "hour")
 
-  return new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
     day: "numeric",
     month: "long",
   }).format(new Date(value))
 }
 
 export default function DeviceSettings() {
+  const t = useTranslations("settings.devices")
+  const tNav = useTranslations("settings.nav")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const [devices, setDevices] = useState<PosDevice[]>([])
   const [selectedType, setSelectedType] = useState<DeviceFilter>("all")
@@ -216,15 +175,11 @@ export default function DeviceSettings() {
       setDevices(await posDevicesService.list())
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      setLoadError(
-        status === 403
-          ? "لا تملك صلاحية عرض إعدادات الأجهزة."
-          : "تعذر تحميل إعدادات الأجهزة. حاول مرة أخرى."
-      )
+      setLoadError(status === 403 ? t("loadErrors.forbidden") : t("loadErrors.generic"))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void load()
@@ -241,31 +196,31 @@ export default function DeviceSettings() {
     return byType
   }, [devices])
 
-  // The "جميع الأجهزة" tile first (Figma's own order and default selection), one tile per real
+  // The "all devices" tile first (Figma's own order and default selection), one tile per real
   // device kind after it -- all six, including customer displays and card readers, which used to
   // have no tile or settings panel of their own even though the backend already models both.
   const tiles = useMemo(
     () => [
       {
         key: "all" as const,
-        label: "جميع الأجهزة",
-        sub: "عرض جميع الأجهزة المتصلة",
+        label: t("allDevicesTile.label"),
+        sub: t("allDevicesTile.sub"),
         icon: LayoutGrid,
         count: devices.length,
       },
       ...TILE_ORDER.map((type) => {
-        const typeMeta = DEVICE_META[type]
+        const plural = devicePlural(type, t)
         const entry = counts.get(type) ?? { total: 0, online: 0 }
         return {
           key: type,
-          label: typeMeta.plural,
-          sub: `إعدادات ${typeMeta.plural}`,
-          icon: typeMeta.icon,
+          label: plural,
+          sub: t("tileSub", { plural }),
+          icon: DEVICE_ICON[type],
           count: entry.total,
         }
       }),
     ],
-    [devices.length, counts]
+    [devices.length, counts, t]
   )
 
   const filteredDevices = useMemo(() => {
@@ -303,11 +258,11 @@ export default function DeviceSettings() {
     setBusyId(pendingDelete.id)
     try {
       await posDevicesService.remove(pendingDelete.id)
-      toast.success("تم حذف الجهاز.", { description: pendingDelete.name })
+      toast.success(t("toasts.deleted"), { description: pendingDelete.name })
       setPendingDelete(null)
       setDevices(await posDevicesService.list())
     } catch {
-      toast.error("تعذر حذف الجهاز.")
+      toast.error(t("toasts.deleteFailed"))
     } finally {
       setBusyId(null)
     }
@@ -315,45 +270,46 @@ export default function DeviceSettings() {
 
   if (loading) {
     return (
-      <div dir="rtl" className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}
+      >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل إعدادات الأجهزة...
+        {t("loading")}
       </div>
     )
   }
 
   if (loadError) {
     return (
-      <div dir="rtl" className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}
+      >
         <p className={cn("text-[13px]", HEADING)}>{loadError}</p>
         <Button variant="outline" onClick={() => void load()}>
           <RotateCcw className="size-4" />
-          إعادة المحاولة
+          {t("retry")}
         </Button>
       </div>
     )
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5 pb-24">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-5 pb-24">
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.settings} className="transition-colors hover:text-[#2563eb]">
-          الإعدادات
+          {tNav("heading")}
         </Link>
-        <ChevronLeft className="size-3.5 text-[#c7d3e3]" />
-        <span className={cn("font-semibold", HEADING)}>إعدادات الأجهزة</span>
+        <ChevronRight className="size-3.5 rtl:rotate-180 text-[#c7d3e3]" />
+        <span className={cn("font-semibold", HEADING)}>{t("breadcrumbCurrent")}</span>
       </nav>
 
       {/* RTL: the copy is written first so the icon tile lands on the left. */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>
-            إعدادات الأجهزة
-          </h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            إدارة وإعداد جميع الأجهزة المتصلة بنظام مدار مثل الموازين، طابعات الفواتير، ماسحات
-            الباركود وغيرها.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <span
           className={cn("flex size-12 shrink-0 items-center justify-center rounded-2xl", BLUE_TINT)}
@@ -417,13 +373,13 @@ export default function DeviceSettings() {
           <div>
             <h2 className={cn("text-[16px] font-bold", HEADING)}>
               {selectedType === "all"
-                ? "الأجهزة المتصلة"
-                : `${DEVICE_META[selectedType].plural} المتصلة`}
+                ? t("section.allHeading")
+                : t("section.typeHeading", { plural: devicePlural(selectedType, t) })}
             </h2>
             <p className={cn("mt-1 text-[11.5px]", MUTED)}>
               {selectedType === "all"
-                ? "قائمة بجميع الأجهزة وإعداداتها وحالة الاتصال."
-                : `قائمة بجميع ${DEVICE_META[selectedType].plural} وإعداداتها وحالة الاتصال.`}
+                ? t("section.allSubtitle")
+                : t("section.typeSubtitle", { plural: devicePlural(selectedType, t) })}
             </p>
           </div>
           {selectedType === "all" ? null : (
@@ -432,7 +388,7 @@ export default function DeviceSettings() {
               onClick={() => router.push(`${ROUTES.settingsDeviceNew}?type=${selectedType}`)}
             >
               <Plus className="size-4" />
-              {ADD_LABEL[selectedType]}
+              {deviceAddLabel(selectedType, t)}
             </Button>
           )}
         </div>
@@ -449,8 +405,8 @@ export default function DeviceSettings() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder={
                 selectedType === "all"
-                  ? "البحث عن جهاز، موديل أو منفذ اتصال..."
-                  : `البحث عن ${DEVICE_META[selectedType].label} بالاسم أو الموديل أو المنفذ...`
+                  ? t("search.allPlaceholder")
+                  : t("search.typePlaceholder", { label: deviceLabel(selectedType, t) })
               }
               className={cn(FIELD_CLASS, "ps-9")}
             />
@@ -465,10 +421,10 @@ export default function DeviceSettings() {
                   <AppSelectValue />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  <AppSelectItem value="all">جميع الأنواع</AppSelectItem>
+                  <AppSelectItem value="all">{t("filters.allTypes")}</AppSelectItem>
                   {TILE_ORDER.map((type) => (
                     <AppSelectItem key={type} value={type}>
-                      {DEVICE_META[type].label}
+                      {deviceLabel(type, t)}
                     </AppSelectItem>
                   ))}
                 </AppSelectContent>
@@ -484,9 +440,9 @@ export default function DeviceSettings() {
                 <AppSelectValue />
               </AppSelectTrigger>
               <AppSelectContent>
-                <AppSelectItem value="all">جميع الحالات</AppSelectItem>
-                <AppSelectItem value="online">متصل</AppSelectItem>
-                <AppSelectItem value="offline">غير متصل</AppSelectItem>
+                <AppSelectItem value="all">{t("filters.allStatuses")}</AppSelectItem>
+                <AppSelectItem value="online">{t("filters.online")}</AppSelectItem>
+                <AppSelectItem value="offline">{t("filters.offline")}</AppSelectItem>
               </AppSelectContent>
             </AppSelect>
           </div>
@@ -499,7 +455,7 @@ export default function DeviceSettings() {
               MUTED
             )}
           >
-            لا توجد أجهزة مسجلة بعد.
+            {t("empty.noDevicesYet")}
           </div>
         ) : filteredDevices.length === 0 ? (
           <div
@@ -509,8 +465,8 @@ export default function DeviceSettings() {
             )}
           >
             {selectedType === "all"
-              ? "لا توجد أجهزة مطابقة لهذا البحث أو التصفية."
-              : `لا توجد ${DEVICE_META[selectedType].plural} مطابقة لهذا البحث أو التصفية.`}
+              ? t("empty.allNoMatch")
+              : t("empty.typeNoMatch", { plural: devicePlural(selectedType, t) })}
           </div>
         ) : (
           <>
@@ -519,17 +475,17 @@ export default function DeviceSettings() {
                 <thead>
                   <tr>
                     {[
-                      { key: "name", label: "اسم الجهاز", align: "text-right" },
+                      { key: "name", label: t("table.name"), align: "text-right" },
                       // Redundant once a single type is selected -- every row is already that
                       // type, and the tiles above say so.
                       ...(selectedType === "all"
-                        ? [{ key: "type", label: "النوع", align: "text-center" }]
+                        ? [{ key: "type", label: t("table.type"), align: "text-center" }]
                         : []),
-                      { key: "model", label: "الموديل", align: "text-center" },
-                      { key: "port", label: "منفذ الاتصال", align: "text-center" },
-                      { key: "status", label: "الحالة", align: "text-center" },
-                      { key: "seen", label: "آخر اتصال", align: "text-center" },
-                      { key: "actions", label: "الإجراءات", align: "text-center" },
+                      { key: "model", label: t("table.model"), align: "text-center" },
+                      { key: "port", label: t("table.port"), align: "text-center" },
+                      { key: "status", label: t("table.status"), align: "text-center" },
+                      { key: "seen", label: t("table.lastSeen"), align: "text-center" },
+                      { key: "actions", label: t("table.actions"), align: "text-center" },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -546,7 +502,7 @@ export default function DeviceSettings() {
                 </thead>
                 <tbody>
                   {pagedDevices.map((device, index) => {
-                    const typeMeta = DEVICE_META[device.deviceType]
+                    const TypeIcon = DEVICE_ICON[device.deviceType]
 
                     return (
                       <tr
@@ -567,7 +523,7 @@ export default function DeviceSettings() {
                                     .role
                                   return role ? (
                                     <span className="rounded-md bg-[#eff6ff] px-1.5 py-0.5 text-[10px] font-semibold text-[#2563eb]">
-                                      {PRINTER_ROLE_BADGE[role]}
+                                      {printerRoleLabel(role, t)}
                                     </span>
                                   ) : null
                                 })()
@@ -584,8 +540,8 @@ export default function DeviceSettings() {
                                 MUTED
                               )}
                             >
-                              <typeMeta.icon className="size-4" />
-                              {typeMeta.label}
+                              <TypeIcon className="size-4" />
+                              {deviceLabel(device.deviceType, t)}
                             </span>
                           </td>
                         ) : null}
@@ -594,7 +550,7 @@ export default function DeviceSettings() {
                           {device.model || "—"}
                         </td>
                         <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
-                          {device.port || CONNECTION_LABEL[device.connection]}
+                          {device.port || connectionLabel(device.connection, t)}
                         </td>
 
                         <td className="px-3 py-3.5">
@@ -602,7 +558,7 @@ export default function DeviceSettings() {
                         </td>
 
                         <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>
-                          {lastSeenLabel(device.lastSeenAt)}
+                          {lastSeenLabel(device.lastSeenAt, t, locale)}
                         </td>
 
                         <td className="px-3 py-3.5">
@@ -645,9 +601,11 @@ export default function DeviceSettings() {
                   </AppSelect>
                 </div>
                 <span className={cn("text-[12px]", MUTED)}>
-                  عرض {(clampedPage - 1) * pageSize + 1} -{" "}
-                  {Math.min(clampedPage * pageSize, filteredDevices.length)} من{" "}
-                  {filteredDevices.length} أجهزة
+                  {t("pagination.showingRange", {
+                    from: (clampedPage - 1) * pageSize + 1,
+                    to: Math.min(clampedPage * pageSize, filteredDevices.length),
+                    total: filteredDevices.length,
+                  })}
                 </span>
               </div>
 
@@ -656,10 +614,10 @@ export default function DeviceSettings() {
                   type="button"
                   disabled={clampedPage <= 1}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("pagination.previousAriaLabel")}
                   className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] transition-colors hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <ChevronRight className="size-3.5" />
+                  <ChevronLeft className="size-3.5 rtl:rotate-180" />
                 </button>
                 <span className="flex size-7 items-center justify-center rounded-[7px] bg-[#2563eb] text-[12.5px] font-bold text-white">
                   {clampedPage}
@@ -668,10 +626,10 @@ export default function DeviceSettings() {
                   type="button"
                   disabled={clampedPage >= pageCount}
                   onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("pagination.nextAriaLabel")}
                   className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] transition-colors hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <ChevronLeft className="size-3.5" />
+                  <ChevronRight className="size-3.5 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -683,14 +641,21 @@ export default function DeviceSettings() {
         open={pendingDelete !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
       >
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              حذف الجهاز؟
+              {t("deleteDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              سيتم حذف <span className={cn("font-bold", HEADING)}>{pendingDelete?.name}</span> من
-              قائمة الأجهزة.
+              {t.rich("deleteDialog.description", {
+                name: pendingDelete?.name ?? "",
+                b: (chunks) => <span className={cn("font-bold", HEADING)}>{chunks}</span>,
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -699,10 +664,10 @@ export default function DeviceSettings() {
               disabled={busyId !== null}
               onClick={() => void deleteDevice()}
             >
-              حذف
+              {t("deleteDialog.confirm")}
             </Button>
             <Button variant="outline" onClick={() => setPendingDelete(null)}>
-              إلغاء
+              {t("deleteDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -712,13 +677,14 @@ export default function DeviceSettings() {
 }
 
 function StatusDot({ online }: { online: boolean }) {
+  const t = useTranslations("settings.devices")
   return (
     <span className="flex items-center justify-center gap-1.5">
       <span className={cn("size-2 rounded-full", online ? "bg-[#10b981]" : "bg-[#c7d3e3]")} />
       <span
         className={cn("text-[11.5px] font-semibold", online ? "text-[#10b981]" : "text-[#8098b4]")}
       >
-        {online ? "متصل" : "غير متصل"}
+        {online ? t("filters.online") : t("filters.offline")}
       </span>
     </span>
   )
@@ -733,6 +699,8 @@ function DeviceRowActions({
   onEdit: () => void
   onDelete: () => void
 }) {
+  const t = useTranslations("settings.devices")
+  const locale = useLocale() as Locale
   // Radix releases its pointer-events lock as the menu closes; opening a dialog in the same tick
   // mounts it under that lock and freezes the page. preventDefault must not be used here -- on
   // onSelect it suppresses the close itself.
@@ -743,20 +711,26 @@ function DeviceRowActions({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label="إجراءات الجهاز"
+          aria-label={t("rowActions.ariaLabel")}
           disabled={busy}
           className="mx-auto flex size-8 cursor-pointer items-center justify-center rounded-lg text-[#8098b4] transition-colors hover:bg-[#f2f5fa] hover:text-[#0d1b3e] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-4" />}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44 rounded-[12px] [direction:rtl]">
+      <DropdownMenuContent
+        align="end"
+        className={cn(
+          "w-44 rounded-[12px]",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
+      >
         <DropdownMenuItem
           className="cursor-pointer gap-2 text-[12.5px]"
           onSelect={afterClose(onEdit)}
         >
           <Pencil className="size-4" />
-          تعديل الجهاز
+          {t("rowActions.edit")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -764,7 +738,7 @@ function DeviceRowActions({
           onSelect={afterClose(onDelete)}
         >
           <Trash2 className="size-4" />
-          حذف الجهاز
+          {t("rowActions.delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

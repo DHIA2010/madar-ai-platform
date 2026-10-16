@@ -10,8 +10,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
+  ArrowLeft,
   Cable,
-  ChevronLeft,
   ChevronRight,
   CreditCard,
   Inbox,
@@ -30,9 +30,11 @@ import {
 import type { LucideIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 import {
@@ -67,73 +69,61 @@ const FIELD_CLASS =
   "h-11 rounded-[12px] border-[#E8EBF0] bg-white text-[13px] text-[#0b1738] placeholder:text-[#98A2B3]"
 const BLUE_TINT = "bg-[#eef4ff] text-[#2878ff]"
 
-const DEVICE_LABEL: Record<DeviceType, { label: string; icon: LucideIcon }> = {
-  scale: { label: "ميزان إلكتروني", icon: ScaleIcon },
-  receipt_printer: { label: "طابعة فواتير", icon: Printer },
-  barcode_scanner: { label: "ماسح باركود", icon: ScanLine },
-  cash_drawer: { label: "درج نقود", icon: Inbox },
-  customer_display: { label: "شاشة عميل", icon: Monitor },
-  card_reader: { label: "قارئ بطاقات", icon: CreditCard },
+type DeviceFormTranslator = ReturnType<typeof useTranslations<"settings.deviceForm">>
+type DevicesTranslator = ReturnType<typeof useTranslations<"settings.devices">>
+
+const DEVICE_ICON: Record<DeviceType, LucideIcon> = {
+  scale: ScaleIcon,
+  receipt_printer: Printer,
+  barcode_scanner: ScanLine,
+  cash_drawer: Inbox,
+  customer_display: Monitor,
+  card_reader: CreditCard,
 }
 
-const CONNECTION_LABEL: Record<DeviceConnection, string> = {
-  usb: "USB",
-  network: "شبكة",
-  bluetooth: "بلوتوث",
-  serial: "منفذ تسلسلي",
-}
-
-// For the breadcrumb's last segment only: the plural section name ("الموازين الإلكترونية"), not
-// the singular DEVICE_LABEL used for the type picker -- matches the plural used on the tiles/list
-// page (DeviceSettings.tsx's DEVICE_META), so the two screens read as the same place.
-const DEVICE_SECTION_LABEL: Record<DeviceType, string> = {
-  scale: "الموازين الإلكترونية",
-  receipt_printer: "طابعات الفواتير",
-  barcode_scanner: "ماسحات الباركود",
-  cash_drawer: "أدراج النقود",
-  customer_display: "شاشات العملاء",
-  card_reader: "قارئات البطاقات",
-}
-
-const STEPS = [
-  "اختر نوع الجهاز والموديل.",
-  "تأكد من توصيل الجهاز بالمنفذ الصحيح.",
-  "اضغط على اختبار الاتصال للتأكد من عمل الجهاز.",
-  "احفظ الإعدادات.",
-]
-
-const DEVICE_TYPE_VALUES = new Set<string>(Object.keys(DEVICE_LABEL))
+const DEVICE_TYPE_VALUES = new Set<DeviceType>([
+  "scale",
+  "receipt_printer",
+  "barcode_scanner",
+  "cash_drawer",
+  "customer_display",
+  "card_reader",
+])
 
 function isDeviceType(value: string | null): value is DeviceType {
-  return value !== null && DEVICE_TYPE_VALUES.has(value)
+  return value !== null && DEVICE_TYPE_VALUES.has(value as DeviceType)
 }
 
-const PRINTER_ROLE_LABEL: Record<PrinterRole, string> = {
-  receipt: "إيصالات العملاء",
-  kitchen: "شاشة المطبخ",
-  bar: "البار",
+const DEVICE_CONNECTION_VALUES: DeviceConnection[] = ["usb", "network", "bluetooth", "serial"]
+const PAPER_WIDTH_VALUES: PaperWidth[] = ["58mm", "80mm"]
+const PRINT_DIRECTION_VALUES: PrintDirection[] = ["vertical", "horizontal"]
+const PRINT_DENSITY_VALUES: PrintDensity[] = ["light", "normal", "dark"]
+const PRINTER_CHARSET_VALUES: PrinterCharset[] = ["utf8", "cp1256", "iso88596"]
+
+function deviceTypeLabel(type: DeviceType, t: DevicesTranslator): string {
+  return t(`types.${type}.label` as "types.scale.label")
+}
+function deviceTypePlural(type: DeviceType, t: DevicesTranslator): string {
+  return t(`types.${type}.plural` as "types.scale.plural")
+}
+function connectionLabel(connection: DeviceConnection, t: DevicesTranslator): string {
+  return t(`connections.${connection}` as "connections.usb")
 }
 
-const PAPER_WIDTH_LABEL: Record<PaperWidth, string> = {
-  "58mm": "58 مم",
-  "80mm": "80 مم",
+function printerRoleLabel(role: PrinterRole, t: DeviceFormTranslator): string {
+  return t(`printer.roles.${role}` as "printer.roles.receipt")
 }
-
-const PRINT_DIRECTION_LABEL: Record<PrintDirection, string> = {
-  vertical: "عمودي",
-  horizontal: "أفقي",
+function paperWidthLabel(width: PaperWidth, t: DeviceFormTranslator): string {
+  return t(`printer.paperWidths.${width}` as "printer.paperWidths.58mm")
 }
-
-const PRINT_DENSITY_LABEL: Record<PrintDensity, string> = {
-  light: "فاتحة",
-  normal: "عادية",
-  dark: "داكنة",
+function printDirectionLabel(direction: PrintDirection, t: DeviceFormTranslator): string {
+  return t(`printer.directions.${direction}` as "printer.directions.vertical")
 }
-
-const PRINTER_CHARSET_LABEL: Record<PrinterCharset, string> = {
-  utf8: "UTF-8",
-  cp1256: "CP1256 (عربي)",
-  iso88596: "ISO-8859-6 (عربي)",
+function printDensityLabel(density: PrintDensity, t: DeviceFormTranslator): string {
+  return t(`printer.densities.${density}` as "printer.densities.light")
+}
+function printerCharsetLabel(charset: PrinterCharset, t: DeviceFormTranslator): string {
+  return t(`printer.charsets.${charset}` as "printer.charsets.utf8")
 }
 
 // Scale and receipt_printer are the only kinds with a per-unit shape; every other kind stores an
@@ -159,6 +149,10 @@ function buildEmpty(deviceType: DeviceType): PosDeviceInput {
 }
 
 export default function DeviceForm() {
+  const t = useTranslations("settings.deviceForm")
+  const tDevices = useTranslations("settings.devices")
+  const tNav = useTranslations("settings.nav")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const searchParams = useSearchParams()
   const editingId = searchParams.get("id")
@@ -191,11 +185,11 @@ export default function DeviceForm() {
         settings: { ...defaultSettingsFor(found.deviceType), ...found.settings },
       })
     } catch {
-      toast.error("تعذر تحميل الجهاز.")
+      toast.error(t("toasts.loadFailed"))
     } finally {
       setLoading(false)
     }
-  }, [editingId])
+  }, [editingId, t])
 
   useEffect(() => {
     void load()
@@ -215,17 +209,17 @@ export default function DeviceForm() {
   const needsBaudRate = device.connection === "serial"
 
   const errors = {
-    name: device.name.trim() ? null : "اسم الجهاز مطلوب",
-    model: device.model?.trim() ? null : "الموديل مطلوب",
-    port: device.port?.trim() ? null : "المنفذ مطلوب",
-    baudRate: !needsBaudRate || device.baudRate !== null ? null : "السرعة مطلوبة",
+    name: device.name.trim() ? null : t("validation.nameRequired"),
+    model: device.model?.trim() ? null : t("validation.modelRequired"),
+    port: device.port?.trim() ? null : t("validation.portRequired"),
+    baudRate: !needsBaudRate || device.baudRate !== null ? null : t("validation.baudRateRequired"),
   }
   const isValid = Object.values(errors).every((error) => error === null)
 
   const save = async () => {
     setShowErrors(true)
     if (!isValid) {
-      toast.error("أكمل الحقول المطلوبة قبل الحفظ.")
+      toast.error(t("validation.completeRequiredFields"))
       return
     }
 
@@ -241,58 +235,61 @@ export default function DeviceForm() {
 
       if (editingId) {
         await posDevicesService.update(editingId, payload)
-        toast.success("تم حفظ الجهاز.")
+        toast.success(t("toasts.updated"))
       } else {
         await posDevicesService.create(payload)
-        toast.success("تمت إضافة الجهاز.")
+        toast.success(t("toasts.created"))
       }
       router.push(ROUTES.settingsDevices)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      toast.error(status === 403 ? "لا تملك صلاحية إدارة الأجهزة." : "تعذر حفظ الجهاز.", {
-        description: status === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية pos:manage." : undefined,
+      toast.error(status === 403 ? t("toasts.forbidden") : t("toasts.saveFailed"), {
+        description: status === 403 ? t("toasts.forbiddenDescription") : undefined,
       })
     } finally {
       setSaving(false)
     }
   }
 
-  // "تعديل الجهاز" when editing; the type-specific title ("إضافة ميزان إلكتروني") when a tile's
+  // The edit title when editing; the type-specific title ("إضافة ميزان إلكتروني") when a tile's
   // own add button sent a type; the generic one otherwise (the "الأجهزة" tab's plain "إضافة
   // جهاز").
   const pageTitle = isEditing
-    ? "تعديل الجهاز"
+    ? t("editTitle")
     : requestedType
-      ? `إضافة ${DEVICE_LABEL[requestedType].label}`
-      : "إضافة جهاز جديد"
+      ? t("addTypeTitle", { type: deviceTypeLabel(requestedType, tDevices) })
+      : t("addGenericTitle")
 
   // The breadcrumb's last segment names the SECTION you're in (matching the Figma reference and
   // the tiles page), not the action already stated by the H1 just below it -- once a type is
   // known (editing an existing device, or arriving from a type-specific "إضافة {نوع}" button),
   // repeating the same words in both places is redundant.
   const knownType = isEditing ? device.deviceType : requestedType
-  const breadcrumbTail = knownType ? DEVICE_SECTION_LABEL[knownType] : pageTitle
+  const breadcrumbTail = knownType ? deviceTypePlural(knownType, tDevices) : pageTitle
 
   if (loading) {
     return (
-      <div dir="rtl" className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}
+      >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل الجهاز...
+        {t("loading")}
       </div>
     )
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5 pb-24">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-5 pb-24">
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.settings} className="transition-colors hover:text-[#2878ff]">
-          الإعدادات
+          {tNav("heading")}
         </Link>
-        <ChevronLeft className="size-3.5 text-[#b6c2d4]" />
+        <ChevronRight className="size-3.5 text-[#b6c2d4] rtl:rotate-180" />
         <Link href={ROUTES.settingsDevices} className="transition-colors hover:text-[#2878ff]">
-          إعدادات الأجهزة
+          {tDevices("breadcrumbCurrent")}
         </Link>
-        <ChevronLeft className="size-3.5 text-[#b6c2d4]" />
+        <ChevronRight className="size-3.5 text-[#b6c2d4] rtl:rotate-180" />
         <span className={cn("font-semibold", HEADING)}>{breadcrumbTail}</span>
       </nav>
 
@@ -300,9 +297,7 @@ export default function DeviceForm() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className={cn("text-[24px] font-bold leading-tight", HEADING)}>{pageTitle}</h1>
-          <p className={cn("mt-1 text-[12.5px]", MUTED)}>
-            قم بإعداد جهاز جديد وربطه بالمنفذ المناسب ليعمل مع نظام مدار.
-          </p>
+          <p className={cn("mt-1 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <span
           className={cn(
@@ -323,8 +318,8 @@ export default function DeviceForm() {
           className="h-10 gap-1.5 rounded-[10px] border-[#E8EBF0] px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
           onClick={() => router.push(ROUTES.settingsDevices)}
         >
-          <ChevronRight className="size-4" />
-          العودة إلى الأجهزة
+          <ArrowLeft className="size-4 rtl:rotate-180" />
+          {t("backToDevices")}
         </Button>
       </div>
 
@@ -332,17 +327,19 @@ export default function DeviceForm() {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-5">
           <section className={cn(PANEL, "p-5")}>
-            <h2 className={cn("mb-4 text-[16px] font-bold", HEADING)}>معلومات الجهاز الأساسية</h2>
+            <h2 className={cn("mb-4 text-[16px] font-bold", HEADING)}>
+              {t("basicInfo.sectionTitle")}
+            </h2>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="نوع الجهاز" required>
+              <Field label={t("basicInfo.deviceTypeLabel")} required>
                 <IconSelect
                   value={device.deviceType}
-                  ariaLabel="نوع الجهاز"
-                  icon={DEVICE_LABEL[device.deviceType].icon}
-                  options={Object.entries(DEVICE_LABEL).map(([value, entry]) => ({
+                  ariaLabel={t("basicInfo.deviceTypeLabel")}
+                  icon={DEVICE_ICON[device.deviceType]}
+                  options={Array.from(DEVICE_TYPE_VALUES).map((value) => ({
                     value,
-                    label: entry.label,
+                    label: deviceTypeLabel(value, tDevices),
                   }))}
                   onChange={(value) => {
                     const deviceType = value as DeviceType
@@ -351,54 +348,66 @@ export default function DeviceForm() {
                 />
               </Field>
 
-              <Field label="اسم الجهاز" required error={showErrors ? errors.name : null}>
+              <Field
+                label={t("basicInfo.nameLabel")}
+                required
+                error={showErrors ? errors.name : null}
+              >
                 <Input
                   value={device.name}
-                  aria-label="اسم الجهاز"
-                  placeholder="ميزان قسم الخضار"
+                  aria-label={t("basicInfo.nameLabel")}
+                  placeholder={t("basicInfo.namePlaceholder")}
                   className={FIELD_CLASS}
                   onChange={(event) => patch({ name: event.target.value })}
                 />
               </Field>
 
-              <Field label="الموديل" required error={showErrors ? errors.model : null}>
+              <Field
+                label={t("basicInfo.modelLabel")}
+                required
+                error={showErrors ? errors.model : null}
+              >
                 <Input
                   value={device.model ?? ""}
-                  aria-label="الموديل"
-                  placeholder="CAS SW-1"
+                  aria-label={t("basicInfo.modelLabel")}
+                  placeholder={t("basicInfo.modelPlaceholder")}
                   className={FIELD_CLASS}
                   onChange={(event) => patch({ model: event.target.value || null })}
                 />
               </Field>
 
-              <Field label="وصف اختياري">
+              <Field label={t("basicInfo.descriptionLabel")}>
                 <Input
                   value={device.description ?? ""}
-                  aria-label="وصف اختياري"
-                  placeholder="الميزان المستخدم في قسم الخضار والفواكه"
+                  aria-label={t("basicInfo.descriptionLabel")}
+                  placeholder={t("basicInfo.descriptionPlaceholder")}
                   className={FIELD_CLASS}
                   onChange={(event) => patch({ description: event.target.value || null })}
                 />
               </Field>
 
-              <Field label="المنفذ" required error={showErrors ? errors.port : null}>
+              <Field
+                label={t("basicInfo.portLabel")}
+                required
+                error={showErrors ? errors.port : null}
+              >
                 <IconInput
                   value={device.port ?? ""}
-                  ariaLabel="المنفذ"
-                  placeholder="COM3"
+                  ariaLabel={t("basicInfo.portLabel")}
+                  placeholder={t("basicInfo.portPlaceholder")}
                   icon={Cable}
                   onChange={(value) => patch({ port: value || null })}
                 />
               </Field>
 
-              <Field label="نوع الاتصال" required>
+              <Field label={t("basicInfo.connectionTypeLabel")} required>
                 <IconSelect
                   value={device.connection}
-                  ariaLabel="نوع الاتصال"
+                  ariaLabel={t("basicInfo.connectionTypeLabel")}
                   icon={Usb}
-                  options={Object.entries(CONNECTION_LABEL).map(([value, label]) => ({
+                  options={DEVICE_CONNECTION_VALUES.map((value) => ({
                     value,
-                    label,
+                    label: connectionLabel(value, tDevices),
                   }))}
                   onChange={(value) => patch({ connection: value as DeviceConnection })}
                 />
@@ -407,13 +416,13 @@ export default function DeviceForm() {
               {/* Only a serial device negotiates a speed; USB and network do not. */}
               {needsBaudRate ? (
                 <Field
-                  label="السرعة (Baud Rate)"
+                  label={t("basicInfo.baudRateLabel")}
                   required
                   error={showErrors ? errors.baudRate : null}
                 >
                   <PlainSelect
                     value={String(device.baudRate ?? 9600)}
-                    ariaLabel="السرعة"
+                    ariaLabel={t("basicInfo.baudRateAriaLabel")}
                     options={BAUD_RATES.map((rate) => ({
                       value: String(rate),
                       label: String(rate),
@@ -430,17 +439,17 @@ export default function DeviceForm() {
               {/* RTL: the icon is written first so it sits to the right of the title. */}
               <div className="mb-4 flex items-center gap-2">
                 <Settings2 className="size-[18px] text-[#2878ff]" />
-                <h2 className={cn("text-[16px] font-bold", HEADING)}>إعدادات الميزان</h2>
+                <h2 className={cn("text-[16px] font-bold", HEADING)}>{t("scale.sectionTitle")}</h2>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="وحدة الوزن الافتراضية" required>
+                <Field label={t("scale.defaultWeightUnitLabel")} required>
                   <PlainSelect
                     value={scaleSettings.defaultWeightUnit ?? "kg"}
-                    ariaLabel="وحدة الوزن الافتراضية"
+                    ariaLabel={t("scale.defaultWeightUnitLabel")}
                     options={[
-                      { value: "kg", label: "كيلوجرام (كجم)" },
-                      { value: "g", label: "جرام" },
+                      { value: "kg", label: t("scale.kg") },
+                      { value: "g", label: t("scale.g") },
                     ]}
                     onChange={(value) => patchSettings({ defaultWeightUnit: value as "kg" | "g" })}
                   />
@@ -448,13 +457,13 @@ export default function DeviceForm() {
 
                 {/* Reading these as a price when they are a weight charges the wrong amount, so
                     both options are on screen rather than hidden in a list. */}
-                <Field label="الأرقام الأخيرة تمثل" required>
+                <Field label={t("scale.trailingDigitsLabel")} required>
                   <RadioPair
                     value={scaleSettings.trailingDigits ?? "weight"}
-                    ariaLabel="الأرقام الأخيرة تمثل"
+                    ariaLabel={t("scale.trailingDigitsLabel")}
                     options={[
-                      { value: "price", label: "السعر" },
-                      { value: "weight", label: "الوزن" },
+                      { value: "price", label: t("scale.price") },
+                      { value: "weight", label: t("scale.weight") },
                     ]}
                     onChange={(value) =>
                       patchSettings({ trailingDigits: value as TrailingDigitMeaning })
@@ -462,13 +471,13 @@ export default function DeviceForm() {
                   />
                 </Field>
 
-                <Field label="بداية مؤشر الميزان">
+                <Field label={t("scale.indicatorStartLabel")}>
                   <Input
                     type="number"
                     min={1}
                     max={255}
                     value={scaleSettings.indicatorStart ?? 1}
-                    aria-label="بداية مؤشر الميزان"
+                    aria-label={t("scale.indicatorStartLabel")}
                     className={FIELD_CLASS}
                     onChange={(event) => {
                       const next = Number(event.target.value)
@@ -481,10 +490,10 @@ export default function DeviceForm() {
                   />
                 </Field>
 
-                <Field label="الجزء العشري" required>
+                <Field label={t("scale.decimalsLabel")} required>
                   <PlainSelect
                     value={String(scaleSettings.decimals ?? 3)}
-                    ariaLabel="الجزء العشري"
+                    ariaLabel={t("scale.decimalsLabel")}
                     options={[0, 1, 2, 3, 4].map((value) => ({
                       value: String(value),
                       label: String(value),
@@ -497,15 +506,15 @@ export default function DeviceForm() {
               <div className="mt-5 grid gap-4 border-t border-[#F1F4F9] pt-5 sm:grid-cols-2">
                 <ToggleRow
                   id="auto-zero"
-                  label="تصفير الوزن تلقائيا"
-                  hint="إعادة تثبيت الميزان إلى الصفر قبل قراءة الوزن."
+                  label={t("scale.autoZeroLabel")}
+                  hint={t("scale.autoZeroHint")}
                   checked={scaleSettings.autoZero ?? true}
                   onChange={(autoZero) => patchSettings({ autoZero })}
                 />
                 <ToggleRow
                   id="block-unstable"
-                  label="منع الإضافة إلى الكاشير"
-                  hint="منع إضافة المنتج إذا كان الوزن غير مستقر."
+                  label={t("scale.blockUnstableLabel")}
+                  hint={t("scale.blockUnstableHint")}
                   checked={scaleSettings.blockUnstableWeight ?? false}
                   onChange={(blockUnstableWeight) => patchSettings({ blockUnstableWeight })}
                 />
@@ -518,68 +527,70 @@ export default function DeviceForm() {
               {/* RTL: the icon is written first so it sits to the right of the title. */}
               <div className="mb-4 flex items-center gap-2">
                 <Printer className="size-[18px] text-[#2878ff]" />
-                <h2 className={cn("text-[16px] font-bold", HEADING)}>إعدادات الطابعة</h2>
+                <h2 className={cn("text-[16px] font-bold", HEADING)}>
+                  {t("printer.sectionTitle")}
+                </h2>
               </div>
 
               {/* A restaurant sends the same sale to more than one printer -- a receipt with
                   prices, a kitchen ticket without them. This role only labels what this printer
                   is for; nothing in the platform dispatches a print job to it yet. */}
-              <Field label="دور الطابعة" required>
+              <Field label={t("printer.roleLabel")} required>
                 <PlainSelect
                   value={printerSettings.role ?? "receipt"}
-                  ariaLabel="دور الطابعة"
+                  ariaLabel={t("printer.roleLabel")}
                   options={PRINTER_ROLES.map((role) => ({
                     value: role,
-                    label: PRINTER_ROLE_LABEL[role],
+                    label: printerRoleLabel(role, t),
                   }))}
                   onChange={(value) => patchSettings({ role: value as PrinterRole })}
                 />
               </Field>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Field label="عرض الورق" required>
+                <Field label={t("printer.paperWidthLabel")} required>
                   <PlainSelect
                     value={printerSettings.paperWidth ?? "80mm"}
-                    ariaLabel="عرض الورق"
-                    options={Object.entries(PAPER_WIDTH_LABEL).map(([value, label]) => ({
+                    ariaLabel={t("printer.paperWidthLabel")}
+                    options={PAPER_WIDTH_VALUES.map((value) => ({
                       value,
-                      label,
+                      label: paperWidthLabel(value, t),
                     }))}
                     onChange={(value) => patchSettings({ paperWidth: value as PaperWidth })}
                   />
                 </Field>
 
-                <Field label="اتجاه الطباعة" required>
+                <Field label={t("printer.printDirectionLabel")} required>
                   <PlainSelect
                     value={printerSettings.printDirection ?? "vertical"}
-                    ariaLabel="اتجاه الطباعة"
-                    options={Object.entries(PRINT_DIRECTION_LABEL).map(([value, label]) => ({
+                    ariaLabel={t("printer.printDirectionLabel")}
+                    options={PRINT_DIRECTION_VALUES.map((value) => ({
                       value,
-                      label,
+                      label: printDirectionLabel(value, t),
                     }))}
                     onChange={(value) => patchSettings({ printDirection: value as PrintDirection })}
                   />
                 </Field>
 
-                <Field label="كثافة الطباعة" required>
+                <Field label={t("printer.printDensityLabel")} required>
                   <PlainSelect
                     value={printerSettings.printDensity ?? "normal"}
-                    ariaLabel="كثافة الطباعة"
-                    options={Object.entries(PRINT_DENSITY_LABEL).map(([value, label]) => ({
+                    ariaLabel={t("printer.printDensityLabel")}
+                    options={PRINT_DENSITY_VALUES.map((value) => ({
                       value,
-                      label,
+                      label: printDensityLabel(value, t),
                     }))}
                     onChange={(value) => patchSettings({ printDensity: value as PrintDensity })}
                   />
                 </Field>
 
-                <Field label="ترميز الأحرف" required>
+                <Field label={t("printer.charsetLabel")} required>
                   <PlainSelect
                     value={printerSettings.charset ?? "utf8"}
-                    ariaLabel="ترميز الأحرف"
-                    options={Object.entries(PRINTER_CHARSET_LABEL).map(([value, label]) => ({
+                    ariaLabel={t("printer.charsetLabel")}
+                    options={PRINTER_CHARSET_VALUES.map((value) => ({
                       value,
-                      label,
+                      label: printerCharsetLabel(value, t),
                     }))}
                     onChange={(value) => patchSettings({ charset: value as PrinterCharset })}
                   />
@@ -588,10 +599,10 @@ export default function DeviceForm() {
                 {/* Only meaningful for a network printer -- kept when switching away so flipping
                     back does not lose an address that was already typed. */}
                 {device.connection === "network" ? (
-                  <Field label="عنوان الشبكة (IP)">
+                  <Field label={t("printer.networkAddressLabel")}>
                     <IconInput
                       value={printerSettings.networkAddress ?? ""}
-                      ariaLabel="عنوان الشبكة"
+                      ariaLabel={t("printer.networkAddressLabel")}
                       placeholder="192.168.1.50"
                       icon={Cable}
                       onChange={(value) => patchSettings({ networkAddress: value || null })}
@@ -599,11 +610,11 @@ export default function DeviceForm() {
                   </Field>
                 ) : null}
 
-                <Field label="نص أسفل الإيصال">
+                <Field label={t("printer.footerTextLabel")}>
                   <Input
                     value={printerSettings.footerText ?? ""}
-                    aria-label="نص أسفل الإيصال"
-                    placeholder="شكرا لزيارتكم"
+                    aria-label={t("printer.footerTextLabel")}
+                    placeholder={t("printer.footerTextPlaceholder")}
                     className={FIELD_CLASS}
                     onChange={(event) => patchSettings({ footerText: event.target.value || null })}
                   />
@@ -613,22 +624,22 @@ export default function DeviceForm() {
               <div className="mt-5 grid gap-4 border-t border-[#F1F4F9] pt-5 sm:grid-cols-2">
                 <ToggleRow
                   id="auto-cut"
-                  label="قص الورق تلقائيا"
-                  hint="قص الإيصال تلقائيا بعد انتهاء الطباعة."
+                  label={t("printer.autoCutLabel")}
+                  hint={t("printer.autoCutHint")}
                   checked={printerSettings.autoCut ?? true}
                   onChange={(autoCut) => patchSettings({ autoCut })}
                 />
                 <ToggleRow
                   id="print-logo"
-                  label="طباعة شعار المتجر"
-                  hint="إضافة شعار المتجر أعلى الإيصال."
+                  label={t("printer.printLogoLabel")}
+                  hint={t("printer.printLogoHint")}
                   checked={printerSettings.printLogo ?? false}
                   onChange={(printLogo) => patchSettings({ printLogo })}
                 />
                 <ToggleRow
                   id="extra-copy"
-                  label="طباعة نسخة إضافية"
-                  hint="طباعة نسخة ثانية من كل إيصال."
+                  label={t("printer.extraCopyLabel")}
+                  hint={t("printer.extraCopyHint")}
                   checked={printerSettings.extraCopy ?? false}
                   onChange={(extraCopy) => patchSettings({ extraCopy })}
                 />
@@ -641,13 +652,11 @@ export default function DeviceForm() {
           <section className={cn(PANEL, "p-5")}>
             {/* RTL: the title is written first so the icon lands on its left, as in the design. */}
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className={cn("text-[15px] font-bold", HEADING)}>اختبار الجهاز</h2>
+              <h2 className={cn("text-[15px] font-bold", HEADING)}>{t("testDevice.title")}</h2>
               <PlayCircle className="size-[22px] text-[#2878ff]" />
             </div>
 
-            <p className={cn("text-[12px] leading-6", MUTED)}>
-              بعد حفظ الجهاز يمكنك اختبار الاتصال للتأكد من أن الجهاز يعمل بشكل صحيح.
-            </p>
+            <p className={cn("text-[12px] leading-6", MUTED)}>{t("testDevice.description")}</p>
 
             {/* Reading a serial port is something only software running on the till can do -- a
                 browser cannot reach COM3. The control stays visible with the reason rather than
@@ -655,25 +664,25 @@ export default function DeviceForm() {
             <Button
               variant="outline"
               disabled
-              title="اختبار الاتصال يتطلب تطبيق نقطة البيع على جهاز الكاشير"
+              title={t("testDevice.buttonTitle")}
               className="mt-4 h-11 w-full cursor-not-allowed gap-2 rounded-[12px] border-[#c4d5f0] bg-[#f7faff] text-[13px] font-semibold text-[#2878ff] opacity-70"
             >
               <PlayCircle className="size-4" />
-              اختبار الاتصال
+              {t("testDevice.buttonLabel")}
             </Button>
             <p className="mt-2 text-center text-[10.5px] text-[#98A2B3]">
-              متاح من تطبيق الكاشير على الجهاز نفسه
+              {t("testDevice.availabilityNote")}
             </p>
           </section>
 
           <section className={cn(PANEL, "p-5")}>
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className={cn("text-[15px] font-bold", HEADING)}>تعليمات سريعة</h2>
+              <h2 className={cn("text-[15px] font-bold", HEADING)}>{t("quickSteps.title")}</h2>
               <Lightbulb className="size-[22px] text-[#e08b00]" />
             </div>
 
             <ol className="flex flex-col gap-3">
-              {STEPS.map((step, index) => (
+              {(t.raw("quickSteps.steps") as string[]).map((step, index) => (
                 // RTL: the number is written first so it sits to the right of its step.
                 <li key={step} className="flex items-start gap-2.5">
                   <span
@@ -705,7 +714,7 @@ export default function DeviceForm() {
             disabled={saving}
             onClick={() => void save()}
           >
-            {saving ? "جارٍ الحفظ..." : "حفظ الجهاز"}
+            {saving ? t("saving") : t("save")}
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           </Button>
           <Button
@@ -714,7 +723,7 @@ export default function DeviceForm() {
             disabled={saving}
             onClick={() => router.push(ROUTES.settingsDevices)}
           >
-            إلغاء
+            {t("cancel")}
           </Button>
         </div>
       </div>

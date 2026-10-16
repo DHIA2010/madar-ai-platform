@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { CreditCard, Monitor, Printer, ScanBarcode, ShoppingCart } from "lucide-react"
+import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -59,6 +60,7 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
 }
 
 export function CashierSettingsPage() {
+  const t = useTranslations("settings.cashier")
   const [settings, setSettings] = useState<PosSettingsUpdateInput | null>(null)
   const [printers, setPrinters] = useState<PosDevice[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -79,7 +81,7 @@ export function CashierSettingsPage() {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoadError(error instanceof Error ? error.message : "تعذر تحميل إعدادات الكاشير.")
+        setLoadError(error instanceof Error ? error.message : t("loadError"))
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false)
@@ -88,7 +90,7 @@ export function CashierSettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [t])
 
   const patch = (partial: Partial<PosSettingsUpdateInput>) => {
     setSettings((current) => (current ? { ...current, ...partial } : current))
@@ -100,9 +102,9 @@ export function CashierSettingsPage() {
     try {
       const result = await posSettingsService.update(settings)
       setSettings(stripUpdatedAt(result))
-      toast.success("تم حفظ إعدادات الكاشير بنجاح.")
+      toast.success(t("toasts.saved"))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر حفظ إعدادات الكاشير.")
+      toast.error(error instanceof Error ? error.message : t("toasts.saveFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -113,9 +115,9 @@ export function CashierSettingsPage() {
     try {
       const result = await pairAndTestDevice()
       if (result.ok) {
-        toast.success(result.message)
+        toast.success(t("print.toasts.success"))
       } else {
-        toast.error(result.message)
+        toast.error(t(`print.toasts.${result.code}`))
       }
     } finally {
       setIsTestingPrint(false)
@@ -125,63 +127,64 @@ export function CashierSettingsPage() {
   if (isLoading || !settings) {
     return (
       <div className={cn(PANEL, "px-6 py-16 text-center")}>
-        <p className={cn("text-[15px] font-semibold", HEADING)}>{loadError ?? "جارٍ التحميل..."}</p>
+        <p className={cn("text-[15px] font-semibold", HEADING)}>{loadError ?? t("loading")}</p>
       </div>
     )
   }
 
   const printerOptions = [
-    { value: "", label: "بدون طابعة افتراضية" },
+    { value: "", label: t("print.noDefaultPrinter") },
     ...printers.map((printer) => ({ value: printer.id, label: printer.name })),
   ]
 
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>إعدادات الكاشير</h1>
-        <p className={cn("mt-1 text-[13px]", MUTED)}>
-          إدارة إعدادات نقطة البيع بما يناسب طبيعة منشأتك
-        </p>
+        <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+        <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
       </div>
 
       <div className="grid gap-3.5 lg:grid-cols-3">
         {/* Sale settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
-          <SectionHeader icon={<ShoppingCart className="size-4" />} title="إعدادات البيع" />
+          <SectionHeader
+            icon={<ShoppingCart className="size-4" />}
+            title={t("sale.sectionTitle")}
+          />
           <div className="divide-y divide-[#eef1f6]">
             <ToggleRow
-              title="السماح بالبيع بأقل من التكلفة"
-              description="السماح بإتمام البيع إذا كان سعر البيع أقل من تكلفة المنتج"
+              title={t("sale.allowBelowCostSale.title")}
+              description={t("sale.allowBelowCostSale.description")}
               checked={settings.allowBelowCostSale}
               onChange={(checked) => patch({ allowBelowCostSale: checked })}
             />
             <ToggleRow
-              title="السماح بالبيع عند نفاد المخزون"
-              description="السماح بإتمام البيع حتى لو كانت كمية المنتج في المخزون صفرًا"
+              title={t("sale.allowOutOfStockSale.title")}
+              description={t("sale.allowOutOfStockSale.description")}
               checked={settings.allowOutOfStockSale}
               onChange={(checked) => patch({ allowOutOfStockSale: checked })}
             />
             <ToggleRow
-              title="تأكيد عملية البيع"
-              description="إظهار رسالة تأكيد قبل إتمام عملية البيع"
+              title={t("sale.confirmSale.title")}
+              description={t("sale.confirmSale.description")}
               checked={settings.confirmSale}
               onChange={(checked) => patch({ confirmSale: checked })}
             />
             <ToggleRow
-              title="فتح درج النقد تلقائياً"
-              description="فتح درج النقد مباشرة بعد إتمام الدفع (يتطلب جهازًا مقترنًا عبر متصفح Chrome)"
+              title={t("sale.autoOpenCashDrawer.title")}
+              description={t("sale.autoOpenCashDrawer.description")}
               checked={settings.autoOpenCashDrawer}
               onChange={(checked) => patch({ autoOpenCashDrawer: checked })}
             />
             <ToggleRow
-              title="السماح بتعديل السعر يدوياً"
-              description="السماح للكاشير بتعديل سعر المنتج أثناء البيع"
+              title={t("sale.allowManualPriceEdit.title")}
+              description={t("sale.allowManualPriceEdit.description")}
               checked={settings.allowManualPriceEdit}
               onChange={(checked) => patch({ allowManualPriceEdit: checked })}
             />
             <ToggleRow
-              title="تطبيق الخصومات"
-              description="السماح بتطبيق الخصومات على المبيعات"
+              title={t("sale.applyDiscounts.title")}
+              description={t("sale.applyDiscounts.description")}
               checked={settings.applyDiscounts}
               onChange={(checked) => patch({ applyDiscounts: checked })}
             />
@@ -190,11 +193,11 @@ export function CashierSettingsPage() {
 
         {/* Print settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
-          <SectionHeader icon={<Printer className="size-4" />} title="إعدادات الطباعة" />
+          <SectionHeader icon={<Printer className="size-4" />} title={t("print.sectionTitle")} />
           <div className="space-y-3.5">
             <div>
               <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
-                الطابعة الافتراضية
+                {t("print.defaultPrinterLabel")}
               </div>
               <AppSearchableSelect
                 value={settings.defaultPrinterDeviceId ?? ""}
@@ -205,7 +208,9 @@ export function CashierSettingsPage() {
             </div>
 
             <div>
-              <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>حجم الورق</div>
+              <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                {t("print.paperWidthLabel")}
+              </div>
               <div className="flex gap-2">
                 {(["80mm", "58mm"] as const).map((width) => (
                   <button
@@ -226,20 +231,22 @@ export function CashierSettingsPage() {
             </div>
 
             <ToggleRow
-              title="طباعة الفاتورة تلقائياً"
-              description="طباعة الفاتورة بعد إتمام عملية البيع"
+              title={t("print.autoPrintInvoice.title")}
+              description={t("print.autoPrintInvoice.description")}
               checked={settings.autoPrintInvoice}
               onChange={(checked) => patch({ autoPrintInvoice: checked })}
             />
             <ToggleRow
-              title="طباعة نسخة للمطبخ"
-              description="إضافة نسخة للمطبخ (للمطاعم والمقاهي)"
+              title={t("print.printKitchenCopy.title")}
+              description={t("print.printKitchenCopy.description")}
               checked={settings.printKitchenCopy}
               onChange={(checked) => patch({ printKitchenCopy: checked })}
             />
 
             <div>
-              <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>عدد النسخ</div>
+              <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                {t("print.copiesCountLabel")}
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -270,36 +277,39 @@ export function CashierSettingsPage() {
               disabled={isTestingPrint}
               className="h-10 w-full rounded-[10px] border-[#e1e7f0] text-[12.5px] font-semibold text-[#5b6b85]"
             >
-              {isTestingPrint ? "جارٍ الاختبار..." : "اختبار الطباعة"}
+              {isTestingPrint ? t("print.testingPrint") : t("print.testPrint")}
             </Button>
           </div>
         </div>
 
         {/* Payment settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
-          <SectionHeader icon={<CreditCard className="size-4" />} title="إعدادات الدفع" />
+          <SectionHeader
+            icon={<CreditCard className="size-4" />}
+            title={t("payment.sectionTitle")}
+          />
           <div className="divide-y divide-[#eef1f6]">
             <ToggleRow
-              title="الدفع السريع"
-              description="عند فتح شاشة الدفع، تُعبَّأ أول وسيلة دفع مفعّلة بكامل المبلغ تلقائيًا"
+              title={t("payment.showQuickPaymentScreen.title")}
+              description={t("payment.showQuickPaymentScreen.description")}
               checked={settings.showQuickPaymentScreen}
               onChange={(checked) => patch({ showQuickPaymentScreen: checked })}
             />
             <ToggleRow
-              title="السماح بأكثر من وسيلة دفع"
-              description="إمكانية تقسيم المبلغ على أكثر من وسيلة دفع"
+              title={t("payment.allowSplitPayment.title")}
+              description={t("payment.allowSplitPayment.description")}
               checked={settings.allowSplitPayment}
               onChange={(checked) => patch({ allowSplitPayment: checked })}
             />
             <ToggleRow
-              title="الاحتفاظ بآخر وسيلة دفع"
-              description="تذكر آخر وسيلة دفع مستخدمة"
+              title={t("payment.rememberLastPaymentMethod.title")}
+              description={t("payment.rememberLastPaymentMethod.description")}
               checked={settings.rememberLastPaymentMethod}
               onChange={(checked) => patch({ rememberLastPaymentMethod: checked })}
             />
             <ToggleRow
-              title="إلزام اختيار وسيلة دفع"
-              description="يجب اختيار وسيلة دفع لاتمام البيع"
+              title={t("payment.requirePaymentMethodSelection.title")}
+              description={t("payment.requirePaymentMethodSelection.description")}
               checked={settings.requirePaymentMethodSelection}
               onChange={(checked) => patch({ requirePaymentMethodSelection: checked })}
             />
@@ -310,35 +320,38 @@ export function CashierSettingsPage() {
       <div className="grid gap-3.5 lg:grid-cols-2">
         {/* Interface settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
-          <SectionHeader icon={<Monitor className="size-4" />} title="إعدادات الواجهة" />
+          <SectionHeader
+            icon={<Monitor className="size-4" />}
+            title={t("interface.sectionTitle")}
+          />
           <div className="divide-y divide-[#eef1f6]">
             <ToggleRow
-              title="عرض صور المنتجات"
-              description="إظهار صور المنتجات في شاشة الكاشير"
+              title={t("interface.showProductImages.title")}
+              description={t("interface.showProductImages.description")}
               checked={settings.showProductImages}
               onChange={(checked) => patch({ showProductImages: checked })}
             />
             <ToggleRow
-              title="استخدام الوضع المبسط"
-              description="شبكة منتجات أكثر كثافة (بطاقات أصغر) لعرض عدد أكبر دون تمرير"
+              title={t("interface.useCompactMode.title")}
+              description={t("interface.useCompactMode.description")}
               checked={settings.useCompactMode}
               onChange={(checked) => patch({ useCompactMode: checked })}
             />
             <ToggleRow
-              title="إظهار لوحة المجموعات"
-              description="إظهار تصنيفات المنتجات في الشاشة الرئيسية"
+              title={t("interface.showCategoryPanel.title")}
+              description={t("interface.showCategoryPanel.description")}
               checked={settings.showCategoryPanel}
               onChange={(checked) => patch({ showCategoryPanel: checked })}
             />
             <ToggleRow
-              title="زر عرض الشبكة"
-              description="إظهار زر التبديل إلى عرض شبكة المنتجات بجانب مربع البحث"
+              title={t("interface.showGridView.title")}
+              description={t("interface.showGridView.description")}
               checked={settings.showGridView}
               onChange={(checked) => patch({ showGridView: checked })}
             />
             <ToggleRow
-              title="زر عرض القائمة"
-              description="إظهار زر التبديل إلى عرض قائمة عناصر السلة بجانب مربع البحث"
+              title={t("interface.showListView.title")}
+              description={t("interface.showListView.description")}
               checked={settings.showListView}
               onChange={(checked) => patch({ showListView: checked })}
             />
@@ -347,17 +360,20 @@ export function CashierSettingsPage() {
 
         {/* Scanner settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
-          <SectionHeader icon={<ScanBarcode className="size-4" />} title="إعدادات الماسح الضوئي" />
+          <SectionHeader
+            icon={<ScanBarcode className="size-4" />}
+            title={t("scanner.sectionTitle")}
+          />
           <div className="divide-y divide-[#eef1f6]">
             <ToggleRow
-              title="تفعيل قارئ الباركود"
-              description="استخدام قارئ الباركود في الكاشير"
+              title={t("scanner.enableBarcodeScanner.title")}
+              description={t("scanner.enableBarcodeScanner.description")}
               checked={settings.enableBarcodeScanner}
               onChange={(checked) => patch({ enableBarcodeScanner: checked })}
             />
             <ToggleRow
-              title="تشغيل صوت المسح"
-              description="إصدار صوت عند قراءة الباركود"
+              title={t("scanner.playScanSound.title")}
+              description={t("scanner.playScanSound.description")}
               checked={settings.playScanSound}
               onChange={(checked) => patch({ playScanSound: checked })}
             />
@@ -372,7 +388,7 @@ export function CashierSettingsPage() {
           disabled={isSaving}
           className="h-10 rounded-[10px] bg-[#2878ff] px-6 text-[13px] font-bold text-white hover:bg-[#1f66e0]"
         >
-          {isSaving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
+          {isSaving ? t("saving") : t("save")}
         </Button>
       </div>
     </div>

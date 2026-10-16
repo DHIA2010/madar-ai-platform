@@ -47,23 +47,30 @@ async function writeToPort(port: SerialPortLike, bytes: Uint8Array): Promise<voi
   }
 }
 
+export type PairAndTestResult =
+  | { ok: true }
+  | { ok: false; code: "unsupported" | "failed"; detail?: string }
+
 // Requires a real, direct user gesture (a click handler calling this with no prior await) --
 // the browser silently rejects requestPort() otherwise. Used once, from the settings page's
-// "اختبار الطباعة" action, to grant this origin persistent access to the device; every later
-// call anywhere in the app can then reuse getPorts() with no further prompt.
-export async function pairAndTestDevice(): Promise<{ ok: boolean; message: string }> {
+// test-print action, to grant this origin persistent access to the device; every later call
+// anywhere in the app can then reuse getPorts() with no further prompt.
+//
+// Returns a machine-readable code rather than a user-facing message -- the caller translates it,
+// since this module has no access to the active locale. `detail` carries the raw
+// (English/browser-authored) error text for diagnostics only; it is never shown to the user.
+export async function pairAndTestDevice(): Promise<PairAndTestResult> {
   const serial = getSerial()
   if (!serial) {
-    return { ok: false, message: "هذا المتصفح لا يدعم Web Serial (استخدم Chrome أو Edge)." }
+    return { ok: false, code: "unsupported" }
   }
 
   try {
     const port = await serial.requestPort()
     await writeToPort(port, ESC_POS_DRAWER_KICK)
-    return { ok: true, message: "تم إرسال أمر الاختبار إلى الجهاز بنجاح." }
+    return { ok: true }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "فشل الاتصال بالجهاز."
-    return { ok: false, message }
+    return { ok: false, code: "failed", detail: error instanceof Error ? error.message : undefined }
   }
 }
 

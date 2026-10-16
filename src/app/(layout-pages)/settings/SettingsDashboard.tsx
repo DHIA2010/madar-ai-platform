@@ -21,6 +21,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
 import {
@@ -46,6 +47,7 @@ import {
 import { Can, useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import type { OrganizationSettings } from "@/features/workspace"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 
@@ -54,45 +56,49 @@ const CARD =
 const NAVY = "text-[#0d1b3e]"
 const MUTED = "text-[#8098b4]"
 
-const CURRENCY_OPTIONS = [
-  { code: "SAR", label: "الريال السعودي (SAR)" },
-  { code: "USD", label: "الدولار الأمريكي (USD)" },
-]
+type GeneralTranslator = ReturnType<typeof useTranslations<"settings.general">>
+
+const CURRENCY_CODES = ["SAR", "USD"] as const
 
 // Real IANA zone identifiers -- written verbatim to organizations.timezone, so these have to be
 // zones the platform can actually resolve.
-const TIMEZONE_OPTIONS = [
-  { code: "Asia/Riyadh", label: "الرياض (GMT+3)" },
-  { code: "Asia/Dubai", label: "دبي (GMT+4)" },
-  { code: "Asia/Kuwait", label: "الكويت (GMT+3)" },
-  { code: "Asia/Qatar", label: "الدوحة (GMT+3)" },
-  { code: "Asia/Bahrain", label: "المنامة (GMT+3)" },
-  { code: "Asia/Muscat", label: "مسقط (GMT+4)" },
-  { code: "Africa/Cairo", label: "القاهرة (GMT+2)" },
-  { code: "Asia/Baghdad", label: "بغداد (GMT+3)" },
-  { code: "Asia/Amman", label: "عمّان (GMT+3)" },
-  { code: "UTC", label: "التوقيت العالمي (UTC)" },
-]
+const TIMEZONE_CODES = [
+  "Asia/Riyadh",
+  "Asia/Dubai",
+  "Asia/Kuwait",
+  "Asia/Qatar",
+  "Asia/Bahrain",
+  "Asia/Muscat",
+  "Africa/Cairo",
+  "Asia/Baghdad",
+  "Asia/Amman",
+  "UTC",
+] as const
 
 // Only the locales the app actually ships messages for -- offering more would promise
 // translations that do not exist.
-const LOCALE_OPTIONS = [
-  { code: "ar", label: "العربية" },
-  { code: "en", label: "English" },
-]
+const LOCALE_CODES = ["ar", "en"] as const
 
-const COUNTRY_OPTIONS = [
-  { code: "SA", label: "المملكة العربية السعودية" },
-  { code: "AE", label: "الإمارات العربية المتحدة" },
-  { code: "KW", label: "الكويت" },
-  { code: "QA", label: "قطر" },
-  { code: "BH", label: "البحرين" },
-  { code: "OM", label: "عُمان" },
-  { code: "EG", label: "مصر" },
-  { code: "JO", label: "الأردن" },
-  { code: "IQ", label: "العراق" },
-  { code: "MA", label: "المغرب" },
-]
+const COUNTRY_CODES = ["SA", "AE", "KW", "QA", "BH", "OM", "EG", "JO", "IQ", "MA"] as const
+
+function currencyOptions(t: GeneralTranslator) {
+  return CURRENCY_CODES.map((code) => ({
+    code,
+    label: t(`currencies.${code}` as "currencies.SAR"),
+  }))
+}
+function timezoneOptions(t: GeneralTranslator) {
+  return TIMEZONE_CODES.map((code) => ({
+    code,
+    label: t(`timezones.${code}` as "timezones.UTC"),
+  }))
+}
+function localeOptions(t: GeneralTranslator) {
+  return LOCALE_CODES.map((code) => ({ code, label: t(`locales.${code}` as "locales.ar") }))
+}
+function countryOptions(t: GeneralTranslator) {
+  return COUNTRY_CODES.map((code) => ({ code, label: t(`countries.${code}` as "countries.SA") }))
+}
 
 // The settings keys this screen owns, as plain text. Kept as one list so the draft, the dirty
 // check and the save payload can never drift apart.
@@ -151,48 +157,45 @@ function buildDraft(
 // Real formats, not invented ones: a Saudi VAT number is 15 digits, a commercial registration is
 // 10, and the National Address uses a 4-digit building number, 4-digit secondary number and
 // 5-digit postal code. Blank is always allowed -- these are optional until an invoice needs them.
-const DIGIT_RULES: Partial<Record<TextKey, { length: number; message: string }>> = {
-  taxNumber: { length: 15, message: "الرقم الضريبي يتكوّن من 15 رقماً." },
-  commercialRegistration: { length: 10, message: "رقم السجل التجاري يتكوّن من 10 أرقام." },
-  buildingNumber: { length: 4, message: "رقم المبنى يتكوّن من 4 أرقام." },
-  secondaryNumber: { length: 4, message: "الرقم الفرعي يتكوّن من 4 أرقام." },
-  postalCode: { length: 5, message: "الرمز البريدي يتكوّن من 5 أرقام." },
+const DIGIT_RULE_LENGTHS: Partial<Record<TextKey, number>> = {
+  taxNumber: 15,
+  commercialRegistration: 10,
+  buildingNumber: 4,
+  secondaryNumber: 4,
+  postalCode: 5,
 }
 
-function validate(draft: Draft): Partial<Record<TextKey | "name", string>> {
+function validate(draft: Draft, t: GeneralTranslator): Partial<Record<TextKey | "name", string>> {
   const errors: Partial<Record<TextKey | "name", string>> = {}
 
   if (!draft.name.trim()) {
-    errors.name = "اسم الحساب مطلوب."
+    errors.name = t("validation.nameRequired")
   }
 
-  for (const [key, rule] of Object.entries(DIGIT_RULES) as [
-    TextKey,
-    { length: number; message: string },
-  ][]) {
+  for (const [key, length] of Object.entries(DIGIT_RULE_LENGTHS) as [TextKey, number][]) {
     const value = draft.text[key].trim()
-    if (value && !new RegExp(`^\\d{${rule.length}}$`).test(value)) {
-      errors[key] = rule.message
+    if (value && !new RegExp(`^\\d{${length}}$`).test(value)) {
+      errors[key] = t(`validation.${key}` as "validation.taxNumber")
     }
   }
 
   const email = draft.text.email.trim()
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "صيغة البريد الإلكتروني غير صحيحة."
+    errors.email = t("validation.invalidEmail")
   }
 
   return errors
 }
 
-function getInitials(name: string | undefined) {
-  if (!name) return "؟"
+function getInitials(name: string | undefined, fallback: string) {
+  if (!name) return fallback
   const parts = name.trim().split(/\s+/)
   return (
     parts
       .slice(0, 2)
       .map((part) => part[0])
       .join("")
-      .toUpperCase() || "؟"
+      .toUpperCase() || fallback
   )
 }
 
@@ -231,6 +234,7 @@ const FIELD_CLASS = "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px]"
 const LABEL_CLASS = "text-[12.5px] font-medium text-[#0b1738]"
 
 function ChangePasswordForm() {
+  const t = useTranslations("settings.general.password")
   const { changePassword } = useAuth()
   const [expanded, setExpanded] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
@@ -244,25 +248,25 @@ function ChangePasswordForm() {
     setErrorText(null)
 
     if (newPassword.length < 12) {
-      setErrorText("يجب ألا تقل كلمة المرور الجديدة عن 12 حرفاً.")
+      setErrorText(t("tooShort"))
       return
     }
     if (newPassword !== confirmPassword) {
-      setErrorText("كلمتا المرور الجديدتان غير متطابقتين.")
+      setErrorText(t("mismatch"))
       return
     }
 
     setIsSaving(true)
     try {
       await changePassword({ currentPassword, newPassword })
-      toast.success("تم تغيير كلمة المرور. سيتم تسجيل خروجك الآن.")
+      toast.success(t("success"))
       // The backend revokes every other active session on a successful change, and the current
       // one isn't excluded -- redirect to login rather than leave the UI on a stale session.
       window.setTimeout(() => {
         window.location.href = "/auth/basic/login/"
       }, 1200)
     } catch {
-      setErrorText("كلمة المرور الحالية غير صحيحة.")
+      setErrorText(t("currentIncorrect"))
     } finally {
       setIsSaving(false)
     }
@@ -276,11 +280,11 @@ function ChangePasswordForm() {
         className="flex min-h-[64px] w-full items-center justify-between gap-3 rounded-[10px] border border-[#e8edf3] bg-[#f8fafc] px-4 py-3.5 text-start transition-colors hover:border-[#c7d9ff] hover:bg-[#eff6ff]"
       >
         <span className="flex flex-col">
-          <span className={cn("text-[13px] font-bold", NAVY)}>تغيير كلمة المرور</span>
-          <span className={cn("mt-0.5 text-[12px]", MUTED)}>تحديث كلمة المرور الخاصة بحسابك</span>
+          <span className={cn("text-[13px] font-bold", NAVY)}>{t("changeTitle")}</span>
+          <span className={cn("mt-0.5 text-[12px]", MUTED)}>{t("changeSubtitle")}</span>
         </span>
         <span className="rounded-[8px] border border-[#c7d9ff] bg-white px-4 py-2 text-[12px] font-semibold text-[#2563eb]">
-          تغيير
+          {t("change")}
         </span>
       </button>
     )
@@ -290,7 +294,7 @@ function ChangePasswordForm() {
     <form className="space-y-3 rounded-[10px] border border-[#e8edf3] p-4" onSubmit={handleSubmit}>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <AppPasswordInput
-          label="كلمة المرور الحالية"
+          label={t("currentPassword")}
           value={currentPassword}
           onChange={(event) => setCurrentPassword(event.target.value)}
           required
@@ -298,16 +302,16 @@ function ChangePasswordForm() {
           labelClassName={LABEL_CLASS}
         />
         <AppPasswordInput
-          label="كلمة المرور الجديدة"
+          label={t("newPassword")}
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
           required
-          helperText="12 حرفاً على الأقل."
+          helperText={t("newPasswordHint")}
           className={FIELD_CLASS}
           labelClassName={LABEL_CLASS}
         />
         <AppPasswordInput
-          label="تأكيد كلمة المرور الجديدة"
+          label={t("confirmPassword")}
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
           required
@@ -330,14 +334,14 @@ function ChangePasswordForm() {
           }}
           disabled={isSaving}
         >
-          إلغاء
+          {t("cancel")}
         </AppButton>
         <AppButton
           type="submit"
           className="h-11 rounded-[10px] px-5 text-[13px]"
           disabled={isSaving}
         >
-          {isSaving ? "جارٍ الحفظ…" : "حفظ كلمة المرور"}
+          {isSaving ? t("saving") : t("save")}
         </AppButton>
       </div>
     </form>
@@ -345,6 +349,8 @@ function ChangePasswordForm() {
 }
 
 export default function SettingsDashboard() {
+  const t = useTranslations("settings.general")
+  const locale = useLocale() as Locale
   const { currentOrganization, updateOrganization, uploadOrganizationLogo, deleteOrganization } =
     useWorkspace()
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -383,9 +389,9 @@ export default function SettingsDashboard() {
     setIsUploadingLogo(true)
     try {
       await uploadOrganizationLogo(currentOrganization.id, file)
-      toast.success("تم تحديث الشعار")
+      toast.success(t("toasts.logoUpdated"))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذّر رفع الشعار")
+      toast.error(error instanceof Error ? error.message : t("toasts.logoUploadFailed"))
     } finally {
       setIsUploadingLogo(false)
     }
@@ -394,10 +400,10 @@ export default function SettingsDashboard() {
   async function handleSave() {
     if (!currentOrganization) return
 
-    const found = validate(draft)
+    const found = validate(draft, t)
     setErrors(found)
     if (Object.keys(found).length > 0) {
-      toast.error("راجع الحقول المحدّدة قبل الحفظ.")
+      toast.error(t("validation.reviewFields"))
       return
     }
 
@@ -417,9 +423,9 @@ export default function SettingsDashboard() {
         currency: draft.currency || undefined,
         settings,
       })
-      toast.success("تم حفظ الإعدادات")
+      toast.success(t("toasts.settingsSaved"))
     } catch {
-      toast.error("تعذّر الحفظ. حاول مرة أخرى.")
+      toast.error(t("toasts.saveFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -441,7 +447,7 @@ export default function SettingsDashboard() {
       // to the real destination avoids that redirect entirely.
       window.location.href = ROUTES.workspaceSelect
     } catch {
-      toast.error("تعذّر حذف الحساب. حاول مرة أخرى.")
+      toast.error(t("toasts.deleteFailed"))
       setIsDeleting(false)
     }
   }
@@ -463,18 +469,16 @@ export default function SettingsDashboard() {
   )
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-4">
       <div>
-        <h1 className={cn("text-[22px] font-extrabold leading-tight", NAVY)}>الإعدادات العامة</h1>
-        <p className={cn("mt-1 text-[13px]", MUTED)}>
-          إدارة معلومات الحساب والتهيئات الأساسية للنظام
-        </p>
+        <h1 className={cn("text-[22px] font-extrabold leading-tight", NAVY)}>{t("title")}</h1>
+        <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
       </div>
 
       <section className={cn(CARD, "p-5")}>
         <SectionHeader
-          title="معلومات الحساب"
-          subtitle="بيانات الحساب التي ستظهر في الفواتير والمستندات الرسمية"
+          title={t("accountInfo.title")}
+          subtitle={t("accountInfo.subtitle")}
           icon={<Building2 className="size-[18px]" />}
         />
 
@@ -491,7 +495,7 @@ export default function SettingsDashboard() {
                 />
               ) : (
                 <span className={cn("text-[24px] font-extrabold", NAVY)}>
-                  {getInitials(currentOrganization?.name)}
+                  {getInitials(currentOrganization?.name, t("initialsFallback"))}
                 </span>
               )}
             </div>
@@ -502,7 +506,7 @@ export default function SettingsDashboard() {
                 disabled={isUploadingLogo}
                 className="flex w-full items-center justify-center gap-1.5 rounded-[8px] border border-[#e8edf3] bg-white py-2 text-[12px] font-semibold text-[#334155] transition-colors hover:border-[#c7d9ff] hover:text-[#2563eb] disabled:opacity-50"
               >
-                {isUploadingLogo ? "جارٍ الرفع…" : "تغيير الشعار"}
+                {isUploadingLogo ? t("accountInfo.changingLogo") : t("accountInfo.changeLogo")}
                 <Upload className="size-3" />
               </button>
               <input
@@ -517,7 +521,7 @@ export default function SettingsDashboard() {
 
           <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <AppInput
-              label="اسم الحساب"
+              label={t("accountInfo.accountName")}
               required
               value={draft.name}
               onChange={(event) =>
@@ -527,44 +531,58 @@ export default function SettingsDashboard() {
               className={FIELD_CLASS}
               labelClassName={LABEL_CLASS}
             />
-            {textField("commercialRegistration", "رقم السجل التجاري", {
+            {textField("commercialRegistration", t("accountInfo.commercialRegistration"), {
               inputMode: "numeric",
               placeholder: "1012345678",
             })}
-            {textField("taxNumber", "الرقم الضريبي", {
+            {textField("taxNumber", t("accountInfo.taxNumber"), {
               inputMode: "numeric",
               placeholder: "300000000000003",
             })}
-            {textField("phone", "رقم الهاتف", {
+            {textField("phone", t("accountInfo.phone"), {
               inputMode: "tel",
               placeholder: "+966 50 000 0000",
             })}
-            {textField("email", "البريد الإلكتروني", {
+            {textField("email", t("accountInfo.email"), {
               type: "email",
               placeholder: "info@example.sa",
             })}
-            {textField("website", "الموقع الإلكتروني", { placeholder: "example.sa" })}
+            {textField("website", t("accountInfo.website"), { placeholder: "example.sa" })}
           </div>
         </div>
       </section>
 
       <section className={cn(CARD, "p-5")}>
         <SectionHeader
-          title="معلومات العنوان الوطني"
-          subtitle="أدخل بيانات العنوان الوطني لاستخدامها في الفواتير والمستندات"
+          title={t("nationalAddress.title")}
+          subtitle={t("nationalAddress.subtitle")}
           icon={<MapPin className="size-[18px]" />}
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {textField("addressShort", "العنوان المختصر", { placeholder: "حي العليا" })}
-          {textField("buildingNumber", "رقم المبنى", { inputMode: "numeric", placeholder: "0000" })}
-          {textField("street", "الشارع", { placeholder: "طريق الملك فهد" })}
-          {textField("secondaryNumber", "الرقم الفرعي", {
+          {textField("addressShort", t("nationalAddress.addressShort"), {
+            placeholder: t("nationalAddress.addressShortPlaceholder"),
+          })}
+          {textField("buildingNumber", t("nationalAddress.buildingNumber"), {
             inputMode: "numeric",
             placeholder: "0000",
           })}
-          {textField("district", "الحي", { placeholder: "العليا" })}
-          {textField("postalCode", "الرمز البريدي", { inputMode: "numeric", placeholder: "00000" })}
-          {textField("city", "المدينة", { placeholder: "الرياض" })}
+          {textField("street", t("nationalAddress.street"), {
+            placeholder: t("nationalAddress.streetPlaceholder"),
+          })}
+          {textField("secondaryNumber", t("nationalAddress.secondaryNumber"), {
+            inputMode: "numeric",
+            placeholder: "0000",
+          })}
+          {textField("district", t("nationalAddress.district"), {
+            placeholder: t("nationalAddress.districtPlaceholder"),
+          })}
+          {textField("postalCode", t("nationalAddress.postalCode"), {
+            inputMode: "numeric",
+            placeholder: "00000",
+          })}
+          {textField("city", t("nationalAddress.city"), {
+            placeholder: t("nationalAddress.cityPlaceholder"),
+          })}
         </div>
       </section>
 
@@ -572,24 +590,24 @@ export default function SettingsDashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className={cn(CARD, "p-5")}>
           <SectionHeader
-            title="الإعدادات الإقليمية"
-            subtitle="تحديد اللغة والمنطقة الزمنية والعملة"
+            title={t("regional.title")}
+            subtitle={t("regional.subtitle")}
             icon={<Globe className="size-[18px]" />}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <span className={LABEL_CLASS}>
-                اللغة <span className="text-[#e0484d]">*</span>
+                {t("regional.languageLabel")} <span className="text-[#e0484d]">*</span>
               </span>
               <AppSelect
                 value={draft.locale}
                 onValueChange={(value) => setDraft((current) => ({ ...current, locale: value }))}
               >
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر اللغة" />
+                  <AppSelectValue placeholder={t("regional.languagePlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  {LOCALE_OPTIONS.map((option) => (
+                  {localeOptions(t).map((option) => (
                     <AppSelectItem key={option.code} value={option.code}>
                       {option.label}
                     </AppSelectItem>
@@ -600,17 +618,17 @@ export default function SettingsDashboard() {
 
             <div className="space-y-1.5">
               <span className={LABEL_CLASS}>
-                المنطقة الزمنية <span className="text-[#e0484d]">*</span>
+                {t("regional.timezoneLabel")} <span className="text-[#e0484d]">*</span>
               </span>
               <AppSelect
                 value={draft.timezone}
                 onValueChange={(value) => setDraft((current) => ({ ...current, timezone: value }))}
               >
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر المنطقة الزمنية" />
+                  <AppSelectValue placeholder={t("regional.timezonePlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  {TIMEZONE_OPTIONS.map((option) => (
+                  {timezoneOptions(t).map((option) => (
                     <AppSelectItem key={option.code} value={option.code}>
                       {option.label}
                     </AppSelectItem>
@@ -620,16 +638,16 @@ export default function SettingsDashboard() {
             </div>
 
             <div className="space-y-1.5">
-              <span className={LABEL_CLASS}>العملة (عملة التقارير)</span>
+              <span className={LABEL_CLASS}>{t("regional.currencyLabel")}</span>
               <AppSelect
                 value={draft.currency}
                 onValueChange={(value) => setDraft((current) => ({ ...current, currency: value }))}
               >
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر العملة" />
+                  <AppSelectValue placeholder={t("regional.currencyPlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  {CURRENCY_OPTIONS.map((option) => (
+                  {currencyOptions(t).map((option) => (
                     <AppSelectItem key={option.code} value={option.code}>
                       {option.label}
                     </AppSelectItem>
@@ -639,16 +657,16 @@ export default function SettingsDashboard() {
             </div>
 
             <div className="space-y-1.5">
-              <span className={LABEL_CLASS}>الدولة</span>
+              <span className={LABEL_CLASS}>{t("regional.countryLabel")}</span>
               <AppSelect
                 value={draft.text.country}
                 onValueChange={(value) => setText("country", value)}
               >
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر الدولة" />
+                  <AppSelectValue placeholder={t("regional.countryPlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  {COUNTRY_OPTIONS.map((option) => (
+                  {countryOptions(t).map((option) => (
                     <AppSelectItem key={option.code} value={option.code}>
                       {option.label}
                     </AppSelectItem>
@@ -661,8 +679,8 @@ export default function SettingsDashboard() {
 
         <section className={cn(CARD, "p-5")}>
           <SectionHeader
-            title="إعدادات الإشعارات"
-            subtitle="تفعيل الإشعارات المهمة عبر القنوات المختلفة"
+            title={t("notifications.title")}
+            subtitle={t("notifications.subtitle")}
             icon={<Bell className="size-[18px]" />}
             tint="violet"
           />
@@ -674,16 +692,18 @@ export default function SettingsDashboard() {
                 <Mail className="size-4" />
               </span>
               <div>
-                <p className={cn("text-[13px] font-bold", NAVY)}>إشعارات البريد الإلكتروني</p>
+                <p className={cn("text-[13px] font-bold", NAVY)}>
+                  {t("notifications.emailNotifications")}
+                </p>
                 <p className={cn("mt-0.5 text-[12px]", MUTED)}>
-                  استلام الإشعارات عبر البريد الإلكتروني
+                  {t("notifications.emailNotificationsDescription")}
                 </p>
               </div>
             </div>
             <Switch
               checked={draft.notifyEmail}
               onCheckedChange={(next) => setDraft((current) => ({ ...current, notifyEmail: next }))}
-              aria-label="إشعارات البريد الإلكتروني"
+              aria-label={t("notifications.emailNotifications")}
               className="h-6 w-11 data-[state=checked]:bg-[#2563eb] [&>span]:size-5"
             />
           </div>
@@ -693,7 +713,7 @@ export default function SettingsDashboard() {
           <div className="mt-3 flex items-start gap-2.5 rounded-[10px] border border-[#c7d9ff] bg-[#eff6ff] px-4 py-3">
             <Info className="mt-0.5 size-4 shrink-0 text-[#2563eb]" />
             <p className={cn("text-[12px] leading-[1.6]", MUTED)}>
-              يُحفظ تفضيلك الآن، وسيبدأ الإرسال فور تفعيل خدمة الإشعارات على المنصة.
+              {t("notifications.notReadyNote")}
             </p>
           </div>
         </section>
@@ -701,8 +721,8 @@ export default function SettingsDashboard() {
 
       <section className={cn(CARD, "p-5")}>
         <SectionHeader
-          title="الأمان وكلمة المرور"
-          subtitle="إدارة أمان حسابك وتغيير كلمة المرور"
+          title={t("security.title")}
+          subtitle={t("security.subtitle")}
           icon={<ShieldCheck className="size-[18px]" />}
         />
         <ChangePasswordForm />
@@ -724,9 +744,11 @@ export default function SettingsDashboard() {
               <Trash2 className="size-[18px]" />
             </span>
             <span className="flex flex-col">
-              <span className="text-[14px] font-bold text-[#dc2626]">حذف الحساب</span>
+              <span className="text-[14px] font-bold text-[#dc2626]">
+                {t("deleteAccount.title")}
+              </span>
               <span className="mt-0.5 text-[12.5px] text-[#b06a6a]">
-                سيتم حذف جميع البيانات بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
+                {t("deleteAccount.description")}
               </span>
             </span>
           </button>
@@ -739,32 +761,39 @@ export default function SettingsDashboard() {
             disabled={!isDirty || isSaving}
             className="h-[74px] shrink-0 rounded-[12px] px-10 text-[15px] font-bold sm:w-[190px]"
           >
-            {isSaving ? "جارٍ الحفظ…" : "حفظ التغييرات"}
+            {isSaving ? t("saving") : t("saveChanges")}
           </AppButton>
         </Can>
       </div>
 
       <p className={cn("text-center text-[12px]", MUTED)}>
-        {isDirty ? "لديك تغييرات غير محفوظة." : "كل التغييرات محفوظة."}
+        {isDirty ? t("unsavedChanges") : t("allSaved")}
       </p>
 
       {/* Deleting is irreversible from this screen, so it asks for the account name to be typed
           rather than accepting a single click. */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[30rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[30rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("flex items-center gap-2 text-[16px] font-extrabold", NAVY)}>
               <AlertTriangle className="size-5 text-[#dc2626]" />
-              حذف الحساب نهائياً
+              {t("deleteAccount.dialogTitle")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-[1.7]", MUTED)}>
-              سيتم حذف حساب <span className="font-bold text-[#0d1b3e]">{savedName || "—"}</span>{" "}
-              وجميع بياناته. لا يمكن التراجع عن هذا الإجراء. اكتب اسم الحساب للتأكيد.
+              {t.rich("deleteAccount.dialogDescription", {
+                name: savedName || t("deleteAccount.unnamedFallback"),
+                b: (chunks) => <span className="font-bold text-[#0d1b3e]">{chunks}</span>,
+              })}
             </DialogDescription>
           </DialogHeader>
 
           <AppInput
-            label="اسم الحساب"
+            label={t("deleteAccount.confirmLabel")}
             value={deleteConfirmation}
             onChange={(event) => setDeleteConfirmation(event.target.value)}
             placeholder={savedName}
@@ -780,7 +809,7 @@ export default function SettingsDashboard() {
               onClick={() => setIsDeleteOpen(false)}
               disabled={isDeleting}
             >
-              إلغاء
+              {t("deleteAccount.cancel")}
             </AppButton>
             <AppButton
               type="button"
@@ -788,20 +817,20 @@ export default function SettingsDashboard() {
               disabled={!canDelete || isDeleting}
               className="h-11 rounded-[10px] bg-[#dc2626] px-5 text-[13px] text-white hover:bg-[#b91c1c]"
             >
-              {isDeleting ? "جارٍ الحذف…" : "حذف الحساب"}
+              {isDeleting ? t("deleteAccount.deleting") : t("deleteAccount.confirmDelete")}
             </AppButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <p className={cn("text-center text-[11.5px]", MUTED)}>
-        © {new Date().getFullYear()} مدار. جميع الحقوق محفوظة &nbsp;|&nbsp;{" "}
+        {t("footer.copyright", { year: new Date().getFullYear() })} &nbsp;|&nbsp;{" "}
         <Link href={ROUTES.privacy} className="hover:text-[#2563eb]">
-          سياسة الخصوصية
+          {t("footer.privacyPolicy")}
         </Link>
         &nbsp;|&nbsp;
         <Link href={ROUTES.terms} className="hover:text-[#2563eb]">
-          الشروط والأحكام
+          {t("footer.termsOfService")}
         </Link>
       </p>
     </div>

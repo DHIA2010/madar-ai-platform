@@ -14,27 +14,27 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 
 import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 
 interface SettingsSection {
-  key: string
-  label: string
+  key: "general" | "devices" | "cashier" | "workspaces" | "payments" | "tax" | "zatca" | "backup"
   href?: string
-  // Why it is not reachable yet, shown on hover. Absent means the section is live.
-  pending?: string
+  // Whether this section has no destination yet. When true, it's shown disabled with a reason.
+  pending?: boolean
 }
 
 const SECTIONS: SettingsSection[] = [
-  { key: "general", label: "الإعدادات العامة", href: ROUTES.settings },
-  { key: "devices", label: "إعدادات الأجهزة", href: ROUTES.settingsDevices },
-  { key: "cashier", label: "إعدادات الكاشير", href: ROUTES.settingsCashier },
-  { key: "workspaces", label: "إدارة مساحات العمل", href: ROUTES.settingsWorkspaces },
-  { key: "payments", label: "طرق الدفع", href: ROUTES.settingsPayments },
-  { key: "tax", label: "الضرائب", href: ROUTES.settingsTaxes },
-  { key: "zatca", label: "الفوترة الإلكترونية (هيئة الزكاة)", href: ROUTES.settingsZatca },
-  { key: "backup", label: "النسخ الاحتياطي", pending: "النسخ الاحتياطي غير متاح بعد" },
+  { key: "general", href: ROUTES.settings },
+  { key: "devices", href: ROUTES.settingsDevices },
+  { key: "cashier", href: ROUTES.settingsCashier },
+  { key: "workspaces", href: ROUTES.settingsWorkspaces },
+  { key: "payments", href: ROUTES.settingsPayments },
+  { key: "tax", href: ROUTES.settingsTaxes },
+  { key: "zatca", href: ROUTES.settingsZatca },
+  { key: "backup", pending: true },
 ]
 
 // Metrics from the design source: 11px/14px padding, 11px radius, 13px label, and a resting fill
@@ -43,6 +43,7 @@ const SECTIONS: SettingsSection[] = [
 const ROW_BASE = "relative block w-full rounded-[11px] px-3.5 py-[11px] text-right text-[13px]"
 
 export function SettingsNav() {
+  const t = useTranslations("settings.nav")
   const pathname = usePathname()
 
   // Longest match wins, so /settings/devices does not also light up /settings. The same rule the
@@ -55,24 +56,25 @@ export function SettingsNav() {
 
   return (
     <nav className="flex flex-col">
-      <h2 className="mb-2.5 px-2 text-[13px] font-bold text-[#8098b4]">الإعدادات</h2>
+      <h2 className="mb-2.5 px-2 text-[13px] font-bold text-[#8098b4]">{t("heading")}</h2>
 
       <ul className="flex flex-col gap-1">
         {SECTIONS.map((section) => {
           const active = Boolean(section.href) && section.href === activeHref
+          const label = t(`sections.${section.key}`)
 
           if (!section.href) {
             return (
               <li key={section.key}>
                 <span
-                  title={section.pending}
+                  title={section.pending ? t("backupPendingReason") : undefined}
                   aria-disabled="true"
                   className={cn(
                     ROW_BASE,
                     "cursor-not-allowed bg-[#f7f9fc] font-medium text-[#c4cdd9]"
                   )}
                 >
-                  {section.label}
+                  {label}
                 </span>
               </li>
             )
@@ -96,7 +98,7 @@ export function SettingsNav() {
                 {active ? (
                   <span className="absolute inset-y-0 start-0 w-1 rounded-s-[3px] bg-[#2563eb]" />
                 ) : null}
-                {section.label}
+                {label}
               </Link>
             </li>
           )

@@ -3366,5 +3366,506 @@
         }
       }
     }
+  },
+  "settings": {
+    "nav": {
+      "heading": "الإعدادات",
+      "sections": {
+        "general": "الإعدادات العامة",
+        "devices": "إعدادات الأجهزة",
+        "cashier": "إعدادات الكاشير",
+        "workspaces": "إدارة مساحات العمل",
+        "payments": "طرق الدفع",
+        "tax": "الضرائب",
+        "zatca": "الفوترة الإلكترونية (هيئة الزكاة)",
+        "backup": "النسخ الاحتياطي"
+      },
+      "backupPendingReason": "النسخ الاحتياطي غير متاح بعد"
+    },
+    "general": {
+      "title": "الإعدادات العامة",
+      "subtitle": "إدارة معلومات الحساب والتهيئات الأساسية للنظام",
+      "initialsFallback": "؟",
+      "currencies": {
+        "SAR": "الريال السعودي (SAR)",
+        "USD": "الدولار الأمريكي (USD)"
+      },
+      "timezones": {
+        "Asia/Riyadh": "الرياض (GMT+3)",
+        "Asia/Dubai": "دبي (GMT+4)",
+        "Asia/Kuwait": "الكويت (GMT+3)",
+        "Asia/Qatar": "الدوحة (GMT+3)",
+        "Asia/Bahrain": "المنامة (GMT+3)",
+        "Asia/Muscat": "مسقط (GMT+4)",
+        "Africa/Cairo": "القاهرة (GMT+2)",
+        "Asia/Baghdad": "بغداد (GMT+3)",
+        "Asia/Amman": "عمّان (GMT+3)",
+        "UTC": "التوقيت العالمي (UTC)"
+      },
+      "locales": {
+        "ar": "العربية",
+        "en": "English"
+      },
+      "countries": {
+        "SA": "المملكة العربية السعودية",
+        "AE": "الإمارات العربية المتحدة",
+        "KW": "الكويت",
+        "QA": "قطر",
+        "BH": "البحرين",
+        "OM": "عُمان",
+        "EG": "مصر",
+        "JO": "الأردن",
+        "IQ": "العراق",
+        "MA": "المغرب"
+      },
+      "validation": {
+        "taxNumber": "الرقم الضريبي يتكوّن من 15 رقماً.",
+        "commercialRegistration": "رقم السجل التجاري يتكوّن من 10 أرقام.",
+        "buildingNumber": "رقم المبنى يتكوّن من 4 أرقام.",
+        "secondaryNumber": "الرقم الفرعي يتكوّن من 4 أرقام.",
+        "postalCode": "الرمز البريدي يتكوّن من 5 أرقام.",
+        "nameRequired": "اسم الحساب مطلوب.",
+        "invalidEmail": "صيغة البريد الإلكتروني غير صحيحة.",
+        "reviewFields": "راجع الحقول المحدّدة قبل الحفظ."
+      },
+      "password": {
+        "changeTitle": "تغيير كلمة المرور",
+        "changeSubtitle": "تحديث كلمة المرور الخاصة بحسابك",
+        "change": "تغيير",
+        "currentPassword": "كلمة المرور الحالية",
+        "newPassword": "كلمة المرور الجديدة",
+        "confirmPassword": "تأكيد كلمة المرور الجديدة",
+        "newPasswordHint": "12 حرفاً على الأقل.",
+        "cancel": "إلغاء",
+        "saving": "جارٍ الحفظ…",
+        "save": "حفظ كلمة المرور",
+        "tooShort": "يجب ألا تقل كلمة المرور الجديدة عن 12 حرفاً.",
+        "mismatch": "كلمتا المرور الجديدتان غير متطابقتين.",
+        "success": "تم تغيير كلمة المرور. سيتم تسجيل خروجك الآن.",
+        "currentIncorrect": "كلمة المرور الحالية غير صحيحة."
+      },
+      "accountInfo": {
+        "title": "معلومات الحساب",
+        "subtitle": "بيانات الحساب التي ستظهر في الفواتير والمستندات الرسمية",
+        "changingLogo": "جارٍ الرفع…",
+        "changeLogo": "تغيير الشعار",
+        "accountName": "اسم الحساب",
+        "commercialRegistration": "رقم السجل التجاري",
+        "taxNumber": "الرقم الضريبي",
+        "phone": "رقم الهاتف",
+        "email": "البريد الإلكتروني",
+        "website": "الموقع الإلكتروني"
+      },
+      "nationalAddress": {
+        "title": "معلومات العنوان الوطني",
+        "subtitle": "أدخل بيانات العنوان الوطني لاستخدامها في الفواتير والمستندات",
+        "addressShort": "العنوان المختصر",
+        "addressShortPlaceholder": "حي العليا",
+        "buildingNumber": "رقم المبنى",
+        "street": "الشارع",
+        "streetPlaceholder": "طريق الملك فهد",
+        "secondaryNumber": "الرقم الفرعي",
+        "district": "الحي",
+        "districtPlaceholder": "العليا",
+        "postalCode": "الرمز البريدي",
+        "city": "المدينة",
+        "cityPlaceholder": "الرياض"
+      },
+      "regional": {
+        "title": "الإعدادات الإقليمية",
+        "subtitle": "تحديد اللغة والمنطقة الزمنية والعملة",
+        "languageLabel": "اللغة",
+        "languagePlaceholder": "اختر اللغة",
+        "timezoneLabel": "المنطقة الزمنية",
+        "timezonePlaceholder": "اختر المنطقة الزمنية",
+        "currencyLabel": "العملة (عملة التقارير)",
+        "currencyPlaceholder": "اختر العملة",
+        "countryLabel": "الدولة",
+        "countryPlaceholder": "اختر الدولة"
+      },
+      "notifications": {
+        "title": "إعدادات الإشعارات",
+        "subtitle": "تفعيل الإشعارات المهمة عبر القنوات المختلفة",
+        "emailNotifications": "إشعارات البريد الإلكتروني",
+        "emailNotificationsDescription": "استلام الإشعارات عبر البريد الإلكتروني",
+        "notReadyNote": "يُحفظ تفضيلك الآن، وسيبدأ الإرسال فور تفعيل خدمة الإشعارات على المنصة."
+      },
+      "security": {
+        "title": "الأمان وكلمة المرور",
+        "subtitle": "إدارة أمان حسابك وتغيير كلمة المرور"
+      },
+      "deleteAccount": {
+        "title": "حذف الحساب",
+        "description": "سيتم حذف جميع البيانات بشكل نهائي ولا يمكن التراجع عن هذا الإجراء",
+        "dialogTitle": "حذف الحساب نهائياً",
+        "dialogDescription": "سيتم حذف حساب <b>{name}</b> وجميع بياناته. لا يمكن التراجع عن هذا الإجراء. اكتب اسم الحساب للتأكيد.",
+        "unnamedFallback": "—",
+        "confirmLabel": "اسم الحساب",
+        "cancel": "إلغاء",
+        "deleting": "جارٍ الحذف…",
+        "confirmDelete": "حذف الحساب"
+      },
+      "saveChanges": "حفظ التغييرات",
+      "saving": "جارٍ الحفظ…",
+      "unsavedChanges": "لديك تغييرات غير محفوظة.",
+      "allSaved": "كل التغييرات محفوظة.",
+      "footer": {
+        "copyright": "© {year} مدار. جميع الحقوق محفوظة",
+        "privacyPolicy": "سياسة الخصوصية",
+        "termsOfService": "الشروط والأحكام"
+      },
+      "toasts": {
+        "logoUpdated": "تم تحديث الشعار",
+        "logoUploadFailed": "تعذّر رفع الشعار",
+        "settingsSaved": "تم حفظ الإعدادات",
+        "saveFailed": "تعذّر الحفظ. حاول مرة أخرى.",
+        "deleteFailed": "تعذّر حذف الحساب. حاول مرة أخرى."
+      }
+    },
+    "devices": {
+      "breadcrumbCurrent": "إعدادات الأجهزة",
+      "title": "إعدادات الأجهزة",
+      "subtitle": "إدارة وإعداد جميع الأجهزة المتصلة بنظام مدار مثل الموازين، طابعات الفواتير، ماسحات الباركود وغيرها.",
+      "loading": "جارٍ تحميل إعدادات الأجهزة...",
+      "loadErrors": {
+        "forbidden": "لا تملك صلاحية عرض إعدادات الأجهزة.",
+        "generic": "تعذر تحميل إعدادات الأجهزة. حاول مرة أخرى."
+      },
+      "retry": "إعادة المحاولة",
+      "types": {
+        "scale": {
+          "label": "ميزان إلكتروني",
+          "definite": "الميزان الإلكتروني",
+          "plural": "الموازين الإلكترونية",
+          "addLabel": "إضافة ميزان"
+        },
+        "receipt_printer": {
+          "label": "طابعة فواتير",
+          "definite": "طابعة الفواتير",
+          "plural": "طابعات الفواتير",
+          "addLabel": "إضافة طابعة"
+        },
+        "barcode_scanner": {
+          "label": "ماسح باركود",
+          "definite": "ماسح الباركود",
+          "plural": "ماسحات الباركود",
+          "addLabel": "إضافة ماسح باركود"
+        },
+        "cash_drawer": {
+          "label": "درج نقود",
+          "definite": "درج النقود",
+          "plural": "أدراج النقود",
+          "addLabel": "إضافة درج نقود"
+        },
+        "customer_display": {
+          "label": "شاشة عميل",
+          "definite": "شاشة العميل",
+          "plural": "شاشات العملاء",
+          "addLabel": "إضافة شاشة عميل"
+        },
+        "card_reader": {
+          "label": "قارئ بطاقات",
+          "definite": "قارئ البطاقات",
+          "plural": "قارئات البطاقات",
+          "addLabel": "إضافة قارئ بطاقات"
+        }
+      },
+      "printerRoles": {
+        "receipt": "إيصالات",
+        "kitchen": "مطبخ",
+        "bar": "بار"
+      },
+      "connections": {
+        "usb": "USB",
+        "network": "شبكة",
+        "bluetooth": "بلوتوث",
+        "serial": "منفذ تسلسلي"
+      },
+      "lastSeen": {
+        "now": "الآن",
+        "never": "—"
+      },
+      "allDevicesTile": {
+        "label": "جميع الأجهزة",
+        "sub": "عرض جميع الأجهزة المتصلة"
+      },
+      "tileSub": "إعدادات {plural}",
+      "section": {
+        "allHeading": "الأجهزة المتصلة",
+        "typeHeading": "{plural} المتصلة",
+        "allSubtitle": "قائمة بجميع الأجهزة وإعداداتها وحالة الاتصال.",
+        "typeSubtitle": "قائمة بجميع {plural} وإعداداتها وحالة الاتصال."
+      },
+      "search": {
+        "allPlaceholder": "البحث عن جهاز، موديل أو منفذ اتصال...",
+        "typePlaceholder": "البحث عن {label} بالاسم أو الموديل أو المنفذ..."
+      },
+      "filters": {
+        "allTypes": "جميع الأنواع",
+        "allStatuses": "جميع الحالات",
+        "online": "متصل",
+        "offline": "غير متصل"
+      },
+      "empty": {
+        "noDevicesYet": "لا توجد أجهزة مسجلة بعد.",
+        "allNoMatch": "لا توجد أجهزة مطابقة لهذا البحث أو التصفية.",
+        "typeNoMatch": "لا توجد {plural} مطابقة لهذا البحث أو التصفية."
+      },
+      "table": {
+        "name": "اسم الجهاز",
+        "type": "النوع",
+        "model": "الموديل",
+        "port": "منفذ الاتصال",
+        "status": "الحالة",
+        "lastSeen": "آخر اتصال",
+        "actions": "الإجراءات"
+      },
+      "pagination": {
+        "showingRange": "عرض {from} - {to} من {total} أجهزة",
+        "previousAriaLabel": "الصفحة السابقة",
+        "nextAriaLabel": "الصفحة التالية"
+      },
+      "rowActions": {
+        "ariaLabel": "إجراءات الجهاز",
+        "edit": "تعديل الجهاز",
+        "delete": "حذف الجهاز"
+      },
+      "deleteDialog": {
+        "title": "حذف الجهاز؟",
+        "description": "سيتم حذف <b>{name}</b> من قائمة الأجهزة.",
+        "confirm": "حذف",
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "deleted": "تم حذف الجهاز.",
+        "deleteFailed": "تعذر حذف الجهاز."
+      }
+    },
+    "deviceForm": {
+      "loading": "جارٍ تحميل الجهاز...",
+      "editTitle": "تعديل الجهاز",
+      "addTypeTitle": "إضافة {type}",
+      "addGenericTitle": "إضافة جهاز جديد",
+      "subtitle": "قم بإعداد جهاز جديد وربطه بالمنفذ المناسب ليعمل مع نظام مدار.",
+      "backToDevices": "العودة إلى الأجهزة",
+      "basicInfo": {
+        "sectionTitle": "معلومات الجهاز الأساسية",
+        "deviceTypeLabel": "نوع الجهاز",
+        "nameLabel": "اسم الجهاز",
+        "namePlaceholder": "ميزان قسم الخضار",
+        "modelLabel": "الموديل",
+        "modelPlaceholder": "CAS SW-1",
+        "descriptionLabel": "وصف اختياري",
+        "descriptionPlaceholder": "الميزان المستخدم في قسم الخضار والفواكه",
+        "portLabel": "المنفذ",
+        "portPlaceholder": "COM3",
+        "connectionTypeLabel": "نوع الاتصال",
+        "baudRateLabel": "السرعة (Baud Rate)",
+        "baudRateAriaLabel": "السرعة"
+      },
+      "validation": {
+        "nameRequired": "اسم الجهاز مطلوب",
+        "modelRequired": "الموديل مطلوب",
+        "portRequired": "المنفذ مطلوب",
+        "baudRateRequired": "السرعة مطلوبة",
+        "completeRequiredFields": "أكمل الحقول المطلوبة قبل الحفظ."
+      },
+      "scale": {
+        "sectionTitle": "إعدادات الميزان",
+        "defaultWeightUnitLabel": "وحدة الوزن الافتراضية",
+        "kg": "كيلوجرام (كجم)",
+        "g": "جرام",
+        "trailingDigitsLabel": "الأرقام الأخيرة تمثل",
+        "price": "السعر",
+        "weight": "الوزن",
+        "indicatorStartLabel": "بداية مؤشر الميزان",
+        "decimalsLabel": "الجزء العشري",
+        "autoZeroLabel": "تصفير الوزن تلقائيا",
+        "autoZeroHint": "إعادة تثبيت الميزان إلى الصفر قبل قراءة الوزن.",
+        "blockUnstableLabel": "منع الإضافة إلى الكاشير",
+        "blockUnstableHint": "منع إضافة المنتج إذا كان الوزن غير مستقر."
+      },
+      "printer": {
+        "sectionTitle": "إعدادات الطابعة",
+        "roleLabel": "دور الطابعة",
+        "roles": {
+          "receipt": "إيصالات العملاء",
+          "kitchen": "شاشة المطبخ",
+          "bar": "البار"
+        },
+        "paperWidthLabel": "عرض الورق",
+        "paperWidths": {
+          "58mm": "58 مم",
+          "80mm": "80 مم"
+        },
+        "printDirectionLabel": "اتجاه الطباعة",
+        "directions": {
+          "vertical": "عمودي",
+          "horizontal": "أفقي"
+        },
+        "printDensityLabel": "كثافة الطباعة",
+        "densities": {
+          "light": "فاتحة",
+          "normal": "عادية",
+          "dark": "داكنة"
+        },
+        "charsetLabel": "ترميز الأحرف",
+        "charsets": {
+          "utf8": "UTF-8",
+          "cp1256": "CP1256 (عربي)",
+          "iso88596": "ISO-8859-6 (عربي)"
+        },
+        "networkAddressLabel": "عنوان الشبكة (IP)",
+        "footerTextLabel": "نص أسفل الإيصال",
+        "footerTextPlaceholder": "شكرا لزيارتكم",
+        "autoCutLabel": "قص الورق تلقائيا",
+        "autoCutHint": "قص الإيصال تلقائيا بعد انتهاء الطباعة.",
+        "printLogoLabel": "طباعة شعار المتجر",
+        "printLogoHint": "إضافة شعار المتجر أعلى الإيصال.",
+        "extraCopyLabel": "طباعة نسخة إضافية",
+        "extraCopyHint": "طباعة نسخة ثانية من كل إيصال."
+      },
+      "testDevice": {
+        "title": "اختبار الجهاز",
+        "description": "بعد حفظ الجهاز يمكنك اختبار الاتصال للتأكد من أن الجهاز يعمل بشكل صحيح.",
+        "buttonTitle": "اختبار الاتصال يتطلب تطبيق نقطة البيع على جهاز الكاشير",
+        "buttonLabel": "اختبار الاتصال",
+        "availabilityNote": "متاح من تطبيق الكاشير على الجهاز نفسه"
+      },
+      "quickSteps": {
+        "title": "تعليمات سريعة",
+        "steps": [
+          "اختر نوع الجهاز والموديل.",
+          "تأكد من توصيل الجهاز بالمنفذ الصحيح.",
+          "اضغط على اختبار الاتصال للتأكد من عمل الجهاز.",
+          "احفظ الإعدادات."
+        ]
+      },
+      "saving": "جارٍ الحفظ...",
+      "save": "حفظ الجهاز",
+      "cancel": "إلغاء",
+      "toasts": {
+        "loadFailed": "تعذر تحميل الجهاز.",
+        "updated": "تم حفظ الجهاز.",
+        "created": "تمت إضافة الجهاز.",
+        "forbidden": "لا تملك صلاحية إدارة الأجهزة.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
+        "saveFailed": "تعذر حفظ الجهاز."
+      }
+    },
+    "cashier": {
+      "title": "إعدادات الكاشير",
+      "subtitle": "إدارة إعدادات نقطة البيع بما يناسب طبيعة منشأتك",
+      "loading": "جارٍ التحميل...",
+      "loadError": "تعذر تحميل إعدادات الكاشير.",
+      "sale": {
+        "sectionTitle": "إعدادات البيع",
+        "allowBelowCostSale": {
+          "title": "السماح بالبيع بأقل من التكلفة",
+          "description": "السماح بإتمام البيع إذا كان سعر البيع أقل من تكلفة المنتج"
+        },
+        "allowOutOfStockSale": {
+          "title": "السماح بالبيع عند نفاد المخزون",
+          "description": "السماح بإتمام البيع حتى لو كانت كمية المنتج في المخزون صفرًا"
+        },
+        "confirmSale": {
+          "title": "تأكيد عملية البيع",
+          "description": "إظهار رسالة تأكيد قبل إتمام عملية البيع"
+        },
+        "autoOpenCashDrawer": {
+          "title": "فتح درج النقد تلقائياً",
+          "description": "فتح درج النقد مباشرة بعد إتمام الدفع (يتطلب جهازًا مقترنًا عبر متصفح Chrome)"
+        },
+        "allowManualPriceEdit": {
+          "title": "السماح بتعديل السعر يدوياً",
+          "description": "السماح للكاشير بتعديل سعر المنتج أثناء البيع"
+        },
+        "applyDiscounts": {
+          "title": "تطبيق الخصومات",
+          "description": "السماح بتطبيق الخصومات على المبيعات"
+        }
+      },
+      "print": {
+        "sectionTitle": "إعدادات الطباعة",
+        "defaultPrinterLabel": "الطابعة الافتراضية",
+        "noDefaultPrinter": "بدون طابعة افتراضية",
+        "paperWidthLabel": "حجم الورق",
+        "autoPrintInvoice": {
+          "title": "طباعة الفاتورة تلقائياً",
+          "description": "طباعة الفاتورة بعد إتمام عملية البيع"
+        },
+        "printKitchenCopy": {
+          "title": "طباعة نسخة للمطبخ",
+          "description": "إضافة نسخة للمطبخ (للمطاعم والمقاهي)"
+        },
+        "copiesCountLabel": "عدد النسخ",
+        "testPrint": "اختبار الطباعة",
+        "testingPrint": "جارٍ الاختبار...",
+        "toasts": {
+          "unsupported": "هذا المتصفح لا يدعم Web Serial (استخدم Chrome أو Edge).",
+          "success": "تم إرسال أمر الاختبار إلى الجهاز بنجاح.",
+          "failed": "فشل الاتصال بالجهاز."
+        }
+      },
+      "payment": {
+        "sectionTitle": "إعدادات الدفع",
+        "showQuickPaymentScreen": {
+          "title": "الدفع السريع",
+          "description": "عند فتح شاشة الدفع، تُعبَّأ أول وسيلة دفع مفعّلة بكامل المبلغ تلقائيًا"
+        },
+        "allowSplitPayment": {
+          "title": "السماح بأكثر من وسيلة دفع",
+          "description": "إمكانية تقسيم المبلغ على أكثر من وسيلة دفع"
+        },
+        "rememberLastPaymentMethod": {
+          "title": "الاحتفاظ بآخر وسيلة دفع",
+          "description": "تذكر آخر وسيلة دفع مستخدمة"
+        },
+        "requirePaymentMethodSelection": {
+          "title": "إلزام اختيار وسيلة دفع",
+          "description": "يجب اختيار وسيلة دفع لاتمام البيع"
+        }
+      },
+      "interface": {
+        "sectionTitle": "إعدادات الواجهة",
+        "showProductImages": {
+          "title": "عرض صور المنتجات",
+          "description": "إظهار صور المنتجات في شاشة الكاشير"
+        },
+        "useCompactMode": {
+          "title": "استخدام الوضع المبسط",
+          "description": "شبكة منتجات أكثر كثافة (بطاقات أصغر) لعرض عدد أكبر دون تمرير"
+        },
+        "showCategoryPanel": {
+          "title": "إظهار لوحة المجموعات",
+          "description": "إظهار تصنيفات المنتجات في الشاشة الرئيسية"
+        },
+        "showGridView": {
+          "title": "زر عرض الشبكة",
+          "description": "إظهار زر التبديل إلى عرض شبكة المنتجات بجانب مربع البحث"
+        },
+        "showListView": {
+          "title": "زر عرض القائمة",
+          "description": "إظهار زر التبديل إلى عرض قائمة عناصر السلة بجانب مربع البحث"
+        }
+      },
+      "scanner": {
+        "sectionTitle": "إعدادات الماسح الضوئي",
+        "enableBarcodeScanner": {
+          "title": "تفعيل قارئ الباركود",
+          "description": "استخدام قارئ الباركود في الكاشير"
+        },
+        "playScanSound": {
+          "title": "تشغيل صوت المسح",
+          "description": "إصدار صوت عند قراءة الباركود"
+        }
+      },
+      "saving": "جارٍ الحفظ...",
+      "save": "حفظ الإعدادات",
+      "toasts": {
+        "saved": "تم حفظ إعدادات الكاشير بنجاح.",
+        "saveFailed": "تعذر حفظ إعدادات الكاشير."
+      }
+    }
   }
 }
