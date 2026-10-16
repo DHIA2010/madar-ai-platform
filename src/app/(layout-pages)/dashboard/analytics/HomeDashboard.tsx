@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { subDays } from "date-fns"
+import { useLocale, useTranslations } from "next-intl"
 import { CartesianGrid, Cell, Label, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts"
 import type { DateRange } from "react-day-picker"
 import {
@@ -23,6 +24,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 
 import { AppButton, AppCard, AppDateRangeFilter, RelativeTime } from "@/components/app"
 import { PlatformBadge, PLATFORM_ICON } from "@/components/platform-badge"
@@ -51,16 +53,18 @@ import { useConnectionsCenter } from "@/features/integrations/hooks/use-connecti
 
 // Mirrors connections-overview.tsx's own CONNECTION_STATUS_META -- kept as a small local copy
 // rather than importing from that file, since it isn't exported and this card only needs the
-// label/className, not the rest of that component's surface.
-const CONNECTION_STATUS_META: Record<string, { label: string; className: string }> = {
-  connected: { label: "متصل", className: "bg-emerald-50 text-emerald-600" },
-  valid: { label: "متصل", className: "bg-emerald-50 text-emerald-600" },
-  authorized: { label: "متصل", className: "bg-emerald-50 text-emerald-600" },
-  paused: { label: "متوقف", className: "bg-amber-50 text-amber-600" },
-  disconnected: { label: "خطأ", className: "bg-rose-50 text-rose-600" },
-  error: { label: "خطأ", className: "bg-rose-50 text-rose-600" },
-  draft: { label: "مسودة", className: "bg-slate-50 text-slate-600" },
-  syncing: { label: "قيد المزامنة", className: "bg-blue-50 text-blue-600" },
+// label/className, not the rest of that component's surface. Label is resolved via t() at render
+// time (keyed by `key` below) rather than stored here, since this is module scope and can't call
+// the translation hook.
+const CONNECTION_STATUS_META: Record<string, { key: string; className: string }> = {
+  connected: { key: "connected", className: "bg-emerald-50 text-emerald-600" },
+  valid: { key: "connected", className: "bg-emerald-50 text-emerald-600" },
+  authorized: { key: "connected", className: "bg-emerald-50 text-emerald-600" },
+  paused: { key: "paused", className: "bg-amber-50 text-amber-600" },
+  disconnected: { key: "error", className: "bg-rose-50 text-rose-600" },
+  error: { key: "error", className: "bg-rose-50 text-rose-600" },
+  draft: { key: "draft", className: "bg-slate-50 text-slate-600" },
+  syncing: { key: "syncing", className: "bg-blue-50 text-blue-600" },
 }
 
 const KPI_TONE_CLASSNAMES = {
@@ -83,18 +87,20 @@ interface HomeKpi {
   tone: KpiTone
 }
 
-const quickActions = [
-  { label: "إنشاء حملة جديدة", icon: Megaphone, href: ROUTES.campaignsCreate },
-  { label: "تقرير مخصص", icon: CreditCard, href: ROUTES.reports },
-  { label: "مزامنة جميع القنوات", icon: RefreshCcw, href: ROUTES.integrations },
-  { label: "إضافة قناة جديدة", icon: Plus, href: ROUTES.integrationsNew },
-]
+// key resolved via t() at render time, same reasoning as CONNECTION_STATUS_META above.
+const QUICK_ACTIONS = [
+  { key: "newCampaign", icon: Megaphone, href: ROUTES.campaignsCreate },
+  { key: "customReport", icon: CreditCard, href: ROUTES.reports },
+  { key: "syncAllChannels", icon: RefreshCcw, href: ROUTES.integrations },
+  { key: "addChannel", icon: Plus, href: ROUTES.integrationsNew },
+] as const
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("ar", { maximumFractionDigits: 0 }).format(value)
+function formatMoney(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)
 }
 
 function KpiCard({ kpi }: { kpi: HomeKpi }) {
+  const t = useTranslations("dashboard")
   const Icon = kpi.icon
   const trend = kpi.deltaPct === null ? null : kpi.deltaPct >= 0 ? "up" : "down"
   const TrendIcon = trend === "down" ? ArrowDownRight : ArrowUpRight
@@ -131,7 +137,7 @@ function KpiCard({ kpi }: { kpi: HomeKpi }) {
               ? `${kpi.deltaPct > 0 ? "+" : ""}${kpi.deltaPct.toFixed(1)}%`
               : ""}
           </span>
-          <span className="text-muted-foreground">عن الفترة السابقة</span>
+          <span className="text-muted-foreground">{t("kpis.vsPreviousPeriod")}</span>
         </div>
       ) : null}
     </AppCard>
@@ -170,6 +176,9 @@ function groupPlatformRows(rows: CampaignPerformancePlatformRow[]) {
 }
 
 export default function HomeDashboard() {
+  const t = useTranslations("dashboard")
+  const tCommon = useTranslations("common")
+  const locale = useLocale()
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date()
     return { from: subDays(today, 29), to: today }
@@ -210,7 +219,9 @@ export default function HomeDashboard() {
         setLastUpdatedAt(new Date().toISOString())
       } catch (error) {
         if (cancelled) return
-        setLoadError(error instanceof Error ? error.message : "تعذر تحميل بيانات لوحة التحكم.")
+        // Empty string is the sentinel for "no specific message, use the generic translated
+        // fallback at render time" -- t() can't be called from inside a catch handler's closure.
+        setLoadError(error instanceof Error ? error.message : "")
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -226,23 +237,23 @@ export default function HomeDashboard() {
     if (!summary) return []
     return [
       {
-        label: "إجمالي الإنفاق",
-        value: formatMoney(summary.spend),
+        label: t("kpis.spend"),
+        value: formatMoney(summary.spend, locale),
         unit: "SAR",
         deltaPct: summary.spendChangePct,
         icon: Wallet,
         tone: "blue",
       },
       {
-        label: "إجمالي الإيرادات",
-        value: formatMoney(summary.revenue),
+        label: t("kpis.revenue"),
+        value: formatMoney(summary.revenue, locale),
         unit: "SAR",
         deltaPct: summary.revenueChangePct,
         icon: TrendingUp,
         tone: "green",
       },
       {
-        label: "ROAS",
+        label: t("kpis.roas"),
         value: summary.roas.toFixed(2),
         unit: "",
         deltaPct: summary.roasChangePct,
@@ -250,23 +261,23 @@ export default function HomeDashboard() {
         tone: "violet",
       },
       {
-        label: "إجمالي التحويلات",
-        value: formatMoney(summary.conversions),
+        label: t("kpis.conversions"),
+        value: formatMoney(summary.conversions, locale),
         unit: "",
         deltaPct: summary.conversionsChangePct,
         icon: Users,
         tone: "orange",
       },
       {
-        label: "متوسط CPA",
-        value: formatMoney(summary.cpa),
+        label: t("kpis.cpa"),
+        value: formatMoney(summary.cpa, locale),
         unit: "SAR",
         deltaPct: summary.cpaChangePct,
         icon: MousePointerClick,
         tone: "rose",
       },
       {
-        label: "معدل التحويل",
+        label: t("kpis.conversionRate"),
         value: summary.conversionRate.toFixed(1),
         unit: "%",
         deltaPct: summary.conversionRateChangePct,
@@ -274,7 +285,7 @@ export default function HomeDashboard() {
         tone: "indigo",
       },
     ]
-  }, [summary])
+  }, [summary, t, locale])
 
   const groupedPlatformRows = useMemo(() => groupPlatformRows(platformRows), [platformRows])
 
@@ -297,18 +308,18 @@ export default function HomeDashboard() {
       config[item.channel] = { label: item.label, color: item.color }
       return config
     },
-    { value: { label: "الإنفاق" } } as ChartConfig
+    { value: { label: t("charts.spendLabel") } } as ChartConfig
   )
 
   const trendChartData = useMemo(
     () =>
       trendPoints.map((point) => ({
-        date: new Intl.DateTimeFormat("ar", { day: "numeric", month: "short" }).format(
+        date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(
           new Date(point.bucketStart)
         ),
         ...point.spendByChannel,
       })),
-    [trendPoints]
+    [trendPoints, locale]
   )
   const trendChannelNames = useMemo(() => {
     const names = new Set<string>()
@@ -325,6 +336,11 @@ export default function HomeDashboard() {
   const topCampaigns = useMemo(
     () => [...campaignRows].sort((a, b) => b.roas - a.roas).slice(0, 4),
     [campaignRows]
+  )
+
+  const quickActions = useMemo(
+    () => QUICK_ACTIONS.map((action) => ({ ...action, label: t(`quickActions.${action.key}`) })),
+    [t]
   )
 
   // Every card below states a real number already fetched on this page -- there is no AI
@@ -345,8 +361,8 @@ export default function HomeDashboard() {
       cards.push({
         icon: TrendingUp,
         tone: "bg-emerald-50 text-emerald-600",
-        title: `${bestRoas.platformNodeKey} يحقق أفضل عائد`,
-        description: `بمعدل ${bestRoas.roas.toFixed(2)}x عائد على الإنفاق في هذه الفترة.`,
+        title: t("insights.bestRoasTitle", { platform: bestRoas.platformNodeKey }),
+        description: t("insights.bestRoasDescription", { roas: bestRoas.roas.toFixed(2) }),
       })
     }
 
@@ -357,8 +373,10 @@ export default function HomeDashboard() {
       cards.push({
         icon: RefreshCcw,
         tone: "bg-amber-50 text-amber-600",
-        title: `لا حملات نشطة على ${dormant.platformNodeKey}`,
-        description: `${dormant.impressions.toLocaleString()} ظهور مسجّل دون أي حملة نشطة حالياً.`,
+        title: t("insights.dormantTitle", { platform: dormant.platformNodeKey }),
+        description: t("insights.dormantDescription", {
+          impressions: dormant.impressions.toLocaleString(locale),
+        }),
       })
     }
 
@@ -369,33 +387,36 @@ export default function HomeDashboard() {
       cards.push({
         icon: Target,
         tone: "bg-blue-50 text-blue-600",
-        title: "فرصة لتحسين الاستهداف",
-        description: `${weakestCtr.platformNodeKey} يسجل أدنى معدل نقر (${weakestCtr.ctr.toFixed(2)}%).`,
+        title: t("insights.weakCtrTitle"),
+        description: t("insights.weakCtrDescription", {
+          platform: weakestCtr.platformNodeKey,
+          ctr: weakestCtr.ctr.toFixed(2),
+        }),
       })
     }
 
     return cards
-  }, [groupedPlatformRows])
+  }, [groupedPlatformRows, t, locale])
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={localeDirection(locale as Locale)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">الرئيسية</h1>
-          <p className="text-sm text-muted-foreground">نظرة عامة على أداء متجرك التسويقي</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("heading")}</h1>
+          <p className="text-sm text-muted-foreground">{t("subheading")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <AppDateRangeFilter value={dateRange} onChange={setDateRange} />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="size-2 rounded-full bg-emerald-500" />
-            آخر تحديث: <RelativeTime value={lastUpdatedAt} fallback="—" />
+            {t("lastUpdated")} <RelativeTime value={lastUpdatedAt} fallback="—" />
           </div>
         </div>
       </div>
 
-      {loadError ? (
+      {loadError !== null ? (
         <AppCard className="rounded-2xl border-destructive/40 p-5 text-sm text-destructive">
-          {loadError}
+          {loadError || t("loadError")}
         </AppCard>
       ) : null}
 
@@ -408,14 +429,9 @@ export default function HomeDashboard() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[7fr_3fr]">
-        <AppCard
-          title="اتجاه الإنفاق حسب القناة"
-          className="rounded-2xl border-border/60 shadow-sm"
-        >
+        <AppCard title={t("charts.spendTrend")} className="rounded-2xl border-border/60 shadow-sm">
           {trendChartData.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              لا توجد بيانات كافية لهذه الفترة.
-            </p>
+            <p className="py-10 text-center text-sm text-muted-foreground">{t("empty.trend")}</p>
           ) : (
             <ChartContainer config={trendChartConfig} className="h-72 w-full" dir="ltr">
               <LineChart data={trendChartData} margin={{ left: 4, right: 4 }}>
@@ -444,9 +460,12 @@ export default function HomeDashboard() {
           )}
         </AppCard>
 
-        <AppCard title="الأداء حسب القناة" className="rounded-2xl border-border/60 shadow-sm">
+        <AppCard
+          title={t("charts.channelPerformance")}
+          className="rounded-2xl border-border/60 shadow-sm"
+        >
           {channelBreakdown.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">لا توجد بيانات بعد.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">{t("empty.channel")}</p>
           ) : (
             <div className="flex flex-col items-center gap-4">
               <ChartContainer
@@ -482,14 +501,14 @@ export default function HomeDashboard() {
                               y={(viewBox.cy ?? 0) - 8}
                               className="fill-foreground text-xl font-bold"
                             >
-                              {totalChannelSpend.toLocaleString()}
+                              {totalChannelSpend.toLocaleString(locale)}
                             </tspan>
                             <tspan
                               x={viewBox.cx}
                               y={(viewBox.cy ?? 0) + 14}
                               className="fill-muted-foreground text-xs"
                             >
-                              SAR إجمالي الإنفاق
+                              {t("charts.totalSpend")} SAR
                             </tspan>
                           </text>
                         )
@@ -509,7 +528,7 @@ export default function HomeDashboard() {
                       <span className="text-foreground">{item.label}</span>
                     </div>
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <span>{item.value.toLocaleString()} SAR</span>
+                      <span>{item.value.toLocaleString(locale)} SAR</span>
                       <span className="font-medium text-foreground">{item.share}%</span>
                     </div>
                   </div>
@@ -520,20 +539,21 @@ export default function HomeDashboard() {
         </AppCard>
       </div>
 
-      <AppCard title="أفضل الحملات أداءً" className="rounded-2xl border-border/60 shadow-sm">
+      <AppCard
+        title={t("campaigns.topPerforming")}
+        className="rounded-2xl border-border/60 shadow-sm"
+      >
         {topCampaigns.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            لا توجد حملات لهذه الفترة.
-          </p>
+          <p className="py-10 text-center text-sm text-muted-foreground">{t("empty.campaigns")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-start text-xs text-muted-foreground">
-                  <th className="pb-3 text-start font-medium">الحملة</th>
-                  <th className="pb-3 text-start font-medium">الإيرادات</th>
-                  <th className="pb-3 text-start font-medium">الإنفاق</th>
-                  <th className="pb-3 text-start font-medium">ROAS</th>
+                  <th className="pb-3 text-start font-medium">{t("campaigns.table.campaign")}</th>
+                  <th className="pb-3 text-start font-medium">{t("campaigns.table.revenue")}</th>
+                  <th className="pb-3 text-start font-medium">{t("campaigns.table.spend")}</th>
+                  <th className="pb-3 text-start font-medium">{t("campaigns.table.roas")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -547,9 +567,11 @@ export default function HomeDashboard() {
                           <span className="font-medium text-foreground">{campaign.name}</span>
                         </div>
                       </td>
-                      <td className="py-3 text-foreground">{formatMoney(campaign.revenue)} SAR</td>
+                      <td className="py-3 text-foreground">
+                        {formatMoney(campaign.revenue, locale)} SAR
+                      </td>
                       <td className="py-3 text-muted-foreground">
-                        {formatMoney(campaign.spend)} SAR
+                        {formatMoney(campaign.spend, locale)} SAR
                       </td>
                       <td className="py-3">
                         <div className="flex items-center gap-2">
@@ -580,21 +602,17 @@ export default function HomeDashboard() {
               <Sparkles className="size-5" />
             </div>
             <div>
-              <p className="font-semibold text-foreground">ملاحظات على أدائك</p>
-              <p className="text-sm text-muted-foreground">
-                نقاط محسوبة مباشرة من أرقام حسابك الحالية
-              </p>
+              <p className="font-semibold text-foreground">{t("insights.title")}</p>
+              <p className="text-sm text-muted-foreground">{t("insights.subtitle")}</p>
             </div>
           </div>
           <AppButton variant="ghost" size="sm" asChild>
-            <Link href={ROUTES.campaigns}>عرض الحملات</Link>
+            <Link href={ROUTES.campaigns}>{t("campaigns.viewAll")}</Link>
           </AppButton>
         </div>
 
         {insights.length === 0 ? (
-          <p className="mt-4 text-sm text-muted-foreground">
-            لا توجد بيانات كافية لعرض ملاحظات لهذه الفترة.
-          </p>
+          <p className="mt-4 text-sm text-muted-foreground">{t("insights.empty")}</p>
         ) : (
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {insights.map((item) => {
@@ -619,7 +637,7 @@ export default function HomeDashboard() {
       </AppCard>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <AppCard title="إجراءات سريعة" className="rounded-2xl border-border/60 shadow-sm">
+        <AppCard title={t("quickActions.title")} className="rounded-2xl border-border/60 shadow-sm">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {quickActions.map((action) => {
               const Icon = action.icon
@@ -639,23 +657,24 @@ export default function HomeDashboard() {
           </div>
         </AppCard>
 
-        <AppCard title="حالة التكاملات" className="rounded-2xl border-border/60 shadow-sm">
+        <AppCard title={t("integrations.title")} className="rounded-2xl border-border/60 shadow-sm">
           {connectionsLoading && connectionRecords.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">{tCommon("loading")}</p>
           ) : connectionRecords.length === 0 ? (
             <div className="space-y-3 text-center">
-              <p className="text-sm text-muted-foreground">لا توجد تكاملات متصلة بعد.</p>
+              <p className="text-sm text-muted-foreground">{t("integrations.empty")}</p>
               <AppButton size="sm" asChild>
-                <Link href={ROUTES.integrationsNew}>إضافة تكامل</Link>
+                <Link href={ROUTES.integrationsNew}>{t("integrations.add")}</Link>
               </AppButton>
             </div>
           ) : (
             <div className="space-y-3">
               {connectionRecords.slice(0, 5).map((record) => {
-                const statusMeta = CONNECTION_STATUS_META[record.connection.status] ?? {
-                  label: record.connection.status,
-                  className: "bg-slate-50 text-slate-600",
-                }
+                const statusEntry = CONNECTION_STATUS_META[record.connection.status]
+                const statusLabel = statusEntry
+                  ? t(`connectionStatus.${statusEntry.key}`)
+                  : record.connection.status
+                const statusClassName = statusEntry?.className ?? "bg-slate-50 text-slate-600"
                 return (
                   <div key={record.connectorId} className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
@@ -663,17 +682,20 @@ export default function HomeDashboard() {
                       <div>
                         <p className="text-sm font-medium text-foreground">{record.platformName}</p>
                         <p className="text-xs text-muted-foreground">
-                          <RelativeTime value={record.lastSyncAt} fallback="لم تتم المزامنة بعد" />
+                          <RelativeTime
+                            value={record.lastSyncAt}
+                            fallback={t("integrations.notSyncedYet")}
+                          />
                         </p>
                       </div>
                     </div>
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-xs font-medium",
-                        statusMeta.className
+                        statusClassName
                       )}
                     >
-                      {statusMeta.label}
+                      {statusLabel}
                     </span>
                   </div>
                 )

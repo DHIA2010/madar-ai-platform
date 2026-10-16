@@ -7,7 +7,8 @@
     "help": "Help",
     "next": "Next",
     "back": "Back",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "loading": "Loading..."
   },
   "authShowcase": {
     "preview": {
@@ -346,5 +347,101 @@
         ]
       }
     }
+  },
+  "dashboard": {
+    "heading": "Home",
+    "subheading": "Overview of your store's marketing performance",
+    "lastUpdated": "Last updated:",
+    "loadError": "Couldn't load dashboard data.",
+    "kpis": {
+      "spend": "Total Spend",
+      "revenue": "Total Revenue",
+      "roas": "ROAS",
+      "conversions": "Total Conversions",
+      "cpa": "Average CPA",
+      "conversionRate": "Conversion Rate",
+      "vsPreviousPeriod": "vs previous period"
+    },
+    "connectionStatus": {
+      "connected": "Connected",
+      "paused": "Paused",
+      "error": "Error",
+      "draft": "Draft",
+      "syncing": "Syncing"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "newCampaign": "Create New Campaign",
+      "customReport": "Custom Report",
+      "syncAllChannels": "Sync All Channels",
+      "addChannel": "Add New Channel"
+    },
+    "charts": {
+      "spendTrend": "Spend Trend by Channel",
+      "channelPerformance": "Performance by Channel",
+      "spendLabel": "Spend",
+      "totalSpend": "Total Spend"
+    },
+    "campaigns": {
+      "topPerforming": "Top Performing Campaigns",
+      "viewAll": "View Campaigns",
+      "table": {
+        "campaign": "Campaign",
+        "revenue": "Revenue",
+        "spend": "Spend",
+        "roas": "ROAS"
+      }
+    },
+    "insights": {
+      "title": "Insights on your performance",
+      "subtitle": "Points calculated directly from your account's current numbers",
+      "bestRoasTitle": "{platform} has the best return",
+      "bestRoasDescription": "Averaging {roas}x return on spend this period.",
+      "dormantTitle": "No active campaigns on {platform}",
+      "dormantDescription": "{impressions} impressions logged without any active campaign.",
+      "weakCtrTitle": "Opportunity to improve targeting",
+      "weakCtrDescription": "{platform} has the lowest click-through rate ({ctr}%).",
+      "empty": "Not enough data to show insights for this period."
+    },
+    "integrations": {
+      "title": "Integrations Status",
+      "empty": "No integrations connected yet.",
+      "add": "Add Integration",
+      "notSyncedYet": "Not synced yet"
+    },
+    "empty": {
+      "trend": "Not enough data for this period.",
+      "channel": "No data yet.",
+      "campaigns": "No campaigns for this period."
+    }
+  },
+  "dateRangeFilter": {
+    "placeholder": "Date range",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "clear": "Clear dates",
+    "today": "Today",
+    "presets": {
+      "yesterday": "Yesterday",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "thisMonth": "This month",
+      "lastMonth": "Last month"
+    },
+    "months": [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ],
+    "weekdaysShort": ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
   }
 }

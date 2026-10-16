@@ -6,7 +6,8 @@
 // Products page's activity-date filter and promoted here so any feature needing the same
 // date-range-filter look can reuse it instead of rebuilding it.
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import {
   addMonths,
   endOfMonth,
@@ -28,45 +29,23 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 
-const MONTH_OPTIONS = [
-  "يناير",
-  "فبراير",
-  "مارس",
-  "أبريل",
-  "مايو",
-  "يونيو",
-  "يوليو",
-  "أغسطس",
-  "سبتمبر",
-  "أكتوبر",
-  "نوفمبر",
-  "ديسمبر",
-]
 const YEAR_OPTIONS = Array.from({ length: 21 }, (_, index) => 2018 + index)
 
-const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
-
-// date-fns's own Arabic locale narrow weekday format (ح ن ث ر خ ج س) is the correct CLDR
-// abbreviation, but reads as unfamiliar single letters at a glance -- these conventional
-// two-letter forms are easier to scan in a calendar cell, and match AppDateField's own weekday
-// header (see components/app/date-field.tsx) so every date picker in the app reads the same way.
-// Indexed by getDay() (0 = Sunday).
-const WEEKDAY_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
-
-function getDateRangePresets(): Array<{ label: string; range: DateRange }> {
+function getDateRangePresets(
+  t: ReturnType<typeof useTranslations<"dateRangeFilter">>
+): Array<{ label: string; range: DateRange }> {
   const today = new Date()
   const lastMonth = subMonths(today, 1)
 
   return [
-    { label: "أمس", range: { from: subDays(today, 1), to: subDays(today, 1) } },
-    { label: "آخر 7 أيام", range: { from: subDays(today, 6), to: today } },
-    { label: "آخر 30 يومًا", range: { from: subDays(today, 29), to: today } },
-    { label: "هذا الشهر", range: { from: startOfMonth(today), to: endOfMonth(today) } },
-    { label: "الشهر الماضي", range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) } },
+    { label: t("presets.yesterday"), range: { from: subDays(today, 1), to: subDays(today, 1) } },
+    { label: t("presets.last7Days"), range: { from: subDays(today, 6), to: today } },
+    { label: t("presets.last30Days"), range: { from: subDays(today, 29), to: today } },
+    { label: t("presets.thisMonth"), range: { from: startOfMonth(today), to: endOfMonth(today) } },
+    {
+      label: t("presets.lastMonth"),
+      range: { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) },
+    },
   ]
 }
 
@@ -92,22 +71,26 @@ function normalizeRange(range: DateRange | undefined): DateRange | undefined {
   }
 }
 
-function formatDateRangeLabel(range: DateRange | undefined, placeholder: string) {
+function formatDateRangeLabel(
+  range: DateRange | undefined,
+  placeholder: string,
+  formatter: Intl.DateTimeFormat
+) {
   if (!range?.from) {
     return placeholder
   }
 
   if (!range.to) {
-    return ARABIC_DATE.format(range.from)
+    return formatter.format(range.from)
   }
 
-  return `${ARABIC_DATE.format(range.from)} - ${ARABIC_DATE.format(range.to)}`
+  return `${formatter.format(range.from)} - ${formatter.format(range.to)}`
 }
 
 export function AppDateRangeFilter({
   value,
   onChange,
-  placeholder = "الفترة الزمنية",
+  placeholder,
   triggerClassName,
 }: {
   value: DateRange | undefined
@@ -115,11 +98,25 @@ export function AppDateRangeFilter({
   placeholder?: string
   triggerClassName?: string
 }) {
+  const t = useTranslations("dateRangeFilter")
+  const locale = useLocale()
   const [open, setOpen] = useState(false)
   const [displayMonth, setDisplayMonth] = useState<Date>(value?.from ?? new Date())
   const [rangeAnchor, setRangeAnchor] = useState<Date | undefined>(undefined)
   const monthIndex = getMonth(displayMonth)
   const yearValue = getYear(displayMonth)
+
+  const monthOptions = t.raw("months") as string[]
+  const weekdayShort = t.raw("weekdaysShort") as string[]
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+    [locale]
+  )
 
   return (
     <Popover
@@ -144,7 +141,9 @@ export function AppDateRangeFilter({
           )}
         >
           <CalendarIcon className="size-4 shrink-0 text-[#95a4bd]" />
-          <span className="truncate">{formatDateRangeLabel(value, placeholder)}</span>
+          <span className="truncate">
+            {formatDateRangeLabel(value, placeholder ?? t("placeholder"), dateFormatter)}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -161,7 +160,7 @@ export function AppDateRangeFilter({
             variant="ghost"
             className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
             onClick={() => setDisplayMonth((current) => addMonths(current, -1))}
-            aria-label="الشهر السابق"
+            aria-label={t("prevMonth")}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -174,7 +173,7 @@ export function AppDateRangeFilter({
               }}
             >
               <SelectTrigger className="h-9 w-[7.75rem] rounded-full border border-border bg-muted/60 px-3 text-sm font-semibold text-foreground shadow-none transition-all hover:border-sky-400/35 hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-400/35">
-                <span>{MONTH_OPTIONS[monthIndex]}</span>
+                <span>{monthOptions[monthIndex]}</span>
               </SelectTrigger>
               <SelectContent
                 position="popper"
@@ -182,7 +181,7 @@ export function AppDateRangeFilter({
                 align="center"
                 sideOffset={4}
               >
-                {MONTH_OPTIONS.map((monthLabel, index) => (
+                {monthOptions.map((monthLabel, index) => (
                   <SelectItem
                     key={monthLabel}
                     value={String(index)}
@@ -228,7 +227,7 @@ export function AppDateRangeFilter({
             variant="ghost"
             className="size-8 rounded-full border border-border bg-muted/60 text-muted-foreground transition-all hover:border-sky-400/45 hover:bg-sky-500/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-sky-400/35"
             onClick={() => setDisplayMonth((current) => addMonths(current, 1))}
-            aria-label="الشهر التالي"
+            aria-label={t("nextMonth")}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -264,7 +263,7 @@ export function AppDateRangeFilter({
           endMonth={new Date(2038, 11)}
           captionLayout="label"
           formatters={{
-            formatWeekdayName: (date) => WEEKDAY_SHORT[date.getDay()],
+            formatWeekdayName: (date) => weekdayShort[date.getDay()],
           }}
           className="rounded-[18px] bg-transparent p-0 [--cell-size:32px]"
           classNames={{
@@ -300,7 +299,7 @@ export function AppDateRangeFilter({
         />
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
-          {getDateRangePresets().map((preset) => (
+          {getDateRangePresets(t).map((preset) => (
             <button
               key={preset.label}
               type="button"
@@ -330,7 +329,7 @@ export function AppDateRangeFilter({
               setOpen(false)
             }}
           >
-            مسح التاريخ
+            {t("clear")}
           </Button>
           <Button
             type="button"
@@ -344,7 +343,7 @@ export function AppDateRangeFilter({
               setOpen(false)
             }}
           >
-            اليوم
+            {t("today")}
           </Button>
         </div>
       </PopoverContent>
