@@ -5145,5 +5145,138 @@
         }
       }
     }
+  },
+  "account": {
+    "editProfile": {
+      "title": "Edit profile",
+      "subtitle": "Update your name and profile photo.",
+      "uploadPhoto": "Upload new photo",
+      "uploading": "Uploading…",
+      "remove": "Remove",
+      "removing": "Removing…",
+      "photoHint": "Optional. PNG, JPEG, WEBP, or GIF, up to 3MB.",
+      "nameLabel": "Name",
+      "emailLabel": "Email",
+      "saveChanges": "Save changes",
+      "saving": "Saving…",
+      "initialsFallback": "?",
+      "toasts": {
+        "profileUpdated": "Profile updated",
+        "profileUpdateFailed": "Failed to update profile",
+        "photoUpdated": "Profile photo updated",
+        "photoUploadFailed": "Failed to upload photo",
+        "photoRemoved": "Profile photo removed",
+        "photoRemoveFailed": "Failed to remove photo"
+      }
+    },
+    "notifications": {
+      "title": "Notification Settings",
+      "newForYou": "New for you",
+      "accountActivity": "Account activity",
+      "newBrowserSignIn": "A new browser used to sign in",
+      "newDeviceLinked": "A new device is linked",
+      "weeklyReports": "Weekly reports",
+      "saveChanges": "Save changes"
+    },
+    "passwordSettings": {
+      "title": "Password",
+      "oldPasswordLabel": "Old Password",
+      "passwordPlaceholder": "Password",
+      "newPasswordLabel": "New Password",
+      "newPasswordPlaceholder": "New password",
+      "minChars": "Minimum 8 Characters",
+      "confirmPasswordLabel": "Confirm New Password",
+      "confirmPasswordPlaceholder": "Confirm new password",
+      "saveChanges": "Save changes"
+    },
+    "profile": {
+      "header": {
+        "tasksBadge": "13.5k Tasks",
+        "projectsBadge": "146 Projects",
+        "connectionsBadge": "897 Connections",
+        "getInTouch": "Get In Touch",
+        "message": "Message"
+      },
+      "about": {
+        "title": "About",
+        "fullNameLabel": "Full Name:",
+        "statusLabel": "Status:",
+        "statusValue": "Active",
+        "roleLabel": "Role:",
+        "roleValue": "Frontend Developer",
+        "locationLabel": "Location:",
+        "languagesLabel": "Languages:",
+        "languagesValue": "English, Spanish"
+      },
+      "contacts": {
+        "title": "Contacts",
+        "phoneLabel": "Phone:",
+        "skypeLabel": "Skype:",
+        "emailLabel": "Email:"
+      },
+      "teams": {
+        "title": "Teams",
+        "backendDevelopers": "Backend Developers",
+        "reactDevelopers": "React Developers",
+        "membersCount": "{count} members",
+        "backendBadge": "Backend",
+        "frontendBadge": "Frontend"
+      },
+      "overview": {
+        "title": "Overview",
+        "tasksCompletedLabel": "Tasks Completed:",
+        "activeProjectsLabel": "Active Projects:",
+        "performanceScoreLabel": "Performance Score:"
+      },
+      "skills": {
+        "title": "Skills"
+      },
+      "activityTimeline": {
+        "title": "Activity Timeline",
+        "monthlyReport": {
+          "title": "Monthly Report Uploaded",
+          "description": "The finance team submitted the September report",
+          "time": "10 min ago"
+        },
+        "standup": {
+          "title": "Team Standup Completed",
+          "description": "Daily sync with the product team wrapped up",
+          "time": "35 min ago"
+        },
+        "featureDeploy": {
+          "title": "New Feature Deployed",
+          "description": "Dark mode toggle added to dashboard settings",
+          "time": "1 day ago"
+        },
+        "securityPatch": {
+          "title": "Security Patch Released",
+          "description": "Critical update applied to authentication module",
+          "time": "2 hours ago"
+        },
+        "suspensions": {
+          "title": "Account Suspensions",
+          "description": "3 user accounts flagged for suspicious activity",
+          "time": "25 min ago"
+        }
+      },
+      "connections": {
+        "title": "Connections",
+        "viewAll": "View all connections"
+      },
+      "support": {
+        "title": "Support",
+        "viewAllTeams": "View all teams",
+        "dataAnalysts": "Data Analysts",
+        "cybersecurityTeam": "Cybersecurity Team",
+        "devopsEngineers": "DevOps Engineers",
+        "contentWriters": "Content Writers",
+        "productManagers": "Product Managers",
+        "analyticsBadge": "Analytics",
+        "securityBadge": "Security",
+        "infrastructureBadge": "Infrastructure",
+        "contentBadge": "Content",
+        "strategyBadge": "Strategy"
+      }
+    }
   }
 }

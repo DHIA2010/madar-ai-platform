@@ -5141,5 +5141,138 @@
         }
       }
     }
+  },
+  "account": {
+    "editProfile": {
+      "title": "تعديل الملف الشخصي",
+      "subtitle": "تحديث اسمك وصورتك الشخصية.",
+      "uploadPhoto": "رفع صورة جديدة",
+      "uploading": "جارٍ الرفع...",
+      "remove": "إزالة",
+      "removing": "جارٍ الإزالة...",
+      "photoHint": "اختياري. بصيغة PNG أو JPEG أو WEBP أو GIF، بحد أقصى 3 ميغابايت.",
+      "nameLabel": "الاسم",
+      "emailLabel": "البريد الإلكتروني",
+      "saveChanges": "حفظ التغييرات",
+      "saving": "جارٍ الحفظ...",
+      "initialsFallback": "؟",
+      "toasts": {
+        "profileUpdated": "تم تحديث الملف الشخصي",
+        "profileUpdateFailed": "تعذر تحديث الملف الشخصي",
+        "photoUpdated": "تم تحديث الصورة الشخصية",
+        "photoUploadFailed": "تعذر رفع الصورة",
+        "photoRemoved": "تمت إزالة الصورة الشخصية",
+        "photoRemoveFailed": "تعذر إزالة الصورة"
+      }
+    },
+    "notifications": {
+      "title": "إعدادات الإشعارات",
+      "newForYou": "جديد لك",
+      "accountActivity": "نشاط الحساب",
+      "newBrowserSignIn": "تسجيل دخول من متصفح جديد",
+      "newDeviceLinked": "ربط جهاز جديد",
+      "weeklyReports": "التقارير الأسبوعية",
+      "saveChanges": "حفظ التغييرات"
+    },
+    "passwordSettings": {
+      "title": "كلمة المرور",
+      "oldPasswordLabel": "كلمة المرور الحالية",
+      "passwordPlaceholder": "كلمة المرور",
+      "newPasswordLabel": "كلمة المرور الجديدة",
+      "newPasswordPlaceholder": "كلمة المرور الجديدة",
+      "minChars": "8 أحرف على الأقل",
+      "confirmPasswordLabel": "تأكيد كلمة المرور الجديدة",
+      "confirmPasswordPlaceholder": "تأكيد كلمة المرور الجديدة",
+      "saveChanges": "حفظ التغييرات"
+    },
+    "profile": {
+      "header": {
+        "tasksBadge": "13.5 ألف مهمة",
+        "projectsBadge": "146 مشروعًا",
+        "connectionsBadge": "897 اتصالًا",
+        "getInTouch": "تواصل معي",
+        "message": "رسالة"
+      },
+      "about": {
+        "title": "نبذة",
+        "fullNameLabel": "الاسم الكامل:",
+        "statusLabel": "الحالة:",
+        "statusValue": "نشط",
+        "roleLabel": "الدور:",
+        "roleValue": "مطور واجهات أمامية",
+        "locationLabel": "الموقع:",
+        "languagesLabel": "اللغات:",
+        "languagesValue": "الإنجليزية، الإسبانية"
+      },
+      "contacts": {
+        "title": "جهات الاتصال",
+        "phoneLabel": "الهاتف:",
+        "skypeLabel": "سكايب:",
+        "emailLabel": "البريد الإلكتروني:"
+      },
+      "teams": {
+        "title": "الفرق",
+        "backendDevelopers": "مطورو الخلفية",
+        "reactDevelopers": "مطورو React",
+        "membersCount": "{count} عضو",
+        "backendBadge": "الخلفية",
+        "frontendBadge": "الواجهة الأمامية"
+      },
+      "overview": {
+        "title": "نظرة عامة",
+        "tasksCompletedLabel": "المهام المكتملة:",
+        "activeProjectsLabel": "المشاريع النشطة:",
+        "performanceScoreLabel": "درجة الأداء:"
+      },
+      "skills": {
+        "title": "المهارات"
+      },
+      "activityTimeline": {
+        "title": "الجدول الزمني للنشاط",
+        "monthlyReport": {
+          "title": "تم رفع التقرير الشهري",
+          "description": "قدّم فريق المالية تقرير سبتمبر",
+          "time": "منذ 10 دقائق"
+        },
+        "standup": {
+          "title": "اكتمل اجتماع الفريق اليومي",
+          "description": "انتهت المزامنة اليومية مع فريق المنتج",
+          "time": "منذ 35 دقيقة"
+        },
+        "featureDeploy": {
+          "title": "تم نشر ميزة جديدة",
+          "description": "تمت إضافة زر الوضع الداكن إلى إعدادات لوحة التحكم",
+          "time": "منذ يوم واحد"
+        },
+        "securityPatch": {
+          "title": "تم إصدار تحديث أمني",
+          "description": "تم تطبيق تحديث حرج على وحدة المصادقة",
+          "time": "منذ ساعتين"
+        },
+        "suspensions": {
+          "title": "إيقاف حسابات",
+          "description": "تم الإبلاغ عن 3 حسابات مستخدمين لنشاط مشبوه",
+          "time": "منذ 25 دقيقة"
+        }
+      },
+      "connections": {
+        "title": "الاتصالات",
+        "viewAll": "عرض جميع الاتصالات"
+      },
+      "support": {
+        "title": "الدعم",
+        "viewAllTeams": "عرض جميع الفرق",
+        "dataAnalysts": "محللو البيانات",
+        "cybersecurityTeam": "فريق الأمن السيبراني",
+        "devopsEngineers": "مهندسو DevOps",
+        "contentWriters": "كتّاب المحتوى",
+        "productManagers": "مديرو المنتجات",
+        "analyticsBadge": "التحليلات",
+        "securityBadge": "الأمن",
+        "infrastructureBadge": "البنية التحتية",
+        "contentBadge": "المحتوى",
+        "strategyBadge": "الاستراتيجية"
+      }
+    }
   }
 }
