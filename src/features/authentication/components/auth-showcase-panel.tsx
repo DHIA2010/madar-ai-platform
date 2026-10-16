@@ -262,7 +262,7 @@ export function AuthShowcasePanel({
   footer,
 }: AuthShowcasePanelProps) {
   return (
-    <div className="relative hidden h-full flex-col justify-center gap-8 overflow-y-auto bg-gradient-to-br from-blue-50 via-sky-50 to-white p-10 lg:flex xl:p-14">
+    <div className="relative hidden flex-col justify-center gap-8 bg-gradient-to-br from-blue-50 via-sky-50 to-white p-10 lg:flex xl:p-14">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 -end-24 size-96 rounded-full bg-blue-200/40 blur-3xl" />
         <div className="absolute -bottom-24 -start-24 size-96 rounded-full bg-sky-200/40 blur-3xl" />

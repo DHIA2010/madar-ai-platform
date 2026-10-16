@@ -132,7 +132,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   })
 
   return (
-    <div className={cn("flex w-full max-w-md flex-col gap-8", className)} {...props}>
+    <div className={cn("flex w-full max-w-lg flex-col gap-8", className)} {...props}>
       <div className="flex flex-col items-center gap-6 text-center">
         <Image
           src={ASSETS.logo}
