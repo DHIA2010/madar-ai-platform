@@ -1,3 +1,5 @@
+import type { useTranslations } from "next-intl"
+
 import type { Connection, ConnectionStatus, IntegrationStatusDto } from "@/application/contracts"
 
 export const CONNECTION_ACTION_IDS = {
@@ -273,5 +275,52 @@ export function localizeConnectionAction(
     confirmation: action.confirmation
       ? (ACTION_CONFIRMATION_AR[action.id] ?? action.confirmation)
       : action.confirmation,
+  }
+}
+
+// Translated counterpart of localizeConnectionAction above, for the two consumers
+// (connections-overview.tsx, connection-details.tsx) that now render through next-intl instead of
+// hardcoded Arabic. Mirrors plan-tiers.ts's translatedPlanTierMeta(tier, t) /
+// campaign-status.service.ts's translatedCampaignStatusMeta(status, t): the calling component owns
+// the useTranslations() call and passes the translator in, while ACTION_LABEL_AR/
+// ACTION_CONFIRMATION_AR/localizeConnectionAction above stay untouched as-is in case anything else
+// still reads them.
+type IntegrationsTranslator = ReturnType<typeof useTranslations<"integrations">>
+
+const ACTION_CONFIRMATION_KEYS: Partial<Record<ConnectionActionId, "deleteConnection">> = {
+  [CONNECTION_ACTION_IDS.DELETE_CONNECTION]: "deleteConnection",
+}
+
+export function localizeConnectionActionTranslated(
+  action: ConnectionActionDefinition,
+  t: IntegrationsTranslator
+): ConnectionActionDefinition {
+  const label = t(
+    `connectionActionPolicy.actionLabels.${action.id}` as "connectionActionPolicy.actionLabels.run_sync"
+  )
+
+  if (!action.confirmation) {
+    return { ...action, label }
+  }
+
+  const confirmationKey = ACTION_CONFIRMATION_KEYS[action.id]
+  if (!confirmationKey) {
+    return { ...action, label }
+  }
+
+  return {
+    ...action,
+    label,
+    confirmation: {
+      title: t(
+        `connectionActionPolicy.confirmations.${confirmationKey}.title` as "connectionActionPolicy.confirmations.deleteConnection.title"
+      ),
+      description: t(
+        `connectionActionPolicy.confirmations.${confirmationKey}.description` as "connectionActionPolicy.confirmations.deleteConnection.description"
+      ),
+      confirmLabel: t(
+        `connectionActionPolicy.confirmations.${confirmationKey}.confirmLabel` as "connectionActionPolicy.confirmations.deleteConnection.confirmLabel"
+      ),
+    },
   }
 }

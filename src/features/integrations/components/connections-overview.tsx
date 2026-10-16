@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   AlertTriangle,
-  ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   Layers,
   Loader2,
@@ -38,7 +39,7 @@ import {
   CONNECTION_ACTION_IDS,
   type ConnectionActionDefinition,
   connectionActionPolicy,
-  localizeConnectionAction,
+  localizeConnectionActionTranslated,
 } from "../services"
 import type { ConnectionCenterRecord, ConnectionsFilterState } from "../types"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
@@ -46,72 +47,9 @@ import { ConnectorLogo } from "./connector-logo"
 import { SyncAllDialog } from "./sync-all-dialog"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
-const UI_TEXT = {
-  breadcrumb: "التكاملات ›",
-  pageTitle: "مركز التكاملات",
-  pageSubtitle:
-    "أدر جميع تكاملات التسويق، المتاجر الإلكترونية، أنظمة إدارة العملاء والتحليلات في مكان واحد.",
-  legacyTitle: "Connections Overview",
-  searchAria: "البحث في التكاملات",
-  searchPlaceholder: "البحث في التكاملات...",
-  buttons: {
-    newConnection: "ربط تكامل جديد",
-    syncAll: "مزامنة الكل",
-    syncing: "جارٍ المزامنة...",
-    runSync: "مزامنة",
-    viewDetails: "عرض التفاصيل",
-    open: "فتح",
-    cancel: "إلغاء",
-  },
-  sections: {
-    summaryTotal: "إجمالي التكاملات",
-    summaryActive: "التكاملات النشطة",
-    summaryAttention: "بحاجة إلى انتباه",
-    summarySyncing: "قيد المزامنة",
-    tableTitle: "التكاملات",
-    platform: "المنصة",
-    connectedAccounts: "حسابات متصلة",
-    accountLinked: "حساب متصل",
-    accountCount: (count: number) => `حساب ${count}`,
-    status: "الحالة",
-    lastSync: "آخر مزامنة",
-    nextSync: "المزامنة التالية",
-    actions: "الإجراءات",
-    failedLoadTitle: "تعذر تحميل التكاملات",
-  },
-  hints: {
-    allPlatforms: "جميع المنصات المرتبطة",
-    percentOfTotal: "% من إجمالي التكاملات",
-    noConnections: "لا توجد تكاملات بعد",
-    noIssues: "لا توجد مشاكل حالياً",
-    needsReview: "تحتاج إلى مراجعة",
-    noOperations: "لا توجد عمليات حالياً",
-    operationsRunning: "عمليات جارية",
-  },
-  filters: {
-    allIntegrations: "كل التكاملات",
-    allStatuses: "كل الحالات",
-  },
-  toasts: {
-    syncStarted: "بدأت المزامنة بنجاح.",
-    syncFailed: "تعذر تشغيل المزامنة.",
-    deleted: "تم حذف التكامل بنجاح.",
-    deleteFailed: "تعذر حذف التكامل.",
-  },
-  empty: {
-    noConnectorsTitle: "لا توجد تكاملات بعد",
-    noConnectorsSubtitle: "ابدأ بربط أول تكامل لمتجرك أو منصتك الإعلانية.",
-    noSearchTitle: "لا توجد نتائج",
-    noSearchSubtitle: "جرّب كلمة بحث مختلفة أو امسح البحث.",
-    noFilteredTitle: "لا توجد نتائج مطابقة",
-    noFilteredSubtitle: "عدّل التصنيف أو الحالة لعرض التكاملات المطابقة.",
-    tableNoRows: "لا توجد تكاملات مطابقة للبحث والفلاتر.",
-  },
-  overflow: {
-    moreActions: "إجراءات إضافية",
-  },
-} as const
+type IntegrationsTranslator = ReturnType<typeof useTranslations<"integrations">>
 
 const CATEGORY_OPTIONS = ["All", "Marketing Platforms", "Ecommerce", "CRM", "Analytics"]
 
@@ -123,15 +61,70 @@ const CATEGORY_PLATFORM_MAP: Record<string, string[]> = {
   Analytics: ["Google Analytics 4", "PostHog", "Mixpanel"],
 }
 
-const CONNECTION_STATUS_META: Record<string, { icon: string; label: string; className: string }> = {
-  connected: { icon: "🟢", label: "متصل", className: "bg-[#ecfdf5] text-[#10b981]" },
-  valid: { icon: "🟢", label: "متصل", className: "bg-[#ecfdf5] text-[#10b981]" },
-  authorized: { icon: "🟢", label: "متصل", className: "bg-[#ecfdf5] text-[#10b981]" },
-  paused: { icon: "⏸", label: "متوقف", className: "bg-[#fffbeb] text-[#f59e0b]" },
-  disconnected: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
-  error: { icon: "🔴", label: "خطأ", className: "bg-[#fef2f2] text-[#ef4444]" },
-  draft: { icon: "⚪", label: "مسودة", className: "bg-[#f1f5f9] text-[#64748b]" },
-  syncing: { icon: "⟳", label: "قيد المزامنة", className: "bg-[#eff6ff] text-[#2563eb]" },
+// Display label only -- the keys above (used for the AppSelect value, CATEGORY_PLATFORM_MAP
+// lookups, and the activeCategory filter state) stay as plain English tokens.
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  "Marketing Platforms": "marketingPlatforms",
+  Ecommerce: "ecommerce",
+  CRM: "crm",
+  Analytics: "analytics",
+}
+
+function categoryLabel(category: string, t: IntegrationsTranslator) {
+  const key = CATEGORY_LABEL_KEYS[category]
+  return key
+    ? t(`connectionsOverview.categories.${key}` as "connectionsOverview.categories.ecommerce")
+    : category
+}
+
+const CONNECTION_STATUS_ICON: Record<string, string> = {
+  connected: "🟢",
+  valid: "🟢",
+  authorized: "🟢",
+  paused: "⏸",
+  disconnected: "🔴",
+  error: "🔴",
+  draft: "⚪",
+  syncing: "⟳",
+}
+
+const CONNECTION_STATUS_CLASSNAME: Record<string, string> = {
+  connected: "bg-[#ecfdf5] text-[#10b981]",
+  valid: "bg-[#ecfdf5] text-[#10b981]",
+  authorized: "bg-[#ecfdf5] text-[#10b981]",
+  paused: "bg-[#fffbeb] text-[#f59e0b]",
+  disconnected: "bg-[#fef2f2] text-[#ef4444]",
+  error: "bg-[#fef2f2] text-[#ef4444]",
+  draft: "bg-[#f1f5f9] text-[#64748b]",
+  syncing: "bg-[#eff6ff] text-[#2563eb]",
+}
+
+// Status label keys mirror the status ids themselves -- disconnected/error intentionally share the
+// same displayed label (matches the data this replaced), authorized/valid/connected all read as
+// "connected" to the user.
+const CONNECTION_STATUS_LABEL_KEY: Record<string, string> = {
+  connected: "connected",
+  valid: "connected",
+  authorized: "connected",
+  paused: "paused",
+  disconnected: "error",
+  error: "error",
+  draft: "draft",
+  syncing: "syncing",
+}
+
+function connectionStatusMeta(status: string, t: IntegrationsTranslator) {
+  const labelKey = CONNECTION_STATUS_LABEL_KEY[status]
+  if (!labelKey) {
+    return undefined
+  }
+  return {
+    icon: CONNECTION_STATUS_ICON[status],
+    label: t(
+      `connectionsOverview.statusLabels.${labelKey}` as "connectionsOverview.statusLabels.connected"
+    ),
+    className: CONNECTION_STATUS_CLASSNAME[status],
+  }
 }
 
 function getCategoryPlatformOptions(category: string, platforms: string[]) {
@@ -146,7 +139,8 @@ function getCategoryPlatformOptions(category: string, platforms: string[]) {
 function getEmptyState(
   recordsCount: number,
   searchQuery: string,
-  hasNonDefaultFilters: boolean
+  hasNonDefaultFilters: boolean,
+  t: IntegrationsTranslator
 ): { title: string; subtitle: string } | null {
   if (recordsCount > 0) {
     return null
@@ -154,25 +148,29 @@ function getEmptyState(
 
   if (searchQuery.trim()) {
     return {
-      title: UI_TEXT.empty.noSearchTitle,
-      subtitle: UI_TEXT.empty.noSearchSubtitle,
+      title: t("connectionsOverview.empty.noSearchTitle"),
+      subtitle: t("connectionsOverview.empty.noSearchSubtitle"),
     }
   }
 
   if (hasNonDefaultFilters) {
     return {
-      title: UI_TEXT.empty.noFilteredTitle,
-      subtitle: UI_TEXT.empty.noFilteredSubtitle,
+      title: t("connectionsOverview.empty.noFilteredTitle"),
+      subtitle: t("connectionsOverview.empty.noFilteredSubtitle"),
     }
   }
 
   return {
-    title: UI_TEXT.empty.noConnectorsTitle,
-    subtitle: UI_TEXT.empty.noConnectorsSubtitle,
+    title: t("connectionsOverview.empty.noConnectorsTitle"),
+    subtitle: t("connectionsOverview.empty.noConnectorsSubtitle"),
   }
 }
 
 export function ConnectionsOverview() {
+  const t = useTranslations("integrations")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
   const router = useRouter()
   const { availableWorkspaces, currentWorkspace } = useWorkspace()
   const isCurrentWorkspaceArchived = currentWorkspace?.status === "archived"
@@ -251,7 +249,8 @@ export function ConnectionsOverview() {
       filters.capability !== "all" ||
       filters.status !== "all" ||
       filters.health !== "all" ||
-      activeCategory !== "All"
+      activeCategory !== "All",
+    t
   )
 
   // Four KPIs, matching the design's cards: value plus a short factual hint underneath. Every
@@ -274,38 +273,44 @@ export function ConnectionsOverview() {
 
     return [
       {
-        label: UI_TEXT.sections.summaryTotal,
+        label: t("connectionsOverview.sections.summaryTotal"),
         value: total,
-        hint: UI_TEXT.hints.allPlatforms,
+        hint: t("connectionsOverview.hints.allPlatforms"),
         icon: <Layers className="size-[18px] text-[#8b5cf6]" />,
         iconClassName: "bg-[#8b5cf6]/12",
       },
       {
-        label: UI_TEXT.sections.summaryActive,
+        label: t("connectionsOverview.sections.summaryActive"),
         value: active,
         hint:
           total === 0
-            ? UI_TEXT.hints.noConnections
-            : `${Math.round((active / total) * 100)}${UI_TEXT.hints.percentOfTotal}`,
+            ? t("connectionsOverview.hints.noConnections")
+            : `${Math.round((active / total) * 100)}${t("connectionsOverview.hints.percentOfTotal")}`,
         icon: <CheckCircle2 className="size-[18px] text-[#19c98c]" />,
         iconClassName: "bg-[#19c98c]/12",
       },
       {
-        label: UI_TEXT.sections.summaryAttention,
+        label: t("connectionsOverview.sections.summaryAttention"),
         value: attention,
-        hint: attention === 0 ? UI_TEXT.hints.noIssues : UI_TEXT.hints.needsReview,
+        hint:
+          attention === 0
+            ? t("connectionsOverview.hints.noIssues")
+            : t("connectionsOverview.hints.needsReview"),
         icon: <AlertTriangle className="size-[18px] text-[#f59e0b]" />,
         iconClassName: "bg-[#f59e0b]/12",
       },
       {
-        label: UI_TEXT.sections.summarySyncing,
+        label: t("connectionsOverview.sections.summarySyncing"),
         value: syncing,
-        hint: syncing === 0 ? UI_TEXT.hints.noOperations : UI_TEXT.hints.operationsRunning,
+        hint:
+          syncing === 0
+            ? t("connectionsOverview.hints.noOperations")
+            : t("connectionsOverview.hints.operationsRunning"),
         icon: <RefreshCcw className="size-[18px] text-[#2878ff]" />,
         iconClassName: "bg-[#2878ff]/12",
       },
     ]
-  }, [categoryFilteredRecords])
+  }, [categoryFilteredRecords, t])
 
   const requestDeleteConnection = (connectionId: string, action: ConnectionActionDefinition) => {
     setPendingDeleteAction({ connectionId, action })
@@ -322,9 +327,11 @@ export function ConnectionsOverview() {
       await deleteConnection(pendingDeleteAction.connectionId)
       setDeleteDialogOpen(false)
       setPendingDeleteAction(null)
-      toast.success(UI_TEXT.toasts.deleted)
+      toast.success(t("connectionsOverview.toasts.deleted"))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : UI_TEXT.toasts.deleteFailed)
+      toast.error(
+        error instanceof Error ? error.message : t("connectionsOverview.toasts.deleteFailed")
+      )
     } finally {
       setIsDeletingConnection(false)
     }
@@ -363,9 +370,11 @@ export function ConnectionsOverview() {
     setSyncProgress((prev) => ({ ...prev, [connectionId]: "running" }))
     try {
       await runSync(connectionId)
-      toast.success(UI_TEXT.toasts.syncStarted)
+      toast.success(t("connectionsOverview.toasts.syncStarted"))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : UI_TEXT.toasts.syncFailed)
+      toast.error(
+        error instanceof Error ? error.message : t("connectionsOverview.toasts.syncFailed")
+      )
     } finally {
       setSyncProgress((prev) => {
         const next = { ...prev }
@@ -376,17 +385,21 @@ export function ConnectionsOverview() {
   }
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir={dir}>
       {/* Header */}
       <div className="mb-3.5 rounded-[14px] border border-[#e1e7f0] bg-white px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 text-right">
-            <div className="mb-1 text-[11px] text-[#8190a8]">{UI_TEXT.breadcrumb}</div>
+            <div className="mb-1 text-[11px] text-[#8190a8]">
+              {t("connectionsOverview.breadcrumb")}
+            </div>
             <h1 className="text-[30px] font-bold leading-tight text-[#0b1738]">
-              {UI_TEXT.pageTitle}
-              <span className="sr-only">{UI_TEXT.legacyTitle}</span>
+              {t("connectionsOverview.pageTitle")}
+              <span className="sr-only">{t("connectionsOverview.legacyTitle")}</span>
             </h1>
-            <p className="mt-1.5 text-[13px] text-[#71809a]">{UI_TEXT.pageSubtitle}</p>
+            <p className="mt-1.5 text-[13px] text-[#71809a]">
+              {t("connectionsOverview.pageSubtitle")}
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Can permission="connections:create">
@@ -395,7 +408,7 @@ export function ConnectionsOverview() {
                   className="h-11 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-bold hover:bg-[#1f66e0]"
                   disabled
                 >
-                  {UI_TEXT.buttons.newConnection}
+                  {t("connectionsOverview.buttons.newConnection")}
                 </AppButton>
               ) : (
                 <Link href={ROUTES.integrationsNew}>
@@ -404,7 +417,7 @@ export function ConnectionsOverview() {
                     icon={<Plus className="size-4" />}
                     iconPosition="end"
                   >
-                    {UI_TEXT.buttons.newConnection}
+                    {t("connectionsOverview.buttons.newConnection")}
                   </AppButton>
                 </Link>
               )}
@@ -423,7 +436,9 @@ export function ConnectionsOverview() {
               }
               iconPosition="end"
             >
-              {isSyncingAll ? UI_TEXT.buttons.syncing : UI_TEXT.buttons.syncAll}
+              {isSyncingAll
+                ? t("connectionsOverview.buttons.syncing")
+                : t("connectionsOverview.buttons.syncAll")}
             </AppButton>
           </div>
         </div>
@@ -431,7 +446,7 @@ export function ConnectionsOverview() {
 
       {error ? (
         <div className="mb-3.5 rounded-[14px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#B91C1C]">
-          {UI_TEXT.sections.failedLoadTitle}: {error}
+          {t("connectionsOverview.sections.failedLoadTitle")}: {error}
         </div>
       ) : null}
 
@@ -467,7 +482,7 @@ export function ConnectionsOverview() {
       {categoryFilteredRecords.length > 0 ? (
         <div className="mb-3.5 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {categoryFilteredRecords.map((record) => {
-            const statusMeta = CONNECTION_STATUS_META[record.connection.status]
+            const statusMeta = connectionStatusMeta(record.connection.status, t)
             return (
               <div
                 key={record.connection.connectionId}
@@ -483,8 +498,8 @@ export function ConnectionsOverview() {
                           (workspace) => workspace.id === record.connection.workspaceId
                         )?.status,
                       })
-                      .map(localizeConnectionAction)}
-                    menuLabel={UI_TEXT.overflow.moreActions}
+                      .map((action) => localizeConnectionActionTranslated(action, t))}
+                    menuLabel={t("connectionsOverview.overflow.moreActions")}
                     onActionSelect={(action) => {
                       void handleConnectionAction(record, action)
                     }}
@@ -505,7 +520,9 @@ export function ConnectionsOverview() {
                 </div>
 
                 <div className="mt-3 text-right">
-                  <div className="text-[11px] text-[#7b89a1]">{UI_TEXT.sections.accountLinked}</div>
+                  <div className="text-[11px] text-[#7b89a1]">
+                    {t("connectionsOverview.sections.accountLinked")}
+                  </div>
                   <div className="mt-1 text-[15px] font-bold text-[#12a56b]" dir="ltr">
                     {Math.max(record.connectedAccounts?.length ?? 0, 1)}
                   </div>
@@ -516,8 +533,8 @@ export function ConnectionsOverview() {
                   className="mt-3"
                 >
                   <span className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#f4f8ff] text-[11px] font-semibold text-[#2878ff] transition-colors hover:bg-[#eaf1ff]">
-                    <ArrowLeft className="size-3.5" />
-                    {UI_TEXT.buttons.viewDetails}
+                    <ArrowRight className="size-3.5 rtl:rotate-180" />
+                    {t("connectionsOverview.buttons.viewDetails")}
                   </span>
                 </Link>
               </div>
@@ -530,17 +547,17 @@ export function ConnectionsOverview() {
       <div className="rounded-[16px] border border-[#e1e7f0] bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 lg:flex-nowrap">
           <h2 className="shrink-0 text-[17px] font-bold text-[#0b1738]">
-            {UI_TEXT.sections.tableTitle}
+            {t("connectionsOverview.sections.tableTitle")}
           </h2>
 
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[10px] border border-[#e1e7f0] bg-[#f7f9fd] px-3 lg:max-w-[390px]">
               <Search className="size-4 shrink-0 text-[#9aa6b8]" />
               <input
-                aria-label={UI_TEXT.searchAria}
+                aria-label={t("connectionsOverview.searchAria")}
                 value={filters.search}
                 onChange={(event) => updateFilters({ search: event.target.value })}
-                placeholder={UI_TEXT.searchPlaceholder}
+                placeholder={t("connectionsOverview.searchPlaceholder")}
                 className="min-w-0 flex-1 border-none bg-transparent text-[11px] text-[#40506d] outline-none placeholder:text-[#9aa6b8]"
               />
             </div>
@@ -563,7 +580,9 @@ export function ConnectionsOverview() {
               <AppSelectContent className="z-[90] rounded-[10px] border-[#e1e7f0]">
                 {categoryOptions.map((option) => (
                   <AppSelectItem key={option} value={option} className="text-[12px]">
-                    {option === "All" ? UI_TEXT.filters.allIntegrations : option}
+                    {option === "All"
+                      ? t("connectionsOverview.filters.allIntegrations")
+                      : categoryLabel(option, t)}
                   </AppSelectItem>
                 ))}
               </AppSelectContent>
@@ -582,8 +601,8 @@ export function ConnectionsOverview() {
                 {statuses.map((option) => (
                   <AppSelectItem key={option} value={option} className="text-[12px]">
                     {option === "all"
-                      ? UI_TEXT.filters.allStatuses
-                      : (CONNECTION_STATUS_META[option]?.label ?? option)}
+                      ? t("connectionsOverview.filters.allStatuses")
+                      : (connectionStatusMeta(option, t)?.label ?? option)}
                   </AppSelectItem>
                 ))}
               </AppSelectContent>
@@ -596,12 +615,12 @@ export function ConnectionsOverview() {
             <thead>
               <tr>
                 {[
-                  UI_TEXT.sections.platform,
-                  UI_TEXT.sections.connectedAccounts,
-                  UI_TEXT.sections.status,
-                  UI_TEXT.sections.lastSync,
-                  UI_TEXT.sections.nextSync,
-                  UI_TEXT.sections.actions,
+                  t("connectionsOverview.sections.platform"),
+                  t("connectionsOverview.sections.connectedAccounts"),
+                  t("connectionsOverview.sections.status"),
+                  t("connectionsOverview.sections.lastSync"),
+                  t("connectionsOverview.sections.nextSync"),
+                  t("connectionsOverview.sections.actions"),
                 ].map((heading) => (
                   <th
                     key={heading}
@@ -625,16 +644,16 @@ export function ConnectionsOverview() {
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center">
                     <p className="text-sm font-semibold text-[#1d2d4c]">
-                      {emptyState?.title ?? UI_TEXT.empty.noConnectorsTitle}
+                      {emptyState?.title ?? t("connectionsOverview.empty.noConnectorsTitle")}
                     </p>
                     <p className="mt-1 text-xs text-[#7b879b]">
-                      {emptyState?.subtitle ?? UI_TEXT.empty.tableNoRows}
+                      {emptyState?.subtitle ?? t("connectionsOverview.empty.tableNoRows")}
                     </p>
                   </td>
                 </tr>
               ) : (
                 categoryFilteredRecords.map((record) => {
-                  const statusMeta = CONNECTION_STATUS_META[record.connection.status]
+                  const statusMeta = connectionStatusMeta(record.connection.status, t)
                   const workspaceStatus = availableWorkspaces.find(
                     (workspace) => workspace.id === record.connection.workspaceId
                   )?.status
@@ -644,7 +663,7 @@ export function ConnectionsOverview() {
                       integrationStatus: record.integrationStatus,
                       workspaceStatus,
                     })
-                    .map(localizeConnectionAction)
+                    .map((action) => localizeConnectionActionTranslated(action, t))
                   const syncState = syncProgress[record.connection.connectionId]
 
                   return (
@@ -661,9 +680,9 @@ export function ConnectionsOverview() {
                         </div>
                       </td>
                       <td className="border-b border-[#e7ecf3] px-4 py-3 text-[11px] text-[#52627e]">
-                        {UI_TEXT.sections.accountCount(
-                          Math.max(record.connectedAccounts?.length ?? 0, 1)
-                        )}
+                        {t("connectionsOverview.sections.accountCount", {
+                          count: Math.max(record.connectedAccounts?.length ?? 0, 1),
+                        })}
                       </td>
                       <td className="border-b border-[#e7ecf3] px-4 py-3">
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f8ef] px-3 py-1 text-[10px] font-semibold text-[#07945e]">
@@ -681,7 +700,7 @@ export function ConnectionsOverview() {
                         <div className="flex items-center justify-center gap-1.5">
                           <Link href={ROUTES.integrationsDetails(record.connection.connectionId)}>
                             <span className="flex h-[25px] items-center rounded-[7px] border border-[#dfe6ef] bg-[#f4f7fb] px-3 text-[10px] font-semibold text-[#2878ff] transition-colors hover:bg-[#eaf1ff]">
-                              {UI_TEXT.buttons.open}
+                              {t("connectionsOverview.buttons.open")}
                             </span>
                           </Link>
                           <AppButton
@@ -695,11 +714,11 @@ export function ConnectionsOverview() {
                             iconPosition="end"
                             onClick={() => void runSyncFor(record)}
                           >
-                            {UI_TEXT.buttons.runSync}
+                            {t("connectionsOverview.buttons.runSync")}
                           </AppButton>
                           <ConnectionActionsMenu
                             actions={availableActions}
-                            menuLabel={UI_TEXT.overflow.moreActions}
+                            menuLabel={t("connectionsOverview.overflow.moreActions")}
                             onActionSelect={(action) => {
                               void handleConnectionAction(record, action)
                             }}
@@ -740,7 +759,7 @@ export function ConnectionsOverview() {
         }}
         title={pendingDeleteAction?.action.confirmation?.title ?? ""}
         description={pendingDeleteAction?.action.confirmation?.description ?? ""}
-        cancelLabel={UI_TEXT.buttons.cancel}
+        cancelLabel={tCommon("cancel")}
         confirmLabel={pendingDeleteAction?.action.confirmation?.confirmLabel ?? ""}
         confirmTone="destructive"
         loading={isDeletingConnection}

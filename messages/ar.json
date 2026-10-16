@@ -6979,6 +6979,192 @@
         "invalidCron": "صيغة الجدولة المخصصة غير صحيحة -- يجب أن تتكون من 5 حقول.",
         "selectAtLeastOneDay": "اختر يومًا واحدًا على الأقل لأيام التشغيل."
       }
+    },
+    "connectionsOverview": {
+      "breadcrumb": "التكاملات ›",
+      "pageTitle": "مركز التكاملات",
+      "pageSubtitle": "أدر جميع تكاملات التسويق، المتاجر الإلكترونية، أنظمة إدارة العملاء والتحليلات في مكان واحد.",
+      "legacyTitle": "نظرة عامة على الاتصالات",
+      "searchAria": "البحث في التكاملات",
+      "searchPlaceholder": "البحث في التكاملات...",
+      "buttons": {
+        "newConnection": "ربط تكامل جديد",
+        "syncAll": "مزامنة الكل",
+        "syncing": "جارٍ المزامنة...",
+        "runSync": "مزامنة",
+        "viewDetails": "عرض التفاصيل",
+        "open": "فتح"
+      },
+      "sections": {
+        "summaryTotal": "إجمالي التكاملات",
+        "summaryActive": "التكاملات النشطة",
+        "summaryAttention": "بحاجة إلى انتباه",
+        "summarySyncing": "قيد المزامنة",
+        "tableTitle": "التكاملات",
+        "platform": "المنصة",
+        "connectedAccounts": "حسابات متصلة",
+        "accountLinked": "حساب متصل",
+        "accountCount": "حساب {count}",
+        "status": "الحالة",
+        "lastSync": "آخر مزامنة",
+        "nextSync": "المزامنة التالية",
+        "actions": "الإجراءات",
+        "failedLoadTitle": "تعذر تحميل التكاملات"
+      },
+      "hints": {
+        "allPlatforms": "جميع المنصات المرتبطة",
+        "percentOfTotal": "% من إجمالي التكاملات",
+        "noConnections": "لا توجد تكاملات بعد",
+        "noIssues": "لا توجد مشاكل حالياً",
+        "needsReview": "تحتاج إلى مراجعة",
+        "noOperations": "لا توجد عمليات حالياً",
+        "operationsRunning": "عمليات جارية"
+      },
+      "filters": {
+        "allIntegrations": "كل التكاملات",
+        "allStatuses": "كل الحالات"
+      },
+      "categories": {
+        "marketingPlatforms": "منصات التسويق",
+        "ecommerce": "التجارة الإلكترونية",
+        "crm": "إدارة علاقات العملاء",
+        "analytics": "التحليلات"
+      },
+      "statusLabels": {
+        "connected": "متصل",
+        "paused": "متوقف",
+        "error": "خطأ",
+        "draft": "مسودة",
+        "syncing": "قيد المزامنة"
+      },
+      "toasts": {
+        "syncStarted": "بدأت المزامنة بنجاح.",
+        "syncFailed": "تعذر تشغيل المزامنة.",
+        "deleted": "تم حذف التكامل بنجاح.",
+        "deleteFailed": "تعذر حذف التكامل."
+      },
+      "empty": {
+        "noConnectorsTitle": "لا توجد تكاملات بعد",
+        "noConnectorsSubtitle": "ابدأ بربط أول تكامل لمتجرك أو منصتك الإعلانية.",
+        "noSearchTitle": "لا توجد نتائج",
+        "noSearchSubtitle": "جرّب كلمة بحث مختلفة أو امسح البحث.",
+        "noFilteredTitle": "لا توجد نتائج مطابقة",
+        "noFilteredSubtitle": "عدّل التصنيف أو الحالة لعرض التكاملات المطابقة.",
+        "tableNoRows": "لا توجد تكاملات مطابقة للبحث والفلاتر."
+      },
+      "overflow": {
+        "moreActions": "إجراءات إضافية"
+      }
+    },
+    "connectionDetails": {
+      "notFound": "لم يتم العثور على الاتصال",
+      "breadcrumb": {
+        "integrations": "التكاملات",
+        "connectionDetails": "تفاصيل التكامل"
+      },
+      "backLink": "العودة إلى التكاملات",
+      "manageConnectionWith": "إدارة الاتصال مع منصة {platform}",
+      "scheduleSettingsLink": "إعدادات الجدولة",
+      "actionsMenuLabel": "إجراءات الاتصال",
+      "sectionTitles": {
+        "generalInfo": "معلومات عامة",
+        "linkedAccounts": "الحسابات المرتبطة",
+        "capabilitiesAndMetadata": "القدرات والبيانات الوصفية",
+        "syncAndReliability": "المزامنة والموثوقية",
+        "logsAndActivity": "السجلات والأنشطة الحديثة"
+      },
+      "infoRows": {
+        "connectionId": "معرف الاتصال",
+        "integrationName": "اسم التكامل",
+        "connectorType": "نوع الموصل",
+        "workspace": "مساحة العمل",
+        "version": "الإصدار",
+        "authStatus": "حالة المصادقة",
+        "tokenExpiry": "انتهاء الرمز",
+        "lastSync": "آخر مزامنة",
+        "nextSync": "المزامنة القادمة",
+        "syncStatus": "حالة المزامنة",
+        "retryCount": "عدد المحاولات",
+        "maxRetryLimit": "الحد المسموح للمحاولات",
+        "rateLimitRemaining": "الوقت المتبقي للحد",
+        "rateLimitReset": "إعادة تعيين الحد الزمني",
+        "lastSyncDuration": "مدة آخر مزامنة",
+        "lastError": "آخر خطأ"
+      },
+      "linkedAccounts": {
+        "selectedClient": "العميل المحدد",
+        "platformConnectedAccount": "حساب {platform} المتصل",
+        "customerId": "معرف العميل"
+      },
+      "tabs": {
+        "metadata": "البيانات الوصفية"
+      },
+      "capabilityEnabledBadge": "مفعّلة",
+      "capabilityEnabledHint": "لهذا الاتصال. لا تتوفر بيانات تفصيلية إضافية لهذه القدرة حاليًا.",
+      "capabilityLabels": {
+        "products": "المنتجات",
+        "orders": "الطلبات",
+        "customers": "العملاء",
+        "catalog": "الكتالوج",
+        "media": "الوسائط",
+        "traffic": "الزيارات",
+        "events": "الأحداث",
+        "conversions": "التحويلات",
+        "campaigns": "الحملات",
+        "ads": "الإعلانات"
+      },
+      "statusLabels": {
+        "connected": "متصل",
+        "valid": "متصل",
+        "authorized": "مصرّح",
+        "syncing": "قيد المزامنة",
+        "paused": "متوقف مؤقتًا",
+        "disconnected": "غير متصل",
+        "error": "خطأ",
+        "draft": "مسودة",
+        "deleted": "محذوف"
+      },
+      "syncStatusLabels": {
+        "queued": "في الانتظار",
+        "running": "قيد التشغيل",
+        "completed": "مكتملة",
+        "failed": "فشلت",
+        "paused": "متوقفة",
+        "canceled": "ملغاة"
+      },
+      "durationMs": "{value} م.ث",
+      "durationSeconds": "{value} ثانية",
+      "eventsTable": {
+        "event": "الحدث",
+        "date": "التاريخ",
+        "description": "الوصف",
+        "syncedItems": "العناصر المتزامنة"
+      },
+      "noEventsRecorded": "لا توجد أنشطة مسجلة لهذا الاتصال بعد.",
+      "showLess": "عرض أقل",
+      "showAllRecords": "عرض جميع السجلات ({count})",
+      "toasts": {
+        "deleteSuccess": "تم حذف الاتصال بنجاح.",
+        "deleteFailed": "تعذر حذف الاتصال."
+      }
+    },
+    "connectionActionPolicy": {
+      "actionLabels": {
+        "run_sync": "مزامنة الآن",
+        "reconnect": "إعادة الاتصال",
+        "pause_sync": "إيقاف المزامنة مؤقتًا",
+        "resume_sync": "استئناف المزامنة",
+        "retry": "إعادة المحاولة",
+        "disconnect": "قطع الاتصال",
+        "delete_connection": "حذف الاتصال"
+      },
+      "confirmations": {
+        "deleteConnection": {
+          "title": "حذف الاتصال",
+          "description": "سيؤدي هذا إلى حذف الاتصال ورموز المصادقة والبيانات المتزامنة والسجل نهائيًا.\nلا يمكن التراجع عن هذا الإجراء.",
+          "confirmLabel": "حذف"
+        }
+      }
     }
   }
 }

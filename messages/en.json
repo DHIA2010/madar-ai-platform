@@ -6983,6 +6983,192 @@
         "invalidCron": "Invalid custom schedule format -- it must have 5 fields.",
         "selectAtLeastOneDay": "Select at least one active day."
       }
+    },
+    "connectionsOverview": {
+      "breadcrumb": "Integrations ›",
+      "pageTitle": "Integrations Center",
+      "pageSubtitle": "Manage all your marketing, ecommerce, CRM, and analytics integrations in one place.",
+      "legacyTitle": "Connections Overview",
+      "searchAria": "Search integrations",
+      "searchPlaceholder": "Search integrations...",
+      "buttons": {
+        "newConnection": "Connect New Integration",
+        "syncAll": "Sync All",
+        "syncing": "Syncing...",
+        "runSync": "Sync",
+        "viewDetails": "View Details",
+        "open": "Open"
+      },
+      "sections": {
+        "summaryTotal": "Total Integrations",
+        "summaryActive": "Active Integrations",
+        "summaryAttention": "Needs Attention",
+        "summarySyncing": "Syncing",
+        "tableTitle": "Integrations",
+        "platform": "Platform",
+        "connectedAccounts": "Connected Accounts",
+        "accountLinked": "Linked Accounts",
+        "accountCount": "{count} account",
+        "status": "Status",
+        "lastSync": "Last Sync",
+        "nextSync": "Next Sync",
+        "actions": "Actions",
+        "failedLoadTitle": "Couldn't load integrations"
+      },
+      "hints": {
+        "allPlatforms": "All linked platforms",
+        "percentOfTotal": "% of total integrations",
+        "noConnections": "No integrations yet",
+        "noIssues": "No issues right now",
+        "needsReview": "Needs review",
+        "noOperations": "No operations right now",
+        "operationsRunning": "Operations running"
+      },
+      "filters": {
+        "allIntegrations": "All Integrations",
+        "allStatuses": "All Statuses"
+      },
+      "categories": {
+        "marketingPlatforms": "Marketing Platforms",
+        "ecommerce": "Ecommerce",
+        "crm": "CRM",
+        "analytics": "Analytics"
+      },
+      "statusLabels": {
+        "connected": "Connected",
+        "paused": "Paused",
+        "error": "Error",
+        "draft": "Draft",
+        "syncing": "Syncing"
+      },
+      "toasts": {
+        "syncStarted": "Sync started successfully.",
+        "syncFailed": "Couldn't start sync.",
+        "deleted": "Integration deleted successfully.",
+        "deleteFailed": "Couldn't delete the integration."
+      },
+      "empty": {
+        "noConnectorsTitle": "No integrations yet",
+        "noConnectorsSubtitle": "Start by connecting your first store or ad platform.",
+        "noSearchTitle": "No results",
+        "noSearchSubtitle": "Try a different search term or clear the search.",
+        "noFilteredTitle": "No matching results",
+        "noFilteredSubtitle": "Adjust the category or status to show matching integrations.",
+        "tableNoRows": "No integrations match the search and filters."
+      },
+      "overflow": {
+        "moreActions": "More actions"
+      }
+    },
+    "connectionDetails": {
+      "notFound": "Connection not found",
+      "breadcrumb": {
+        "integrations": "Integrations",
+        "connectionDetails": "Connection Details"
+      },
+      "backLink": "Back to integrations",
+      "manageConnectionWith": "Manage the connection with {platform}",
+      "scheduleSettingsLink": "Schedule Settings",
+      "actionsMenuLabel": "Connection actions",
+      "sectionTitles": {
+        "generalInfo": "General Information",
+        "linkedAccounts": "Linked Accounts",
+        "capabilitiesAndMetadata": "Capabilities & Metadata",
+        "syncAndReliability": "Sync & Reliability",
+        "logsAndActivity": "Logs & Recent Activity"
+      },
+      "infoRows": {
+        "connectionId": "Connection ID",
+        "integrationName": "Integration Name",
+        "connectorType": "Connector Type",
+        "workspace": "Workspace",
+        "version": "Version",
+        "authStatus": "Auth Status",
+        "tokenExpiry": "Token Expiry",
+        "lastSync": "Last Sync",
+        "nextSync": "Next Sync",
+        "syncStatus": "Sync Status",
+        "retryCount": "Retry Count",
+        "maxRetryLimit": "Max Retry Limit",
+        "rateLimitRemaining": "Rate Limit Remaining",
+        "rateLimitReset": "Rate Limit Reset",
+        "lastSyncDuration": "Last Sync Duration",
+        "lastError": "Last Error"
+      },
+      "linkedAccounts": {
+        "selectedClient": "Selected Client",
+        "platformConnectedAccount": "{platform} Connected Account",
+        "customerId": "Customer ID"
+      },
+      "tabs": {
+        "metadata": "Metadata"
+      },
+      "capabilityEnabledBadge": "Enabled",
+      "capabilityEnabledHint": "for this connection. No additional details are currently available for this capability.",
+      "capabilityLabels": {
+        "products": "Products",
+        "orders": "Orders",
+        "customers": "Customers",
+        "catalog": "Catalog",
+        "media": "Media",
+        "traffic": "Traffic",
+        "events": "Events",
+        "conversions": "Conversions",
+        "campaigns": "Campaigns",
+        "ads": "Ads"
+      },
+      "statusLabels": {
+        "connected": "Connected",
+        "valid": "Connected",
+        "authorized": "Authorized",
+        "syncing": "Syncing",
+        "paused": "Paused",
+        "disconnected": "Disconnected",
+        "error": "Error",
+        "draft": "Draft",
+        "deleted": "Deleted"
+      },
+      "syncStatusLabels": {
+        "queued": "Queued",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "paused": "Paused",
+        "canceled": "Canceled"
+      },
+      "durationMs": "{value} ms",
+      "durationSeconds": "{value} s",
+      "eventsTable": {
+        "event": "Event",
+        "date": "Date",
+        "description": "Description",
+        "syncedItems": "Synced Items"
+      },
+      "noEventsRecorded": "No activity recorded for this connection yet.",
+      "showLess": "Show less",
+      "showAllRecords": "Show all records ({count})",
+      "toasts": {
+        "deleteSuccess": "Connection deleted successfully.",
+        "deleteFailed": "Couldn't delete the connection."
+      }
+    },
+    "connectionActionPolicy": {
+      "actionLabels": {
+        "run_sync": "Run Sync",
+        "reconnect": "Reconnect",
+        "pause_sync": "Pause Sync",
+        "resume_sync": "Resume Sync",
+        "retry": "Retry",
+        "disconnect": "Disconnect",
+        "delete_connection": "Delete Connection"
+      },
+      "confirmations": {
+        "deleteConnection": {
+          "title": "Delete Connection",
+          "description": "This will permanently remove the connection, OAuth tokens, synced metadata, and history.\nThis action cannot be undone.",
+          "confirmLabel": "Delete"
+        }
+      }
     }
   }
 }
