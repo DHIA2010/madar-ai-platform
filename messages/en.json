@@ -4352,5 +4352,755 @@
         "statusUpdateFailed": "Couldn't update the workspace's status."
       }
     }
+  },
+  "administration": {
+    "time": {
+      "now": "Just now",
+      "minutesAgo": "{minutes} min ago",
+      "todayAt": "Today at {time}",
+      "yesterdayAt": "Yesterday at {time}",
+      "hourAgo": "1 hour ago",
+      "hoursAgo": "{hours} hours ago",
+      "dayAgo": "1 day ago",
+      "daysAgo": "{days} days ago"
+    },
+    "nav": {
+      "overview": "Overview",
+      "users": "Users",
+      "roles": "Roles",
+      "teams": "Teams",
+      "invitations": "Invitations",
+      "activityLog": "Full log",
+      "auditLog": "Audit logs",
+      "sessions": "Active sessions"
+    },
+    "common": {
+      "loading": "Loading...",
+      "close": "Close",
+      "active": "Active"
+    },
+    "userProfileDrawer": {
+      "title": "Profile",
+      "description": "Identity, access scope, and session status.",
+      "access": {
+        "sectionTitle": "Access",
+        "roleLabel": "Role:",
+        "workspacesLabel": "Workspaces:",
+        "teamsLabel": "Teams:"
+      },
+      "recentActivity": {
+        "sectionTitle": "Recent activity",
+        "empty": "No activity recorded yet."
+      },
+      "sessions": {
+        "sectionTitle": "Sessions and devices",
+        "empty": "No active sessions.",
+        "lastActive": "Last active {time}",
+        "currentSessionSuffix": " · Current session"
+      }
+    },
+    "activityLog": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Activity log"
+      },
+      "title": "Activity log",
+      "subtitle": "A chronological log of every activity and operation in the system.",
+      "stats": {
+        "failedAttempts": "Failed attempts",
+        "userChanges": "User changes",
+        "dataChanges": "Data changes",
+        "totalEvents": "Total events"
+      },
+      "search": {
+        "placeholder": "Search the activity log..."
+      },
+      "filters": {
+        "allStatuses": "All statuses",
+        "success": "Success",
+        "failed": "Failed",
+        "allUsers": "All users"
+      },
+      "table": {
+        "columns": {
+          "time": "Date & time",
+          "user": "User",
+          "type": "Type",
+          "description": "Description",
+          "target": "Target entity",
+          "ip": "IP address",
+          "status": "Status"
+        }
+      },
+      "loading": "Loading the log...",
+      "loadError": "Couldn't load the log.",
+      "empty": "No matching events."
+    },
+    "auditLog": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Audit logs"
+      },
+      "title": "Audit logs",
+      "subtitle": "A chronological log of system operations, security events, and governance.",
+      "stats": {
+        "securityEvents": "Security events",
+        "userChanges": "User changes",
+        "dataChanges": "Data changes",
+        "totalEvents": "Total events"
+      },
+      "search": {
+        "placeholder": "Search the activity log..."
+      },
+      "filters": {
+        "allSeverities": "All severities",
+        "allUsers": "All users"
+      },
+      "severities": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "table": {
+        "columns": {
+          "time": "Date & time",
+          "user": "User",
+          "type": "Type",
+          "description": "Description",
+          "target": "Target entity",
+          "ip": "IP address",
+          "severity": "Severity"
+        }
+      },
+      "loading": "Loading the log...",
+      "loadError": "Couldn't load the log.",
+      "empty": "No matching events."
+    },
+    "invitations": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Invitations"
+      },
+      "title": "Invitations",
+      "subtitle": "Invite new users or add them directly, and track the status of sent invitations.",
+      "addUser": "Add user",
+      "stats": {
+        "total": "Total invitations",
+        "pending": "Pending",
+        "accepted": "Accepted",
+        "closed": "Canceled or expired"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "accepted": "Accepted",
+        "declined": "Declined",
+        "canceled": "Canceled",
+        "expired": "Expired"
+      },
+      "table": {
+        "columns": {
+          "name": "Name",
+          "email": "Email",
+          "workspace": "Workspace",
+          "status": "Status",
+          "expires": "Expires",
+          "actions": "Actions"
+        },
+        "resendAria": "Resend",
+        "cancelAria": "Cancel"
+      },
+      "loading": "Loading invitations...",
+      "loadError": "Couldn't load invitations.",
+      "empty": "No invitations yet.",
+      "toasts": {
+        "resent": "Invitation resent to {email}.",
+        "resendFailed": "Couldn't resend the invitation.",
+        "canceled": "Invitation canceled.",
+        "cancelFailed": "Couldn't cancel the invitation."
+      }
+    },
+    "dashboard": {
+      "breadcrumb": {
+        "home": "Home",
+        "current": "Administration"
+      },
+      "title": "Administration dashboard",
+      "subtitle": "Manage users, roles, permissions, and governance across the platform.",
+      "stats": {
+        "invitations": "Invitations",
+        "teams": "Teams",
+        "roles": "Roles",
+        "users": "Users"
+      },
+      "search": {
+        "sectionTitle": "Identity-wide search",
+        "sectionDescription": "Quickly search users, teams, roles, or invitations.",
+        "placeholder": "Type to search...",
+        "noResults": "No matching results.",
+        "resultTypes": {
+          "user": "User",
+          "team": "Team",
+          "role": "Role",
+          "invitation": "Invitation"
+        }
+      },
+      "secure": {
+        "sectionTitle": "Secure and flexible administration",
+        "description": "Control user access, customize roles and permissions, and track every activity to keep your data secure.",
+        "features": [
+          "Fine-grained permission control",
+          "Comprehensive audit log",
+          "Support for multi-department teams"
+        ]
+      },
+      "recentActivity": {
+        "sectionTitle": "Recent activity",
+        "viewAll": "View all",
+        "empty": "No activity yet.",
+        "actorByTarget": "{actor} on {target}"
+      },
+      "quickActions": {
+        "sectionTitle": "Quick actions",
+        "inviteUser": {
+          "label": "Invite user",
+          "description": "Send a new invitation"
+        },
+        "addRole": {
+          "label": "Add role",
+          "description": "Create a custom role"
+        },
+        "createTeam": {
+          "label": "Create team",
+          "description": "Organize users"
+        },
+        "viewAuditLog": {
+          "label": "View audit log",
+          "description": "Review all activity"
+        }
+      }
+    },
+    "sessions": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Active sessions"
+      },
+      "title": "Active sessions",
+      "subtitle": "Monitor connected devices and manage active sessions for all users.",
+      "terminateAllOthers": "Terminate all other sessions",
+      "stats": {
+        "totalActive": "Total active sessions",
+        "connectedUsers": "Connected users",
+        "connectedDevices": "Connected devices"
+      },
+      "loading": "Loading sessions...",
+      "loadError": "Couldn't load sessions.",
+      "empty": "No active sessions.",
+      "unknownLocation": "Unknown",
+      "table": {
+        "columns": {
+          "user": "User",
+          "device": "Device",
+          "browser": "Browser",
+          "ip": "IP address",
+          "location": "Location",
+          "lastActivity": "Last active",
+          "status": "Status",
+          "actions": "Actions"
+        },
+        "currentSession": "Current session",
+        "activeSession": "Active",
+        "terminate": "Terminate"
+      },
+      "confirmTerminateAll": {
+        "title": "Terminate all other sessions",
+        "description": "All users will be logged out of every active session except your current one.",
+        "confirm": "Terminate sessions",
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "terminated": "Session terminated.",
+        "terminateFailed": "Couldn't terminate the session.",
+        "terminatedCount": "{count} session(s) terminated.",
+        "terminateSomeFailed": "Couldn't terminate some sessions."
+      }
+    },
+    "users": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Users"
+      },
+      "title": "Users",
+      "subtitle": "Manage user accounts, permissions, and their access to resources on the platform.",
+      "addUser": "Add user",
+      "stats": {
+        "inactive": "Inactive users",
+        "pendingActivation": "Pending activation",
+        "active": "Active users",
+        "total": "Total users"
+      },
+      "export": "Export",
+      "search": {
+        "placeholder": "Search by user name or email..."
+      },
+      "statuses": {
+        "active": "Active",
+        "inactive": "Inactive",
+        "pending": "Pending activation",
+        "suspended": "Suspended"
+      },
+      "filters": {
+        "allStatuses": "All statuses",
+        "allWorkspaces": "All workspaces",
+        "moreOptions": "More options"
+      },
+      "bulk": {
+        "selectedCount": "{count} user(s) selected",
+        "assignRolePlaceholder": "Assign a role...",
+        "applying": "Applying...",
+        "apply": "Apply"
+      },
+      "loading": "Loading users...",
+      "loadError": "Couldn't load users.",
+      "empty": "No matching users.",
+      "table": {
+        "columns": {
+          "user": "User",
+          "role": "Role",
+          "teams": "Teams",
+          "workspace": "Workspace",
+          "status": "Status",
+          "lastLogin": "Last login",
+          "actions": "Actions"
+        },
+        "selectAria": "Select {name}",
+        "roleAria": "{name}'s role",
+        "noAccess": "No access",
+        "neverLoggedIn": "Never logged in",
+        "actionsAria": "Actions",
+        "viewProfile": "View profile",
+        "edit": "Edit",
+        "reactivate": "Reactivate",
+        "deactivate": "Deactivate"
+      },
+      "pagination": {
+        "showingRange": "Showing {from}-{to} of {total} user(s)",
+        "previous": "Previous page",
+        "next": "Next page"
+      },
+      "deactivateDialog": {
+        "title": "Deactivate user",
+        "description": "{name} will immediately lose access to this organization. They can be reactivated later.",
+        "confirm": "Deactivate",
+        "cancel": "Cancel",
+        "reasonLabel": "Reason",
+        "reasonPlaceholder": "Reason for deactivating this user"
+      },
+      "editDialog": {
+        "title": "Edit user",
+        "description": "Update {name}'s details.",
+        "save": "Save",
+        "cancel": "Cancel",
+        "changeAvatarAria": "Change profile picture",
+        "fullNamePlaceholder": "Full name",
+        "workspacesLabel": "Workspaces",
+        "noWorkspaces": "No workspaces",
+        "noWorkspacesAvailable": "No workspaces available.",
+        "alreadyHasAccess": "Already has access",
+        "workspaceGrantHint": "Granting a workspace here is permanent and can't be undone from this window.",
+        "passwordTitle": "Password",
+        "passwordHint": "The password isn't shown or changed directly here.",
+        "sendResetLink": "Send reset link"
+      },
+      "csv": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "status": "Status",
+        "lastLogin": "Last login"
+      },
+      "toasts": {
+        "reasonTooShort": "Enter a reason of at least two characters.",
+        "userDeactivated": "{name} deactivated.",
+        "deactivateFailed": "Couldn't deactivate the user.",
+        "userUpdated": "{name} updated.",
+        "updateFailed": "Couldn't update the user.",
+        "avatarTooLarge": "The image size must not exceed 3 MB.",
+        "avatarUnsupportedFormat": "Unsupported image format.",
+        "avatarUpdated": "Profile picture updated.",
+        "avatarUploadFailed": "Couldn't upload the image.",
+        "passwordResetSent": "Password reset link sent to {email}.",
+        "passwordResetFailed": "Couldn't send the password reset link.",
+        "userReactivated": "{name} reactivated.",
+        "reactivateFailed": "Couldn't reactivate the user.",
+        "accessRevoked": "{name} no longer has access.",
+        "roleAssigned": "{name} is now {role}.",
+        "customRoleAssigned": "{name} now has the \"{role}\" role.",
+        "customRoleFallback": "Custom",
+        "accessUpdateFailed": "Couldn't update the permission.",
+        "bulkRoleAssigned": "Role assigned to {count} user(s).",
+        "bulkRoleAssignFailed": "Couldn't assign the role to some users."
+      }
+    },
+    "addUserDialog": {
+      "title": "Add user",
+      "description": "New members start with no permissions. Add them to a team later to grant access.",
+      "close": "Close",
+      "methodLabel": "How to add",
+      "modes": {
+        "direct": {
+          "title": "Add directly",
+          "subtitle": "Create the account and add it to the system immediately"
+        },
+        "invite": {
+          "title": "Invite by email",
+          "subtitle": "Send an invitation to join the team"
+        }
+      },
+      "fields": {
+        "fullNameLabel": "Full name",
+        "fullNamePlaceholder": "e.g. Sarah Al-Harbi",
+        "emailLabel": "Email",
+        "emailPlaceholder": "name@madar.local",
+        "scopeLabel": "Access scope",
+        "scopeOptional": "(optional)",
+        "scopeOrgWide": "Organization-wide access",
+        "scopeMultiple": "{count} workspaces selected",
+        "noWorkspacesAvailable": "No workspaces available.",
+        "scopeHintInvite": "Leave unselected to grant organization-wide access. A separate invitation is sent for each workspace you choose.",
+        "scopeHintDirect": "Leave unselected to grant organization-wide access. A separate membership is created for each workspace you choose, immediately upon creation.",
+        "passwordLabel": "Password",
+        "passwordHelper": "Must be at least 12 characters",
+        "passwordPlaceholder": "Enter a temporary password"
+      },
+      "notice": {
+        "invite": "The user will receive an invitation link valid for 7 days, and choose their own password.",
+        "direct": "The account will be created immediately with the password set above, and they'll also receive a real link to set a new password by email."
+      },
+      "primaryLabel": {
+        "invite": "Send invitation",
+        "direct": "Create and add"
+      },
+      "cancel": "Cancel",
+      "toasts": {
+        "invitationSent": "Invitation sent to {email}.",
+        "invitationFailed": "Couldn't send the invitation. Check that the email is correct.",
+        "memberCreatedNotifyFailed": "The user was added, but the notification email couldn't be sent.",
+        "memberCreated": "{name} added directly.",
+        "memberCreateFailed": "Couldn't add the user. Check that the email isn't already in use."
+      }
+    },
+    "roles": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Roles"
+      },
+      "title": "Roles",
+      "subtitle": "Manage roles and permissions and set access levels for the system.",
+      "createRole": "Create new role",
+      "stats": {
+        "customRoles": "Custom roles",
+        "linkedUsers": "Linked users",
+        "totalRoles": "Total roles"
+      },
+      "search": {
+        "placeholder": "Search roles..."
+      },
+      "loading": "Loading roles...",
+      "loadError": "Couldn't load roles.",
+      "roleCard": {
+        "defaultBadge": "Default role",
+        "customBadge": "Custom role",
+        "usersCount": "{count} user(s)",
+        "permissionsCount": "{count} permission(s)",
+        "viewDetails": "View details",
+        "clone": "Clone",
+        "deleteAria": "Delete {name}"
+      },
+      "cloneSuffix": " (copy)",
+      "dialog": {
+        "titles": {
+          "details": "Role details",
+          "edit": "Edit role",
+          "clone": "Create role from copy",
+          "create": "Create custom role"
+        },
+        "descriptions": {
+          "readOnly": "This is a default system role and can't be edited.",
+          "edit": "Update the role's details while keeping its linked users.",
+          "create": "Define a custom role and set its permissions."
+        },
+        "saveLabelEdit": "Save changes",
+        "saveLabelCreate": "Create role",
+        "close": "Close",
+        "cancel": "Cancel",
+        "back": "Back",
+        "next": "Next"
+      },
+      "wizard": {
+        "steps": {
+          "info": {
+            "title": "Role information",
+            "subtitle": "Name and description"
+          },
+          "permissions": {
+            "title": "Permissions",
+            "subtitle": "Set access permissions"
+          },
+          "review": {
+            "title": "Review and save",
+            "subtitle": "Review the settings"
+          }
+        },
+        "note": {
+          "title": "Note",
+          "description": "You can select multiple permissions per module. These permissions will apply to everything under that module."
+        }
+      },
+      "form": {
+        "nameLabel": "Role name",
+        "namePlaceholder": "e.g. Campaign manager",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "A brief description of this role's tasks and scope"
+      },
+      "permissions": {
+        "selectedCount": "{count} permission(s) selected",
+        "startingFrom": " (starting from {name})",
+        "subtitle": "Define exactly what this role can do -- use a template as a starting point, then adjust it."
+      },
+      "review": {
+        "unnamed": "Unnamed",
+        "permissionsSelected": "permission(s) selected",
+        "noPermissions": "No permissions selected yet."
+      },
+      "deleteDialog": {
+        "title": "Delete role",
+        "description": "\"{name}\" will be permanently deleted. Users assigned to this role will lose the permissions it grants. This action can't be undone.",
+        "confirm": "Delete role",
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "updated": "Role \"{name}\" updated.",
+        "created": "Role \"{name}\" created.",
+        "saveFailed": "Couldn't save the role.",
+        "deleted": "Role \"{name}\" deleted.",
+        "deleteFailed": "Couldn't delete the role."
+      }
+    },
+    "permissionMatrix": {
+      "actions": {
+        "view": "View",
+        "create": "Create",
+        "edit": "Edit",
+        "delete": "Delete",
+        "export": "Export",
+        "import": "Import",
+        "approve": "Approve",
+        "publish": "Publish",
+        "manage": "Manage"
+      },
+      "modules": {
+        "dashboard": {
+          "label": "Home",
+          "pages": ["Home"]
+        },
+        "liveVisitors": {
+          "label": "Live visitors",
+          "pages": ["Live visitors"]
+        },
+        "campaigns": {
+          "label": "Campaigns",
+          "pages": ["Campaigns"],
+          "children": {
+            "main": "Campaigns",
+            "channels": "Channels",
+            "linkBuilder": "Link builder"
+          }
+        },
+        "connections": {
+          "label": "Integrations",
+          "pages": ["Integrations"]
+        },
+        "stores": {
+          "label": "Stores",
+          "pages": ["Stores"]
+        },
+        "products": {
+          "label": "Products",
+          "pages": ["Products"]
+        },
+        "orders": {
+          "label": "Orders",
+          "pages": ["Orders"]
+        },
+        "pos": {
+          "label": "Cashier",
+          "pages": ["Cashier"],
+          "children": {
+            "main": "Cashier",
+            "invoices": "Invoices",
+            "shifts": "Shifts"
+          }
+        },
+        "customers": {
+          "label": "Customers",
+          "pages": ["Customers"]
+        },
+        "reports": {
+          "label": "Reports",
+          "pages": ["Reports"]
+        },
+        "ai": {
+          "label": "AI",
+          "pages": ["AI"]
+        },
+        "users": {
+          "label": "Administration",
+          "pages": ["Users"],
+          "children": {
+            "main": "Users",
+            "roles": "Roles",
+            "teams": "Teams",
+            "invitations": "Invitations",
+            "auditLog": "Full log / Audit logs",
+            "sessions": "Active sessions"
+          }
+        },
+        "roles": {
+          "label": "Roles",
+          "pages": ["Roles"]
+        },
+        "teams": {
+          "label": "Teams",
+          "pages": ["Teams"]
+        },
+        "invitations": {
+          "label": "Invitations",
+          "pages": ["Invitations"]
+        },
+        "auditLog": {
+          "label": "Audit logs",
+          "pages": ["Full log", "Audit logs"]
+        },
+        "sessions": {
+          "label": "Active sessions",
+          "pages": ["Active sessions"]
+        },
+        "settings": {
+          "label": "Settings",
+          "pages": ["General settings"],
+          "children": {
+            "general": "General settings",
+            "devices": "Device settings",
+            "cashier": "Cashier settings",
+            "payments": "Payment methods",
+            "zatca": "E-invoicing (ZATCA)",
+            "workspace": "Workspace management",
+            "tax": "Taxes"
+          }
+        },
+        "workspace": {
+          "label": "Workspace",
+          "pages": ["Workspace management"]
+        },
+        "tax": {
+          "label": "Taxes",
+          "pages": ["Taxes"]
+        }
+      },
+      "toggleAll": "Enable all",
+      "toggleNone": "Disable all",
+      "search": {
+        "placeholder": "Search features..."
+      },
+      "table": {
+        "moduleColumn": "Module"
+      },
+      "collapseSection": "Collapse section",
+      "expandSection": "Expand section",
+      "childPagesCount": "{count} sub-page(s) -- click to expand",
+      "subPermissionsCount": "{count} sub-permission(s)",
+      "noResults": "No matching results.",
+      "checkboxAria": "{module} {action}"
+    },
+    "teams": {
+      "breadcrumb": {
+        "home": "Home",
+        "administration": "Administration",
+        "current": "Teams"
+      },
+      "title": "Teams",
+      "subtitle": "Organize team members by function, manager, and workspace.",
+      "createTeam": "Create new team",
+      "stats": {
+        "totalTeams": "Total teams",
+        "totalMembers": "Total members",
+        "teamsWithoutManager": "Teams without a manager"
+      },
+      "search": {
+        "placeholder": "Search teams..."
+      },
+      "loading": "Loading teams...",
+      "loadError": "Couldn't load teams.",
+      "empty": "No matching teams.",
+      "table": {
+        "columns": {
+          "team": "Team",
+          "manager": "Manager",
+          "members": "Team members",
+          "workspace": "Workspace",
+          "description": "Description",
+          "actions": "Actions"
+        },
+        "noManager": "No manager",
+        "editAria": "Edit {name}",
+        "deleteAria": "Delete {name}"
+      },
+      "deleteDialog": {
+        "title": "Delete team",
+        "description": "\"{name}\" and its member list will be permanently deleted. This action can't be undone.",
+        "confirm": "Delete team",
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "updated": "Team \"{name}\" updated.",
+        "created": "Team \"{name}\" created.",
+        "updateFailed": "Couldn't update the team.",
+        "createFailed": "Couldn't create the team.",
+        "deleted": "Team \"{name}\" deleted.",
+        "deleteFailed": "Couldn't delete the team.",
+        "memberAdded": "Member added.",
+        "memberAddFailed": "Couldn't add the member.",
+        "memberRemoved": "Member removed.",
+        "memberRemoveFailed": "Couldn't remove the member."
+      },
+      "dialog": {
+        "editTitle": "Edit team — {name}",
+        "createTitle": "Create team",
+        "description": "Collaborative teams organize members by workspace and area of responsibility.",
+        "cancel": "Cancel",
+        "saveChanges": "Save changes",
+        "create": "Create team",
+        "nameLabel": "Team name",
+        "workspacePlaceholder": "Workspace (optional)",
+        "descriptionLabel": "Description",
+        "membersTitle": "Team members",
+        "addMemberPlaceholder": "Choose a member to add",
+        "allOrgMembersJoined": "All organization members have already joined.",
+        "add": "Add",
+        "loadingMembers": "Loading members...",
+        "noMembersYet": "No members yet.",
+        "removeMemberAria": "Remove {name}",
+        "autoManagerNote": "You'll be added automatically as the team manager. You can optionally add other members now.",
+        "noOrgMembers": "No members in the organization.",
+        "allMembersAdded": "All members have been added.",
+        "noAdditionalMembers": "No additional members selected."
+      }
+    }
   }
 }

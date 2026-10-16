@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   BarChart3,
   Grid2x2,
@@ -16,22 +17,29 @@ import {
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const NAV_ITEMS = [
-  { href: ROUTES.administration, label: "نظرة عامة", icon: Grid2x2 },
-  { href: ROUTES.administrationUsers, label: "المستخدمون", icon: Users },
-  { href: ROUTES.administrationRoles, label: "الأدوار", icon: ShieldCheck },
-  { href: ROUTES.administrationTeams, label: "الفرق", icon: UsersRound },
-  { href: ROUTES.administrationInvitations, label: "الدعوات", icon: Mail },
-  { href: ROUTES.administrationActivityLog, label: "السجل الشامل", icon: History },
-  { href: ROUTES.administrationAuditLog, label: "سجلات التدقيق", icon: BarChart3 },
-  { href: ROUTES.administrationSessions, label: "الجلسات النشطة", icon: Monitor },
-]
+  { href: ROUTES.administration, key: "overview", icon: Grid2x2 },
+  { href: ROUTES.administrationUsers, key: "users", icon: Users },
+  { href: ROUTES.administrationRoles, key: "roles", icon: ShieldCheck },
+  { href: ROUTES.administrationTeams, key: "teams", icon: UsersRound },
+  { href: ROUTES.administrationInvitations, key: "invitations", icon: Mail },
+  { href: ROUTES.administrationActivityLog, key: "activityLog", icon: History },
+  { href: ROUTES.administrationAuditLog, key: "auditLog", icon: BarChart3 },
+  { href: ROUTES.administrationSessions, key: "sessions", icon: Monitor },
+] as const
 
 export function AdministrationModuleNav() {
+  const t = useTranslations("administration.nav")
+  const locale = useLocale() as Locale
   const pathname = usePathname()
 
   return (
-    <nav dir="rtl" className="overflow-x-auto rounded-2xl border border-[#e8edf3] bg-white p-1.5">
+    <nav
+      dir={localeDirection(locale)}
+      className="overflow-x-auto rounded-2xl border border-[#e8edf3] bg-white p-1.5"
+    >
       <ul className="flex min-w-max items-center gap-1">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href
@@ -48,7 +56,7 @@ export function AdministrationModuleNav() {
                 )}
               >
                 <Icon className="size-3.5" />
-                {item.label}
+                {t(item.key)}
               </Link>
             </li>
           )

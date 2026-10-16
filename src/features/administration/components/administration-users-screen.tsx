@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Ban,
   ChevronDown,
@@ -57,6 +58,7 @@ import { AdministrationUserProfileDrawer } from "./administration-user-profile-d
 
 import { useApplicationServices } from "@/application/context"
 import type { AdministrationUserDto, AdministrationUserStatus } from "@/application/contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -67,11 +69,10 @@ const FIELD_CLASS =
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
-const STATUS_LABEL: Record<AdministrationUserStatus, string> = {
-  active: "نشط",
-  inactive: "غير نشط",
-  pending: "قيد التفعيل",
-  suspended: "معلّق",
+type UsersTranslator = ReturnType<typeof useTranslations<"administration.users">>
+
+function statusLabel(status: AdministrationUserStatus, t: UsersTranslator): string {
+  return t(`statuses.${status}` as "statuses.active")
 }
 
 const STATUS_TINT: Record<AdministrationUserStatus, string> = {
@@ -124,6 +125,9 @@ function StatCard({
 }
 
 export function AdministrationUsersScreen() {
+  const t = useTranslations("administration.users")
+  const tTime = useTranslations("administration.time")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization, availableWorkspaces } = useWorkspace()
   const { currentUser } = useAuth()
@@ -219,8 +223,8 @@ export function AdministrationUsersScreen() {
           workspaceFilter === "all" || user.workspaces.includes(workspaceFilter)
         return matchesTerm && matchesStatus && matchesWorkspace
       })
-      .sort((left, right) => left.fullName.localeCompare(right.fullName, "ar"))
-  }, [allUsers, query, statusFilter, workspaceFilter])
+      .sort((left, right) => left.fullName.localeCompare(right.fullName, locale))
+  }, [allUsers, locale, query, statusFilter, workspaceFilter])
 
   const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
   const clampedPage = Math.min(page, pageCount)
@@ -233,12 +237,18 @@ export function AdministrationUsersScreen() {
   }
 
   function exportCsv() {
-    const header = ["الاسم", "البريد الإلكتروني", "الدور", "الحالة", "آخر تسجيل دخول"]
+    const header = [
+      t("csv.name"),
+      t("csv.email"),
+      t("csv.role"),
+      t("csv.status"),
+      t("csv.lastLogin"),
+    ]
     const rows = filteredUsers.map((user) => [
       user.fullName,
       user.email,
       user.roleId,
-      STATUS_LABEL[user.status],
+      statusLabel(user.status, t),
       user.lastLogin,
     ])
     const csv = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n")
@@ -254,7 +264,7 @@ export function AdministrationUsersScreen() {
   async function handleDeactivateUser() {
     if (!deactivatingUser || !currentOrganization) return
     if (deactivateReason.trim().length < 2) {
-      toast.error("أدخل سبباً لا يقل عن حرفين.")
+      toast.error(t("toasts.reasonTooShort"))
       return
     }
     try {
@@ -263,11 +273,11 @@ export function AdministrationUsersScreen() {
         memberUserId: deactivatingUser.id,
         reason: deactivateReason.trim(),
       })
-      toast.success(`تم إيقاف ${deactivatingUser.fullName}.`)
+      toast.success(t("toasts.userDeactivated", { name: deactivatingUser.fullName }))
       setDeactivatingUser(null)
       setDeactivateReason("")
     } catch {
-      toast.error("تعذر إيقاف المستخدم.")
+      toast.error(t("toasts.deactivateFailed"))
     }
   }
 
@@ -314,12 +324,12 @@ export function AdministrationUsersScreen() {
         const authUser = useAuthStore.getState().user
         if (authUser) useAuthStore.getState().setUser({ ...authUser, fullName: trimmedName })
       }
-      toast.success(`تم تحديث ${editingUser.fullName}.`)
+      toast.success(t("toasts.userUpdated", { name: editingUser.fullName }))
       setEditingUser(null)
       setEditWorkspaceIds([])
       setEditFullName("")
     } catch {
-      toast.error("تعذر تحديث المستخدم.")
+      toast.error(t("toasts.updateFailed"))
     }
   }
 
@@ -327,12 +337,12 @@ export function AdministrationUsersScreen() {
     if (!editingUser || !currentOrganization) return
     const MAX_AVATAR_BYTES = 3 * 1024 * 1024
     if (file.size > MAX_AVATAR_BYTES) {
-      toast.error("يجب ألا يتجاوز حجم الصورة 3 ميغابايت.")
+      toast.error(t("toasts.avatarTooLarge"))
       return
     }
     const contentType = file.type as "image/png" | "image/jpeg" | "image/webp" | "image/gif"
     if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(contentType)) {
-      toast.error("صيغة الصورة غير مدعومة.")
+      toast.error(t("toasts.avatarUnsupportedFormat"))
       return
     }
     try {
@@ -353,9 +363,9 @@ export function AdministrationUsersScreen() {
         const authUser = useAuthStore.getState().user
         if (authUser) useAuthStore.getState().setUser({ ...authUser, avatarUrl: result.avatarUrl })
       }
-      toast.success("تم تحديث الصورة الشخصية.")
+      toast.success(t("toasts.avatarUpdated"))
     } catch {
-      toast.error("تعذر رفع الصورة.")
+      toast.error(t("toasts.avatarUploadFailed"))
     }
   }
 
@@ -366,9 +376,9 @@ export function AdministrationUsersScreen() {
         organizationId: currentOrganization.id,
         memberUserId: editingUser.id,
       })
-      toast.success(`تم إرسال رابط إعادة تعيين كلمة المرور إلى ${editingUser.email}.`)
+      toast.success(t("toasts.passwordResetSent", { email: editingUser.email }))
     } catch {
-      toast.error("تعذر إرسال رابط إعادة تعيين كلمة المرور.")
+      toast.error(t("toasts.passwordResetFailed"))
     }
   }
 
@@ -379,9 +389,9 @@ export function AdministrationUsersScreen() {
         organizationId: currentOrganization.id,
         memberUserId: user.id,
       })
-      toast.success(`تم إعادة تفعيل ${user.fullName}.`)
+      toast.success(t("toasts.userReactivated", { name: user.fullName }))
     } catch {
-      toast.error("تعذر إعادة التفعيل.")
+      toast.error(t("toasts.reactivateFailed"))
     }
   }
 
@@ -396,7 +406,7 @@ export function AdministrationUsersScreen() {
     try {
       if (value === "none") {
         await setModuleAccess.mutateAsync({ organizationId, memberUserId: user.id, revoked: true })
-        toast.success(`لم يعد لدى ${user.fullName} صلاحية وصول.`)
+        toast.success(t("toasts.accessRevoked", { name: user.fullName }))
         return
       }
       if (user.moduleAccessRevoked) {
@@ -412,7 +422,7 @@ export function AdministrationUsersScreen() {
             customRoleId: null,
           })
         }
-        toast.success(`أصبح ${user.fullName} ${humanizeRole(value)}.`)
+        toast.success(t("toasts.roleAssigned", { name: user.fullName, role: humanizeRole(value) }))
         return
       }
       await assignCustomRole.mutateAsync({
@@ -421,9 +431,14 @@ export function AdministrationUsersScreen() {
         customRoleId: value,
       })
       const customRole = assignableCustomRoles.find((role) => role.id === value)
-      toast.success(`أصبح لدى ${user.fullName} دور "${customRole?.name ?? "مخصص"}".`)
+      toast.success(
+        t("toasts.customRoleAssigned", {
+          name: user.fullName,
+          role: customRole?.name ?? t("toasts.customRoleFallback"),
+        })
+      )
     } catch {
-      toast.error("تعذر تحديث الصلاحية.")
+      toast.error(t("toasts.accessUpdateFailed"))
     }
   }
 
@@ -443,47 +458,45 @@ export function AdministrationUsersScreen() {
           })
         )
       )
-      toast.success(`تم تعيين الدور لعدد ${selectedIds.length} مستخدم.`)
+      toast.success(t("toasts.bulkRoleAssigned", { count: selectedIds.length }))
       setSelectedIds([])
       setBulkRoleValue("")
     } catch {
-      toast.error("تعذر تعيين الدور لبعض المستخدمين.")
+      toast.error(t("toasts.bulkRoleAssignFailed"))
     } finally {
       setAssigningBulkRole(false)
     }
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
-          الرئيسية
+          {t("breadcrumb.home")}
         </Link>
         <span>/</span>
         <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
-          الإدارة
+          {t("breadcrumb.administration")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <UsersIcon className="size-3.5" />
-          المستخدمين
+          {t("breadcrumb.current")}
         </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>المستخدمين</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            إدارة حسابات المستخدمين، الصلاحيات، ووصولهم إلى الموارد في المنصة.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <AppButton
           onClick={() => setAddUserOpen(true)}
           className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
-          إضافة مستخدم
+          {t("addUser")}
         </AppButton>
       </div>
 
@@ -491,25 +504,25 @@ export function AdministrationUsersScreen() {
         <StatCard
           icon={UserX}
           tint="bg-[#fef2f2] text-[#dc2626]"
-          label="مستخدمين غير نشطين"
+          label={t("stats.inactive")}
           value={counts.inactive}
         />
         <StatCard
           icon={Clock3}
           tint="bg-[#fffbeb] text-[#92400e]"
-          label="بانتظار التفعيل"
+          label={t("stats.pendingActivation")}
           value={counts.pending}
         />
         <StatCard
           icon={UserCheck}
           tint="bg-[#f0fdf4] text-[#16a34a]"
-          label="المستخدمين النشطين"
+          label={t("stats.active")}
           value={counts.active}
         />
         <StatCard
           icon={UsersIcon}
           tint="bg-[#eff6ff] text-[#2563eb]"
-          label="إجمالي المستخدمين"
+          label={t("stats.total")}
           value={counts.total}
         />
       </div>
@@ -522,7 +535,7 @@ export function AdministrationUsersScreen() {
             className="flex h-10 items-center gap-1.5 rounded-[10px] border border-[#e8edf3] px-3 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff]"
           >
             <Download className="size-3.5" />
-            تصدير
+            {t("export")}
           </button>
 
           <div className="relative min-w-[200px] flex-1">
@@ -533,7 +546,7 @@ export function AdministrationUsersScreen() {
                 setQuery(event.target.value)
                 setPage(1)
               }}
-              placeholder="البحث باسم المستخدم أو البريد الإلكتروني..."
+              placeholder={t("search.placeholder")}
               className={cn(FIELD_CLASS, "ps-9")}
             />
           </div>
@@ -549,11 +562,11 @@ export function AdministrationUsersScreen() {
               <AppSelectValue />
             </AppSelectTrigger>
             <AppSelectContent>
-              <AppSelectItem value="all">جميع الحالات</AppSelectItem>
-              <AppSelectItem value="active">نشط</AppSelectItem>
-              <AppSelectItem value="pending">قيد التفعيل</AppSelectItem>
-              <AppSelectItem value="suspended">معلّق</AppSelectItem>
-              <AppSelectItem value="inactive">غير نشط</AppSelectItem>
+              <AppSelectItem value="all">{t("filters.allStatuses")}</AppSelectItem>
+              <AppSelectItem value="active">{statusLabel("active", t)}</AppSelectItem>
+              <AppSelectItem value="pending">{statusLabel("pending", t)}</AppSelectItem>
+              <AppSelectItem value="suspended">{statusLabel("suspended", t)}</AppSelectItem>
+              <AppSelectItem value="inactive">{statusLabel("inactive", t)}</AppSelectItem>
             </AppSelectContent>
           </AppSelect>
 
@@ -568,7 +581,7 @@ export function AdministrationUsersScreen() {
               <AppSelectValue />
             </AppSelectTrigger>
             <AppSelectContent>
-              <AppSelectItem value="all">جميع أماكن العمل</AppSelectItem>
+              <AppSelectItem value="all">{t("filters.allWorkspaces")}</AppSelectItem>
               {workspaceFilterOptions.map((workspace) => (
                 <AppSelectItem key={workspace} value={workspace}>
                   {workspace}
@@ -584,18 +597,18 @@ export function AdministrationUsersScreen() {
             )}
           >
             <SlidersHorizontal className="size-3.5" />
-            مزيد من الخيارات
+            {t("filters.moreOptions")}
           </span>
         </div>
 
         {selectedIds.length > 0 ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] border border-[#c7d9ff] bg-[#eff6ff] p-2.5">
             <span className="text-[12.5px] font-semibold text-[#2563eb]">
-              تم تحديد {selectedIds.length} مستخدم
+              {t("bulk.selectedCount", { count: selectedIds.length })}
             </span>
             <AppSelect value={bulkRoleValue} onValueChange={setBulkRoleValue}>
               <AppSelectTrigger className="h-9 w-[160px] rounded-[8px] border-[#c7d9ff] bg-white text-[12px]">
-                <AppSelectValue placeholder="تعيين دور..." />
+                <AppSelectValue placeholder={t("bulk.assignRolePlaceholder")} />
               </AppSelectTrigger>
               <AppSelectContent>
                 {assignableRoles.map((role) => (
@@ -610,7 +623,7 @@ export function AdministrationUsersScreen() {
               onClick={() => void handleBulkAssignRole()}
               className="h-9 rounded-[8px] bg-[#2563eb] px-3 text-[12px] font-semibold text-white hover:bg-[#1d4ed8]"
             >
-              {assigningBulkRole ? "جارٍ التعيين..." : "تطبيق"}
+              {assigningBulkRole ? t("bulk.applying") : t("bulk.apply")}
             </AppButton>
           </div>
         ) : null}
@@ -620,12 +633,12 @@ export function AdministrationUsersScreen() {
         {isLoading ? (
           <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل المستخدمين...
+            {t("loading")}
           </div>
         ) : isError ? (
-          <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل المستخدمين.</p>
+          <p className="p-8 text-center text-[13px] text-[#dc2626]">{t("loadError")}</p>
         ) : filteredUsers.length === 0 ? (
-          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>لا يوجد مستخدمون مطابقون.</p>
+          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>{t("empty")}</p>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -634,13 +647,13 @@ export function AdministrationUsersScreen() {
                   <tr>
                     {[
                       { key: "select", label: "" },
-                      { key: "user", label: "المستخدم" },
-                      { key: "role", label: "الدور" },
-                      { key: "teams", label: "الفرق" },
-                      { key: "workspace", label: "مكان العمل" },
-                      { key: "status", label: "الحالة" },
-                      { key: "lastLogin", label: "آخر تسجيل دخول" },
-                      { key: "actions", label: "الإجراءات" },
+                      { key: "user", label: t("table.columns.user") },
+                      { key: "role", label: t("table.columns.role") },
+                      { key: "teams", label: t("table.columns.teams") },
+                      { key: "workspace", label: t("table.columns.workspace") },
+                      { key: "status", label: t("table.columns.status") },
+                      { key: "lastLogin", label: t("table.columns.lastLogin") },
+                      { key: "actions", label: t("table.columns.actions") },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -668,7 +681,7 @@ export function AdministrationUsersScreen() {
                           type="checkbox"
                           checked={selectedIds.includes(user.id)}
                           onChange={() => toggleSelected(user.id)}
-                          aria-label={`تحديد ${user.fullName}`}
+                          aria-label={t("table.selectAria", { name: user.fullName })}
                           className="size-4 accent-[#2563eb]"
                         />
                       </td>
@@ -701,7 +714,7 @@ export function AdministrationUsersScreen() {
                         >
                           <AppSelectTrigger
                             className="mx-auto h-8 w-[130px] rounded-[8px] border-[#e8edf3] text-[11.5px]"
-                            aria-label={`دور ${user.fullName}`}
+                            aria-label={t("table.roleAria", { name: user.fullName })}
                             disabled={
                               (assignRole.isPending &&
                                 assignRole.variables?.memberUserId === user.id) ||
@@ -714,7 +727,7 @@ export function AdministrationUsersScreen() {
                             <AppSelectValue />
                           </AppSelectTrigger>
                           <AppSelectContent>
-                            <AppSelectItem value="none">بلا صلاحية</AppSelectItem>
+                            <AppSelectItem value="none">{t("table.noAccess")}</AppSelectItem>
                             {assignableRoles.map((role) => (
                               <AppSelectItem key={role.id} value={role.id}>
                                 {role.name}
@@ -754,11 +767,16 @@ export function AdministrationUsersScreen() {
                             STATUS_TINT[user.status]
                           )}
                         >
-                          {STATUS_LABEL[user.status]}
+                          {statusLabel(user.status, t)}
                         </span>
                       </td>
                       <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
-                        {formatRelativeArabic(user.lastLogin, "لم يسجّل الدخول")}
+                        {formatRelativeArabic(
+                          user.lastLogin,
+                          tTime,
+                          locale,
+                          t("table.neverLoggedIn")
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <AppDropdownMenu
@@ -768,7 +786,7 @@ export function AdministrationUsersScreen() {
                           <AppDropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              aria-label="الإجراءات"
+                              aria-label={t("table.actionsAria")}
                               className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
                             >
                               <MoreHorizontal className="size-4" />
@@ -790,7 +808,7 @@ export function AdministrationUsersScreen() {
                               className="gap-2 text-[12.5px] font-semibold text-[#5b6b85]"
                             >
                               <Eye className="size-3.5" />
-                              عرض الملف الشخصي
+                              {t("table.viewProfile")}
                             </AppDropdownMenuItem>
                             <AppDropdownMenuItem
                               onSelect={(event) => {
@@ -804,7 +822,7 @@ export function AdministrationUsersScreen() {
                               className="gap-2 text-[12.5px] font-semibold text-[#5b6b85]"
                             >
                               <Pencil className="size-3.5" />
-                              تعديل
+                              {t("table.edit")}
                             </AppDropdownMenuItem>
                             {user.id === currentUser?.id ? null : user.status === "suspended" ? (
                               <AppDropdownMenuItem
@@ -816,7 +834,7 @@ export function AdministrationUsersScreen() {
                                 className="gap-2 text-[12.5px] font-semibold text-[#16a34a] focus:text-[#16a34a]"
                               >
                                 <RotateCcw className="size-3.5" />
-                                إعادة تفعيل
+                                {t("table.reactivate")}
                               </AppDropdownMenuItem>
                             ) : (
                               <AppDropdownMenuItem
@@ -828,7 +846,7 @@ export function AdministrationUsersScreen() {
                                 className="gap-2 text-[12.5px] font-semibold text-[#dc2626] focus:text-[#dc2626]"
                               >
                                 <Ban className="size-3.5" />
-                                إيقاف
+                                {t("table.deactivate")}
                               </AppDropdownMenuItem>
                             )}
                           </AppDropdownMenuContent>
@@ -860,9 +878,11 @@ export function AdministrationUsersScreen() {
                   </AppSelect>
                 </div>
                 <span className={cn("text-[12px]", MUTED)}>
-                  عرض {(clampedPage - 1) * pageSize + 1} -{" "}
-                  {Math.min(clampedPage * pageSize, filteredUsers.length)} من {filteredUsers.length}{" "}
-                  مستخدم
+                  {t("pagination.showingRange", {
+                    from: (clampedPage - 1) * pageSize + 1,
+                    to: Math.min(clampedPage * pageSize, filteredUsers.length),
+                    total: filteredUsers.length,
+                  })}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -870,10 +890,10 @@ export function AdministrationUsersScreen() {
                   type="button"
                   disabled={clampedPage <= 1}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("pagination.previous")}
                   className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <ChevronRight className="size-3.5" />
+                  <ChevronLeft className="size-3.5 rtl:rotate-180" />
                 </button>
                 <span className="flex size-7 items-center justify-center rounded-[7px] bg-[#2563eb] text-[12.5px] font-bold text-white">
                   {clampedPage}
@@ -882,10 +902,10 @@ export function AdministrationUsersScreen() {
                   type="button"
                   disabled={clampedPage >= pageCount}
                   onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("pagination.next")}
                   className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <ChevronLeft className="size-3.5" />
+                  <ChevronRight className="size-3.5 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -918,16 +938,16 @@ export function AdministrationUsersScreen() {
             setDeactivateReason("")
           }
         }}
-        title={<span dir="rtl">إيقاف المستخدم</span>}
+        title={<span dir={localeDirection(locale)}>{t("deactivateDialog.title")}</span>}
         description={
-          <span dir="rtl">
+          <span dir={localeDirection(locale)}>
             {deactivatingUser
-              ? `سيفقد ${deactivatingUser.fullName} الوصول إلى هذه المنظمة فوراً. يمكن إعادة تفعيله لاحقاً.`
+              ? t("deactivateDialog.description", { name: deactivatingUser.fullName })
               : null}
           </span>
         }
-        confirmLabel="إيقاف"
-        cancelLabel="إلغاء"
+        confirmLabel={t("deactivateDialog.confirm")}
+        cancelLabel={t("deactivateDialog.cancel")}
         confirmTone="destructive"
         loading={suspendUser.isPending}
         onConfirm={handleDeactivateUser}
@@ -935,13 +955,13 @@ export function AdministrationUsersScreen() {
           setDeactivatingUser(null)
           setDeactivateReason("")
         }}
-        contentClassName="[direction:rtl]"
+        contentClassName={locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"}
       >
         <AppInput
-          label="السبب"
+          label={t("deactivateDialog.reasonLabel")}
           value={deactivateReason}
           onChange={(event) => setDeactivateReason(event.target.value)}
-          placeholder="سبب إيقاف هذا المستخدم"
+          placeholder={t("deactivateDialog.reasonPlaceholder")}
         />
       </AppConfirmDialog>
 
@@ -955,12 +975,14 @@ export function AdministrationUsersScreen() {
             setEditAvatarUrl(null)
           }
         }}
-        title={<span dir="rtl">تعديل المستخدم</span>}
+        title={<span dir={localeDirection(locale)}>{t("editDialog.title")}</span>}
         description={
-          <span dir="rtl">{editingUser ? `تحديث بيانات ${editingUser.fullName}.` : null}</span>
+          <span dir={localeDirection(locale)}>
+            {editingUser ? t("editDialog.description", { name: editingUser.fullName }) : null}
+          </span>
         }
-        confirmLabel="حفظ"
-        cancelLabel="إلغاء"
+        confirmLabel={t("editDialog.save")}
+        cancelLabel={t("editDialog.cancel")}
         loading={assignWorkspaces.isPending || updateIdentity.isPending}
         onConfirm={handleEditUser}
         onCancel={() => {
@@ -969,14 +991,14 @@ export function AdministrationUsersScreen() {
           setEditFullName("")
           setEditAvatarUrl(null)
         }}
-        contentClassName="[direction:rtl]"
+        contentClassName={locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"}
       >
-        <div dir="rtl" className="flex flex-col gap-3.5">
+        <div dir={localeDirection(locale)} className="flex flex-col gap-3.5">
           <div className={cn(PANEL, "flex items-center gap-3 p-3.5")}>
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
-              aria-label="تغيير الصورة الشخصية"
+              aria-label={t("editDialog.changeAvatarAria")}
               className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#eff6ff] text-[15px] font-bold text-[#2563eb]"
             >
               {editAvatarUrl ? (
@@ -1006,7 +1028,7 @@ export function AdministrationUsersScreen() {
               <AppInput
                 value={editFullName}
                 onChange={(event) => setEditFullName(event.target.value)}
-                placeholder="الاسم الكامل"
+                placeholder={t("editDialog.fullNamePlaceholder")}
                 className="h-9"
               />
               <p className={cn("mt-1.5 truncate text-[11px]", MUTED)}>{editingUser?.email}</p>
@@ -1014,7 +1036,9 @@ export function AdministrationUsersScreen() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className={cn("text-[11.5px] font-semibold", MUTED)}>أماكن العمل</span>
+            <span className={cn("text-[11.5px] font-semibold", MUTED)}>
+              {t("editDialog.workspacesLabel")}
+            </span>
             <AppPopover>
               <AppPopoverTrigger asChild>
                 <button
@@ -1030,7 +1054,7 @@ export function AdministrationUsersScreen() {
                           .filter((workspace) => editWorkspaceIds.includes(workspace.id))
                           .map((workspace) => workspace.name)
                           .join("، ")
-                      : "لا يوجد أماكن عمل"}
+                      : t("editDialog.noWorkspaces")}
                   </span>
                   <ChevronDown className="size-4 shrink-0 text-[#8098b4]" />
                 </button>
@@ -1041,7 +1065,9 @@ export function AdministrationUsersScreen() {
                 className="w-[var(--radix-popover-trigger-width)] flex-col gap-0 rounded-[10px] border-[#e8edf3] p-1"
               >
                 {orgWorkspaces.length === 0 ? (
-                  <p className={cn("p-2.5 text-[12px]", MUTED)}>لا توجد أماكن عمل متاحة.</p>
+                  <p className={cn("p-2.5 text-[12px]", MUTED)}>
+                    {t("editDialog.noWorkspacesAvailable")}
+                  </p>
                 ) : (
                   orgWorkspaces.map((workspace) => {
                     const alreadyAssigned =
@@ -1071,7 +1097,9 @@ export function AdministrationUsersScreen() {
                           {workspace.name}
                         </span>
                         {alreadyAssigned ? (
-                          <span className={cn("text-[10.5px]", MUTED)}>لديه وصول بالفعل</span>
+                          <span className={cn("text-[10.5px]", MUTED)}>
+                            {t("editDialog.alreadyHasAccess")}
+                          </span>
                         ) : null}
                       </label>
                     )
@@ -1079,17 +1107,15 @@ export function AdministrationUsersScreen() {
                 )}
               </AppPopoverContent>
             </AppPopover>
-            <p className={cn("text-[10.5px]", MUTED)}>
-              إضافة مكان عمل هنا دائمة ولا يمكن التراجع عنها من هذه النافذة.
-            </p>
+            <p className={cn("text-[10.5px]", MUTED)}>{t("editDialog.workspaceGrantHint")}</p>
           </div>
 
           <div className={cn(PANEL, "flex items-center justify-between gap-3 p-3.5")}>
             <div>
-              <p className={cn("text-[12.5px] font-extrabold", HEADING)}>كلمة المرور</p>
-              <p className={cn("text-[11px]", MUTED)}>
-                لا تُعرض كلمة المرور أو تُغيَّر هنا مباشرة.
+              <p className={cn("text-[12.5px] font-extrabold", HEADING)}>
+                {t("editDialog.passwordTitle")}
               </p>
+              <p className={cn("text-[11px]", MUTED)}>{t("editDialog.passwordHint")}</p>
             </div>
             <AppButton
               type="button"
@@ -1098,7 +1124,7 @@ export function AdministrationUsersScreen() {
               onClick={() => void handleSendPasswordReset()}
               className="h-9 shrink-0 rounded-[9px] border-[#e8edf3] text-[12px] font-semibold text-[#5b6b85]"
             >
-              إرسال رابط إعادة التعيين
+              {t("editDialog.sendResetLink")}
             </AppButton>
           </div>
         </div>

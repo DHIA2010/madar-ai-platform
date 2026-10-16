@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import {
   ArrowLeft,
   Check,
@@ -26,15 +27,20 @@ import { useWorkspace } from "@/features/workspace"
 import { useRoleMutations } from "../queries/use-role-mutations"
 import { useRolesQuery } from "../queries/use-roles-query"
 import { IAM_PERMISSION_GROUPS } from "../services"
+import type { IamPermissionAction, IamPermissionModule } from "../types"
 import { AdministrationModuleNav } from "./administration-module-nav"
 import {
+  actionLabel as matrixActionLabel,
+  moduleLabel as matrixModuleLabel,
   PERMISSION_ACTION_META,
   PERMISSION_MODULE_META,
   PermissionMatrix,
+  type PermissionMatrixTranslator,
 } from "./permission-matrix"
 
 import { useApplicationServices } from "@/application"
 import type { AdministrationRoleDto, RolePermissionDto } from "@/application/contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -50,10 +56,10 @@ type CustomRoleDraft = {
 
 type WizardStep = 1 | 2 | 3
 
-const WIZARD_STEPS: Array<{ step: WizardStep; title: string; subtitle: string }> = [
-  { step: 1, title: "معلومات الدور", subtitle: "الاسم والوصف" },
-  { step: 2, title: "الصلاحيات", subtitle: "تحديد صلاحيات الوصول" },
-  { step: 3, title: "مراجعة وحفظ", subtitle: "مراجعة الإعدادات" },
+const WIZARD_STEP_KEYS: Array<{ step: WizardStep; key: "info" | "permissions" | "review" }> = [
+  { step: 1, key: "info" },
+  { step: 2, key: "permissions" },
+  { step: 3, key: "review" },
 ]
 
 function clonePermissions(permissions: Record<string, string[]>): Record<string, string[]> {
@@ -76,17 +82,50 @@ function grantCount(role: AdministrationRoleDto) {
   return Object.values(role.permissions).reduce((total, list) => total + list.length, 0)
 }
 
+const KNOWN_MODULES = new Set<string>([
+  "dashboard",
+  "liveVisitors",
+  "campaigns",
+  "connections",
+  "stores",
+  "products",
+  "orders",
+  "pos",
+  "customers",
+  "reports",
+  "ai",
+  "users",
+  "roles",
+  "teams",
+  "invitations",
+  "auditLog",
+  "sessions",
+  "settings",
+  "workspace",
+  "tax",
+])
+const KNOWN_ACTIONS = new Set<string>([
+  "view",
+  "create",
+  "edit",
+  "delete",
+  "export",
+  "import",
+  "approve",
+  "publish",
+  "manage",
+])
+
 // A role's stored permissions can include module keys outside the static taxonomy shown in the
 // create/edit matrix (e.g. legacy grants) -- falls back to the raw key/action string rather than
 // hiding the row, so nothing granted on a role is ever silently dropped from view.
-function moduleLabel(module: string) {
-  return PERMISSION_MODULE_META[module as keyof typeof PERMISSION_MODULE_META]?.label ?? module
+function moduleLabel(module: string, t: PermissionMatrixTranslator) {
+  return KNOWN_MODULES.has(module) ? matrixModuleLabel(module as IamPermissionModule, t) : module
 }
-function actionLabels(actions: string[]) {
+function actionLabels(actions: string[], t: PermissionMatrixTranslator) {
   return actions
-    .map(
-      (action) =>
-        PERMISSION_ACTION_META[action as keyof typeof PERMISSION_ACTION_META]?.label ?? action
+    .map((action) =>
+      KNOWN_ACTIONS.has(action) ? matrixActionLabel(action as IamPermissionAction, t) : action
     )
     .join("، ")
 }
@@ -116,6 +155,9 @@ function StatCard({
 }
 
 export function AdministrationRolesScreen() {
+  const t = useTranslations("administration.roles")
+  const tMatrix = useTranslations("administration.permissionMatrix")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization } = useWorkspace()
   const { data, isLoading, isError } = useRolesQuery(
@@ -193,7 +235,7 @@ export function AdministrationRolesScreen() {
     setEditingRole(false)
     setCloningRole(true)
     setDraft({
-      name: `${role.name} (نسخة)`,
+      name: `${role.name}${t("cloneSuffix")}`,
       description: role.description,
       cloneFrom: role.id,
       permissions: clonePermissions(role.permissions),
@@ -217,7 +259,7 @@ export function AdministrationRolesScreen() {
           description: draft.description.trim() || undefined,
           permissions: permissionsToList(draft.permissions),
         })
-        toast.success(`تم تحديث دور "${draft.name.trim()}".`)
+        toast.success(t("toasts.updated", { name: draft.name.trim() }))
       } else {
         await createRole.mutateAsync({
           organizationId: currentOrganization.id,
@@ -225,11 +267,11 @@ export function AdministrationRolesScreen() {
           description: draft.description.trim() || undefined,
           permissions: permissionsToList(draft.permissions),
         })
-        toast.success(`تم إنشاء دور "${draft.name.trim()}".`)
+        toast.success(t("toasts.created", { name: draft.name.trim() }))
       }
       closeDialog()
     } catch {
-      toast.error("تعذر حفظ الدور.")
+      toast.error(t("toasts.saveFailed"))
     }
   }
 
@@ -237,10 +279,10 @@ export function AdministrationRolesScreen() {
     if (!deletingRole) return
     try {
       await deleteRole.mutateAsync({ roleId: deletingRole.id })
-      toast.success(`تم حذف دور "${deletingRole.name}".`)
+      toast.success(t("toasts.deleted", { name: deletingRole.name }))
       setDeletingRole(null)
     } catch {
-      toast.error("تعذر حذف الدور.")
+      toast.error(t("toasts.deleteFailed"))
     }
   }
 
@@ -248,54 +290,52 @@ export function AdministrationRolesScreen() {
   // save path for it, so the form must not offer one rather than failing silently on submit.
   const isReadOnly = editingRole && selectedRole ? !selectedRole.editable : false
   const dialogTitle = isReadOnly
-    ? "تفاصيل الدور"
+    ? t("dialog.titles.details")
     : editingRole
-      ? "تعديل الدور"
+      ? t("dialog.titles.edit")
       : cloningRole
-        ? "إنشاء دور من نسخة"
-        : "إنشاء دور مخصص"
+        ? t("dialog.titles.clone")
+        : t("dialog.titles.create")
   const dialogDescription = isReadOnly
-    ? "هذا دور افتراضي في النظام ولا يمكن تعديله."
+    ? t("dialog.descriptions.readOnly")
     : editingRole
-      ? "تحديث بيانات الدور مع الحفاظ على المستخدمين المرتبطين به."
-      : "عرّف دوراً مخصصاً وحدد صلاحياته."
-  const saveLabel = editingRole ? "حفظ التعديلات" : "إنشاء الدور"
+      ? t("dialog.descriptions.edit")
+      : t("dialog.descriptions.create")
+  const saveLabel = editingRole ? t("dialog.saveLabelEdit") : t("dialog.saveLabelCreate")
   const isSaving = createRole.isPending || updateRole.isPending
 
   const customRoleCount = roles.filter((role) => !role.isDefault).length
   const linkedUserCount = roles.reduce((total, role) => total + role.userCount, 0)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
-          الرئيسية
+          {t("breadcrumb.home")}
         </Link>
         <span>/</span>
         <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
-          الإدارة
+          {t("breadcrumb.administration")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <ShieldCheck className="size-3.5" />
-          الأدوار
+          {t("breadcrumb.current")}
         </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الأدوار</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            إدارة الأدوار والصلاحيات وتحديد مستويات الوصول للنظام.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <AppButton
           onClick={openCreateDialog}
           className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
-          إنشاء دور جديد
+          {t("createRole")}
         </AppButton>
       </div>
 
@@ -303,19 +343,19 @@ export function AdministrationRolesScreen() {
         <StatCard
           icon={ShieldCheck}
           tint="bg-[#f5f3ff] text-[#7c3aed]"
-          label="أدوار مخصصة"
+          label={t("stats.customRoles")}
           value={customRoleCount}
         />
         <StatCard
           icon={Users}
           tint="bg-[#eff6ff] text-[#2563eb]"
-          label="المستخدمين المربوطين"
+          label={t("stats.linkedUsers")}
           value={linkedUserCount}
         />
         <StatCard
           icon={Crown}
           tint="bg-[#fffbeb] text-[#92400e]"
-          label="إجمالي الأدوار"
+          label={t("stats.totalRoles")}
           value={roles.length}
         />
       </div>
@@ -326,7 +366,7 @@ export function AdministrationRolesScreen() {
           <AppInput
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="البحث في الأدوار..."
+            placeholder={t("search.placeholder")}
             className="h-10 rounded-[10px] border-[#e8edf3] bg-white ps-9 text-[13px]"
           />
         </div>
@@ -335,10 +375,10 @@ export function AdministrationRolesScreen() {
       {isLoading ? (
         <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
           <Loader2 className="size-4 animate-spin" />
-          جارٍ تحميل الأدوار...
+          {t("loading")}
         </div>
       ) : isError ? (
-        <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل الأدوار.</p>
+        <p className="p-8 text-center text-[13px] text-[#dc2626]">{t("loadError")}</p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filteredRoles.map((role) => (
@@ -353,7 +393,7 @@ export function AdministrationRolesScreen() {
                     role.isDefault ? "bg-[#f4f7fc] text-[#5b6b85]" : "bg-[#fef2f2] text-[#dc2626]"
                   )}
                 >
-                  {role.isDefault ? "دور افتراضي" : "دور مخصص"}
+                  {role.isDefault ? t("roleCard.defaultBadge") : t("roleCard.customBadge")}
                 </span>
               </div>
               <div>
@@ -363,11 +403,11 @@ export function AdministrationRolesScreen() {
               <div className="flex items-center gap-4 text-[11.5px]">
                 <span className={cn("flex items-center gap-1", MUTED)}>
                   <Users className="size-3.5" />
-                  {role.userCount} مستخدمين
+                  {t("roleCard.usersCount", { count: role.userCount })}
                 </span>
                 <span className={cn("flex items-center gap-1", MUTED)}>
                   <ShieldCheck className="size-3.5" />
-                  {grantCount(role)} صلاحية
+                  {t("roleCard.permissionsCount", { count: grantCount(role) })}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 border-t border-[#eef2f8] pt-3">
@@ -376,7 +416,7 @@ export function AdministrationRolesScreen() {
                   onClick={() => openEditDialog(role)}
                   className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[8px] border border-[#e8edf3] text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff]"
                 >
-                  عرض التفاصيل
+                  {t("roleCard.viewDetails")}
                 </button>
                 <button
                   type="button"
@@ -384,13 +424,13 @@ export function AdministrationRolesScreen() {
                   className="flex h-8 items-center gap-1.5 rounded-[8px] border border-[#e8edf3] px-2.5 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff]"
                 >
                   <Copy className="size-3.5" />
-                  استنساخ
+                  {t("roleCard.clone")}
                 </button>
                 {role.editable ? (
                   <button
                     type="button"
                     onClick={() => setDeletingRole(role)}
-                    aria-label={`حذف ${role.name}`}
+                    aria-label={t("roleCard.deleteAria", { name: role.name })}
                     className="flex h-8 items-center justify-center rounded-[8px] border border-[#e8edf3] px-2.5 text-[#dc2626] hover:bg-[#fef2f2]"
                   >
                     <Trash2 className="size-3.5" />
@@ -408,9 +448,12 @@ export function AdministrationRolesScreen() {
           setOpen(nextOpen)
           if (!nextOpen) resetDialogState()
         }}
-        title={<span dir="rtl">{dialogTitle}</span>}
-        description={<span dir="rtl">{dialogDescription}</span>}
-        contentClassName="w-[95vw] max-w-6xl [direction:rtl]"
+        title={<span dir={localeDirection(locale)}>{dialogTitle}</span>}
+        description={<span dir={localeDirection(locale)}>{dialogDescription}</span>}
+        contentClassName={cn(
+          "w-[95vw] max-w-6xl",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
         footer={
           isReadOnly ? (
             <AppButton
@@ -418,7 +461,7 @@ export function AdministrationRolesScreen() {
               onClick={closeDialog}
               className="h-11 rounded-[10px] px-6 text-[13px] font-semibold"
             >
-              إغلاق
+              {t("dialog.close")}
             </AppButton>
           ) : (
             <>
@@ -429,7 +472,7 @@ export function AdministrationRolesScreen() {
                 }
                 className="h-11 rounded-[10px] border-[#dbe3ef] px-6 text-[13px] font-semibold text-[#5b6b85]"
               >
-                {step === 1 ? "إلغاء" : "رجوع"}
+                {step === 1 ? t("dialog.cancel") : t("dialog.back")}
               </AppButton>
               {step < 3 ? (
                 <AppButton
@@ -439,7 +482,7 @@ export function AdministrationRolesScreen() {
                   disabled={step === 1 && draft.name.trim().length === 0}
                   className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
                 >
-                  التالي
+                  {t("dialog.next")}
                 </AppButton>
               ) : (
                 <AppButton
@@ -455,7 +498,7 @@ export function AdministrationRolesScreen() {
           )
         }
       >
-        <div dir="rtl">
+        <div dir={localeDirection(locale)}>
           {isReadOnly ? (
             <div className="grid gap-4">
               <div>
@@ -468,9 +511,11 @@ export function AdministrationRolesScreen() {
                   .map(([module, actions]) => (
                     <div key={module} className="rounded-lg border border-[#e8edf3] p-3">
                       <p className={cn("text-[12.5px] font-bold", HEADING)}>
-                        {moduleLabel(module)}
+                        {moduleLabel(module, tMatrix)}
                       </p>
-                      <p className={cn("mt-1 text-[11.5px]", MUTED)}>{actionLabels(actions)}</p>
+                      <p className={cn("mt-1 text-[11.5px]", MUTED)}>
+                        {actionLabels(actions, tMatrix)}
+                      </p>
                     </div>
                   ))}
               </div>
@@ -481,7 +526,7 @@ export function AdministrationRolesScreen() {
                   (stepper on the right, step content on the left). */}
               <div className="w-[210px] shrink-0 space-y-4">
                 <ol className="space-y-1">
-                  {WIZARD_STEPS.map((item) => {
+                  {WIZARD_STEP_KEYS.map((item) => {
                     const isDone = item.step < step
                     const isCurrent = item.step === step
                     return (
@@ -511,9 +556,11 @@ export function AdministrationRolesScreen() {
                               isCurrent || isDone ? HEADING : "text-[#8098b4]"
                             )}
                           >
-                            {item.title}
+                            {t(`wizard.steps.${item.key}.title`)}
                           </p>
-                          <p className="text-[11px] text-[#8098b4]">{item.subtitle}</p>
+                          <p className="text-[11px] text-[#8098b4]">
+                            {t(`wizard.steps.${item.key}.subtitle`)}
+                          </p>
                         </div>
                       </li>
                     )
@@ -524,10 +571,11 @@ export function AdministrationRolesScreen() {
                   <div className="flex gap-2 rounded-[10px] border border-[#e8edf3] bg-[#fafbfd] p-3">
                     <ShieldCheck className="size-4 shrink-0 text-[#8098b4]" />
                     <div>
-                      <p className={cn("text-[11.5px] font-bold", HEADING)}>ملاحظة</p>
+                      <p className={cn("text-[11.5px] font-bold", HEADING)}>
+                        {t("wizard.note.title")}
+                      </p>
                       <p className="mt-0.5 text-[11px] leading-5 text-[#8098b4]">
-                        يمكنك تحديد صلاحيات متعددة لكل وحدة. وسيتم تطبيق هذه الصلاحيات على جميع
-                        العناصر التابعة للوحدة.
+                        {t("wizard.note.description")}
                       </p>
                     </div>
                   </div>
@@ -539,10 +587,10 @@ export function AdministrationRolesScreen() {
                   <>
                     <div className="grid gap-3 md:grid-cols-2">
                       <AppInput
-                        label="اسم الدور"
+                        label={t("form.nameLabel")}
                         labelClassName="text-[13px] font-semibold text-[#0d1b3e]"
                         required
-                        placeholder="مثال: مدير الحملات"
+                        placeholder={t("form.namePlaceholder")}
                         value={draft.name}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, name: event.target.value }))
@@ -550,9 +598,9 @@ export function AdministrationRolesScreen() {
                         className="h-11 rounded-[10px] border-[#e8edf3] bg-white px-3.5 text-[13.5px]"
                       />
                       <AppTextarea
-                        label="الوصف"
+                        label={t("form.descriptionLabel")}
                         labelClassName="text-[13px] font-semibold text-[#0d1b3e]"
-                        placeholder="وصف مختصر لمهام هذا الدور ونطاقه"
+                        placeholder={t("form.descriptionPlaceholder")}
                         value={draft.description}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, description: event.target.value }))
@@ -566,8 +614,10 @@ export function AdministrationRolesScreen() {
                 {step === 2 ? (
                   <>
                     <div className="rounded-lg border border-[#e8edf3] p-3 text-[12.5px] text-[#5b6b85]">
-                      تم اختيار {permissionGrantCount} صلاحية
-                      {selectedClone ? ` (بدءاً من ${selectedClone.name})` : ""}
+                      {t("permissions.selectedCount", { count: permissionGrantCount })}
+                      {selectedClone
+                        ? t("permissions.startingFrom", { name: selectedClone.name })
+                        : ""}
                     </div>
                     <PermissionMatrix
                       groups={IAM_PERMISSION_GROUPS}
@@ -575,7 +625,7 @@ export function AdministrationRolesScreen() {
                       onChange={(next) =>
                         setDraft((current) => ({ ...current, permissions: next }))
                       }
-                      subtitle="حدد بالضبط ما يمكن لهذا الدور القيام به -- استخدم قالباً كنقطة بداية ثم عدّله."
+                      subtitle={t("permissions.subtitle")}
                     />
                   </>
                 ) : null}
@@ -588,7 +638,7 @@ export function AdministrationRolesScreen() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <h3 className={cn("text-[14.5px] font-extrabold", HEADING)}>
-                          {draft.name || "بدون اسم"}
+                          {draft.name || t("review.unnamed")}
                         </h3>
                         {draft.description ? (
                           <p className={cn("mt-0.5 truncate text-[12px] leading-5", MUTED)}>
@@ -601,7 +651,7 @@ export function AdministrationRolesScreen() {
                           {permissionGrantCount}
                         </span>
                         <span className="mt-1 text-[10px] font-semibold opacity-90">
-                          صلاحية محددة
+                          {t("review.permissionsSelected")}
                         </span>
                       </div>
                     </div>
@@ -623,7 +673,7 @@ export function AdministrationRolesScreen() {
                               </span>
                               <div className="min-w-0 flex-1">
                                 <p className={cn("text-[12.5px] font-bold", HEADING)}>
-                                  {moduleLabel(module)}
+                                  {moduleLabel(module, tMatrix)}
                                 </p>
                                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                                   {actions.map((action) => {
@@ -640,7 +690,7 @@ export function AdministrationRolesScreen() {
                                           backgroundColor: `${actionMeta?.color ?? "#8098b4"}1a`,
                                         }}
                                       >
-                                        {actionMeta?.label ?? action}
+                                        {actionLabels([action], tMatrix)}
                                       </span>
                                     )
                                   })}
@@ -651,7 +701,7 @@ export function AdministrationRolesScreen() {
                         })}
                       {permissionGrantCount === 0 ? (
                         <p className="p-3 text-center text-[12.5px] text-[#8098b4]">
-                          لم يتم تحديد أي صلاحيات بعد.
+                          {t("review.noPermissions")}
                         </p>
                       ) : null}
                     </div>
@@ -668,21 +718,19 @@ export function AdministrationRolesScreen() {
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setDeletingRole(null)
         }}
-        title={<span dir="rtl">حذف الدور</span>}
+        title={<span dir={localeDirection(locale)}>{t("deleteDialog.title")}</span>}
         description={
-          <span dir="rtl">
-            {deletingRole
-              ? `سيتم حذف "${deletingRole.name}" نهائياً. سيفقد المستخدمون المعينون لهذا الدور الصلاحيات التي يمنحها. لا يمكن التراجع عن هذا الإجراء.`
-              : null}
+          <span dir={localeDirection(locale)}>
+            {deletingRole ? t("deleteDialog.description", { name: deletingRole.name }) : null}
           </span>
         }
-        confirmLabel="حذف الدور"
-        cancelLabel="إلغاء"
+        confirmLabel={t("deleteDialog.confirm")}
+        cancelLabel={t("deleteDialog.cancel")}
         confirmTone="destructive"
         loading={deleteRole.isPending}
         onConfirm={handleDeleteRole}
         onCancel={() => setDeletingRole(null)}
-        contentClassName="[direction:rtl]"
+        contentClassName={locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"}
       />
     </div>
   )

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { ChevronDown, Lock, Mail, User } from "lucide-react"
 import { toast } from "sonner"
 
@@ -18,6 +19,8 @@ import { useWorkspace } from "@/features/workspace"
 
 import { useInvitationMutations } from "../queries/use-invitation-mutations"
 import { useUserMutations } from "../queries/use-user-mutations"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 // Every value below is transcribed directly from the approved design (Add User Modal.dc.html),
 // not the broader Administration module's HEADING/MUTED tokens -- this dialog intentionally
@@ -142,6 +145,8 @@ export function AdministrationAddUserDialog({
   onOpenChange,
   organizationId,
 }: AdministrationAddUserDialogProps) {
+  const t = useTranslations("administration.addUserDialog")
+  const locale = useLocale() as Locale
   const { availableWorkspaces } = useWorkspace()
   const inviteableWorkspaces = useMemo(
     () => availableWorkspaces.filter((workspace) => workspace.status !== "archived"),
@@ -185,9 +190,9 @@ export function AdministrationAddUserDialog({
         )
       )
       close()
-      toast.success(`تم إرسال الدعوة إلى ${email}.`)
+      toast.success(t("toasts.invitationSent", { email }))
     } catch {
-      toast.error("تعذر إرسال الدعوة. تحقق من أن البريد الإلكتروني صحيح.")
+      toast.error(t("toasts.invitationFailed"))
     }
   }
 
@@ -216,21 +221,18 @@ export function AdministrationAddUserDialog({
       try {
         await sendPasswordReset.mutateAsync({ organizationId, memberUserId: created.userId })
       } catch {
-        toast.error("تمت إضافة المستخدم، لكن تعذر إرسال بريد الإعلام.")
+        toast.error(t("toasts.memberCreatedNotifyFailed"))
       }
       close()
-      toast.success(`تم إضافة ${fullName} مباشرةً.`)
+      toast.success(t("toasts.memberCreated", { name: fullName }))
     } catch {
-      toast.error("تعذر إضافة المستخدم. تحقق من أن البريد الإلكتروني غير مستخدم من قبل.")
+      toast.error(t("toasts.memberCreateFailed"))
     }
   }
 
-  const notice =
-    mode === "invite"
-      ? "سيستلم المستخدم رابط دعوة صالحاً لمدة ٧ أيام، ويختار كلمة المرور بنفسه."
-      : "سيتم إنشاء الحساب فوراً بكلمة المرور المحددة أعلاه، وسيصله أيضاً رابط حقيقي لتعيين كلمة مرور جديدة عبر البريد الإلكتروني."
+  const notice = mode === "invite" ? t("notice.invite") : t("notice.direct")
 
-  const primaryLabel = mode === "invite" ? "إرسال الدعوة" : "إنشاء وإضافة"
+  const primaryLabel = mode === "invite" ? t("primaryLabel.invite") : t("primaryLabel.direct")
   const primaryDisabled = !isValid || isPending
 
   const selectedWorkspaces = inviteableWorkspaces.filter((workspace) =>
@@ -238,10 +240,10 @@ export function AdministrationAddUserDialog({
   )
   const scopeLabel =
     selectedWorkspaces.length === 0
-      ? "وصول على مستوى المنظمة"
+      ? t("fields.scopeOrgWide")
       : selectedWorkspaces.length === 1
         ? selectedWorkspaces[0].name
-        : `${selectedWorkspaces.length} أماكن عمل مختارة`
+        : t("fields.scopeMultiple", { count: selectedWorkspaces.length })
 
   const fieldBase = {
     background: FIELD_BG,
@@ -278,7 +280,7 @@ export function AdministrationAddUserDialog({
     <AppDialog
       open={open}
       onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}
-      title={<span className="sr-only">إضافة مستخدم</span>}
+      title={<span className="sr-only">{t("title")}</span>}
       showCloseButton={false}
       contentClassName="w-[90vw] max-w-[660px] gap-0 rounded-[20px] border p-0 ring-0"
       // Radix's Content still needs *some* box-shadow token from Tailwind's ring utilities
@@ -286,7 +288,7 @@ export function AdministrationAddUserDialog({
       // values Tailwind's arbitrary-class escaping makes unreadable, so they're set here instead.
     >
       <div
-        dir="rtl"
+        dir={localeDirection(locale)}
         style={{
           borderColor: OUTER_BORDER,
           boxShadow: "0 32px 70px -24px rgba(23,32,42,0.3), 0 2px 6px rgba(23,32,42,0.05)",
@@ -320,16 +322,16 @@ export function AdministrationAddUserDialog({
                 letterSpacing: "-0.2px",
               }}
             >
-              إضافة مستخدم
+              {t("title")}
             </h2>
             <p style={{ margin: "6px 0 0", fontSize: "14px", lineHeight: "22px", color: MUTED }}>
-              الأعضاء الجدد يبدأون بلا صلاحيات. أضِفهم إلى فريق لاحقاً لمنحهم الوصول.
+              {t("description")}
             </p>
           </div>
           <button
             type="button"
             onClick={close}
-            aria-label="إغلاق"
+            aria-label={t("close")}
             className="flex shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors hover:bg-[#f2f4f8] hover:text-[#17202a]"
             style={{ width: "32px", height: "32px", color: FAINT, fontSize: "15px", lineHeight: 1 }}
           >
@@ -350,18 +352,18 @@ export function AdministrationAddUserDialog({
               paddingBottom: "10px",
             }}
           >
-            طريقة الإضافة
+            {t("methodLabel")}
           </div>
           <div className="grid grid-cols-2" style={{ gap: "12px" }}>
             <ModeCard
-              title="إضافة مباشرة"
-              subtitle="إنشاء الحساب وإضافته فوراً إلى النظام"
+              title={t("modes.direct.title")}
+              subtitle={t("modes.direct.subtitle")}
               selected={mode === "direct"}
               onClick={() => setMode("direct")}
             />
             <ModeCard
-              title="دعوة عبر البريد"
-              subtitle="إرسال دعوة للانضمام إلى الفريق"
+              title={t("modes.invite.title")}
+              subtitle={t("modes.invite.subtitle")}
               selected={mode === "invite"}
               onClick={() => setMode("invite")}
             />
@@ -372,9 +374,9 @@ export function AdministrationAddUserDialog({
         <div className="grid grid-cols-2" style={{ padding: "22px 28px 0", gap: "18px 16px" }}>
           {mode === "direct" ? (
             <AppInput
-              label={<RequiredLabel>الاسم الكامل</RequiredLabel>}
+              label={<RequiredLabel>{t("fields.fullNameLabel")}</RequiredLabel>}
               labelClassName="text-[13px] font-semibold"
-              placeholder="مثال: سارة الحربي"
+              placeholder={t("fields.fullNamePlaceholder")}
               startIcon={<User className="size-4" />}
               className="h-auto rounded-[10px] text-[14.5px] leading-[22px] focus-visible:ring-[3px]"
               style={iconFieldStyle}
@@ -385,11 +387,11 @@ export function AdministrationAddUserDialog({
             />
           ) : null}
           <AppInput
-            label={<RequiredLabel>البريد الإلكتروني</RequiredLabel>}
+            label={<RequiredLabel>{t("fields.emailLabel")}</RequiredLabel>}
             labelClassName="text-[13px] font-semibold"
             type="email"
             dir="ltr"
-            placeholder="name@madar.local"
+            placeholder={t("fields.emailPlaceholder")}
             startIcon={<Mail className="size-4" />}
             className={
               "h-auto rounded-[10px] text-right text-[14.5px] leading-[22px] focus-visible:ring-[3px]"
@@ -402,7 +404,8 @@ export function AdministrationAddUserDialog({
 
           <div className="col-span-2 flex flex-col" style={{ gap: "7px" }}>
             <div style={{ fontSize: "13px", fontWeight: 600, color: LABEL }}>
-              نطاق الوصول <span style={{ fontWeight: 400, color: FAINT }}>(اختياري)</span>
+              {t("fields.scopeLabel")}{" "}
+              <span style={{ fontWeight: 400, color: FAINT }}>{t("fields.scopeOptional")}</span>
             </div>
 
             <AppPopover>
@@ -433,7 +436,7 @@ export function AdministrationAddUserDialog({
               >
                 {inviteableWorkspaces.length === 0 ? (
                   <p style={{ padding: "10px", fontSize: "13px", color: FAINT }}>
-                    لا توجد أماكن عمل متاحة.
+                    {t("fields.noWorkspacesAvailable")}
                   </p>
                 ) : (
                   inviteableWorkspaces.map((workspace) => (
@@ -459,19 +462,17 @@ export function AdministrationAddUserDialog({
               </AppPopoverContent>
             </AppPopover>
             <p style={{ fontSize: "12.5px", lineHeight: "19px", color: FAINT }}>
-              {mode === "invite"
-                ? "اتركها بلا تحديد لمنح وصول على مستوى المنظمة. سيتم إرسال دعوة منفصلة لكل مكان عمل تختاره."
-                : "اتركها بلا تحديد لمنح وصول على مستوى المنظمة. سيتم إنشاء عضوية منفصلة لكل مكان عمل تختاره فور الإنشاء."}
+              {mode === "invite" ? t("fields.scopeHintInvite") : t("fields.scopeHintDirect")}
             </p>
           </div>
 
           {mode === "direct" ? (
             <div className="col-span-2">
               <AppPasswordInput
-                label={<RequiredLabel>كلمة المرور</RequiredLabel>}
+                label={<RequiredLabel>{t("fields.passwordLabel")}</RequiredLabel>}
                 labelClassName="text-[13px] font-semibold"
-                helperText="يجب ألا تقل عن 12 حرفاً"
-                placeholder="أدخل كلمة مرور مؤقتة"
+                helperText={t("fields.passwordHelper")}
+                placeholder={t("fields.passwordPlaceholder")}
                 startIcon={<Lock className="size-4" />}
                 className="h-auto rounded-[10px] text-[14.5px] leading-[22px] focus-visible:ring-[3px]"
                 style={iconFieldStyle}
@@ -548,7 +549,7 @@ export function AdministrationAddUserDialog({
               cursor: "pointer",
             }}
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <div className="flex-1" />
         </div>

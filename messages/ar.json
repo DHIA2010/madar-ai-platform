@@ -4352,5 +4352,751 @@
         "statusUpdateFailed": "تعذر تحديث حالة مساحة العمل."
       }
     }
+  },
+  "administration": {
+    "time": {
+      "now": "الآن",
+      "minutesAgo": "منذ {minutes} دقيقة",
+      "todayAt": "اليوم {time}",
+      "yesterdayAt": "أمس {time}",
+      "hourAgo": "منذ ساعة",
+      "hoursAgo": "منذ {hours} ساعات",
+      "dayAgo": "منذ يوم",
+      "daysAgo": "منذ {days} أيام"
+    },
+    "nav": {
+      "overview": "نظرة عامة",
+      "users": "المستخدمون",
+      "roles": "الأدوار",
+      "teams": "الفرق",
+      "invitations": "الدعوات",
+      "activityLog": "السجل الشامل",
+      "auditLog": "سجلات التدقيق",
+      "sessions": "الجلسات النشطة"
+    },
+    "common": {
+      "loading": "جارٍ التحميل...",
+      "close": "إغلاق",
+      "active": "نشط"
+    },
+    "userProfileDrawer": {
+      "title": "الملف الشخصي",
+      "description": "الهوية، نطاق الوصول، وحالة الجلسات.",
+      "access": {
+        "sectionTitle": "الوصول",
+        "roleLabel": "الدور:",
+        "workspacesLabel": "أماكن العمل:",
+        "teamsLabel": "الفرق:"
+      },
+      "recentActivity": {
+        "sectionTitle": "آخر النشاطات",
+        "empty": "لا توجد نشاطات مسجلة بعد."
+      },
+      "sessions": {
+        "sectionTitle": "الجلسات والأجهزة",
+        "empty": "لا توجد جلسات نشطة.",
+        "lastActive": "آخر نشاط {time}",
+        "currentSessionSuffix": " · الجلسة الحالية"
+      }
+    },
+    "activityLog": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "سجل الأحداث"
+      },
+      "title": "سجل الأحداث",
+      "subtitle": "سجل زمني لجميع الأنشطة والعمليات في النظام.",
+      "stats": {
+        "failedAttempts": "محاولات فاشلة",
+        "userChanges": "تغييرات المستخدمين",
+        "dataChanges": "تغييرات البيانات",
+        "totalEvents": "إجمالي الأحداث"
+      },
+      "search": {
+        "placeholder": "البحث في سجل الأحداث..."
+      },
+      "filters": {
+        "allStatuses": "جميع الحالات",
+        "success": "نجاح",
+        "failed": "فشل",
+        "allUsers": "جميع المستخدمين"
+      },
+      "table": {
+        "columns": {
+          "time": "الوقت والتاريخ",
+          "user": "المستخدم",
+          "type": "النوع",
+          "description": "الوصف",
+          "target": "الكيان المستهدف",
+          "ip": "عنوان IP",
+          "status": "الحالة"
+        }
+      },
+      "loading": "جارٍ تحميل السجل...",
+      "loadError": "تعذر تحميل السجل.",
+      "empty": "لا توجد أحداث مطابقة."
+    },
+    "auditLog": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "سجلات التدقيق"
+      },
+      "title": "سجلات التدقيق",
+      "subtitle": "سجل زمني لعمليات النظام والأحداث الأمنية والحوكمة.",
+      "stats": {
+        "securityEvents": "أحداث أمنية",
+        "userChanges": "تغييرات المستخدمين",
+        "dataChanges": "تغييرات البيانات",
+        "totalEvents": "إجمالي الأحداث"
+      },
+      "search": {
+        "placeholder": "البحث في سجل الأحداث..."
+      },
+      "filters": {
+        "allSeverities": "جميع مستويات الخطورة",
+        "allUsers": "جميع المستخدمين"
+      },
+      "severities": {
+        "low": "منخفض",
+        "medium": "متوسط",
+        "high": "عالي"
+      },
+      "table": {
+        "columns": {
+          "time": "الوقت والتاريخ",
+          "user": "المستخدم",
+          "type": "النوع",
+          "description": "الوصف",
+          "target": "الكيان المستهدف",
+          "ip": "عنوان IP",
+          "severity": "مستوى الخطورة"
+        }
+      },
+      "loading": "جارٍ تحميل السجل...",
+      "loadError": "تعذر تحميل السجل.",
+      "empty": "لا توجد أحداث مطابقة."
+    },
+    "invitations": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "الدعوات"
+      },
+      "title": "الدعوات",
+      "subtitle": "دعوة مستخدمين جدد أو إضافتهم مباشرةً، ومتابعة حالة الدعوات المرسلة.",
+      "addUser": "إضافة مستخدم",
+      "stats": {
+        "total": "إجمالي الدعوات",
+        "pending": "قيد الانتظار",
+        "accepted": "مقبولة",
+        "closed": "ملغاة أو منتهية"
+      },
+      "statuses": {
+        "pending": "قيد الانتظار",
+        "accepted": "مقبولة",
+        "declined": "مرفوضة",
+        "canceled": "ملغاة",
+        "expired": "منتهية"
+      },
+      "table": {
+        "columns": {
+          "name": "الاسم",
+          "email": "البريد الإلكتروني",
+          "workspace": "مكان العمل",
+          "status": "الحالة",
+          "expires": "تنتهي في",
+          "actions": "الإجراءات"
+        },
+        "resendAria": "إعادة إرسال",
+        "cancelAria": "إلغاء"
+      },
+      "loading": "جارٍ تحميل الدعوات...",
+      "loadError": "تعذر تحميل الدعوات.",
+      "empty": "لا توجد دعوات بعد.",
+      "toasts": {
+        "resent": "تمت إعادة إرسال الدعوة إلى {email}.",
+        "resendFailed": "تعذر إعادة إرسال الدعوة.",
+        "canceled": "تم إلغاء الدعوة.",
+        "cancelFailed": "تعذر إلغاء الدعوة."
+      }
+    },
+    "dashboard": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "current": "الإدارة"
+      },
+      "title": "لوحة الإدارة",
+      "subtitle": "إدارة المستخدمين، الأدوار، الصلاحيات، والحوكمة في المنصة.",
+      "stats": {
+        "invitations": "الدعوات",
+        "teams": "الفرق",
+        "roles": "الأدوار",
+        "users": "المستخدمون"
+      },
+      "search": {
+        "sectionTitle": "البحث الشامل في إدارة الهوية",
+        "sectionDescription": "ابحث في المستخدمين، الفرق، الأدوار، أو الدعوات بسرعة.",
+        "placeholder": "اكتب للبحث...",
+        "noResults": "لا توجد نتائج مطابقة.",
+        "resultTypes": {
+          "user": "مستخدم",
+          "team": "فريق",
+          "role": "دور",
+          "invitation": "دعوة"
+        }
+      },
+      "secure": {
+        "sectionTitle": "إدارة آمنة ومرنة",
+        "description": "تحكم في وصول المستخدمين، خصص الأدوار والصلاحيات، وتابع جميع الأنشطة لضمان أمان بياناتك.",
+        "features": ["تحكم دقيق في الصلاحيات", "سجل تدقيق شامل", "دعم الفرق متعددة الأقسام"]
+      },
+      "recentActivity": {
+        "sectionTitle": "آخر الأنشطة",
+        "viewAll": "عرض الكل",
+        "empty": "لا توجد أنشطة بعد.",
+        "actorByTarget": "{actor} بواسطة {target}"
+      },
+      "quickActions": {
+        "sectionTitle": "الإجراءات السريعة",
+        "inviteUser": {
+          "label": "دعوة مستخدم",
+          "description": "إرسال دعوة جديدة"
+        },
+        "addRole": {
+          "label": "إضافة دور",
+          "description": "إنشاء دور مخصص"
+        },
+        "createTeam": {
+          "label": "إنشاء فريق",
+          "description": "تنظيم المستخدمين"
+        },
+        "viewAuditLog": {
+          "label": "عرض سجل التدقيق",
+          "description": "مراجعة جميع الأنشطة"
+        }
+      }
+    },
+    "sessions": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "الجلسات النشطة"
+      },
+      "title": "الجلسات النشطة",
+      "subtitle": "مراقبة الأجهزة المتصلة وإدارة الجلسات النشطة لجميع المستخدمين.",
+      "terminateAllOthers": "إنهاء جميع الجلسات الأخرى",
+      "stats": {
+        "totalActive": "إجمالي الجلسات النشطة",
+        "connectedUsers": "مستخدمون متصلون",
+        "connectedDevices": "أجهزة متصلة"
+      },
+      "loading": "جارٍ تحميل الجلسات...",
+      "loadError": "تعذر تحميل الجلسات.",
+      "empty": "لا توجد جلسات نشطة.",
+      "unknownLocation": "غير معروف",
+      "table": {
+        "columns": {
+          "user": "المستخدم",
+          "device": "الجهاز",
+          "browser": "المتصفح",
+          "ip": "عنوان IP",
+          "location": "الموقع",
+          "lastActivity": "آخر نشاط",
+          "status": "الحالة",
+          "actions": "الإجراءات"
+        },
+        "currentSession": "الجلسة الحالية",
+        "activeSession": "نشطة",
+        "terminate": "إنهاء"
+      },
+      "confirmTerminateAll": {
+        "title": "إنهاء جميع الجلسات الأخرى",
+        "description": "سيتم تسجيل خروج جميع المستخدمين من كل الجلسات النشطة باستثناء جلستك الحالية.",
+        "confirm": "إنهاء الجلسات",
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "terminated": "تم إنهاء الجلسة.",
+        "terminateFailed": "تعذر إنهاء الجلسة.",
+        "terminatedCount": "تم إنهاء {count} جلسة.",
+        "terminateSomeFailed": "تعذر إنهاء بعض الجلسات."
+      }
+    },
+    "users": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "المستخدمين"
+      },
+      "title": "المستخدمين",
+      "subtitle": "إدارة حسابات المستخدمين، الصلاحيات، ووصولهم إلى الموارد في المنصة.",
+      "addUser": "إضافة مستخدم",
+      "stats": {
+        "inactive": "مستخدمين غير نشطين",
+        "pendingActivation": "بانتظار التفعيل",
+        "active": "المستخدمين النشطين",
+        "total": "إجمالي المستخدمين"
+      },
+      "export": "تصدير",
+      "search": {
+        "placeholder": "البحث باسم المستخدم أو البريد الإلكتروني..."
+      },
+      "statuses": {
+        "active": "نشط",
+        "inactive": "غير نشط",
+        "pending": "قيد التفعيل",
+        "suspended": "معلّق"
+      },
+      "filters": {
+        "allStatuses": "جميع الحالات",
+        "allWorkspaces": "جميع أماكن العمل",
+        "moreOptions": "مزيد من الخيارات"
+      },
+      "bulk": {
+        "selectedCount": "تم تحديد {count} مستخدم",
+        "assignRolePlaceholder": "تعيين دور...",
+        "applying": "جارٍ التعيين...",
+        "apply": "تطبيق"
+      },
+      "loading": "جارٍ تحميل المستخدمين...",
+      "loadError": "تعذر تحميل المستخدمين.",
+      "empty": "لا يوجد مستخدمون مطابقون.",
+      "table": {
+        "columns": {
+          "user": "المستخدم",
+          "role": "الدور",
+          "teams": "الفرق",
+          "workspace": "مكان العمل",
+          "status": "الحالة",
+          "lastLogin": "آخر تسجيل دخول",
+          "actions": "الإجراءات"
+        },
+        "selectAria": "تحديد {name}",
+        "roleAria": "دور {name}",
+        "noAccess": "بلا صلاحية",
+        "neverLoggedIn": "لم يسجّل الدخول",
+        "actionsAria": "الإجراءات",
+        "viewProfile": "عرض الملف الشخصي",
+        "edit": "تعديل",
+        "reactivate": "إعادة تفعيل",
+        "deactivate": "إيقاف"
+      },
+      "pagination": {
+        "showingRange": "عرض {from} - {to} من {total} مستخدم",
+        "previous": "الصفحة السابقة",
+        "next": "الصفحة التالية"
+      },
+      "deactivateDialog": {
+        "title": "إيقاف المستخدم",
+        "description": "سيفقد {name} الوصول إلى هذه المنظمة فوراً. يمكن إعادة تفعيله لاحقاً.",
+        "confirm": "إيقاف",
+        "cancel": "إلغاء",
+        "reasonLabel": "السبب",
+        "reasonPlaceholder": "سبب إيقاف هذا المستخدم"
+      },
+      "editDialog": {
+        "title": "تعديل المستخدم",
+        "description": "تحديث بيانات {name}.",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "changeAvatarAria": "تغيير الصورة الشخصية",
+        "fullNamePlaceholder": "الاسم الكامل",
+        "workspacesLabel": "أماكن العمل",
+        "noWorkspaces": "لا يوجد أماكن عمل",
+        "noWorkspacesAvailable": "لا توجد أماكن عمل متاحة.",
+        "alreadyHasAccess": "لديه وصول بالفعل",
+        "workspaceGrantHint": "إضافة مكان عمل هنا دائمة ولا يمكن التراجع عنها من هذه النافذة.",
+        "passwordTitle": "كلمة المرور",
+        "passwordHint": "لا تُعرض كلمة المرور أو تُغيَّر هنا مباشرة.",
+        "sendResetLink": "إرسال رابط إعادة التعيين"
+      },
+      "csv": {
+        "name": "الاسم",
+        "email": "البريد الإلكتروني",
+        "role": "الدور",
+        "status": "الحالة",
+        "lastLogin": "آخر تسجيل دخول"
+      },
+      "toasts": {
+        "reasonTooShort": "أدخل سبباً لا يقل عن حرفين.",
+        "userDeactivated": "تم إيقاف {name}.",
+        "deactivateFailed": "تعذر إيقاف المستخدم.",
+        "userUpdated": "تم تحديث {name}.",
+        "updateFailed": "تعذر تحديث المستخدم.",
+        "avatarTooLarge": "يجب ألا يتجاوز حجم الصورة 3 ميغابايت.",
+        "avatarUnsupportedFormat": "صيغة الصورة غير مدعومة.",
+        "avatarUpdated": "تم تحديث الصورة الشخصية.",
+        "avatarUploadFailed": "تعذر رفع الصورة.",
+        "passwordResetSent": "تم إرسال رابط إعادة تعيين كلمة المرور إلى {email}.",
+        "passwordResetFailed": "تعذر إرسال رابط إعادة تعيين كلمة المرور.",
+        "userReactivated": "تم إعادة تفعيل {name}.",
+        "reactivateFailed": "تعذر إعادة التفعيل.",
+        "accessRevoked": "لم يعد لدى {name} صلاحية وصول.",
+        "roleAssigned": "أصبح {name} {role}.",
+        "customRoleAssigned": "أصبح لدى {name} دور \"{role}\".",
+        "customRoleFallback": "مخصص",
+        "accessUpdateFailed": "تعذر تحديث الصلاحية.",
+        "bulkRoleAssigned": "تم تعيين الدور لعدد {count} مستخدم.",
+        "bulkRoleAssignFailed": "تعذر تعيين الدور لبعض المستخدمين."
+      }
+    },
+    "addUserDialog": {
+      "title": "إضافة مستخدم",
+      "description": "الأعضاء الجدد يبدأون بلا صلاحيات. أضِفهم إلى فريق لاحقاً لمنحهم الوصول.",
+      "close": "إغلاق",
+      "methodLabel": "طريقة الإضافة",
+      "modes": {
+        "direct": {
+          "title": "إضافة مباشرة",
+          "subtitle": "إنشاء الحساب وإضافته فوراً إلى النظام"
+        },
+        "invite": {
+          "title": "دعوة عبر البريد",
+          "subtitle": "إرسال دعوة للانضمام إلى الفريق"
+        }
+      },
+      "fields": {
+        "fullNameLabel": "الاسم الكامل",
+        "fullNamePlaceholder": "مثال: سارة الحربي",
+        "emailLabel": "البريد الإلكتروني",
+        "emailPlaceholder": "name@madar.local",
+        "scopeLabel": "نطاق الوصول",
+        "scopeOptional": "(اختياري)",
+        "scopeOrgWide": "وصول على مستوى المنظمة",
+        "scopeMultiple": "{count} أماكن عمل مختارة",
+        "noWorkspacesAvailable": "لا توجد أماكن عمل متاحة.",
+        "scopeHintInvite": "اتركها بلا تحديد لمنح وصول على مستوى المنظمة. سيتم إرسال دعوة منفصلة لكل مكان عمل تختاره.",
+        "scopeHintDirect": "اتركها بلا تحديد لمنح وصول على مستوى المنظمة. سيتم إنشاء عضوية منفصلة لكل مكان عمل تختاره فور الإنشاء.",
+        "passwordLabel": "كلمة المرور",
+        "passwordHelper": "يجب ألا تقل عن 12 حرفاً",
+        "passwordPlaceholder": "أدخل كلمة مرور مؤقتة"
+      },
+      "notice": {
+        "invite": "سيستلم المستخدم رابط دعوة صالحاً لمدة 7 أيام، ويختار كلمة المرور بنفسه.",
+        "direct": "سيتم إنشاء الحساب فوراً بكلمة المرور المحددة أعلاه، وسيصله أيضاً رابط حقيقي لتعيين كلمة مرور جديدة عبر البريد الإلكتروني."
+      },
+      "primaryLabel": {
+        "invite": "إرسال الدعوة",
+        "direct": "إنشاء وإضافة"
+      },
+      "cancel": "إلغاء",
+      "toasts": {
+        "invitationSent": "تم إرسال الدعوة إلى {email}.",
+        "invitationFailed": "تعذر إرسال الدعوة. تحقق من أن البريد الإلكتروني صحيح.",
+        "memberCreatedNotifyFailed": "تمت إضافة المستخدم، لكن تعذر إرسال بريد الإعلام.",
+        "memberCreated": "تم إضافة {name} مباشرةً.",
+        "memberCreateFailed": "تعذر إضافة المستخدم. تحقق من أن البريد الإلكتروني غير مستخدم من قبل."
+      }
+    },
+    "roles": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "الأدوار"
+      },
+      "title": "الأدوار",
+      "subtitle": "إدارة الأدوار والصلاحيات وتحديد مستويات الوصول للنظام.",
+      "createRole": "إنشاء دور جديد",
+      "stats": {
+        "customRoles": "أدوار مخصصة",
+        "linkedUsers": "المستخدمين المربوطين",
+        "totalRoles": "إجمالي الأدوار"
+      },
+      "search": {
+        "placeholder": "البحث في الأدوار..."
+      },
+      "loading": "جارٍ تحميل الأدوار...",
+      "loadError": "تعذر تحميل الأدوار.",
+      "roleCard": {
+        "defaultBadge": "دور افتراضي",
+        "customBadge": "دور مخصص",
+        "usersCount": "{count} مستخدمين",
+        "permissionsCount": "{count} صلاحية",
+        "viewDetails": "عرض التفاصيل",
+        "clone": "استنساخ",
+        "deleteAria": "حذف {name}"
+      },
+      "cloneSuffix": " (نسخة)",
+      "dialog": {
+        "titles": {
+          "details": "تفاصيل الدور",
+          "edit": "تعديل الدور",
+          "clone": "إنشاء دور من نسخة",
+          "create": "إنشاء دور مخصص"
+        },
+        "descriptions": {
+          "readOnly": "هذا دور افتراضي في النظام ولا يمكن تعديله.",
+          "edit": "تحديث بيانات الدور مع الحفاظ على المستخدمين المرتبطين به.",
+          "create": "عرّف دوراً مخصصاً وحدد صلاحياته."
+        },
+        "saveLabelEdit": "حفظ التعديلات",
+        "saveLabelCreate": "إنشاء الدور",
+        "close": "إغلاق",
+        "cancel": "إلغاء",
+        "back": "رجوع",
+        "next": "التالي"
+      },
+      "wizard": {
+        "steps": {
+          "info": {
+            "title": "معلومات الدور",
+            "subtitle": "الاسم والوصف"
+          },
+          "permissions": {
+            "title": "الصلاحيات",
+            "subtitle": "تحديد صلاحيات الوصول"
+          },
+          "review": {
+            "title": "مراجعة وحفظ",
+            "subtitle": "مراجعة الإعدادات"
+          }
+        },
+        "note": {
+          "title": "ملاحظة",
+          "description": "يمكنك تحديد صلاحيات متعددة لكل وحدة. وسيتم تطبيق هذه الصلاحيات على جميع العناصر التابعة للوحدة."
+        }
+      },
+      "form": {
+        "nameLabel": "اسم الدور",
+        "namePlaceholder": "مثال: مدير الحملات",
+        "descriptionLabel": "الوصف",
+        "descriptionPlaceholder": "وصف مختصر لمهام هذا الدور ونطاقه"
+      },
+      "permissions": {
+        "selectedCount": "تم اختيار {count} صلاحية",
+        "startingFrom": " (بدءاً من {name})",
+        "subtitle": "حدد بالضبط ما يمكن لهذا الدور القيام به -- استخدم قالباً كنقطة بداية ثم عدّله."
+      },
+      "review": {
+        "unnamed": "بدون اسم",
+        "permissionsSelected": "صلاحية محددة",
+        "noPermissions": "لم يتم تحديد أي صلاحيات بعد."
+      },
+      "deleteDialog": {
+        "title": "حذف الدور",
+        "description": "سيتم حذف \"{name}\" نهائياً. سيفقد المستخدمون المعينون لهذا الدور الصلاحيات التي يمنحها. لا يمكن التراجع عن هذا الإجراء.",
+        "confirm": "حذف الدور",
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "updated": "تم تحديث دور \"{name}\".",
+        "created": "تم إنشاء دور \"{name}\".",
+        "saveFailed": "تعذر حفظ الدور.",
+        "deleted": "تم حذف دور \"{name}\".",
+        "deleteFailed": "تعذر حذف الدور."
+      }
+    },
+    "permissionMatrix": {
+      "actions": {
+        "view": "عرض",
+        "create": "إنشاء",
+        "edit": "تعديل",
+        "delete": "حذف",
+        "export": "تصدير",
+        "import": "استيراد",
+        "approve": "موافقة",
+        "publish": "نشر",
+        "manage": "إدارة"
+      },
+      "modules": {
+        "dashboard": {
+          "label": "الرئيسية",
+          "pages": ["الرئيسية"]
+        },
+        "liveVisitors": {
+          "label": "الزوار المباشرون",
+          "pages": ["الزوار المباشرون"]
+        },
+        "campaigns": {
+          "label": "الحملات",
+          "pages": ["الحملات"],
+          "children": {
+            "main": "الحملات",
+            "channels": "القنوات",
+            "linkBuilder": "منشئ الروابط"
+          }
+        },
+        "connections": {
+          "label": "التكاملات",
+          "pages": ["التكاملات"]
+        },
+        "stores": {
+          "label": "المتاجر",
+          "pages": ["المتاجر"]
+        },
+        "products": {
+          "label": "المنتجات",
+          "pages": ["المنتجات"]
+        },
+        "orders": {
+          "label": "الطلبات",
+          "pages": ["الطلبات"]
+        },
+        "pos": {
+          "label": "الكاشير",
+          "pages": ["الكاشير"],
+          "children": {
+            "main": "الكاشير",
+            "invoices": "الفواتير",
+            "shifts": "الورديات"
+          }
+        },
+        "customers": {
+          "label": "العملاء",
+          "pages": ["العملاء"]
+        },
+        "reports": {
+          "label": "التقارير",
+          "pages": ["التقارير"]
+        },
+        "ai": {
+          "label": "الذكاء الاصطناعي",
+          "pages": ["الذكاء الاصطناعي"]
+        },
+        "users": {
+          "label": "الإدارة",
+          "pages": ["المستخدمون"],
+          "children": {
+            "main": "المستخدمون",
+            "roles": "الأدوار",
+            "teams": "الفرق",
+            "invitations": "الدعوات",
+            "auditLog": "السجل الشامل / سجلات التدقيق",
+            "sessions": "الجلسات النشطة"
+          }
+        },
+        "roles": {
+          "label": "الأدوار",
+          "pages": ["الأدوار"]
+        },
+        "teams": {
+          "label": "الفرق",
+          "pages": ["الفرق"]
+        },
+        "invitations": {
+          "label": "الدعوات",
+          "pages": ["الدعوات"]
+        },
+        "auditLog": {
+          "label": "سجلات التدقيق",
+          "pages": ["السجل الشامل", "سجلات التدقيق"]
+        },
+        "sessions": {
+          "label": "الجلسات النشطة",
+          "pages": ["الجلسات النشطة"]
+        },
+        "settings": {
+          "label": "الإعدادات",
+          "pages": ["الإعدادات العامة"],
+          "children": {
+            "general": "الإعدادات العامة",
+            "devices": "إعدادات الأجهزة",
+            "cashier": "إعدادات الكاشير",
+            "payments": "طرق الدفع",
+            "zatca": "الفوترة الإلكترونية (هيئة الزكاة)",
+            "workspace": "إدارة مساحات العمل",
+            "tax": "الضرائب"
+          }
+        },
+        "workspace": {
+          "label": "مساحة العمل",
+          "pages": ["إدارة مساحات العمل"]
+        },
+        "tax": {
+          "label": "الضرائب",
+          "pages": ["الضرائب"]
+        }
+      },
+      "toggleAll": "تفعيل الكل",
+      "toggleNone": "تعطيل الكل",
+      "search": {
+        "placeholder": "البحث في المميزات..."
+      },
+      "table": {
+        "moduleColumn": "الوحدة"
+      },
+      "collapseSection": "طي القسم",
+      "expandSection": "توسيع القسم",
+      "childPagesCount": "{count} صفحات فرعية -- اضغط للتوسيع",
+      "subPermissionsCount": "{count} صلاحيات فرعية",
+      "noResults": "لا توجد نتائج مطابقة.",
+      "checkboxAria": "{module} {action}"
+    },
+    "teams": {
+      "breadcrumb": {
+        "home": "الرئيسية",
+        "administration": "الإدارة",
+        "current": "الفرق"
+      },
+      "title": "الفرق",
+      "subtitle": "تنظيم أعضاء الفريق حسب الوظيفة، المدير، ومكان العمل.",
+      "createTeam": "إنشاء فريق جديد",
+      "stats": {
+        "totalTeams": "إجمالي الفرق",
+        "totalMembers": "إجمالي الأعضاء",
+        "teamsWithoutManager": "فرق بدون مدير"
+      },
+      "search": {
+        "placeholder": "البحث في الفرق..."
+      },
+      "loading": "جارٍ تحميل الفرق...",
+      "loadError": "تعذر تحميل الفرق.",
+      "empty": "لا توجد فرق مطابقة.",
+      "table": {
+        "columns": {
+          "team": "الفريق",
+          "manager": "المدير",
+          "members": "أعضاء الفريق",
+          "workspace": "مكان العمل",
+          "description": "الوصف",
+          "actions": "الإجراءات"
+        },
+        "noManager": "بدون مدير",
+        "editAria": "تعديل {name}",
+        "deleteAria": "حذف {name}"
+      },
+      "deleteDialog": {
+        "title": "حذف الفريق",
+        "description": "سيتم حذف \"{name}\" وقائمة أعضائه نهائياً. لا يمكن التراجع عن هذا الإجراء.",
+        "confirm": "حذف الفريق",
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "updated": "تم تحديث فريق \"{name}\".",
+        "created": "تم إنشاء فريق \"{name}\".",
+        "updateFailed": "تعذر تحديث الفريق.",
+        "createFailed": "تعذر إنشاء الفريق.",
+        "deleted": "تم حذف فريق \"{name}\".",
+        "deleteFailed": "تعذر حذف الفريق.",
+        "memberAdded": "تمت إضافة العضو.",
+        "memberAddFailed": "تعذر إضافة العضو.",
+        "memberRemoved": "تمت إزالة العضو.",
+        "memberRemoveFailed": "تعذر إزالة العضو."
+      },
+      "dialog": {
+        "editTitle": "تعديل الفريق — {name}",
+        "createTitle": "إنشاء فريق",
+        "description": "الفرق التعاونية تنظم الأعضاء حسب مكان العمل ونطاق المسؤولية.",
+        "cancel": "إلغاء",
+        "saveChanges": "حفظ التعديلات",
+        "create": "إنشاء الفريق",
+        "nameLabel": "اسم الفريق",
+        "workspacePlaceholder": "مكان العمل (اختياري)",
+        "descriptionLabel": "الوصف",
+        "membersTitle": "أعضاء الفريق",
+        "addMemberPlaceholder": "اختر عضواً للإضافة",
+        "allOrgMembersJoined": "جميع أعضاء المنظمة منضمون بالفعل.",
+        "add": "إضافة",
+        "loadingMembers": "جارٍ تحميل الأعضاء...",
+        "noMembersYet": "لا يوجد أعضاء بعد.",
+        "removeMemberAria": "إزالة {name}",
+        "autoManagerNote": "سيتم إضافتك تلقائياً كمدير للفريق. يمكنك إضافة أعضاء آخرين الآن اختيارياً.",
+        "noOrgMembers": "لا يوجد أعضاء في المنظمة.",
+        "allMembersAdded": "تمت إضافة جميع الأعضاء.",
+        "noAdditionalMembers": "لم يتم اختيار أعضاء إضافيين."
+      }
+    }
   }
 }

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { Ban, CheckCircle2, Clock3, Loader2, Mail, RotateCcw, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -20,6 +21,7 @@ import { AdministrationModuleNav } from "./administration-module-nav"
 
 import { useApplicationServices } from "@/application"
 import type { AdministrationInvitationStatus } from "@/application/contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -50,14 +52,6 @@ function StatCard({
   )
 }
 
-const STATUS_LABEL: Record<AdministrationInvitationStatus, string> = {
-  pending: "قيد الانتظار",
-  accepted: "مقبولة",
-  declined: "مرفوضة",
-  canceled: "ملغاة",
-  expired: "منتهية",
-}
-
 const STATUS_TINT: Record<AdministrationInvitationStatus, string> = {
   pending: "bg-[#fffbeb] text-[#92400e]",
   accepted: "bg-[#f0fdf4] text-[#15803d]",
@@ -67,6 +61,9 @@ const STATUS_TINT: Record<AdministrationInvitationStatus, string> = {
 }
 
 export function AdministrationInvitationsScreen() {
+  const t = useTranslations("administration.invitations")
+  const tTime = useTranslations("administration.time")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization } = useWorkspace()
   const { data, isLoading, isError } = useInvitationsQuery(
@@ -93,52 +90,50 @@ export function AdministrationInvitationsScreen() {
   async function handleResend(invitationId: string, email: string) {
     try {
       await resendInvitation.mutateAsync(invitationId)
-      toast.success(`تمت إعادة إرسال الدعوة إلى ${email}.`)
+      toast.success(t("toasts.resent", { email }))
     } catch {
-      toast.error("تعذر إعادة إرسال الدعوة.")
+      toast.error(t("toasts.resendFailed"))
     }
   }
 
   async function handleCancel(invitationId: string) {
     try {
       await cancelInvitation.mutateAsync(invitationId)
-      toast.success("تم إلغاء الدعوة.")
+      toast.success(t("toasts.canceled"))
     } catch {
-      toast.error("تعذر إلغاء الدعوة.")
+      toast.error(t("toasts.cancelFailed"))
     }
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
-          الرئيسية
+          {t("breadcrumb.home")}
         </Link>
         <span>/</span>
         <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
-          الإدارة
+          {t("breadcrumb.administration")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <Mail className="size-3.5" />
-          الدعوات
+          {t("breadcrumb.current")}
         </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الدعوات</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            دعوة مستخدمين جدد أو إضافتهم مباشرةً، ومتابعة حالة الدعوات المرسلة.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <AppButton
           onClick={() => setAddUserOpen(true)}
           className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
-          إضافة مستخدم
+          {t("addUser")}
         </AppButton>
       </div>
 
@@ -146,25 +141,25 @@ export function AdministrationInvitationsScreen() {
         <StatCard
           icon={Mail}
           tint="bg-[#eff6ff] text-[#2563eb]"
-          label="إجمالي الدعوات"
+          label={t("stats.total")}
           value={counts.total}
         />
         <StatCard
           icon={Clock3}
           tint="bg-[#fffbeb] text-[#92400e]"
-          label="قيد الانتظار"
+          label={t("stats.pending")}
           value={counts.pending}
         />
         <StatCard
           icon={CheckCircle2}
           tint="bg-[#f0fdf4] text-[#16a34a]"
-          label="مقبولة"
+          label={t("stats.accepted")}
           value={counts.accepted}
         />
         <StatCard
           icon={Ban}
           tint="bg-[#f2f5fa] text-[#5b6b85]"
-          label="ملغاة أو منتهية"
+          label={t("stats.closed")}
           value={counts.closed}
         />
       </div>
@@ -173,24 +168,24 @@ export function AdministrationInvitationsScreen() {
         {isLoading ? (
           <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل الدعوات...
+            {t("loading")}
           </div>
         ) : isError ? (
-          <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل الدعوات.</p>
+          <p className="p-8 text-center text-[13px] text-[#dc2626]">{t("loadError")}</p>
         ) : invitations.length === 0 ? (
-          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>لا توجد دعوات بعد.</p>
+          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>{t("empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-center">
               <thead>
                 <tr>
                   {[
-                    { key: "name", label: "الاسم" },
-                    { key: "email", label: "البريد الإلكتروني" },
-                    { key: "workspace", label: "مكان العمل" },
-                    { key: "status", label: "الحالة" },
-                    { key: "expires", label: "تنتهي في" },
-                    { key: "actions", label: "الإجراءات" },
+                    { key: "name", label: t("table.columns.name") },
+                    { key: "email", label: t("table.columns.email") },
+                    { key: "workspace", label: t("table.columns.workspace") },
+                    { key: "status", label: t("table.columns.status") },
+                    { key: "expires", label: t("table.columns.expires") },
+                    { key: "actions", label: t("table.columns.actions") },
                   ].map((column) => (
                     <th
                       key={column.key}
@@ -231,11 +226,11 @@ export function AdministrationInvitationsScreen() {
                           STATUS_TINT[invitation.status]
                         )}
                       >
-                        {STATUS_LABEL[invitation.status]}
+                        {t(`statuses.${invitation.status}` as "statuses.pending")}
                       </span>
                     </td>
                     <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
-                      {formatRelativeArabic(invitation.expiresAt)}
+                      {formatRelativeArabic(invitation.expiresAt, tTime, locale)}
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-center gap-1.5">
@@ -243,7 +238,7 @@ export function AdministrationInvitationsScreen() {
                           type="button"
                           disabled={invitation.status !== "pending"}
                           onClick={() => void handleResend(invitation.id, invitation.email)}
-                          aria-label="إعادة إرسال"
+                          aria-label={t("table.resendAria")}
                           className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <RotateCcw className="size-3.5" />
@@ -252,7 +247,7 @@ export function AdministrationInvitationsScreen() {
                           type="button"
                           disabled={invitation.status !== "pending"}
                           onClick={() => void handleCancel(invitation.id)}
-                          aria-label="إلغاء"
+                          aria-label={t("table.cancelAria")}
                           className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#dc2626] hover:bg-[#fef2f2] disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <X className="size-3.5" />

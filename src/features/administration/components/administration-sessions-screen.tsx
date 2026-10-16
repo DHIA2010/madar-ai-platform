@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { AlertTriangle, Laptop, Loader2, LogOut, Monitor, Smartphone } from "lucide-react"
 import { toast } from "sonner"
 
@@ -19,6 +20,7 @@ import { AdministrationModuleNav } from "./administration-module-nav"
 
 import { useApplicationServices } from "@/application"
 import type { AdministrationOrgSessionDto } from "@/application/contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -59,6 +61,9 @@ function StatCard({
 }
 
 export function AdministrationSessionsScreen() {
+  const t = useTranslations("administration.sessions")
+  const tTime = useTranslations("administration.time")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization } = useWorkspace()
   const { data, isLoading, isError } = useOrganizationSessionsQuery(
@@ -80,9 +85,9 @@ export function AdministrationSessionsScreen() {
     setTerminatingId(session.id)
     try {
       await revokeSession.mutateAsync(session.id)
-      toast.success("تم إنهاء الجلسة.")
+      toast.success(t("toasts.terminated"))
     } catch {
-      toast.error("تعذر إنهاء الجلسة.")
+      toast.error(t("toasts.terminateFailed"))
     } finally {
       setTerminatingId(null)
     }
@@ -93,41 +98,37 @@ export function AdministrationSessionsScreen() {
     if (others.length === 0) return
     try {
       await Promise.all(others.map((session) => revokeSession.mutateAsync(session.id)))
-      toast.success(`تم إنهاء ${others.length} جلسة.`)
+      toast.success(t("toasts.terminatedCount", { count: others.length }))
     } catch {
-      toast.error("تعذر إنهاء بعض الجلسات.")
+      toast.error(t("toasts.terminateSomeFailed"))
     } finally {
       setConfirmingTerminateAll(false)
     }
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
-          الرئيسية
+          {t("breadcrumb.home")}
         </Link>
         <span>/</span>
         <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
-          الإدارة
+          {t("breadcrumb.administration")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <Monitor className="size-3.5" />
-          الجلسات النشطة
+          {t("breadcrumb.current")}
         </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>
-            الجلسات النشطة
-          </h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            مراقبة الأجهزة المتصلة وإدارة الجلسات النشطة لجميع المستخدمين.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <AppButton
           variant="outline"
@@ -136,7 +137,7 @@ export function AdministrationSessionsScreen() {
           className="h-11 gap-2 rounded-[10px] border-[#fecaca] px-5 text-[13px] font-semibold text-[#dc2626] hover:bg-[#fef2f2]"
         >
           <LogOut className="size-4" />
-          إنهاء جميع الجلسات الأخرى
+          {t("terminateAllOthers")}
         </AppButton>
       </div>
 
@@ -144,19 +145,19 @@ export function AdministrationSessionsScreen() {
         <StatCard
           icon={Monitor}
           tint="bg-[#eff6ff] text-[#2563eb]"
-          label="إجمالي الجلسات النشطة"
+          label={t("stats.totalActive")}
           value={sessions.length}
         />
         <StatCard
           icon={Laptop}
           tint="bg-[#f0fdf4] text-[#16a34a]"
-          label="مستخدمون متصلون"
+          label={t("stats.connectedUsers")}
           value={uniqueUsers}
         />
         <StatCard
           icon={AlertTriangle}
           tint="bg-[#fffbeb] text-[#92400e]"
-          label="أجهزة متصلة"
+          label={t("stats.connectedDevices")}
           value={uniqueDevices}
         />
       </div>
@@ -165,26 +166,26 @@ export function AdministrationSessionsScreen() {
         {isLoading ? (
           <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل الجلسات...
+            {t("loading")}
           </div>
         ) : isError ? (
-          <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل الجلسات.</p>
+          <p className="p-8 text-center text-[13px] text-[#dc2626]">{t("loadError")}</p>
         ) : sessions.length === 0 ? (
-          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>لا توجد جلسات نشطة.</p>
+          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>{t("empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[840px] text-center">
               <thead>
                 <tr>
                   {[
-                    { key: "user", label: "المستخدم" },
-                    { key: "device", label: "الجهاز" },
-                    { key: "browser", label: "المتصفح" },
-                    { key: "ip", label: "عنوان IP" },
-                    { key: "location", label: "الموقع" },
-                    { key: "lastActivity", label: "آخر نشاط" },
-                    { key: "status", label: "الحالة" },
-                    { key: "actions", label: "الإجراءات" },
+                    { key: "user", label: t("table.columns.user") },
+                    { key: "device", label: t("table.columns.device") },
+                    { key: "browser", label: t("table.columns.browser") },
+                    { key: "ip", label: t("table.columns.ip") },
+                    { key: "location", label: t("table.columns.location") },
+                    { key: "lastActivity", label: t("table.columns.lastActivity") },
+                    { key: "status", label: t("table.columns.status") },
+                    { key: "actions", label: t("table.columns.actions") },
                   ].map((column) => (
                     <th
                       key={column.key}
@@ -224,10 +225,10 @@ export function AdministrationSessionsScreen() {
                       <td className={cn("px-3 py-3 text-[12px]", MUTED)}>{session.browser}</td>
                       <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>{session.ip}</td>
                       <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
-                        {session.location ?? "غير معروف"}
+                        {session.location ?? t("unknownLocation")}
                       </td>
                       <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
-                        {formatRelativeArabic(session.lastActivity)}
+                        {formatRelativeArabic(session.lastActivity, tTime, locale)}
                       </td>
                       <td className="px-3 py-3">
                         <span
@@ -244,7 +245,7 @@ export function AdministrationSessionsScreen() {
                               session.current ? "bg-[#2563eb]" : "bg-[#22c55e]"
                             )}
                           />
-                          {session.current ? "الجلسة الحالية" : "نشطة"}
+                          {session.current ? t("table.currentSession") : t("table.activeSession")}
                         </span>
                       </td>
                       <td className="px-3 py-3">
@@ -254,7 +255,7 @@ export function AdministrationSessionsScreen() {
                           onClick={() => void handleTerminate(session)}
                           className="flex h-8 items-center gap-1.5 rounded-[8px] border border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#dc2626] hover:bg-[#fef2f2] disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          إنهاء
+                          {t("table.terminate")}
                         </button>
                       </td>
                     </tr>
@@ -269,18 +270,16 @@ export function AdministrationSessionsScreen() {
       <AppConfirmDialog
         open={confirmingTerminateAll}
         onOpenChange={setConfirmingTerminateAll}
-        title={<span dir="rtl">إنهاء جميع الجلسات الأخرى</span>}
+        title={<span dir={localeDirection(locale)}>{t("confirmTerminateAll.title")}</span>}
         description={
-          <span dir="rtl">
-            سيتم تسجيل خروج جميع المستخدمين من كل الجلسات النشطة باستثناء جلستك الحالية.
-          </span>
+          <span dir={localeDirection(locale)}>{t("confirmTerminateAll.description")}</span>
         }
-        confirmLabel="إنهاء الجلسات"
-        cancelLabel="إلغاء"
+        confirmLabel={t("confirmTerminateAll.confirm")}
+        cancelLabel={t("confirmTerminateAll.cancel")}
         confirmTone="destructive"
         onConfirm={handleTerminateAllOthers}
         onCancel={() => setConfirmingTerminateAll(false)}
-        contentClassName="[direction:rtl]"
+        contentClassName={locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"}
       />
     </div>
   )

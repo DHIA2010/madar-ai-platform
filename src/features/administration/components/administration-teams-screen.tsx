@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { Loader2, Pencil, Search, Trash2, Users, UsersRound, UserX, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -31,6 +32,7 @@ import { AdministrationModuleNav } from "./administration-module-nav"
 
 import { useApplicationServices } from "@/application"
 import type { AdministrationTeamDto } from "@/application/contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -78,6 +80,8 @@ function TeamDialog({
   onOpenChange: (open: boolean) => void
   team: AdministrationTeamDto | null
 }) {
+  const t = useTranslations("administration.teams")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization, availableWorkspaces } = useWorkspace()
   const { createTeam, updateTeam, addTeamMember, removeTeamMember } = useTeamMutations(
@@ -122,9 +126,9 @@ function TeamDialog({
     try {
       await addTeamMember.mutateAsync({ teamId: team.id, userId: selectedAddUserId })
       setSelectedAddUserId("")
-      toast.success("تمت إضافة العضو.")
+      toast.success(t("toasts.memberAdded"))
     } catch {
-      toast.error("تعذر إضافة العضو.")
+      toast.error(t("toasts.memberAddFailed"))
     }
   }
 
@@ -132,9 +136,9 @@ function TeamDialog({
     if (!team) return
     try {
       await removeTeamMember.mutateAsync({ teamId: team.id, userId })
-      toast.success("تمت إزالة العضو.")
+      toast.success(t("toasts.memberRemoved"))
     } catch {
-      toast.error("تعذر إزالة العضو.")
+      toast.error(t("toasts.memberRemoveFailed"))
     }
   }
 
@@ -158,7 +162,7 @@ function TeamDialog({
           description: draft.description.trim() || undefined,
           workspaceId: draft.workspaceId || null,
         })
-        toast.success(`تم تحديث فريق "${draft.name.trim()}".`)
+        toast.success(t("toasts.updated", { name: draft.name.trim() }))
       } else {
         const created = await createTeam.mutateAsync({
           organizationId: currentOrganization.id,
@@ -173,11 +177,11 @@ function TeamDialog({
             )
           )
         }
-        toast.success(`تم إنشاء فريق "${draft.name.trim()}".`)
+        toast.success(t("toasts.created", { name: draft.name.trim() }))
       }
       onOpenChange(false)
     } catch {
-      toast.error(team ? "تعذر تحديث الفريق." : "تعذر إنشاء الفريق.")
+      toast.error(team ? t("toasts.updateFailed") : t("toasts.createFailed"))
     }
   }
 
@@ -187,28 +191,30 @@ function TeamDialog({
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={<span dir="rtl">{team ? `تعديل الفريق — ${team.name}` : "إنشاء فريق"}</span>}
-      description={
-        <span dir="rtl">الفرق التعاونية تنظم الأعضاء حسب مكان العمل ونطاق المسؤولية.</span>
+      title={
+        <span dir={localeDirection(locale)}>
+          {team ? t("dialog.editTitle", { name: team.name }) : t("dialog.createTitle")}
+        </span>
       }
+      description={<span dir={localeDirection(locale)}>{t("dialog.description")}</span>}
       footer={
         <>
           <AppButton variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
+            {t("dialog.cancel")}
           </AppButton>
           <AppButton
             onClick={() => void handleSave()}
             disabled={isSaving || draft.name.trim().length === 0}
           >
-            {team ? "حفظ التعديلات" : "إنشاء الفريق"}
+            {team ? t("dialog.saveChanges") : t("dialog.create")}
           </AppButton>
         </>
       }
-      contentClassName="sm:max-w-2xl [direction:rtl]"
+      contentClassName={cn("sm:max-w-2xl", locale === "ar" ? "[direction:rtl]" : "[direction:ltr]")}
     >
-      <div dir="rtl" className="grid gap-3 md:grid-cols-2">
+      <div dir={localeDirection(locale)} className="grid gap-3 md:grid-cols-2">
         <AppInput
-          label="اسم الفريق"
+          label={t("dialog.nameLabel")}
           wrapperClassName="md:col-span-2"
           value={draft.name}
           onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
@@ -219,7 +225,7 @@ function TeamDialog({
           onValueChange={(next) => setDraft((current) => ({ ...current, workspaceId: next }))}
         >
           <AppSelectTrigger className="h-10">
-            <AppSelectValue placeholder="مكان العمل (اختياري)" />
+            <AppSelectValue placeholder={t("dialog.workspacePlaceholder")} />
           </AppSelectTrigger>
           <AppSelectContent position="popper" align="start">
             {availableWorkspaces.map((workspace) => (
@@ -231,7 +237,7 @@ function TeamDialog({
         </AppSelect>
 
         <AppTextarea
-          label="الوصف"
+          label={t("dialog.descriptionLabel")}
           className="min-h-[90px]"
           wrapperClassName="md:col-span-2"
           value={draft.description}
@@ -241,20 +247,20 @@ function TeamDialog({
         />
       </div>
 
-      <div dir="rtl" className="mt-4 space-y-3 border-t border-[#eef2f8] pt-4">
-        <p className={cn("text-[12.5px] font-bold", HEADING)}>أعضاء الفريق</p>
+      <div dir={localeDirection(locale)} className="mt-4 space-y-3 border-t border-[#eef2f8] pt-4">
+        <p className={cn("text-[12.5px] font-bold", HEADING)}>{t("dialog.membersTitle")}</p>
 
         {team ? (
           <>
             <div className="flex items-end gap-2">
               <AppSelect value={selectedAddUserId} onValueChange={setSelectedAddUserId}>
                 <AppSelectTrigger className="h-10 flex-1">
-                  <AppSelectValue placeholder="اختر عضواً للإضافة" />
+                  <AppSelectValue placeholder={t("dialog.addMemberPlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent position="popper" align="start">
                   {addableUsers.length === 0 ? (
                     <div className={cn("px-2 py-1.5 text-[12.5px]", MUTED)}>
-                      جميع أعضاء المنظمة منضمون بالفعل.
+                      {t("dialog.allOrgMembersJoined")}
                     </div>
                   ) : (
                     addableUsers.map((user) => (
@@ -269,15 +275,15 @@ function TeamDialog({
                 onClick={() => void handleAddExistingMember()}
                 disabled={!selectedAddUserId || addTeamMember.isPending}
               >
-                إضافة
+                {t("dialog.add")}
               </AppButton>
             </div>
 
             <div className="max-h-56 space-y-2 overflow-y-auto">
               {membersLoading ? (
-                <p className={cn("text-[12.5px]", MUTED)}>جارٍ تحميل الأعضاء...</p>
+                <p className={cn("text-[12.5px]", MUTED)}>{t("dialog.loadingMembers")}</p>
               ) : members.length === 0 ? (
-                <p className={cn("text-[12.5px]", MUTED)}>لا يوجد أعضاء بعد.</p>
+                <p className={cn("text-[12.5px]", MUTED)}>{t("dialog.noMembersYet")}</p>
               ) : (
                 members.map((member) => (
                   <div
@@ -294,7 +300,7 @@ function TeamDialog({
                       type="button"
                       disabled={removeTeamMember.isPending}
                       onClick={() => void handleRemoveExistingMember(member.userId)}
-                      aria-label={`إزالة ${member.fullName}`}
+                      aria-label={t("dialog.removeMemberAria", { name: member.fullName })}
                       className="flex size-7 items-center justify-center rounded-full text-[#8098b4] hover:bg-[#f4f7fc]"
                     >
                       <X className="size-3.5" />
@@ -306,19 +312,17 @@ function TeamDialog({
           </>
         ) : (
           <>
-            <p className={cn("text-[11px]", MUTED)}>
-              سيتم إضافتك تلقائياً كمدير للفريق. يمكنك إضافة أعضاء آخرين الآن اختيارياً.
-            </p>
+            <p className={cn("text-[11px]", MUTED)}>{t("dialog.autoManagerNote")}</p>
 
             <div className="flex items-end gap-2">
               <AppSelect value={selectedAddUserId} onValueChange={setSelectedAddUserId}>
                 <AppSelectTrigger className="h-10 flex-1">
-                  <AppSelectValue placeholder="اختر عضواً للإضافة" />
+                  <AppSelectValue placeholder={t("dialog.addMemberPlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent position="popper" align="start">
                   {selectableNewUsers.length === 0 ? (
                     <div className={cn("px-2 py-1.5 text-[12.5px]", MUTED)}>
-                      {users.length === 0 ? "لا يوجد أعضاء في المنظمة." : "تمت إضافة جميع الأعضاء."}
+                      {users.length === 0 ? t("dialog.noOrgMembers") : t("dialog.allMembersAdded")}
                     </div>
                   ) : (
                     selectableNewUsers.map((user) => (
@@ -330,13 +334,13 @@ function TeamDialog({
                 </AppSelectContent>
               </AppSelect>
               <AppButton onClick={handleAddNewMember} disabled={!selectedAddUserId}>
-                إضافة
+                {t("dialog.add")}
               </AppButton>
             </div>
 
             <div className="max-h-56 space-y-2 overflow-y-auto">
               {selectedNewMemberIds.length === 0 ? (
-                <p className={cn("text-[12.5px]", MUTED)}>لم يتم اختيار أعضاء إضافيين.</p>
+                <p className={cn("text-[12.5px]", MUTED)}>{t("dialog.noAdditionalMembers")}</p>
               ) : (
                 selectedNewMemberIds.map((userId) => {
                   const user = users.find((candidate) => candidate.id === userId)
@@ -355,7 +359,7 @@ function TeamDialog({
                       <button
                         type="button"
                         onClick={() => handleRemoveNewMember(userId)}
-                        aria-label={`إزالة ${user.fullName}`}
+                        aria-label={t("dialog.removeMemberAria", { name: user.fullName })}
                         className="flex size-7 items-center justify-center rounded-full text-[#8098b4] hover:bg-[#f4f7fc]"
                       >
                         <X className="size-3.5" />
@@ -373,6 +377,8 @@ function TeamDialog({
 }
 
 export function AdministrationTeamsScreen() {
+  const t = useTranslations("administration.teams")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { currentOrganization } = useWorkspace()
   const { data, isLoading, isError } = useTeamsQuery(
@@ -415,44 +421,42 @@ export function AdministrationTeamsScreen() {
     if (!deletingTeam) return
     try {
       await deleteTeam.mutateAsync({ teamId: deletingTeam.id })
-      toast.success(`تم حذف فريق "${deletingTeam.name}".`)
+      toast.success(t("toasts.deleted", { name: deletingTeam.name }))
       setDeletingTeamId(null)
     } catch {
-      toast.error("تعذر حذف الفريق.")
+      toast.error(t("toasts.deleteFailed"))
     }
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
-          الرئيسية
+          {t("breadcrumb.home")}
         </Link>
         <span>/</span>
         <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
-          الإدارة
+          {t("breadcrumb.administration")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <UsersRound className="size-3.5" />
-          الفرق
+          {t("breadcrumb.current")}
         </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الفرق</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            تنظيم أعضاء الفريق حسب الوظيفة، المدير، ومكان العمل.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
         </div>
         <AppButton
           onClick={openCreateDialog}
           className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
-          إنشاء فريق جديد
+          {t("createTeam")}
         </AppButton>
       </div>
 
@@ -460,19 +464,19 @@ export function AdministrationTeamsScreen() {
         <StatCard
           icon={UsersRound}
           tint="bg-[#f0fdf4] text-[#16a34a]"
-          label="إجمالي الفرق"
+          label={t("stats.totalTeams")}
           value={teams.length}
         />
         <StatCard
           icon={Users}
           tint="bg-[#eff6ff] text-[#2563eb]"
-          label="إجمالي الأعضاء"
+          label={t("stats.totalMembers")}
           value={totalMembers}
         />
         <StatCard
           icon={UserX}
           tint="bg-[#fffbeb] text-[#92400e]"
-          label="فرق بدون مدير"
+          label={t("stats.teamsWithoutManager")}
           value={teamsWithoutManager}
         />
       </div>
@@ -483,7 +487,7 @@ export function AdministrationTeamsScreen() {
           <AppInput
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="البحث في الفرق..."
+            placeholder={t("search.placeholder")}
             className="h-10 rounded-[10px] border-[#e8edf3] bg-white ps-9 text-[13px]"
           />
         </div>
@@ -493,24 +497,24 @@ export function AdministrationTeamsScreen() {
         {isLoading ? (
           <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل الفرق...
+            {t("loading")}
           </div>
         ) : isError ? (
-          <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل الفرق.</p>
+          <p className="p-8 text-center text-[13px] text-[#dc2626]">{t("loadError")}</p>
         ) : filteredTeams.length === 0 ? (
-          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>لا توجد فرق مطابقة.</p>
+          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>{t("empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-center">
               <thead>
                 <tr>
                   {[
-                    { key: "team", label: "الفريق" },
-                    { key: "manager", label: "المدير" },
-                    { key: "members", label: "أعضاء الفريق" },
-                    { key: "workspace", label: "مكان العمل" },
-                    { key: "description", label: "الوصف" },
-                    { key: "actions", label: "الإجراءات" },
+                    { key: "team", label: t("table.columns.team") },
+                    { key: "manager", label: t("table.columns.manager") },
+                    { key: "members", label: t("table.columns.members") },
+                    { key: "workspace", label: t("table.columns.workspace") },
+                    { key: "description", label: t("table.columns.description") },
+                    { key: "actions", label: t("table.columns.actions") },
                   ].map((column) => (
                     <th
                       key={column.key}
@@ -550,7 +554,7 @@ export function AdministrationTeamsScreen() {
                         team.manager === "Unassigned" ? MUTED : HEADING
                       )}
                     >
-                      {team.manager === "Unassigned" ? "بدون مدير" : team.manager}
+                      {team.manager === "Unassigned" ? t("table.noManager") : team.manager}
                     </td>
                     <td className={cn("px-3 py-3 text-[12px] font-semibold", HEADING)}>
                       {team.members}
@@ -568,7 +572,7 @@ export function AdministrationTeamsScreen() {
                         <button
                           type="button"
                           onClick={() => openEditDialog(team)}
-                          aria-label={`تعديل ${team.name}`}
+                          aria-label={t("table.editAria", { name: team.name })}
                           className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
                         >
                           <Pencil className="size-3.5" />
@@ -576,7 +580,7 @@ export function AdministrationTeamsScreen() {
                         <button
                           type="button"
                           onClick={() => setDeletingTeamId(team.id)}
-                          aria-label={`حذف ${team.name}`}
+                          aria-label={t("table.deleteAria", { name: team.name })}
                           className="flex size-8 items-center justify-center rounded-[8px] border border-[#e8edf3] text-[#dc2626] hover:bg-[#fef2f2]"
                         >
                           <Trash2 className="size-3.5" />
@@ -606,21 +610,19 @@ export function AdministrationTeamsScreen() {
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setDeletingTeamId(null)
         }}
-        title={<span dir="rtl">حذف الفريق</span>}
+        title={<span dir={localeDirection(locale)}>{t("deleteDialog.title")}</span>}
         description={
-          <span dir="rtl">
-            {deletingTeam
-              ? `سيتم حذف "${deletingTeam.name}" وقائمة أعضائه نهائياً. لا يمكن التراجع عن هذا الإجراء.`
-              : null}
+          <span dir={localeDirection(locale)}>
+            {deletingTeam ? t("deleteDialog.description", { name: deletingTeam.name }) : null}
           </span>
         }
-        confirmLabel="حذف الفريق"
-        cancelLabel="إلغاء"
+        confirmLabel={t("deleteDialog.confirm")}
+        cancelLabel={t("deleteDialog.cancel")}
         confirmTone="destructive"
         loading={deleteTeam.isPending}
         onConfirm={handleDeleteTeam}
         onCancel={() => setDeletingTeamId(null)}
-        contentClassName="[direction:rtl]"
+        contentClassName={locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"}
       />
     </div>
   )

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { AlertTriangle, Database, History, Loader2, Search, UserCog } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -21,6 +22,7 @@ import { useAuditLogsQuery } from "../queries/use-audit-logs-query"
 import { AdministrationModuleNav } from "./administration-module-nav"
 
 import { useApplicationServices } from "@/application"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
@@ -52,6 +54,8 @@ function StatCard({
 }
 
 export function AdministrationActivityLogScreen() {
+  const t = useTranslations("administration.activityLog")
+  const locale = useLocale() as Locale
   const { administrationApplicationService } = useApplicationServices()
   const { data, isLoading, isError } = useAuditLogsQuery(administrationApplicationService, 1, 200)
   const allEvents = useMemo(() => data?.items ?? [], [data])
@@ -86,52 +90,52 @@ export function AdministrationActivityLogScreen() {
   const dataChangeCount = allEvents.length - userChangeCount
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4 pb-10">
       <AdministrationModuleNav />
 
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.dashboard} className="hover:text-[#2563eb]">
-          الرئيسية
+          {t("breadcrumb.home")}
         </Link>
         <span>/</span>
         <Link href={ROUTES.administration} className="hover:text-[#2563eb]">
-          الإدارة
+          {t("breadcrumb.administration")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <History className="size-3.5" />
-          سجل الأحداث
+          {t("breadcrumb.current")}
         </span>
       </nav>
 
       <div>
-        <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>سجل الأحداث</h1>
-        <p className={cn("mt-1 text-[13px]", MUTED)}>سجل زمني لجميع الأنشطة والعمليات في النظام.</p>
+        <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>{t("title")}</h1>
+        <p className={cn("mt-1 text-[13px]", MUTED)}>{t("subtitle")}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={AlertTriangle}
           tint="bg-[#fef2f2] text-[#dc2626]"
-          label="محاولات فاشلة"
+          label={t("stats.failedAttempts")}
           value={failedCount}
         />
         <StatCard
           icon={UserCog}
           tint="bg-[#eff6ff] text-[#2563eb]"
-          label="تغييرات المستخدمين"
+          label={t("stats.userChanges")}
           value={userChangeCount}
         />
         <StatCard
           icon={Database}
           tint="bg-[#f0fdf4] text-[#16a34a]"
-          label="تغييرات البيانات"
+          label={t("stats.dataChanges")}
           value={dataChangeCount}
         />
         <StatCard
           icon={History}
           tint="bg-[#f5f3ff] text-[#7c3aed]"
-          label="إجمالي الأحداث"
+          label={t("stats.totalEvents")}
           value={data?.total ?? allEvents.length}
         />
       </div>
@@ -142,7 +146,7 @@ export function AdministrationActivityLogScreen() {
           <AppInput
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="البحث في سجل الأحداث..."
+            placeholder={t("search.placeholder")}
             className="h-10 rounded-[10px] border-[#e8edf3] bg-white ps-9 text-[13px]"
           />
         </div>
@@ -154,9 +158,9 @@ export function AdministrationActivityLogScreen() {
             <AppSelectValue />
           </AppSelectTrigger>
           <AppSelectContent>
-            <AppSelectItem value="all">جميع الحالات</AppSelectItem>
-            <AppSelectItem value="success">نجاح</AppSelectItem>
-            <AppSelectItem value="failed">فشل</AppSelectItem>
+            <AppSelectItem value="all">{t("filters.allStatuses")}</AppSelectItem>
+            <AppSelectItem value="success">{t("filters.success")}</AppSelectItem>
+            <AppSelectItem value="failed">{t("filters.failed")}</AppSelectItem>
           </AppSelectContent>
         </AppSelect>
         <AppSelect value={userFilter} onValueChange={setUserFilter}>
@@ -164,7 +168,7 @@ export function AdministrationActivityLogScreen() {
             <AppSelectValue />
           </AppSelectTrigger>
           <AppSelectContent>
-            <AppSelectItem value="all">جميع المستخدمين</AppSelectItem>
+            <AppSelectItem value="all">{t("filters.allUsers")}</AppSelectItem>
             {availableActors.map((actor) => (
               <AppSelectItem key={actor} value={actor}>
                 {actor}
@@ -178,25 +182,25 @@ export function AdministrationActivityLogScreen() {
         {isLoading ? (
           <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل السجل...
+            {t("loading")}
           </div>
         ) : isError ? (
-          <p className="p-8 text-center text-[13px] text-[#dc2626]">تعذر تحميل السجل.</p>
+          <p className="p-8 text-center text-[13px] text-[#dc2626]">{t("loadError")}</p>
         ) : events.length === 0 ? (
-          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>لا توجد أحداث مطابقة.</p>
+          <p className={cn("p-10 text-center text-[12.5px]", MUTED)}>{t("empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-center">
               <thead>
                 <tr>
                   {[
-                    { key: "time", label: "الوقت والتاريخ" },
-                    { key: "user", label: "المستخدم" },
-                    { key: "type", label: "النوع" },
-                    { key: "description", label: "الوصف" },
-                    { key: "target", label: "الكيان المستهدف" },
-                    { key: "ip", label: "عنوان IP" },
-                    { key: "status", label: "الحالة" },
+                    { key: "time", label: t("table.columns.time") },
+                    { key: "user", label: t("table.columns.user") },
+                    { key: "type", label: t("table.columns.type") },
+                    { key: "description", label: t("table.columns.description") },
+                    { key: "target", label: t("table.columns.target") },
+                    { key: "ip", label: t("table.columns.ip") },
+                    { key: "status", label: t("table.columns.status") },
                   ].map((column) => (
                     <th
                       key={column.key}
@@ -220,7 +224,7 @@ export function AdministrationActivityLogScreen() {
                     )}
                   >
                     <td className={cn("px-3 py-3 text-[11.5px]", MUTED)}>
-                      {formatFullArabicDateTime(event.createdAt)}
+                      {formatFullArabicDateTime(event.createdAt, locale)}
                     </td>
                     <td className={cn("px-3 py-3 text-[12px] font-semibold", HEADING)}>
                       {event.actor}
@@ -244,7 +248,7 @@ export function AdministrationActivityLogScreen() {
                             : "bg-[#fef2f2] text-[#dc2626]"
                         )}
                       >
-                        {event.status === "success" ? "نجاح" : "فشل"}
+                        {event.status === "success" ? t("filters.success") : t("filters.failed")}
                       </span>
                     </td>
                   </tr>
