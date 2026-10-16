@@ -371,9 +371,13 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                       <Briefcase className="size-4 shrink-0 text-muted-foreground" />
                       <AppSelectValue placeholder={t("jobRolePlaceholder")} />
                     </AppSelectTrigger>
-                    <AppSelectContent>
+                    <AppSelectContent className="min-w-(--radix-select-trigger-width) rounded-xl p-1.5 shadow-lg">
                       {jobRoles.map((role) => (
-                        <AppSelectItem key={role.value} value={role.value}>
+                        <AppSelectItem
+                          key={role.value}
+                          value={role.value}
+                          className="h-11 rounded-lg px-3 text-[15px]"
+                        >
                           {role.label}
                         </AppSelectItem>
                       ))}
@@ -452,9 +456,13 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                     <AppSelectTrigger className="h-11 w-full bg-white text-[15px]">
                       <AppSelectValue placeholder={t("industryPlaceholder")} />
                     </AppSelectTrigger>
-                    <AppSelectContent>
+                    <AppSelectContent className="min-w-(--radix-select-trigger-width) rounded-xl p-1.5 shadow-lg">
                       {industries.map((industry) => (
-                        <AppSelectItem key={industry.value} value={industry.value}>
+                        <AppSelectItem
+                          key={industry.value}
+                          value={industry.value}
+                          className="h-11 rounded-lg px-3 text-[15px]"
+                        >
                           {industry.label}
                         </AppSelectItem>
                       ))}
@@ -480,9 +488,13 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                       <Users className="size-4 shrink-0 text-muted-foreground" />
                       <AppSelectValue placeholder={t("companySizePlaceholder")} />
                     </AppSelectTrigger>
-                    <AppSelectContent>
+                    <AppSelectContent className="min-w-(--radix-select-trigger-width) rounded-xl p-1.5 shadow-lg">
                       {companySizes.map((size) => (
-                        <AppSelectItem key={size.value} value={size.value}>
+                        <AppSelectItem
+                          key={size.value}
+                          value={size.value}
+                          className="h-11 rounded-lg px-3 text-[15px]"
+                        >
                           {size.label}
                         </AppSelectItem>
                       ))}
