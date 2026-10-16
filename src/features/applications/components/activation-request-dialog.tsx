@@ -21,7 +21,7 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton, AppDialog } from "@/components/app"
 
-import { PLAN_TIER_ACCENT, PLAN_TIER_META, PLAN_TIER_ORDER } from "../services"
+import { PLAN_TIER_ACCENT, PLAN_TIER_ORDER, translatedPlanTierMeta } from "../services"
 import type { ApplicationCategoryId } from "../types"
 import { PlanComparisonDialog } from "./plan-comparison-dialog"
 
@@ -74,6 +74,7 @@ export function ActivationRequestDialog({
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
   const t = useTranslations("applications.requestDialog")
+  const tApp = useTranslations("applications")
   const locale = useLocale()
   const dir = localeDirection(locale as Locale)
   const router = useRouter()
@@ -260,7 +261,7 @@ export function ActivationRequestDialog({
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {PLAN_TIER_ORDER.map((tier) => {
-                  const meta = PLAN_TIER_META[tier]
+                  const meta = translatedPlanTierMeta(tier, tApp)
                   const accent = PLAN_TIER_ACCENT[tier]
                   const TierIcon = accent.icon
                   const selected = selectedTier === tier

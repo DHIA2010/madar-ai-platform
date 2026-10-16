@@ -1,3 +1,4 @@
+import type { useTranslations } from "next-intl"
 import { BarChart3, Crown, type LucideIcon, Star, Zap } from "lucide-react"
 
 import type { SubscriptionPlanTier } from "@/application/contracts"
@@ -102,3 +103,50 @@ export const PLAN_COMPARISON_ROWS: PlanComparisonRow[] = [
     },
   },
 ]
+
+// Madar Admin has no i18n layer and intentionally stays Arabic-only, so PLAN_TIER_META and
+// PLAN_COMPARISON_ROWS above stay plain Arabic data -- that's what madar-admin-packages.tsx reads
+// directly. The customer-facing applications feature is fully bilingual, though, so these two
+// functions give it a translated view of the exact same tier/row keys instead of forking the data
+// (which would reintroduce the price-drift risk the shared file exists to prevent).
+type ApplicationsTranslator = ReturnType<typeof useTranslations<"applications">>
+
+const COMPARISON_ROW_KEYS = [
+  "stores",
+  "visitors",
+  "dataRetention",
+  "adSources",
+  "ecommerceEvents",
+  "customReports",
+  "apiAccess",
+  "support",
+] as const
+
+export function translatedPlanTierMeta(
+  tier: SubscriptionPlanTier,
+  t: ApplicationsTranslator
+): PlanTierMeta {
+  const base = PLAN_TIER_META[tier]
+  if (tier === "enterprise") {
+    return {
+      ...base,
+      priceLabel: t("planTiers.contactUs"),
+      billingSuffix: t("planTiers.customPricing"),
+    }
+  }
+  return { ...base, billingSuffix: t("planTiers.monthly") }
+}
+
+export function translatedComparisonRows(t: ApplicationsTranslator): PlanComparisonRow[] {
+  return COMPARISON_ROW_KEYS.map((key) => ({
+    label: t(`planTiers.rows.${key}.label` as "planTiers.rows.stores.label"),
+    values: {
+      enterprise: t(
+        `planTiers.rows.${key}.values.enterprise` as "planTiers.rows.stores.values.enterprise"
+      ),
+      pro: t(`planTiers.rows.${key}.values.pro` as "planTiers.rows.stores.values.pro"),
+      growth: t(`planTiers.rows.${key}.values.growth` as "planTiers.rows.stores.values.growth"),
+      starter: t(`planTiers.rows.${key}.values.starter` as "planTiers.rows.stores.values.starter"),
+    },
+  }))
+}

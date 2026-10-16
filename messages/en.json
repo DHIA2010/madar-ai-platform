@@ -737,6 +737,85 @@
       ],
       "primaryCtaLabel": "Subscribe to Madar Complete",
       "secondaryCtaLabel": "Learn more"
+    },
+    "planTiers": {
+      "contactUs": "Contact us",
+      "customPricing": "Custom pricing",
+      "monthly": "Monthly",
+      "rows": {
+        "stores": {
+          "label": "Number of stores",
+          "values": {
+            "enterprise": "Unlimited",
+            "pro": "10",
+            "growth": "3",
+            "starter": "1"
+          }
+        },
+        "visitors": {
+          "label": "Monthly visitors",
+          "values": {
+            "enterprise": "Unlimited",
+            "pro": "500,000",
+            "growth": "100,000",
+            "starter": "10,000"
+          }
+        },
+        "dataRetention": {
+          "label": "Data retention period",
+          "values": {
+            "enterprise": "12 months",
+            "pro": "6 months",
+            "growth": "3 months",
+            "starter": "1 month"
+          }
+        },
+        "adSources": {
+          "label": "Ad sources",
+          "values": {
+            "enterprise": "✓",
+            "pro": "✓",
+            "growth": "✓",
+            "starter": "—"
+          }
+        },
+        "ecommerceEvents": {
+          "label": "E-commerce events",
+          "values": {
+            "enterprise": "✓",
+            "pro": "✓",
+            "growth": "✓",
+            "starter": "—"
+          }
+        },
+        "customReports": {
+          "label": "Custom reports",
+          "values": {
+            "enterprise": "✓",
+            "pro": "✓",
+            "growth": "—",
+            "starter": "—"
+          }
+        },
+        "apiAccess": {
+          "label": "API access",
+          "values": {
+            "enterprise": "✓",
+            "pro": "✓",
+            "growth": "—",
+            "starter": "—"
+          }
+        },
+        "support": {
+          "label": "Technical support",
+          "values": {
+            "enterprise": "Dedicated",
+            "pro": "Priority",
+            "growth": "Email and chat",
+            "starter": "Email"
+          }
+        }
+      }
     }
   },
   "purchases": {

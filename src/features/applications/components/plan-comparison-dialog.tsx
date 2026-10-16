@@ -1,6 +1,6 @@
 "use client"
 
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
 
@@ -15,11 +15,14 @@ import {
 } from "@/components/app"
 
 import {
-  PLAN_COMPARISON_ROWS,
   PLAN_TIER_ACCENT,
   PLAN_TIER_META,
   PLAN_TIER_ORDER,
+  translatedComparisonRows,
+  translatedPlanTierMeta,
 } from "../services"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 // The same comparison matrix Madar Admin's staff-facing packages page shows -- kept in one place
 // (plan-tiers.ts) so a customer and a staff member never see different answers to "what do I get
@@ -32,18 +35,25 @@ export function PlanComparisonDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const t = useTranslations("applications.planComparison")
+  const tApp = useTranslations("applications")
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
+  const comparisonRows = translatedComparisonRows(tApp)
   return (
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
       title={
-        <span dir="rtl" className="text-[17px] font-extrabold text-[#0b1738]">
+        <span dir={dir} className="text-[17px] font-extrabold text-[#0b1738]">
           {t("title")}
         </span>
       }
-      contentClassName="[direction:rtl] max-w-[46rem] gap-4 p-6"
+      contentClassName={cn(
+        "max-w-[46rem] gap-4 p-6",
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+      )}
     >
-      <div dir="rtl" className="overflow-x-auto">
+      <div dir={dir} className="overflow-x-auto">
         <AppTable>
           <AppTableHeader>
             <AppTableRow>
@@ -70,7 +80,7 @@ export function PlanComparisonDialog({
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
-            {PLAN_COMPARISON_ROWS.map((row) => (
+            {comparisonRows.map((row) => (
               <AppTableRow key={row.label}>
                 <AppTableCell className="font-medium text-[#0b1738]">{row.label}</AppTableCell>
                 {PLAN_TIER_ORDER.map((tier) => (
@@ -86,7 +96,7 @@ export function PlanComparisonDialog({
               </AppTableCell>
               {PLAN_TIER_ORDER.map((tier) => (
                 <AppTableCell key={tier} className="font-semibold text-[#0b1738]">
-                  {PLAN_TIER_META[tier].priceLabel}
+                  {translatedPlanTierMeta(tier, tApp).priceLabel}
                 </AppTableCell>
               ))}
             </AppTableRow>
