@@ -5278,5 +5278,156 @@
         "strategyBadge": "Strategy"
       }
     }
+  },
+  "shared": {
+    "settingsHelpCard": {
+      "title": "Need help?",
+      "description": "Contact the support team for help with settings.",
+      "contactUs": "Contact us"
+    }
+  },
+  "liveVisitors": {
+    "title": "Live Visitors",
+    "livePill": "Live",
+    "subtitle": "Track visitors active right now across all commerce platforms",
+    "searchPlaceholder": "Search by country, device, page...",
+    "windowLabel": "Over the last {minutes} min",
+    "loadErrorFallback": "Couldn't load visitor data.",
+    "unknownLocation": "Unknown location",
+    "unknown": "Unknown",
+    "unknownProduct": "Unknown product",
+    "kpis": {
+      "liveVisitorsNow": {
+        "label": "Live visitors now"
+      },
+      "activePlatforms": {
+        "label": "Active platforms",
+        "hint": "Connected stores"
+      },
+      "pageViewsNow": {
+        "label": "Page views now"
+      },
+      "engagementRate": {
+        "label": "Engagement rate",
+        "hint": "Visitors who took a purchase action"
+      },
+      "ordersNow": {
+        "label": "Orders now"
+      },
+      "addToCartsNow": {
+        "label": "Cart additions now"
+      },
+      "productsAddedToCart": {
+        "label": "Products added to cart",
+        "hint": "Distinct products"
+      },
+      "cartValueNow": {
+        "label": "Cart value now"
+      },
+      "orderValueNow": {
+        "label": "Order value now"
+      }
+    },
+    "liveVisitorsCardTitle": "Live visitors now ({count})",
+    "noSearchResults": "No results match your search.",
+    "noActiveVisitors": "No active visitors right now.",
+    "trafficSourceTitle": "Visitors by traffic source",
+    "totalVisitors": "Total visitors",
+    "noDataYet": "No data yet",
+    "visitorDistribution": "Visitor distribution",
+    "recentCartAdditions": "Recent cart additions",
+    "tableHeaders": {
+      "product": "Product",
+      "price": "Price",
+      "quantity": "Quantity",
+      "value": "Value",
+      "views": "Views",
+      "addToCarts": "Added"
+    },
+    "noCartAdditions": {
+      "title": "No cart additions",
+      "description": "Products visitors add to their cart will appear here."
+    },
+    "totalAdditions": "Total additions:",
+    "totalValue": "Total value:",
+    "topProductsTitle": "Most engaged products",
+    "noProducts": {
+      "title": "No products yet",
+      "description": "Products visitors are viewing will appear here."
+    },
+    "worldMapAlt": "Illustrative map of visitor distribution"
+  },
+  "workspace": {
+    "selectFlow": {
+      "title": "Choose a workspace",
+      "subtitle": "Select the organization and workspace you want to enter."
+    },
+    "selector": {
+      "defaultTriggerLabel": "Choose a workspace",
+      "openManagerAria": "Open workspace manager",
+      "currentWorkspaceLabel": "Current workspace",
+      "dialogTitle": "Manage workspaces",
+      "dialogSubtitle": "Choose an organization to view its workspaces, or create a new workspace.",
+      "close": "Close"
+    },
+    "content": {
+      "organizations": {
+        "title": "Organizations",
+        "subtitle": "Choose an organization to view its workspaces.",
+        "searchPlaceholder": "Search organizations...",
+        "searchAria": "Search organizations",
+        "allOrganizations": "All organizations",
+        "allOrganizationsDescription": "Show every workspace across all organizations",
+        "workspaceCountOne": "1 workspace",
+        "workspaceCountOther": "{count} workspaces",
+        "editNameAria": "Edit {name}'s name",
+        "save": "Save",
+        "cancel": "Cancel",
+        "namePlaceholder": "Organization name",
+        "nameAria": "Organization name",
+        "create": "Create",
+        "addNew": "Add new organization"
+      },
+      "workspaces": {
+        "createNew": "Create new workspace",
+        "searchPlaceholder": "Search workspaces...",
+        "searchAria": "Search workspaces",
+        "allWorkspaces": "All workspaces",
+        "listAria": "Workspaces",
+        "emptyNone": "No workspaces yet",
+        "emptyNoMatch": "No matching workspaces",
+        "emptyHint": "Start by creating a new workspace.",
+        "current": "Current",
+        "active": "Active",
+        "archived": "Archived",
+        "actionsAria": "{name} actions",
+        "switchTo": "Switch to this workspace",
+        "edit": "Edit",
+        "activate": "Activate",
+        "deactivate": "Deactivate",
+        "memberCountOne": "1 member",
+        "memberCountOther": "{count} members",
+        "organizationLabel": "Organization: {name}",
+        "lastUpdated": "Last updated: {date}",
+        "showingCount": "Showing {shown} of {total} workspace(s)",
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
+      },
+      "archiveDialog": {
+        "title": "Deactivate {name}?",
+        "description": "All linking and syncing under this workspace will stop immediately and stay stopped until you reactivate it. Nothing is deleted.",
+        "cancel": "Cancel",
+        "confirm": "Deactivate"
+      },
+      "toasts": {
+        "orgNameUpdated": "Organization name updated.",
+        "orgNameUpdateFailed": "Couldn't update the organization name.",
+        "workspaceActivated": "Workspace activated.",
+        "workspaceActivateFailed": "Couldn't activate the workspace.",
+        "workspaceDeactivated": "Workspace deactivated.",
+        "workspaceDeactivateFailed": "Couldn't deactivate the workspace."
+      },
+      "initialsFallback": "?"
+    }
   }
 }

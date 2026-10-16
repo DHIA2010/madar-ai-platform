@@ -137,7 +137,7 @@ describe("LiveVisitorsPage", () => {
 
     expect(screen.getByText("7")).toBeTruthy()
     expect(screen.getByText("50%")).toBeTruthy()
-    expect(screen.getAllByText("SAR 2,000.00").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("2,000.00 ر.س").length).toBeGreaterThan(0)
   })
 
   it("shows a visitor's location, page and device", async () => {

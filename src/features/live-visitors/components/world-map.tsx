@@ -6,13 +6,13 @@
 // country-geometry mapping in this codebase to colour arbitrary countries by visitor count.
 // The real per-country numbers live in the bar list beside it (see LiveVisitorsPage), which is
 // where the actual data is read.
-export function WorldMapIllustration() {
+export function WorldMapIllustration({ label }: { label: string }) {
   return (
     <svg
       viewBox="0 0 700 360"
       className="block h-auto w-full min-h-[180px]"
       role="img"
-      aria-label="خريطة توضيحية لتوزيع الزوار"
+      aria-label={label}
     >
       <rect width="700" height="360" fill="#e8f0fb" rx="10" />
 

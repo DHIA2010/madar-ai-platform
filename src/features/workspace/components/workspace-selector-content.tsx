@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import { useQuery } from "@tanstack/react-query"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -44,6 +45,7 @@ import type { Organization, Workspace } from "../types"
 
 import { useApplicationServices } from "@/application/context"
 import type { AdministrationUserDto } from "@/application/contracts/administration.contracts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 interface WorkspaceSelectorContentProps {
   onComplete?: () => void
@@ -82,8 +84,8 @@ function orgColorFor(organizationId: string) {
   return ORG_COLORS[hashId(organizationId) % ORG_COLORS.length]
 }
 
-function initials(name: string) {
-  return name.trim().charAt(0).toUpperCase() || "؟"
+function initials(name: string, fallback: string) {
+  return name.trim().charAt(0).toUpperCase() || fallback
 }
 
 function matchesWorkspaceSearch(workspace: Workspace, searchTerm: string) {
@@ -102,19 +104,23 @@ function matchesOrganizationSearch(organization: Organization, searchTerm: strin
     .some((value) => value.toLowerCase().includes(normalizedTerm))
 }
 
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-})
+function dateFormatter(locale: Locale): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+}
 
-function formatDate(value: string | undefined) {
+function formatDate(value: string | undefined, locale: Locale) {
   if (!value) return "—"
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "—" : DATE_FORMAT.format(date)
+  return Number.isNaN(date.getTime()) ? "—" : dateFormatter(locale).format(date)
 }
 
 export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorContentProps) {
+  const t = useTranslations("workspace.content")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const { currentWorkspace } = useWorkspace()
   const {
@@ -257,10 +263,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
     setPendingActionId(organizationId)
     try {
       await updateOrganization(organizationId, { name: editingOrganizationName.trim() })
-      toast.success("تم تحديث اسم المنظمة.")
+      toast.success(t("toasts.orgNameUpdated"))
       setEditingOrganizationId(null)
     } catch {
-      toast.error("تعذر تحديث اسم المنظمة.")
+      toast.error(t("toasts.orgNameUpdateFailed"))
     } finally {
       setPendingActionId(null)
     }
@@ -271,10 +277,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
       setPendingActionId(workspace.id)
       try {
         await restoreWorkspace(workspace.id)
-        toast.success("تم تنشيط مساحة العمل.")
+        toast.success(t("toasts.workspaceActivated"))
         emitWorkspaceLifecycleChanged()
       } catch {
-        toast.error("تعذر تنشيط مساحة العمل.")
+        toast.error(t("toasts.workspaceActivateFailed"))
       } finally {
         setPendingActionId(null)
       }
@@ -289,11 +295,11 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
     setPendingActionId(id)
     try {
       await archiveWorkspace(id)
-      toast.success("تم إيقاف مساحة العمل.")
+      toast.success(t("toasts.workspaceDeactivated"))
       setArchiveConfirmTarget(null)
       emitWorkspaceLifecycleChanged()
     } catch {
-      toast.error("تعذر إيقاف مساحة العمل.")
+      toast.error(t("toasts.workspaceDeactivateFailed"))
     } finally {
       setPendingActionId(null)
     }
@@ -301,20 +307,20 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
 
   return (
     <div
-      dir="rtl"
+      dir={localeDirection(locale)}
       className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)]"
     >
       {/* Organizations panel */}
       <aside className={cn(ROW_CARD, "flex min-h-0 flex-col overflow-hidden p-4")}>
-        <h3 className={cn("text-[13.5px] font-bold", HEADING)}>المنظمات</h3>
-        <p className={cn("mt-0.5 text-[11px]", MUTED)}>اختر منظمة لعرض مساحات العمل الخاصة بها.</p>
+        <h3 className={cn("text-[13.5px] font-bold", HEADING)}>{t("organizations.title")}</h3>
+        <p className={cn("mt-0.5 text-[11px]", MUTED)}>{t("organizations.subtitle")}</p>
 
         <AppInput
           type="search"
           value={organizationSearch}
           onChange={(event) => setOrganizationSearch(event.target.value)}
-          placeholder="البحث في المنظمات..."
-          aria-label="البحث في المنظمات"
+          placeholder={t("organizations.searchPlaceholder")}
+          aria-label={t("organizations.searchAria")}
           className="mt-3 h-9 rounded-[10px] border-[#e8edf3] bg-white text-[12px] placeholder:text-[#8098b4]"
           startIcon={<Search className="size-3.5" />}
         />
@@ -336,10 +342,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
               </span>
               <span className="min-w-0 flex-1">
                 <span className={cn("block truncate text-[12.5px] font-bold", HEADING)}>
-                  كل المنظمات
+                  {t("organizations.allOrganizations")}
                 </span>
                 <span className={cn("block truncate text-[10.5px]", MUTED)}>
-                  عرض جميع مساحات العمل في كافة المنظمات
+                  {t("organizations.allOrganizationsDescription")}
                 </span>
               </span>
               <span className={cn("shrink-0 text-[13px] font-extrabold", HEADING)}>
@@ -370,14 +376,14 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                       disabled={pendingActionId === organization.id}
                       onClick={() => void handleUpdateOrganization(organization.id)}
                     >
-                      حفظ
+                      {t("organizations.save")}
                     </AppButton>
                     <AppButton
                       size="sm"
                       variant="outline"
                       onClick={() => setEditingOrganizationId(null)}
                     >
-                      إلغاء
+                      {t("organizations.cancel")}
                     </AppButton>
                   </div>
                 )
@@ -403,7 +409,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={organization.logoUrl} alt="" className="size-full object-cover" />
                       ) : (
-                        initials(organization.name)
+                        initials(organization.name, t("initialsFallback"))
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -411,7 +417,9 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                         {organization.name}
                       </span>
                       <span className={cn("block truncate text-[10.5px]", MUTED)}>
-                        {count === 1 ? "مساحة عمل واحدة" : `${count} مساحات عمل`}
+                        {count === 1
+                          ? t("organizations.workspaceCountOne")
+                          : t("organizations.workspaceCountOther", { count })}
                       </span>
                     </span>
                     <span className={cn("shrink-0 text-[13px] font-extrabold", HEADING)}>
@@ -420,7 +428,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                   </button>
                   <button
                     type="button"
-                    aria-label={`تعديل اسم ${organization.name}`}
+                    aria-label={t("organizations.editNameAria", { name: organization.name })}
                     onClick={() => startEditOrganization(organization)}
                     className="hidden size-7 shrink-0 items-center justify-center rounded-[8px] text-[#8098b4] hover:bg-[#f4f7fc] hover:text-[#0d1b3e] group-hover/org:flex"
                   >
@@ -437,8 +445,8 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
             <AppInput
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
-              placeholder="اسم المنظمة"
-              aria-label="اسم المنظمة"
+              placeholder={t("organizations.namePlaceholder")}
+              aria-label={t("organizations.nameAria")}
               className="h-9 rounded-[9px] border-[#e8edf3] bg-white text-[12.5px] placeholder:text-[#8098b4]"
               autoFocus
             />
@@ -448,10 +456,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                 className="flex-1"
                 onClick={() => void handleCreateOrganization()}
               >
-                إنشاء
+                {t("organizations.create")}
               </AppButton>
               <AppButton size="sm" variant="outline" onClick={() => setShowOrganizationForm(false)}>
-                إلغاء
+                {t("organizations.cancel")}
               </AppButton>
             </div>
           </div>
@@ -462,7 +470,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
             className="mt-3 flex h-10 items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-[#c7d3e3] text-[12px] font-semibold text-[#5b6b85] hover:border-[#2563eb] hover:text-[#2563eb]"
           >
             <Plus className="size-3.5" />
-            إضافة منظمة جديدة
+            {t("organizations.addNew")}
           </button>
         )}
       </aside>
@@ -477,15 +485,15 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
             iconPosition="start"
             className="h-10 gap-2 whitespace-nowrap rounded-[10px] bg-[#2563eb] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1d4ed8]"
           >
-            إنشاء مساحة عمل جديدة
+            {t("workspaces.createNew")}
           </AppButton>
           <div className="min-w-[200px] flex-1">
             <AppInput
               type="search"
               value={workspaceSearch}
               onChange={(event) => setWorkspaceSearch(event.target.value)}
-              placeholder="البحث في مساحات العمل..."
-              aria-label="البحث في مساحات العمل"
+              placeholder={t("workspaces.searchPlaceholder")}
+              aria-label={t("workspaces.searchAria")}
               className="h-10 rounded-[10px] border-[#e8edf3] bg-white text-[12.5px] placeholder:text-[#8098b4]"
               startIcon={<Search className="size-4" />}
             />
@@ -497,14 +505,14 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
             )}
           >
             <Globe className="size-3.5" />
-            {selectedOrganization ? selectedOrganization.name : "كل مساحات العمل"}
+            {selectedOrganization ? selectedOrganization.name : t("workspaces.allWorkspaces")}
           </span>
         </div>
 
         <div
           className="min-h-0 flex-1 overflow-y-auto pe-1"
           role="listbox"
-          aria-label="مساحات العمل"
+          aria-label={t("workspaces.listAria")}
         >
           {pagedWorkspaces.length === 0 ? (
             <div
@@ -516,10 +524,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
               <Building2 className="size-7 text-[#c7d3e3]" />
               <p className={cn("text-[13px] font-semibold", HEADING)}>
                 {searchedWorkspaces.length === 0 && relevantWorkspaces.length === 0
-                  ? "لا توجد مساحات عمل بعد"
-                  : "لا توجد مساحات عمل مطابقة"}
+                  ? t("workspaces.emptyNone")
+                  : t("workspaces.emptyNoMatch")}
               </p>
-              <p className={cn("text-[11.5px]", MUTED)}>ابدأ بإنشاء مساحة عمل جديدة.</p>
+              <p className={cn("text-[11.5px]", MUTED)}>{t("workspaces.emptyHint")}</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
@@ -579,7 +587,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                             >
                               <span className="inline-flex items-center gap-1">
                                 <Check className="size-2.5" />
-                                الحالية
+                                {t("workspaces.current")}
                               </span>
                             </AppBadge>
                           ) : null}
@@ -592,7 +600,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                                 : "bg-[#f0fdf4] text-[#16a34a]"
                             )}
                           >
-                            {isArchived ? "متوقفة" : "نشطة"}
+                            {isArchived ? t("workspaces.archived") : t("workspaces.active")}
                           </AppBadge>
                         </span>
                         <span className={cn("mt-0.5 block truncate text-[11.5px]", MUTED)}>
@@ -605,7 +613,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                         <AppDropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            aria-label={`إجراءات ${workspace.name}`}
+                            aria-label={t("workspaces.actionsAria", { name: workspace.name })}
                             disabled={isPending}
                             onClick={(event) => event.stopPropagation()}
                             className="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-[#8098b4] hover:bg-[#f4f7fc] hover:text-[#0d1b3e] disabled:opacity-50"
@@ -617,15 +625,15 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                           <AppDropdownMenuItem
                             onSelect={() => void handleWorkspaceSelect(workspace)}
                           >
-                            التبديل إلى هذه المساحة
+                            {t("workspaces.switchTo")}
                           </AppDropdownMenuItem>
                           <AppDropdownMenuItem onSelect={() => goToEditWorkspace(workspace)}>
-                            تعديل
+                            {t("workspaces.edit")}
                           </AppDropdownMenuItem>
                           <AppDropdownMenuItem
                             onSelect={() => void handleArchiveRestoreWorkspace(workspace)}
                           >
-                            {isArchived ? "تنشيط" : "إيقاف"}
+                            {isArchived ? t("workspaces.activate") : t("workspaces.deactivate")}
                           </AppDropdownMenuItem>
                         </AppDropdownMenuContent>
                       </AppDropdownMenu>
@@ -638,7 +646,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                             {members.slice(0, 4).map((member) => (
                               <AppAvatar key={member.id} size="sm" className="ring-2 ring-white">
                                 <AppAvatarFallback className="bg-[#eff6ff] text-[10px] font-bold text-[#2563eb]">
-                                  {initials(member.fullName)}
+                                  {initials(member.fullName, t("initialsFallback"))}
                                 </AppAvatarFallback>
                               </AppAvatar>
                             ))}
@@ -652,7 +660,9 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                           <Users className="size-3.5 text-[#c7d3e3]" />
                         )}
                         <span className={cn("text-[11px]", MUTED)}>
-                          {members.length === 1 ? "عضو واحد" : `${members.length} أعضاء`}
+                          {members.length === 1
+                            ? t("workspaces.memberCountOne")
+                            : t("workspaces.memberCountOther", { count: members.length })}
                         </span>
                       </div>
                     ) : null}
@@ -661,10 +671,14 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                       {orgName ? (
                         <span className={cn("flex items-center gap-1", MUTED)}>
                           <Building2 className="size-3" />
-                          المنظمة: {orgName}
+                          {t("workspaces.organizationLabel", { name: orgName })}
                         </span>
                       ) : null}
-                      <span className={MUTED}>أخر تحديث: {formatDate(workspace.createdAt)}</span>
+                      <span className={MUTED}>
+                        {t("workspaces.lastUpdated", {
+                          date: formatDate(workspace.createdAt, locale),
+                        })}
+                      </span>
                     </div>
                   </div>
                 )
@@ -676,7 +690,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
         {searchedWorkspaces.length > 0 ? (
           <div className="mt-3 flex items-center justify-between border-t border-[#f1f4f9] pt-3">
             <span className={cn("text-[11.5px]", MUTED)}>
-              عرض {pagedWorkspaces.length} من {searchedWorkspaces.length} مساحة عمل
+              {t("workspaces.showingCount", {
+                shown: pagedWorkspaces.length,
+                total: searchedWorkspaces.length,
+              })}
             </span>
             {totalPages > 1 ? (
               <div className="flex items-center gap-1">
@@ -685,7 +702,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                   variant="outline"
                   size="icon-sm"
                   disabled={currentPage <= 1}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("workspaces.previousPage")}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
                 >
                   ‹
@@ -700,7 +717,7 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
                   variant="outline"
                   size="icon-sm"
                   disabled={currentPage >= totalPages}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("workspaces.nextPage")}
                   onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 >
                   ›
@@ -716,10 +733,10 @@ export function WorkspaceSelectorContent({ onComplete }: WorkspaceSelectorConten
         onOpenChange={(open) => {
           if (!pendingActionId && !open) setArchiveConfirmTarget(null)
         }}
-        title={`إيقاف ${archiveConfirmTarget?.name ?? ""}؟`}
-        description="سيتوقف كل الربط والمزامنة تحت هذه المساحة فوراً ويبقى متوقفاً حتى تعيد تنشيطها. لا شيء يُحذف."
-        cancelLabel="إلغاء"
-        confirmLabel="إيقاف"
+        title={t("archiveDialog.title", { name: archiveConfirmTarget?.name ?? "" })}
+        description={t("archiveDialog.description")}
+        cancelLabel={t("archiveDialog.cancel")}
+        confirmLabel={t("archiveDialog.confirm")}
         confirmTone="default"
         loading={pendingActionId === archiveConfirmTarget?.id}
         onCancel={() => {

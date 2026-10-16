@@ -5274,5 +5274,156 @@
         "strategyBadge": "الاستراتيجية"
       }
     }
+  },
+  "shared": {
+    "settingsHelpCard": {
+      "title": "تحتاج مساعدة؟",
+      "description": "تواصل مع فريق الدعم للمساعدة في الإعدادات.",
+      "contactUs": "تواصل معنا"
+    }
+  },
+  "liveVisitors": {
+    "title": "الزوار المباشرون",
+    "livePill": "مباشر",
+    "subtitle": "تابع الزوار النشطين الآن عبر جميع منصات التجارة",
+    "searchPlaceholder": "ابحث عن بلد، جهاز، صفحة...",
+    "windowLabel": "خلال آخر {minutes} دقائق",
+    "loadErrorFallback": "تعذر تحميل بيانات الزوار.",
+    "unknownLocation": "موقع غير معروف",
+    "unknown": "غير معروف",
+    "unknownProduct": "منتج غير معروف",
+    "kpis": {
+      "liveVisitorsNow": {
+        "label": "الزوار المباشرون الآن"
+      },
+      "activePlatforms": {
+        "label": "عدد المنصات النشطة",
+        "hint": "متاجر مرتبطة"
+      },
+      "pageViewsNow": {
+        "label": "مشاهدات الصفحات الآن"
+      },
+      "engagementRate": {
+        "label": "معدل التفاعل",
+        "hint": "زوار قاموا بإجراء شرائي"
+      },
+      "ordersNow": {
+        "label": "الطلبات الآن"
+      },
+      "addToCartsNow": {
+        "label": "إضافات للسلة الآن"
+      },
+      "productsAddedToCart": {
+        "label": "منتجات أضيفت للسلة",
+        "hint": "منتجات مختلفة"
+      },
+      "cartValueNow": {
+        "label": "قيمة سلال التسوق الآن"
+      },
+      "orderValueNow": {
+        "label": "قيمة الطلبات الآن"
+      }
+    },
+    "liveVisitorsCardTitle": "الزوار المباشرون الآن ({count})",
+    "noSearchResults": "لا نتائج مطابقة للبحث.",
+    "noActiveVisitors": "لا يوجد زوار نشطون الآن.",
+    "trafficSourceTitle": "الزوار حسب مصدر الزيارة",
+    "totalVisitors": "إجمالي الزوار",
+    "noDataYet": "لا توجد بيانات بعد",
+    "visitorDistribution": "توزيع الزوار",
+    "recentCartAdditions": "إضافات حديثة للسلة",
+    "tableHeaders": {
+      "product": "المنتج",
+      "price": "السعر",
+      "quantity": "الكمية",
+      "value": "القيمة",
+      "views": "مشاهدات",
+      "addToCarts": "إضافات"
+    },
+    "noCartAdditions": {
+      "title": "لا توجد إضافات للسلة",
+      "description": "ستظهر هنا المنتجات التي يضيفها الزوار للسلة الآن."
+    },
+    "totalAdditions": "إجمالي الإضافات:",
+    "totalValue": "القيمة الإجمالية:",
+    "topProductsTitle": "المنتجات الأكثر تفاعلاً",
+    "noProducts": {
+      "title": "لا توجد منتجات بعد",
+      "description": "ستظهر هنا المنتجات التي يشاهدها الزوار الآن."
+    },
+    "worldMapAlt": "خريطة توضيحية لتوزيع الزوار"
+  },
+  "workspace": {
+    "selectFlow": {
+      "title": "اختر مساحة العمل",
+      "subtitle": "حدد المنظمة ومساحة العمل التي تريد الدخول إليها."
+    },
+    "selector": {
+      "defaultTriggerLabel": "اختر مساحة العمل",
+      "openManagerAria": "فتح مدير مساحات العمل",
+      "currentWorkspaceLabel": "مساحة العمل الحالية",
+      "dialogTitle": "إدارة مساحات العمل",
+      "dialogSubtitle": "اختر منظمة لعرض مساحات العمل الخاصة بها، أو أنشئ مساحة عمل جديدة.",
+      "close": "إغلاق"
+    },
+    "content": {
+      "organizations": {
+        "title": "المنظمات",
+        "subtitle": "اختر منظمة لعرض مساحات العمل الخاصة بها.",
+        "searchPlaceholder": "البحث في المنظمات...",
+        "searchAria": "البحث في المنظمات",
+        "allOrganizations": "كل المنظمات",
+        "allOrganizationsDescription": "عرض جميع مساحات العمل في كافة المنظمات",
+        "workspaceCountOne": "مساحة عمل واحدة",
+        "workspaceCountOther": "{count} مساحات عمل",
+        "editNameAria": "تعديل اسم {name}",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "namePlaceholder": "اسم المنظمة",
+        "nameAria": "اسم المنظمة",
+        "create": "إنشاء",
+        "addNew": "إضافة منظمة جديدة"
+      },
+      "workspaces": {
+        "createNew": "إنشاء مساحة عمل جديدة",
+        "searchPlaceholder": "البحث في مساحات العمل...",
+        "searchAria": "البحث في مساحات العمل",
+        "allWorkspaces": "كل مساحات العمل",
+        "listAria": "مساحات العمل",
+        "emptyNone": "لا توجد مساحات عمل بعد",
+        "emptyNoMatch": "لا توجد مساحات عمل مطابقة",
+        "emptyHint": "ابدأ بإنشاء مساحة عمل جديدة.",
+        "current": "الحالية",
+        "active": "نشطة",
+        "archived": "متوقفة",
+        "actionsAria": "إجراءات {name}",
+        "switchTo": "التبديل إلى هذه المساحة",
+        "edit": "تعديل",
+        "activate": "تنشيط",
+        "deactivate": "إيقاف",
+        "memberCountOne": "عضو واحد",
+        "memberCountOther": "{count} أعضاء",
+        "organizationLabel": "المنظمة: {name}",
+        "lastUpdated": "أخر تحديث: {date}",
+        "showingCount": "عرض {shown} من {total} مساحة عمل",
+        "previousPage": "الصفحة السابقة",
+        "nextPage": "الصفحة التالية"
+      },
+      "archiveDialog": {
+        "title": "إيقاف {name}؟",
+        "description": "سيتوقف كل الربط والمزامنة تحت هذه المساحة فوراً ويبقى متوقفاً حتى تعيد تنشيطها. لا شيء يُحذف.",
+        "cancel": "إلغاء",
+        "confirm": "إيقاف"
+      },
+      "toasts": {
+        "orgNameUpdated": "تم تحديث اسم المنظمة.",
+        "orgNameUpdateFailed": "تعذر تحديث اسم المنظمة.",
+        "workspaceActivated": "تم تنشيط مساحة العمل.",
+        "workspaceActivateFailed": "تعذر تنشيط مساحة العمل.",
+        "workspaceDeactivated": "تم إيقاف مساحة العمل.",
+        "workspaceDeactivateFailed": "تعذر إيقاف مساحة العمل."
+      },
+      "initialsFallback": "؟"
+    }
   }
 }
