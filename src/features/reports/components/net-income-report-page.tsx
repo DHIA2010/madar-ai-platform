@@ -2,9 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useLocale } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import {
-  ArrowRight,
+  ArrowLeft,
   Loader2,
   Package,
   Percent,
@@ -29,38 +29,37 @@ import { ReadyReportFilterBar } from "./ready-report-filter-bar"
 import { WaterfallChart } from "./waterfall-chart"
 
 import type { Locale } from "@/i18n/locales"
-
-const TIME_GROUPING_OPTIONS = [
-  { value: "month", label: "شهري" },
-  { value: "week", label: "أسبوعي" },
-  { value: "day", label: "يومي" },
-]
+import { localeDirection } from "@/i18n/locales"
 
 export function NetIncomeReportPage() {
-  // NOTE: this page is not yet translated (deferred to its own i18n pass, alongside
-  // WaterfallChart/NetIncomeByBranchChart/NetIncomeSuggestionsPanel) -- `locale` here only feeds
-  // the now-locale-aware shared formatCurrency() from ready-report-field.tsx, so this file keeps
-  // compiling against that shared helper's new signature.
+  const t = useTranslations("reports.netIncome")
+  const tKpiWidget = useTranslations("reports.kpiWidget")
+  const tCommon = useTranslations("reports.common")
   const locale = useLocale() as Locale
+  const TIME_GROUPING_OPTIONS = [
+    { value: "month", label: tKpiWidget("timeGroupingLabels.month") },
+    { value: "week", label: tKpiWidget("timeGroupingLabels.week") },
+    { value: "day", label: tKpiWidget("timeGroupingLabels.day") },
+  ]
   const router = useRouter()
   const { dateRange, setDateRange, workspaceId, setWorkspaceId, filters } = useReadyReportFilters()
   const [timeGrouping, setTimeGrouping] = useState<"day" | "week" | "month">("month")
   const { data, isLoading } = useNetIncomeReport(filters, timeGrouping)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-4">
       <button
         type="button"
         onClick={() => router.push(ROUTES.reports)}
         className="flex w-fit items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground hover:text-foreground"
       >
-        <ArrowRight className="size-3.5" />
-        العودة إلى التقارير
+        <ArrowLeft className="size-3.5 rtl:rotate-180" />
+        {t("backToReports")}
       </button>
 
       <div>
-        <h1 className={cn("text-2xl font-bold", HEADING)}>تقرير صافي الدخل</h1>
-        <p className={cn("mt-1 text-sm", MUTED)}>تحليل صافي الدخل من المبيعات والمصروفات.</p>
+        <h1 className={cn("text-2xl font-bold", HEADING)}>{t("title")}</h1>
+        <p className={cn("mt-1 text-sm", MUTED)}>{t("subtitle")}</p>
       </div>
 
       <ReadyReportFilterBar
@@ -73,57 +72,57 @@ export function NetIncomeReportPage() {
       {isLoading || !data ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          جارٍ التحميل...
+          {tCommon("loading")}
         </div>
       ) : (
         <>
-          {/* Reversed to match the waterfall chart's own right-to-left flow: المبيعات starts on
-              the right, صافي الدخل ends on the left. */}
+          {/* Reversed to match the waterfall chart's own right-to-left flow: sales starts on the
+              right (in RTL), net income ends on the left. */}
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
             <ReadyReportKpiCard
-              label="المبيعات"
+              label={t("kpis.sales")}
               value={formatCurrency(data.totals.sales, locale)}
               icon={Receipt}
               tone="blue"
             />
             <ReadyReportKpiCard
-              label="المرتجعات"
+              label={t("kpis.returns")}
               value={formatCurrency(data.totals.returns, locale)}
               icon={RotateCcw}
               tone="rose"
             />
             <ReadyReportKpiCard
-              label="صافي المبيعات"
+              label={t("kpis.netSales")}
               value={formatCurrency(data.totals.netSales, locale)}
               icon={ShoppingBag}
               tone="emerald"
             />
             <ReadyReportKpiCard
-              label="الضريبة"
+              label={t("kpis.tax")}
               value={formatCurrency(data.totals.tax, locale)}
               icon={Percent}
               tone="amber"
             />
             <ReadyReportKpiCard
-              label="تكلفة المنتجات المباعة"
+              label={t("kpis.cogs")}
               value={formatCurrency(data.totals.cogs, locale)}
               icon={Package}
               tone="blue"
             />
             <ReadyReportKpiCard
-              label="تكلفة المنتجات المسترجعة"
+              label={t("kpis.returnedCogs")}
               value={formatCurrency(data.totals.returnedCogs, locale)}
               icon={RotateCcw}
               tone="violet"
             />
             <ReadyReportKpiCard
-              label="المصروفات"
+              label={t("kpis.expenses")}
               value={formatCurrency(data.totals.expenses, locale)}
               icon={Wallet}
               tone="amber"
             />
             <ReadyReportKpiCard
-              label="صافي الدخل"
+              label={t("kpis.netIncome")}
               value={formatCurrency(data.totals.netIncome, locale)}
               icon={data.totals.netIncome >= 0 ? TrendingUp : TrendingDown}
               tone={data.totals.netIncome >= 0 ? "emerald" : "rose"}
@@ -142,12 +141,12 @@ export function NetIncomeReportPage() {
 
           <div className={cn(PANEL, "overflow-hidden")}>
             <div className="flex items-center justify-between border-b border-[#e1e7f0] px-4 py-3">
-              <h3 className={cn("text-[13.5px] font-bold", HEADING)}>تفاصيل الحسابات حسب الفترة</h3>
+              <h3 className={cn("text-[13.5px] font-bold", HEADING)}>{t("table.sectionTitle")}</h3>
               <AppSearchableSelect
                 value={timeGrouping}
                 options={TIME_GROUPING_OPTIONS}
                 onChange={(value) => setTimeGrouping(value as typeof timeGrouping)}
-                ariaLabel="التجميع الزمني"
+                ariaLabel={t("table.timeGroupingAriaLabel")}
                 triggerClassName="w-[140px]"
               />
             </div>
@@ -156,15 +155,15 @@ export function NetIncomeReportPage() {
                 <thead>
                   <tr>
                     {[
-                      "الفترة",
-                      "المبيعات",
-                      "المرتجعات",
-                      "صافي المبيعات",
-                      "الضريبة",
-                      "تكلفة المنتجات المباعة",
-                      "تكلفة المنتجات المسترجعة",
-                      "المصروفات",
-                      "صافي الدخل",
+                      t("table.period"),
+                      t("kpis.sales"),
+                      t("kpis.returns"),
+                      t("kpis.netSales"),
+                      t("kpis.tax"),
+                      t("kpis.cogs"),
+                      t("kpis.returnedCogs"),
+                      t("kpis.expenses"),
+                      t("kpis.netIncome"),
                     ].map((heading) => (
                       <th
                         key={heading}
@@ -210,7 +209,7 @@ export function NetIncomeReportPage() {
                   {data.periods.length === 0 ? (
                     <tr>
                       <td colSpan={9} className={cn("py-10 text-center text-[12.5px]", MUTED)}>
-                        لا توجد بيانات لهذه الفترة
+                        {t("table.noData")}
                       </td>
                     </tr>
                   ) : null}

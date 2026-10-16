@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import {
   Bar,
   BarChart,
@@ -27,6 +28,7 @@ const COLOR_TOTAL = "#2878ff"
 // before/after running total, and the delta is the height between them. "start"/"total" steps
 // render as a full bar from 0 instead of floating.
 export function WaterfallChart({ steps }: { steps: WaterfallStep[] }) {
+  const t = useTranslations("reports.netIncome.waterfallChart")
   const { rows } = steps.reduce<{
     cumulative: number
     rows: Array<{ label: string; base: number; delta: number; rawValue: number; color: string }>
@@ -79,7 +81,7 @@ export function WaterfallChart({ steps }: { steps: WaterfallStep[] }) {
 
   return (
     <div className={cn(PANEL, "flex h-full flex-col p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>توزيع حسابات صافي الدخل</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("title")}</h3>
       <div className="min-h-[260px] flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={displayRows} margin={{ top: 24, right: 4, left: -12, bottom: 0 }}>
@@ -97,7 +99,7 @@ export function WaterfallChart({ steps }: { steps: WaterfallStep[] }) {
               contentStyle={TOOLTIP_STYLE}
               formatter={(_value: number, _name: string, item) => {
                 const payload = item.payload as { rawValue: number }
-                return [formatCurrencyCompact(payload.rawValue), "القيمة"]
+                return [formatCurrencyCompact(payload.rawValue), t("tooltipValue")]
               }}
             />
             <Bar dataKey="base" stackId="waterfall" fill="transparent" isAnimationActive={false} />
@@ -123,15 +125,15 @@ export function WaterfallChart({ steps }: { steps: WaterfallStep[] }) {
       <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] font-semibold">
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full" style={{ background: COLOR_INCREASE }} />
-          زيادة
+          {t("increase")}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full" style={{ background: COLOR_DECREASE }} />
-          نقصان
+          {t("decrease")}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full" style={{ background: COLOR_TOTAL }} />
-          الإجمالي
+          {t("total")}
         </span>
       </div>
     </div>

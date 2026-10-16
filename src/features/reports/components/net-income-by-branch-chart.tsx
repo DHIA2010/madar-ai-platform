@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 
 import { cn } from "@/lib/utils"
@@ -18,6 +19,8 @@ import { HEADING, MUTED, PANEL } from "./ready-report-field"
 // (see PaymentMethodDonutCard): the app's own CHART_COLORS palette, a center total that swaps to
 // the hovered slice's own value, and a horizontal legend row below the chart.
 export function NetIncomeByBranchChart({ branches }: { branches: NetIncomeByBranchRow[] }) {
+  const t = useTranslations("reports.netIncome.byBranchChart")
+  const tCommon = useTranslations("reports.common")
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const slices = branches.map((branch) => ({
     ...branch,
@@ -28,9 +31,9 @@ export function NetIncomeByBranchChart({ branches }: { branches: NetIncomeByBran
 
   return (
     <div className={cn(PANEL, "p-4")}>
-      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>مقارنة صافي الدخل حسب الفرع</h3>
+      <h3 className={cn("mb-3 text-[13.5px] font-bold", HEADING)}>{t("title")}</h3>
       {branches.length === 0 ? (
-        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>لا توجد بيانات</p>
+        <p className={cn("py-10 text-center text-[12.5px]", MUTED)}>{tCommon("noData")}</p>
       ) : (
         <div className="flex flex-col items-center gap-4 py-2">
           <div className="relative mx-auto aspect-square w-full max-w-[220px]">
@@ -68,7 +71,7 @@ export function NetIncomeByBranchChart({ branches }: { branches: NetIncomeByBran
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <p className={cn("text-[10.5px]", MUTED)}>
-                {hovered ? hovered.workspaceName : "الإجمالي"}
+                {hovered ? hovered.workspaceName : tCommon("total")}
               </p>
               <p
                 className={cn(

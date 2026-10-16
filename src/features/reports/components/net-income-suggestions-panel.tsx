@@ -1,3 +1,4 @@
+import { useLocale, useTranslations } from "next-intl"
 import { Lightbulb } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -5,14 +6,11 @@ import { cn } from "@/lib/utils"
 import type { NetIncomeTotals } from "../types"
 import { HEADING, MUTED, PANEL } from "./ready-report-field"
 
+import type { Locale } from "@/i18n/locales"
+
 type BadgeTone = "high" | "growth" | "optimize" | "stable"
 
-const BADGE_META: Record<BadgeTone, { label: string; className: string }> = {
-  high: { label: "أولوية عالية", className: "bg-rose-50 text-rose-600" },
-  growth: { label: "فرصة نمو", className: "bg-emerald-50 text-emerald-600" },
-  optimize: { label: "تحسين الربحية", className: "bg-amber-50 text-amber-600" },
-  stable: { label: "مستقر", className: "bg-slate-100 text-slate-600" },
-}
+type SuggestionsTranslator = ReturnType<typeof useTranslations<"reports.netIncome.suggestions">>
 
 interface Suggestion {
   title: string
@@ -23,52 +21,67 @@ interface Suggestion {
 // Plain threshold-based advisory cards -- no AI involved, matching this session's established
 // pattern (src/features/expenses/hooks/use-expenses-overview.ts's rule-based insights) and the
 // user's earlier explicit decision to drop AI from the Expenses module entirely.
-function buildSuggestions(totals: NetIncomeTotals): Suggestion[] {
+function buildSuggestions(
+  totals: NetIncomeTotals,
+  t: SuggestionsTranslator,
+  locale: Locale
+): Suggestion[] {
   const expenseRatio = totals.sales > 0 ? totals.expenses / totals.sales : 0
   const cogsRatio = totals.sales > 0 ? totals.cogs / totals.sales : 0
   const returnRatio = totals.sales > 0 ? totals.returns / totals.sales : 0
+  const currency = locale === "ar" ? "ر.س" : "SAR"
+  const salesAmount = `${Math.round(totals.sales).toLocaleString(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US")} ${currency}`
 
   return [
     {
-      title: "مراجعة المصروفات",
+      title: t("expenseReview.title"),
       description:
         expenseRatio > 0.5
-          ? `المصروفات تمثل ${Math.round(expenseRatio * 100)}% من المبيعات -- راجع البنود الأكبر لخفضها.`
-          : `المصروفات تمثل ${Math.round(expenseRatio * 100)}% من المبيعات، ضمن نطاق معقول.`,
+          ? t("expenseReview.high", { percent: Math.round(expenseRatio * 100) })
+          : t("expenseReview.ok", { percent: Math.round(expenseRatio * 100) }),
       tone: expenseRatio > 0.5 ? "high" : "optimize",
     },
     {
-      title: "تحسين المبيعات",
-      description: `إجمالي المبيعات ${Math.round(totals.sales).toLocaleString("en-US")} ر.س خلال الفترة -- زيادة حجم المبيعات تخفف أثر المصروفات الثابتة.`,
+      title: t("salesImprovement.title"),
+      description: t("salesImprovement.description", { amount: salesAmount }),
       tone: "growth",
     },
     {
-      title: "مراجعة تكلفة المنتجات",
+      title: t("cogsReview.title"),
       description:
         cogsRatio > 0.4
-          ? `تكلفة المنتجات المباعة تمثل ${Math.round(cogsRatio * 100)}% من المبيعات -- راجع تسعير الموردين.`
-          : `تكلفة المنتجات المباعة تمثل ${Math.round(cogsRatio * 100)}% من المبيعات.`,
+          ? t("cogsReview.high", { percent: Math.round(cogsRatio * 100) })
+          : t("cogsReview.ok", { percent: Math.round(cogsRatio * 100) }),
       tone: "optimize",
     },
     {
-      title: "متابعة المرتجعات",
+      title: t("returnsReview.title"),
       description:
         returnRatio > 0.05
-          ? `المرتجعات تمثل ${Math.round(returnRatio * 100)}% من المبيعات -- راجع أسباب الإرجاع المتكررة.`
-          : `المرتجعات منخفضة (${Math.round(returnRatio * 100)}% من المبيعات).`,
+          ? t("returnsReview.high", { percent: Math.round(returnRatio * 100) })
+          : t("returnsReview.ok", { percent: Math.round(returnRatio * 100) }),
       tone: returnRatio > 0.05 ? "high" : "stable",
     },
   ]
 }
 
+const BADGE_CLASS: Record<BadgeTone, string> = {
+  high: "bg-rose-50 text-rose-600",
+  growth: "bg-emerald-50 text-emerald-600",
+  optimize: "bg-amber-50 text-amber-600",
+  stable: "bg-slate-100 text-slate-600",
+}
+
 export function NetIncomeSuggestionsPanel({ totals }: { totals: NetIncomeTotals }) {
-  const suggestions = buildSuggestions(totals)
+  const t = useTranslations("reports.netIncome.suggestions")
+  const locale = useLocale() as Locale
+  const suggestions = buildSuggestions(totals, t, locale)
 
   return (
     <div className={cn(PANEL, "flex h-full flex-col p-4")}>
       <h3 className={cn("mb-3 flex items-center gap-2 text-[13.5px] font-bold", HEADING)}>
         <Lightbulb className="size-4 text-[#f59e0b]" />
-        مقترحات لتحسين صافي الدخل
+        {t("title")}
       </h3>
       <div className="space-y-3">
         {suggestions.map((suggestion) => (
@@ -78,10 +91,10 @@ export function NetIncomeSuggestionsPanel({ totals }: { totals: NetIncomeTotals 
               <span
                 className={cn(
                   "shrink-0 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold",
-                  BADGE_META[suggestion.tone].className
+                  BADGE_CLASS[suggestion.tone]
                 )}
               >
-                {BADGE_META[suggestion.tone].label}
+                {t(`badges.${suggestion.tone}` as "badges.high")}
               </span>
             </div>
             <p className={cn("text-[12px] leading-relaxed", MUTED)}>{suggestion.description}</p>

@@ -3306,6 +3306,65 @@
         "generatedAt": "Generated on {date}",
         "appliedFiltersLabel": "Filters applied to this report"
       }
+    },
+    "netIncome": {
+      "backToReports": "Back to reports",
+      "title": "Net income report",
+      "subtitle": "Net income analysis from sales and expenses.",
+      "kpis": {
+        "sales": "Sales",
+        "returns": "Returns",
+        "netSales": "Net sales",
+        "tax": "Tax",
+        "cogs": "Cost of goods sold",
+        "returnedCogs": "Returned cost of goods",
+        "expenses": "Expenses",
+        "netIncome": "Net income"
+      },
+      "table": {
+        "sectionTitle": "Breakdown by period",
+        "timeGroupingAriaLabel": "Time grouping",
+        "period": "Period",
+        "noData": "No data for this period"
+      },
+      "waterfallChart": {
+        "title": "Net income account breakdown",
+        "tooltipValue": "Value",
+        "increase": "Increase",
+        "decrease": "Decrease",
+        "total": "Total"
+      },
+      "byBranchChart": {
+        "title": "Net income comparison by branch"
+      },
+      "suggestions": {
+        "title": "Suggestions to improve net income",
+        "expenseReview": {
+          "title": "Review expenses",
+          "high": "Expenses make up {percent}% of sales -- review the larger line items to reduce them.",
+          "ok": "Expenses make up {percent}% of sales, within a reasonable range."
+        },
+        "salesImprovement": {
+          "title": "Improve sales",
+          "description": "Total sales were {amount} during the period -- increasing sales volume softens the impact of fixed expenses."
+        },
+        "cogsReview": {
+          "title": "Review cost of goods",
+          "high": "Cost of goods sold makes up {percent}% of sales -- review supplier pricing.",
+          "ok": "Cost of goods sold makes up {percent}% of sales."
+        },
+        "returnsReview": {
+          "title": "Monitor returns",
+          "high": "Returns make up {percent}% of sales -- review the causes of recurring returns.",
+          "ok": "Returns are low ({percent}% of sales)."
+        },
+        "badges": {
+          "high": "High priority",
+          "growth": "Growth opportunity",
+          "optimize": "Improve profitability",
+          "stable": "Stable"
+        }
+      }
     }
   }
 }
