@@ -56,6 +56,15 @@ function MicrosoftIcon() {
   )
 }
 
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 20 20" className="size-4" fill="#000000">
+      <path d="M14.5 10.6c0-1.9 1.5-2.8 1.6-2.9-.9-1.3-2.2-1.5-2.7-1.5-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.6-1.3 0-2.4.7-3.1 1.9-1.3 2.3-.3 5.7.9 7.6.6.9 1.4 1.9 2.3 1.9.9 0 1.3-.6 2.4-.6s1.4.6 2.4.6c1 0 1.7-.9 2.3-1.8.7-1 1-2 1-2.1-.1 0-2-.8-2-3.1Z" />
+      <path d="M12.6 4.8c.5-.6.8-1.4.7-2.3-.7 0-1.6.5-2.1 1.1-.5.5-.9 1.4-.8 2.2.8.1 1.7-.4 2.2-1Z" />
+    </svg>
+  )
+}
+
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const { login, authStatus } = useAuth()
   const { authenticationApplicationService } = useApplicationServices()
@@ -140,13 +149,13 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       </div>
 
       {invitationToken ? (
-        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {t("invitationBanner")}
         </div>
       ) : null}
 
       {zidInstallToken ? (
-        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {t("zidInstallBanner")}
         </div>
       ) : null}
@@ -186,7 +195,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           </label>
           <Link
             href={ROUTES.forgotPassword}
-            className="font-medium text-violet-600 underline-offset-4 hover:underline"
+            className="font-medium text-blue-600 underline-offset-4 hover:underline"
           >
             {t("forgotPassword")}
           </Link>
@@ -198,7 +207,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           type="submit"
           fullWidth
           loading={form.formState.isSubmitting || authStatus === "loading"}
-          className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
+          className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
         >
           {t("submit")}
         </AppButton>
@@ -209,22 +218,27 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           <span className="h-px flex-1 bg-slate-200" />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <GoogleIcon />
-            Google
           </button>
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <MicrosoftIcon />
-            Microsoft
+          </button>
+          <button
+            type="button"
+            title={t("comingSoon")}
+            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <AppleIcon />
           </button>
         </div>
 
@@ -238,7 +252,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
                   ? `${ROUTES.register}?zidInstall=${encodeURIComponent(zidInstallToken)}`
                   : ROUTES.register
             }
-            className="font-semibold text-violet-600 underline-offset-4 hover:underline"
+            className="font-semibold text-blue-600 underline-offset-4 hover:underline"
           >
             {t("createAccount")}
           </Link>

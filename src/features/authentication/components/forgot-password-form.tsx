@@ -119,7 +119,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
           <p className="text-center text-sm text-slate-600">
             <Link
               href={ROUTES.login}
-              className="font-semibold text-violet-600 underline-offset-4 hover:underline"
+              className="font-semibold text-blue-600 underline-offset-4 hover:underline"
             >
               {t("backToLogin")}
             </Link>
@@ -144,7 +144,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
             type="submit"
             fullWidth
             loading={form.formState.isSubmitting}
-            className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
+            className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
           >
             {t("submit")}
           </AppButton>
@@ -152,7 +152,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
           <p className="text-center text-sm text-slate-600">
             <Link
               href={ROUTES.login}
-              className="font-semibold text-violet-600 underline-offset-4 hover:underline"
+              className="font-semibold text-blue-600 underline-offset-4 hover:underline"
             >
               {t("backToLogin")}
             </Link>

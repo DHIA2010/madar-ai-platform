@@ -96,9 +96,9 @@ function StepIndicator({
                 className={cn(
                   "flex size-9 items-center justify-center rounded-full text-sm font-semibold transition-colors",
                   isComplete
-                    ? "bg-violet-600 text-white"
+                    ? "bg-blue-600 text-white"
                     : isActive
-                      ? "bg-violet-600 text-white ring-4 ring-violet-100"
+                      ? "bg-blue-600 text-white ring-4 ring-blue-100"
                       : "bg-slate-100 text-slate-400"
                 )}
               >
@@ -117,7 +117,7 @@ function StepIndicator({
               <span
                 className={cn(
                   "mx-2 mb-5 h-0.5 flex-1",
-                  isComplete ? "bg-violet-600" : "bg-slate-100"
+                  isComplete ? "bg-blue-600" : "bg-slate-100"
                 )}
               />
             ) : null}
@@ -295,13 +295,13 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
       </div>
 
       {isInvitationMode ? (
-        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {t("invitationBanner")}
         </div>
       ) : null}
 
       {zidInstallToken ? (
-        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {t("zidInstallBanner")}
         </div>
       ) : null}
@@ -398,11 +398,11 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 />
                 <span>
                   {t("acceptTermsPrefix")}{" "}
-                  <span className="font-medium text-violet-600">{t("termsAndConditions")}</span>{" "}
+                  <span className="font-medium text-blue-600">{t("termsAndConditions")}</span>{" "}
                   {t("and")}{" "}
                   <Link
                     href={ROUTES.privacy}
-                    className="font-medium text-violet-600 underline-offset-4 hover:underline"
+                    className="font-medium text-blue-600 underline-offset-4 hover:underline"
                   >
                     {t("privacyPolicy")}
                   </Link>
@@ -419,7 +419,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               type="button"
               onClick={goNext}
               fullWidth
-              className="h-11 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
+              className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
             >
               {t("next")}
             </AppButton>
@@ -506,7 +506,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               <AppButton
                 type="button"
                 onClick={goNext}
-                className="h-11 flex-1 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
+                className="h-11 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
               >
                 {t("next")}
               </AppButton>
@@ -564,7 +564,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               <AppButton
                 type="submit"
                 loading={form.formState.isSubmitting}
-                className="h-11 flex-1 bg-gradient-to-l from-violet-600 to-indigo-600 text-base font-semibold shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500"
+                className="h-11 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
               >
                 {t("submit")}
               </AppButton>
@@ -584,7 +584,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                   ? `${ROUTES.login}?zidInstall=${encodeURIComponent(zidInstallToken)}`
                   : ROUTES.login
             }
-            className="font-semibold text-violet-600 underline-offset-4 hover:underline"
+            className="font-semibold text-blue-600 underline-offset-4 hover:underline"
           >
             {t("signIn")}
           </Link>

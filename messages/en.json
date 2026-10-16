@@ -11,19 +11,27 @@
   },
   "authShowcase": {
     "preview": {
-      "title": "Performance overview",
+      "title": "Store overview",
+      "dateRange": "Last 30 days",
+      "sales": "Sales",
+      "orders": "Orders",
+      "customers": "Customers",
       "roas": "ROAS",
-      "revenue": "Revenue",
-      "spend": "Spend",
-      "topChannels": "Top channels",
+      "revenueTrend": "Sales trend",
+      "salesDistribution": "Sales distribution",
+      "channels": {
+        "online": "Online store",
+        "pos": "Point of sale",
+        "ads": "Ads",
+        "other": "Other"
+      },
       "days": {
         "sat": "Sat",
         "sun": "Sun",
         "mon": "Mon",
         "tue": "Tue",
         "wed": "Wed"
-      },
-      "otherChannel": "Other"
+      }
     },
     "trustBadge": "Your data is fully secure and encrypted — we're committed to protecting your data and privacy."
   },
@@ -75,23 +83,50 @@
       "createAccount": "Create a new account",
       "genericError": "Couldn't sign in. Please try again.",
       "showcase": {
-        "eyebrow": "An all-in-one marketing analytics platform",
-        "heading": "Bring all your ad campaign data into one place.",
-        "description": "Analyze performance and make smart decisions to get the best results.",
-        "features": [
+        "eyebrow": "An integrated platform for store growth",
+        "heading": "All your store's data",
+        "headingHighlight": "in one place",
+        "description": "Connect your store, ads, and point of sale with smart analytics that help you grow sales and make better decisions.",
+        "featureCards": [
           {
-            "title": "Connect all your advertising channels",
-            "description": "Google, Meta, Snapchat, TikTok, and more — all in one place."
+            "key": "ecommerce",
+            "title": "E-commerce",
+            "description": "Manage your store, products, and track orders and customers."
           },
           {
-            "title": "Smart reports and analytics",
-            "description": "Dashboards built to give you clear insight into your campaign performance."
+            "key": "ads",
+            "title": "Advertising",
+            "description": "Connect all your ad channels and measure campaign results."
           },
           {
-            "title": "AI-powered recommendations",
-            "description": "Get AI-powered recommendations to improve your campaign results and boost ROI."
+            "key": "pos",
+            "title": "Point of Sale",
+            "description": "Manage branches, sales, and inventory with ease."
           }
-        ]
+        ],
+        "badges": [
+          {
+            "key": "secure",
+            "label": "Secure data"
+          },
+          {
+            "key": "fast",
+            "label": "Quick setup"
+          },
+          {
+            "key": "reports",
+            "label": "Accurate reports"
+          },
+          {
+            "key": "support",
+            "label": "Dedicated support"
+          }
+        ],
+        "connector": {
+          "adPlatforms": "Ad platforms",
+          "ecommercePlatforms": "E-commerce platforms",
+          "pos": "Point of Sale (POS)"
+        }
       },
       "invitationBanner": "You've been invited to join a MADAR organization. Sign in to accept the invitation.",
       "invitationAccepted": "Invitation accepted — welcome aboard!",
@@ -170,21 +205,43 @@
         "goToLogin": "Go to sign in"
       },
       "showcase": {
-        "eyebrow": "Every analytics tool",
-        "heading": "In one place",
-        "description": "Connect your advertising channels, analyze your data, and get smart recommendations to help you grow.",
-        "features": [
+        "eyebrow": "An integrated platform for store growth",
+        "heading": "All your store's data",
+        "headingHighlight": "in one place",
+        "description": "An all-in-one solution combining e-commerce, advertising, and point of sale for a unified view and better performance.",
+        "featureCards": [
           {
-            "title": "Connect all your channels",
-            "description": "Google, Meta, Snapchat, TikTok, and more — all in one place."
+            "key": "ecommerce",
+            "title": "E-commerce",
+            "description": "Manage your store, products, and track orders and customers."
           },
           {
-            "title": "Smart recommendations",
-            "description": "Get AI-driven recommendations to improve your campaign performance and boost ROI."
+            "key": "ads",
+            "title": "Advertising",
+            "description": "Connect all your ad channels and measure campaign results."
           },
           {
-            "title": "Secure and trusted",
-            "description": "We protect your data with the highest security and privacy standards."
+            "key": "pos",
+            "title": "Point of Sale",
+            "description": "Manage branches, sales, and inventory with ease."
+          }
+        ],
+        "badges": [
+          {
+            "key": "secure",
+            "label": "Secure data"
+          },
+          {
+            "key": "fast",
+            "label": "Quick setup"
+          },
+          {
+            "key": "reports",
+            "label": "Accurate reports"
+          },
+          {
+            "key": "support",
+            "label": "Dedicated support"
           }
         ],
         "footerPrefix": "Need help?",

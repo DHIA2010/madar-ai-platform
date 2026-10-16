@@ -1,5 +1,6 @@
+export { AuthPlatformConnector } from "./auth-platform-connector"
 export { AuthProvider } from "./auth-provider"
-export { AuthShowcasePanel, AuthTrustBadge } from "./auth-showcase-panel"
+export { AuthShowcasePanel, AuthTrustBadge, DashboardPreviewCard } from "./auth-showcase-panel"
 export { Can } from "./can"
 export { ForgotPasswordForm } from "./forgot-password-form"
 export { GuestRoute } from "./guest-route"
