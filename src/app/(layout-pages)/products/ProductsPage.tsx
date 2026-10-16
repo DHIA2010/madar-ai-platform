@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
+import { useLocale, useTranslations } from "next-intl"
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -40,6 +41,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { AppError } from "@/lib/errors/app-error"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { cairo } from "@/components/design/fonts"
@@ -89,49 +91,69 @@ const FILTER_TRIGGER_CLASS =
 const PAGER_BUTTON_CLASS =
   "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
 
-// The filter values drive the filtering, so only their display is localised.
-const FILTER_LABEL_AR: Record<string, string> = {
-  "All Platforms": "جميع المنصات",
-  "All Categories": "جميع الفئات",
-  "All Inventory Status": "جميع حالات المخزون",
-  "All Status": "جميع الحالات",
-  Shopify: "Shopify",
-  Salla: "Salla",
-  Zid: "Zid",
-  Madar: "مدار",
-  "In Stock": "متوفر",
-  "Low Stock": "مخزون منخفض",
-  "Out of Stock": "نفدت الكمية",
-  Active: "نشط",
-  Draft: "مسودة",
-  Archived: "مؤرشف",
-  "All Product Types": "جميع أنواع المنتجات",
-  simple: "منتج عادي",
-  variable: "منتج متغير",
-  weighted: "منتج موزون",
-  bundle: "منتج مجمع",
-  raw: "مادة خام",
-  digital: "منتج رقمي",
-  service: "خدمة",
+// The filter values (and the ProductStatus/inventory-status keys they double as) drive the
+// filtering, so only their display is localised -- this maps each raw value to the i18n key
+// suffix that carries its translated label, resolved via useTranslations("products.filters")
+// at the call site (filterLabel() below). "products.filters.status"/"products.filters.
+// inventoryStatus" are also reused directly for the status/inventory pills elsewhere on this
+// page, so there's exactly one translated string per concept, not one per place it's shown.
+const FILTER_LABEL_KEYS: Record<string, string> = {
+  "All Platforms": "platform.all",
+  Shopify: "platform.shopify",
+  Salla: "platform.salla",
+  Zid: "platform.zid",
+  Madar: "platform.madar",
+  "All Categories": "category.all",
+  "All Inventory Status": "inventoryStatus.all",
+  "In Stock": "inventoryStatus.inStock",
+  "Low Stock": "inventoryStatus.lowStock",
+  "Out of Stock": "inventoryStatus.outOfStock",
+  "All Status": "status.all",
+  Active: "status.active",
+  Draft: "status.draft",
+  Archived: "status.archived",
+  "All Product Types": "productType.all",
+  simple: "productType.simple",
+  variable: "productType.variable",
+  weighted: "productType.weighted",
+  bundle: "productType.bundle",
+  raw: "productType.raw",
+  digital: "productType.digital",
+  service: "productType.service",
 }
 
-const STATUS_PILL_AR: Record<ProductStatus, { label: string; className: string }> = {
-  Active: { label: "نشط", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  Draft: { label: "مسودة", className: "bg-[#eef4ff] text-[#2878ff]" },
-  Archived: { label: "مؤرشف", className: "bg-[#eef2f8] text-[#5b6b85]" },
+function filterLabel(
+  value: string,
+  tFilters: ReturnType<typeof useTranslations<"products.filters">>,
+  tTypes: ReturnType<typeof useTranslations<"products.types">>
+): string {
+  const key = FILTER_LABEL_KEYS[value]
+  if (!key) return value
+  if (key.startsWith("productType.") && key !== "productType.all") {
+    return tTypes(`${key.slice("productType.".length)}.title`)
+  }
+  return tFilters(key)
 }
 
-const INVENTORY_PILL_AR: Record<string, { label: string; className: string }> = {
-  "In Stock": { label: "متوفر", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  "Low Stock": { label: "مخزون منخفض", className: "bg-[#fff7e6] text-[#e08b00]" },
-  "Out of Stock": { label: "نفدت الكمية", className: "bg-[#fdeeee] text-[#e0484d]" },
+const STATUS_PILL_CLASS: Record<ProductStatus, string> = {
+  Active: "bg-[#e9f8ef] text-[#1f9d55]",
+  Draft: "bg-[#eef4ff] text-[#2878ff]",
+  Archived: "bg-[#eef2f8] text-[#5b6b85]",
 }
 
-const ARABIC_DATE = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
+const INVENTORY_PILL_CLASS: Record<string, string> = {
+  "In Stock": "bg-[#e9f8ef] text-[#1f9d55]",
+  "Low Stock": "bg-[#fff7e6] text-[#e08b00]",
+  "Out of Stock": "bg-[#fdeeee] text-[#e0484d]",
+}
+
+function dateFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
 
 const FALLBACK_PRODUCT_IMAGE = "/products/01.png"
 // "Madar" covers products authored on the Add Product page rather than synced from a
@@ -298,6 +320,8 @@ function ProductRowActions({
   onExport: () => void
   onDelete: () => void
 }) {
+  const t = useTranslations("products.list")
+  const locale = useLocale()
   const isNative = product.platform === "Madar"
 
   // Radix locks pointer events on the body while the menu is open and releases them as it
@@ -313,7 +337,7 @@ function ProductRowActions({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`إجراءات ${product.name}`}
+          aria-label={t("rowActions.actionsLabel", { name: product.name })}
           disabled={busy}
           className="mx-auto flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:bg-[#f4f7fc] disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -328,25 +352,29 @@ function ProductRowActions({
       {/* Radix portals this to document.body, which does not inherit the page's dir. */}
       <DropdownMenuContent
         align="end"
-        className={cn(cairo.className, "w-52 rounded-[12px] [direction:rtl]")}
+        className={cn(
+          cairo.className,
+          "w-52 rounded-[12px]",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
       >
         <DropdownMenuItem
           className="cursor-pointer gap-2 text-[12.5px]"
           onSelect={afterClose(onView)}
         >
           <Eye className="size-4" />
-          عرض التفاصيل
+          {t("rowActions.viewDetails")}
         </DropdownMenuItem>
 
         <Can permission="products:edit">
           <DropdownMenuItem
             className="cursor-pointer gap-2 text-[12.5px]"
             disabled={!isNative}
-            title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
+            title={isNative ? undefined : t("rowActions.importedTitle")}
             onSelect={afterClose(onEdit)}
           >
             <Pencil className="size-4" />
-            تعديل المنتج
+            {t("rowActions.edit")}
           </DropdownMenuItem>
         </Can>
 
@@ -356,7 +384,7 @@ function ProductRowActions({
           onSelect={afterClose(onCopySku)}
         >
           <Copy className="size-4" />
-          نسخ رمز المنتج
+          {t("rowActions.copySku")}
         </DropdownMenuItem>
 
         <DropdownMenuItem
@@ -364,7 +392,7 @@ function ProductRowActions({
           onSelect={afterClose(onExport)}
         >
           <Download className="size-4" />
-          تصدير هذا المنتج
+          {t("rowActions.exportThis")}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -373,11 +401,11 @@ function ProductRowActions({
           <DropdownMenuItem
             className="cursor-pointer gap-2 text-[12.5px] text-[#e0484d] focus:text-[#e0484d]"
             disabled={!isNative}
-            title={isNative ? undefined : "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"}
+            title={isNative ? undefined : t("rowActions.importedTitle")}
             onSelect={afterClose(onDelete)}
           >
             <Trash2 className="size-4" />
-            حذف المنتج
+            {t("rowActions.delete")}
           </DropdownMenuItem>
         </Can>
       </DropdownMenuContent>
@@ -427,8 +455,8 @@ function downloadImportCsv(filename: string, rows: string[][]) {
 // One example row per importable type, so opening the template teaches the format instead of
 // just naming its columns -- a blank sku/stock/description cell only being wrong for SOME types
 // is much easier to grasp from a working example than from a rule written out in prose.
-function downloadProductsImportTemplateCsv() {
-  downloadImportCsv("نموذج-استيراد-المنتجات.csv", [
+function downloadProductsImportTemplateCsv(t: ReturnType<typeof useTranslations<"products.list">>) {
+  downloadImportCsv(`${t("importTemplate.filename")}.csv`, [
     [
       "name",
       "sku",
@@ -442,9 +470,45 @@ function downloadProductsImportTemplateCsv() {
       "unit",
       "description",
     ],
-    ["قميص قطن", "SKU-1001", "ملابس", "simple", "active", "40", "89.9", "25", "5", "حبة", ""],
-    ["دقيق فاخر", "", "مواد خام", "raw", "active", "", "", "100", "10", "كجم", ""],
-    ["استشارة تسويقية", "SKU-2002", "خدمات", "service", "active", "", "250", "", "", "", ""],
+    [
+      t("importTemplate.row1Name"),
+      "SKU-1001",
+      t("importTemplate.row1Category"),
+      "simple",
+      "active",
+      "40",
+      "89.9",
+      "25",
+      "5",
+      t("importTemplate.row1Unit"),
+      "",
+    ],
+    [
+      t("importTemplate.row2Name"),
+      "",
+      t("importTemplate.row2Category"),
+      "raw",
+      "active",
+      "",
+      "",
+      "100",
+      "10",
+      t("importTemplate.row2Unit"),
+      "",
+    ],
+    [
+      t("importTemplate.row3Name"),
+      "SKU-2002",
+      t("importTemplate.row3Category"),
+      "service",
+      "active",
+      "",
+      "250",
+      "",
+      "",
+      "",
+      "",
+    ],
   ])
 }
 
@@ -533,6 +597,9 @@ function ImportProductsDialog({
   onOpenChange: (open: boolean) => void
   onImported: () => void
 }) {
+  const t = useTranslations("products.list")
+  const tTypes = useTranslations("products.types")
+  const locale = useLocale()
   const [fileName, setFileName] = useState<string | null>(null)
   const [rows, setRows] = useState<BulkImportProductRow[]>([])
   const [isImporting, setIsImporting] = useState(false)
@@ -553,7 +620,7 @@ function ImportProductsDialog({
 
   const submit = async () => {
     if (rows.length === 0) {
-      toast.error("اختر ملف CSV يحتوي على منتجات أولاً.")
+      toast.error(t("toasts.selectCsvFirst"))
       return
     }
     setIsImporting(true)
@@ -561,15 +628,19 @@ function ImportProductsDialog({
       const outcome = await productListService.bulkImportProducts(rows)
       setResult(outcome)
       if (outcome.created > 0) {
-        toast.success(`تم إضافة ${outcome.created} منتج.`)
+        toast.success(t("toasts.importSuccess", { count: outcome.created }))
         onImported()
       }
     } catch {
-      toast.error("تعذر استيراد الملف.")
+      toast.error(t("toasts.importError"))
     } finally {
       setIsImporting(false)
     }
   }
+
+  const importableTypeNames = IMPORTABLE_PRODUCT_TYPES.map((key) => tTypes(`${key}.title`)).join(
+    t("importDialog.listSeparator")
+  )
 
   return (
     <Dialog
@@ -580,16 +651,19 @@ function ImportProductsDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className={cn(cairo.className, "sm:max-w-[28rem] [direction:rtl]")}>
+      <DialogContent
+        className={cn(
+          cairo.className,
+          "sm:max-w-[28rem]",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
+      >
         <DialogHeader className="text-right">
           <DialogTitle className="text-[15px] font-extrabold text-[#0b1738]">
-            استيراد منتجات
+            {t("importDialog.title")}
           </DialogTitle>
           <DialogDescription className="text-[12.5px] leading-6 text-[#6b7b96]">
-            ارفع ملف CSV لإضافة عدة منتجات دفعة واحدة. يدعم الاستيراد أنواع المنتجات:{" "}
-            {IMPORTABLE_PRODUCT_TYPES.join("، ")} -- أما الحزم والمنتجات متعددة الخيارات فتُضاف
-            يدوياً من صفحة إضافة منتج، لأنها تحتاج اختيار مكونات أو متغيرات لا تتسع لها خانة واحدة
-            في الجدول.
+            {t("importDialog.description", { types: importableTypeNames })}
           </DialogDescription>
         </DialogHeader>
 
@@ -597,12 +671,12 @@ function ImportProductsDialog({
           <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border border-dashed border-[#c7d3e3] bg-[#fafbfd] px-4 py-6 text-center hover:border-[#93a6c9]">
             <Upload className="size-5 text-[#2878ff]" />
             <span className="text-[12px] font-semibold text-[#0b1738]">
-              {fileName ?? "اضغط لاختيار ملف CSV"}
+              {fileName ?? t("importDialog.chooseFile")}
             </span>
             <span className="text-[10.5px] text-[#6b7b96]">
               {rows.length > 0
-                ? `تم العثور على ${rows.length} صف`
-                : "الأعمدة: name, sku, category, type, status, cost_price, sell_price, stock, min_stock, unit, description"}
+                ? t("importDialog.rowsFound", { count: rows.length })
+                : t("importDialog.columnsHint")}
             </span>
             <input
               type="file"
@@ -618,23 +692,25 @@ function ImportProductsDialog({
 
           <button
             type="button"
-            onClick={downloadProductsImportTemplateCsv}
+            onClick={() => downloadProductsImportTemplateCsv(t)}
             className="self-start text-[11.5px] font-semibold text-[#2878ff] hover:underline"
           >
-            تحميل نموذج CSV
+            {t("importDialog.downloadTemplate")}
           </button>
 
           {result ? (
             <div className="rounded-[10px] border border-[#e1e7f0] p-3">
               <p className="text-[12.5px] font-bold text-[#0b1738]">
-                تم إضافة {result.created} منتج
-                {result.skipped.length > 0 ? `، وتخطي ${result.skipped.length} صف` : ""}
+                {t("importDialog.resultSummary", { created: result.created })}
+                {result.skipped.length > 0
+                  ? t("importDialog.resultSkippedSuffix", { count: result.skipped.length })
+                  : ""}
               </p>
               {result.skipped.length > 0 ? (
                 <ul className="mt-1.5 flex max-h-[180px] flex-col gap-0.5 overflow-y-auto">
                   {result.skipped.map((entry) => (
                     <li key={entry.row} className="text-[11px] text-[#6b7b96]">
-                      السطر {entry.row + 1} في الملف: {entry.reason}
+                      {t("importDialog.rowError", { row: entry.row + 1, reason: entry.reason })}
                     </li>
                   ))}
                 </ul>
@@ -650,8 +726,10 @@ function ImportProductsDialog({
             onClick={() => void submit()}
           >
             {isImporting
-              ? "جارٍ الاستيراد..."
-              : `استيراد ${rows.length > 0 ? `(${rows.length})` : ""}`}
+              ? t("importDialog.importing")
+              : rows.length > 0
+                ? t("importDialog.importButtonWithCount", { count: rows.length })
+                : t("importDialog.importButton")}
           </Button>
           <Button
             variant="outline"
@@ -659,7 +737,7 @@ function ImportProductsDialog({
             disabled={isImporting}
             onClick={() => onOpenChange(false)}
           >
-            إغلاق
+            {t("importDialog.close")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -668,6 +746,12 @@ function ImportProductsDialog({
 }
 
 export default function ProductsPage() {
+  const t = useTranslations("products.list")
+  const tFilters = useTranslations("products.filters")
+  const tTypes = useTranslations("products.types")
+  const tCommon = useTranslations("common")
+  const locale = useLocale()
+  const activityDateFormat = dateFormatter(locale as Locale)
   const [products, setProducts] = useState<ProductRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -701,11 +785,11 @@ export default function ProductsPage() {
       // Logged rather than swallowed: a silent generic message here previously hid a real
       // client-side bug (a malformed endpoint URL) that never even reached the backend.
       console.error("Failed to load products", error)
-      setLoadError("Couldn't load products from your connected stores. Please try again.")
+      setLoadError(t("loadError"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void loadProducts()
@@ -775,35 +859,35 @@ export default function ProductsPage() {
 
     return [
       {
-        label: "إجمالي المنتجات",
+        label: t("kpis.total.label"),
         value: filteredProducts.length.toLocaleString(),
-        footnote: "من جميع المتاجر المتصلة",
+        footnote: t("kpis.total.footnote"),
         icon: Package,
         tone: "blue",
       },
       {
-        label: "المنتجات النشطة",
+        label: t("kpis.active.label"),
         value: activeCount.toLocaleString(),
-        footnote: "منشورة وظاهرة للعملاء",
+        footnote: t("kpis.active.footnote"),
         icon: CheckCircle2,
         tone: "green",
       },
       {
-        label: "منتجات منخفضة المخزون",
+        label: t("kpis.lowStock.label"),
         value: lowOrOutOfStockCount.toLocaleString(),
-        footnote: "المخزون 30 وحدة أو أقل",
+        footnote: t("kpis.lowStock.footnote"),
         icon: AlertTriangle,
         tone: "rose",
       },
       {
-        label: "قيمة المخزون",
+        label: t("kpis.inventoryValue.label"),
         value: formatCurrency(inventoryValue),
-        footnote: "بسعر التكلفة للكمية المتاحة",
+        footnote: t("kpis.inventoryValue.footnote"),
         icon: Wallet,
         tone: "violet",
       },
     ]
-  }, [filteredProducts])
+  }, [filteredProducts, t])
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -854,7 +938,7 @@ export default function ProductsPage() {
   const applyBulkStatus = async (nextStatus: "draft" | "active" | "archived") => {
     const nativeSelected = selectedProducts.filter((product) => product.platform === "Madar")
     if (nativeSelected.length === 0) {
-      toast.error("لا يمكن تغيير حالة المنتجات المستوردة من المتجر من هنا.")
+      toast.error(t("toasts.cannotChangeImported"))
       return
     }
 
@@ -865,21 +949,17 @@ export default function ProductsPage() {
         nextStatus
       )
       const skipped = selectedProducts.length - nativeSelected.length
-      toast.success(`تم تحديث حالة ${result.updated} منتج.`, {
-        description:
-          skipped > 0
-            ? `تم تجاوز ${skipped} منتج مستورد من المتجر -- يُدار من المتجر نفسه.`
-            : undefined,
+      toast.success(t("toasts.statusUpdateSuccess", { count: result.updated }), {
+        description: skipped > 0 ? t("toasts.statusUpdateSkipped", { count: skipped }) : undefined,
       })
       setSelectedIds(new Set())
       await loadProducts()
     } catch (error) {
       const errorStatus = error instanceof AppError ? error.status : undefined
       toast.error(
-        errorStatus === 403 ? "لا تملك صلاحية تعديل المنتجات." : "تعذر تحديث حالة المنتجات.",
+        errorStatus === 403 ? t("toasts.noEditPermission") : t("toasts.statusUpdateError"),
         {
-          description:
-            errorStatus === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية products:edit." : undefined,
+          description: errorStatus === 403 ? t("toasts.contactOwnerEdit") : undefined,
         }
       )
     } finally {
@@ -889,15 +969,15 @@ export default function ProductsPage() {
 
   const copyToClipboard = async (value: string, label: string) => {
     if (!value) {
-      toast.error(`لا يوجد ${label} لهذا المنتج.`)
+      toast.error(t("toasts.copyNothingToCopy", { label }))
       return
     }
     try {
       await navigator.clipboard.writeText(value)
-      toast.success(`تم نسخ ${label}.`, { description: value })
+      toast.success(t("toasts.copiedSuccess", { label }), { description: value })
     } catch {
       // Clipboard access is refused outside a secure context and in some embedded browsers.
-      toast.error(`تعذر النسخ — انسخ ${label} يدوياً.`, { description: value })
+      toast.error(t("toasts.copyError", { label }), { description: value })
     }
   }
 
@@ -907,7 +987,7 @@ export default function ProductsPage() {
     setDeletingId(pendingDelete.id)
     try {
       await productListService.deleteProduct(pendingDelete.id)
-      toast.success("تم حذف المنتج.", { description: pendingDelete.name })
+      toast.success(t("toasts.deleteSuccess"), { description: pendingDelete.name })
       setPendingDelete(null)
       setSelectedIds((current) => {
         const next = new Set(current)
@@ -917,10 +997,10 @@ export default function ProductsPage() {
       await loadProducts()
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      toast.error(status === 403 ? "لا تملك صلاحية حذف المنتجات." : "تعذر حذف المنتج.", {
+      toast.error(status === 403 ? t("toasts.noDeletePermission") : t("toasts.deleteError"), {
         description:
           status === 403
-            ? "تواصل مع مالك الحساب لمنحك صلاحية products:delete."
+            ? t("toasts.contactOwnerDelete")
             : error instanceof Error
               ? error.message
               : undefined,
@@ -986,15 +1066,18 @@ export default function ProductsPage() {
   ]
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div
+      className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")}
+      dir={localeDirection(locale as Locale)}
+    >
       <div className="mx-auto w-full max-w-[1500px] space-y-4">
         {/* RTL: the title block is written first so it lands on the right, actions left. */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>المنتجات</h1>
-            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>
-              إدارة منتجاتك ومتابعة المخزون والأداء عبر جميع المتاجر المتصلة.
-            </p>
+            <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
+              {t("heading")}
+            </h1>
+            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>{t("subheading")}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
@@ -1004,7 +1087,7 @@ export default function ProductsPage() {
                 className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
                 onClick={() => setIsImportOpen(true)}
               >
-                استيراد
+                {t("import")}
                 <Upload className="size-4" />
               </Button>
             </Can>
@@ -1016,7 +1099,7 @@ export default function ProductsPage() {
                 disabled={exportRows.length === 0}
                 onClick={() => exportToCSV(exportRows)}
               >
-                تصدير
+                {t("export")}
                 <Download className="size-4" />
               </Button>
             </Can>
@@ -1027,7 +1110,7 @@ export default function ProductsPage() {
                 className="h-11 gap-2 rounded-[10px] bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f66e0]"
               >
                 <Link href={ROUTES.productsAdd}>
-                  إضافة منتج
+                  {t("addProduct")}
                   <Plus className="size-4" />
                 </Link>
               </Button>
@@ -1062,7 +1145,7 @@ export default function ProductsPage() {
                 }}
                 options={filter.options.map((option) => ({
                   value: option,
-                  label: FILTER_LABEL_AR[option] ?? option,
+                  label: filterLabel(option, tFilters, tTypes),
                 }))}
                 triggerClassName={FILTER_TRIGGER_CLASS}
               />
@@ -1071,7 +1154,7 @@ export default function ProductsPage() {
             <div className="relative ms-auto w-full md:w-[225px]">
               <Search className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-[#95a4bd]" />
               <Input
-                placeholder="البحث في المنتجات أو SKU..."
+                placeholder={t("searchPlaceholder")}
                 className="h-10 rounded-[10px] border-[#e1e7f0] bg-white pe-9 text-[12.5px] placeholder:text-[#95a4bd]"
                 value={search}
                 onChange={(event) => {
@@ -1087,8 +1170,8 @@ export default function ProductsPage() {
             <div className="flex items-center gap-1 rounded-[10px] bg-[#f2f5fa] p-1">
               {(
                 [
-                  { key: "table", label: "عرض جدول", icon: List },
-                  { key: "grid", label: "عرض شبكي", icon: LayoutGrid },
+                  { key: "table", label: t("viewTable"), icon: List },
+                  { key: "grid", label: t("viewGrid"), icon: LayoutGrid },
                 ] as const
               ).map((option) => (
                 <button
@@ -1110,12 +1193,14 @@ export default function ProductsPage() {
             </div>
 
             <span className="text-[12px] font-semibold text-[#2878ff]">
-              {filteredProducts.length} منتج
+              {t("productCount", { count: filteredProducts.length })}
             </span>
 
             {selectedProducts.length > 0 ? (
               <>
-                <span className={cn("text-[12px]", MUTED)}>{selectedProducts.length} محدد</span>
+                <span className={cn("text-[12px]", MUTED)}>
+                  {t("selectedCount", { count: selectedProducts.length })}
+                </span>
 
                 <Can permission="products:edit">
                   <DropdownMenu>
@@ -1130,32 +1215,36 @@ export default function ProductsPage() {
                         ) : (
                           <ChevronDown className="size-3.5" />
                         )}
-                        تغيير الحالة
+                        {t("changeStatus")}
                       </button>
                     </DropdownMenuTrigger>
 
                     {/* Radix portals this to document.body, which does not inherit the page's dir. */}
                     <DropdownMenuContent
                       align="end"
-                      className={cn(cairo.className, "w-44 rounded-[12px] [direction:rtl]")}
+                      className={cn(
+                        cairo.className,
+                        "w-44 rounded-[12px]",
+                        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+                      )}
                     >
                       <DropdownMenuItem
                         className="cursor-pointer gap-2 text-[12.5px]"
                         onSelect={() => void applyBulkStatus("active")}
                       >
-                        {STATUS_PILL_AR.Active.label}
+                        {tFilters("status.active")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer gap-2 text-[12.5px]"
                         onSelect={() => void applyBulkStatus("draft")}
                       >
-                        {STATUS_PILL_AR.Draft.label}
+                        {tFilters("status.draft")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer gap-2 text-[12.5px]"
                         onSelect={() => void applyBulkStatus("archived")}
                       >
-                        {STATUS_PILL_AR.Archived.label}
+                        {tFilters("status.archived")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -1172,7 +1261,7 @@ export default function ProductsPage() {
               )}
             >
               <Loader2 className="size-4 animate-spin" />
-              جارٍ تحميل المنتجات من متاجرك المتصلة...
+              {t("loadingProducts")}
             </div>
           ) : loadError ? (
             <div className="rounded-[12px] border border-[#f7c9ca] bg-[#fdeeee] px-4 py-8 text-center text-[12.5px] text-[#e0484d]">
@@ -1180,18 +1269,20 @@ export default function ProductsPage() {
             </div>
           ) : paginatedProducts.length === 0 ? (
             <div className="rounded-[12px] border border-[#eef2f8] px-4 py-12 text-center">
-              <p className={cn("text-[13.5px] font-bold", HEADING)}>
-                لا توجد منتجات مطابقة للفلاتر الحالية
-              </p>
-              <p className={cn("mt-2 text-[12px]", MUTED)}>
-                جرّب تغيير المنصة أو الفئة أو حالة المخزون أو الفترة الزمنية.
-              </p>
+              <p className={cn("text-[13.5px] font-bold", HEADING)}>{t("emptyTitle")}</p>
+              <p className={cn("mt-2 text-[12px]", MUTED)}>{t("emptyDescription")}</p>
             </div>
           ) : viewMode === "grid" ? (
             <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {paginatedProducts.map((product) => {
-                const status = STATUS_PILL_AR[product.status]
-                const inventory = INVENTORY_PILL_AR[getInventoryStatus(product.availableStock)]
+                const status = {
+                  label: filterLabel(product.status, tFilters, tTypes),
+                  className: STATUS_PILL_CLASS[product.status],
+                }
+                const inventory = {
+                  label: filterLabel(getInventoryStatus(product.availableStock), tFilters, tTypes),
+                  className: INVENTORY_PILL_CLASS[getInventoryStatus(product.availableStock)],
+                }
 
                 return (
                   <div key={product.id} className="rounded-[12px] border border-[#e1e7f0] p-4">
@@ -1228,7 +1319,7 @@ export default function ProductsPage() {
 
                     <div className="mt-3 flex items-center justify-between border-t border-[#f1f4f9] pt-2.5">
                       <span className={cn("text-[11px]", MUTED)}>
-                        {product.availableStock.toLocaleString()} متاح
+                        {t("availableSuffix", { count: product.availableStock.toLocaleString() })}
                       </span>
                       <span className={cn("text-[12.5px] font-extrabold", HEADING)}>
                         {formatCurrency(product.sellingPrice, product.currency)}
@@ -1246,23 +1337,27 @@ export default function ProductsPage() {
                     <th className="border-b border-[#eef2f8] px-3 py-3">
                       <input
                         type="checkbox"
-                        aria-label="تحديد كل المنتجات في الصفحة"
+                        aria-label={t("table.selectAll")}
                         className="size-4 cursor-pointer accent-[#2878ff]"
                         checked={allOnPageSelected}
                         onChange={togglePage}
                       />
                     </th>
                     {[
-                      { key: "product", label: "المنتج", align: "text-right" },
-                      { key: "sku", label: "SKU", align: "text-center" },
-                      { key: "category", label: "الفئة", align: "text-center" },
-                      { key: "status", label: "الحالة", align: "text-center" },
-                      { key: "inventory", label: "حالة المخزون", align: "text-center" },
-                      { key: "stock", label: "الكمية المتاحة", align: "text-center" },
-                      { key: "cost", label: "سعر التكلفة", align: "text-center" },
-                      { key: "price", label: "سعر البيع", align: "text-center" },
-                      { key: "platform", label: "المنصة", align: "text-center" },
-                      { key: "actions", label: "إجراءات", align: "text-center" },
+                      { key: "product", label: t("table.columns.product"), align: "text-right" },
+                      { key: "sku", label: t("table.columns.sku"), align: "text-center" },
+                      { key: "category", label: t("table.columns.category"), align: "text-center" },
+                      { key: "status", label: t("table.columns.status"), align: "text-center" },
+                      {
+                        key: "inventory",
+                        label: t("table.columns.inventory"),
+                        align: "text-center",
+                      },
+                      { key: "stock", label: t("table.columns.stock"), align: "text-center" },
+                      { key: "cost", label: t("table.columns.cost"), align: "text-center" },
+                      { key: "price", label: t("table.columns.price"), align: "text-center" },
+                      { key: "platform", label: t("table.columns.platform"), align: "text-center" },
+                      { key: "actions", label: t("table.columns.actions"), align: "text-center" },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -1279,8 +1374,18 @@ export default function ProductsPage() {
                 </thead>
                 <tbody>
                   {paginatedProducts.map((product) => {
-                    const status = STATUS_PILL_AR[product.status]
-                    const inventory = INVENTORY_PILL_AR[getInventoryStatus(product.availableStock)]
+                    const status = {
+                      label: filterLabel(product.status, tFilters, tTypes),
+                      className: STATUS_PILL_CLASS[product.status],
+                    }
+                    const inventory = {
+                      label: filterLabel(
+                        getInventoryStatus(product.availableStock),
+                        tFilters,
+                        tTypes
+                      ),
+                      className: INVENTORY_PILL_CLASS[getInventoryStatus(product.availableStock)],
+                    }
 
                     return (
                       <tr
@@ -1290,7 +1395,7 @@ export default function ProductsPage() {
                         <td className="px-3 py-3.5">
                           <input
                             type="checkbox"
-                            aria-label={`تحديد ${product.name}`}
+                            aria-label={t("table.selectRow", { name: product.name })}
                             className="size-4 cursor-pointer accent-[#2878ff]"
                             checked={selectedIds.has(product.id)}
                             onChange={() => toggleProduct(product.id)}
@@ -1388,7 +1493,7 @@ export default function ProductsPage() {
                                 `${ROUTES.productsAdd}?id=${encodeURIComponent(product.id)}`
                               )
                             }
-                            onCopySku={() => copyToClipboard(product.sku, "رمز المنتج")}
+                            onCopySku={() => copyToClipboard(product.sku, t("skuLabel"))}
                             onExport={() => exportToCSV([product])}
                             onDelete={() => setPendingDelete(product)}
                           />
@@ -1407,11 +1512,15 @@ export default function ProductsPage() {
               <div className="flex items-center gap-3">
                 <span className={cn("text-[12px]", MUTED)}>
                   {filteredProducts.length === 0
-                    ? "لا توجد نتائج"
-                    : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, filteredProducts.length)} من ${filteredProducts.length}`}
+                    ? t("noResults")
+                    : t("showingRange", {
+                        from: (currentPage - 1) * pageSize + 1,
+                        to: Math.min(currentPage * pageSize, filteredProducts.length),
+                        total: filteredProducts.length,
+                      })}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-[12px]", MUTED)}>عدد العناصر في الصفحة</span>
+                  <span className={cn("text-[12px]", MUTED)}>{t("itemsPerPage")}</span>
                   <Select
                     value={String(pageSize)}
                     onValueChange={(next) => {
@@ -1438,19 +1547,19 @@ export default function ProductsPage() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة الأولى"
+                  aria-label={t("pagination.first")}
                   onClick={() => setPage(1)}
                 >
-                  <ChevronsRight className="size-4" />
+                  <ChevronsLeft className="size-4 rtl:rotate-180" />
                 </button>
                 <button
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("pagination.previous")}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronLeft className="size-4 rtl:rotate-180" />
                 </button>
 
                 {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
@@ -1479,19 +1588,19 @@ export default function ProductsPage() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("pagination.next")}
                   onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 >
-                  <ChevronLeft className="size-4" />
+                  <ChevronRight className="size-4 rtl:rotate-180" />
                 </button>
                 <button
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة الأخيرة"
+                  aria-label={t("pagination.last")}
                   onClick={() => setPage(totalPages)}
                 >
-                  <ChevronsLeft className="size-4" />
+                  <ChevronsRight className="size-4 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -1511,7 +1620,8 @@ export default function ProductsPage() {
           className={cn(
             cairo.className,
             // sm:-prefixed because DialogContent's own sm:max-w-sm would otherwise win.
-            "gap-0 rounded-[18px] p-0 sm:max-w-[42rem] [direction:rtl]"
+            "gap-0 rounded-[18px] p-0 sm:max-w-[42rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
           )}
         >
           {detailProduct ? (
@@ -1534,8 +1644,8 @@ export default function ProductsPage() {
                   </DialogTitle>
                   <DialogDescription className="mt-0.5 text-[11.5px] text-[#6b7b96]">
                     {detailProduct.platform === "Madar"
-                      ? "منتج تمت إضافته في مدار"
-                      : `منتج مستورد من ${detailProduct.platform}`}
+                      ? t("detail.addedInMadar")
+                      : t("detail.importedFrom", { platform: detailProduct.platform })}
                   </DialogDescription>
 
                   {/* The same pills the table uses, so the two read as one system. */}
@@ -1543,26 +1653,29 @@ export default function ProductsPage() {
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-                        STATUS_PILL_AR[detailProduct.status].className
+                        STATUS_PILL_CLASS[detailProduct.status]
                       )}
                     >
-                      {STATUS_PILL_AR[detailProduct.status].label}
+                      {filterLabel(detailProduct.status, tFilters, tTypes)}
                     </span>
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-                        INVENTORY_PILL_AR[getInventoryStatus(detailProduct.availableStock)]
-                          .className
+                        INVENTORY_PILL_CLASS[getInventoryStatus(detailProduct.availableStock)]
                       )}
                     >
-                      {INVENTORY_PILL_AR[getInventoryStatus(detailProduct.availableStock)].label}
+                      {filterLabel(
+                        getInventoryStatus(detailProduct.availableStock),
+                        tFilters,
+                        tTypes
+                      )}
                     </span>
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  aria-label="إغلاق"
+                  aria-label={t("detail.close")}
                   className="shrink-0 cursor-pointer rounded-full p-1 text-[#95a4bd] transition-colors hover:bg-[#f2f5fa] hover:text-[#0b1738]"
                   onClick={() => setDetailProduct(null)}
                 >
@@ -1573,12 +1686,12 @@ export default function ProductsPage() {
               {/* The three figures someone opens this for, given room to be read at a glance. */}
               <div className="grid grid-cols-3 divide-x divide-x-reverse divide-[#eef2f8] border-b border-[#eef2f8]">
                 <DetailStat
-                  label="سعر البيع"
+                  label={t("detail.sellingPrice")}
                   value={formatCurrency(detailProduct.sellingPrice, detailProduct.currency)}
                   emphasis
                 />
                 <DetailStat
-                  label="سعر التكلفة"
+                  label={t("detail.costPrice")}
                   value={
                     detailProduct.costPrice === null
                       ? "—"
@@ -1586,7 +1699,7 @@ export default function ProductsPage() {
                   }
                 />
                 <DetailStat
-                  label="الكمية المتاحة"
+                  label={t("detail.availableStock")}
                   value={detailProduct.availableStock.toLocaleString()}
                 />
               </div>
@@ -1594,14 +1707,18 @@ export default function ProductsPage() {
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3.5 p-5">
                 <DetailRow
                   icon={Tag}
-                  label="رمز المنتج"
-                  value={detailProduct.sku || "لا يوجد رمز لهذا النوع"}
+                  label={t("detail.sku")}
+                  value={detailProduct.sku || t("detail.noSkuForType")}
                   muted={!detailProduct.sku}
                 />
-                <DetailRow icon={LayoutGrid} label="الفئة" value={detailProduct.category || "—"} />
+                <DetailRow
+                  icon={LayoutGrid}
+                  label={t("detail.category")}
+                  value={detailProduct.category || "—"}
+                />
                 <DetailRow
                   icon={Wallet}
-                  label="هامش الربح"
+                  label={t("detail.margin")}
                   // Only shown when both figures are real -- a margin against an unknown cost
                   // would be an invented number.
                   value={
@@ -1620,8 +1737,8 @@ export default function ProductsPage() {
                 />
                 <DetailRow
                   icon={CalendarIcon}
-                  label="آخر تحديث"
-                  value={ARABIC_DATE.format(new Date(detailProduct.activityDate))}
+                  label={t("detail.lastUpdated")}
+                  value={activityDateFormat.format(new Date(detailProduct.activityDate))}
                 />
               </dl>
 
@@ -1639,7 +1756,7 @@ export default function ProductsPage() {
                         }}
                       >
                         <Pencil className="size-4" />
-                        تعديل المنتج
+                        {t("detail.edit")}
                       </Button>
                     </Can>
                     <Can permission="products:delete">
@@ -1653,13 +1770,13 @@ export default function ProductsPage() {
                         }}
                       >
                         <Trash2 className="size-4" />
-                        حذف
+                        {t("detail.delete")}
                       </Button>
                     </Can>
                   </>
                 ) : (
                   <p className="text-[11.5px] text-[#6b7b96]">
-                    هذا المنتج يُدار من {detailProduct.platform} ولا يمكن تعديله هنا.
+                    {t("detail.managedElsewhere", { platform: detailProduct.platform })}
                   </p>
                 )}
 
@@ -1668,7 +1785,7 @@ export default function ProductsPage() {
                   className="ms-auto h-10 rounded-[10px] px-4 text-[12.5px] font-semibold text-[#5b6b85]"
                   onClick={() => setDetailProduct(null)}
                 >
-                  إغلاق
+                  {t("detail.close")}
                 </Button>
               </DialogFooter>
             </>
@@ -1681,14 +1798,21 @@ export default function ProductsPage() {
         open={pendingDelete !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
       >
-        <DialogContent className={cn(cairo.className, "sm:max-w-[28rem] [direction:rtl]")}>
+        <DialogContent
+          className={cn(
+            cairo.className,
+            "sm:max-w-[28rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className="text-[15px] font-extrabold text-[#0b1738]">
-              حذف المنتج؟
+              {t("deleteDialog.title")}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-6 text-[#6b7b96]">
-              سيتم حذف <span className="font-bold text-[#0b1738]">{pendingDelete?.name}</span> من
-              قائمة المنتجات. لن يظهر بعد ذلك في المتجر أو في التقارير.
+              {t("deleteDialog.descriptionBefore")}{" "}
+              <span className="font-bold text-[#0b1738]">{pendingDelete?.name}</span>{" "}
+              {t("deleteDialog.descriptionAfter")}
             </DialogDescription>
           </DialogHeader>
 
@@ -1698,14 +1822,14 @@ export default function ProductsPage() {
               disabled={deletingId !== null}
               onClick={() => void confirmDelete()}
             >
-              {deletingId !== null ? "جارٍ الحذف..." : "حذف"}
+              {deletingId !== null ? t("deleteDialog.deleting") : t("deleteDialog.confirm")}
             </Button>
             <Button
               variant="outline"
               disabled={deletingId !== null}
               onClick={() => setPendingDelete(null)}
             >
-              إلغاء
+              {tCommon("cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>

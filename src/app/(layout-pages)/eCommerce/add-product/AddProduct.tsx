@@ -33,11 +33,13 @@ import {
   X,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useLocale, useTranslations } from "next-intl"
 
 import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { cairo } from "@/components/design/fonts"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { useAuth, usePermissions } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import {
@@ -56,20 +58,20 @@ import { Textarea } from "@/components/ui/textarea"
 
 import { AppDateField, AppSearchableSelect, type AppSearchableSelectOption } from "@/components/app"
 
-import { PRODUCT_TYPES, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
+import { getProductTypes, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
 import {
-  BASE_UNIT_OPTIONS,
   CATEGORY_ICON,
   CATEGORY_TINT,
   COMPONENT_FALLBACK_ICON,
   COMPONENT_FALLBACK_TINT,
-  COMPONENT_UNIT_OPTIONS,
-  DELIVERY_METHOD_OPTIONS,
+  getBaseUnitOptions,
+  getComponentUnitOptions,
+  getDeliveryMethodOptions,
+  getPricingTypeOptions,
+  getProductLanguageOptions,
+  getServiceDurationUnitOptions,
   LOCATION_ICON,
   LOCATION_TINT,
-  PRICING_TYPE_OPTIONS,
-  PRODUCT_LANGUAGE_OPTIONS,
-  SERVICE_DURATION_UNIT_OPTIONS,
 } from "./select-options"
 
 const PANEL =
@@ -210,21 +212,31 @@ function generateSku(taken: ReadonlySet<string>) {
 
 // Settings -> الضرائب -> "الأسعار تشمل الضريبة" -> "الاختيار يدوي أثناء إضافة المنتج" replaces
 // this form's read-only hint with this actual dropdown.
-const PRICE_TAX_MODE_OPTIONS: AppSearchableSelectOption[] = [
-  { value: "excluded", label: "السعر غير شامل الضريبة" },
-  { value: "included", label: "السعر شامل الضريبة" },
-]
+function getPriceTaxModeOptions(
+  t: ReturnType<typeof useTranslations<"products.form">>
+): AppSearchableSelectOption[] {
+  return [
+    { value: "excluded", label: t("priceTaxMode.excludedLabel") },
+    { value: "included", label: t("priceTaxMode.includedLabel") },
+  ]
+}
 
-const NUMBER_AR = new Intl.NumberFormat("ar-SA-u-nu-latn")
-const MONEY_AR = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-const DATE_AR = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
+function numberFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US")
+}
+function moneyFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function dateFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
 
 export default function AddProduct() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -248,13 +260,34 @@ export default function AddProduct() {
   // -- checked here instead, redirecting immediately on load rather than letting someone fill out
   // the whole form only to be rejected on save.
   const hasFormAccess = isEditing ? can("products:edit") : can("products:create")
+
+  const t = useTranslations("products")
+  const tForm = useTranslations("products.form")
+  const tTypes = useTranslations("products.types")
+  const locale = useLocale() as Locale
+
+  const NUMBER_AR = useMemo(() => numberFormatter(locale), [locale])
+  const MONEY_AR = useMemo(() => moneyFormatter(locale), [locale])
+  const DATE_AR = useMemo(() => dateFormatter(locale), [locale])
+
+  const PRODUCT_TYPES = useMemo(() => getProductTypes(tTypes), [tTypes])
+  const BASE_UNIT_OPTIONS = useMemo(() => getBaseUnitOptions(t), [t])
+  const COMPONENT_UNIT_OPTIONS = useMemo(() => getComponentUnitOptions(t), [t])
+  const PRICING_TYPE_OPTIONS = useMemo(() => getPricingTypeOptions(t), [t])
+  const SERVICE_DURATION_UNIT_OPTIONS = useMemo(() => getServiceDurationUnitOptions(t), [t])
+  const DELIVERY_METHOD_OPTIONS = useMemo(() => getDeliveryMethodOptions(t), [t])
+  const PRODUCT_LANGUAGE_OPTIONS = useMemo(() => getProductLanguageOptions(t), [t])
+  const OPTION_ORDINALS = tForm.raw("optionOrdinals") as string[]
+
   useEffect(() => {
     if (hasFormAccess) return
-    toast.error(isEditing ? "لا تملك صلاحية تعديل المنتجات." : "لا تملك صلاحية إنشاء المنتجات.", {
-      description: `تواصل مع مالك الحساب لمنحك صلاحية products:${isEditing ? "edit" : "create"}.`,
+    toast.error(isEditing ? tForm("errors.noPermissionEdit") : tForm("errors.noPermissionCreate"), {
+      description: tForm("errors.noPermissionDescription", {
+        action: isEditing ? "edit" : "create",
+      }),
     })
     router.replace(ROUTES.products)
-  }, [hasFormAccess, isEditing, router])
+  }, [hasFormAccess, isEditing, router, tForm])
 
   // The ordinary product is the common case and the first card in the row, so the page opens on
   // it rather than on a bundle.
@@ -281,7 +314,9 @@ export default function AddProduct() {
   const isManualTaxMode = currentOrganization?.settings.taxPriceEntryMode === "manual"
   // Shown right under every price field when not in manual mode -- the only place a merchant sees
   // which convention the typed number will actually be saved under.
-  const priceTaxHint = priceIncludesTax ? "السعر شامل الضريبة" : "السعر غير شامل الضريبة"
+  const priceTaxHint = priceIncludesTax
+    ? tForm("priceTaxMode.includedLabel")
+    : tForm("priceTaxMode.excludedLabel")
   useEffect(() => {
     if (isEditing) return
     setPriceIncludesTax(currentOrganization?.settings.taxPricesIncludeTax ?? false)
@@ -529,7 +564,7 @@ export default function AddProduct() {
         }
       })
       .catch(() => {
-        if (!cancelled) toast.error("تعذر تحميل المنتج للتعديل.")
+        if (!cancelled) toast.error(tForm("errors.loadProductFailed"))
       })
       .finally(() => {
         if (cancelled) return
@@ -539,6 +574,9 @@ export default function AddProduct() {
     return () => {
       cancelled = true
     }
+    // Only re-runs when the edited product changes -- re-running on every locale/options
+    // recompute would refetch and re-hydrate the whole form just from toggling the language.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingId])
 
   const knownCategories = useMemo(
@@ -591,7 +629,7 @@ export default function AddProduct() {
     () => [
       {
         value: "",
-        label: "استخدام المعدل الافتراضي",
+        label: tForm("basicInfo.taxDefaultOption"),
         icon: Percent,
         tint: "bg-[#eef4ff] text-[#2878ff]",
       },
@@ -602,7 +640,7 @@ export default function AddProduct() {
         tint: "bg-[#f3eeff] text-[#8b5cf6]",
       })),
     ],
-    [taxRates]
+    [taxRates, tForm]
   )
 
   // A bundle is assembled from raw materials, so the picker offers those alone rather than the
@@ -627,7 +665,10 @@ export default function AddProduct() {
         .map((product) => ({
           value: product.id,
           label: product.name,
-          hint: [`${NUMBER_AR.format(product.availableStock)} حبة في المخزون`, product.sku || null]
+          hint: [
+            tForm("packaging.piecesInStock", { count: NUMBER_AR.format(product.availableStock) }),
+            product.sku || null,
+          ]
             .filter(Boolean)
             .join(" · "),
           imageUrl: product.image,
@@ -635,7 +676,7 @@ export default function AddProduct() {
           tint: COMPONENT_FALLBACK_TINT,
           keywords: `${product.sku} ${product.category}`,
         })),
-    [catalogue]
+    [catalogue, tForm, NUMBER_AR]
   )
 
   const linkedUnitProduct = catalogue.find((product) => product.id === linkedUnitProductId) ?? null
@@ -648,7 +689,7 @@ export default function AddProduct() {
         // Two raw materials can share a name, so the stock figure and category are what tell
         // them apart in the list.
         hint: [
-          `${NUMBER_AR.format(product.availableStock)} في المخزون`,
+          tForm("bundle.stockCountHint", { count: NUMBER_AR.format(product.availableStock) }),
           product.category || null,
           product.sku || null,
         ]
@@ -659,7 +700,7 @@ export default function AddProduct() {
         tint: COMPONENT_FALLBACK_TINT,
         keywords: `${product.sku} ${product.category}`,
       })),
-    [rawMaterials]
+    [rawMaterials, tForm, NUMBER_AR]
   )
 
   /* ---------------------------------------------------------------- bundle */
@@ -789,7 +830,7 @@ export default function AddProduct() {
     if (bulkStock.trim() !== "") patch.stock = bulkStock.trim()
 
     if (Object.keys(patch).length === 0) {
-      toast.error("أدخل سعراً أو كمية لتطبيقها.")
+      toast.error(tForm("variants.applyErrorNoValue"))
       return
     }
 
@@ -810,7 +851,7 @@ export default function AddProduct() {
 
     setBulkPrice("")
     setBulkStock("")
-    toast.success(`تم التطبيق على ${NUMBER_AR.format(targets.length)} متغير.`)
+    toast.success(tForm("variants.applySuccess", { count: NUMBER_AR.format(targets.length) }))
   }
 
   const excludeVariants = (keys: Iterable<string>) => {
@@ -858,11 +899,11 @@ export default function AddProduct() {
     const accepted: ImageDraft[] = []
     for (const file of Array.from(files)) {
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        toast.error(`${file.name}: صيغة غير مدعومة. المسموح PNG أو JPG أو WebP.`)
+        toast.error(tForm("errors.imageTypeUnsupported", { file: file.name }))
         continue
       }
       if (file.size > MAX_IMAGE_BYTES) {
-        toast.error(`${file.name}: الحجم يتجاوز 10MB.`)
+        toast.error(tForm("errors.imageTooLarge", { file: file.name }))
         continue
       }
       accepted.push({
@@ -886,16 +927,15 @@ export default function AddProduct() {
   /* -------------------------------------------------------------- validation */
 
   const errors = {
-    name: name.trim() ? null : `${type.nameLabel} مطلوب`,
-    category: category.trim() ? null : "الفئة مطلوبة",
-    workspaceId: productWorkspaceId ? null : "مساحة العمل مطلوبة",
-    sku: !showsSku || sku.trim() ? null : `${type.skuLabel} مطلوب`,
-    description: productType !== "digital" || description.trim() ? null : "وصف المنتج مطلوب",
+    name: name.trim() ? null : tForm("errors.fieldRequired", { label: type.nameLabel }),
+    category: category.trim() ? null : tForm("errors.categoryRequired"),
+    workspaceId: productWorkspaceId ? null : tForm("errors.workspaceRequired"),
+    sku: !showsSku || sku.trim() ? null : tForm("errors.fieldRequired", { label: type.skuLabel }),
+    description:
+      productType !== "digital" || description.trim() ? null : tForm("errors.descriptionRequired"),
     components:
-      !isBundle || completeComponents.length > 0
-        ? null
-        : "أضف مكوناً واحداً على الأقل مع الكمية المطلوبة",
-    options: !isVariable || filledOptions.length > 0 ? null : "أضف خياراً واحداً على الأقل بقيمه",
+      !isBundle || completeComponents.length > 0 ? null : tForm("errors.componentsRequired"),
+    options: !isVariable || filledOptions.length > 0 ? null : tForm("errors.optionsRequired"),
     // A variable product carries no price of its own -- each variant is priced in the table
     // below -- so requiring the (non-existent) سعر البيع field here made every variable product
     // unsavable with no field to point the user at.
@@ -904,21 +944,21 @@ export default function AddProduct() {
       (activeVariants.length > 0 &&
         activeVariants.every((variant) => variantOverride(variant.key).price.trim() !== ""))
         ? null
-        : "حدد سعراً لكل متغير قبل الحفظ",
+        : tForm("errors.variantPricesRequired"),
     price:
       productType === "raw" || isVariable || isService || sellPrice.trim() !== ""
         ? null
-        : "السعر مطلوب",
-    servicePrice: !isService || sellPrice.trim() !== "" ? null : "السعر مطلوب",
+        : tForm("errors.priceRequired"),
+    servicePrice: !isService || sellPrice.trim() !== "" ? null : tForm("errors.priceRequired"),
     stock:
       ["simple", "raw", "weighted"].includes(productType) && stockQty.trim() === ""
-        ? "الكمية الحالية في المخزون مطلوبة"
+        ? tForm("errors.stockRequired")
         : null,
     // A carton with nothing to package is not a sellable thing -- selling one has to deduct
     // from some piece-measured product's stock.
     linkedUnitProduct:
       baseUnit.startsWith("كرتون") && linkedUnitProductId === ""
-        ? "اختر المنتج المرتبط المباع بالحبة"
+        ? tForm("errors.linkedProductRequired")
         : null,
   }
   const isValid = Object.values(errors).every((error) => error === null)
@@ -1017,14 +1057,14 @@ export default function AddProduct() {
     setShowErrors(true)
 
     if (!asDraft && !isValid) {
-      toast.error("أكمل الحقول المطلوبة قبل الحفظ.")
+      toast.error(tForm("errors.completeRequiredFields"))
       // "Complete the required fields" is useless on a form this tall if the offending field is
       // three sections away, so bump a token that scrolls to the first one once it has rendered.
       setScrollToError((current) => current + 1)
       return
     }
     if (asDraft && !name.trim()) {
-      toast.error(`أدخل ${type.nameLabel} لحفظه كمسودة.`)
+      toast.error(tForm("errors.enterNameForDraft", { label: type.nameLabel }))
       return
     }
 
@@ -1042,7 +1082,9 @@ export default function AddProduct() {
         )
       )
     } catch {
-      toast.error("تعذر رفع إحدى الصور.", { description: "تحقق من الاتصال وحاول مرة أخرى." })
+      toast.error(tForm("errors.uploadImageFailed"), {
+        description: tForm("errors.uploadImageFailedDescription"),
+      })
       setSaving(false)
       return
     }
@@ -1054,8 +1096,16 @@ export default function AddProduct() {
         : await productListService.createProduct(payload)
 
       toast.success(
-        isEditing ? "تم حفظ التعديلات." : asDraft ? "تم حفظ المسودة." : `تم حفظ ${type.title}.`,
-        { description: saved.sku ? `رمز المنتج: ${saved.sku}` : saved.name }
+        isEditing
+          ? tForm("errors.saveSuccessEdit")
+          : asDraft
+            ? tForm("errors.saveSuccessDraft")
+            : tForm("errors.saveSuccessTyped", { type: type.title }),
+        {
+          description: saved.sku
+            ? tForm("errors.saveSuccessSkuDescription", { sku: saved.sku })
+            : saved.name,
+        }
       )
       // The form is deliberately not cleared before navigating: if the push fails the work is
       // still on screen.
@@ -1065,25 +1115,27 @@ export default function AddProduct() {
       const serverFields = error instanceof AppError ? applyServerErrors(error.details) : []
 
       if (status === 404) {
-        toast.error("المنتج غير موجود.", { description: "ربما تم حذفه من جهاز آخر." })
+        toast.error(tForm("errors.notFound"), { description: tForm("errors.notFoundDescription") })
       } else if (status === 409) {
-        toast.error("رمز المنتج (SKU) مستخدم بالفعل.", {
-          description: "غيّر الرمز أو استخدم زر التوليد التلقائي.",
+        toast.error(tForm("errors.skuTaken"), {
+          description: tForm("errors.skuTakenDescription"),
         })
       } else if (status === 403) {
         toast.error(
-          isEditing ? "لا تملك صلاحية تعديل المنتجات." : "لا تملك صلاحية إنشاء المنتجات.",
+          isEditing ? tForm("errors.noPermissionEdit") : tForm("errors.noPermissionCreate"),
           {
-            description: `تواصل مع مالك الحساب لمنحك صلاحية products:${isEditing ? "edit" : "create"}.`,
+            description: tForm("errors.noPermissionDescription", {
+              action: isEditing ? "edit" : "create",
+            }),
           }
         )
       } else if (serverFields.length > 0) {
-        toast.error("تعذر حفظ المنتج — راجع الحقول التالية.", {
+        toast.error(tForm("errors.serverValidationError"), {
           description: serverFields.slice(0, 4).join(" · "),
         })
       } else {
-        toast.error(isEditing ? "تعذر حفظ التعديلات." : "تعذر حفظ المنتج.", {
-          description: error instanceof Error ? error.message : "حدث خطأ غير متوقع. حاول مرة أخرى.",
+        toast.error(isEditing ? tForm("errors.saveFailedEdit") : tForm("errors.saveFailedCreate"), {
+          description: error instanceof Error ? error.message : tForm("errors.unexpectedError"),
         })
       }
     } finally {
@@ -1115,15 +1167,18 @@ export default function AddProduct() {
   })()
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 pb-28 pt-5")} dir="rtl">
+    <div
+      className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 pb-28 pt-5")}
+      dir={localeDirection(locale)}
+    >
       <div className="mx-auto w-full max-w-[1400px] space-y-4">
         <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
           <Link href={ROUTES.products} className="transition-colors hover:text-[#2878ff]">
-            المنتجات
+            {tForm("breadcrumb.products")}
           </Link>
-          <ChevronLeft className="size-3.5 text-[#b6c2d4]" />
+          <ChevronLeft className="size-3.5 text-[#b6c2d4] rtl:rotate-180" />
           <span className={cn("font-semibold", HEADING)}>
-            {isEditing ? "تعديل منتج" : "إضافة منتج جديد"}
+            {isEditing ? tForm("header.editGeneric") : tForm("header.addGeneric")}
           </span>
         </nav>
 
@@ -1134,7 +1189,7 @@ export default function AddProduct() {
           </span>
           <div>
             <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
-              {isEditing ? `تعديل ${type.title}` : type.pageTitle}
+              {isEditing ? tForm("header.editTyped", { type: type.title }) : type.pageTitle}
             </h1>
             <p className={cn("mt-1 text-[12.5px]", MUTED)}>{type.pageSubtitle}</p>
           </div>
@@ -1143,7 +1198,7 @@ export default function AddProduct() {
         {loadingProduct ? (
           <div className="flex items-center gap-2 rounded-[12px] border border-[#cfe0ff] bg-[#f2f7ff] px-4 py-2.5">
             <Loader2 className="size-4 animate-spin text-[#2878ff]" />
-            <p className={cn("text-[12px]", HEADING)}>جارٍ تحميل بيانات المنتج...</p>
+            <p className={cn("text-[12px]", HEADING)}>{tForm("loadingProduct")}</p>
           </div>
         ) : null}
 
@@ -1161,11 +1216,7 @@ export default function AddProduct() {
                   // product would silently discard its components or variants. Editing keeps
                   // the type it was saved with.
                   disabled={isEditing && !isSelected}
-                  title={
-                    isEditing && !isSelected
-                      ? "لا يمكن تغيير نوع منتج محفوظ — أنشئ منتجاً جديداً بالنوع المطلوب"
-                      : undefined
-                  }
+                  title={isEditing && !isSelected ? tForm("typeLocked") : undefined}
                   className={cn(
                     "rounded-[12px] border p-3.5 text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2878ff]/40",
                     isSelected
@@ -1208,13 +1259,13 @@ export default function AddProduct() {
             <section className={cn(PANEL, "p-4 md:p-5")}>
               <SectionHeading
                 icon={FileText}
-                title="المعلومات الأساسية"
+                title={tForm("basicInfo.title")}
                 subtitle={
                   productType === "raw"
-                    ? "أدخل تفاصيل المادة الخام"
+                    ? tForm("basicInfo.subtitleRaw")
                     : isService
-                      ? "أدخل تفاصيل الخدمة الرئيسية"
-                      : "أدخل تفاصيل المنتج الرئيسي"
+                      ? tForm("basicInfo.subtitleService")
+                      : tForm("basicInfo.subtitleDefault")
                 }
               />
 
@@ -1229,7 +1280,11 @@ export default function AddProduct() {
                   />
                 </Field>
 
-                <Field label="الفئة" required error={showErrors ? errors.category : null}>
+                <Field
+                  label={tForm("basicInfo.categoryLabel")}
+                  required
+                  error={showErrors ? errors.category : null}
+                >
                   {/* Creatable: a category is just a name carried on the product, so a new one
                       is typed here and joins the list once a product using it is saved. The
                       control handles an empty catalogue on its own -- with nothing to pick
@@ -1239,15 +1294,19 @@ export default function AddProduct() {
                     options={categoryOptions}
                     onChange={setCategory}
                     onCreate={setCategory}
-                    createLabel={(draft) => `إضافة فئة "${draft}"`}
-                    placeholder="اختر الفئة أو اكتب فئة جديدة"
-                    searchPlaceholder="ابحث أو اكتب فئة جديدة..."
-                    emptyLabel="لا توجد فئة مطابقة"
-                    ariaLabel="الفئة"
+                    createLabel={(draft) => tForm("basicInfo.categoryCreateLabel", { draft })}
+                    placeholder={tForm("basicInfo.categoryPlaceholder")}
+                    searchPlaceholder={tForm("basicInfo.categorySearchPlaceholder")}
+                    emptyLabel={tForm("basicInfo.categoryEmptyLabel")}
+                    ariaLabel={tForm("basicInfo.categoryLabel")}
                   />
                 </Field>
 
-                <Field label="موقع المخزون" required error={showErrors ? errors.workspaceId : null}>
+                <Field
+                  label={tForm("basicInfo.workspaceLabel")}
+                  required
+                  error={showErrors ? errors.workspaceId : null}
+                >
                   {/* Which workspace (branch) this product belongs to and will appear in -- every
                       type, even منتج رقمي/خدمة which have no physical stock, still needs one.
                       Not creatable (unlike الفئة above): a made-up value here would be a
@@ -1256,14 +1315,14 @@ export default function AddProduct() {
                     value={productWorkspaceId}
                     options={workspaceOptions}
                     onChange={setProductWorkspaceId}
-                    placeholder="اختر مساحة العمل"
-                    searchPlaceholder="ابحث عن مساحة عمل..."
-                    emptyLabel="لا توجد مساحة عمل مطابقة"
-                    ariaLabel="موقع المخزون"
+                    placeholder={tForm("basicInfo.workspacePlaceholder")}
+                    searchPlaceholder={tForm("basicInfo.workspaceSearchPlaceholder")}
+                    emptyLabel={tForm("basicInfo.workspaceEmptyLabel")}
+                    ariaLabel={tForm("basicInfo.workspaceLabel")}
                   />
                 </Field>
 
-                <Field label="الضريبة">
+                <Field label={tForm("basicInfo.taxLabel")}>
                   {/* Null (the "" option) means this product follows whatever the organization's
                       default rate is at the time of each sale -- re-read fresh every time, never
                       frozen to today's default. Only set this when the product genuinely needs
@@ -1272,8 +1331,8 @@ export default function AddProduct() {
                     value={taxRateId}
                     options={taxRateOptions}
                     onChange={setTaxRateId}
-                    placeholder="استخدام المعدل الافتراضي"
-                    ariaLabel="الضريبة"
+                    placeholder={tForm("basicInfo.taxDefaultOption")}
+                    ariaLabel={tForm("basicInfo.taxLabel")}
                   />
                 </Field>
 
@@ -1294,7 +1353,7 @@ export default function AddProduct() {
                         className="h-11 shrink-0 gap-1.5 rounded-[12px] border-[#c4d5f0] bg-[#eef4ff] px-3 text-[11.5px] font-semibold text-[#2878ff] hover:bg-[#e2ecff]"
                         onClick={() => setSku(generateSku(knownSkus))}
                       >
-                        توليد تلقائي
+                        {tForm("basicInfo.generateSkuButton")}
                         <Sparkles className="size-3.5" />
                       </Button>
                     </div>
@@ -1327,17 +1386,21 @@ export default function AddProduct() {
               <section className={cn(PANEL, "p-4 md:p-5")}>
                 <SectionHeading
                   icon={Boxes}
-                  title="المخزون والتسعير"
-                  subtitle="حدد كمية المخزون الحالية وتكلفة الشراء"
+                  title={tForm("raw.sectionTitle")}
+                  subtitle={tForm("raw.sectionSubtitle")}
                 />
 
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  <Field label="وحدة القياس الأساسية" required>
-                    <UnitSelect value={baseUnit} onChange={setBaseUnit} />
+                  <Field label={tForm("raw.baseUnitLabel")} required>
+                    <UnitSelect
+                      value={baseUnit}
+                      onChange={setBaseUnit}
+                      options={BASE_UNIT_OPTIONS}
+                    />
                   </Field>
 
                   <Field
-                    label="الكمية الحالية في المخزون"
+                    label={tForm("stock.currentLabel")}
                     required
                     error={showErrors ? errors.stock : null}
                   >
@@ -1346,7 +1409,7 @@ export default function AddProduct() {
                       min={0}
                       step="any"
                       value={stockQty}
-                      aria-label="الكمية الحالية في المخزون"
+                      aria-label={tForm("stock.currentLabel")}
                       onChange={(event) => setStockQty(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
@@ -1360,18 +1423,18 @@ export default function AddProduct() {
                     ) : null}
                   </Field>
 
-                  <Field label="الحد الأدنى للمخزون">
+                  <Field label={tForm("stock.minLabel")}>
                     <Input
                       type="number"
                       min={0}
                       step="any"
                       value={minStock}
-                      aria-label="الحد الأدنى للمخزون"
+                      aria-label={tForm("stock.minLabel")}
                       onChange={(event) => setMinStock(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
                     />
-                    <p className={cn(HINT, MUTED)}>سيتم تنبيهك عند الوصول إلى هذا الحد</p>
+                    <p className={cn(HINT, MUTED)}>{tForm("stock.minHint")}</p>
                   </Field>
 
                   {/* Only asked for when the product is counted in pieces or cartons -- a carton's
@@ -1379,7 +1442,7 @@ export default function AddProduct() {
                   {packagingApplies ? (
                     <>
                       <Field
-                        label="المنتج المرتبط (بالحبة)"
+                        label={tForm("packaging.linkedProductLabel")}
                         required
                         error={showErrors ? errors.linkedUnitProduct : null}
                       >
@@ -1387,57 +1450,64 @@ export default function AddProduct() {
                           value={linkedUnitProductId}
                           options={pieceProductOptions}
                           onChange={setLinkedUnitProductId}
-                          placeholder="اختر المنتج المباع بالحبة"
-                          searchPlaceholder="ابحث في المنتجات بالحبة..."
+                          placeholder={tForm("packaging.linkedProductPlaceholder")}
+                          searchPlaceholder={tForm("packaging.linkedProductSearchPlaceholder")}
                           emptyLabel={
                             pieceProductOptions.length === 0
-                              ? "لا يوجد منتج مقاس بالحبة بعد"
-                              : "لا يوجد منتج مطابق"
+                              ? tForm("packaging.linkedProductEmptyNone")
+                              : tForm("packaging.linkedProductEmptyNoMatch")
                           }
-                          ariaLabel="المنتج المرتبط"
+                          ariaLabel={tForm("packaging.linkedProductAriaLabel")}
                         />
-                        <p className={cn(HINT, MUTED)}>
-                          الكرتون تعبئة لهذا المنتج — بيع كرتون يخصم من مخزونه
-                        </p>
+                        <p className={cn(HINT, MUTED)}>{tForm("packaging.linkedProductHint")}</p>
                       </Field>
 
-                      <Field label="عدد الحبات في الكرتون" required>
+                      <Field label={tForm("packaging.unitsPerCartonLabel")} required>
                         <SuffixInput
                           value={unitsPerCarton}
                           onChange={setUnitsPerCarton}
-                          suffix="حبة"
-                          label="عدد الحبات في الكرتون"
+                          suffix={tForm("packaging.pieceSuffix")}
+                          label={tForm("packaging.unitsPerCartonLabel")}
                         />
                         <p className={cn(HINT, MUTED)}>
                           {hasPackaging && linkedUnitProduct
-                            ? `1 كرتون = ${NUMBER_AR.format(perCarton)} حبة من ${linkedUnitProduct.name}`
-                            : "يربط كمية الكرتون بكمية الحبة"}
+                            ? tForm("packaging.unitsPerCartonHintWithProduct", {
+                                count: NUMBER_AR.format(perCarton),
+                                name: linkedUnitProduct.name,
+                              })
+                            : tForm("packaging.unitsPerCartonHintDefault")}
                         </p>
                       </Field>
                     </>
                   ) : null}
 
-                  <Field label="سعر الشراء (التكلفة)">
-                    <MoneyInput value={costPrice} onChange={setCostPrice} label="سعر الشراء" />
-                    <p className={cn(HINT, MUTED)}>سعر الشراء لكل {baseUnitShort}</p>
+                  <Field label={tForm("raw.costPriceLabel")}>
+                    <MoneyInput
+                      value={costPrice}
+                      onChange={setCostPrice}
+                      label={tForm("raw.costPriceAriaLabel")}
+                    />
+                    <p className={cn(HINT, MUTED)}>
+                      {tForm("raw.costPriceHint", { unit: baseUnitShort })}
+                    </p>
                   </Field>
 
-                  <Field label="المورد (اختياري)">
+                  <Field label={tForm("raw.supplierLabel")}>
                     <Input
                       value={supplier}
-                      aria-label="المورد"
+                      aria-label={tForm("raw.supplierAriaLabel")}
                       onChange={(event) => setSupplier(event.target.value)}
-                      placeholder="اسم المورد"
+                      placeholder={tForm("raw.supplierPlaceholder")}
                       className={FIELD_CLASS}
                     />
                   </Field>
 
-                  <Field label="ملاحظات المخزون (اختياري)">
+                  <Field label={tForm("raw.stockNotesLabel")}>
                     <Textarea
                       value={stockNotes}
                       maxLength={STOCK_NOTES_LIMIT}
                       onChange={(event) => setStockNotes(event.target.value)}
-                      placeholder="مثال: تاريخ الدفعة، رقم الفاتورة..."
+                      placeholder={tForm("raw.stockNotesPlaceholder")}
                       className="min-h-[76px] rounded-[12px] border-[#e1e7f0] bg-white text-[13px] placeholder:text-[#95a4bd]"
                     />
                     <p className={cn(HINT, MUTED)}>
@@ -1453,13 +1523,21 @@ export default function AddProduct() {
               <section className={cn(PANEL, "p-4 md:p-5")}>
                 <SectionHeading
                   icon={Layers}
-                  title="السعر والمخزون"
-                  subtitle="حدد سعر المنتج وكميات المخزون"
+                  title={tForm("simple.sectionTitle")}
+                  subtitle={tForm("simple.sectionSubtitle")}
                 />
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <Field label="سعر البيع" required error={showErrors ? errors.price : null}>
-                    <MoneyInput value={sellPrice} onChange={setSellPrice} label="سعر البيع" />
+                  <Field
+                    label={tForm("simple.sellPriceLabel")}
+                    required
+                    error={showErrors ? errors.price : null}
+                  >
+                    <MoneyInput
+                      value={sellPrice}
+                      onChange={setSellPrice}
+                      label={tForm("simple.sellPriceLabel")}
+                    />
                     <PriceTaxIndicator
                       isManualTaxMode={isManualTaxMode}
                       priceIncludesTax={priceIncludesTax}
@@ -1468,12 +1546,16 @@ export default function AddProduct() {
                     />
                   </Field>
 
-                  <Field label="سعر التكلفة">
-                    <MoneyInput value={costPrice} onChange={setCostPrice} label="سعر التكلفة" />
+                  <Field label={tForm("simple.costPriceLabel")}>
+                    <MoneyInput
+                      value={costPrice}
+                      onChange={setCostPrice}
+                      label={tForm("simple.costPriceLabel")}
+                    />
                   </Field>
 
                   <Field
-                    label="الكمية الحالية في المخزون"
+                    label={tForm("stock.currentLabel")}
                     required
                     error={showErrors ? errors.stock : null}
                   >
@@ -1481,7 +1563,7 @@ export default function AddProduct() {
                       type="number"
                       min={0}
                       value={stockQty}
-                      aria-label="الكمية الحالية في المخزون"
+                      aria-label={tForm("stock.currentLabel")}
                       onChange={(event) => setStockQty(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
@@ -1495,17 +1577,17 @@ export default function AddProduct() {
                     ) : null}
                   </Field>
 
-                  <Field label="الحد الأدنى للمخزون">
+                  <Field label={tForm("stock.minLabel")}>
                     <Input
                       type="number"
                       min={0}
                       value={minStock}
-                      aria-label="الحد الأدنى للمخزون"
+                      aria-label={tForm("stock.minLabel")}
                       onChange={(event) => setMinStock(event.target.value)}
                       placeholder="0"
                       className={FIELD_CLASS}
                     />
-                    <p className={cn(HINT, MUTED)}>سيتم تنبيهك عند الوصول إلى هذا الحد</p>
+                    <p className={cn(HINT, MUTED)}>{tForm("stock.minHint")}</p>
                   </Field>
 
                   {/* Only asked for when the product is counted in pieces or cartons -- a carton's
@@ -1513,7 +1595,7 @@ export default function AddProduct() {
                   {packagingApplies ? (
                     <>
                       <Field
-                        label="المنتج المرتبط (بالحبة)"
+                        label={tForm("packaging.linkedProductLabel")}
                         required
                         error={showErrors ? errors.linkedUnitProduct : null}
                       >
@@ -1521,38 +1603,43 @@ export default function AddProduct() {
                           value={linkedUnitProductId}
                           options={pieceProductOptions}
                           onChange={setLinkedUnitProductId}
-                          placeholder="اختر المنتج المباع بالحبة"
-                          searchPlaceholder="ابحث في المنتجات بالحبة..."
+                          placeholder={tForm("packaging.linkedProductPlaceholder")}
+                          searchPlaceholder={tForm("packaging.linkedProductSearchPlaceholder")}
                           emptyLabel={
                             pieceProductOptions.length === 0
-                              ? "لا يوجد منتج مقاس بالحبة بعد"
-                              : "لا يوجد منتج مطابق"
+                              ? tForm("packaging.linkedProductEmptyNone")
+                              : tForm("packaging.linkedProductEmptyNoMatch")
                           }
-                          ariaLabel="المنتج المرتبط"
+                          ariaLabel={tForm("packaging.linkedProductAriaLabel")}
                         />
-                        <p className={cn(HINT, MUTED)}>
-                          الكرتون تعبئة لهذا المنتج — بيع كرتون يخصم من مخزونه
-                        </p>
+                        <p className={cn(HINT, MUTED)}>{tForm("packaging.linkedProductHint")}</p>
                       </Field>
 
-                      <Field label="عدد الحبات في الكرتون" required>
+                      <Field label={tForm("packaging.unitsPerCartonLabel")} required>
                         <SuffixInput
                           value={unitsPerCarton}
                           onChange={setUnitsPerCarton}
-                          suffix="حبة"
-                          label="عدد الحبات في الكرتون"
+                          suffix={tForm("packaging.pieceSuffix")}
+                          label={tForm("packaging.unitsPerCartonLabel")}
                         />
                         <p className={cn(HINT, MUTED)}>
                           {hasPackaging && linkedUnitProduct
-                            ? `1 كرتون = ${NUMBER_AR.format(perCarton)} حبة من ${linkedUnitProduct.name}`
-                            : "يربط كمية الكرتون بكمية الحبة"}
+                            ? tForm("packaging.unitsPerCartonHintWithProduct", {
+                                count: NUMBER_AR.format(perCarton),
+                                name: linkedUnitProduct.name,
+                              })
+                            : tForm("packaging.unitsPerCartonHintDefault")}
                         </p>
                       </Field>
                     </>
                   ) : null}
 
-                  <Field label="وحدة القياس" required>
-                    <UnitSelect value={baseUnit} onChange={setBaseUnit} />
+                  <Field label={tForm("simple.unitLabel")} required>
+                    <UnitSelect
+                      value={baseUnit}
+                      onChange={setBaseUnit}
+                      options={BASE_UNIT_OPTIONS}
+                    />
                   </Field>
                 </div>
               </section>
@@ -1564,21 +1651,29 @@ export default function AddProduct() {
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   <SectionHeading
                     icon={Layers}
-                    title="معلومات الوزن والتسعير"
-                    subtitle="حدد وحدة الوزن وسعر المنتج وإعدادات البيع"
+                    title={tForm("weighted.sectionTitle")}
+                    subtitle={tForm("weighted.sectionSubtitle")}
                   />
 
                   <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <Field label="وحدة الوزن الأساسية" required>
-                      <UnitSelect value={baseUnit} onChange={setBaseUnit} />
+                    <Field label={tForm("weighted.baseUnitLabel")} required>
+                      <UnitSelect
+                        value={baseUnit}
+                        onChange={setBaseUnit}
+                        options={BASE_UNIT_OPTIONS}
+                      />
                     </Field>
 
                     <Field
-                      label={`سعر البيع لل${baseUnitShort}`}
+                      label={tForm("weighted.sellPriceLabel", { unit: baseUnitShort })}
                       required
                       error={showErrors ? errors.price : null}
                     >
-                      <MoneyInput value={sellPrice} onChange={setSellPrice} label="سعر البيع" />
+                      <MoneyInput
+                        value={sellPrice}
+                        onChange={setSellPrice}
+                        label={tForm("simple.sellPriceLabel")}
+                      />
                       <PriceTaxIndicator
                         isManualTaxMode={isManualTaxMode}
                         priceIncludesTax={priceIncludesTax}
@@ -1587,18 +1682,20 @@ export default function AddProduct() {
                       />
                     </Field>
 
-                    <Field label="الحد الأدنى للشراء">
+                    <Field label={tForm("weighted.minPurchaseLabel")}>
                       <Input
                         type="number"
                         min={0}
                         step="any"
                         value={minPurchase}
-                        aria-label="الحد الأدنى للشراء"
+                        aria-label={tForm("weighted.minPurchaseAriaLabel")}
                         onChange={(event) => setMinPurchase(event.target.value)}
                         placeholder="0.1"
                         className={FIELD_CLASS}
                       />
-                      <p className={cn(HINT, MUTED)}>أقل كمية يمكن شراؤها (بال{baseUnitShort})</p>
+                      <p className={cn(HINT, MUTED)}>
+                        {tForm("weighted.minPurchaseHint", { unit: baseUnitShort })}
+                      </p>
                     </Field>
                   </div>
 
@@ -1606,12 +1703,16 @@ export default function AddProduct() {
                     <Info className="mt-0.5 size-4 shrink-0 text-[#2878ff]" />
                     <div>
                       <p className={cn("text-[11.5px] font-semibold leading-5", HEADING)}>
-                        سيتم احتساب السعر تلقائياً بناءً على الوزن الذي يحدده العميل عند الشراء.
+                        {tForm("weighted.infoTitle")}
                       </p>
                       <p className={cn("mt-0.5 text-[11px]", MUTED)}>
                         {sellPrice.trim() && Number(sellPrice) > 0
-                          ? `مثال: 0.5 ${baseUnitShort} × ${NUMBER_AR.format(Number(sellPrice))} ريال = ${MONEY_AR.format(Number(sellPrice) * 0.5)} ريال.`
-                          : `مثال: 0.5 ${baseUnitShort} × سعر ال${baseUnitShort} = السعر النهائي.`}
+                          ? tForm("weighted.infoExampleWithPrice", {
+                              unit: baseUnitShort,
+                              price: NUMBER_AR.format(Number(sellPrice)),
+                              total: MONEY_AR.format(Number(sellPrice) * 0.5),
+                            })
+                          : tForm("weighted.infoExampleDefault", { unit: baseUnitShort })}
                       </p>
                     </div>
                   </div>
@@ -1620,22 +1721,22 @@ export default function AddProduct() {
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   <SectionHeading
                     icon={Boxes}
-                    title="مخزون المنتج"
-                    subtitle="حدد كمية المخزون الحالية"
+                    title={tForm("weighted.stockSectionTitle")}
+                    subtitle={tForm("weighted.stockSectionSubtitle")}
                   />
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <Field
-                      label="الكمية الحالية في المخزون"
+                      label={tForm("stock.currentLabel")}
                       required
                       error={showErrors ? errors.stock : null}
                     >
                       <SuffixInput
                         value={stockQty}
-                        aria-label="الكمية الحالية في المخزون"
+                        aria-label={tForm("stock.currentLabel")}
                         onChange={setStockQty}
                         suffix={baseUnitShort}
-                        label="الكمية الحالية في المخزون"
+                        label={tForm("stock.currentLabel")}
                       />
                       {packagingBreakdown ? (
                         <PackagingReadout
@@ -1646,15 +1747,15 @@ export default function AddProduct() {
                       ) : null}
                     </Field>
 
-                    <Field label="الحد الأدنى للمخزون">
+                    <Field label={tForm("stock.minLabel")}>
                       <SuffixInput
                         value={minStock}
-                        aria-label="الحد الأدنى للمخزون"
+                        aria-label={tForm("stock.minLabel")}
                         onChange={setMinStock}
                         suffix={baseUnitShort}
-                        label="الحد الأدنى للمخزون"
+                        label={tForm("stock.minLabel")}
                       />
-                      <p className={cn(HINT, MUTED)}>سيتم تنبيهك عند الوصول إلى هذا الحد</p>
+                      <p className={cn(HINT, MUTED)}>{tForm("stock.minHint")}</p>
                     </Field>
 
                     {/* No carton packaging here: a weighted product is sold by the kilo, and its
@@ -1670,22 +1771,30 @@ export default function AddProduct() {
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   <SectionHeading
                     icon={Layers}
-                    title="التسعير والمدة"
-                    subtitle="حدد سعر الخدمة ومدة تقديمها"
+                    title={tForm("service.pricingSectionTitle")}
+                    subtitle={tForm("service.pricingSectionSubtitle")}
                   />
 
                   <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <Field label="نوع التسعير" required>
+                    <Field label={tForm("service.pricingTypeLabel")} required>
                       <AppSearchableSelect
                         value={pricingType}
                         options={PRICING_TYPE_OPTIONS}
                         onChange={setPricingType}
-                        ariaLabel="نوع التسعير"
+                        ariaLabel={tForm("service.pricingTypeLabel")}
                       />
                     </Field>
 
-                    <Field label="السعر" required error={showErrors ? errors.servicePrice : null}>
-                      <MoneyInput value={sellPrice} onChange={setSellPrice} label="السعر" />
+                    <Field
+                      label={tForm("service.priceLabel")}
+                      required
+                      error={showErrors ? errors.servicePrice : null}
+                    >
+                      <MoneyInput
+                        value={sellPrice}
+                        onChange={setSellPrice}
+                        label={tForm("service.priceLabel")}
+                      />
                       <PriceTaxIndicator
                         isManualTaxMode={isManualTaxMode}
                         priceIncludesTax={priceIncludesTax}
@@ -1694,14 +1803,14 @@ export default function AddProduct() {
                       />
                     </Field>
 
-                    <Field label="مدة الخدمة">
+                    <Field label={tForm("service.durationLabel")}>
                       {/* RTL: the value is written first so its unit sits on the left. */}
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
                           min={0}
                           value={serviceDuration}
-                          aria-label="مدة الخدمة"
+                          aria-label={tForm("service.durationAriaLabel")}
                           onChange={(event) => setServiceDuration(event.target.value)}
                           placeholder="1"
                           className={FIELD_CLASS}
@@ -1711,11 +1820,11 @@ export default function AddProduct() {
                             value={serviceDurationUnit}
                             options={SERVICE_DURATION_UNIT_OPTIONS}
                             onChange={setServiceDurationUnit}
-                            ariaLabel="وحدة مدة الخدمة"
+                            ariaLabel={tForm("service.durationUnitAriaLabel")}
                           />
                         </div>
                       </div>
-                      <p className={cn(HINT, MUTED)}>المدة الافتراضية لتقديم الخدمة</p>
+                      <p className={cn(HINT, MUTED)}>{tForm("service.durationHint")}</p>
                     </Field>
                   </div>
                 </section>
@@ -1723,14 +1832,14 @@ export default function AddProduct() {
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   <SectionHeading
                     icon={CalendarDays}
-                    title="التوفر والحجز (اختياري)"
-                    subtitle="حدد مواعيد التوفر إذا كانت الخدمة تتطلب حجزاً مسبقاً"
+                    title={tForm("service.availabilitySectionTitle")}
+                    subtitle={tForm("service.availabilitySectionSubtitle")}
                   />
 
                   <div className="mt-4 flex items-start gap-3 rounded-[12px] border border-[#cfe0ff] bg-[#f2f7ff] px-4 py-3">
                     <Info className="mt-0.5 size-4 shrink-0 text-[#2878ff]" />
                     <p className={cn("text-[11.5px] leading-5", HEADING)}>
-                      يمكنك لاحقاً ربط الخدمة مع تقويم المواعيد لإدارة الحجوزات تلقائياً.
+                      {tForm("service.availabilityInfo")}
                     </p>
                   </div>
 
@@ -1741,10 +1850,10 @@ export default function AddProduct() {
                         htmlFor="booking"
                         className={cn("cursor-pointer text-[13px] font-extrabold", HEADING)}
                       >
-                        تفعيل الحجز المسبق
+                        {tForm("service.bookingLabel")}
                       </Label>
                       <p className={cn("mt-1 text-[11px]", MUTED)}>
-                        السماح للعملاء بحجز مواعيد لهذه الخدمة
+                        {tForm("service.bookingHint")}
                       </p>
                     </div>
                     <Switch
@@ -1761,11 +1870,23 @@ export default function AddProduct() {
             {/* -------------------------------------------------- منتج رقمي */}
             {productType === "digital" ? (
               <section className={cn(PANEL, "p-4 md:p-5")}>
-                <SectionHeading icon={Layers} title="التسعير" subtitle="حدد سعر المنتج الرقمي" />
+                <SectionHeading
+                  icon={Layers}
+                  title={tForm("digital.sectionTitle")}
+                  subtitle={tForm("digital.sectionSubtitle")}
+                />
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <Field label="السعر" required error={showErrors ? errors.price : null}>
-                    <MoneyInput value={sellPrice} onChange={setSellPrice} label="السعر" />
+                  <Field
+                    label={tForm("digital.priceLabel")}
+                    required
+                    error={showErrors ? errors.price : null}
+                  >
+                    <MoneyInput
+                      value={sellPrice}
+                      onChange={setSellPrice}
+                      label={tForm("digital.priceLabel")}
+                    />
                     <PriceTaxIndicator
                       isManualTaxMode={isManualTaxMode}
                       priceIncludesTax={priceIncludesTax}
@@ -1774,8 +1895,12 @@ export default function AddProduct() {
                     />
                   </Field>
 
-                  <Field label="سعر العرض (اختياري)">
-                    <MoneyInput value={offerPrice} onChange={setOfferPrice} label="سعر العرض" />
+                  <Field label={tForm("digital.offerPriceLabel")}>
+                    <MoneyInput
+                      value={offerPrice}
+                      onChange={setOfferPrice}
+                      label={tForm("digital.offerPriceAriaLabel")}
+                    />
                   </Field>
                 </div>
               </section>
@@ -1787,8 +1912,8 @@ export default function AddProduct() {
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   <SectionHeading
                     icon={GitBranch}
-                    title="المتغيرات"
-                    subtitle="أضف خيارات المتغيرات مثل المقاسات والألوان. يمكنك دمج أكثر من خيار."
+                    title={tForm("variants.sectionTitle")}
+                    subtitle={tForm("variants.sectionSubtitle")}
                   />
 
                   {showErrors && errors.options ? (
@@ -1805,12 +1930,17 @@ export default function AddProduct() {
 
                         <div className="flex shrink-0 items-center gap-1.5">
                           <span className={cn("text-[11.5px] font-semibold", MUTED)}>
-                            {optionLabel(index)}:
+                            {optionLabel(
+                              index,
+                              OPTION_ORDINALS,
+                              tForm("optionOrdinalFallback", { n: index + 1 })
+                            )}
+                            :
                           </span>
                           <Input
                             value={option.name}
-                            aria-label="اسم الخيار"
-                            placeholder="المقاس"
+                            aria-label={tForm("variants.optionNameAriaLabel")}
+                            placeholder={tForm("variants.optionNamePlaceholder")}
                             className={cn(FIELD_CLASS, "h-9 w-[120px] text-[12px]")}
                             onChange={(event) =>
                               setOptions((current) =>
@@ -1833,7 +1963,7 @@ export default function AddProduct() {
                               {value}
                               <button
                                 type="button"
-                                aria-label={`حذف ${value}`}
+                                aria-label={tForm("variants.removeValueAriaLabel", { value })}
                                 className="cursor-pointer text-[#b6c2d4] transition-colors hover:text-[#e0484d]"
                                 onClick={() =>
                                   setOptions((current) =>
@@ -1855,8 +1985,8 @@ export default function AddProduct() {
 
                           <Input
                             value={option.draft}
-                            aria-label="إضافة قيمة"
-                            placeholder="أضف قيمة ثم Enter"
+                            aria-label={tForm("variants.addValueAriaLabel")}
+                            placeholder={tForm("variants.addValuePlaceholder")}
                             className={cn(FIELD_CLASS, "h-9 min-w-[150px] flex-1 text-[12px]")}
                             onChange={(event) =>
                               setOptions((current) =>
@@ -1885,7 +2015,7 @@ export default function AddProduct() {
 
                         <button
                           type="button"
-                          aria-label="حذف الخيار"
+                          aria-label={tForm("variants.removeOptionAriaLabel")}
                           className="shrink-0 cursor-pointer text-[#e0484d] transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-30"
                           disabled={options.length === 1}
                           onClick={() =>
@@ -1902,7 +2032,7 @@ export default function AddProduct() {
                       className="h-10 gap-2 rounded-[12px] border-dashed border-[#c4d5f0] bg-white px-4 text-[12px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
                       onClick={() => setOptions((current) => [...current, emptyOption()])}
                     >
-                      إضافة خيار آخر
+                      {tForm("variants.addOptionLabel")}
                       <Plus className="size-4" />
                     </Button>
                   </div>
@@ -1913,8 +2043,10 @@ export default function AddProduct() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <SectionHeading
                       icon={Boxes}
-                      title={`المتغيرات الناتجة (${activeVariants.length})`}
-                      subtitle="سيتم إنشاء متغير لكل توليفة من الخيارات. يمكنك تعديل التفاصيل لكل متغير."
+                      title={tForm("variants.generatedSectionTitle", {
+                        count: activeVariants.length,
+                      })}
+                      subtitle={tForm("variants.generatedSectionSubtitle")}
                     />
                     <Button
                       variant="outline"
@@ -1922,7 +2054,7 @@ export default function AddProduct() {
                       disabled={activeVariants.length === 0}
                       onClick={generateVariantSkus}
                     >
-                      توليد جميع SKU تلقائياً
+                      {tForm("variants.generateSkuButton")}
                       <RefreshCcw className="size-4" />
                     </Button>
                   </div>
@@ -1931,9 +2063,9 @@ export default function AddProduct() {
                     <div className="mt-4 flex items-start gap-2.5 rounded-[12px] border border-[#f3ddb0] bg-[#fdf7ec] px-4 py-3">
                       <Info className="mt-0.5 size-4 shrink-0 text-[#e08b00]" />
                       <p className={cn("text-[11.5px] leading-5", HEADING)}>
-                        عدد التوليفات يتجاوز الحد الأقصى، لذلك يتم عرض أول{" "}
-                        {NUMBER_AR.format(MAX_GENERATED_VARIANTS)} متغير فقط. قلّل عدد القيم أو
-                        الخيارات لعرضها جميعاً.
+                        {tForm("variants.truncatedWarning", {
+                          count: NUMBER_AR.format(MAX_GENERATED_VARIANTS),
+                        })}
                       </p>
                     </div>
                   ) : null}
@@ -1942,14 +2074,16 @@ export default function AddProduct() {
                     /* RTL: the copy is written first so the undo action sits on the left. */
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#e1e7f0] bg-[#fafbfe] px-4 py-2.5">
                       <p className={cn("text-[11.5px]", MUTED)}>
-                        تم استبعاد {NUMBER_AR.format(excludedCount)} متغير من هذا المنتج.
+                        {tForm("variants.excludedNotice", {
+                          count: NUMBER_AR.format(excludedCount),
+                        })}
                       </p>
                       <button
                         type="button"
                         className="cursor-pointer text-[11.5px] font-semibold text-[#2878ff] transition-opacity hover:opacity-70"
                         onClick={() => setExcludedVariants(new Set())}
                       >
-                        استعادة الكل
+                        {tForm("variants.restoreAll")}
                       </button>
                     </div>
                   ) : null}
@@ -1969,11 +2103,15 @@ export default function AddProduct() {
                   {activeVariants.length > 0 ? (
                     <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-[#c4d5f0] bg-[#f2f7ff] px-4 py-2.5">
                       <p className={cn("text-[11.5px] font-bold", HEADING)}>
-                        تطبيق سريع
+                        {tForm("variants.quickApplyTitle")}
                         <span className={cn("ms-1.5 font-semibold", MUTED)}>
                           {selectedVariants.size > 0
-                            ? `على ${NUMBER_AR.format(selectedVariants.size)} محدد`
-                            : `على الكل (${NUMBER_AR.format(activeVariants.length)})`}
+                            ? tForm("variants.quickApplySelected", {
+                                count: NUMBER_AR.format(selectedVariants.size),
+                              })
+                            : tForm("variants.quickApplyAll", {
+                                count: NUMBER_AR.format(activeVariants.length),
+                              })}
                         </span>
                       </p>
 
@@ -1982,8 +2120,8 @@ export default function AddProduct() {
                         min={0}
                         step="0.01"
                         value={bulkPrice}
-                        aria-label="سعر موحد"
-                        placeholder="السعر"
+                        aria-label={tForm("variants.bulkPriceAriaLabel")}
+                        placeholder={tForm("variants.bulkPricePlaceholder")}
                         className="h-9 w-[110px] rounded-[10px] border-[#c4d5f0] bg-white text-[12px]"
                         onChange={(event) => setBulkPrice(event.target.value)}
                         onKeyDown={(event) => {
@@ -1997,8 +2135,8 @@ export default function AddProduct() {
                         type="number"
                         min={0}
                         value={bulkStock}
-                        aria-label="كمية موحدة"
-                        placeholder="الكمية"
+                        aria-label={tForm("variants.bulkStockAriaLabel")}
+                        placeholder={tForm("variants.bulkStockPlaceholder")}
                         className="h-9 w-[110px] rounded-[10px] border-[#c4d5f0] bg-white text-[12px]"
                         onChange={(event) => setBulkStock(event.target.value)}
                         onKeyDown={(event) => {
@@ -2014,7 +2152,7 @@ export default function AddProduct() {
                         disabled={bulkPrice.trim() === "" && bulkStock.trim() === ""}
                         onClick={applyBulkValues}
                       >
-                        تطبيق
+                        {tForm("variants.applyButton")}
                         <CircleCheckBig className="size-3.5" />
                       </Button>
 
@@ -2025,7 +2163,7 @@ export default function AddProduct() {
                             className="cursor-pointer text-[11.5px] font-semibold text-[#e0484d] transition-opacity hover:opacity-70"
                             onClick={() => excludeVariants(selectedVariants)}
                           >
-                            استبعاد المحدد
+                            {tForm("variants.excludeSelected")}
                           </button>
                           <button
                             type="button"
@@ -2035,12 +2173,12 @@ export default function AddProduct() {
                             )}
                             onClick={() => setSelectedVariants(new Set())}
                           >
-                            إلغاء التحديد
+                            {tForm("variants.clearSelection")}
                           </button>
                         </>
                       ) : (
                         <p className={cn("ms-auto text-[10.5px]", MUTED)}>
-                          حدد صفوفاً لتطبيق القيم عليها وحدها
+                          {tForm("variants.selectRowsHint")}
                         </p>
                       )}
                     </div>
@@ -2054,8 +2192,8 @@ export default function AddProduct() {
                       )}
                     >
                       {excludedCount > 0
-                        ? "تم استبعاد كل التوليفات. استعد بعضها أو أضف قيمة جديدة."
-                        : "أضف خياراً واحداً على الأقل بقيمه لتوليد المتغيرات."}
+                        ? tForm("variants.emptyExcluded")
+                        : tForm("variants.emptyNoOptions")}
                     </div>
                   ) : (
                     <div className="mt-4 overflow-x-auto">
@@ -2065,7 +2203,7 @@ export default function AddProduct() {
                             <th className="border-b border-[#eef2f8] px-2 py-3">
                               <input
                                 type="checkbox"
-                                aria-label="تحديد كل المتغيرات"
+                                aria-label={tForm("variants.selectAllAriaLabel")}
                                 className="size-4 cursor-pointer accent-[#2878ff]"
                                 checked={
                                   selectedVariants.size > 0 &&
@@ -2087,13 +2225,13 @@ export default function AddProduct() {
                               />
                             </th>
                             {[
-                              "صورة",
+                              tForm("variants.columnImage"),
                               ...filledOptions.map((option) => option.name),
-                              "SKU",
-                              "السعر",
-                              "الكمية في المخزون",
-                              "الحالة",
-                              "إجراء",
+                              tForm("variants.columnSku"),
+                              tForm("variants.columnPrice"),
+                              tForm("variants.columnStock"),
+                              tForm("variants.columnStatus"),
+                              tForm("variants.columnAction"),
                             ].map((label, index) => (
                               <th
                                 key={`${label}-${index}`}
@@ -2124,7 +2262,9 @@ export default function AddProduct() {
                                 <td className="px-2 py-3">
                                   <input
                                     type="checkbox"
-                                    aria-label={`تحديد ${variant.key}`}
+                                    aria-label={tForm("variants.selectRowAriaLabel", {
+                                      key: variant.key,
+                                    })}
                                     className="size-4 cursor-pointer accent-[#2878ff]"
                                     checked={selectedVariants.has(variant.key)}
                                     onChange={() => toggleVariantSelection(variant.key)}
@@ -2148,7 +2288,9 @@ export default function AddProduct() {
                                 <td className="px-2 py-3">
                                   <Input
                                     value={override.sku}
-                                    aria-label={`SKU ${variant.key}`}
+                                    aria-label={tForm("variants.skuAriaLabel", {
+                                      key: variant.key,
+                                    })}
                                     placeholder="—"
                                     className={cn(FIELD_CLASS, "h-9 w-[178px] text-[11.5px]")}
                                     onChange={(event) =>
@@ -2163,7 +2305,9 @@ export default function AddProduct() {
                                     min={0}
                                     step="any"
                                     value={override.price}
-                                    aria-label={`سعر ${variant.key}`}
+                                    aria-label={tForm("variants.priceAriaLabel", {
+                                      key: variant.key,
+                                    })}
                                     placeholder="0.00"
                                     className={cn(
                                       FIELD_CLASS,
@@ -2180,7 +2324,9 @@ export default function AddProduct() {
                                     type="number"
                                     min={0}
                                     value={override.stock}
-                                    aria-label={`مخزون ${variant.key}`}
+                                    aria-label={tForm("variants.stockAriaLabel", {
+                                      key: variant.key,
+                                    })}
                                     placeholder="0"
                                     className={cn(
                                       FIELD_CLASS,
@@ -2201,7 +2347,9 @@ export default function AddProduct() {
                                         : "bg-[#fdeeee] text-[#e0484d]"
                                     )}
                                   >
-                                    {inStock ? "متوفر" : "نفد"}
+                                    {inStock
+                                      ? tForm("variants.inStock")
+                                      : tForm("variants.outOfStock")}
                                   </span>
                                 </td>
 
@@ -2210,8 +2358,10 @@ export default function AddProduct() {
                                 <td className="px-2 py-3">
                                   <button
                                     type="button"
-                                    aria-label={`استبعاد ${variant.key}`}
-                                    title="استبعاد هذه التوليفة من المنتج"
+                                    aria-label={tForm("variants.excludeRowAriaLabel", {
+                                      key: variant.key,
+                                    })}
+                                    title={tForm("variants.excludeRowTitle")}
                                     className="cursor-pointer text-[#e0484d] transition-opacity hover:opacity-70"
                                     onClick={() => excludeVariants([variant.key])}
                                   >
@@ -2235,13 +2385,21 @@ export default function AddProduct() {
                 <section className={cn(PANEL, "p-4 md:p-5")}>
                   <SectionHeading
                     icon={Layers}
-                    title="السعر"
-                    subtitle="حدد السعر الذي يُباع به هذا المنتج المجمع (لا يُحتسب تلقائياً من تكلفة المكونات)"
+                    title={tForm("bundle.priceSectionTitle")}
+                    subtitle={tForm("bundle.priceSectionSubtitle")}
                   />
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Field label="سعر البيع" required error={showErrors ? errors.price : null}>
-                      <MoneyInput value={sellPrice} onChange={setSellPrice} label="سعر البيع" />
+                    <Field
+                      label={tForm("bundle.sellPriceLabel")}
+                      required
+                      error={showErrors ? errors.price : null}
+                    >
+                      <MoneyInput
+                        value={sellPrice}
+                        onChange={setSellPrice}
+                        label={tForm("bundle.sellPriceLabel")}
+                      />
                       <PriceTaxIndicator
                         isManualTaxMode={isManualTaxMode}
                         priceIncludesTax={priceIncludesTax}
@@ -2257,15 +2415,15 @@ export default function AddProduct() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <SectionHeading
                       icon={Boxes}
-                      title="المكونات (المواد الخام)"
-                      subtitle="اختر المكونات من المخزون وحدد الكميات المطلوبة لكل وحدة من هذا المنتج"
+                      title={tForm("bundle.componentsSectionTitle")}
+                      subtitle={tForm("bundle.componentsSectionSubtitle")}
                     />
                     <Button
                       variant="outline"
                       className="h-10 shrink-0 gap-2 rounded-[12px] border-[#c4d5f0] bg-white px-4 text-[12.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
                       onClick={() => setComponents((current) => [...current, emptyComponent()])}
                     >
-                      إضافة مكون
+                      {tForm("bundle.addComponentLabel")}
                       <Plus className="size-4" />
                     </Button>
                   </div>
@@ -2276,8 +2434,7 @@ export default function AddProduct() {
                   {catalogueLoaded && rawMaterials.length === 0 ? (
                     <div className="mt-4 rounded-[12px] border border-[#cfe0ff] bg-[#f2f7ff] px-4 py-3">
                       <p className={cn("text-[11.5px] leading-5", HEADING)}>
-                        لا توجد مواد خام في المخزون بعد — يمكنك إضافة المكونات يدوياً الآن وربطها
-                        بالمخزون لاحقاً، أو إنشاء مادة خام من نوع &quot;مادة خام&quot; أولاً.
+                        {tForm("bundle.noRawMaterialsNotice")}
                       </p>
                     </div>
                   ) : null}
@@ -2287,14 +2444,46 @@ export default function AddProduct() {
                       <thead>
                         <tr>
                           {[
-                            { key: "index", label: "#", align: "w-8 text-center" },
-                            { key: "component", label: "المكون", align: "text-right" },
-                            { key: "unit", label: "وحدة القياس", align: "text-center" },
-                            { key: "required", label: "الكمية المطلوبة", align: "text-center" },
-                            { key: "stock", label: "المخزون الحالي", align: "text-center" },
-                            { key: "producible", label: "متوفر للإنتاج", align: "text-center" },
-                            { key: "note", label: "ملاحظات", align: "text-center" },
-                            { key: "actions", label: "إجراء", align: "text-center" },
+                            {
+                              key: "index",
+                              label: tForm("bundle.columnIndex"),
+                              align: "w-8 text-center",
+                            },
+                            {
+                              key: "component",
+                              label: tForm("bundle.columnComponent"),
+                              align: "text-right",
+                            },
+                            {
+                              key: "unit",
+                              label: tForm("bundle.columnUnit"),
+                              align: "text-center",
+                            },
+                            {
+                              key: "required",
+                              label: tForm("bundle.columnRequired"),
+                              align: "text-center",
+                            },
+                            {
+                              key: "stock",
+                              label: tForm("bundle.columnStock"),
+                              align: "text-center",
+                            },
+                            {
+                              key: "producible",
+                              label: tForm("bundle.columnProducible"),
+                              align: "text-center",
+                            },
+                            {
+                              key: "note",
+                              label: tForm("bundle.columnNote"),
+                              align: "text-center",
+                            },
+                            {
+                              key: "actions",
+                              label: tForm("bundle.columnActions"),
+                              align: "text-center",
+                            },
                           ].map((column) => (
                             <th
                               key={column.key}
@@ -2338,8 +2527,8 @@ export default function AddProduct() {
                                         componentNameInputs.current[entry.row.id] = node
                                       }}
                                       value={entry.row.customName}
-                                      aria-label="اسم المكون"
-                                      placeholder="اسم المكون"
+                                      aria-label={tForm("bundle.componentNameAriaLabel")}
+                                      placeholder={tForm("bundle.componentNamePlaceholder")}
                                       className="h-8 min-w-0 flex-1 rounded-[8px] border-[#e1e7f0] bg-white text-[12px] font-bold text-[#0b1738]"
                                       onChange={(event) =>
                                         updateComponent(entry.row.id, {
@@ -2354,8 +2543,8 @@ export default function AddProduct() {
                                     {catalogue.length > 0 ? (
                                       <button
                                         type="button"
-                                        title="اختيار من المخزون بدلاً من ذلك"
-                                        aria-label="اختيار من المخزون بدلاً من ذلك"
+                                        title={tForm("bundle.switchToPickerTitle")}
+                                        aria-label={tForm("bundle.switchToPickerTitle")}
                                         className="shrink-0 cursor-pointer text-[#95a4bd] transition-colors hover:text-[#0b1738]"
                                         onClick={() =>
                                           updateComponent(entry.row.id, {
@@ -2386,14 +2575,14 @@ export default function AddProduct() {
                                         ...(unit ? { requiredUnit: unit, stockUnit: unit } : {}),
                                       })
                                     }}
-                                    placeholder="اختر المكون"
-                                    searchPlaceholder="ابحث في المواد الخام..."
+                                    placeholder={tForm("bundle.pickerPlaceholder")}
+                                    searchPlaceholder={tForm("bundle.pickerSearchPlaceholder")}
                                     emptyLabel={
                                       rawMaterials.length === 0
-                                        ? "لا توجد مواد خام في المخزون بعد"
-                                        : "لا توجد مادة خام مطابقة"
+                                        ? tForm("bundle.pickerEmptyNone")
+                                        : tForm("bundle.pickerEmptyNoMatch")
                                     }
-                                    ariaLabel="المكون"
+                                    ariaLabel={tForm("bundle.pickerAriaLabel")}
                                     compact
                                     hideTriggerMark
                                     triggerRef={(node) => {
@@ -2412,7 +2601,7 @@ export default function AddProduct() {
                                         }}
                                       >
                                         <Plus className="size-4 shrink-0" />
-                                        مكون جديد غير موجود في المخزون
+                                        {tForm("bundle.newComponentOption")}
                                       </button>
                                     )}
                                   />
@@ -2434,8 +2623,8 @@ export default function AddProduct() {
                                     ...(comparable ? {} : { stockUnit: unit }),
                                   })
                                 }}
-                                ariaLabel="وحدة القياس"
-                                searchPlaceholder="البحث عن وحدة قياس..."
+                                ariaLabel={tForm("bundle.unitAriaLabel")}
+                                searchPlaceholder={tForm("unitSelect.searchPlaceholder")}
                                 compact
                                 triggerClassName="w-[104px]"
                               />
@@ -2447,7 +2636,7 @@ export default function AddProduct() {
                                 min={0}
                                 step="any"
                                 value={entry.row.requiredQuantity}
-                                aria-label="الكمية المطلوبة"
+                                aria-label={tForm("bundle.requiredQtyAriaLabel")}
                                 onChange={(event) =>
                                   updateComponent(entry.row.id, {
                                     requiredQuantity: event.target.value,
@@ -2470,7 +2659,7 @@ export default function AddProduct() {
                                       min={0}
                                       step="any"
                                       value={entry.row.customStock}
-                                      aria-label="المخزون الحالي"
+                                      aria-label={tForm("bundle.columnStock")}
                                       placeholder="0"
                                       className="h-8 w-[62px] rounded-[8px] border-[#e1e7f0] bg-white text-center text-[12px]"
                                       onChange={(event) =>
@@ -2490,8 +2679,8 @@ export default function AddProduct() {
                                     onChange={(next) =>
                                       updateComponent(entry.row.id, { stockUnit: next as Unit })
                                     }
-                                    ariaLabel="وحدة المخزون"
-                                    searchPlaceholder="البحث عن وحدة قياس..."
+                                    ariaLabel={tForm("bundle.stockUnitAriaLabel")}
+                                    searchPlaceholder={tForm("unitSelect.searchPlaceholder")}
                                     compact
                                     hideTriggerMark
                                     triggerClassName="h-auto w-auto border-0 bg-transparent p-0 font-semibold text-[#6b7b96] shadow-none hover:border-0 focus-visible:ring-0"
@@ -2511,7 +2700,10 @@ export default function AddProduct() {
                                     min={0}
                                     step="any"
                                     value={entry.row.conversionFactor}
-                                    aria-label={`كم ${entry.row.stockUnit} في 1 ${entry.row.requiredUnit}`}
+                                    aria-label={tForm("bundle.conversionFactorAriaLabel", {
+                                      stockUnit: entry.row.stockUnit,
+                                      requiredUnit: entry.row.requiredUnit,
+                                    })}
                                     placeholder="?"
                                     className={cn(
                                       "h-7 w-[52px] rounded-[8px] bg-white text-center text-[11px]",
@@ -2536,9 +2728,12 @@ export default function AddProduct() {
                               {entry.incompatibleUnits ? (
                                 <span
                                   className="text-[10.5px] font-semibold leading-[15px] text-[#e08b00]"
-                                  title={`حدد كم ${entry.row.stockUnit} في 1 ${entry.row.requiredUnit}`}
+                                  title={tForm("bundle.conversionFactorTitle", {
+                                    stockUnit: entry.row.stockUnit,
+                                    requiredUnit: entry.row.requiredUnit,
+                                  })}
                                 >
-                                  حدد معامل التحويل
+                                  {tForm("bundle.conversionNeeded")}
                                 </span>
                               ) : entry.producible === null ? (
                                 <span className={cn("text-[12px]", MUTED)}>—</span>
@@ -2557,7 +2752,7 @@ export default function AddProduct() {
                             <td className="px-2 py-3">
                               <Input
                                 value={entry.row.note}
-                                aria-label="ملاحظات"
+                                aria-label={tForm("bundle.noteAriaLabel")}
                                 onChange={(event) =>
                                   updateComponent(entry.row.id, { note: event.target.value })
                                 }
@@ -2571,7 +2766,7 @@ export default function AddProduct() {
                               <div className="flex items-center justify-center gap-1.5">
                                 <button
                                   type="button"
-                                  aria-label="حذف المكون"
+                                  aria-label={tForm("bundle.deleteComponentAriaLabel")}
                                   className="cursor-pointer text-[#e0484d] transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-30"
                                   disabled={components.length === 1}
                                   onClick={() =>
@@ -2587,8 +2782,8 @@ export default function AddProduct() {
                                     the second branch the button did nothing at all on those rows. */}
                                 <button
                                   type="button"
-                                  aria-label="تعديل المكون"
-                                  title="تعديل المكون"
+                                  aria-label={tForm("bundle.editComponentAriaLabel")}
+                                  title={tForm("bundle.editComponentTitle")}
                                   className="cursor-pointer text-[#2878ff] transition-opacity hover:opacity-70"
                                   onClick={() => {
                                     const trigger = componentTriggers.current[entry.row.id]
@@ -2623,15 +2818,17 @@ export default function AddProduct() {
                         </span>
                         <div>
                           <p className={cn("text-[12.5px] font-extrabold", HEADING)}>
-                            الكمية المتاحة للإنتاج
+                            {tForm("bundle.availableProductionLabel")}
                           </p>
                           <p className="mt-0.5 text-[22px] font-extrabold leading-tight text-[#1f9d55]">
                             {availableProduction === null
                               ? "—"
-                              : `${NUMBER_AR.format(availableProduction)} وحدة`}
+                              : tForm("bundle.availableProductionUnit", {
+                                  count: NUMBER_AR.format(availableProduction),
+                                })}
                           </p>
                           <p className={cn("mt-0.5 text-[10.5px]", MUTED)}>
-                            بناءً على أقل مكون متوفر في المخزون
+                            {tForm("bundle.availableProductionHint")}
                           </p>
                         </div>
                       </div>
@@ -2639,17 +2836,20 @@ export default function AddProduct() {
                       {limiting ? (
                         <div className="flex items-center gap-2">
                           <CalcCell
-                            label="المخزون الحالي"
+                            label={tForm("bundle.calcStockLabel")}
                             value={`${NUMBER_AR.format(limiting.stock ?? 0)} ${limiting.row.stockUnit}`}
                           />
                           <span className={cn("text-[13px] font-bold", MUTED)}>÷</span>
                           <CalcCell
-                            label="الكمية المطلوبة"
-                            value={`${NUMBER_AR.format(limiting.required ?? 0)} ${limiting.row.requiredUnit} لكل وحدة`}
+                            label={tForm("bundle.calcRequiredLabel")}
+                            value={tForm("bundle.calcRequiredValue", {
+                              qty: NUMBER_AR.format(limiting.required ?? 0),
+                              unit: limiting.row.requiredUnit,
+                            })}
                           />
                           <span className={cn("text-[13px] font-bold", MUTED)}>=</span>
                           <CalcCell
-                            label="النتيجة"
+                            label={tForm("bundle.calcResultLabel")}
                             value={NUMBER_AR.format(limiting.producible ?? 0)}
                             emphasis
                           />
@@ -2659,23 +2859,22 @@ export default function AddProduct() {
                       <div className="flex max-w-[250px] items-start gap-2">
                         <CircleCheckBig className="mt-0.5 size-4 shrink-0 text-[#1f9d55]" />
                         <p className={cn("text-[11px] leading-[18px]", HEADING)}>
-                          سيتم خصم كميات المكونات تلقائياً من المخزون عند كل عملية بيع.
+                          {tForm("bundle.autoDeductNotice")}
                         </p>
                       </div>
                     </div>
 
                     {limiting ? (
                       <p className={cn("mt-3 border-t border-[#cdeadb] pt-3 text-[11px]", HEADING)}>
-                        أقل مكون متوفر هو <span className="font-extrabold">{limiting.label}</span>،
-                        لذلك الكمية القصوى المتاحة للإنتاج هي{" "}
-                        <span className="font-extrabold">
-                          {NUMBER_AR.format(limiting.producible ?? 0)} وحدة
-                        </span>
-                        .
+                        {tForm("bundle.limitingNoticeBefore")}
+                        <span className="font-extrabold">{limiting.label}</span>
+                        {tForm("bundle.limitingNoticeAfter", {
+                          count: NUMBER_AR.format(limiting.producible ?? 0),
+                        })}
                       </p>
                     ) : (
                       <p className={cn("mt-3 border-t border-[#cdeadb] pt-3 text-[11px]", MUTED)}>
-                        أضف مكوناً واحداً على الأقل مع كميته المطلوبة لحساب الكمية المتاحة للإنتاج.
+                        {tForm("bundle.noComponentsNotice")}
                       </p>
                     )}
                   </div>
@@ -2694,11 +2893,11 @@ export default function AddProduct() {
                 >
                   <SectionHeading
                     icon={GitBranch}
-                    title="الخيارات والمتغيرات (اختياري)"
+                    title={tForm("optionalVariants.sectionTitle")}
                     subtitle={
                       isBundle
-                        ? "أضف خيارات مثل الحجم أو الإضافات (مثال: حجم كبير، دجاج إضافي)."
-                        : "أضف متغيرات مثل المقاسات أو الألوان إذا كان هذا المنتج يحتوي على عدة خيارات"
+                        ? tForm("optionalVariants.sectionSubtitleBundle")
+                        : tForm("optionalVariants.sectionSubtitleSimple")
                     }
                   />
                   <ChevronDown
@@ -2715,8 +2914,14 @@ export default function AddProduct() {
                       <div key={option.id} className="flex flex-wrap items-center gap-2.5">
                         <Input
                           value={option.name}
-                          aria-label="اسم الخيار"
-                          placeholder={`${optionLabel(index)} (مثال: الحجم)`}
+                          aria-label={tForm("optionalVariants.optionNameAriaLabel")}
+                          placeholder={tForm("optionalVariants.optionNamePlaceholder", {
+                            ordinal: optionLabel(
+                              index,
+                              OPTION_ORDINALS,
+                              tForm("optionOrdinalFallback", { n: index + 1 })
+                            ),
+                          })}
                           className={cn(FIELD_CLASS, "h-10 min-w-[180px] flex-1")}
                           onChange={(event) =>
                             setOptions((current) =>
@@ -2728,8 +2933,8 @@ export default function AddProduct() {
                         />
                         <Input
                           value={option.values.join("، ")}
-                          aria-label="قيم الخيار"
-                          placeholder="القيم مفصولة بفاصلة (كبير، وسط، صغير)"
+                          aria-label={tForm("optionalVariants.valuesAriaLabel")}
+                          placeholder={tForm("optionalVariants.valuesPlaceholder")}
                           className={cn(FIELD_CLASS, "h-10 min-w-[220px] flex-[2]")}
                           onChange={(event) =>
                             setOptions((current) =>
@@ -2749,7 +2954,7 @@ export default function AddProduct() {
                         />
                         <button
                           type="button"
-                          aria-label="حذف الخيار"
+                          aria-label={tForm("optionalVariants.removeOptionAriaLabel")}
                           className="shrink-0 cursor-pointer text-[#e0484d] transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-30"
                           disabled={options.length === 1}
                           onClick={() =>
@@ -2766,7 +2971,7 @@ export default function AddProduct() {
                       className="h-10 w-full rounded-[12px] border-dashed border-[#c4d5f0] bg-white text-[12px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
                       onClick={() => setOptions((current) => [...current, emptyOption()])}
                     >
-                      إضافة خيار
+                      {tForm("optionalVariants.addOptionLabel")}
                     </Button>
                   </div>
                 ) : null}
@@ -2778,23 +2983,23 @@ export default function AddProduct() {
               <section className={cn(PANEL, "p-4 md:p-5")}>
                 <SectionHeading
                   icon={Settings2}
-                  title="معلومات إضافية"
+                  title={tForm("additionalInfo.sectionTitle")}
                   subtitle={
                     productType === "raw"
-                      ? "تفاصيل إضافية عن المادة الخام"
+                      ? tForm("additionalInfo.subtitleRaw")
                       : isService
-                        ? "تفاصيل إضافية عن الخدمة"
-                        : "تفاصيل إضافية عن المنتج"
+                        ? tForm("additionalInfo.subtitleService")
+                        : tForm("additionalInfo.subtitleDefault")
                   }
                 />
 
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  <Field label="ملاحظات داخلية (اختياري)">
+                  <Field label={tForm("additionalInfo.internalNotesLabel")}>
                     <Textarea
                       value={internalNotes}
                       maxLength={NOTES_LIMIT}
                       onChange={(event) => setInternalNotes(event.target.value)}
-                      placeholder="أضف أي ملاحظات داخلية..."
+                      placeholder={tForm("additionalInfo.internalNotesPlaceholder")}
                       className="min-h-[84px] rounded-[12px] border-[#e1e7f0] bg-white text-[13px] placeholder:text-[#95a4bd]"
                     />
                     <p className={cn(HINT, MUTED)}>
@@ -2804,16 +3009,16 @@ export default function AddProduct() {
 
                   {productType === "raw" ? (
                     <>
-                      <Field label="رقم الدفعة (اختياري)">
+                      <Field label={tForm("additionalInfo.batchNumberLabel")}>
                         <Input
                           value={batchNumber}
-                          aria-label="رقم الدفعة"
+                          aria-label={tForm("additionalInfo.batchNumberAriaLabel")}
                           onChange={(event) => setBatchNumber(event.target.value)}
                           placeholder="LOT-001"
                           className={FIELD_CLASS}
                         />
                       </Field>
-                      <Field label="تاريخ الانتهاء (اختياري)">
+                      <Field label={tForm("additionalInfo.expiryDateLabel")}>
                         <DateInput value={expiryDate} onChange={setExpiryDate} />
                       </Field>
                     </>
@@ -2821,24 +3026,24 @@ export default function AddProduct() {
 
                   {productType === "simple" ? (
                     <>
-                      <Field label="تاريخ الانتهاء (اختياري)">
+                      <Field label={tForm("additionalInfo.expiryDateLabel")}>
                         <DateInput value={expiryDate} onChange={setExpiryDate} />
                       </Field>
-                      <Field label="علامة تجارية (اختياري)">
+                      <Field label={tForm("additionalInfo.brandLabel")}>
                         <Input
                           value={brand}
-                          aria-label="العلامة التجارية"
+                          aria-label={tForm("additionalInfo.brandAriaLabel")}
                           onChange={(event) => setBrand(event.target.value)}
-                          placeholder="العلامة التجارية"
+                          placeholder={tForm("additionalInfo.brandPlaceholder")}
                           className={FIELD_CLASS}
                         />
                       </Field>
-                      <Field label="رمز الباركود (اختياري)">
+                      <Field label={tForm("additionalInfo.barcodeLabel")}>
                         {/* RTL: the field is written first so the icon sits on the left. */}
                         <div className="flex overflow-hidden rounded-[12px] border border-[#e1e7f0] bg-white">
                           <Input
                             value={barcode}
-                            aria-label="رمز الباركود"
+                            aria-label={tForm("additionalInfo.barcodeAriaLabel")}
                             onChange={(event) => setBarcode(event.target.value)}
                             placeholder="6281234567890"
                             className="h-11 rounded-none border-0 bg-transparent text-[13px] focus-visible:ring-0"
@@ -2853,15 +3058,15 @@ export default function AddProduct() {
 
                   {productType === "weighted" ? (
                     <>
-                      <Field label="تاريخ الانتهاء (اختياري)">
+                      <Field label={tForm("additionalInfo.expiryDateLabel")}>
                         <DateInput value={expiryDate} onChange={setExpiryDate} />
                       </Field>
-                      <Field label="بلد المنشأ (اختياري)">
+                      <Field label={tForm("additionalInfo.countryLabel")}>
                         <Input
                           value={countryOfOrigin}
-                          aria-label="بلد المنشأ"
+                          aria-label={tForm("additionalInfo.countryAriaLabel")}
                           onChange={(event) => setCountryOfOrigin(event.target.value)}
-                          placeholder="المملكة العربية السعودية"
+                          placeholder={tForm("additionalInfo.countryPlaceholder")}
                           className={FIELD_CLASS}
                         />
                       </Field>
@@ -2869,36 +3074,36 @@ export default function AddProduct() {
                   ) : null}
 
                   {isService ? (
-                    <Field label="طريقة تقديم الخدمة">
+                    <Field label={tForm("additionalInfo.deliveryMethodLabel")}>
                       <AppSearchableSelect
                         value={deliveryMethod}
                         options={DELIVERY_METHOD_OPTIONS}
                         onChange={setDeliveryMethod}
-                        ariaLabel="طريقة تقديم الخدمة"
+                        ariaLabel={tForm("additionalInfo.deliveryMethodAriaLabel")}
                       />
                     </Field>
                   ) : null}
 
                   {productType === "digital" ? (
                     <>
-                      <Field label="متطلبات النظام (اختياري)">
+                      <Field label={tForm("additionalInfo.systemRequirementsLabel")}>
                         <Textarea
                           value={systemRequirements}
                           maxLength={NOTES_LIMIT}
                           onChange={(event) => setSystemRequirements(event.target.value)}
-                          placeholder="مثال: يحتاج إلى PDF أو برنامج معين..."
+                          placeholder={tForm("additionalInfo.systemRequirementsPlaceholder")}
                           className="min-h-[84px] rounded-[12px] border-[#e1e7f0] bg-white text-[13px] placeholder:text-[#95a4bd]"
                         />
                         <p className={cn(HINT, MUTED)}>
                           {systemRequirements.length}/{NOTES_LIMIT}
                         </p>
                       </Field>
-                      <Field label="لغة المنتج (اختياري)">
+                      <Field label={tForm("additionalInfo.productLanguageLabel")}>
                         <AppSearchableSelect
                           value={productLanguage}
                           options={PRODUCT_LANGUAGE_OPTIONS}
                           onChange={setProductLanguage}
-                          ariaLabel="لغة المنتج"
+                          ariaLabel={tForm("additionalInfo.productLanguageAriaLabel")}
                         />
                       </Field>
                     </>
@@ -2906,15 +3111,15 @@ export default function AddProduct() {
 
                   {isBundle ? (
                     <>
-                      <Field label="مدة التحضير (اختياري)">
+                      <Field label={tForm("additionalInfo.preparationTimeLabel")}>
                         <SuffixInput
                           value={serviceDuration}
                           onChange={setServiceDuration}
-                          suffix="دقيقة"
-                          label="مدة التحضير"
+                          suffix={tForm("additionalInfo.preparationTimeSuffix")}
+                          label={tForm("additionalInfo.preparationTimeLabel")}
                         />
                       </Field>
-                      <Field label="تاريخ الإنتهاء (اختياري)">
+                      <Field label={tForm("additionalInfo.expiryDateLabel")}>
                         <DateInput value={expiryDate} onChange={setExpiryDate} />
                       </Field>
                     </>
@@ -2944,11 +3149,11 @@ export default function AddProduct() {
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Pencil className="size-3" />
-                      تعديل الصورة
+                      {tForm("images.editLabel")}
                     </button>
                     <button
                       type="button"
-                      aria-label="حذف الصورة"
+                      aria-label={tForm("images.deleteImageAriaLabel")}
                       className="absolute end-2.5 top-2.5 flex size-7 cursor-pointer items-center justify-center rounded-full bg-[#0b1738]/85 text-white backdrop-blur transition-colors hover:bg-[#e0484d]"
                       onClick={() => removeImage(images[0].id)}
                     >
@@ -2977,8 +3182,8 @@ export default function AddProduct() {
                             type="button"
                             aria-label={
                               isPrimary
-                                ? `${image.name} — الصورة الرئيسية`
-                                : `اجعل ${image.name} الصورة الرئيسية`
+                                ? tForm("images.primaryAriaLabel", { name: image.name })
+                                : tForm("images.setPrimaryAriaLabel", { name: image.name })
                             }
                             className="size-full cursor-pointer"
                             disabled={isPrimary}
@@ -2999,13 +3204,15 @@ export default function AddProduct() {
 
                           {isPrimary ? (
                             <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-[#2878ff] py-0.5 text-center text-[8.5px] font-bold text-white">
-                              رئيسية
+                              {tForm("images.primaryBadge")}
                             </span>
                           ) : null}
 
                           <button
                             type="button"
-                            aria-label={`حذف ${image.name}`}
+                            aria-label={tForm("images.deleteThumbnailAriaLabel", {
+                              name: image.name,
+                            })}
                             className="absolute end-1 top-1 flex size-5 cursor-pointer items-center justify-center rounded-full bg-white/90 text-[#e0484d] opacity-0 transition-opacity group-hover:opacity-100"
                             onClick={() => removeImage(image.id)}
                           >
@@ -3017,7 +3224,7 @@ export default function AddProduct() {
 
                     <button
                       type="button"
-                      aria-label="إضافة صورة"
+                      aria-label={tForm("images.addImageAriaLabel")}
                       className="flex aspect-square cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-[#cfd9e8] bg-white text-[#95a4bd] transition-colors hover:border-[#2878ff] hover:text-[#2878ff]"
                       onClick={() => fileInputRef.current?.click()}
                     >
@@ -3040,9 +3247,11 @@ export default function AddProduct() {
                     <ImageIcon className="size-5" />
                   </span>
                   <span className={cn("mt-3 text-[12.5px] font-bold", HEADING)}>
-                    اسحب وأفلت الصورة هنا
+                    {tForm("images.dropzoneLabel")}
                   </span>
-                  <span className={cn("mt-1 text-[11px]", MUTED)}>أو اضغط للاختيار من الجهاز</span>
+                  <span className={cn("mt-1 text-[11px]", MUTED)}>
+                    {tForm("images.dropzoneHint")}
+                  </span>
                 </button>
               )}
 
@@ -3059,15 +3268,17 @@ export default function AddProduct() {
               />
 
               <p className={cn("mt-2.5 text-center text-[10.5px]", MUTED)}>
-                PNG, JPG, WebP حتى 10MB
+                {tForm("images.formatsHint")}
               </p>
             </section>
 
             <section className={cn(PANEL, "p-4 md:p-5")}>
               <SectionHeading
                 icon={Send}
-                title="حالة النشر"
-                subtitle={`تحكم في ظهور ${isService ? "الخدمة" : "المنتج"} في المتجر`}
+                title={tForm("publish.sectionTitle")}
+                subtitle={tForm("publish.subtitle", {
+                  thing: isService ? tForm("publish.serviceWord") : tForm("publish.productWord"),
+                })}
                 roundIcon
               />
 
@@ -3083,14 +3294,14 @@ export default function AddProduct() {
                   htmlFor="published"
                   className={cn("cursor-pointer text-[15px] font-extrabold", HEADING)}
                 >
-                  {published ? "منشور" : "غير منشور"}
+                  {published ? tForm("publish.publishedLabel") : tForm("publish.unpublishedLabel")}
                 </Label>
               </div>
 
               <p className={cn("mt-3 text-[10.5px]", MUTED)}>
                 {published
-                  ? `${isService ? "ستظهر الخدمة" : "سيظهر المنتج"} في جميع قنوات البيع المتصلة`
-                  : `${isService ? "لن تظهر الخدمة" : "لن يظهر المنتج"} للعملاء حتى يتم النشر`}
+                  ? `${isService ? tForm("publish.willShowService") : tForm("publish.willShowProduct")} ${tForm("publish.publishedHintSuffix")}`
+                  : `${isService ? tForm("publish.willNotShowService") : tForm("publish.willNotShowProduct")} ${tForm("publish.unpublishedHintSuffix")}`}
               </p>
             </section>
 
@@ -3104,7 +3315,11 @@ export default function AddProduct() {
                   aria-expanded={extraOpen}
                   onClick={() => setExtraOpen((current) => !current)}
                 >
-                  <SectionHeading icon={Settings2} title="معلومات إضافية" subtitle="" />
+                  <SectionHeading
+                    icon={Settings2}
+                    title={tForm("variableExtra.sectionTitle")}
+                    subtitle=""
+                  />
                   <ChevronDown
                     className={cn(
                       "size-5 shrink-0 text-[#95a4bd] transition-transform",
@@ -3115,25 +3330,25 @@ export default function AddProduct() {
 
                 {extraOpen ? (
                   <div className="mt-4 space-y-3.5">
-                    <Field label="العلامة التجارية (اختياري)">
+                    <Field label={tForm("variableExtra.brandLabel")}>
                       <Input
                         value={brand}
-                        aria-label="العلامة التجارية"
+                        aria-label={tForm("variableExtra.brandAriaLabel")}
                         onChange={(event) => setBrand(event.target.value)}
-                        placeholder="Nike"
+                        placeholder={tForm("variableExtra.brandPlaceholder")}
                         className={FIELD_CLASS}
                       />
                     </Field>
-                    <Field label="الموديل (اختياري)">
+                    <Field label={tForm("variableExtra.modelLabel")}>
                       <Input
                         value={model}
-                        aria-label="الموديل"
+                        aria-label={tForm("variableExtra.modelAriaLabel")}
                         onChange={(event) => setModel(event.target.value)}
-                        placeholder="Air Max"
+                        placeholder={tForm("variableExtra.modelPlaceholder")}
                         className={FIELD_CLASS}
                       />
                     </Field>
-                    <Field label="ملاحظات داخلية (اختياري)">
+                    <Field label={tForm("variableExtra.internalNotesLabel")}>
                       <Textarea
                         value={internalNotes}
                         maxLength={NOTES_LIMIT}
@@ -3150,19 +3365,23 @@ export default function AddProduct() {
             ) : null}
 
             <section className={cn(PANEL, "p-4 md:p-5")}>
-              <SectionHeading icon={Info} title="معلومات سريعة" subtitle="" />
+              <SectionHeading icon={Info} title={tForm("quickFacts.sectionTitle")} subtitle="" />
 
               <div className="mt-4 space-y-3">
                 {/* Dates are the draft's own, not a stored record -- nothing is saved yet. */}
                 <QuickFact
                   icon={CalendarDays}
-                  label="تاريخ الإضافة"
+                  label={tForm("quickFacts.addedDateLabel")}
                   value={DATE_AR.format(new Date())}
                 />
-                <QuickFact icon={Clock} label="آخر تحديث" value={DATE_AR.format(new Date())} />
+                <QuickFact
+                  icon={Clock}
+                  label={tForm("quickFacts.lastUpdatedLabel")}
+                  value={DATE_AR.format(new Date())}
+                />
                 <QuickFact
                   icon={User}
-                  label="أضيف بواسطة"
+                  label={tForm("quickFacts.addedByLabel")}
                   value={currentUser?.fullName || currentUser?.email || "—"}
                 />
               </div>
@@ -3186,7 +3405,11 @@ export default function AddProduct() {
             disabled={saving}
             onClick={() => void submit(false)}
           >
-            {saving ? "جارٍ الحفظ..." : isEditing ? "حفظ التعديلات" : type.saveLabel}
+            {saving
+              ? tForm("actions.saving")
+              : isEditing
+                ? tForm("actions.saveEditing")
+                : type.saveLabel}
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           </Button>
           <Button
@@ -3195,7 +3418,7 @@ export default function AddProduct() {
             disabled={saving}
             onClick={() => void submit(true)}
           >
-            حفظ كمسودة
+            {tForm("actions.saveDraft")}
             <Tag className="size-4" />
           </Button>
           {/* RTL: written last so it sits at the far left, away from the save actions -- it is
@@ -3206,7 +3429,7 @@ export default function AddProduct() {
             disabled={saving}
             onClick={cancel}
           >
-            إلغاء
+            {tForm("actions.cancel")}
           </Button>
         </div>
       </div>
@@ -3214,10 +3437,8 @@ export default function AddProduct() {
   )
 }
 
-const OPTION_ORDINALS = ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"]
-
-function optionLabel(index: number) {
-  return OPTION_ORDINALS[index] ?? `الخيار ${index + 1}`
+function optionLabel(index: number, ordinals: string[], fallback: string) {
+  return ordinals[index] ?? fallback
 }
 
 function SectionHeading({
@@ -3284,6 +3505,7 @@ function MoneyInput({
   onChange: (next: string) => void
   label: string
 }) {
+  const tForm = useTranslations("products.form")
   // RTL: the field is written first so the currency chip sits on the left, as in the export.
   return (
     <div className="flex overflow-hidden rounded-[12px] border border-[#e1e7f0] bg-white">
@@ -3303,7 +3525,7 @@ function MoneyInput({
           MUTED
         )}
       >
-        ريال
+        {tForm("moneyInput.currency")}
       </span>
     </div>
   )
@@ -3324,14 +3546,15 @@ function PriceTaxIndicator({
   setPriceIncludesTax: (next: boolean) => void
   priceTaxHint: string
 }) {
+  const tForm = useTranslations("products.form")
   if (isManualTaxMode) {
     return (
       <div className="mt-1.5">
         <AppSearchableSelect
           value={priceIncludesTax ? "included" : "excluded"}
-          options={PRICE_TAX_MODE_OPTIONS}
+          options={getPriceTaxModeOptions(tForm)}
           onChange={(value) => setPriceIncludesTax(value === "included")}
-          ariaLabel="شمول الضريبة"
+          ariaLabel={tForm("priceTaxMode.ariaLabel")}
           compact
         />
       </div>
@@ -3379,14 +3602,23 @@ function DateInput({ value, onChange }: { value: string; onChange: (next: string
   return <AppDateField value={value} onChange={onChange} />
 }
 
-function UnitSelect({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+function UnitSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (next: string) => void
+  options: AppSearchableSelectOption[]
+}) {
+  const tForm = useTranslations("products.form")
   return (
     <AppSearchableSelect
       value={value}
-      options={BASE_UNIT_OPTIONS}
+      options={options}
       onChange={onChange}
-      ariaLabel="وحدة القياس"
-      searchPlaceholder="البحث عن وحدة قياس..."
+      ariaLabel={tForm("unitSelect.ariaLabel")}
+      searchPlaceholder={tForm("unitSelect.searchPlaceholder")}
     />
   )
 }
@@ -3423,23 +3655,34 @@ function PackagingReadout({
   perCarton: number
   linkedName: string | null
 }) {
+  const tForm = useTranslations("products.form")
+  const locale = useLocale() as Locale
+  const numberFormat = useMemo(() => numberFormatter(locale), [locale])
   const { cartons, remainder, pieces } = breakdown
 
   // Read out both ways round: the shelf figure (whole cartons plus loose pieces) and the total
   // in single units, since a stock count is done in one and a sale happens in the other.
   const shelf =
     remainder === 0
-      ? `${NUMBER_AR.format(cartons)} كرتون`
+      ? tForm("packaging.shelfCartons", { count: numberFormat.format(cartons) })
       : cartons === 0
-        ? `${NUMBER_AR.format(remainder)} حبة`
-        : `${NUMBER_AR.format(cartons)} كرتون و ${NUMBER_AR.format(remainder)} حبة`
+        ? tForm("packaging.shelfPieces", { count: numberFormat.format(remainder) })
+        : tForm("packaging.shelfCartonsAndPieces", {
+            count: numberFormat.format(cartons),
+            remainder: numberFormat.format(remainder),
+          })
 
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-[10px] bg-[#f2fbf6] px-2.5 py-1.5">
       <span className="text-[11px] font-bold text-[#1f9d55]">{shelf}</span>
       <span className="text-[10.5px] text-[#6b7b96]">
-        = {NUMBER_AR.format(pieces)} حبة{linkedName ? ` من ${linkedName}` : ""} · الكرتون{" "}
-        {NUMBER_AR.format(perCarton)} حبة
+        {tForm("packaging.totalPieces", {
+          count: numberFormat.format(pieces),
+          linked: linkedName
+            ? tForm("packaging.totalPiecesLinkedSuffix", { name: linkedName })
+            : "",
+          perCarton: numberFormat.format(perCarton),
+        })}
       </span>
     </div>
   )

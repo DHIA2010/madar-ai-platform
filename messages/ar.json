@@ -1367,5 +1367,646 @@
       },
       "csvFilenamePrefix": "كشف-حساب"
     }
+  },
+  "products": {
+    "types": {
+      "simple": {
+        "title": "منتج عادي",
+        "description": "منتج جاهز للبيع",
+        "pageTitle": "إضافة منتج عادي",
+        "pageSubtitle": "إضافة منتج جاهز للبيع في متجرك.",
+        "saveLabel": "حفظ المنتج",
+        "imageCardTitle": "صورة المنتج",
+        "nameLabel": "اسم المنتج",
+        "skuLabel": "رمز المنتج (SKU)",
+        "descriptionLabel": "وصف المنتج"
+      },
+      "variable": {
+        "title": "منتج متغير",
+        "description": "متغيرات مثل المقاس",
+        "pageTitle": "إضافة منتج متغير",
+        "pageSubtitle": "إضافة منتج متعدد المتغيرات مثل المقاسات والألوان وغيرها.",
+        "saveLabel": "حفظ المنتج",
+        "imageCardTitle": "صورة المنتج",
+        "nameLabel": "اسم المنتج",
+        "skuLabel": "رمز المنتج (SKU)",
+        "descriptionLabel": "وصف المنتج"
+      },
+      "weighted": {
+        "title": "منتج موزون",
+        "description": "يُباع بالوزن",
+        "pageTitle": "إضافة منتج موزون",
+        "pageSubtitle": "إضافة منتج يباع بالوزن مثل الجرام أو الكيلو.",
+        "saveLabel": "حفظ المنتج",
+        "imageCardTitle": "صورة المنتج",
+        "nameLabel": "اسم المنتج",
+        "skuLabel": "رمز المنتج (SKU)",
+        "descriptionLabel": "وصف المنتج"
+      },
+      "digital": {
+        "title": "منتج رقمي",
+        "description": "ملف أو رابط تحميل",
+        "pageTitle": "إضافة منتج رقمي",
+        "pageSubtitle": "إضافة منتج رقمي قابل للتحميل أو الوصول الرقمي.",
+        "saveLabel": "حفظ المنتج",
+        "imageCardTitle": "صورة المنتج",
+        "nameLabel": "اسم المنتج",
+        "skuLabel": "رمز المنتج (SKU)",
+        "descriptionLabel": "وصف المنتج"
+      },
+      "bundle": {
+        "title": "منتج مجمع",
+        "description": "يتكون من عدة مكونات",
+        "pageTitle": "إضافة منتج مجمع",
+        "pageSubtitle": "إنشاء منتج يتكون من عدة مكونات يتم خصمها من المخزون عند البيع.",
+        "saveLabel": "حفظ المنتج",
+        "imageCardTitle": "صورة المنتج",
+        "nameLabel": "اسم المنتج",
+        "skuLabel": "رمز المنتج (SKU)",
+        "descriptionLabel": "وصف المنتج"
+      },
+      "raw": {
+        "title": "مادة خام",
+        "description": "مادة أولية للمخزون",
+        "pageTitle": "إضافة مادة خام",
+        "pageSubtitle": "إضافة مادة أولية للمخزون تستخدم في المنتجات المجمعة أو تباع مباشرة.",
+        "saveLabel": "حفظ المنتج",
+        "imageCardTitle": "صورة المنتج",
+        "nameLabel": "اسم المنتج",
+        "skuLabel": "رمز المنتج (SKU)",
+        "descriptionLabel": "وصف المنتج"
+      },
+      "service": {
+        "title": "خدمة",
+        "description": "خدمة تقدم للعميل",
+        "pageTitle": "إضافة خدمة جديدة",
+        "pageSubtitle": "إضافة خدمة تقدم للعميل مثل الاستشارات أو الصيانة أو التوصيل.",
+        "saveLabel": "حفظ الخدمة",
+        "imageCardTitle": "صورة الخدمة",
+        "nameLabel": "اسم الخدمة",
+        "skuLabel": "رمز الخدمة (SKU)",
+        "descriptionLabel": "وصف الخدمة"
+      }
+    },
+    "units": {
+      "kg": {
+        "label": "كجم",
+        "hint": "وزن · 1000 جرام"
+      },
+      "g": {
+        "label": "جرام",
+        "hint": "وزن"
+      },
+      "l": {
+        "label": "لتر",
+        "hint": "حجم · 1000 مل"
+      },
+      "ml": {
+        "label": "مل",
+        "hint": "حجم"
+      },
+      "pcs": {
+        "label": "حبة",
+        "hint": "عدد"
+      },
+      "ctn": {
+        "label": "كرتون",
+        "hint": "تعبئة · حدد عدد الحبات"
+      }
+    },
+    "pricingType": {
+      "fixed": {
+        "label": "سعر ثابت",
+        "hint": "مبلغ واحد لكل طلب"
+      },
+      "hourly": {
+        "label": "سعر بالساعة",
+        "hint": "يُحتسب حسب المدة"
+      },
+      "custom": {
+        "label": "حسب الطلب",
+        "hint": "يُحدد لكل عميل"
+      }
+    },
+    "serviceDuration": {
+      "minute": "دقيقة",
+      "hour": "ساعة",
+      "day": "يوم"
+    },
+    "deliveryMethod": {
+      "online": "عبر الإنترنت",
+      "onsite": "في الموقع",
+      "atCustomer": "لدى العميل"
+    },
+    "language": {
+      "arabic": "العربية",
+      "english": "الإنجليزية",
+      "multilingual": "متعدد اللغات"
+    },
+    "filters": {
+      "platform": {
+        "all": "جميع المنصات",
+        "shopify": "Shopify",
+        "salla": "Salla",
+        "zid": "Zid",
+        "madar": "مدار"
+      },
+      "category": {
+        "all": "جميع الفئات"
+      },
+      "inventoryStatus": {
+        "all": "جميع حالات المخزون",
+        "inStock": "متوفر",
+        "lowStock": "مخزون منخفض",
+        "outOfStock": "نفدت الكمية"
+      },
+      "status": {
+        "all": "جميع الحالات",
+        "active": "نشط",
+        "draft": "مسودة",
+        "archived": "مؤرشف"
+      },
+      "productType": {
+        "all": "جميع أنواع المنتجات"
+      }
+    },
+    "list": {
+      "heading": "المنتجات",
+      "subheading": "إدارة منتجاتك ومتابعة المخزون والأداء عبر جميع المتاجر المتصلة.",
+      "import": "استيراد",
+      "export": "تصدير",
+      "addProduct": "إضافة منتج",
+      "kpis": {
+        "total": {
+          "label": "إجمالي المنتجات",
+          "footnote": "من جميع المتاجر المتصلة"
+        },
+        "active": {
+          "label": "المنتجات النشطة",
+          "footnote": "منشورة وظاهرة للعملاء"
+        },
+        "lowStock": {
+          "label": "منتجات منخفضة المخزون",
+          "footnote": "المخزون 30 وحدة أو أقل"
+        },
+        "inventoryValue": {
+          "label": "قيمة المخزون",
+          "footnote": "بسعر التكلفة للكمية المتاحة"
+        }
+      },
+      "searchPlaceholder": "البحث في المنتجات أو SKU...",
+      "viewTable": "عرض جدول",
+      "viewGrid": "عرض شبكي",
+      "productCount": "{count} منتج",
+      "selectedCount": "{count} محدد",
+      "changeStatus": "تغيير الحالة",
+      "loadingProducts": "جارٍ تحميل المنتجات من متاجرك المتصلة...",
+      "loadError": "تعذر تحميل المنتجات من متاجرك المتصلة. حاول مرة أخرى.",
+      "emptyTitle": "لا توجد منتجات مطابقة للفلاتر الحالية",
+      "emptyDescription": "جرّب تغيير المنصة أو الفئة أو حالة المخزون أو الفترة الزمنية.",
+      "availableSuffix": "{count} متاح",
+      "noResults": "لا توجد نتائج",
+      "showingRange": "عرض {from} - {to} من {total}",
+      "itemsPerPage": "عدد العناصر في الصفحة",
+      "skuLabel": "رمز المنتج",
+      "table": {
+        "selectAll": "تحديد كل المنتجات في الصفحة",
+        "selectRow": "تحديد {name}",
+        "columns": {
+          "product": "المنتج",
+          "sku": "SKU",
+          "category": "الفئة",
+          "status": "الحالة",
+          "inventory": "حالة المخزون",
+          "stock": "الكمية المتاحة",
+          "cost": "سعر التكلفة",
+          "price": "سعر البيع",
+          "platform": "المنصة",
+          "actions": "إجراءات"
+        }
+      },
+      "pagination": {
+        "first": "الصفحة الأولى",
+        "previous": "الصفحة السابقة",
+        "next": "الصفحة التالية",
+        "last": "الصفحة الأخيرة"
+      },
+      "rowActions": {
+        "actionsLabel": "إجراءات {name}",
+        "viewDetails": "عرض التفاصيل",
+        "edit": "تعديل المنتج",
+        "copySku": "نسخ رمز المنتج",
+        "exportThis": "تصدير هذا المنتج",
+        "delete": "حذف المنتج",
+        "importedTitle": "المنتجات المستوردة من المتجر تُدار من المتجر نفسه"
+      },
+      "detail": {
+        "addedInMadar": "منتج تمت إضافته في مدار",
+        "importedFrom": "منتج مستورد من {platform}",
+        "sellingPrice": "سعر البيع",
+        "costPrice": "سعر التكلفة",
+        "availableStock": "الكمية المتاحة",
+        "sku": "رمز المنتج",
+        "noSkuForType": "لا يوجد رمز لهذا النوع",
+        "category": "الفئة",
+        "margin": "هامش الربح",
+        "lastUpdated": "آخر تحديث",
+        "edit": "تعديل المنتج",
+        "delete": "حذف",
+        "close": "إغلاق",
+        "managedElsewhere": "هذا المنتج يُدار من {platform} ولا يمكن تعديله هنا."
+      },
+      "deleteDialog": {
+        "title": "حذف المنتج؟",
+        "descriptionBefore": "سيتم حذف",
+        "descriptionAfter": "من قائمة المنتجات. لن يظهر بعد ذلك في المتجر أو في التقارير.",
+        "deleting": "جارٍ الحذف...",
+        "confirm": "حذف"
+      },
+      "importDialog": {
+        "title": "استيراد منتجات",
+        "description": "ارفع ملف CSV لإضافة عدة منتجات دفعة واحدة. يدعم الاستيراد أنواع المنتجات: {types} -- أما الحزم والمنتجات متعددة الخيارات فتُضاف يدوياً من صفحة إضافة منتج، لأنها تحتاج اختيار مكونات أو متغيرات لا تتسع لها خانة واحدة في الجدول.",
+        "chooseFile": "اضغط لاختيار ملف CSV",
+        "columnsHint": "الأعمدة: name, sku, category, type, status, cost_price, sell_price, stock, min_stock, unit, description",
+        "rowsFound": "تم العثور على {count} صف",
+        "downloadTemplate": "تحميل نموذج CSV",
+        "resultSummary": "تم إضافة {created} منتج",
+        "resultSkippedSuffix": "، وتخطي {count} صف",
+        "rowError": "السطر {row} في الملف: {reason}",
+        "importing": "جارٍ الاستيراد...",
+        "importButton": "استيراد",
+        "importButtonWithCount": "استيراد ({count})",
+        "close": "إغلاق",
+        "listSeparator": "، "
+      },
+      "importTemplate": {
+        "filename": "نموذج-استيراد-المنتجات",
+        "row1Name": "قميص قطن",
+        "row1Category": "ملابس",
+        "row1Unit": "حبة",
+        "row2Name": "دقيق فاخر",
+        "row2Category": "مواد خام",
+        "row2Unit": "كجم",
+        "row3Name": "استشارة تسويقية",
+        "row3Category": "خدمات"
+      },
+      "toasts": {
+        "selectCsvFirst": "اختر ملف CSV يحتوي على منتجات أولاً.",
+        "importSuccess": "تم إضافة {count} منتج.",
+        "importError": "تعذر استيراد الملف.",
+        "cannotChangeImported": "لا يمكن تغيير حالة المنتجات المستوردة من المتجر من هنا.",
+        "statusUpdateSuccess": "تم تحديث حالة {count} منتج.",
+        "statusUpdateSkipped": "تم تجاوز {count} منتج مستورد من المتجر -- يُدار من المتجر نفسه.",
+        "noEditPermission": "لا تملك صلاحية تعديل المنتجات.",
+        "contactOwnerEdit": "تواصل مع مالك الحساب لمنحك صلاحية products:edit.",
+        "statusUpdateError": "تعذر تحديث حالة المنتجات.",
+        "copyNothingToCopy": "لا يوجد {label} لهذا المنتج.",
+        "copiedSuccess": "تم نسخ {label}.",
+        "copyError": "تعذر النسخ — انسخ {label} يدوياً.",
+        "deleteSuccess": "تم حذف المنتج.",
+        "noDeletePermission": "لا تملك صلاحية حذف المنتجات.",
+        "contactOwnerDelete": "تواصل مع مالك الحساب لمنحك صلاحية products:delete.",
+        "deleteError": "تعذر حذف المنتج."
+      }
+    },
+    "form": {
+      "breadcrumb": {
+        "products": "المنتجات"
+      },
+      "header": {
+        "editGeneric": "تعديل منتج",
+        "addGeneric": "إضافة منتج جديد",
+        "editTyped": "تعديل {type}"
+      },
+      "loadingProduct": "جارٍ تحميل بيانات المنتج...",
+      "typeLocked": "لا يمكن تغيير نوع منتج محفوظ — أنشئ منتجاً جديداً بالنوع المطلوب",
+      "basicInfo": {
+        "title": "المعلومات الأساسية",
+        "subtitleRaw": "أدخل تفاصيل المادة الخام",
+        "subtitleService": "أدخل تفاصيل الخدمة الرئيسية",
+        "subtitleDefault": "أدخل تفاصيل المنتج الرئيسي",
+        "categoryLabel": "الفئة",
+        "categoryCreateLabel": "إضافة فئة \"{draft}\"",
+        "categoryPlaceholder": "اختر الفئة أو اكتب فئة جديدة",
+        "categorySearchPlaceholder": "ابحث أو اكتب فئة جديدة...",
+        "categoryEmptyLabel": "لا توجد فئة مطابقة",
+        "workspaceLabel": "موقع المخزون",
+        "workspacePlaceholder": "اختر مساحة العمل",
+        "workspaceSearchPlaceholder": "ابحث عن مساحة عمل...",
+        "workspaceEmptyLabel": "لا توجد مساحة عمل مطابقة",
+        "taxLabel": "الضريبة",
+        "taxDefaultOption": "استخدام المعدل الافتراضي",
+        "generateSkuButton": "توليد تلقائي"
+      },
+      "stock": {
+        "currentLabel": "الكمية الحالية في المخزون",
+        "minLabel": "الحد الأدنى للمخزون",
+        "minHint": "سيتم تنبيهك عند الوصول إلى هذا الحد"
+      },
+      "packaging": {
+        "linkedProductLabel": "المنتج المرتبط (بالحبة)",
+        "linkedProductPlaceholder": "اختر المنتج المباع بالحبة",
+        "linkedProductSearchPlaceholder": "ابحث في المنتجات بالحبة...",
+        "linkedProductEmptyNone": "لا يوجد منتج مقاس بالحبة بعد",
+        "linkedProductEmptyNoMatch": "لا يوجد منتج مطابق",
+        "linkedProductAriaLabel": "المنتج المرتبط",
+        "linkedProductHint": "الكرتون تعبئة لهذا المنتج — بيع كرتون يخصم من مخزونه",
+        "unitsPerCartonLabel": "عدد الحبات في الكرتون",
+        "unitsPerCartonHintWithProduct": "1 كرتون = {count} حبة من {name}",
+        "unitsPerCartonHintDefault": "يربط كمية الكرتون بكمية الحبة",
+        "shelfCartons": "{count} كرتون",
+        "shelfPieces": "{count} حبة",
+        "shelfCartonsAndPieces": "{count} كرتون و {remainder} حبة",
+        "totalPieces": "= {count} حبة{linked} · الكرتون {perCarton} حبة",
+        "totalPiecesLinkedSuffix": " من {name}",
+        "pieceSuffix": "حبة",
+        "piecesInStock": "{count} حبة في المخزون"
+      },
+      "raw": {
+        "sectionTitle": "المخزون والتسعير",
+        "sectionSubtitle": "حدد كمية المخزون الحالية وتكلفة الشراء",
+        "baseUnitLabel": "وحدة القياس الأساسية",
+        "costPriceLabel": "سعر الشراء (التكلفة)",
+        "costPriceAriaLabel": "سعر الشراء",
+        "costPriceHint": "سعر الشراء لكل {unit}",
+        "supplierLabel": "المورد (اختياري)",
+        "supplierAriaLabel": "المورد",
+        "supplierPlaceholder": "اسم المورد",
+        "stockNotesLabel": "ملاحظات المخزون (اختياري)",
+        "stockNotesPlaceholder": "مثال: تاريخ الدفعة، رقم الفاتورة..."
+      },
+      "simple": {
+        "sectionTitle": "السعر والمخزون",
+        "sectionSubtitle": "حدد سعر المنتج وكميات المخزون",
+        "sellPriceLabel": "سعر البيع",
+        "costPriceLabel": "سعر التكلفة",
+        "unitLabel": "وحدة القياس"
+      },
+      "weighted": {
+        "sectionTitle": "معلومات الوزن والتسعير",
+        "sectionSubtitle": "حدد وحدة الوزن وسعر المنتج وإعدادات البيع",
+        "baseUnitLabel": "وحدة الوزن الأساسية",
+        "sellPriceLabel": "سعر البيع لل{unit}",
+        "minPurchaseLabel": "الحد الأدنى للشراء",
+        "minPurchaseAriaLabel": "الحد الأدنى للشراء",
+        "minPurchaseHint": "أقل كمية يمكن شراؤها (بال{unit})",
+        "infoTitle": "سيتم احتساب السعر تلقائياً بناءً على الوزن الذي يحدده العميل عند الشراء.",
+        "infoExampleWithPrice": "مثال: 0.5 {unit} × {price} ريال = {total} ريال.",
+        "infoExampleDefault": "مثال: 0.5 {unit} × سعر ال{unit} = السعر النهائي.",
+        "stockSectionTitle": "مخزون المنتج",
+        "stockSectionSubtitle": "حدد كمية المخزون الحالية"
+      },
+      "service": {
+        "pricingSectionTitle": "التسعير والمدة",
+        "pricingSectionSubtitle": "حدد سعر الخدمة ومدة تقديمها",
+        "pricingTypeLabel": "نوع التسعير",
+        "priceLabel": "السعر",
+        "durationLabel": "مدة الخدمة",
+        "durationAriaLabel": "مدة الخدمة",
+        "durationUnitAriaLabel": "وحدة مدة الخدمة",
+        "durationHint": "المدة الافتراضية لتقديم الخدمة",
+        "availabilitySectionTitle": "التوفر والحجز (اختياري)",
+        "availabilitySectionSubtitle": "حدد مواعيد التوفر إذا كانت الخدمة تتطلب حجزاً مسبقاً",
+        "availabilityInfo": "يمكنك لاحقاً ربط الخدمة مع تقويم المواعيد لإدارة الحجوزات تلقائياً.",
+        "bookingLabel": "تفعيل الحجز المسبق",
+        "bookingHint": "السماح للعملاء بحجز مواعيد لهذه الخدمة"
+      },
+      "digital": {
+        "sectionTitle": "التسعير",
+        "sectionSubtitle": "حدد سعر المنتج الرقمي",
+        "priceLabel": "السعر",
+        "offerPriceLabel": "سعر العرض (اختياري)",
+        "offerPriceAriaLabel": "سعر العرض"
+      },
+      "variants": {
+        "sectionTitle": "المتغيرات",
+        "sectionSubtitle": "أضف خيارات المتغيرات مثل المقاسات والألوان. يمكنك دمج أكثر من خيار.",
+        "optionNameAriaLabel": "اسم الخيار",
+        "optionNamePlaceholder": "المقاس",
+        "addValueAriaLabel": "إضافة قيمة",
+        "addValuePlaceholder": "أضف قيمة ثم Enter",
+        "removeValueAriaLabel": "حذف {value}",
+        "removeOptionAriaLabel": "حذف الخيار",
+        "addOptionLabel": "إضافة خيار آخر",
+        "generatedSectionTitle": "المتغيرات الناتجة ({count})",
+        "generatedSectionSubtitle": "سيتم إنشاء متغير لكل توليفة من الخيارات. يمكنك تعديل التفاصيل لكل متغير.",
+        "generateSkuButton": "توليد جميع SKU تلقائياً",
+        "truncatedWarning": "عدد التوليفات يتجاوز الحد الأقصى، لذلك يتم عرض أول {count} متغير فقط. قلّل عدد القيم أو الخيارات لعرضها جميعاً.",
+        "excludedNotice": "تم استبعاد {count} متغير من هذا المنتج.",
+        "restoreAll": "استعادة الكل",
+        "quickApplyTitle": "تطبيق سريع",
+        "quickApplySelected": "على {count} محدد",
+        "quickApplyAll": "على الكل ({count})",
+        "bulkPriceAriaLabel": "سعر موحد",
+        "bulkPricePlaceholder": "السعر",
+        "bulkStockAriaLabel": "كمية موحدة",
+        "bulkStockPlaceholder": "الكمية",
+        "applyButton": "تطبيق",
+        "excludeSelected": "استبعاد المحدد",
+        "clearSelection": "إلغاء التحديد",
+        "selectRowsHint": "حدد صفوفاً لتطبيق القيم عليها وحدها",
+        "emptyExcluded": "تم استبعاد كل التوليفات. استعد بعضها أو أضف قيمة جديدة.",
+        "emptyNoOptions": "أضف خياراً واحداً على الأقل بقيمه لتوليد المتغيرات.",
+        "selectAllAriaLabel": "تحديد كل المتغيرات",
+        "columnImage": "صورة",
+        "columnSku": "SKU",
+        "columnPrice": "السعر",
+        "columnStock": "الكمية في المخزون",
+        "columnStatus": "الحالة",
+        "columnAction": "إجراء",
+        "selectRowAriaLabel": "تحديد {key}",
+        "skuAriaLabel": "SKU {key}",
+        "priceAriaLabel": "سعر {key}",
+        "stockAriaLabel": "مخزون {key}",
+        "inStock": "متوفر",
+        "outOfStock": "نفد",
+        "excludeRowAriaLabel": "استبعاد {key}",
+        "excludeRowTitle": "استبعاد هذه التوليفة من المنتج",
+        "applyErrorNoValue": "أدخل سعراً أو كمية لتطبيقها.",
+        "applySuccess": "تم التطبيق على {count} متغير."
+      },
+      "optionalVariants": {
+        "sectionTitle": "الخيارات والمتغيرات (اختياري)",
+        "sectionSubtitleBundle": "أضف خيارات مثل الحجم أو الإضافات (مثال: حجم كبير، دجاج إضافي).",
+        "sectionSubtitleSimple": "أضف متغيرات مثل المقاسات أو الألوان إذا كان هذا المنتج يحتوي على عدة خيارات",
+        "optionNameAriaLabel": "اسم الخيار",
+        "optionNamePlaceholder": "{ordinal} (مثال: الحجم)",
+        "valuesAriaLabel": "قيم الخيار",
+        "valuesPlaceholder": "القيم مفصولة بفاصلة (كبير، وسط، صغير)",
+        "removeOptionAriaLabel": "حذف الخيار",
+        "addOptionLabel": "إضافة خيار"
+      },
+      "bundle": {
+        "priceSectionTitle": "السعر",
+        "priceSectionSubtitle": "حدد السعر الذي يُباع به هذا المنتج المجمع (لا يُحتسب تلقائياً من تكلفة المكونات)",
+        "sellPriceLabel": "سعر البيع",
+        "componentsSectionTitle": "المكونات (المواد الخام)",
+        "componentsSectionSubtitle": "اختر المكونات من المخزون وحدد الكميات المطلوبة لكل وحدة من هذا المنتج",
+        "addComponentLabel": "إضافة مكون",
+        "noRawMaterialsNotice": "لا توجد مواد خام في المخزون بعد — يمكنك إضافة المكونات يدوياً الآن وربطها بالمخزون لاحقاً، أو إنشاء مادة خام من نوع \"مادة خام\" أولاً.",
+        "columnIndex": "#",
+        "columnComponent": "المكون",
+        "columnUnit": "وحدة القياس",
+        "columnRequired": "الكمية المطلوبة",
+        "columnStock": "المخزون الحالي",
+        "columnProducible": "متوفر للإنتاج",
+        "columnNote": "ملاحظات",
+        "columnActions": "إجراء",
+        "componentNameAriaLabel": "اسم المكون",
+        "componentNamePlaceholder": "اسم المكون",
+        "switchToPickerTitle": "اختيار من المخزون بدلاً من ذلك",
+        "pickerPlaceholder": "اختر المكون",
+        "pickerSearchPlaceholder": "ابحث في المواد الخام...",
+        "pickerEmptyNone": "لا توجد مواد خام في المخزون بعد",
+        "pickerEmptyNoMatch": "لا توجد مادة خام مطابقة",
+        "pickerAriaLabel": "المكون",
+        "newComponentOption": "مكون جديد غير موجود في المخزون",
+        "unitAriaLabel": "وحدة القياس",
+        "requiredQtyAriaLabel": "الكمية المطلوبة",
+        "stockUnitAriaLabel": "وحدة المخزون",
+        "conversionFactorAriaLabel": "كم {stockUnit} في 1 {requiredUnit}",
+        "conversionFactorTitle": "حدد كم {stockUnit} في 1 {requiredUnit}",
+        "conversionNeeded": "حدد معامل التحويل",
+        "noteAriaLabel": "ملاحظات",
+        "deleteComponentAriaLabel": "حذف المكون",
+        "editComponentAriaLabel": "تعديل المكون",
+        "editComponentTitle": "تعديل المكون",
+        "availableProductionLabel": "الكمية المتاحة للإنتاج",
+        "availableProductionUnit": "{count} وحدة",
+        "availableProductionHint": "بناءً على أقل مكون متوفر في المخزون",
+        "calcStockLabel": "المخزون الحالي",
+        "calcRequiredLabel": "الكمية المطلوبة",
+        "calcRequiredValue": "{qty} {unit} لكل وحدة",
+        "calcResultLabel": "النتيجة",
+        "autoDeductNotice": "سيتم خصم كميات المكونات تلقائياً من المخزون عند كل عملية بيع.",
+        "limitingNoticeBefore": "أقل مكون متوفر هو ",
+        "limitingNoticeAfter": "، لذلك الكمية القصوى المتاحة للإنتاج هي {count} وحدة.",
+        "noComponentsNotice": "أضف مكوناً واحداً على الأقل مع كميته المطلوبة لحساب الكمية المتاحة للإنتاج.",
+        "stockCountHint": "{count} في المخزون"
+      },
+      "additionalInfo": {
+        "sectionTitle": "معلومات إضافية",
+        "subtitleRaw": "تفاصيل إضافية عن المادة الخام",
+        "subtitleService": "تفاصيل إضافية عن الخدمة",
+        "subtitleDefault": "تفاصيل إضافية عن المنتج",
+        "internalNotesLabel": "ملاحظات داخلية (اختياري)",
+        "internalNotesPlaceholder": "أضف أي ملاحظات داخلية...",
+        "batchNumberLabel": "رقم الدفعة (اختياري)",
+        "batchNumberAriaLabel": "رقم الدفعة",
+        "expiryDateLabel": "تاريخ الانتهاء (اختياري)",
+        "brandLabel": "علامة تجارية (اختياري)",
+        "brandAriaLabel": "العلامة التجارية",
+        "brandPlaceholder": "العلامة التجارية",
+        "barcodeLabel": "رمز الباركود (اختياري)",
+        "barcodeAriaLabel": "رمز الباركود",
+        "countryLabel": "بلد المنشأ (اختياري)",
+        "countryAriaLabel": "بلد المنشأ",
+        "countryPlaceholder": "المملكة العربية السعودية",
+        "deliveryMethodLabel": "طريقة تقديم الخدمة",
+        "deliveryMethodAriaLabel": "طريقة تقديم الخدمة",
+        "systemRequirementsLabel": "متطلبات النظام (اختياري)",
+        "systemRequirementsPlaceholder": "مثال: يحتاج إلى PDF أو برنامج معين...",
+        "productLanguageLabel": "لغة المنتج (اختياري)",
+        "productLanguageAriaLabel": "لغة المنتج",
+        "preparationTimeLabel": "مدة التحضير (اختياري)",
+        "preparationTimeSuffix": "دقيقة"
+      },
+      "images": {
+        "editLabel": "تعديل الصورة",
+        "deleteImageAriaLabel": "حذف الصورة",
+        "dropzoneLabel": "اسحب وأفلت الصورة هنا",
+        "dropzoneHint": "أو اضغط للاختيار من الجهاز",
+        "formatsHint": "PNG, JPG, WebP حتى 10MB",
+        "primaryBadge": "رئيسية",
+        "primaryAriaLabel": "{name} — الصورة الرئيسية",
+        "setPrimaryAriaLabel": "اجعل {name} الصورة الرئيسية",
+        "deleteThumbnailAriaLabel": "حذف {name}",
+        "addImageAriaLabel": "إضافة صورة"
+      },
+      "publish": {
+        "sectionTitle": "حالة النشر",
+        "subtitle": "تحكم في ظهور {thing} في المتجر",
+        "publishedLabel": "منشور",
+        "unpublishedLabel": "غير منشور",
+        "productWord": "المنتج",
+        "serviceWord": "الخدمة",
+        "willShowProduct": "سيظهر المنتج",
+        "willShowService": "ستظهر الخدمة",
+        "willNotShowProduct": "لن يظهر المنتج",
+        "willNotShowService": "لن تظهر الخدمة",
+        "publishedHintSuffix": "في جميع قنوات البيع المتصلة",
+        "unpublishedHintSuffix": "للعملاء حتى يتم النشر"
+      },
+      "variableExtra": {
+        "sectionTitle": "معلومات إضافية",
+        "brandLabel": "العلامة التجارية (اختياري)",
+        "brandAriaLabel": "العلامة التجارية",
+        "brandPlaceholder": "Nike",
+        "modelLabel": "الموديل (اختياري)",
+        "modelAriaLabel": "الموديل",
+        "modelPlaceholder": "Air Max",
+        "internalNotesLabel": "ملاحظات داخلية (اختياري)"
+      },
+      "quickFacts": {
+        "sectionTitle": "معلومات سريعة",
+        "addedDateLabel": "تاريخ الإضافة",
+        "lastUpdatedLabel": "آخر تحديث",
+        "addedByLabel": "أضيف بواسطة"
+      },
+      "actions": {
+        "saving": "جارٍ الحفظ...",
+        "saveEditing": "حفظ التعديلات",
+        "saveDraft": "حفظ كمسودة",
+        "cancel": "إلغاء"
+      },
+      "errors": {
+        "fieldRequired": "{label} مطلوب",
+        "categoryRequired": "الفئة مطلوبة",
+        "workspaceRequired": "مساحة العمل مطلوبة",
+        "descriptionRequired": "وصف المنتج مطلوب",
+        "componentsRequired": "أضف مكوناً واحداً على الأقل مع الكمية المطلوبة",
+        "optionsRequired": "أضف خياراً واحداً على الأقل بقيمه",
+        "variantPricesRequired": "حدد سعراً لكل متغير قبل الحفظ",
+        "priceRequired": "السعر مطلوب",
+        "stockRequired": "الكمية الحالية في المخزون مطلوبة",
+        "linkedProductRequired": "اختر المنتج المرتبط المباع بالحبة",
+        "completeRequiredFields": "أكمل الحقول المطلوبة قبل الحفظ.",
+        "enterNameForDraft": "أدخل {label} لحفظه كمسودة.",
+        "uploadImageFailed": "تعذر رفع إحدى الصور.",
+        "uploadImageFailedDescription": "تحقق من الاتصال وحاول مرة أخرى.",
+        "saveSuccessEdit": "تم حفظ التعديلات.",
+        "saveSuccessDraft": "تم حفظ المسودة.",
+        "saveSuccessTyped": "تم حفظ {type}.",
+        "saveSuccessSkuDescription": "رمز المنتج: {sku}",
+        "loadProductFailed": "تعذر تحميل المنتج للتعديل.",
+        "notFound": "المنتج غير موجود.",
+        "notFoundDescription": "ربما تم حذفه من جهاز آخر.",
+        "skuTaken": "رمز المنتج (SKU) مستخدم بالفعل.",
+        "skuTakenDescription": "غيّر الرمز أو استخدم زر التوليد التلقائي.",
+        "noPermissionEdit": "لا تملك صلاحية تعديل المنتجات.",
+        "noPermissionCreate": "لا تملك صلاحية إنشاء المنتجات.",
+        "noPermissionDescription": "تواصل مع مالك الحساب لمنحك صلاحية products:{action}.",
+        "serverValidationError": "تعذر حفظ المنتج — راجع الحقول التالية.",
+        "saveFailedEdit": "تعذر حفظ التعديلات.",
+        "saveFailedCreate": "تعذر حفظ المنتج.",
+        "unexpectedError": "حدث خطأ غير متوقع. حاول مرة أخرى.",
+        "imageTypeUnsupported": "{file}: صيغة غير مدعومة. المسموح PNG أو JPG أو WebP.",
+        "imageTooLarge": "{file}: الحجم يتجاوز 10MB."
+      },
+      "priceTaxMode": {
+        "includedLabel": "السعر شامل الضريبة",
+        "excludedLabel": "السعر غير شامل الضريبة",
+        "ariaLabel": "شمول الضريبة"
+      },
+      "unitSelect": {
+        "ariaLabel": "وحدة القياس",
+        "searchPlaceholder": "البحث عن وحدة قياس..."
+      },
+      "moneyInput": {
+        "currency": "ريال"
+      },
+      "optionOrdinals": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
+      "optionOrdinalFallback": "الخيار {n}"
+    }
   }
 }

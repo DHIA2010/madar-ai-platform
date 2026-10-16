@@ -1367,5 +1367,646 @@
       },
       "csvFilenamePrefix": "statement"
     }
+  },
+  "products": {
+    "types": {
+      "simple": {
+        "title": "Simple Product",
+        "description": "Ready to sell",
+        "pageTitle": "Add Simple Product",
+        "pageSubtitle": "Add a product that's ready to sell in your store.",
+        "saveLabel": "Save Product",
+        "imageCardTitle": "Product Image",
+        "nameLabel": "Product Name",
+        "skuLabel": "SKU",
+        "descriptionLabel": "Product Description"
+      },
+      "variable": {
+        "title": "Variable Product",
+        "description": "Variants like size",
+        "pageTitle": "Add Variable Product",
+        "pageSubtitle": "Add a product with multiple variants like sizes and colors.",
+        "saveLabel": "Save Product",
+        "imageCardTitle": "Product Image",
+        "nameLabel": "Product Name",
+        "skuLabel": "SKU",
+        "descriptionLabel": "Product Description"
+      },
+      "weighted": {
+        "title": "Weighted Product",
+        "description": "Sold by weight",
+        "pageTitle": "Add Weighted Product",
+        "pageSubtitle": "Add a product sold by weight, such as grams or kilograms.",
+        "saveLabel": "Save Product",
+        "imageCardTitle": "Product Image",
+        "nameLabel": "Product Name",
+        "skuLabel": "SKU",
+        "descriptionLabel": "Product Description"
+      },
+      "digital": {
+        "title": "Digital Product",
+        "description": "A file or download link",
+        "pageTitle": "Add Digital Product",
+        "pageSubtitle": "Add a downloadable or digitally-accessed product.",
+        "saveLabel": "Save Product",
+        "imageCardTitle": "Product Image",
+        "nameLabel": "Product Name",
+        "skuLabel": "SKU",
+        "descriptionLabel": "Product Description"
+      },
+      "bundle": {
+        "title": "Bundle Product",
+        "description": "Made of several components",
+        "pageTitle": "Add Bundle Product",
+        "pageSubtitle": "Create a product made of several components deducted from stock on sale.",
+        "saveLabel": "Save Product",
+        "imageCardTitle": "Product Image",
+        "nameLabel": "Product Name",
+        "skuLabel": "SKU",
+        "descriptionLabel": "Product Description"
+      },
+      "raw": {
+        "title": "Raw Material",
+        "description": "A raw stock material",
+        "pageTitle": "Add Raw Material",
+        "pageSubtitle": "Add a raw stock material used in bundle products or sold directly.",
+        "saveLabel": "Save Product",
+        "imageCardTitle": "Product Image",
+        "nameLabel": "Product Name",
+        "skuLabel": "SKU",
+        "descriptionLabel": "Product Description"
+      },
+      "service": {
+        "title": "Service",
+        "description": "A service offered to customers",
+        "pageTitle": "Add New Service",
+        "pageSubtitle": "Add a service offered to customers, such as consulting, maintenance, or delivery.",
+        "saveLabel": "Save Service",
+        "imageCardTitle": "Service Image",
+        "nameLabel": "Service Name",
+        "skuLabel": "Service Code (SKU)",
+        "descriptionLabel": "Service Description"
+      }
+    },
+    "units": {
+      "kg": {
+        "label": "kg",
+        "hint": "Weight · 1000 g"
+      },
+      "g": {
+        "label": "g",
+        "hint": "Weight"
+      },
+      "l": {
+        "label": "L",
+        "hint": "Volume · 1000 mL"
+      },
+      "ml": {
+        "label": "mL",
+        "hint": "Volume"
+      },
+      "pcs": {
+        "label": "pcs",
+        "hint": "Count"
+      },
+      "ctn": {
+        "label": "carton",
+        "hint": "Packaging · set piece count"
+      }
+    },
+    "pricingType": {
+      "fixed": {
+        "label": "Fixed price",
+        "hint": "One amount per order"
+      },
+      "hourly": {
+        "label": "Hourly rate",
+        "hint": "Calculated by duration"
+      },
+      "custom": {
+        "label": "Custom quote",
+        "hint": "Set per customer"
+      }
+    },
+    "serviceDuration": {
+      "minute": "Minute",
+      "hour": "Hour",
+      "day": "Day"
+    },
+    "deliveryMethod": {
+      "online": "Online",
+      "onsite": "On-site",
+      "atCustomer": "At customer's location"
+    },
+    "language": {
+      "arabic": "Arabic",
+      "english": "English",
+      "multilingual": "Multilingual"
+    },
+    "filters": {
+      "platform": {
+        "all": "All Platforms",
+        "shopify": "Shopify",
+        "salla": "Salla",
+        "zid": "Zid",
+        "madar": "Madar"
+      },
+      "category": {
+        "all": "All Categories"
+      },
+      "inventoryStatus": {
+        "all": "All Inventory Status",
+        "inStock": "In Stock",
+        "lowStock": "Low Stock",
+        "outOfStock": "Out of Stock"
+      },
+      "status": {
+        "all": "All Status",
+        "active": "Active",
+        "draft": "Draft",
+        "archived": "Archived"
+      },
+      "productType": {
+        "all": "All Product Types"
+      }
+    },
+    "list": {
+      "heading": "Products",
+      "subheading": "Manage your products and track inventory and performance across every connected store.",
+      "import": "Import",
+      "export": "Export",
+      "addProduct": "Add Product",
+      "kpis": {
+        "total": {
+          "label": "Total Products",
+          "footnote": "From all connected stores"
+        },
+        "active": {
+          "label": "Active Products",
+          "footnote": "Published and visible to customers"
+        },
+        "lowStock": {
+          "label": "Low-Stock Products",
+          "footnote": "30 units or fewer in stock"
+        },
+        "inventoryValue": {
+          "label": "Inventory Value",
+          "footnote": "At cost price for available stock"
+        }
+      },
+      "searchPlaceholder": "Search products or SKU...",
+      "viewTable": "Table view",
+      "viewGrid": "Grid view",
+      "productCount": "{count} products",
+      "selectedCount": "{count} selected",
+      "changeStatus": "Change Status",
+      "loadingProducts": "Loading products from your connected stores...",
+      "loadError": "Couldn't load products from your connected stores. Please try again.",
+      "emptyTitle": "No products match the current filters",
+      "emptyDescription": "Try changing the platform, category, inventory status, or date range.",
+      "availableSuffix": "{count} available",
+      "noResults": "No results",
+      "showingRange": "Showing {from} - {to} of {total}",
+      "itemsPerPage": "Items per page",
+      "skuLabel": "SKU",
+      "table": {
+        "selectAll": "Select all products on this page",
+        "selectRow": "Select {name}",
+        "columns": {
+          "product": "Product",
+          "sku": "SKU",
+          "category": "Category",
+          "status": "Status",
+          "inventory": "Inventory Status",
+          "stock": "Available Stock",
+          "cost": "Cost Price",
+          "price": "Selling Price",
+          "platform": "Platform",
+          "actions": "Actions"
+        }
+      },
+      "pagination": {
+        "first": "First page",
+        "previous": "Previous page",
+        "next": "Next page",
+        "last": "Last page"
+      },
+      "rowActions": {
+        "actionsLabel": "Actions for {name}",
+        "viewDetails": "View Details",
+        "edit": "Edit Product",
+        "copySku": "Copy SKU",
+        "exportThis": "Export This Product",
+        "delete": "Delete Product",
+        "importedTitle": "Products imported from a store are managed from that store"
+      },
+      "detail": {
+        "addedInMadar": "Product added in Madar",
+        "importedFrom": "Product imported from {platform}",
+        "sellingPrice": "Selling Price",
+        "costPrice": "Cost Price",
+        "availableStock": "Available Stock",
+        "sku": "SKU",
+        "noSkuForType": "No SKU for this type",
+        "category": "Category",
+        "margin": "Profit Margin",
+        "lastUpdated": "Last Updated",
+        "edit": "Edit Product",
+        "delete": "Delete",
+        "close": "Close",
+        "managedElsewhere": "This product is managed from {platform} and can't be edited here."
+      },
+      "deleteDialog": {
+        "title": "Delete this product?",
+        "descriptionBefore": "This will delete",
+        "descriptionAfter": "from the product list. It will no longer appear in the store or in reports.",
+        "deleting": "Deleting...",
+        "confirm": "Delete"
+      },
+      "importDialog": {
+        "title": "Import Products",
+        "description": "Upload a CSV file to add several products at once. Import supports these product types: {types} -- bundles and multi-option products must be added manually from the Add Product page, since they need components or variants that don't fit one row.",
+        "chooseFile": "Tap to choose a CSV file",
+        "columnsHint": "Columns: name, sku, category, type, status, cost_price, sell_price, stock, min_stock, unit, description",
+        "rowsFound": "{count} row(s) found",
+        "downloadTemplate": "Download CSV Template",
+        "resultSummary": "{created} product(s) added",
+        "resultSkippedSuffix": ", {count} row(s) skipped",
+        "rowError": "Line {row} in the file: {reason}",
+        "importing": "Importing...",
+        "importButton": "Import",
+        "importButtonWithCount": "Import ({count})",
+        "close": "Close",
+        "listSeparator": ", "
+      },
+      "importTemplate": {
+        "filename": "products-import-template",
+        "row1Name": "Cotton Shirt",
+        "row1Category": "Clothing",
+        "row1Unit": "pcs",
+        "row2Name": "Premium Flour",
+        "row2Category": "Raw Materials",
+        "row2Unit": "kg",
+        "row3Name": "Marketing Consultation",
+        "row3Category": "Services"
+      },
+      "toasts": {
+        "selectCsvFirst": "Choose a CSV file with products first.",
+        "importSuccess": "{count} product(s) added.",
+        "importError": "Couldn't import the file.",
+        "cannotChangeImported": "Can't change the status of store-imported products from here.",
+        "statusUpdateSuccess": "{count} product(s) updated.",
+        "statusUpdateSkipped": "{count} store-imported product(s) skipped -- managed from the store itself.",
+        "noEditPermission": "You don't have permission to edit products.",
+        "contactOwnerEdit": "Contact the account owner to grant you the products:edit permission.",
+        "statusUpdateError": "Couldn't update the products' status.",
+        "copyNothingToCopy": "This product has no {label}.",
+        "copiedSuccess": "{label} copied.",
+        "copyError": "Couldn't copy — copy the {label} manually.",
+        "deleteSuccess": "Product deleted.",
+        "noDeletePermission": "You don't have permission to delete products.",
+        "contactOwnerDelete": "Contact the account owner to grant you the products:delete permission.",
+        "deleteError": "Couldn't delete the product."
+      }
+    },
+    "form": {
+      "breadcrumb": {
+        "products": "Products"
+      },
+      "header": {
+        "editGeneric": "Edit product",
+        "addGeneric": "Add new product",
+        "editTyped": "Edit {type}"
+      },
+      "loadingProduct": "Loading product data...",
+      "typeLocked": "A saved product's type can't be changed — create a new product with the type you need",
+      "basicInfo": {
+        "title": "Basic information",
+        "subtitleRaw": "Enter the raw material's details",
+        "subtitleService": "Enter the main service details",
+        "subtitleDefault": "Enter the main product details",
+        "categoryLabel": "Category",
+        "categoryCreateLabel": "Add category \"{draft}\"",
+        "categoryPlaceholder": "Choose a category or type a new one",
+        "categorySearchPlaceholder": "Search or type a new category...",
+        "categoryEmptyLabel": "No matching category",
+        "workspaceLabel": "Stock location",
+        "workspacePlaceholder": "Choose a workspace",
+        "workspaceSearchPlaceholder": "Search for a workspace...",
+        "workspaceEmptyLabel": "No matching workspace",
+        "taxLabel": "Tax",
+        "taxDefaultOption": "Use the default rate",
+        "generateSkuButton": "Generate automatically"
+      },
+      "stock": {
+        "currentLabel": "Current stock quantity",
+        "minLabel": "Minimum stock",
+        "minHint": "You'll be alerted when stock reaches this level"
+      },
+      "packaging": {
+        "linkedProductLabel": "Linked product (by piece)",
+        "linkedProductPlaceholder": "Choose the product sold by the piece",
+        "linkedProductSearchPlaceholder": "Search piece-measured products...",
+        "linkedProductEmptyNone": "No piece-measured product yet",
+        "linkedProductEmptyNoMatch": "No matching product",
+        "linkedProductAriaLabel": "Linked product",
+        "linkedProductHint": "The carton is this product's packaging — selling a carton deducts from its stock",
+        "unitsPerCartonLabel": "Pieces per carton",
+        "unitsPerCartonHintWithProduct": "1 carton = {count} pcs of {name}",
+        "unitsPerCartonHintDefault": "Links the carton quantity to the piece quantity",
+        "shelfCartons": "{count} carton",
+        "shelfPieces": "{count} pcs",
+        "shelfCartonsAndPieces": "{count} carton and {remainder} pcs",
+        "totalPieces": "= {count} pcs{linked} · carton {perCarton} pcs",
+        "totalPiecesLinkedSuffix": " of {name}",
+        "pieceSuffix": "pcs",
+        "piecesInStock": "{count} pcs in stock"
+      },
+      "raw": {
+        "sectionTitle": "Stock and pricing",
+        "sectionSubtitle": "Set the current stock quantity and purchase cost",
+        "baseUnitLabel": "Base unit of measure",
+        "costPriceLabel": "Purchase price (cost)",
+        "costPriceAriaLabel": "Purchase price",
+        "costPriceHint": "Purchase price per {unit}",
+        "supplierLabel": "Supplier (optional)",
+        "supplierAriaLabel": "Supplier",
+        "supplierPlaceholder": "Supplier name",
+        "stockNotesLabel": "Stock notes (optional)",
+        "stockNotesPlaceholder": "e.g. batch date, invoice number..."
+      },
+      "simple": {
+        "sectionTitle": "Price and stock",
+        "sectionSubtitle": "Set the product's price and stock quantities",
+        "sellPriceLabel": "Sell price",
+        "costPriceLabel": "Cost price",
+        "unitLabel": "Unit of measure"
+      },
+      "weighted": {
+        "sectionTitle": "Weight and pricing information",
+        "sectionSubtitle": "Set the weight unit, price, and sales settings",
+        "baseUnitLabel": "Base weight unit",
+        "sellPriceLabel": "Sell price per {unit}",
+        "minPurchaseLabel": "Minimum purchase",
+        "minPurchaseAriaLabel": "Minimum purchase",
+        "minPurchaseHint": "The smallest quantity that can be purchased (in {unit})",
+        "infoTitle": "The price will be calculated automatically based on the weight the customer chooses at checkout.",
+        "infoExampleWithPrice": "Example: 0.5 {unit} × {price} SAR = {total} SAR.",
+        "infoExampleDefault": "Example: 0.5 {unit} × price per {unit} = final price.",
+        "stockSectionTitle": "Product stock",
+        "stockSectionSubtitle": "Set the current stock quantity"
+      },
+      "service": {
+        "pricingSectionTitle": "Pricing and duration",
+        "pricingSectionSubtitle": "Set the service's price and how long it takes",
+        "pricingTypeLabel": "Pricing type",
+        "priceLabel": "Price",
+        "durationLabel": "Service duration",
+        "durationAriaLabel": "Service duration",
+        "durationUnitAriaLabel": "Service duration unit",
+        "durationHint": "The default duration to deliver the service",
+        "availabilitySectionTitle": "Availability and booking (optional)",
+        "availabilitySectionSubtitle": "Set availability windows if this service requires booking ahead",
+        "availabilityInfo": "You can later link the service to the appointments calendar to manage bookings automatically.",
+        "bookingLabel": "Enable advance booking",
+        "bookingHint": "Allow customers to book appointments for this service"
+      },
+      "digital": {
+        "sectionTitle": "Pricing",
+        "sectionSubtitle": "Set the digital product's price",
+        "priceLabel": "Price",
+        "offerPriceLabel": "Offer price (optional)",
+        "offerPriceAriaLabel": "Offer price"
+      },
+      "variants": {
+        "sectionTitle": "Variants",
+        "sectionSubtitle": "Add variant options such as sizes and colors. You can combine more than one option.",
+        "optionNameAriaLabel": "Option name",
+        "optionNamePlaceholder": "Size",
+        "addValueAriaLabel": "Add a value",
+        "addValuePlaceholder": "Add a value then press Enter",
+        "removeValueAriaLabel": "Remove {value}",
+        "removeOptionAriaLabel": "Remove option",
+        "addOptionLabel": "Add another option",
+        "generatedSectionTitle": "Generated variants ({count})",
+        "generatedSectionSubtitle": "A variant is created for every combination of the options. You can edit each variant's details.",
+        "generateSkuButton": "Generate all SKUs automatically",
+        "truncatedWarning": "The number of combinations exceeds the limit, so only the first {count} variants are shown. Reduce the number of values or options to see them all.",
+        "excludedNotice": "{count} variants have been excluded from this product.",
+        "restoreAll": "Restore all",
+        "quickApplyTitle": "Quick apply",
+        "quickApplySelected": "to {count} selected",
+        "quickApplyAll": "to all ({count})",
+        "bulkPriceAriaLabel": "Uniform price",
+        "bulkPricePlaceholder": "Price",
+        "bulkStockAriaLabel": "Uniform quantity",
+        "bulkStockPlaceholder": "Quantity",
+        "applyButton": "Apply",
+        "excludeSelected": "Exclude selected",
+        "clearSelection": "Clear selection",
+        "selectRowsHint": "Select rows to apply values to them only",
+        "emptyExcluded": "All combinations have been excluded. Restore some or add a new value.",
+        "emptyNoOptions": "Add at least one option with its values to generate variants.",
+        "selectAllAriaLabel": "Select all variants",
+        "columnImage": "Image",
+        "columnSku": "SKU",
+        "columnPrice": "Price",
+        "columnStock": "Stock quantity",
+        "columnStatus": "Status",
+        "columnAction": "Action",
+        "selectRowAriaLabel": "Select {key}",
+        "skuAriaLabel": "SKU {key}",
+        "priceAriaLabel": "Price {key}",
+        "stockAriaLabel": "Stock {key}",
+        "inStock": "In stock",
+        "outOfStock": "Out of stock",
+        "excludeRowAriaLabel": "Exclude {key}",
+        "excludeRowTitle": "Exclude this combination from the product",
+        "applyErrorNoValue": "Enter a price or quantity to apply.",
+        "applySuccess": "Applied to {count} variants."
+      },
+      "optionalVariants": {
+        "sectionTitle": "Options and variants (optional)",
+        "sectionSubtitleBundle": "Add options such as size or add-ons (e.g. large size, extra chicken).",
+        "sectionSubtitleSimple": "Add variants such as sizes or colors if this product has multiple options",
+        "optionNameAriaLabel": "Option name",
+        "optionNamePlaceholder": "{ordinal} (e.g. size)",
+        "valuesAriaLabel": "Option values",
+        "valuesPlaceholder": "Values separated by commas (large, medium, small)",
+        "removeOptionAriaLabel": "Remove option",
+        "addOptionLabel": "Add option"
+      },
+      "bundle": {
+        "priceSectionTitle": "Price",
+        "priceSectionSubtitle": "Set the price this bundled product is sold at (not calculated automatically from component costs)",
+        "sellPriceLabel": "Sell price",
+        "componentsSectionTitle": "Components (raw materials)",
+        "componentsSectionSubtitle": "Choose components from stock and set the quantities required per unit of this product",
+        "addComponentLabel": "Add component",
+        "noRawMaterialsNotice": "No raw materials in stock yet — you can add components manually now and link them to stock later, or create a raw material of type \"raw material\" first.",
+        "columnIndex": "#",
+        "columnComponent": "Component",
+        "columnUnit": "Unit",
+        "columnRequired": "Quantity required",
+        "columnStock": "Current stock",
+        "columnProducible": "Available to produce",
+        "columnNote": "Notes",
+        "columnActions": "Action",
+        "componentNameAriaLabel": "Component name",
+        "componentNamePlaceholder": "Component name",
+        "switchToPickerTitle": "Choose from stock instead",
+        "pickerPlaceholder": "Choose a component",
+        "pickerSearchPlaceholder": "Search raw materials...",
+        "pickerEmptyNone": "No raw materials in stock yet",
+        "pickerEmptyNoMatch": "No matching raw material",
+        "pickerAriaLabel": "Component",
+        "newComponentOption": "New component not in stock",
+        "unitAriaLabel": "Unit",
+        "requiredQtyAriaLabel": "Quantity required",
+        "stockUnitAriaLabel": "Stock unit",
+        "conversionFactorAriaLabel": "How many {stockUnit} in 1 {requiredUnit}",
+        "conversionFactorTitle": "Set how many {stockUnit} in 1 {requiredUnit}",
+        "conversionNeeded": "Set the conversion factor",
+        "noteAriaLabel": "Notes",
+        "deleteComponentAriaLabel": "Delete component",
+        "editComponentAriaLabel": "Edit component",
+        "editComponentTitle": "Edit component",
+        "availableProductionLabel": "Quantity available to produce",
+        "availableProductionUnit": "{count} units",
+        "availableProductionHint": "Based on the scarcest component in stock",
+        "calcStockLabel": "Current stock",
+        "calcRequiredLabel": "Quantity required",
+        "calcRequiredValue": "{qty} {unit} per unit",
+        "calcResultLabel": "Result",
+        "autoDeductNotice": "Component quantities will be deducted from stock automatically on every sale.",
+        "limitingNoticeBefore": "The scarcest component is ",
+        "limitingNoticeAfter": ", so the maximum quantity available to produce is {count} units.",
+        "noComponentsNotice": "Add at least one component with its required quantity to calculate the available production quantity.",
+        "stockCountHint": "{count} in stock"
+      },
+      "additionalInfo": {
+        "sectionTitle": "Additional information",
+        "subtitleRaw": "Additional details about the raw material",
+        "subtitleService": "Additional details about the service",
+        "subtitleDefault": "Additional details about the product",
+        "internalNotesLabel": "Internal notes (optional)",
+        "internalNotesPlaceholder": "Add any internal notes...",
+        "batchNumberLabel": "Batch number (optional)",
+        "batchNumberAriaLabel": "Batch number",
+        "expiryDateLabel": "Expiry date (optional)",
+        "brandLabel": "Brand (optional)",
+        "brandAriaLabel": "Brand",
+        "brandPlaceholder": "Brand",
+        "barcodeLabel": "Barcode (optional)",
+        "barcodeAriaLabel": "Barcode",
+        "countryLabel": "Country of origin (optional)",
+        "countryAriaLabel": "Country of origin",
+        "countryPlaceholder": "Saudi Arabia",
+        "deliveryMethodLabel": "Delivery method",
+        "deliveryMethodAriaLabel": "Delivery method",
+        "systemRequirementsLabel": "System requirements (optional)",
+        "systemRequirementsPlaceholder": "e.g. requires a PDF reader or specific software...",
+        "productLanguageLabel": "Product language (optional)",
+        "productLanguageAriaLabel": "Product language",
+        "preparationTimeLabel": "Preparation time (optional)",
+        "preparationTimeSuffix": "minute"
+      },
+      "images": {
+        "editLabel": "Edit image",
+        "deleteImageAriaLabel": "Delete image",
+        "dropzoneLabel": "Drag and drop an image here",
+        "dropzoneHint": "or click to choose from your device",
+        "formatsHint": "PNG, JPG, WebP up to 10MB",
+        "primaryBadge": "Primary",
+        "primaryAriaLabel": "{name} — primary image",
+        "setPrimaryAriaLabel": "Make {name} the primary image",
+        "deleteThumbnailAriaLabel": "Delete {name}",
+        "addImageAriaLabel": "Add image"
+      },
+      "publish": {
+        "sectionTitle": "Publish status",
+        "subtitle": "Control {thing}'s visibility in the store",
+        "publishedLabel": "Published",
+        "unpublishedLabel": "Unpublished",
+        "productWord": "the product",
+        "serviceWord": "the service",
+        "willShowProduct": "The product will appear",
+        "willShowService": "The service will appear",
+        "willNotShowProduct": "The product won't appear",
+        "willNotShowService": "The service won't appear",
+        "publishedHintSuffix": "across all connected sales channels",
+        "unpublishedHintSuffix": "to customers until it's published"
+      },
+      "variableExtra": {
+        "sectionTitle": "Additional information",
+        "brandLabel": "Brand (optional)",
+        "brandAriaLabel": "Brand",
+        "brandPlaceholder": "Nike",
+        "modelLabel": "Model (optional)",
+        "modelAriaLabel": "Model",
+        "modelPlaceholder": "Air Max",
+        "internalNotesLabel": "Internal notes (optional)"
+      },
+      "quickFacts": {
+        "sectionTitle": "Quick facts",
+        "addedDateLabel": "Date added",
+        "lastUpdatedLabel": "Last updated",
+        "addedByLabel": "Added by"
+      },
+      "actions": {
+        "saving": "Saving...",
+        "saveEditing": "Save changes",
+        "saveDraft": "Save as draft",
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "fieldRequired": "{label} is required",
+        "categoryRequired": "Category is required",
+        "workspaceRequired": "Workspace is required",
+        "descriptionRequired": "Product description is required",
+        "componentsRequired": "Add at least one component with the required quantity",
+        "optionsRequired": "Add at least one option with its values",
+        "variantPricesRequired": "Set a price for every variant before saving",
+        "priceRequired": "Price is required",
+        "stockRequired": "Current stock quantity is required",
+        "linkedProductRequired": "Choose the linked product sold by the piece",
+        "completeRequiredFields": "Complete the required fields before saving.",
+        "enterNameForDraft": "Enter a {label} to save it as a draft.",
+        "uploadImageFailed": "Couldn't upload one of the images.",
+        "uploadImageFailedDescription": "Check your connection and try again.",
+        "saveSuccessEdit": "Changes saved.",
+        "saveSuccessDraft": "Draft saved.",
+        "saveSuccessTyped": "{type} saved.",
+        "saveSuccessSkuDescription": "Product SKU: {sku}",
+        "loadProductFailed": "Couldn't load the product to edit.",
+        "notFound": "Product not found.",
+        "notFoundDescription": "It may have been deleted from another device.",
+        "skuTaken": "That product SKU is already in use.",
+        "skuTakenDescription": "Change the SKU or use the auto-generate button.",
+        "noPermissionEdit": "You don't have permission to edit products.",
+        "noPermissionCreate": "You don't have permission to create products.",
+        "noPermissionDescription": "Contact the account owner to grant you the products:{action} permission.",
+        "serverValidationError": "Couldn't save the product — review the following fields.",
+        "saveFailedEdit": "Couldn't save the changes.",
+        "saveFailedCreate": "Couldn't save the product.",
+        "unexpectedError": "An unexpected error occurred. Try again.",
+        "imageTypeUnsupported": "{file}: unsupported format. PNG, JPG, or WebP only.",
+        "imageTooLarge": "{file}: size exceeds 10MB."
+      },
+      "priceTaxMode": {
+        "includedLabel": "Price includes tax",
+        "excludedLabel": "Price excludes tax",
+        "ariaLabel": "Tax inclusion"
+      },
+      "unitSelect": {
+        "ariaLabel": "Unit of measure",
+        "searchPlaceholder": "Search for a unit..."
+      },
+      "moneyInput": {
+        "currency": "SAR"
+      },
+      "optionOrdinals": ["First option", "Second option", "Third option", "Fourth option"],
+      "optionOrdinalFallback": "Option {n}"
+    }
   }
 }
