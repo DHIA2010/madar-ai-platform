@@ -1,3 +1,5 @@
+import type { useTranslations } from "next-intl"
+
 // "audiences"/"placements"/"creatives" were dropped -- no platform sync produces real data for
 // these, so they're not offered as drill-down levels rather than showing fabricated numbers
 // (see the Campaigns dashboard plan's Phase 7 UX decision).
@@ -348,4 +350,112 @@ export function getMetricsColumns({
   }
 
   return [...leadingColumns, ...tiktokColumns]
+}
+
+// Everything below mirrors the plain English data above with a translated view, following the
+// established pattern from applications/services/plan-tiers.ts (translatedPlanTierMeta /
+// translatedComparisonRows): this file can't call useTranslations() itself, so each function
+// takes the caller's `t` instead. The untranslated exports above stay exactly as they are --
+// campaign-dashboard-screen.tsx (a larger screen not yet migrated) reads them directly and
+// matches its own Arabic overlay by the literal English label text, so changing that text here
+// would silently break that screen's translations.
+type CampaignsTranslator = ReturnType<typeof useTranslations<"campaigns">>
+
+// Maps every literal label string used by the column lists above to its translation key under
+// campaigns.metrics.columns. Keyed by label text (not MetricColumnKey) because the same
+// MetricColumnKey can carry a different label in different platform contexts (e.g. "views" is
+// "Views" for YouTube but "Video Views" for TikTok).
+const METRIC_COLUMN_LABEL_KEYS: Record<string, string> = {
+  Platform: "platform",
+  "Active Campaigns": "activeCampaigns",
+  Impressions: "impressions",
+  Clicks: "clicks",
+  CTR: "ctr",
+  Spend: "spend",
+  Revenue: "revenue",
+  ROAS: "roas",
+  Conversions: "conversions",
+  Status: "status",
+  CPC: "cpc",
+  CPA: "cpa",
+  "Quality Score": "qualityScore",
+  "Impression Share": "impressionShare",
+  "Top Impression Rate": "topImpressionRate",
+  CPM: "cpm",
+  "Viewable Impressions": "viewableImpressions",
+  Viewability: "viewability",
+  Views: "views",
+  "View Rate": "viewRate",
+  "Watch Time": "watchTime",
+  "Avg View Duration": "avgViewDuration",
+  "25% View": "view25",
+  "50% View": "view50",
+  "75% View": "view75",
+  "100% Completion": "view100Completion",
+  Reach: "reach",
+  Frequency: "frequency",
+  "Video Plays": "videoPlays",
+  "3-second Views": "threeSecondViews",
+  ThruPlays: "thruPlays",
+  "Add To Cart": "addToCart",
+  "Checkout Started": "checkoutStarted",
+  Purchases: "purchases",
+  "Purchase Value": "purchaseValue",
+  "Video Views": "videoViews",
+  "Average Watch Time": "averageWatchTime",
+  Swipes: "swipes",
+  "Swipe Rate": "swipeRate",
+}
+
+const ENTITY_LABEL_KEYS: Record<string, string> = {
+  Platform: "platform",
+  Campaign: "campaign",
+  "Ad Set": "adSet",
+  "Ad Squad": "adSquad",
+  "Ad Group": "adGroup",
+  Keyword: "keyword",
+  Ad: "ad",
+}
+
+function translatedColumn(column: MetricColumn, t: CampaignsTranslator): MetricColumn {
+  const key = METRIC_COLUMN_LABEL_KEYS[column.label]
+  if (!key) {
+    return column
+  }
+  return { ...column, label: t(`metrics.columns.${key}` as "metrics.columns.platform") }
+}
+
+export function translatedEntityLabel(
+  level: ExplorerLevel,
+  campaignPlatform: CampaignPlatform | undefined,
+  t: CampaignsTranslator
+): string {
+  const label = getEntityLabel(level, campaignPlatform)
+  const key = ENTITY_LABEL_KEYS[label]
+  return key ? t(`metrics.entity.${key}` as "metrics.entity.platform") : label
+}
+
+export function translatedAnalysisTabs(
+  t: CampaignsTranslator
+): Array<{ key: AnalysisTab; label: string }> {
+  return ANALYSIS_TABS.map((tab) => ({
+    key: tab.key,
+    label: t(`metrics.tabs.${tab.key}`),
+  }))
+}
+
+export function translatedMetricsColumns(
+  params: {
+    level: ExplorerLevel
+    campaignPlatform?: CampaignPlatform
+    campaignType: CampaignTypeFilter
+  },
+  t: CampaignsTranslator
+): MetricColumn[] {
+  const columns = getMetricsColumns(params)
+  return columns.map((column) =>
+    column.key === "entity"
+      ? { ...column, label: translatedEntityLabel(params.level, params.campaignPlatform, t) }
+      : translatedColumn(column, t)
+  )
 }

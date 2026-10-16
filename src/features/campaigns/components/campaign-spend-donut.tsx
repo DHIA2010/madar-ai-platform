@@ -1,10 +1,13 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 interface CampaignSpendDonutProps {
   distribution: Array<{ label: string; value: number; color: string }>
 }
 
 export function CampaignSpendDonut({ distribution }: CampaignSpendDonutProps) {
+  const t = useTranslations("campaigns.spendDonut")
   const total = distribution.reduce((sum, item) => sum + item.value, 0)
 
   const chartGradient = distribution
@@ -25,9 +28,9 @@ export function CampaignSpendDonut({ distribution }: CampaignSpendDonutProps) {
           style={{ background: `conic-gradient(${chartGradient || "hsl(var(--muted)) 0% 100%"})` }}
         >
           <div className="flex size-24 items-center justify-center rounded-full bg-background text-center text-xs font-medium text-muted-foreground">
-            Total
+            {t("total")}
             <br />
-            Spend
+            {t("spend")}
           </div>
         </div>
       </div>

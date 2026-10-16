@@ -1,35 +1,42 @@
+"use client"
+
+import { useTranslations } from "next-intl"
+
 import { AppBadge, AppButton, AppCard, AppPageHeader } from "@/components/app"
 
 import { CampaignModuleNav } from "./campaign-module-nav"
 
-const TEMPLATE_CARDS = ["Lead Generation", "Sales", "Traffic", "Awareness", "Remarketing"]
+const TEMPLATE_CARD_KEYS = [
+  "leadGeneration",
+  "sales",
+  "traffic",
+  "awareness",
+  "remarketing",
+] as const
 
 export function CampaignTemplatesScreen() {
+  const t = useTranslations("campaigns.templatesScreen")
+
   return (
     <div className="space-y-4">
       <CampaignModuleNav />
 
-      <AppPageHeader
-        title="Templates"
-        subtitle="Choose from campaign template placeholders to accelerate setup."
-      />
+      <AppPageHeader title={t("title")} subtitle={t("subtitle")} />
 
-      <AppCard title="Campaign Templates" subtitle="Prebuilt campaign blueprints (UI placeholder).">
+      <AppCard title={t("cardTitle")} subtitle={t("cardSubtitle")}>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {TEMPLATE_CARDS.map((template) => (
-            <article key={template} className="rounded-xl border border-border/70 bg-card p-4">
+          {TEMPLATE_CARD_KEYS.map((templateKey) => (
+            <article key={templateKey} className="rounded-xl border border-border/70 bg-card p-4">
               <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-semibold">{template}</h3>
+                <h3 className="text-sm font-semibold">{t(`categories.${templateKey}`)}</h3>
                 <AppBadge variant="outline" className="text-xs">
-                  Placeholder
+                  {t("placeholderBadge")}
                 </AppBadge>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Template structure is ready. Logic and automation will be added in a future sprint.
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{t("cardDescription")}</p>
               <div className="mt-4">
                 <AppButton size="sm" variant="outline" disabled>
-                  Use Template (Coming Soon)
+                  {t("useTemplate")}
                 </AppButton>
               </div>
             </article>

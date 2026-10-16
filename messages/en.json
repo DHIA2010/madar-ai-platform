@@ -6108,5 +6108,162 @@
         }
       }
     }
+  },
+  "campaigns": {
+    "statusBadge": {
+      "status": {
+        "draft": "Draft",
+        "scheduled": "Scheduled",
+        "active": "Active",
+        "paused": "Paused",
+        "completed": "Completed",
+        "archived": "Archived"
+      }
+    },
+    "editScreen": {
+      "notFoundTitle": "Campaign not found",
+      "notFoundDescription": "Unable to edit a missing campaign."
+    },
+    "templatesScreen": {
+      "title": "Templates",
+      "subtitle": "Choose from campaign template placeholders to accelerate setup.",
+      "cardTitle": "Campaign Templates",
+      "cardSubtitle": "Prebuilt campaign blueprints (UI placeholder).",
+      "placeholderBadge": "Placeholder",
+      "cardDescription": "Template structure is ready. Logic and automation will be added in a future sprint.",
+      "useTemplate": "Use Template (Coming Soon)",
+      "categories": {
+        "leadGeneration": "Lead Generation",
+        "sales": "Sales",
+        "traffic": "Traffic",
+        "awareness": "Awareness",
+        "remarketing": "Remarketing"
+      }
+    },
+    "moduleNav": {
+      "dashboard": "Campaign Dashboard",
+      "list": "Campaign List",
+      "create": "Create Campaign",
+      "creativeLibrary": "Creative Library",
+      "templates": "Templates"
+    },
+    "spendDonut": {
+      "total": "Total",
+      "spend": "Spend"
+    },
+    "listScreen": {
+      "title": "Campaign List",
+      "subtitle": "Search, filter, and manage campaigns in one operational table.",
+      "newCampaign": "New Campaign",
+      "createCampaign": "Create Campaign",
+      "importCsv": "Import CSV",
+      "importFrom": "Import from {platform} (Coming Soon)"
+    },
+    "performanceChart": {
+      "ariaLabel": "Performance trend chart"
+    },
+    "creativeUploadArea": {
+      "invalidFiles": "One or more files are invalid. Supported: images, videos, PDFs, HTML5.",
+      "duplicateFiles": "Duplicate files were skipped.",
+      "dropzoneTitle": "Drag & drop files here or click to browse",
+      "dropzoneSubtitle": "Multiple upload supported. Preview and validation enabled.",
+      "uploadQueue": "Upload queue",
+      "completedCount": "{completed}/{total} completed",
+      "previewBeforeSave": "Preview Before Save",
+      "saveToLibrary": "Save to Library"
+    },
+    "creativeLibrary": {
+      "title": "Creative Library",
+      "subtitle": "Manage reusable assets for campaigns across channels.",
+      "newCreative": "New Creative",
+      "uploadCard": {
+        "title": "Upload Creatives",
+        "subtitle": "Drag & drop, browse files, and upload multiple assets with progress."
+      },
+      "libraryCard": {
+        "title": "Asset Library",
+        "subtitle": "Select creatives for campaign creation without duplicate uploads."
+      },
+      "searchPlaceholder": "Search creatives...",
+      "typeFilterPlaceholder": "Type",
+      "typeOptions": {
+        "all": "All Types",
+        "image": "Images",
+        "video": "Videos",
+        "logo": "Logos",
+        "pdf": "PDFs",
+        "html5": "HTML5",
+        "headline": "Headlines",
+        "description": "Descriptions",
+        "cta": "CTA Buttons"
+      },
+      "emptyTitle": "No creatives found.",
+      "emptyDescription": "Upload your first asset to populate the library.",
+      "usedCount": "Used {count}x",
+      "lastModified": "Last modified {modified}",
+      "actions": {
+        "preview": "Preview",
+        "use": "Use",
+        "edit": "Edit"
+      }
+    },
+    "metrics": {
+      "entity": {
+        "platform": "Platform",
+        "campaign": "Campaign",
+        "adSet": "Ad Set",
+        "adSquad": "Ad Squad",
+        "adGroup": "Ad Group",
+        "keyword": "Keyword",
+        "ad": "Ad"
+      },
+      "tabs": {
+        "campaigns": "Campaigns",
+        "adGroups": "Ad Groups",
+        "ads": "Ads",
+        "keywords": "Keywords"
+      },
+      "columns": {
+        "platform": "Platform",
+        "activeCampaigns": "Active Campaigns",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "ctr": "CTR",
+        "spend": "Spend",
+        "revenue": "Revenue",
+        "roas": "ROAS",
+        "conversions": "Conversions",
+        "status": "Status",
+        "cpc": "CPC",
+        "cpa": "CPA",
+        "qualityScore": "Quality Score",
+        "impressionShare": "Impression Share",
+        "topImpressionRate": "Top Impression Rate",
+        "cpm": "CPM",
+        "viewableImpressions": "Viewable Impressions",
+        "viewability": "Viewability",
+        "views": "Views",
+        "viewRate": "View Rate",
+        "watchTime": "Watch Time",
+        "avgViewDuration": "Avg View Duration",
+        "view25": "25% View",
+        "view50": "50% View",
+        "view75": "75% View",
+        "view100Completion": "100% Completion",
+        "reach": "Reach",
+        "frequency": "Frequency",
+        "videoPlays": "Video Plays",
+        "threeSecondViews": "3-second Views",
+        "thruPlays": "ThruPlays",
+        "addToCart": "Add To Cart",
+        "checkoutStarted": "Checkout Started",
+        "purchases": "Purchases",
+        "purchaseValue": "Purchase Value",
+        "videoViews": "Video Views",
+        "averageWatchTime": "Average Watch Time",
+        "swipes": "Swipes",
+        "swipeRate": "Swipe Rate"
+      }
+    }
   }
 }

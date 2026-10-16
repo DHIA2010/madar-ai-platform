@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ChevronDown, Plus, Upload } from "lucide-react"
 
 import { ROUTES } from "@/constants/routes"
@@ -22,33 +23,38 @@ import { CampaignModuleNav } from "./campaign-module-nav"
 
 export function CampaignListScreen() {
   const router = useRouter()
+  const t = useTranslations("campaigns.listScreen")
 
   return (
     <div className="space-y-4">
       <CampaignModuleNav />
       <AppPageHeader
-        title="Campaign List"
-        subtitle="Search, filter, and manage campaigns in one operational table."
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <Can permission="campaigns:create">
             <AppDropdownMenu>
               <AppDropdownMenuTrigger asChild>
                 <AppButton icon={<Plus className="size-4" />}>
-                  New Campaign
+                  {t("newCampaign")}
                   <ChevronDown className="size-4" />
                 </AppButton>
               </AppDropdownMenuTrigger>
               <AppDropdownMenuContent align="end">
                 <AppDropdownMenuItem onClick={() => router.push(ROUTES.campaignsCreate)}>
-                  Create Campaign
+                  {t("createCampaign")}
                 </AppDropdownMenuItem>
                 <AppDropdownMenuItem>
                   <Upload className="size-4" />
-                  Import CSV
+                  {t("importCsv")}
                 </AppDropdownMenuItem>
                 <AppDropdownMenuSeparator />
-                <AppDropdownMenuItem disabled>Import from Meta (Coming Soon)</AppDropdownMenuItem>
-                <AppDropdownMenuItem disabled>Import from Google (Coming Soon)</AppDropdownMenuItem>
+                <AppDropdownMenuItem disabled>
+                  {t("importFrom", { platform: "Meta" })}
+                </AppDropdownMenuItem>
+                <AppDropdownMenuItem disabled>
+                  {t("importFrom", { platform: "Google" })}
+                </AppDropdownMenuItem>
               </AppDropdownMenuContent>
             </AppDropdownMenu>
           </Can>

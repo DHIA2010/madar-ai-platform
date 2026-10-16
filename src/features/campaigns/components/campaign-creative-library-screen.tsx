@@ -3,6 +3,7 @@
 import { lazy, Suspense, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { FileText, Film, ImageIcon, Plus, Tags, Upload } from "lucide-react"
 
 import { ROUTES } from "@/constants/routes"
@@ -77,18 +78,19 @@ const MOCK_CREATIVES: CreativeAsset[] = [
 ]
 
 const TYPE_OPTIONS = [
-  { value: "all", label: "All Types" },
-  { value: "image", label: "Images" },
-  { value: "video", label: "Videos" },
-  { value: "logo", label: "Logos" },
-  { value: "pdf", label: "PDFs" },
-  { value: "html5", label: "HTML5" },
-  { value: "headline", label: "Headlines" },
-  { value: "description", label: "Descriptions" },
-  { value: "cta", label: "CTA Buttons" },
-]
+  { value: "all", labelKey: "all" },
+  { value: "image", labelKey: "image" },
+  { value: "video", labelKey: "video" },
+  { value: "logo", labelKey: "logo" },
+  { value: "pdf", labelKey: "pdf" },
+  { value: "html5", labelKey: "html5" },
+  { value: "headline", labelKey: "headline" },
+  { value: "description", labelKey: "description" },
+  { value: "cta", labelKey: "cta" },
+] as const
 
 export function CampaignCreativeLibraryScreen() {
+  const t = useTranslations("campaigns.creativeLibrary")
   const searchParams = useSearchParams()
   const returnTo = searchParams.get("returnTo") || ROUTES.campaignsCreate
 
@@ -108,15 +110,12 @@ export function CampaignCreativeLibraryScreen() {
       <CampaignModuleNav />
 
       <AppPageHeader
-        title="Creative Library"
-        subtitle="Manage reusable assets for campaigns across channels."
-        actions={<AppButton icon={<Plus className="size-4" />}>New Creative</AppButton>}
+        title={t("title")}
+        subtitle={t("subtitle")}
+        actions={<AppButton icon={<Plus className="size-4" />}>{t("newCreative")}</AppButton>}
       />
 
-      <AppCard
-        title="Upload Creatives"
-        subtitle="Drag & drop, browse files, and upload multiple assets with progress."
-      >
+      <AppCard title={t("uploadCard.title")} subtitle={t("uploadCard.subtitle")}>
         <Suspense
           fallback={
             <div className="h-52 animate-pulse rounded-xl border border-border/60 bg-muted/20" />
@@ -126,20 +125,17 @@ export function CampaignCreativeLibraryScreen() {
         </Suspense>
       </AppCard>
 
-      <AppCard
-        title="Asset Library"
-        subtitle="Select creatives for campaign creation without duplicate uploads."
-      >
+      <AppCard title={t("libraryCard.title")} subtitle={t("libraryCard.subtitle")}>
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-[minmax(320px,1fr)_220px]">
             <AppSearchInput
-              placeholder="Search creatives..."
+              placeholder={t("searchPlaceholder")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
             <AppSelect value={type} onValueChange={setType}>
               <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                <AppSelectValue placeholder="Type" />
+                <AppSelectValue placeholder={t("typeFilterPlaceholder")} />
               </AppSelectTrigger>
               <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                 {TYPE_OPTIONS.map((option) => (
@@ -148,7 +144,7 @@ export function CampaignCreativeLibraryScreen() {
                     value={option.value}
                     className={CAMPAIGN_SELECT_ITEM_CLASSNAME}
                   >
-                    {option.label}
+                    {t(`typeOptions.${option.labelKey}`)}
                   </AppSelectItem>
                 ))}
               </AppSelectContent>
@@ -157,10 +153,8 @@ export function CampaignCreativeLibraryScreen() {
 
           {filtered.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-10 text-center">
-              <p className="text-sm font-medium">No creatives found.</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Upload your first asset to populate the library.
-              </p>
+              <p className="text-sm font-medium">{t("emptyTitle")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("emptyDescription")}</p>
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -170,12 +164,14 @@ export function CampaignCreativeLibraryScreen() {
                     <div className="flex size-10 items-center justify-center rounded-lg border border-border/60 bg-muted/20 text-muted-foreground">
                       <TypeIcon type={asset.type} />
                     </div>
-                    <AppBadge variant="outline">Used {asset.usageCount}x</AppBadge>
+                    <AppBadge variant="outline">
+                      {t("usedCount", { count: asset.usageCount })}
+                    </AppBadge>
                   </div>
 
                   <p className="text-sm font-semibold">{asset.name}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Last modified {asset.modified}
+                    {t("lastModified", { modified: asset.modified })}
                   </p>
 
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -200,13 +196,15 @@ export function CampaignCreativeLibraryScreen() {
 
                   <div className="mt-4 grid grid-cols-3 gap-2">
                     <AppButton size="sm" variant="outline">
-                      Preview
+                      {t("actions.preview")}
                     </AppButton>
                     <AppButton asChild size="sm" variant="outline">
-                      <Link href={`${returnTo}?creative=${encodeURIComponent(asset.id)}`}>Use</Link>
+                      <Link href={`${returnTo}?creative=${encodeURIComponent(asset.id)}`}>
+                        {t("actions.use")}
+                      </Link>
                     </AppButton>
                     <AppButton size="sm" variant="outline">
-                      Edit
+                      {t("actions.edit")}
                     </AppButton>
                   </div>
                 </article>

@@ -6104,5 +6104,162 @@
         }
       }
     }
+  },
+  "campaigns": {
+    "statusBadge": {
+      "status": {
+        "draft": "مسودة",
+        "scheduled": "مجدولة",
+        "active": "نشطة",
+        "paused": "متوقفة",
+        "completed": "مكتملة",
+        "archived": "مؤرشفة"
+      }
+    },
+    "editScreen": {
+      "notFoundTitle": "لم يتم العثور على الحملة",
+      "notFoundDescription": "لا يمكن تعديل حملة غير موجودة."
+    },
+    "templatesScreen": {
+      "title": "القوالب",
+      "subtitle": "اختر من بين قوالب الحملات الجاهزة لتسريع الإعداد.",
+      "cardTitle": "قوالب الحملات",
+      "cardSubtitle": "مخططات حملات جاهزة (نموذج واجهة مستخدم).",
+      "placeholderBadge": "نموذج مؤقت",
+      "cardDescription": "هيكل القالب جاهز. سيتم إضافة المنطق والأتمتة في نسخة قادمة.",
+      "useTemplate": "استخدام القالب (قريباً)",
+      "categories": {
+        "leadGeneration": "توليد العملاء المحتملين",
+        "sales": "المبيعات",
+        "traffic": "الزيارات",
+        "awareness": "الوعي بالعلامة",
+        "remarketing": "إعادة التسويق"
+      }
+    },
+    "moduleNav": {
+      "dashboard": "لوحة معلومات الحملات",
+      "list": "قائمة الحملات",
+      "create": "إنشاء حملة",
+      "creativeLibrary": "مكتبة المواد الإبداعية",
+      "templates": "القوالب"
+    },
+    "spendDonut": {
+      "total": "إجمالي",
+      "spend": "الإنفاق"
+    },
+    "listScreen": {
+      "title": "قائمة الحملات",
+      "subtitle": "البحث والتصفية وإدارة الحملات في جدول تشغيلي واحد.",
+      "newCampaign": "حملة جديدة",
+      "createCampaign": "إنشاء حملة",
+      "importCsv": "استيراد CSV",
+      "importFrom": "الاستيراد من {platform} (قريباً)"
+    },
+    "performanceChart": {
+      "ariaLabel": "مخطط اتجاه الأداء"
+    },
+    "creativeUploadArea": {
+      "invalidFiles": "ملف واحد أو أكثر غير صالح. المدعوم: الصور والفيديوهات وملفات PDF وHTML5.",
+      "duplicateFiles": "تم تجاوز الملفات المكررة.",
+      "dropzoneTitle": "اسحب الملفات وأفلتها هنا أو انقر للتصفح",
+      "dropzoneSubtitle": "يدعم الرفع المتعدد. المعاينة والتحقق مفعّلان.",
+      "uploadQueue": "قائمة الرفع",
+      "completedCount": "{completed}/{total} مكتمل",
+      "previewBeforeSave": "معاينة قبل الحفظ",
+      "saveToLibrary": "حفظ في المكتبة"
+    },
+    "creativeLibrary": {
+      "title": "مكتبة المواد الإبداعية",
+      "subtitle": "إدارة الأصول القابلة لإعادة الاستخدام للحملات عبر القنوات.",
+      "newCreative": "مادة إبداعية جديدة",
+      "uploadCard": {
+        "title": "رفع المواد الإبداعية",
+        "subtitle": "اسحب وأفلت، تصفح الملفات، وارفع عدة أصول مع عرض التقدم."
+      },
+      "libraryCard": {
+        "title": "مكتبة الأصول",
+        "subtitle": "اختر المواد الإبداعية لإنشاء الحملات دون رفع مكرر."
+      },
+      "searchPlaceholder": "البحث في المواد الإبداعية...",
+      "typeFilterPlaceholder": "النوع",
+      "typeOptions": {
+        "all": "جميع الأنواع",
+        "image": "صور",
+        "video": "فيديوهات",
+        "logo": "شعارات",
+        "pdf": "ملفات PDF",
+        "html5": "HTML5",
+        "headline": "عناوين",
+        "description": "أوصاف",
+        "cta": "أزرار دعوة لاتخاذ إجراء"
+      },
+      "emptyTitle": "لم يتم العثور على مواد إبداعية.",
+      "emptyDescription": "ارفع أول أصل لك لتعبئة المكتبة.",
+      "usedCount": "استُخدم {count} مرة",
+      "lastModified": "آخر تعديل {modified}",
+      "actions": {
+        "preview": "معاينة",
+        "use": "استخدام",
+        "edit": "تعديل"
+      }
+    },
+    "metrics": {
+      "entity": {
+        "platform": "المنصة",
+        "campaign": "الحملة",
+        "adSet": "مجموعة الإعلانات",
+        "adSquad": "فرقة الإعلانات",
+        "adGroup": "المجموعة الإعلانية",
+        "keyword": "الكلمة المفتاحية",
+        "ad": "الإعلان"
+      },
+      "tabs": {
+        "campaigns": "الحملات",
+        "adGroups": "المجموعات الإعلانية",
+        "ads": "الإعلانات",
+        "keywords": "الكلمات المفتاحية"
+      },
+      "columns": {
+        "platform": "المنصة",
+        "activeCampaigns": "الحملات النشطة",
+        "impressions": "مرات الظهور",
+        "clicks": "النقرات",
+        "ctr": "معدل النقر إلى الظهور",
+        "spend": "الإنفاق",
+        "revenue": "الإيرادات",
+        "roas": "ROAS",
+        "conversions": "التحويلات",
+        "status": "الحالة",
+        "cpc": "تكلفة النقرة",
+        "cpa": "تكلفة الاكتساب",
+        "qualityScore": "نقاط الجودة",
+        "impressionShare": "نسبة الظهور",
+        "topImpressionRate": "معدل الظهور العلوي",
+        "cpm": "تكلفة الألف ظهور",
+        "viewableImpressions": "مرات الظهور القابلة للمشاهدة",
+        "viewability": "قابلية المشاهدة",
+        "views": "المشاهدات",
+        "viewRate": "معدل المشاهدة",
+        "watchTime": "مدة المشاهدة",
+        "avgViewDuration": "متوسط مدة المشاهدة",
+        "view25": "مشاهدة 25%",
+        "view50": "مشاهدة 50%",
+        "view75": "مشاهدة 75%",
+        "view100Completion": "اكتمال 100%",
+        "reach": "الوصول",
+        "frequency": "التكرار",
+        "videoPlays": "تشغيلات الفيديو",
+        "threeSecondViews": "مشاهدات 3 ثوانٍ",
+        "thruPlays": "ThruPlays",
+        "addToCart": "الإضافة إلى السلة",
+        "checkoutStarted": "بدء الدفع",
+        "purchases": "عمليات الشراء",
+        "purchaseValue": "قيمة الشراء",
+        "videoViews": "مشاهدات الفيديو",
+        "averageWatchTime": "متوسط مدة المشاهدة",
+        "swipes": "التمريرات",
+        "swipeRate": "معدل التمرير"
+      }
+    }
   }
 }

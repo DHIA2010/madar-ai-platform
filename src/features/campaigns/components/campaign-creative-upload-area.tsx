@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
 import { CheckCircle2, FileUp, Loader2, UploadCloud } from "lucide-react"
 
 import { AppButton, AppInput } from "@/components/app"
@@ -15,6 +16,7 @@ type UploadItem = {
 const ALLOWED_TYPES = ["image/", "video/", "application/pdf", "text/html"]
 
 export function CampaignCreativeUploadArea() {
+  const t = useTranslations("campaigns.creativeUploadArea")
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const [error, setError] = useState("")
 
@@ -29,7 +31,7 @@ export function CampaignCreativeUploadArea() {
     )
 
     if (invalid) {
-      setError("One or more files are invalid. Supported: images, videos, PDFs, HTML5.")
+      setError(t("invalidFiles"))
       return
     }
 
@@ -37,7 +39,7 @@ export function CampaignCreativeUploadArea() {
     const deduped = fileArray.filter((file) => !existing.has(file.name))
 
     if (deduped.length !== fileArray.length) {
-      setError("Duplicate files were skipped.")
+      setError(t("duplicateFiles"))
     } else {
       setError("")
     }
@@ -89,10 +91,8 @@ export function CampaignCreativeUploadArea() {
         <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full border border-border/70 bg-background">
           <UploadCloud className="size-5 text-muted-foreground" />
         </div>
-        <p className="text-sm font-medium">Drag & drop files here or click to browse</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Multiple upload supported. Preview and validation enabled.
-        </p>
+        <p className="text-sm font-medium">{t("dropzoneTitle")}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("dropzoneSubtitle")}</p>
         <AppInput
           type="file"
           multiple
@@ -102,9 +102,9 @@ export function CampaignCreativeUploadArea() {
       </label>
 
       <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card px-3 py-2 text-xs">
-        <span className="text-muted-foreground">Upload queue</span>
+        <span className="text-muted-foreground">{t("uploadQueue")}</span>
         <span className="font-medium">
-          {completedCount}/{uploads.length} completed
+          {t("completedCount", { completed: completedCount, total: uploads.length })}
         </span>
       </div>
 
@@ -138,9 +138,9 @@ export function CampaignCreativeUploadArea() {
 
       <div className="flex items-center justify-end gap-2">
         <AppButton variant="outline" size="sm" icon={<FileUp className="size-3.5" />}>
-          Preview Before Save
+          {t("previewBeforeSave")}
         </AppButton>
-        <AppButton size="sm">Save to Library</AppButton>
+        <AppButton size="sm">{t("saveToLibrary")}</AppButton>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
 
@@ -24,6 +25,7 @@ export function CampaignPerformanceChart({
   labels,
   metric,
 }: CampaignPerformanceChartProps) {
+  const t = useTranslations("campaigns.performanceChart")
   const points = useMemo(() => {
     if (values.length === 0) {
       return ""
@@ -51,7 +53,7 @@ export function CampaignPerformanceChart({
           className="relative z-10 h-full w-full"
           preserveAspectRatio="none"
           role="img"
-          aria-label="Performance trend chart"
+          aria-label={t("ariaLabel")}
         >
           <polyline
             points={points}

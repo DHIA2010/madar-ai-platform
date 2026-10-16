@@ -2,20 +2,22 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
 const CAMPAIGN_NAV_ITEMS = [
-  { href: ROUTES.campaigns, label: "Campaign Dashboard" },
-  { href: `${ROUTES.campaigns}/list`, label: "Campaign List" },
-  { href: ROUTES.campaignsCreate, label: "Create Campaign" },
-  { href: `${ROUTES.campaigns}/creative-library`, label: "Creative Library" },
-  { href: `${ROUTES.campaigns}/templates`, label: "Templates" },
-]
+  { href: ROUTES.campaigns, labelKey: "dashboard" },
+  { href: `${ROUTES.campaigns}/list`, labelKey: "list" },
+  { href: ROUTES.campaignsCreate, labelKey: "create" },
+  { href: `${ROUTES.campaigns}/creative-library`, labelKey: "creativeLibrary" },
+  { href: `${ROUTES.campaigns}/templates`, labelKey: "templates" },
+] as const
 
 export function CampaignModuleNav() {
   const pathname = usePathname()
+  const t = useTranslations("campaigns.moduleNav")
 
   return (
     <nav className="overflow-x-auto rounded-xl border border-border/70 bg-card p-1">
@@ -33,7 +35,7 @@ export function CampaignModuleNav() {
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )}
               >
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             </li>
           )

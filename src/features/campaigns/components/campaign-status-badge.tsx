@@ -1,6 +1,10 @@
+"use client"
+
+import { useTranslations } from "next-intl"
+
 import { AppStatusBadge } from "@/components/app"
 
-import { getCampaignStatusMeta } from "../services"
+import { translatedCampaignStatusMeta } from "../services"
 import type { CampaignStatus } from "../types"
 
 export interface CampaignStatusBadgeProps {
@@ -8,7 +12,8 @@ export interface CampaignStatusBadgeProps {
 }
 
 export function CampaignStatusBadge({ status }: CampaignStatusBadgeProps) {
-  const meta = getCampaignStatusMeta(status)
+  const t = useTranslations("campaigns")
+  const meta = translatedCampaignStatusMeta(status, t)
 
   return <AppStatusBadge status={meta.tone} label={meta.label} />
 }

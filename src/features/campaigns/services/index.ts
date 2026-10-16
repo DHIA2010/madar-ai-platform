@@ -1,1 +1,1 @@
-export { getCampaignStatusMeta } from "./campaign-status.service"
+export { getCampaignStatusMeta, translatedCampaignStatusMeta } from "./campaign-status.service"
