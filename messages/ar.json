@@ -7165,6 +7165,379 @@
           "confirmLabel": "حذف"
         }
       }
+    },
+    "newConnectionWizard": {
+      "steps": {
+        "platform": {
+          "label": "اختيار المنصة",
+          "description": "اختر المنصة التي ترغب بربطها"
+        },
+        "connect": {
+          "label": "تسجيل الدخول والتفويض",
+          "description": "منح صلاحيات الوصول الآمن"
+        },
+        "import": {
+          "label": "اختيار بيانات الاستيراد",
+          "description": "حدد البيانات المطلوبة للمزامنة"
+        },
+        "review": {
+          "label": "مراجعة وإتمام",
+          "description": "مراجعة الإعدادات وبدء المزامنة"
+        }
+      },
+      "successHero": {
+        "title": "تم الربط بنجاح",
+        "subtitle": "منصة {platform} جاهزة الآن لمزامنة بياناتك مع مدار."
+      },
+      "heroCopy": {
+        "platform": {
+          "title": "ربط منصة جديدة",
+          "subtitle": "اربط متجرك أو قنواتك التسويقية لتحصل على بيانات موحدة ورؤى أعمق."
+        },
+        "connect": {
+          "title": "ربط منصة جديدة",
+          "subtitle": "اربط متجرك في خطوات بسيطة وابدأ بمزامنة بياناتك."
+        },
+        "import": {
+          "title": "استيراد البيانات",
+          "subtitle": "اختر البيانات التي تريد استيرادها من منصتك إلى مدار."
+        },
+        "review": {
+          "title": "مراجعة وإتمام الربط",
+          "subtitle": "راجع تفاصيل الربط قبل إنشائه للتأكد من صحة الإعدادات."
+        }
+      },
+      "categories": {
+        "all": "الكل",
+        "ecommerce": "متاجر إلكترونية",
+        "marketing": "منصات إعلانية",
+        "analytics": "منصات أخرى"
+      },
+      "categorySingular": {
+        "all": "منصة",
+        "ecommerce": "منصة تجارة إلكترونية",
+        "marketing": "منصة إعلانية",
+        "analytics": "منصة تحليلات"
+      },
+      "connectionTypes": {
+        "ecommerce": "موصل التجارة الإلكترونية",
+        "analytics": "موصل التحليلات",
+        "marketing": "موصل المنصات الإعلانية"
+      },
+      "syncFrequency": {
+        "every30Min": "كل 30 دقيقة",
+        "every15Min": "كل 15 دقيقة"
+      },
+      "estimatedDuration": {
+        "oneToTwoMinutes": "1 – 2 دقيقة",
+        "under90Seconds": "أقل من 90 ثانية"
+      },
+      "objectLibrary": {
+        "customers": {
+          "label": "العملاء",
+          "description": "استيراد بيانات العملاء ومعلوماتهم"
+        },
+        "orders": {
+          "label": "الطلبات",
+          "description": "استيراد الطلبات وحالاتها"
+        },
+        "products": {
+          "label": "المنتجات",
+          "description": "استيراد المنتجات وبياناتها"
+        },
+        "inventory": {
+          "label": "المخزون",
+          "description": "استيراد بيانات المخزون والكميات"
+        },
+        "catalog": {
+          "label": "التصنيفات",
+          "description": "استيراد التصنيفات والمجموعات"
+        },
+        "traffic": {
+          "label": "الزيارات",
+          "description": "استيراد بيانات الزيارات والجلسات"
+        },
+        "events": {
+          "label": "الأحداث",
+          "description": "استيراد الأحداث والتفاعلات"
+        },
+        "conversions": {
+          "label": "التحويلات",
+          "description": "استيراد بيانات التحويلات"
+        },
+        "pageViews": {
+          "label": "مشاهدات الصفحات",
+          "description": "استيراد مشاهدات الصفحات"
+        },
+        "funnels": {
+          "label": "مسارات التحويل",
+          "description": "استيراد مسارات التحويل"
+        },
+        "campaigns": {
+          "label": "الحملات",
+          "description": "استيراد الحملات الإعلانية"
+        },
+        "ads": {
+          "label": "الإعلانات",
+          "description": "استيراد الإعلانات وأدائها"
+        },
+        "audience": {
+          "label": "الجمهور",
+          "description": "استيراد بيانات الجمهور"
+        },
+        "audienceInsights": {
+          "label": "رؤى الجمهور",
+          "description": "استيراد رؤى وتحليلات الجمهور"
+        },
+        "searchTerms": {
+          "label": "عبارات البحث",
+          "description": "استيراد عبارات البحث المستخدمة"
+        },
+        "pixelEvents": {
+          "label": "أحداث البكسل",
+          "description": "استيراد الأحداث المسجلة عبر البكسل"
+        }
+      },
+      "objectFallbackDescription": "استيراد هذه البيانات من المنصة",
+      "platformDescriptions": {
+        "salla": "زامن المنتجات والطلبات وبيانات العملاء من متجرك.",
+        "shopify": "اربط متجر شوبيفاي لمزامنة الطلبات والمنتجات.",
+        "zid": "اربط متجر زد لمزامنة الطلبات والمنتجات والعملاء.",
+        "googleAnalytics4": "استورد الجلسات والأحداث وتقارير الجمهور.",
+        "metaAds": "اسحب حملات فيسبوك وإنستغرام وأداء الإنفاق.",
+        "googleAds": "اسحب الحملات والكلمات المفتاحية وبيانات التحويل.",
+        "tiktokAds": "زامن حملات تيك توك ومقاييس الأداء.",
+        "snapchatAds": "زامن حملات سناب شات والإنفاق والتحويلات."
+      },
+      "errors": {
+        "authorizationCancelled": {
+          "title": "تم إلغاء التفويض",
+          "description": "أغلقت المنصة جلسة OAuth قبل منح الصلاحية."
+        },
+        "permissionDenied": {
+          "title": "الصلاحية مرفوضة",
+          "description": "لم يمنح الحساب المرتبط الصلاحيات التي يحتاجها مدار لمزامنة البيانات."
+        },
+        "tokenExpired": {
+          "title": "انتهت صلاحية الرمز",
+          "description": "لم يعد رمز OAuth صالحاً. أعد ربط المنصة للمتابعة."
+        },
+        "networkTimeout": {
+          "title": "انتهت مهلة الشبكة",
+          "description": "استغرق الاتصال وقتاً أطول من اللازم. حاول مجدداً عندما تستقر الشبكة."
+        },
+        "generic": {
+          "title": "تعذّر إكمال الربط",
+          "description": "حدث ما قاطع عملية الإعداد. يمكنك المحاولة مجدداً أو اختيار حساب آخر."
+        },
+        "zidManualMissingFields": {
+          "title": "بيانات ناقصة",
+          "description": "أدخل معرّف المتجر ورمز الوصول من إعدادات زد قبل المتابعة."
+        },
+        "zidTokenInvalid": {
+          "title": "رمز الوصول غير صالح",
+          "description": "رفض زد رمز الوصول هذا. تحقق من نسخه بالكامل من إعدادات متجرك في زد (التكاملات البرمجية)."
+        },
+        "syncFailedGeneric": "تعذّر إكمال المزامنة.",
+        "oauthCallbackErrorWithReason": "تعذر إتمام الاتصال: {reason}",
+        "oauthCallbackErrorGeneric": "تعذر إتمام الاتصال. حاول مرة أخرى."
+      },
+      "loadingStages": {
+        "connecting": "جارٍ الاتصال...",
+        "authorizing": "جارٍ التفويض...",
+        "fetchingAccounts": "جارٍ جلب الحسابات...",
+        "almostDone": "على وشك الانتهاء..."
+      },
+      "accountFallback": {
+        "label": "الحساب الرئيسي",
+        "description": "الحساب الذي تختاره المنصة افتراضياً."
+      },
+      "heroConstellationAriaLabel": "MADAR متصل بمنصات المتاجر والإعلانات",
+      "successHandshakeTagline": "خطوة جديدة نحو قرارات أعمق",
+      "syncingHeading": {
+        "running": "جاري مزامنة بيانات {platform}",
+        "failed": "تعذّرت مزامنة بيانات {platform}",
+        "done": "اكتملت مزامنة بيانات {platform}"
+      },
+      "backToIntegrations": "العودة إلى التكاملات",
+      "stepIndicator": {
+        "final": "الخطوة 4 من 4",
+        "ongoing": "خطوة {current} من {total}"
+      },
+      "currentStepLabel": "الخطوة الحالية: {step}",
+      "aboutToCreateIntegration": "أنت على وشك إنشاء التكامل!",
+      "platformStep": {
+        "searchPlaceholder": "ابحث عن منصة...",
+        "searchAriaLabel": "ابحث عن منصة",
+        "availablePlatforms": "المنصات المتاحة",
+        "platformCount": "{count} منصة",
+        "noResults": "لا توجد منصة مطابقة لبحثك.",
+        "selectedPlatform": "المنصة المختارة",
+        "linkNow": "ربط الآن"
+      },
+      "changePlatformButton": "تغيير المنصة",
+      "connectStep": {
+        "choosePlatformFirstTitle": "اختر منصة أولاً",
+        "choosePlatformFirstDescription": "اختر منصة في الخطوة السابقة لبدء عملية التفويض عبر OAuth.",
+        "oauthInfoTitle": "معلومات OAuth",
+        "oauthInfoLine1": "قم بتسجيل الدخول إلى متجرك ومنح مدار الصلاحيات المطلوبة.",
+        "oauthInfoLine2": "سيتم تحويلك إلى {platform} لإتمام التفويض بشكل آمن.",
+        "shopDomainLabel": "نطاق المتجر",
+        "shopDomainHint": "أدخل معرّف متجر شوبيفاي أو نطاق myshopify.com كاملاً.",
+        "oauthSecurityNote": "نستخدم بروتوكول OAuth 2.0 الآمن ولا يتم تخزين كلمات المرور.",
+        "connectButton": "الاتصال بـ {platform}",
+        "importantNoteTitle": "معلومة مهمة",
+        "noCredentialStorage": "نحن لا نقوم بتخزين بيانات تسجيل الدخول الخاصة بك.",
+        "allConnectionsSecure": "جميع الاتصالات تتم عبر OAuth الآمن.",
+        "advancedSetup": "إعداد متقدّم",
+        "zidStoreIdLabel": "معرّف المتجر",
+        "zidStoreIdPlaceholder": "مثال: 3058261",
+        "zidAccessTokenLabel": "رمز الوصول",
+        "zidCredentialsHint": "احصل على القيمتين من متجرك في زد: الإعدادات ← التكاملات البرمجية (API) ← بيانات الربط المباشر.",
+        "apiKeyLabel": "مفتاح API",
+        "clientSecretLabel": "المفتاح السري",
+        "manualCredentialsLabel": "بيانات اعتماد يدوية",
+        "switchToManual": "التبديل إلى الإعداد اليدوي",
+        "useOauthOnly": "استخدام OAuth فقط"
+      },
+      "importStep": {
+        "connectedBadge": "متصل",
+        "title": "اختر البيانات المراد استيرادها",
+        "subtitle": "يمكنك اختيار مجموعة مقترحة، أو تحديد البيانات حسب احتياجك.",
+        "presetAll": "الكل",
+        "presetRecommended": "مقترح",
+        "presetCustom": "مخصص",
+        "historicalDataNote": "سيتم استيراد البيانات التاريخية المتاحة من حسابك في {platform}",
+        "whichAccountTitle": "بأي حساب تريد ربط مدار؟",
+        "tiles": {
+          "syncFrequency": "تكرار المزامنة",
+          "estimatedDuration": "المدة المتوقعة",
+          "presetLabel": "الإعداد المسبق"
+        },
+        "presetValue": {
+          "custom": "بيانات مخصصة",
+          "all": "جميع البيانات المحددة",
+          "recommended": "المجموعة المقترحة"
+        }
+      },
+      "labels": {
+        "platform": "المنصة",
+        "workspace": "مساحة العمل",
+        "authMethod": "طريقة المصادقة"
+      },
+      "reviewStep": {
+        "cells": {
+          "account": "الحساب",
+          "connectionType": "نوع الربط",
+          "syncRate": "معدل المزامنة"
+        },
+        "platformPrefix": "منصة ",
+        "readyBadge": "جاهز للربط",
+        "detailsTitle": "تفاصيل الربط",
+        "detailsSubtitle": "جميع الإعدادات التي قمت باختيارها سنُستخدم لإنشاء التكامل.",
+        "selectedDataTitle": "البيانات المحددة للاستيراد",
+        "selectedDataSubtitle": "سيتم استيراد البيانات التالية من {platform}:",
+        "firstSyncNote": "ستبدأ المزامنة الأولى بعد إنشاء التكامل مباشرة، وسيتم تحديث البيانات حسب المعدل المحدد."
+      },
+      "successStep": {
+        "tiles": {
+          "healthMonitoring": "مراقبة الصحة",
+          "autoSync": "المزامنة التلقائية",
+          "firstSyncEstimate": "المزامنة الأولى المتوقعة"
+        },
+        "enabledValue": "مفعلة",
+        "disabledValue": "معطلة",
+        "title": "تم ربط منصة {platform} بنجاح",
+        "subtitle": "أصبح بإمكان مدار الآن استيراد بياناتك ومزامنتها تلقائياً.",
+        "syncStartingNote": "سيبدأ استيراد البيانات الأولى خلال دقائق قليلة، وسيتم تحديث البيانات تلقائياً حسب الجدول المحدد."
+      },
+      "syncingStep": {
+        "statusPill": {
+          "running": "جاري المزامنة",
+          "failed": "تعذّرت المزامنة",
+          "done": "اكتملت المزامنة"
+        },
+        "descriptionRunning": "جاري مزامنة بيانات {platform}...",
+        "descriptionDone": "اكتملت المزامنة الأولى.",
+        "stateLabel": {
+          "running": "المزامنة قيد التنفيذ",
+          "failed": "توقفت المزامنة",
+          "done": "المزامنة مكتملة"
+        },
+        "elapsedPrefixed": "الوقت المنقضي: {value}",
+        "elapsedWords": "{minutes} دقيقة و {seconds} ثانية",
+        "objectBadge": {
+          "running": "جاري",
+          "failed": "متوقف",
+          "done": "مكتمل"
+        },
+        "dataDetailsTitle": "تفاصيل البيانات",
+        "dataDetailsSubtitle": "يمكنك متابعة حالة البيانات التي يتم استيرادها من {platform}.",
+        "totals": {
+          "recordsRead": "سجلات مقروءة",
+          "recordsWritten": "سجلات محفوظة",
+          "recordsFailed": "سجلات فاشلة"
+        },
+        "autoUpdateNote": "سيتم تحديث البيانات تلقائياً حسب الجدول المحدد بعد اكتمال هذه المزامنة."
+      },
+      "errorCard": {
+        "eyebrow": "خطأ في الاتصال",
+        "retryButton": "إعادة المحاولة",
+        "backToImportSetup": "العودة إلى إعداد الاستيراد"
+      },
+      "footer": {
+        "continueToPlatform": "المتابعة إلى {platform}",
+        "fallbackPlatformName": "المنصة",
+        "continue": "المتابعة",
+        "continueFallback": "متابعة",
+        "reviewSettings": "مراجعة الإعدادات",
+        "createIntegration": "إنشاء التكامل",
+        "close": "إغلاق",
+        "goToIntegrations": "الانتقال إلى التكاملات",
+        "finish": "إنهاء",
+        "runSyncNow": "تشغيل المزامنة الآن"
+      },
+      "emptyWorkspace": {
+        "title": "أنشئ مساحة عمل أولى قبل إضافة الاتصالات.",
+        "subtitle": "يتطلب إعداد الاتصال الآن وجود مساحة عمل نشطة.",
+        "createButton": "إنشاء مساحة عمل",
+        "createButtonAria": "إنشاء مساحة عمل من مدير مساحات العمل"
+      },
+      "archivedWorkspace": {
+        "title": "مساحة العمل هذه مؤرشفة.",
+        "subtitle": "استعدها لإضافة أو إعادة ربط التكاملات. تبقى جميع عمليات المزامنة متوقفة حتى ذلك الحين.",
+        "manageButton": "إدارة مساحات العمل",
+        "manageButtonAria": "فتح مدير مساحات العمل"
+      },
+      "sidebar": {
+        "benefits": {
+          "oauthSecure": "ربط سريع وآمن عبر OAuth",
+          "autoSync": "مزامنة تلقائية للبيانات",
+          "unifiedInsights": "رؤى موحدة في مكان واحد",
+          "noManualEntry": "لا حاجة إلى إدخال بيانات يدوياً"
+        },
+        "whatYouGetTitle": "ماذا ستحصل؟",
+        "needHelpTitle": "بحاجة إلى مساعدة؟",
+        "needHelpBody": "تعرّف على كيفية ربط المنصات وما الذي تتم مزامنته في كل خطوة، أو تواصل مع فريق الدعم إذا واجهتك مشكلة أثناء الربط."
+      },
+      "setupChecklist": {
+        "titleReview": "قائمة الإعداد",
+        "titleSteps": "خطوات الإعداد"
+      },
+      "helpCard": {
+        "title": "هل تحتاج إلى مساعدة؟",
+        "subtitle": "فريق الدعم جاهز لمساعدتك في أي وقت."
+      },
+      "summaryRail": {
+        "title": "ملخص الاتصال",
+        "rows": {
+          "accountType": "نوع الحساب",
+          "requiredPermissions": "الصلاحيات المطلوبة",
+          "setupDuration": "المدة المتوقعة للإعداد",
+          "firstSyncEstimate": "أول مزامنة متوقعة"
+        },
+        "setupDurationValue": "‏~30 ثانية"
+      }
     }
   }
 }

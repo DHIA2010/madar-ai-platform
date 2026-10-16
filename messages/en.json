@@ -7169,6 +7169,379 @@
           "confirmLabel": "Delete"
         }
       }
+    },
+    "newConnectionWizard": {
+      "steps": {
+        "platform": {
+          "label": "Choose a Platform",
+          "description": "Choose the platform you want to connect"
+        },
+        "connect": {
+          "label": "Sign In & Authorize",
+          "description": "Grant secure access permissions"
+        },
+        "import": {
+          "label": "Choose Import Data",
+          "description": "Select the data you need to sync"
+        },
+        "review": {
+          "label": "Review & Finish",
+          "description": "Review the settings and start syncing"
+        }
+      },
+      "successHero": {
+        "title": "Connected Successfully",
+        "subtitle": "{platform} is now ready to sync your data with Madar."
+      },
+      "heroCopy": {
+        "platform": {
+          "title": "Connect a New Platform",
+          "subtitle": "Connect your store or marketing channels to get unified data and deeper insights."
+        },
+        "connect": {
+          "title": "Connect a New Platform",
+          "subtitle": "Connect your store in a few simple steps and start syncing your data."
+        },
+        "import": {
+          "title": "Import Data",
+          "subtitle": "Choose the data you want to import from your platform into Madar."
+        },
+        "review": {
+          "title": "Review & Finish Connecting",
+          "subtitle": "Review the connection details before creating it to make sure everything is correct."
+        }
+      },
+      "categories": {
+        "all": "All",
+        "ecommerce": "Online Stores",
+        "marketing": "Ad Platforms",
+        "analytics": "Other Platforms"
+      },
+      "categorySingular": {
+        "all": "Platform",
+        "ecommerce": "Ecommerce Platform",
+        "marketing": "Ad Platform",
+        "analytics": "Analytics Platform"
+      },
+      "connectionTypes": {
+        "ecommerce": "Ecommerce Connector",
+        "analytics": "Analytics Connector",
+        "marketing": "Ad Platform Connector"
+      },
+      "syncFrequency": {
+        "every30Min": "Every 30 minutes",
+        "every15Min": "Every 15 minutes"
+      },
+      "estimatedDuration": {
+        "oneToTwoMinutes": "1 – 2 minutes",
+        "under90Seconds": "Under 90 seconds"
+      },
+      "objectLibrary": {
+        "customers": {
+          "label": "Customers",
+          "description": "Import customer records and details"
+        },
+        "orders": {
+          "label": "Orders",
+          "description": "Import orders and their statuses"
+        },
+        "products": {
+          "label": "Products",
+          "description": "Import products and their data"
+        },
+        "inventory": {
+          "label": "Inventory",
+          "description": "Import inventory data and stock levels"
+        },
+        "catalog": {
+          "label": "Catalog",
+          "description": "Import categories and collections"
+        },
+        "traffic": {
+          "label": "Traffic",
+          "description": "Import traffic and session data"
+        },
+        "events": {
+          "label": "Events",
+          "description": "Import events and interactions"
+        },
+        "conversions": {
+          "label": "Conversions",
+          "description": "Import conversion data"
+        },
+        "pageViews": {
+          "label": "Page Views",
+          "description": "Import page views"
+        },
+        "funnels": {
+          "label": "Funnels",
+          "description": "Import conversion funnels"
+        },
+        "campaigns": {
+          "label": "Campaigns",
+          "description": "Import ad campaigns"
+        },
+        "ads": {
+          "label": "Ads",
+          "description": "Import ads and their performance"
+        },
+        "audience": {
+          "label": "Audience",
+          "description": "Import audience data"
+        },
+        "audienceInsights": {
+          "label": "Audience Insights",
+          "description": "Import audience insights and analytics"
+        },
+        "searchTerms": {
+          "label": "Search Terms",
+          "description": "Import search terms used"
+        },
+        "pixelEvents": {
+          "label": "Pixel Events",
+          "description": "Import events recorded via the pixel"
+        }
+      },
+      "objectFallbackDescription": "Import this data from the platform",
+      "platformDescriptions": {
+        "salla": "Sync products, orders, and customer data from your store.",
+        "shopify": "Connect your Shopify store to sync orders and products.",
+        "zid": "Connect your Zid store to sync orders, products, and customers.",
+        "googleAnalytics4": "Import sessions, events, and audience reports.",
+        "metaAds": "Pull Facebook and Instagram campaigns and spend performance.",
+        "googleAds": "Pull campaigns, keywords, and conversion data.",
+        "tiktokAds": "Sync TikTok campaigns and performance metrics.",
+        "snapchatAds": "Sync Snapchat campaigns, spend, and conversions."
+      },
+      "errors": {
+        "authorizationCancelled": {
+          "title": "Authorization Cancelled",
+          "description": "The platform closed the OAuth session before granting access."
+        },
+        "permissionDenied": {
+          "title": "Permission Denied",
+          "description": "The linked account didn't grant the permissions Madar needs to sync data."
+        },
+        "tokenExpired": {
+          "title": "Token Expired",
+          "description": "The OAuth token is no longer valid. Reconnect the platform to continue."
+        },
+        "networkTimeout": {
+          "title": "Network Timeout",
+          "description": "The connection took longer than expected. Try again once your network is stable."
+        },
+        "generic": {
+          "title": "Couldn't Finish Connecting",
+          "description": "Something interrupted the setup. You can try again or choose a different account."
+        },
+        "zidManualMissingFields": {
+          "title": "Missing Information",
+          "description": "Enter the store ID and access token from your Zid settings before continuing."
+        },
+        "zidTokenInvalid": {
+          "title": "Invalid Access Token",
+          "description": "Zid rejected this access token. Check that you copied it in full from your Zid store settings (API Integrations)."
+        },
+        "syncFailedGeneric": "Couldn't complete the sync.",
+        "oauthCallbackErrorWithReason": "Couldn't complete the connection: {reason}",
+        "oauthCallbackErrorGeneric": "Couldn't complete the connection. Try again."
+      },
+      "loadingStages": {
+        "connecting": "Connecting...",
+        "authorizing": "Authorizing...",
+        "fetchingAccounts": "Fetching accounts...",
+        "almostDone": "Almost done..."
+      },
+      "accountFallback": {
+        "label": "Primary Account",
+        "description": "The account the platform selects by default."
+      },
+      "heroConstellationAriaLabel": "MADAR connected to store and ad platforms",
+      "successHandshakeTagline": "A new step toward deeper decisions",
+      "syncingHeading": {
+        "running": "Syncing {platform} data",
+        "failed": "Couldn't sync {platform} data",
+        "done": "Finished syncing {platform} data"
+      },
+      "backToIntegrations": "Back to Integrations",
+      "stepIndicator": {
+        "final": "Step 4 of 4",
+        "ongoing": "Step {current} of {total}"
+      },
+      "currentStepLabel": "Current step: {step}",
+      "aboutToCreateIntegration": "You're about to create the integration!",
+      "platformStep": {
+        "searchPlaceholder": "Search for a platform...",
+        "searchAriaLabel": "Search for a platform",
+        "availablePlatforms": "Available Platforms",
+        "platformCount": "{count} platforms",
+        "noResults": "No platform matches your search.",
+        "selectedPlatform": "Selected Platform",
+        "linkNow": "Connect Now"
+      },
+      "changePlatformButton": "Change Platform",
+      "connectStep": {
+        "choosePlatformFirstTitle": "Choose a Platform First",
+        "choosePlatformFirstDescription": "Choose a platform in the previous step to start the OAuth authorization process.",
+        "oauthInfoTitle": "OAuth Information",
+        "oauthInfoLine1": "Sign in to your store and grant Madar the permissions it needs.",
+        "oauthInfoLine2": "You'll be redirected to {platform} to complete authorization securely.",
+        "shopDomainLabel": "Store Domain",
+        "shopDomainHint": "Enter your Shopify store handle or full myshopify.com domain.",
+        "oauthSecurityNote": "We use secure OAuth 2.0, and passwords are never stored.",
+        "connectButton": "Connect to {platform}",
+        "importantNoteTitle": "Important",
+        "noCredentialStorage": "We don't store your login credentials.",
+        "allConnectionsSecure": "All connections go through secure OAuth.",
+        "advancedSetup": "Advanced Setup",
+        "zidStoreIdLabel": "Store ID",
+        "zidStoreIdPlaceholder": "e.g. 3058261",
+        "zidAccessTokenLabel": "Access Token",
+        "zidCredentialsHint": "Get both values from your Zid store: Settings → API Integrations → Direct connection credentials.",
+        "apiKeyLabel": "API Key",
+        "clientSecretLabel": "Client Secret",
+        "manualCredentialsLabel": "Manual Credentials",
+        "switchToManual": "Switch to Manual Setup",
+        "useOauthOnly": "Use OAuth Only"
+      },
+      "importStep": {
+        "connectedBadge": "Connected",
+        "title": "Choose the Data to Import",
+        "subtitle": "You can choose a recommended set, or select data based on your needs.",
+        "presetAll": "All",
+        "presetRecommended": "Recommended",
+        "presetCustom": "Custom",
+        "historicalDataNote": "Available historical data from your {platform} account will be imported",
+        "whichAccountTitle": "Which account would you like to connect to Madar?",
+        "tiles": {
+          "syncFrequency": "Sync Frequency",
+          "estimatedDuration": "Estimated Duration",
+          "presetLabel": "Preset"
+        },
+        "presetValue": {
+          "custom": "Custom data",
+          "all": "All selected data",
+          "recommended": "Recommended set"
+        }
+      },
+      "labels": {
+        "platform": "Platform",
+        "workspace": "Workspace",
+        "authMethod": "Auth Method"
+      },
+      "reviewStep": {
+        "cells": {
+          "account": "Account",
+          "connectionType": "Connection Type",
+          "syncRate": "Sync Rate"
+        },
+        "platformPrefix": "Platform ",
+        "readyBadge": "Ready to Connect",
+        "detailsTitle": "Connection Details",
+        "detailsSubtitle": "All the settings you chose will be used to create the integration.",
+        "selectedDataTitle": "Data Selected for Import",
+        "selectedDataSubtitle": "The following data will be imported from {platform}:",
+        "firstSyncNote": "The first sync will start right after the integration is created, and data will then update on the selected schedule."
+      },
+      "successStep": {
+        "tiles": {
+          "healthMonitoring": "Health Monitoring",
+          "autoSync": "Auto Sync",
+          "firstSyncEstimate": "Expected First Sync"
+        },
+        "enabledValue": "Enabled",
+        "disabledValue": "Disabled",
+        "title": "{platform} Connected Successfully",
+        "subtitle": "Madar can now import your data and sync it automatically.",
+        "syncStartingNote": "The first data import will start within a few minutes, and data will then update automatically on the selected schedule."
+      },
+      "syncingStep": {
+        "statusPill": {
+          "running": "Syncing",
+          "failed": "Sync Failed",
+          "done": "Sync Completed"
+        },
+        "descriptionRunning": "Syncing {platform} data...",
+        "descriptionDone": "The first sync is complete.",
+        "stateLabel": {
+          "running": "Sync in progress",
+          "failed": "Sync stopped",
+          "done": "Sync complete"
+        },
+        "elapsedPrefixed": "Elapsed time: {value}",
+        "elapsedWords": "{minutes} min {seconds} sec",
+        "objectBadge": {
+          "running": "Syncing",
+          "failed": "Stopped",
+          "done": "Complete"
+        },
+        "dataDetailsTitle": "Data Details",
+        "dataDetailsSubtitle": "You can track the status of the data being imported from {platform}.",
+        "totals": {
+          "recordsRead": "Records read",
+          "recordsWritten": "Records saved",
+          "recordsFailed": "Records failed"
+        },
+        "autoUpdateNote": "Data will update automatically on the selected schedule once this sync completes."
+      },
+      "errorCard": {
+        "eyebrow": "Connection Error",
+        "retryButton": "Retry",
+        "backToImportSetup": "Back to Import Setup"
+      },
+      "footer": {
+        "continueToPlatform": "Continue to {platform}",
+        "fallbackPlatformName": "Platform",
+        "continue": "Continue",
+        "continueFallback": "Continue",
+        "reviewSettings": "Review Settings",
+        "createIntegration": "Create Integration",
+        "close": "Close",
+        "goToIntegrations": "Go to Integrations",
+        "finish": "Finish",
+        "runSyncNow": "Run Sync Now"
+      },
+      "emptyWorkspace": {
+        "title": "Create your first workspace before adding connections.",
+        "subtitle": "Connection onboarding now requires an active workspace context.",
+        "createButton": "Create Workspace",
+        "createButtonAria": "Create workspace from workspace manager"
+      },
+      "archivedWorkspace": {
+        "title": "This workspace is archived.",
+        "subtitle": "Restore it to add or reconnect integrations. All syncing stays paused until then.",
+        "manageButton": "Manage Workspaces",
+        "manageButtonAria": "Open workspace manager"
+      },
+      "sidebar": {
+        "benefits": {
+          "oauthSecure": "Fast, secure connection via OAuth",
+          "autoSync": "Automatic data syncing",
+          "unifiedInsights": "Unified insights in one place",
+          "noManualEntry": "No need for manual data entry"
+        },
+        "whatYouGetTitle": "What You'll Get",
+        "needHelpTitle": "Need Help?",
+        "needHelpBody": "Learn how to connect platforms and what gets synced at each step, or reach out to our support team if you run into trouble."
+      },
+      "setupChecklist": {
+        "titleReview": "Setup Checklist",
+        "titleSteps": "Setup Steps"
+      },
+      "helpCard": {
+        "title": "Need Help?",
+        "subtitle": "Our support team is ready to help you anytime."
+      },
+      "summaryRail": {
+        "title": "Connection Summary",
+        "rows": {
+          "accountType": "Account Type",
+          "requiredPermissions": "Required Permissions",
+          "setupDuration": "Estimated Setup Duration",
+          "firstSyncEstimate": "First Sync Estimate"
+        },
+        "setupDurationValue": "~30 seconds"
+      }
     }
   }
 }

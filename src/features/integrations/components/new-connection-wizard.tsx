@@ -12,6 +12,7 @@ import {
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Activity,
   ArrowLeft,
@@ -69,9 +70,18 @@ import { ConnectorLogo } from "./connector-logo"
 import { useApplicationServices } from "@/application/context"
 import { SURFACE_CARD_CLASS } from "@/components/design/dashboard-surface"
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 type PlatformCategory = "All" | "Marketing" | "Analytics" | "Ecommerce"
 type WizardStep = 0 | 1 | 2 | 3
+
+// Mirrors connection-action-policy.ts's IntegrationsTranslator / plan-tiers.ts's
+// ApplicationsTranslator: the component owns the useTranslations() call and passes the
+// translator into every module-level data+function below, rather than forking the data into
+// a parallel Arabic-only copy.
+type NewConnectionWizardTranslator = ReturnType<
+  typeof useTranslations<"integrations.newConnectionWizard">
+>
 
 type SyncPreset = "recommended" | "all" | "custom"
 type SetupMode = "oauth" | "manual"
@@ -100,21 +110,47 @@ type ErrorKind =
   | "network_timeout"
   | "generic"
 
+// syncFrequency/estimatedDuration are semantic tokens, not display text -- connectionType is
+// derived straight from `category` instead of being stored at all -- so the only three
+// user-visible facts every connector carries here (connector type, sync cadence, first-sync
+// estimate) are rendered through connectionTypeLabel()/syncFrequencyLabel()/
+// estimatedDurationLabel() below rather than baked into this data as Arabic literals.
+type SyncFrequencyToken = "every30Min" | "every15Min"
+type EstimatedDurationToken = "oneToTwoMinutes" | "under90Seconds"
+
 interface PlatformDetails {
   category: PlatformCategory
   description: string
-  connectionType: string
   authMethod: string
   permissions: string[]
   capabilities: string[]
   accountLabel: string
   accountDescription: string
   resourceTypeLabel: string
-  syncFrequency: string
-  estimatedDuration: string
+  syncFrequency: SyncFrequencyToken
+  estimatedDuration: EstimatedDurationToken
   recommendedObjects: string[]
   allObjects: string[]
   accounts: Array<{ id: string; label: string; description: string }>
+}
+
+function connectionTypeLabel(category: PlatformCategory, t: NewConnectionWizardTranslator): string {
+  if (category === "Ecommerce") return t("connectionTypes.ecommerce")
+  if (category === "Analytics") return t("connectionTypes.analytics")
+  return t("connectionTypes.marketing")
+}
+
+function syncFrequencyLabel(token: SyncFrequencyToken, t: NewConnectionWizardTranslator): string {
+  return token === "every30Min" ? t("syncFrequency.every30Min") : t("syncFrequency.every15Min")
+}
+
+function estimatedDurationLabel(
+  token: EstimatedDurationToken,
+  t: NewConnectionWizardTranslator
+): string {
+  return token === "oneToTwoMinutes"
+    ? t("estimatedDuration.oneToTwoMinutes")
+    : t("estimatedDuration.under90Seconds")
 }
 
 interface AccountOption {
@@ -129,54 +165,54 @@ interface WizardErrorState {
   description: string
 }
 
-const WIZARD_STEPS: Array<{ label: string; description: string }> = [
-  { label: "اختيار المنصة", description: "اختر المنصة التي ترغب بربطها" },
-  { label: "تسجيل الدخول والتفويض", description: "منح صلاحيات الوصول الآمن" },
-  { label: "اختيار بيانات الاستيراد", description: "حدد البيانات المطلوبة للمزامنة" },
-  { label: "مراجعة وإتمام", description: "مراجعة الإعدادات وبدء المزامنة" },
-]
+function wizardSteps(
+  t: NewConnectionWizardTranslator
+): Array<{ label: string; description: string }> {
+  return [
+    { label: t("steps.platform.label"), description: t("steps.platform.description") },
+    { label: t("steps.connect.label"), description: t("steps.connect.description") },
+    { label: t("steps.import.label"), description: t("steps.import.description") },
+    { label: t("steps.review.label"), description: t("steps.review.description") },
+  ]
+}
 
-const SUCCESS_HERO = (platformName: string) => ({
-  title: "تم الربط بنجاح",
-  subtitle: `منصة ${platformName} جاهزة الآن لمزامنة بياناتك مع مدار.`,
-})
+function successHero(platformName: string, t: NewConnectionWizardTranslator) {
+  return {
+    title: t("successHero.title"),
+    subtitle: t("successHero.subtitle", { platform: platformName }),
+  }
+}
 
 // Per-step hero copy. Steps three and four retitle the page in the export rather than
 // keeping the "ربط منصة جديدة" heading.
-const HERO_COPY: Array<{ title: string; subtitle: string }> = [
-  {
-    title: "ربط منصة جديدة",
-    subtitle: "اربط متجرك أو قنواتك التسويقية لتحصل على بيانات موحدة ورؤى أعمق.",
-  },
-  {
-    title: "ربط منصة جديدة",
-    subtitle: "اربط متجرك في خطوات بسيطة وابدأ بمزامنة بياناتك.",
-  },
-  {
-    title: "استيراد البيانات",
-    subtitle: "اختر البيانات التي تريد استيرادها من منصتك إلى مدار.",
-  },
-  {
-    title: "مراجعة وإتمام الربط",
-    subtitle: "راجع تفاصيل الربط قبل إنشائه للتأكد من صحة الإعدادات.",
-  },
-]
+function heroCopy(t: NewConnectionWizardTranslator): Array<{ title: string; subtitle: string }> {
+  return [
+    { title: t("heroCopy.platform.title"), subtitle: t("heroCopy.platform.subtitle") },
+    { title: t("heroCopy.connect.title"), subtitle: t("heroCopy.connect.subtitle") },
+    { title: t("heroCopy.import.title"), subtitle: t("heroCopy.import.subtitle") },
+    { title: t("heroCopy.review.title"), subtitle: t("heroCopy.review.subtitle") },
+  ]
+}
 
 const PLATFORM_CATEGORIES: PlatformCategory[] = ["All", "Ecommerce", "Marketing", "Analytics"]
 
-const CATEGORY_LABELS: Record<PlatformCategory, string> = {
-  All: "الكل",
-  Ecommerce: "متاجر إلكترونية",
-  Marketing: "منصات إعلانية",
-  Analytics: "منصات أخرى",
+function categoryLabels(t: NewConnectionWizardTranslator): Record<PlatformCategory, string> {
+  return {
+    All: t("categories.all"),
+    Ecommerce: t("categories.ecommerce"),
+    Marketing: t("categories.marketing"),
+    Analytics: t("categories.analytics"),
+  }
 }
 
 // The platform header on steps two to four names the category in the singular.
-const CATEGORY_SINGULAR: Record<PlatformCategory, string> = {
-  All: "منصة",
-  Ecommerce: "منصة تجارة إلكترونية",
-  Marketing: "منصة إعلانية",
-  Analytics: "منصة تحليلات",
+function categorySingular(t: NewConnectionWizardTranslator): Record<PlatformCategory, string> {
+  return {
+    All: t("categorySingular.all"),
+    Ecommerce: t("categorySingular.ecommerce"),
+    Marketing: t("categorySingular.marketing"),
+    Analytics: t("categorySingular.analytics"),
+  }
 }
 
 // The card tag in the mockup is green for stores and red for ad platforms.
@@ -244,150 +280,101 @@ const OBJECT_TINTS = {
   },
 } as const
 
-function objectPresentation(name: string): ObjectPresentation {
-  const entry = OBJECT_LIBRARY[name]
+function objectPresentation(name: string, t: NewConnectionWizardTranslator): ObjectPresentation {
+  const entry = OBJECT_ICON_LIBRARY[name]
   const palette = OBJECT_TINTS[entry?.palette ?? "blue"]
+  const key = OBJECT_KEY_BY_NAME[name]
   return {
-    label: entry?.label ?? name,
-    description: entry?.description ?? "استيراد هذه البيانات من المنصة",
+    label: key ? t(`objectLibrary.${key}.label` as "objectLibrary.customers.label") : name,
+    description: key
+      ? t(`objectLibrary.${key}.description` as "objectLibrary.customers.description")
+      : t("objectFallbackDescription"),
     icon: entry?.icon ?? Layers,
     ...palette,
   }
 }
 
-const OBJECT_LIBRARY: Record<
+// Translation key for each sync object -- camelCased from the raw object identifier below.
+const OBJECT_KEY_BY_NAME: Record<string, string> = {
+  Customers: "customers",
+  Orders: "orders",
+  Products: "products",
+  Inventory: "inventory",
+  Catalog: "catalog",
+  Traffic: "traffic",
+  Events: "events",
+  Conversions: "conversions",
+  "Page Views": "pageViews",
+  Funnels: "funnels",
+  Campaigns: "campaigns",
+  Ads: "ads",
+  Audience: "audience",
+  "Audience Insights": "audienceInsights",
+  "Search Terms": "searchTerms",
+  "Pixel Events": "pixelEvents",
+}
+
+const OBJECT_ICON_LIBRARY: Record<
   string,
   {
-    label: string
-    description: string
     icon: typeof Users
     palette: keyof typeof OBJECT_TINTS
   }
 > = {
-  Customers: {
-    label: "العملاء",
-    description: "استيراد بيانات العملاء ومعلوماتهم",
-    icon: Users,
-    palette: "blue",
-  },
-  Orders: {
-    label: "الطلبات",
-    description: "استيراد الطلبات وحالاتها",
-    icon: ShoppingCart,
-    palette: "green",
-  },
-  Products: {
-    label: "المنتجات",
-    description: "استيراد المنتجات وبياناتها",
-    icon: Package,
-    palette: "purple",
-  },
-  Inventory: {
-    label: "المخزون",
-    description: "استيراد بيانات المخزون والكميات",
-    icon: Layers,
-    palette: "amber",
-  },
-  Catalog: {
-    label: "التصنيفات",
-    description: "استيراد التصنيفات والمجموعات",
-    icon: Tag,
-    palette: "red",
-  },
-  Traffic: {
-    label: "الزيارات",
-    description: "استيراد بيانات الزيارات والجلسات",
-    icon: BarChart3,
-    palette: "teal",
-  },
-  Events: {
-    label: "الأحداث",
-    description: "استيراد الأحداث والتفاعلات",
-    icon: Activity,
-    palette: "blue",
-  },
-  Conversions: {
-    label: "التحويلات",
-    description: "استيراد بيانات التحويلات",
-    icon: Target,
-    palette: "green",
-  },
-  "Page Views": {
-    label: "مشاهدات الصفحات",
-    description: "استيراد مشاهدات الصفحات",
-    icon: Eye,
-    palette: "purple",
-  },
-  Funnels: {
-    label: "مسارات التحويل",
-    description: "استيراد مسارات التحويل",
-    icon: Filter,
-    palette: "amber",
-  },
-  Campaigns: {
-    label: "الحملات",
-    description: "استيراد الحملات الإعلانية",
-    icon: Megaphone,
-    palette: "blue",
-  },
-  Ads: {
-    label: "الإعلانات",
-    description: "استيراد الإعلانات وأدائها",
-    icon: Layers,
-    palette: "purple",
-  },
-  Audience: {
-    label: "الجمهور",
-    description: "استيراد بيانات الجمهور",
-    icon: Users,
-    palette: "teal",
-  },
-  "Audience Insights": {
-    label: "رؤى الجمهور",
-    description: "استيراد رؤى وتحليلات الجمهور",
-    icon: BarChart3,
-    palette: "teal",
-  },
-  "Search Terms": {
-    label: "عبارات البحث",
-    description: "استيراد عبارات البحث المستخدمة",
-    icon: Search,
-    palette: "amber",
-  },
-  "Pixel Events": {
-    label: "أحداث البكسل",
-    description: "استيراد الأحداث المسجلة عبر البكسل",
-    icon: Activity,
-    palette: "red",
-  },
+  Customers: { icon: Users, palette: "blue" },
+  Orders: { icon: ShoppingCart, palette: "green" },
+  Products: { icon: Package, palette: "purple" },
+  Inventory: { icon: Layers, palette: "amber" },
+  Catalog: { icon: Tag, palette: "red" },
+  Traffic: { icon: BarChart3, palette: "teal" },
+  Events: { icon: Activity, palette: "blue" },
+  Conversions: { icon: Target, palette: "green" },
+  "Page Views": { icon: Eye, palette: "purple" },
+  Funnels: { icon: Filter, palette: "amber" },
+  Campaigns: { icon: Megaphone, palette: "blue" },
+  Ads: { icon: Layers, palette: "purple" },
+  Audience: { icon: Users, palette: "teal" },
+  "Audience Insights": { icon: BarChart3, palette: "teal" },
+  "Search Terms": { icon: Search, palette: "amber" },
+  "Pixel Events": { icon: Activity, palette: "red" },
 }
 
-// Arabic one-liners for the platform grid. Keyed by the catalog's displayName; a connector
-// with no entry falls back to its English PLATFORM_DETAILS description rather than nothing.
-const PLATFORM_DESCRIPTION_AR: Record<string, string> = {
-  Salla: "زامن المنتجات والطلبات وبيانات العملاء من متجرك.",
-  Shopify: "اربط متجر شوبيفاي لمزامنة الطلبات والمنتجات.",
-  Zid: "اربط متجر زد لمزامنة الطلبات والمنتجات والعملاء.",
-  "Google Analytics 4": "استورد الجلسات والأحداث وتقارير الجمهور.",
-  "Meta Ads": "اسحب حملات فيسبوك وإنستغرام وأداء الإنفاق.",
-  "Google Ads": "اسحب الحملات والكلمات المفتاحية وبيانات التحويل.",
-  "TikTok Ads": "زامن حملات تيك توك ومقاييس الأداء.",
-  "Snapchat Ads": "زامن حملات سناب شات والإنفاق والتحويلات.",
+// Translation key for the platform grid's one-liner blurb, keyed by the catalog's displayName.
+// A connector with no entry falls back to its English PLATFORM_DETAILS description rather than
+// nothing -- kept as a deliberate English fallback (see platformDescription() below), not a
+// translation gap.
+const PLATFORM_DESCRIPTION_KEY: Record<string, string> = {
+  Salla: "salla",
+  Shopify: "shopify",
+  Zid: "zid",
+  "Google Analytics 4": "googleAnalytics4",
+  "Meta Ads": "metaAds",
+  "Google Ads": "googleAds",
+  "TikTok Ads": "tiktokAds",
+  "Snapchat Ads": "snapchatAds",
+}
+
+function platformDescription(
+  displayName: string,
+  englishFallback: string,
+  t: NewConnectionWizardTranslator
+): string {
+  const key = PLATFORM_DESCRIPTION_KEY[displayName]
+  return key ? t(`platformDescriptions.${key}` as "platformDescriptions.salla") : englishFallback
 }
 
 const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   Salla: {
     category: "Ecommerce",
     description: "Sync products, orders, and customer records from your store.",
-    connectionType: "موصل التجارة الإلكترونية",
     authMethod: "OAuth 2.0",
     permissions: ["Orders", "Products", "Customers"],
     capabilities: ["Products", "Orders", "Customers", "Catalog"],
     accountLabel: "Store",
     accountDescription: "Choose the Salla store that should connect to MADAR.",
     resourceTypeLabel: "Store",
-    syncFrequency: "كل 30 دقيقة",
-    estimatedDuration: "1 – 2 دقيقة",
+    syncFrequency: "every30Min",
+    estimatedDuration: "oneToTwoMinutes",
     recommendedObjects: ["Products", "Orders", "Customers"],
     allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
     accounts: [
@@ -399,15 +386,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   Shopify: {
     category: "Ecommerce",
     description: "Sync products, orders, and customer records from your store.",
-    connectionType: "موصل التجارة الإلكترونية",
     authMethod: "OAuth 2.0",
     permissions: ["Orders", "Products", "Customers"],
     capabilities: ["Products", "Orders", "Customers", "Catalog"],
     accountLabel: "Store",
     accountDescription: "Choose the Shopify store that should connect to MADAR.",
     resourceTypeLabel: "Store",
-    syncFrequency: "كل 30 دقيقة",
-    estimatedDuration: "1 – 2 دقيقة",
+    syncFrequency: "every30Min",
+    estimatedDuration: "oneToTwoMinutes",
     recommendedObjects: ["Products", "Orders", "Customers"],
     allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
     accounts: [
@@ -419,15 +405,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   Zid: {
     category: "Ecommerce",
     description: "Bring store activity, product updates, and customer records together.",
-    connectionType: "موصل التجارة الإلكترونية",
     authMethod: "OAuth 2.0",
     permissions: ["Orders", "Products", "Customers"],
     capabilities: ["Products", "Orders", "Customers", "Catalog"],
     accountLabel: "Store",
     accountDescription: "Choose the Zid store that should sync into MADAR.",
     resourceTypeLabel: "Store",
-    syncFrequency: "كل 30 دقيقة",
-    estimatedDuration: "1 – 2 دقيقة",
+    syncFrequency: "every30Min",
+    estimatedDuration: "oneToTwoMinutes",
     recommendedObjects: ["Products", "Orders", "Customers"],
     allObjects: ["Products", "Orders", "Customers", "Inventory", "Catalog"],
     accounts: [
@@ -439,15 +424,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Google Analytics 4": {
     category: "Analytics",
     description: "Capture traffic, events, and conversions for customer insight.",
-    connectionType: "موصل التحليلات",
     authMethod: "OAuth 2.0",
     permissions: ["Traffic", "Events", "Conversions"],
     capabilities: ["Traffic", "Events", "Conversions"],
     accountLabel: "Property",
     accountDescription: "Select the GA4 property that should feed your workspace.",
     resourceTypeLabel: "Property",
-    syncFrequency: "كل 15 دقيقة",
-    estimatedDuration: "أقل من 90 ثانية",
+    syncFrequency: "every15Min",
+    estimatedDuration: "under90Seconds",
     recommendedObjects: ["Traffic", "Events", "Conversions"],
     allObjects: ["Traffic", "Events", "Conversions", "Page Views", "Funnels"],
     accounts: [
@@ -459,15 +443,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Meta Ads": {
     category: "Marketing",
     description: "Sync campaign, ad, and conversion data from Meta.",
-    connectionType: "موصل المنصات الإعلانية",
     authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Business or Ad Account",
     accountDescription: "Choose the Meta business or ad account to import from.",
     resourceTypeLabel: "Account",
-    syncFrequency: "كل 15 دقيقة",
-    estimatedDuration: "أقل من 90 ثانية",
+    syncFrequency: "every15Min",
+    estimatedDuration: "under90Seconds",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Audience Insights"],
     accounts: [
@@ -479,15 +462,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Google Ads": {
     category: "Marketing",
     description: "Import paid media performance and conversion signals.",
-    connectionType: "موصل المنصات الإعلانية",
     authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Account",
     accountDescription: "Select the Google Ads account that should connect to MADAR.",
     resourceTypeLabel: "Account",
-    syncFrequency: "كل 15 دقيقة",
-    estimatedDuration: "أقل من 90 ثانية",
+    syncFrequency: "every15Min",
+    estimatedDuration: "under90Seconds",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Search Terms"],
     accounts: [
@@ -499,15 +481,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "TikTok Ads": {
     category: "Marketing",
     description: "Connect campaign and audience performance from TikTok Ads.",
-    connectionType: "موصل المنصات الإعلانية",
     authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Account",
     accountDescription: "Choose the TikTok Ads account to sync into MADAR.",
     resourceTypeLabel: "Account",
-    syncFrequency: "كل 15 دقيقة",
-    estimatedDuration: "أقل من 90 ثانية",
+    syncFrequency: "every15Min",
+    estimatedDuration: "under90Seconds",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Audience"],
     accounts: [
@@ -518,15 +499,14 @@ const PLATFORM_DETAILS: Record<string, PlatformDetails> = {
   "Snapchat Ads": {
     category: "Marketing",
     description: "Sync ad delivery and conversion performance from Snapchat.",
-    connectionType: "موصل المنصات الإعلانية",
     authMethod: "OAuth 2.0",
     permissions: ["Campaigns", "Ads", "Conversions"],
     capabilities: ["Campaigns", "Ads", "Traffic", "Events", "Conversions"],
     accountLabel: "Account",
     accountDescription: "Choose the Snapchat Ads account to import from.",
     resourceTypeLabel: "Account",
-    syncFrequency: "كل 15 دقيقة",
-    estimatedDuration: "أقل من 90 ثانية",
+    syncFrequency: "every15Min",
+    estimatedDuration: "under90Seconds",
     recommendedObjects: ["Campaigns", "Ads", "Conversions"],
     allObjects: ["Campaigns", "Ads", "Conversions", "Traffic", "Pixel Events"],
     accounts: [
@@ -651,37 +631,37 @@ function parseAccessibleProviderAccounts(
   }
 }
 
-function errorMeta(kind: ErrorKind): WizardErrorState {
+function errorMeta(kind: ErrorKind, t: NewConnectionWizardTranslator): WizardErrorState {
   switch (kind) {
     case "authorization_cancelled":
       return {
         kind,
-        title: "تم إلغاء التفويض",
-        description: "أغلقت المنصة جلسة OAuth قبل منح الصلاحية.",
+        title: t("errors.authorizationCancelled.title"),
+        description: t("errors.authorizationCancelled.description"),
       }
     case "permission_denied":
       return {
         kind,
-        title: "الصلاحية مرفوضة",
-        description: "لم يمنح الحساب المرتبط الصلاحيات التي يحتاجها مدار لمزامنة البيانات.",
+        title: t("errors.permissionDenied.title"),
+        description: t("errors.permissionDenied.description"),
       }
     case "token_expired":
       return {
         kind,
-        title: "انتهت صلاحية الرمز",
-        description: "لم يعد رمز OAuth صالحاً. أعد ربط المنصة للمتابعة.",
+        title: t("errors.tokenExpired.title"),
+        description: t("errors.tokenExpired.description"),
       }
     case "network_timeout":
       return {
         kind,
-        title: "انتهت مهلة الشبكة",
-        description: "استغرق الاتصال وقتاً أطول من اللازم. حاول مجدداً عندما تستقر الشبكة.",
+        title: t("errors.networkTimeout.title"),
+        description: t("errors.networkTimeout.description"),
       }
     default:
       return {
         kind,
-        title: "تعذّر إكمال الربط",
-        description: "حدث ما قاطع عملية الإعداد. يمكنك المحاولة مجدداً أو اختيار حساب آخر.",
+        title: t("errors.generic.title"),
+        description: t("errors.generic.description"),
       }
   }
 }
@@ -695,17 +675,30 @@ function inferErrorKind(message: string): ErrorKind {
   return "generic"
 }
 
-const LOADING_STAGES: Record<Exclude<FlowStatus, "idle" | "finalizing">, string> = {
-  connecting: "جارٍ الاتصال...",
-  authorizing: "جارٍ التفويض...",
-  fetching_accounts: "جارٍ جلب الحسابات...",
-  almost_done: "على وشك الانتهاء...",
+function loadingStageLabel(
+  status: Exclude<FlowStatus, "idle" | "finalizing">,
+  t: NewConnectionWizardTranslator
+): string {
+  switch (status) {
+    case "connecting":
+      return t("loadingStages.connecting")
+    case "authorizing":
+      return t("loadingStages.authorizing")
+    case "fetching_accounts":
+      return t("loadingStages.fetchingAccounts")
+    case "almost_done":
+      return t("loadingStages.almostDone")
+  }
 }
 
-const ACCOUNT_FALLBACK = {
-  id: "account-default",
-  label: "الحساب الرئيسي",
-  description: "الحساب الذي تختاره المنصة افتراضياً.",
+const ACCOUNT_FALLBACK_ID = "account-default"
+
+function accountFallback(t: NewConnectionWizardTranslator): AccountOption {
+  return {
+    id: ACCOUNT_FALLBACK_ID,
+    label: t("accountFallback.label"),
+    description: t("accountFallback.description"),
+  }
 }
 
 // Colours, radii and type sizes below are read straight off the new-connection SVG export
@@ -725,12 +718,12 @@ const HERO_ORBIT: Array<{ platform: string; x: number; y: number }> = [
   { platform: "Snapchat Ads", x: 50, y: 92 },
 ]
 
-function HeroConstellation() {
+function HeroConstellation({ t }: { t: NewConnectionWizardTranslator }) {
   return (
     <div
       className="relative h-[210px] w-full max-w-[320px] shrink-0"
       role="img"
-      aria-label="MADAR متصل بمنصات المتاجر والإعلانات"
+      aria-label={t("heroConstellationAriaLabel")}
     >
       <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         {HERO_ORBIT.map((node) => (
@@ -826,11 +819,17 @@ function SyncingHandshake({ platformName }: { platformName: string }) {
   )
 }
 
-function SuccessHandshake({ platformName }: { platformName: string }) {
+function SuccessHandshake({
+  platformName,
+  t,
+}: {
+  platformName: string
+  t: NewConnectionWizardTranslator
+}) {
   return (
     <div className="relative shrink-0 pt-7">
       <p className="absolute end-2 top-0 max-w-44 text-center text-[12.5px] font-extrabold leading-5 text-[#0b1738]">
-        خطوة جديدة نحو قرارات أعمق
+        {t("successHandshakeTagline")}
       </p>
       {/* RTL: the first child lands rightmost, and the export reads MADAR -> done ->
           platform from left to right, so the platform is written first. */}
@@ -852,10 +851,12 @@ function SuccessHandshake({ platformName }: { platformName: string }) {
   )
 }
 
-// Latin digits: the rest of the page (the elapsed clock, the step numbers, the export's
-// own "943/2,000") uses them, and ar-SA defaults to Arabic-Indic.
-function formatCount(value: number) {
-  return new Intl.NumberFormat("ar-SA-u-nu-latn", { useGrouping: true }).format(value)
+// Latin digits in both locales: the rest of the page (the elapsed clock, the step numbers,
+// the export's own "943/2,000") uses them, and ar-SA defaults to Arabic-Indic otherwise.
+// Mirrors schedule-settings.tsx's dateTimeLocale(locale) helper in this same feature.
+function formatCount(value: number, locale: Locale) {
+  const intlLocale = locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
+  return new Intl.NumberFormat(intlLocale, { useGrouping: true }).format(value)
 }
 
 function formatElapsed(ms: number) {
@@ -865,21 +866,31 @@ function formatElapsed(ms: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
-function formatElapsedWords(ms: number) {
+function formatElapsedWords(ms: number, t: NewConnectionWizardTranslator) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
-  return `${minutes} دقيقة و ${seconds} ثانية`
+  return t("syncingStep.elapsedWords", { minutes, seconds })
 }
 
 const WIZARD_INTERACTION_CLASS =
   "cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
 
 export function NewConnectionWizard() {
+  const t = useTranslations("integrations.newConnectionWizard")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
   const router = useRouter()
   const { refetch } = useConnectionsCenter()
   const { connectionManager, integrationApplicationService } = useApplicationServices()
   const { currentWorkspace, currentOrganization } = useWorkspace()
+
+  const steps = useMemo(() => wizardSteps(t), [t])
+  const heroCopySteps = useMemo(() => heroCopy(t), [t])
+  const categoryLabelMap = useMemo(() => categoryLabels(t), [t])
+  const categorySingularMap = useMemo(() => categorySingular(t), [t])
+  const fallbackAccount = useMemo(() => accountFallback(t), [t])
 
   const [stepIndex, setStepIndex] = useState<WizardStep>(0)
   const [selectedCategory, setSelectedCategory] = useState<PlatformCategory>("All")
@@ -966,14 +977,15 @@ export function NewConnectionWizard() {
         return true
       }
 
-      // Search both the English catalog name and the Arabic blurb, since the page is Arabic
-      // but every connector is still listed under its English brand name.
-      const arabicDescription = PLATFORM_DESCRIPTION_AR[connector.displayName] ?? ""
+      // Search both the English catalog name and the localized blurb, since the page carries
+      // every connector under its English brand name regardless of locale.
+      const localizedDescription = platformDescription(connector.displayName, "", t)
       return (
-        connector.displayName.toLowerCase().includes(query) || arabicDescription.includes(query)
+        connector.displayName.toLowerCase().includes(query) ||
+        localizedDescription.toLowerCase().includes(query)
       )
     })
-  }, [platformSearch, selectedCategory, visibleCategories])
+  }, [platformSearch, selectedCategory, visibleCategories, t])
 
   const availableAccounts = useMemo(() => {
     if (!selectedConnector) {
@@ -981,15 +993,15 @@ export function NewConnectionWizard() {
     }
 
     if (selectedConnector.connectorId in OAUTH_CONNECTOR_PROFILES) {
-      return discoveredProviderAccounts.length > 0 ? discoveredProviderAccounts : [ACCOUNT_FALLBACK]
+      return discoveredProviderAccounts.length > 0 ? discoveredProviderAccounts : [fallbackAccount]
     }
 
-    return selectedConnectorDetails?.accounts ?? [ACCOUNT_FALLBACK]
-  }, [discoveredProviderAccounts, selectedConnector, selectedConnectorDetails])
+    return selectedConnectorDetails?.accounts ?? [fallbackAccount]
+  }, [discoveredProviderAccounts, fallbackAccount, selectedConnector, selectedConnectorDetails])
   const selectedAccount =
     availableAccounts.find((account) => account.id === selectedAccountId) ??
     availableAccounts[0] ??
-    ACCOUNT_FALLBACK
+    fallbackAccount
   const selectedObjectsSet = useMemo(() => new Set(selectedObjects), [selectedObjects])
 
   const recommendedObjects = useMemo(
@@ -1019,7 +1031,7 @@ export function NewConnectionWizard() {
       }
       return recommendedObjects.length > 0 ? recommendedObjects : allObjects.slice(0, 3)
     })
-    setSelectedAccountId((current) => current ?? availableAccounts[0]?.id ?? ACCOUNT_FALLBACK.id)
+    setSelectedAccountId((current) => current ?? availableAccounts[0]?.id ?? ACCOUNT_FALLBACK_ID)
     setConnectionName((current) => current || `اتصال ${selectedConnector.displayName}`)
   }, [availableAccounts, allObjects, recommendedObjects, selectedConnector])
 
@@ -1038,7 +1050,11 @@ export function NewConnectionWizard() {
     )
     if (erroredProfileEntry) {
       const reason = callbackParams.get("reason")
-      toast.error(reason ? `تعذر إتمام الاتصال: ${reason}` : "تعذر إتمام الاتصال. حاول مرة أخرى.")
+      toast.error(
+        reason
+          ? t("errors.oauthCallbackErrorWithReason", { reason })
+          : t("errors.oauthCallbackErrorGeneric")
+      )
       return
     }
 
@@ -1124,7 +1140,7 @@ export function NewConnectionWizard() {
         }
         const message = error instanceof Error ? error.message : String(error)
         const kind = inferErrorKind(message)
-        setErrorState(errorMeta(kind))
+        setErrorState(errorMeta(kind, t))
       } finally {
         if (!cancelled) {
           setFlowStatus("idle")
@@ -1142,8 +1158,10 @@ export function NewConnectionWizard() {
     // this same effect mid-flight (selectedConnector?.connectorId changing on the first render),
     // cancelling the in-flight validateConnection call before its catch block ever runs and
     // silently swallowing the resulting error state. workspaceId IS safe to depend on -- this
-    // effect only reads it, never writes it, so no such retrigger risk applies there.
-  }, [integrationApplicationService, workspaceId])
+    // effect only reads it, never writes it, so no such retrigger risk applies there. `t` is
+    // next-intl's own memoized translator (stable across renders, only changing with locale), so
+    // depending on it carries none of that retrigger risk either.
+  }, [integrationApplicationService, workspaceId, t])
 
   useEffect(() => {
     if (!selectedConnectorDetails) {
@@ -1203,8 +1221,8 @@ export function NewConnectionWizard() {
       if (apiKey.trim().length === 0 || clientSecret.trim().length === 0) {
         setErrorState({
           kind: "generic",
-          title: "بيانات ناقصة",
-          description: "أدخل معرّف المتجر ورمز الوصول من إعدادات زد قبل المتابعة.",
+          title: t("errors.zidManualMissingFields.title"),
+          description: t("errors.zidManualMissingFields.description"),
         })
         setRetryTarget("connect")
         setFlowStatus("idle")
@@ -1244,13 +1262,12 @@ export function NewConnectionWizard() {
         if (code === "ZID_DIRECT_TOKEN_INVALID" || code === "ZID_DIRECT_TOKEN_MISSING") {
           setErrorState({
             kind: "generic",
-            title: "رمز الوصول غير صالح",
-            description:
-              "رفض زد رمز الوصول هذا. تحقق من نسخه بالكامل من إعدادات متجرك في زد (التكاملات البرمجية).",
+            title: t("errors.zidTokenInvalid.title"),
+            description: t("errors.zidTokenInvalid.description"),
           })
         } else {
           const message = error instanceof Error ? error.message : String(error)
-          setErrorState(errorMeta(inferErrorKind(message)))
+          setErrorState(errorMeta(inferErrorKind(message), t))
         }
         setRetryTarget("connect")
         setFlowStatus("idle")
@@ -1317,7 +1334,7 @@ export function NewConnectionWizard() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const kind = inferErrorKind(message)
-      setErrorState(errorMeta(kind))
+      setErrorState(errorMeta(kind, t))
       setRetryTarget("connect")
       setFlowStatus("idle")
     }
@@ -1333,6 +1350,7 @@ export function NewConnectionWizard() {
     selectedConnectorDetails,
     setupMode,
     shopDomain,
+    t,
     workspaceId,
     workspaceLabel,
   ])
@@ -1356,7 +1374,7 @@ export function NewConnectionWizard() {
         selectedConnector.connectorId in OAUTH_CONNECTOR_PROFILES &&
         discoveredProviderAccounts.length > 0 &&
         selectedAccountId &&
-        selectedAccountId !== ACCOUNT_FALLBACK.id
+        selectedAccountId !== ACCOUNT_FALLBACK_ID
       ) {
         await connectionManager.selectAccount({
           connectionId: draftConnectionId,
@@ -1379,7 +1397,7 @@ export function NewConnectionWizard() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const kind = inferErrorKind(message)
-      setErrorState(errorMeta(kind))
+      setErrorState(errorMeta(kind, t))
       setRetryTarget("finalize")
       setFlowStatus("idle")
     }
@@ -1391,6 +1409,7 @@ export function NewConnectionWizard() {
     resetError,
     selectedAccountId,
     selectedConnector,
+    t,
   ])
 
   const handleContinue = useCallback(async () => {
@@ -1532,15 +1551,15 @@ export function NewConnectionWizard() {
       setSyncOutcome(run.result ?? null)
       setSyncPhase(run.status === "failed" ? "failed" : "done")
       if (run.status === "failed") {
-        setSyncError(run.errorMessage ?? "تعذّر إكمال المزامنة.")
+        setSyncError(run.errorMessage ?? t("errors.syncFailedGeneric"))
       }
     } catch (error) {
       setSyncPhase("failed")
-      setSyncError(error instanceof Error ? error.message : "تعذّر إكمال المزامنة.")
+      setSyncError(error instanceof Error ? error.message : t("errors.syncFailedGeneric"))
     } finally {
       setIsRunningFirstSync(false)
     }
-  }, [connectionManager, draftConnectionId])
+  }, [connectionManager, draftConnectionId, t])
 
   // A real clock, ticking only while a run is actually in flight.
   useEffect(() => {
@@ -1574,7 +1593,7 @@ export function NewConnectionWizard() {
   const renderStepper = () => (
     <div className={cn(PANEL_CLASS, "px-5 py-5 md:px-7")}>
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-        {WIZARD_STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const state = currentStepState(index as WizardStep)
           return (
             <Fragment key={step.label}>
@@ -1633,10 +1652,10 @@ export function NewConnectionWizard() {
     if (syncPhase !== "idle" && selectedConnector) {
       const heading =
         syncPhase === "running"
-          ? `جاري مزامنة بيانات ${selectedConnector.displayName}`
+          ? t("syncingHeading.running", { platform: selectedConnector.displayName })
           : syncPhase === "failed"
-            ? `تعذّرت مزامنة بيانات ${selectedConnector.displayName}`
-            : `اكتملت مزامنة بيانات ${selectedConnector.displayName}`
+            ? t("syncingHeading.failed", { platform: selectedConnector.displayName })
+            : t("syncingHeading.done", { platform: selectedConnector.displayName })
 
       return (
         <div className="space-y-4">
@@ -1665,8 +1684,8 @@ export function NewConnectionWizard() {
     }
 
     const hero = isSuccess
-      ? SUCCESS_HERO(selectedConnector?.displayName ?? "")
-      : HERO_COPY[stepIndex]
+      ? successHero(selectedConnector?.displayName ?? "", t)
+      : heroCopySteps[stepIndex]
     const isFinalStep = stepIndex === 3 && !isSuccess
 
     return (
@@ -1688,14 +1707,14 @@ export function NewConnectionWizard() {
                   className="inline-flex items-center gap-1 text-[12px] font-medium text-[#6b7b96] transition-colors hover:text-[#2878ff]"
                 >
                   <ChevronLeft className="size-3.5 rtl:rotate-180" />
-                  العودة إلى التكاملات
+                  {t("backToIntegrations")}
                 </Link>
               )}
               {isSuccess ? null : (
                 <p className="text-[12px] font-semibold text-[#2878ff]">
                   {isFinalStep
-                    ? "الخطوة 4 من 4"
-                    : `خطوة ${stepIndex + 1} من ${WIZARD_STEPS.length}`}
+                    ? t("stepIndicator.final")
+                    : t("stepIndicator.ongoing", { current: stepIndex + 1, total: steps.length })}
                 </p>
               )}
               {/* RTL: the tick is written first so it lands to the right of the heading. */}
@@ -1724,16 +1743,18 @@ export function NewConnectionWizard() {
               </p>
               {stepIndex === 1 ? (
                 <p className="pt-1 text-[12.5px] font-bold text-[#2878ff]">
-                  الخطوة الحالية: {WIZARD_STEPS[1].label}
+                  {t("currentStepLabel", { step: steps[1].label })}
                 </p>
               ) : null}
             </div>
 
             {isSuccess && selectedConnector ? (
-              <SuccessHandshake platformName={selectedConnector.displayName} />
+              <SuccessHandshake platformName={selectedConnector.displayName} t={t} />
             ) : isFinalStep ? (
               <div className="flex shrink-0 items-center gap-5">
-                <p className="text-[13px] font-bold text-[#2878ff]">أنت على وشك إنشاء التكامل!</p>
+                <p className="text-[13px] font-bold text-[#2878ff]">
+                  {t("aboutToCreateIntegration")}
+                </p>
                 <div className="flex size-24 shrink-0 items-center justify-center rounded-[20px] bg-white shadow-[0_8px_24px_rgba(11,23,56,0.08)]">
                   <span className="flex size-14 items-center justify-center rounded-full bg-[#1fa85c] text-white">
                     <Check className="size-8" strokeWidth={3} />
@@ -1741,7 +1762,7 @@ export function NewConnectionWizard() {
                 </div>
               </div>
             ) : (
-              <HeroConstellation />
+              <HeroConstellation t={t} />
             )}
           </div>
         </div>
@@ -1768,7 +1789,7 @@ export function NewConnectionWizard() {
               )}
               onClick={() => setSelectedCategory(category)}
             >
-              {CATEGORY_LABELS[category]}
+              {categoryLabelMap[category]}
             </button>
           ))}
         </div>
@@ -1776,8 +1797,8 @@ export function NewConnectionWizard() {
         <AppInput
           value={platformSearch}
           onChange={(event) => setPlatformSearch(event.target.value)}
-          placeholder="ابحث عن منصة..."
-          aria-label="ابحث عن منصة"
+          placeholder={t("platformStep.searchPlaceholder")}
+          aria-label={t("platformStep.searchAriaLabel")}
           startIcon={<Search className="size-4 text-[#95a4bd]" />}
           wrapperClassName="w-full md:w-[262px]"
           className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738] placeholder:text-[#95a4bd]"
@@ -1785,13 +1806,17 @@ export function NewConnectionWizard() {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <h2 className={cn("text-[15px] font-extrabold", PAGE_TEXT)}>المنصات المتاحة</h2>
-        <span className={cn("text-[11.5px]", MUTED_TEXT)}>{filteredConnectors.length} منصة</span>
+        <h2 className={cn("text-[15px] font-extrabold", PAGE_TEXT)}>
+          {t("platformStep.availablePlatforms")}
+        </h2>
+        <span className={cn("text-[11.5px]", MUTED_TEXT)}>
+          {t("platformStep.platformCount", { count: filteredConnectors.length })}
+        </span>
       </div>
 
       {filteredConnectors.length === 0 ? (
         <div className={cn(PANEL_CLASS, "px-5 py-10 text-center text-[13px]", MUTED_TEXT)}>
-          لا توجد منصة مطابقة لبحثك.
+          {t("platformStep.noResults")}
         </div>
       ) : (
         <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -1799,8 +1824,11 @@ export function NewConnectionWizard() {
             const details = PLATFORM_DETAILS[connector.displayName]
             const category = getCategoryForConnector(connector.displayName)
             const selected = connector.connectorDefinitionId === selectedConnectorDefinitionId
-            const description =
-              PLATFORM_DESCRIPTION_AR[connector.displayName] ?? details?.description ?? ""
+            const description = platformDescription(
+              connector.displayName,
+              details?.description ?? "",
+              t
+            )
 
             return (
               <button
@@ -1832,7 +1860,7 @@ export function NewConnectionWizard() {
                       <Check className="size-3" />
                     </span>
                   ) : (
-                    <ChevronLeft className="size-4 shrink-0 text-[#c0cbdc]" />
+                    <ChevronLeft className="size-4 shrink-0 text-[#c0cbdc] rtl:rotate-180" />
                   )}
                 </div>
 
@@ -1845,7 +1873,7 @@ export function NewConnectionWizard() {
                       CATEGORY_TAG_CLASS[category]
                     )}
                   >
-                    {CATEGORY_LABELS[category]}
+                    {categoryLabelMap[category]}
                   </span>
                 </div>
 
@@ -1858,7 +1886,7 @@ export function NewConnectionWizard() {
                       : "border-[#e1e7f0] bg-white text-[#0b1738] group-hover:border-[#2878ff] group-hover:text-[#2878ff]"
                   )}
                 >
-                  {selected ? "المنصة المختارة" : "ربط الآن"}
+                  {selected ? t("platformStep.selectedPlatform") : t("platformStep.linkNow")}
                   <Link2 className="size-3.5" />
                 </span>
               </button>
@@ -1919,7 +1947,7 @@ export function NewConnectionWizard() {
       iconPosition="end"
       onClick={() => setStepIndex(0)}
     >
-      تغيير المنصة
+      {t("changePlatformButton")}
     </AppButton>
   )
 
@@ -1928,9 +1956,11 @@ export function NewConnectionWizard() {
       return (
         <div className={cn(PANEL_CLASS, "space-y-3 p-6 text-center")}>
           <CircleAlert className="mx-auto size-10 text-[#95a4bd]" />
-          <h3 className={cn("text-[16px] font-extrabold", PAGE_TEXT)}>اختر منصة أولاً</h3>
+          <h3 className={cn("text-[16px] font-extrabold", PAGE_TEXT)}>
+            {t("connectStep.choosePlatformFirstTitle")}
+          </h3>
           <p className={cn("text-[12.5px]", MUTED_TEXT)}>
-            اختر منصة في الخطوة السابقة لبدء عملية التفويض عبر OAuth.
+            {t("connectStep.choosePlatformFirstDescription")}
           </p>
         </div>
       )
@@ -1948,7 +1978,7 @@ export function NewConnectionWizard() {
                 CATEGORY_TAG_CLASS[category]
               )}
             >
-              {CATEGORY_SINGULAR[category]}
+              {categorySingularMap[category]}
             </span>
           ),
         })}
@@ -1957,40 +1987,40 @@ export function NewConnectionWizard() {
           <div className="flex items-center gap-3 rounded-[12px] border border-[#c9dcff] bg-[#eef4ff] px-4 py-3">
             <Loader2 className="size-4 shrink-0 animate-spin text-[#2878ff]" />
             <p className="text-[12.5px] font-semibold text-[#2878ff]">
-              {LOADING_STAGES[flowStatus as Exclude<FlowStatus, "idle" | "finalizing">]}
+              {loadingStageLabel(flowStatus as Exclude<FlowStatus, "idle" | "finalizing">, t)}
             </p>
           </div>
         ) : null}
 
         <div className="rounded-[12px] border border-[#e1e7f0] p-5">
-          <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>معلومات OAuth</h3>
+          <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+            {t("connectStep.oauthInfoTitle")}
+          </h3>
           <p className={cn("mt-3 text-[12.5px] leading-6", MUTED_TEXT)}>
-            قم بتسجيل الدخول إلى متجرك ومنح مدار الصلاحيات المطلوبة.
+            {t("connectStep.oauthInfoLine1")}
           </p>
           <p className={cn("text-[12.5px] leading-6", MUTED_TEXT)}>
-            سيتم تحويلك إلى {selectedConnector.displayName} لإتمام التفويض بشكل آمن.
+            {t("connectStep.oauthInfoLine2", { platform: selectedConnector.displayName })}
           </p>
 
           {selectedConnector.connectorId === "shopify" ? (
             <div className="mt-4 space-y-2">
               <AppInput
-                label="نطاق المتجر"
+                label={t("connectStep.shopDomainLabel")}
                 placeholder="your-store.myshopify.com"
                 value={shopDomain}
                 onChange={(event) => setShopDomain(event.target.value)}
                 className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
               />
               <p className={cn("text-[11px] leading-5", MUTED_TEXT)}>
-                أدخل معرّف متجر شوبيفاي أو نطاق myshopify.com كاملاً.
+                {t("connectStep.shopDomainHint")}
               </p>
             </div>
           ) : null}
 
           <div className="mt-4 flex items-center gap-2 rounded-[10px] bg-[#f2f6fd] px-3.5 py-3">
             <Lock className="size-3.5 shrink-0 text-[#6b7b96]" />
-            <p className={cn("text-[11.5px]", MUTED_TEXT)}>
-              نستخدم بروتوكول OAuth 2.0 الآمن ولا يتم تخزين كلمات المرور.
-            </p>
+            <p className={cn("text-[11.5px]", MUTED_TEXT)}>{t("connectStep.oauthSecurityNote")}</p>
           </div>
         </div>
 
@@ -2004,16 +2034,18 @@ export function NewConnectionWizard() {
           iconPosition="end"
           onClick={() => void beginOAuthFlow()}
         >
-          الاتصال بـ {selectedConnector.displayName}
+          {t("connectStep.connectButton", { platform: selectedConnector.displayName })}
         </AppButton>
 
         <div className="rounded-[12px] border border-[#dbe6f8] bg-[#f2f7ff] p-5">
-          <h4 className={cn("text-[13px] font-extrabold", PAGE_TEXT)}>معلومة مهمة</h4>
+          <h4 className={cn("text-[13px] font-extrabold", PAGE_TEXT)}>
+            {t("connectStep.importantNoteTitle")}
+          </h4>
           <p className={cn("mt-2.5 text-[12px] leading-6", MUTED_TEXT)}>
-            نحن لا نقوم بتخزين بيانات تسجيل الدخول الخاصة بك.
+            {t("connectStep.noCredentialStorage")}
           </p>
           <p className={cn("text-[12px] leading-6", MUTED_TEXT)}>
-            جميع الاتصالات تتم عبر OAuth الآمن.
+            {t("connectStep.allConnectionsSecure")}
           </p>
         </div>
 
@@ -2026,46 +2058,45 @@ export function NewConnectionWizard() {
               PAGE_TEXT
             )}
           >
-            <span>إعداد متقدّم</span>
+            <span>{t("connectStep.advancedSetup")}</span>
             <ChevronRight className="size-4 text-[#95a4bd] transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:-rotate-90" />
           </summary>
           <div className="mt-4 space-y-3">
             {selectedConnector.connectorId === "zid" ? (
               <>
                 <AppInput
-                  label="معرّف المتجر"
-                  placeholder="مثال: 3058261"
+                  label={t("connectStep.zidStoreIdLabel")}
+                  placeholder={t("connectStep.zidStoreIdPlaceholder")}
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
                   className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
                 />
                 <AppInput
-                  label="رمز الوصول"
+                  label={t("connectStep.zidAccessTokenLabel")}
                   value={clientSecret}
                   onChange={(event) => setClientSecret(event.target.value)}
                   className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
                 />
                 <p className={cn("text-[11px] leading-5", MUTED_TEXT)}>
-                  احصل على القيمتين من متجرك في زد: الإعدادات ← التكاملات البرمجية (API) ← بيانات
-                  الربط المباشر.
+                  {t("connectStep.zidCredentialsHint")}
                 </p>
               </>
             ) : (
               <>
                 <AppInput
-                  label="مفتاح API"
+                  label={t("connectStep.apiKeyLabel")}
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
                   className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
                 />
                 <AppInput
-                  label="المفتاح السري"
+                  label={t("connectStep.clientSecretLabel")}
                   value={clientSecret}
                   onChange={(event) => setClientSecret(event.target.value)}
                   className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
                 />
                 <AppInput
-                  label="بيانات اعتماد يدوية"
+                  label={t("connectStep.manualCredentialsLabel")}
                   value={manualCredentials}
                   onChange={(event) => setManualCredentials(event.target.value)}
                   className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
@@ -2083,7 +2114,9 @@ export function NewConnectionWizard() {
               )}
               onClick={() => setSetupMode((current) => (current === "oauth" ? "manual" : "oauth"))}
             >
-              {setupMode === "oauth" ? "التبديل إلى الإعداد اليدوي" : "استخدام OAuth فقط"}
+              {setupMode === "oauth"
+                ? t("connectStep.switchToManual")
+                : t("connectStep.useOauthOnly")}
             </button>
           </div>
         </details>
@@ -2097,9 +2130,9 @@ export function NewConnectionWizard() {
     }
 
     const presets: Array<{ id: SyncPreset; label: string }> = [
-      { id: "all", label: "الكل" },
-      { id: "recommended", label: "مقترح" },
-      { id: "custom", label: "مخصص" },
+      { id: "all", label: t("importStep.presetAll") },
+      { id: "recommended", label: t("importStep.presetRecommended") },
+      { id: "custom", label: t("importStep.presetCustom") },
     ]
 
     return (
@@ -2109,12 +2142,12 @@ export function NewConnectionWizard() {
           statusPill: (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9f8ef] px-2.5 py-1 text-[10.5px] font-semibold text-[#1f9d55]">
               <span className="size-1.5 rounded-full bg-[#1f9d55]" />
-              متصل
+              {t("importStep.connectedBadge")}
             </span>
           ),
           sub: (
             <p className={cn("text-[11.5px]", MUTED_TEXT)}>
-              {CATEGORY_SINGULAR[getCategoryForConnector(selectedConnector.displayName)]}
+              {categorySingularMap[getCategoryForConnector(selectedConnector.displayName)]}
             </p>
           ),
         })}
@@ -2123,10 +2156,10 @@ export function NewConnectionWizard() {
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="space-y-1.5">
               <h3 className={cn("text-[17px] font-extrabold", PAGE_TEXT)}>
-                اختر البيانات المراد استيرادها
+                {t("importStep.title")}
               </h3>
               <p className={cn("text-[12.5px] leading-6", MUTED_TEXT)}>
-                يمكنك اختيار مجموعة مقترحة، أو تحديد البيانات حسب احتياجك.
+                {t("importStep.subtitle")}
               </p>
             </div>
 
@@ -2154,7 +2187,7 @@ export function NewConnectionWizard() {
           <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
             {allObjects.map((object) => {
               const selected = selectedObjectsSet.has(object)
-              const meta = objectPresentation(object)
+              const meta = objectPresentation(object, t)
               const Icon = meta.icon
 
               return (
@@ -2204,14 +2237,16 @@ export function NewConnectionWizard() {
           <div className="flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
             <Info className="size-4 shrink-0 text-[#95a4bd]" />
             <p className={cn("text-[11.5px]", MUTED_TEXT)}>
-              سيتم استيراد البيانات التاريخية المتاحة من حسابك في {selectedConnector.displayName}
+              {t("importStep.historicalDataNote", { platform: selectedConnector.displayName })}
             </p>
           </div>
         </div>
 
         {discoveredProviderAccounts.length > 1 ? (
           <div className="space-y-3 border-t border-[#eef2f8] pt-5">
-            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>بأي حساب تريد ربط مدار؟</h3>
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+              {t("importStep.whichAccountTitle")}
+            </h3>
             <div className="flex flex-wrap gap-2">
               {discoveredProviderAccounts.map((account) => {
                 const selected = selectedAccountId === account.id
@@ -2240,25 +2275,25 @@ export function NewConnectionWizard() {
         <div className="grid gap-3.5 border-t border-[#eef2f8] pt-5 md:grid-cols-3">
           {[
             {
-              label: "تكرار المزامنة",
-              value: selectedConnectorDetails.syncFrequency,
+              label: t("importStep.tiles.syncFrequency"),
+              value: syncFrequencyLabel(selectedConnectorDetails.syncFrequency, t),
               icon: RefreshCcw,
               tint: "text-[#2878ff]",
             },
             {
-              label: "المدة المتوقعة",
-              value: selectedConnectorDetails.estimatedDuration,
+              label: t("importStep.tiles.estimatedDuration"),
+              value: estimatedDurationLabel(selectedConnectorDetails.estimatedDuration, t),
               icon: Calendar,
               tint: "text-[#1f9d55]",
             },
             {
-              label: "الإعداد المسبق",
+              label: t("importStep.tiles.presetLabel"),
               value:
                 syncPreset === "custom"
-                  ? "بيانات مخصصة"
+                  ? t("importStep.presetValue.custom")
                   : syncPreset === "all"
-                    ? "جميع البيانات المحددة"
-                    : "المجموعة المقترحة",
+                    ? t("importStep.presetValue.all")
+                    : t("importStep.presetValue.recommended"),
               icon: Layers,
               tint: "text-[#8b5cf6]",
             },
@@ -2285,29 +2320,39 @@ export function NewConnectionWizard() {
     }
 
     const detailCells = [
-      { label: "الحساب", value: selectedAccount.label, icon: Users, tint: "text-[#2878ff]" },
-      { label: "مساحة العمل", value: workspaceLabel, icon: Layers, tint: "text-[#8b5cf6]" },
       {
-        label: "المنصة",
+        label: t("reviewStep.cells.account"),
+        value: selectedAccount.label,
+        icon: Users,
+        tint: "text-[#2878ff]",
+      },
+      {
+        label: t("labels.workspace"),
+        value: workspaceLabel,
+        icon: Layers,
+        tint: "text-[#8b5cf6]",
+      },
+      {
+        label: t("labels.platform"),
         value: selectedConnector.displayName,
         icon: Link2,
         tint: "text-[#1f9d55]",
       },
       {
-        label: "نوع الربط",
-        value: selectedConnectorDetails.connectionType,
+        label: t("reviewStep.cells.connectionType"),
+        value: connectionTypeLabel(selectedConnectorDetails.category, t),
         icon: Link2,
         tint: "text-[#2878ff]",
       },
       {
-        label: "طريقة المصادقة",
+        label: t("labels.authMethod"),
         value: selectedConnectorDetails.authMethod,
         icon: ShieldCheck,
         tint: "text-[#1f9d55]",
       },
       {
-        label: "معدل المزامنة",
-        value: selectedConnectorDetails.syncFrequency,
+        label: t("reviewStep.cells.syncRate"),
+        value: syncFrequencyLabel(selectedConnectorDetails.syncFrequency, t),
         icon: RefreshCcw,
         tint: "text-[#e08b00]",
       },
@@ -2318,15 +2363,15 @@ export function NewConnectionWizard() {
         <div className={cn(PANEL_CLASS, "p-5")}>
           {renderPlatformHeader({
             trailing: changePlatformButton,
-            namePrefix: "منصة ",
+            namePrefix: t("reviewStep.platformPrefix"),
             statusPill: (
               <span className="inline-flex rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]">
-                جاهز للربط
+                {t("reviewStep.readyBadge")}
               </span>
             ),
             sub: (
               <p className={cn("text-[11.5px]", MUTED_TEXT)}>
-                {CATEGORY_SINGULAR[getCategoryForConnector(selectedConnector.displayName)]}
+                {categorySingularMap[getCategoryForConnector(selectedConnector.displayName)]}
               </p>
             ),
           })}
@@ -2335,10 +2380,12 @@ export function NewConnectionWizard() {
         <div className={cn(PANEL_CLASS, "p-5")}>
           <div className="flex items-center gap-2">
             <CreditCard className="size-4 text-[#6b7b96]" />
-            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>تفاصيل الربط</h3>
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+              {t("reviewStep.detailsTitle")}
+            </h3>
           </div>
           <p className={cn("mt-2 text-[12px] leading-6", MUTED_TEXT)}>
-            جميع الإعدادات التي قمت باختيارها سنُستخدم لإنشاء التكامل.
+            {t("reviewStep.detailsSubtitle")}
           </p>
 
           <div className="mt-4 grid overflow-hidden rounded-[10px] border border-[#eef2f8] sm:grid-cols-2 lg:grid-cols-3">
@@ -2361,16 +2408,16 @@ export function NewConnectionWizard() {
           <div className="flex items-center gap-2">
             <Layers className="size-4 text-[#6b7b96]" />
             <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
-              البيانات المحددة للاستيراد
+              {t("reviewStep.selectedDataTitle")}
             </h3>
           </div>
           <p className={cn("mt-2 text-[12px]", MUTED_TEXT)}>
-            سيتم استيراد البيانات التالية من {selectedConnector.displayName}:
+            {t("reviewStep.selectedDataSubtitle", { platform: selectedConnector.displayName })}
           </p>
 
           <div className="mt-3.5 flex flex-wrap gap-2">
             {selectedObjects.map((object) => {
-              const meta = objectPresentation(object)
+              const meta = objectPresentation(object, t)
               return (
                 <span
                   key={object}
@@ -2391,8 +2438,7 @@ export function NewConnectionWizard() {
           <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
             <Info className="size-4 shrink-0 text-[#95a4bd]" />
             <p className={cn("text-[11.5px] leading-5", MUTED_TEXT)}>
-              ستبدأ المزامنة الأولى بعد إنشاء التكامل مباشرة، وسيتم تحديث البيانات حسب المعدل
-              المحدد.
+              {t("reviewStep.firstSyncNote")}
             </p>
           </div>
         </div>
@@ -2408,18 +2454,23 @@ export function NewConnectionWizard() {
     // RTL: the first tile lands rightmost, which is where the export puts health monitoring.
     const tiles = [
       {
-        label: "مراقبة الصحة",
-        value: healthMonitoringEnabled ? "مفعلة" : "معطلة",
+        label: t("successStep.tiles.healthMonitoring"),
+        value: healthMonitoringEnabled
+          ? t("successStep.enabledValue")
+          : t("successStep.disabledValue"),
         icon: Activity,
       },
       {
-        label: "المزامنة التلقائية",
-        value: autoSyncEnabled ? "مفعلة" : "معطلة",
+        label: t("successStep.tiles.autoSync"),
+        value: autoSyncEnabled ? t("successStep.enabledValue") : t("successStep.disabledValue"),
         icon: RefreshCcw,
       },
       {
-        label: "المزامنة الأولى المتوقعة",
-        value: selectedConnectorDetails?.estimatedDuration ?? "1 – 2 دقيقة",
+        label: t("successStep.tiles.firstSyncEstimate"),
+        value: estimatedDurationLabel(
+          selectedConnectorDetails?.estimatedDuration ?? "oneToTwoMinutes",
+          t
+        ),
         icon: Calendar,
       },
     ]
@@ -2434,10 +2485,10 @@ export function NewConnectionWizard() {
               <Check className="size-10" strokeWidth={3} />
             </span>
             <h3 className={cn("text-[22px] font-extrabold", PAGE_TEXT)}>
-              تم ربط منصة {selectedConnector.displayName} بنجاح
+              {t("successStep.title", { platform: selectedConnector.displayName })}
             </h3>
             <p className={cn("mx-auto max-w-lg text-[13px] leading-6", MUTED_TEXT)}>
-              أصبح بإمكان مدار الآن استيراد بياناتك ومزامنتها تلقائياً.
+              {t("successStep.subtitle")}
             </p>
           </div>
 
@@ -2457,8 +2508,7 @@ export function NewConnectionWizard() {
           <div className="flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
             <Info className="size-4 shrink-0 text-[#95a4bd]" />
             <p className={cn("text-[11.5px] leading-5", MUTED_TEXT)}>
-              سيبدأ استيراد البيانات الأولى خلال دقائق قليلة، وسيتم تحديث البيانات تلقائياً حسب
-              الجدول المحدد.
+              {t("successStep.syncStartingNote")}
             </p>
           </div>
         </div>
@@ -2477,9 +2527,18 @@ export function NewConnectionWizard() {
 
     const totals = syncOutcome
       ? [
-          { label: "سجلات مقروءة", value: formatCount(syncOutcome.recordsRead) },
-          { label: "سجلات محفوظة", value: formatCount(syncOutcome.recordsWritten) },
-          { label: "سجلات فاشلة", value: formatCount(syncOutcome.recordsFailed) },
+          {
+            label: t("syncingStep.totals.recordsRead"),
+            value: formatCount(syncOutcome.recordsRead, locale),
+          },
+          {
+            label: t("syncingStep.totals.recordsWritten"),
+            value: formatCount(syncOutcome.recordsWritten, locale),
+          },
+          {
+            label: t("syncingStep.totals.recordsFailed"),
+            value: formatCount(syncOutcome.recordsFailed, locale),
+          },
         ]
       : []
 
@@ -2487,7 +2546,7 @@ export function NewConnectionWizard() {
       <div className="space-y-4">
         <div className={cn(PANEL_CLASS, "p-5")}>
           {renderPlatformHeader({
-            namePrefix: "منصة ",
+            namePrefix: t("reviewStep.platformPrefix"),
             statusPill: (
               <span
                 className={cn(
@@ -2499,12 +2558,16 @@ export function NewConnectionWizard() {
                       : "bg-[#e9f8ef] text-[#1f9d55]"
                 )}
               >
-                {isRunning ? "جاري المزامنة" : isFailed ? "تعذّرت المزامنة" : "اكتملت المزامنة"}
+                {isRunning
+                  ? t("syncingStep.statusPill.running")
+                  : isFailed
+                    ? t("syncingStep.statusPill.failed")
+                    : t("syncingStep.statusPill.done")}
               </span>
             ),
             sub: (
               <p className={cn("text-[11.5px]", MUTED_TEXT)}>
-                {CATEGORY_SINGULAR[getCategoryForConnector(selectedConnector.displayName)]}
+                {categorySingularMap[getCategoryForConnector(selectedConnector.displayName)]}
               </p>
             ),
           })}
@@ -2529,10 +2592,12 @@ export function NewConnectionWizard() {
               </p>
               <p className={cn("mt-2 text-[12px]", MUTED_TEXT)}>
                 {isRunning
-                  ? `جاري مزامنة بيانات ${selectedConnector.displayName}...`
+                  ? t("syncingStep.descriptionRunning", {
+                      platform: selectedConnector.displayName,
+                    })
                   : isFailed
-                    ? (syncError ?? "تعذّر إكمال المزامنة.")
-                    : "اكتملت المزامنة الأولى."}
+                    ? (syncError ?? t("errors.syncFailedGeneric"))
+                    : t("syncingStep.descriptionDone")}
               </p>
             </div>
 
@@ -2552,17 +2617,19 @@ export function NewConnectionWizard() {
                   )}
                 >
                   {isRunning
-                    ? "المزامنة قيد التنفيذ"
+                    ? t("syncingStep.stateLabel.running")
                     : isFailed
-                      ? "توقفت المزامنة"
-                      : "المزامنة مكتملة"}
+                      ? t("syncingStep.stateLabel.failed")
+                      : t("syncingStep.stateLabel.done")}
                 </p>
               </div>
               <p className={cn("mt-1.5 text-[11.5px]", MUTED_TEXT)}>
-                الوقت المنقضي:{" "}
-                {formatElapsedWords(
-                  isRunning ? syncElapsedMs : (syncOutcome?.durationMs ?? syncElapsedMs)
-                )}
+                {t("syncingStep.elapsedPrefixed", {
+                  value: formatElapsedWords(
+                    isRunning ? syncElapsedMs : (syncOutcome?.durationMs ?? syncElapsedMs),
+                    t
+                  ),
+                })}
               </p>
             </div>
           </div>
@@ -2583,7 +2650,7 @@ export function NewConnectionWizard() {
 
           <div className="flex flex-wrap gap-2 border-t border-[#eef2f8] pt-4">
             {objects.map((object) => {
-              const meta = objectPresentation(object)
+              const meta = objectPresentation(object, t)
               return (
                 <span
                   key={object}
@@ -2611,15 +2678,17 @@ export function NewConnectionWizard() {
         <div className={cn(PANEL_CLASS, "p-5 md:p-6")}>
           <div className="flex items-center gap-2">
             <Layers className="size-4 text-[#6b7b96]" />
-            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>تفاصيل البيانات</h3>
+            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+              {t("syncingStep.dataDetailsTitle")}
+            </h3>
           </div>
           <p className={cn("mt-2 text-[12px] leading-6", MUTED_TEXT)}>
-            {`يمكنك متابعة حالة البيانات التي يتم استيرادها من ${selectedConnector.displayName}.`}
+            {t("syncingStep.dataDetailsSubtitle", { platform: selectedConnector.displayName })}
           </p>
 
           <div className="mt-4 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
             {objects.map((object) => {
-              const meta = objectPresentation(object)
+              const meta = objectPresentation(object, t)
               const Icon = meta.icon
               return (
                 <div key={object} className="rounded-[12px] border border-[#e1e7f0] p-4">
@@ -2643,7 +2712,11 @@ export function NewConnectionWizard() {
                             : "bg-[#e9f8ef] text-[#1f9d55]"
                       )}
                     >
-                      {isRunning ? "جاري" : isFailed ? "متوقف" : "مكتمل"}
+                      {isRunning
+                        ? t("syncingStep.objectBadge.running")
+                        : isFailed
+                          ? t("syncingStep.objectBadge.failed")
+                          : t("syncingStep.objectBadge.done")}
                     </span>
                   </div>
                   <p className={cn("mt-3 text-[13px] font-extrabold", PAGE_TEXT)}>{meta.label}</p>
@@ -2683,7 +2756,7 @@ export function NewConnectionWizard() {
           <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-[#e1e7f0] bg-[#f8fafd] px-4 py-3">
             <Info className="size-4 shrink-0 text-[#95a4bd]" />
             <p className={cn("text-[11.5px] leading-5", MUTED_TEXT)}>
-              سيتم تحديث البيانات تلقائياً حسب الجدول المحدد بعد اكتمال هذه المزامنة.
+              {t("syncingStep.autoUpdateNote")}
             </p>
           </div>
         </div>
@@ -2704,7 +2777,9 @@ export function NewConnectionWizard() {
           </div>
           <div className="flex-1 space-y-4">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-rose-700/80">خطأ في الاتصال</p>
+              <p className="text-[11px] uppercase tracking-wide text-rose-700/80">
+                {t("errorCard.eyebrow")}
+              </p>
               <h3 className="mt-1 text-lg font-semibold text-rose-900">{errorState.title}</h3>
               <p className="mt-1 text-sm text-rose-800">{errorState.description}</p>
             </div>
@@ -2717,21 +2792,21 @@ export function NewConnectionWizard() {
                 )}
                 onClick={handleRetry}
               >
-                إعادة المحاولة
+                {t("errorCard.retryButton")}
               </AppButton>
               <AppButton
                 variant="outline"
                 className={cn("h-10 rounded-xl px-4", WIZARD_INTERACTION_CLASS)}
                 onClick={goToImportStep}
               >
-                العودة إلى إعداد الاستيراد
+                {t("errorCard.backToImportSetup")}
               </AppButton>
               <AppButton
                 variant="outline"
                 className={cn("h-10 rounded-xl px-4", WIZARD_INTERACTION_CLASS)}
                 onClick={handlePreviousClick}
               >
-                رجوع
+                {tCommon("back")}
               </AppButton>
             </div>
           </div>
@@ -2757,14 +2832,16 @@ export function NewConnectionWizard() {
 
   const footerPrimaryLabel =
     stepIndex === 0
-      ? `المتابعة إلى ${selectedConnector?.displayName ?? "المنصة"}`
+      ? t("footer.continueToPlatform", {
+          platform: selectedConnector?.displayName ?? t("footer.fallbackPlatformName"),
+        })
       : stepIndex === 1
-        ? "المتابعة"
+        ? t("footer.continue")
         : stepIndex === 2
-          ? "مراجعة الإعدادات"
+          ? t("footer.reviewSettings")
           : stepIndex === 3
-            ? "إنشاء التكامل"
-            : "متابعة"
+            ? t("footer.createIntegration")
+            : t("footer.continueFallback")
 
   const footerPrimaryAction =
     stepIndex === 1 ? beginOAuthFlow : stepIndex === 3 ? finalizeConnection : handleContinue
@@ -2782,15 +2859,15 @@ export function NewConnectionWizard() {
         <AppContainer>
           <AppSection>
             <AppCard
-              title="Create your first workspace before adding connections."
-              subtitle="Connection onboarding now requires an active workspace context."
+              title={t("emptyWorkspace.title")}
+              subtitle={t("emptyWorkspace.subtitle")}
               state="empty"
               className={SURFACE_CARD_CLASS}
             >
               <div className="pt-2">
                 <WorkspaceSelector
-                  triggerLabel="Create Workspace"
-                  triggerAriaLabel="Create workspace from workspace manager"
+                  triggerLabel={t("emptyWorkspace.createButton")}
+                  triggerAriaLabel={t("emptyWorkspace.createButtonAria")}
                 />
               </div>
             </AppCard>
@@ -2806,15 +2883,15 @@ export function NewConnectionWizard() {
         <AppContainer>
           <AppSection>
             <AppCard
-              title="This workspace is archived."
-              subtitle="Restore it to add or reconnect integrations. All syncing stays paused until then."
+              title={t("archivedWorkspace.title")}
+              subtitle={t("archivedWorkspace.subtitle")}
               state="empty"
               className={SURFACE_CARD_CLASS}
             >
               <div className="pt-2">
                 <WorkspaceSelector
-                  triggerLabel="Manage Workspaces"
-                  triggerAriaLabel="Open workspace manager"
+                  triggerLabel={t("archivedWorkspace.manageButton")}
+                  triggerAriaLabel={t("archivedWorkspace.manageButtonAria")}
                 />
               </div>
             </AppCard>
@@ -2825,10 +2902,10 @@ export function NewConnectionWizard() {
   }
 
   const sidebarBenefits = [
-    "ربط سريع وآمن عبر OAuth",
-    "مزامنة تلقائية للبيانات",
-    "رؤى موحدة في مكان واحد",
-    "لا حاجة إلى إدخال بيانات يدوياً",
+    t("sidebar.benefits.oauthSecure"),
+    t("sidebar.benefits.autoSync"),
+    t("sidebar.benefits.unifiedInsights"),
+    t("sidebar.benefits.noManualEntry"),
   ]
 
   // The rail that replaces the step-one benefits list once the flow is under way.
@@ -2836,14 +2913,14 @@ export function NewConnectionWizard() {
     <div className={cn(PANEL_CLASS, "p-5")}>
       <div className="flex items-center justify-between gap-3">
         <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
-          {stepIndex === 3 ? "قائمة الإعداد" : "خطوات الإعداد"}
+          {stepIndex === 3 ? t("setupChecklist.titleReview") : t("setupChecklist.titleSteps")}
         </h3>
         {isSuccess && syncPhase === "idle" ? (
           <Check className="size-4 text-[#1f9d55]" strokeWidth={3} />
         ) : null}
       </div>
       <ul className="mt-4 space-y-3.5">
-        {WIZARD_STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const state =
             isSuccess && syncPhase === "idle" ? "done" : currentStepState(index as WizardStep)
           return (
@@ -2885,10 +2962,10 @@ export function NewConnectionWizard() {
     <div className={cn(PANEL_CLASS, "p-5")}>
       <div className="flex items-center gap-2">
         <HelpCircle className="size-4 text-[#2878ff]" />
-        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>هل تحتاج إلى مساعدة؟</h3>
+        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>{t("helpCard.title")}</h3>
       </div>
       <p className={cn("mt-2.5 text-[12px] leading-[21px]", MUTED_TEXT)}>
-        فريق الدعم جاهز لمساعدتك في أي وقت.
+        {t("helpCard.subtitle")}
       </p>
     </div>
   )
@@ -2898,24 +2975,29 @@ export function NewConnectionWizard() {
       return null
     }
 
+    const listSeparator = locale === "ar" ? "، " : ", "
+
     const rows = [
-      { label: "المنصة", value: selectedConnector.displayName },
-      { label: "طريقة المصادقة", value: selectedConnectorDetails.authMethod },
-      { label: "مساحة العمل", value: workspaceLabel },
-      { label: "نوع الحساب", value: selectedAccount.label },
+      { label: t("labels.platform"), value: selectedConnector.displayName },
+      { label: t("labels.authMethod"), value: selectedConnectorDetails.authMethod },
+      { label: t("labels.workspace"), value: workspaceLabel },
+      { label: t("summaryRail.rows.accountType"), value: selectedAccount.label },
       {
-        label: "الصلاحيات المطلوبة",
+        label: t("summaryRail.rows.requiredPermissions"),
         value: selectedConnectorDetails.permissions
-          .map((permission) => objectPresentation(permission).label)
-          .join("، "),
+          .map((permission) => objectPresentation(permission, t).label)
+          .join(listSeparator),
       },
-      { label: "المدة المتوقعة للإعداد", value: "‏~30 ثانية" },
-      { label: "أول مزامنة متوقعة", value: selectedConnectorDetails.estimatedDuration },
+      { label: t("summaryRail.rows.setupDuration"), value: t("summaryRail.setupDurationValue") },
+      {
+        label: t("summaryRail.rows.firstSyncEstimate"),
+        value: estimatedDurationLabel(selectedConnectorDetails.estimatedDuration, t),
+      },
     ]
 
     return (
       <div className={cn(PANEL_CLASS, "p-5")}>
-        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>ملخص الاتصال</h3>
+        <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>{t("summaryRail.title")}</h3>
         <dl className="mt-2 divide-y divide-[#eef2f8]">
           {rows.map((row) => (
             <div key={row.label} className="py-3.5">
@@ -2936,7 +3018,7 @@ export function NewConnectionWizard() {
         : "lg:grid-cols-[268px_minmax(0,1fr)]"
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir={dir}>
       <div className="mx-auto w-full max-w-[1360px] space-y-5">
         {renderTopProgress()}
 
@@ -2947,7 +3029,9 @@ export function NewConnectionWizard() {
               <div>{renderStepContent()}</div>
               <aside className="space-y-4">
                 <div className={cn(PANEL_CLASS, "p-5 lg:sticky lg:top-5")}>
-                  <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>ماذا ستحصل؟</h3>
+                  <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+                    {t("sidebar.whatYouGetTitle")}
+                  </h3>
                   <ul className="mt-4 space-y-3.5">
                     {sidebarBenefits.map((benefit) => (
                       <li key={benefit} className="flex items-start gap-2.5">
@@ -2962,14 +3046,13 @@ export function NewConnectionWizard() {
                   <div className="flex items-center gap-2">
                     <BookOpen className="size-4 text-[#2878ff]" />
                     <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
-                      بحاجة إلى مساعدة؟
+                      {t("sidebar.needHelpTitle")}
                     </h3>
                   </div>
                   {/* The export puts a "عرض الدليل" button here. There is no docs route in
                       the app yet, so the card carries the copy only for now. */}
                   <p className={cn("mt-2.5 text-[12px] leading-[21px]", MUTED_TEXT)}>
-                    تعرّف على كيفية ربط المنصات وما الذي تتم مزامنته في كل خطوة، أو تواصل مع فريق
-                    الدعم إذا واجهتك مشكلة أثناء الربط.
+                    {t("sidebar.needHelpBody")}
                   </p>
                 </div>
               </aside>
@@ -3008,7 +3091,7 @@ export function NewConnectionWizard() {
                 )}
                 onClick={goToConnections}
               >
-                إغلاق
+                {t("footer.close")}
               </AppButton>
 
               <div className="flex-1" />
@@ -3025,7 +3108,7 @@ export function NewConnectionWizard() {
                   iconPosition="end"
                   onClick={() => void runFirstSync()}
                 >
-                  إعادة المحاولة
+                  {t("errorCard.retryButton")}
                 </AppButton>
               ) : syncPhase === "done" ? (
                 <AppButton
@@ -3033,11 +3116,11 @@ export function NewConnectionWizard() {
                     "h-10 min-w-[190px] rounded-[10px] bg-[#1fa85c] px-4 text-[12.5px] font-semibold text-white hover:bg-[#188a4a]",
                     WIZARD_INTERACTION_CLASS
                   )}
-                  icon={<ArrowLeft className="size-4 shrink-0" />}
+                  icon={<ArrowRight className="size-4 shrink-0 rtl:rotate-180" />}
                   iconPosition="end"
                   onClick={goToConnections}
                 >
-                  الانتقال إلى التكاملات
+                  {t("footer.goToIntegrations")}
                 </AppButton>
               ) : null}
             </div>
@@ -3053,7 +3136,7 @@ export function NewConnectionWizard() {
                 iconPosition="end"
                 onClick={goToConnections}
               >
-                إنهاء
+                {t("footer.finish")}
               </AppButton>
 
               <div className="flex-1" />
@@ -3064,11 +3147,11 @@ export function NewConnectionWizard() {
                   "h-10 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]",
                   WIZARD_INTERACTION_CLASS
                 )}
-                icon={<ArrowLeft className="size-4 shrink-0" />}
+                icon={<ArrowRight className="size-4 shrink-0 rtl:rotate-180" />}
                 iconPosition="start"
                 onClick={goToConnections}
               >
-                الانتقال إلى التكاملات
+                {t("footer.goToIntegrations")}
               </AppButton>
               <AppButton
                 className={cn(
@@ -3081,7 +3164,7 @@ export function NewConnectionWizard() {
                 iconPosition="end"
                 onClick={() => void runFirstSync()}
               >
-                تشغيل المزامنة الآن
+                {t("footer.runSyncNow")}
               </AppButton>
             </div>
           ) : (
@@ -3094,7 +3177,7 @@ export function NewConnectionWizard() {
                 )}
                 onClick={exitWizard}
               >
-                إلغاء
+                {tCommon("cancel")}
               </AppButton>
 
               <div className="flex-1" />
@@ -3106,11 +3189,11 @@ export function NewConnectionWizard() {
                   WIZARD_INTERACTION_CLASS
                 )}
                 disabled={stepIndex === 0 || flowStatus !== "idle"}
-                icon={<ArrowRight className="size-4 shrink-0" />}
+                icon={<ArrowLeft className="size-4 shrink-0 rtl:rotate-180" />}
                 iconPosition="start"
                 onClick={handlePreviousClick}
               >
-                السابق
+                {tCommon("previous")}
               </AppButton>
               <AppButton
                 className={cn(
@@ -3125,7 +3208,7 @@ export function NewConnectionWizard() {
                   stepIndex === 3 ? (
                     <Check className="size-4 shrink-0" strokeWidth={3} />
                   ) : (
-                    <ArrowLeft className="size-4 shrink-0" />
+                    <ArrowRight className="size-4 shrink-0 rtl:rotate-180" />
                   )
                 }
                 iconPosition="end"
