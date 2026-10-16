@@ -36,7 +36,14 @@ export function useReadyReportFilters(getInitialRange: () => DateRange = default
   const [workspaceId, setWorkspaceId] = useState<string | "all">("all")
 
   const filters: ReadyReportFilters = useMemo(() => {
-    const range = dateRange?.from && dateRange?.to ? dateRange : getInitialRange()
+    // The picker commits `{ from, to: undefined }` the instant the first day of a range is
+    // clicked, before the second click completes it -- treating that as "no range" and silently
+    // substituting the full default range made the numbers shown right after the first click
+    // describe a completely different period than the date the trigger label displayed. Only an
+    // entirely empty selection (e.g. after "مسح التاريخ") should fall back to the default.
+    const range = dateRange?.from
+      ? { from: dateRange.from, to: dateRange.to ?? dateRange.from }
+      : getInitialRange()
     return {
       from: startOfLocalDay(range.from as Date).toISOString(),
       to: endOfLocalDay(range.to as Date).toISOString(),
