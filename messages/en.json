@@ -5284,6 +5284,25 @@
       "title": "Need help?",
       "description": "Contact the support team for help with settings.",
       "contactUs": "Contact us"
+    },
+    "globalSearch": {
+      "triggerPlaceholder": "Search...",
+      "dialogTitle": "Global Search",
+      "inputPlaceholder": "Search pages, actions...",
+      "noResults": "No results found.",
+      "groups": {
+        "dashboard": {
+          "heading": "Dashboard",
+          "dashboard": "Dashboard",
+          "analytics": "Analytics",
+          "crm": "CRM"
+        },
+        "settings": {
+          "heading": "Settings",
+          "profile": "Profile",
+          "billing": "Billing"
+        }
+      }
     }
   },
   "liveVisitors": {
@@ -5428,6 +5447,443 @@
         "workspaceDeactivateFailed": "Couldn't deactivate the workspace."
       },
       "initialsFallback": "?"
+    }
+  },
+  "stores": {
+    "hub": {
+      "heading": "Stores",
+      "subheading": "Connect your stores, monitor their performance, and analyze your e-commerce data from one place.",
+      "connectNewStore": "Connect a new store",
+      "searchPlaceholder": "Search stores, URL, or platform...",
+      "clearStoreSelection": "Clear store selection",
+      "loading": "Loading your connected stores...",
+      "loadError": "Couldn't load your connected stores. Please try again.",
+      "emptyTitle": "Connect your first store",
+      "emptySubtitle": "Connect your e-commerce platform to start analyzing your data in Madar."
+    },
+    "filters": {
+      "allPlatforms": "All Platforms",
+      "allStatuses": "All Statuses"
+    },
+    "connectionStatus": {
+      "connected": {
+        "label": "Connected"
+      },
+      "pending": {
+        "label": "Pending"
+      },
+      "paused": {
+        "label": "Paused"
+      },
+      "disconnected": {
+        "label": "Disconnected"
+      },
+      "error": {
+        "label": "Error"
+      }
+    },
+    "syncHealth": {
+      "healthy": {
+        "label": "Healthy",
+        "tooltip": "Last successful synchronization completed recently."
+      },
+      "stale": {
+        "label": "Needs attention",
+        "tooltip": "No successful synchronization in the last 7 days."
+      },
+      "failed": {
+        "label": "Failed",
+        "tooltip": "The most recent synchronization failed."
+      },
+      "neverSynced": {
+        "label": "Never synced",
+        "tooltip": "This store has not synced yet."
+      }
+    },
+    "kpis": {
+      "customersSynced": {
+        "label": "Synced customers",
+        "footnote": "Across all stores",
+        "link": "View customers"
+      },
+      "ordersSynced": {
+        "label": "Synced orders",
+        "footnote": "Available in the system",
+        "link": "View orders"
+      },
+      "productsSynced": {
+        "label": "Synced products",
+        "footnote": "Across all stores",
+        "link": "View products"
+      },
+      "connectedStores": {
+        "label": "Connected stores",
+        "footnote": "Across {count} different {platform}",
+        "platformSingular": "platform",
+        "platformPlural": "platforms",
+        "link": "View stores"
+      }
+    },
+    "table": {
+      "columns": {
+        "store": "Store",
+        "platform": "Platform",
+        "connection": "Connection status",
+        "customers": "Customers",
+        "orders": "Orders",
+        "products": "Products",
+        "lastSync": "Last sync",
+        "health": "Sync health",
+        "actions": "Action"
+      },
+      "viewDetailsAriaLabel": "View details for {name}",
+      "noMatchTitle": "No stores match the current filters",
+      "noMatchHint": "Try changing the platform, status, date range, or search text."
+    },
+    "pagination": {
+      "noResults": "No results",
+      "showingRange": "Showing {from} - {to} of {total}",
+      "itemsPerPage": "Items per page",
+      "first": "First page",
+      "previous": "Previous page",
+      "next": "Next page",
+      "last": "Last page"
+    },
+    "features": {
+      "unifiedAnalytics": {
+        "title": "Unified analytics",
+        "body": "A comprehensive view of how all your stores are performing"
+      },
+      "autoSync": {
+        "title": "Automatic sync",
+        "body": "Your data refreshes on a regular schedule"
+      },
+      "allPlatformsSupport": {
+        "title": "Support for every platform",
+        "body": "Zid, Salla, Shopify and more"
+      }
+    },
+    "cta": {
+      "title": "Connect more stores",
+      "body": "Grow your business by connecting more stores and analyze all your data in one place."
+    }
+  },
+  "channels": {
+    "title": "Channels",
+    "subtitle": "An overview of your marketing channels' performance",
+    "loading": "Loading channel data...",
+    "loadError": "Couldn't load channel data. Please try again.",
+    "noChannelsConnected": "No advertising channels connected yet.",
+    "insufficientData": "Not enough data yet.",
+    "listSeparator": ", ",
+    "dateRange": {
+      "yesterday": "Yesterday",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "allTime": "All time"
+    },
+    "time": {
+      "neverSynced": "Not synced yet",
+      "justNow": "Just now",
+      "minutesAgo": "{minutes} min ago",
+      "hoursAgo": "{hours} hr ago",
+      "daysAgo": "{days} days ago"
+    },
+    "health": {
+      "healthy": "Excellent",
+      "stale": "Good",
+      "failed": "Connection error",
+      "never_synced": "Not synced"
+    },
+    "kpis": {
+      "changeVsPreviousPeriod": "vs. previous period",
+      "notEnoughDataToCompare": "Not enough data to compare",
+      "activeChannels": "Active channels",
+      "activeChannelsFootnote": "Out of {total} channels",
+      "avgCpa": "Average CPA",
+      "totalConversions": "Total conversions",
+      "roas": "Return on ad spend",
+      "totalRevenue": "Total revenue",
+      "totalSpend": "Total spend",
+      "otherCurrenciesNotConverted": "{amounts} not converted"
+    },
+    "card": {
+      "connected": "Connected",
+      "revenue": "Revenue",
+      "spend": "Spend",
+      "conversions": "Conversions",
+      "campaigns": "Campaigns",
+      "health": "Health",
+      "otherCurrenciesNote": "(Not converted — no real exchange rate)",
+      "lastSynced": "Last synced: {time}"
+    },
+    "charts": {
+      "comparisonTitle": "Channel comparison",
+      "comparisonSubtitle": "Return on ad spend (ROAS)",
+      "spendDistributionTitle": "Spend distribution",
+      "spendLabel": "Spend",
+      "trendTitle": "Performance trend",
+      "trendSubtitle": "Spend ({currency})"
+    },
+    "topProducts": {
+      "title": "Top performing products",
+      "columns": {
+        "product": "Product",
+        "orders": "Orders",
+        "quantitySold": "Quantity sold"
+      }
+    },
+    "bestChannel": {
+      "title": "Best performing channel"
+    },
+    "attentionChannel": {
+      "title": "Needs attention",
+      "highCpa": "High CPA",
+      "aboveAverage": "{pct}% above average"
+    },
+    "insight": {
+      "title": "Smart insight from Madar",
+      "description": "Smart budget reallocation recommendations are currently in development.",
+      "comingSoon": "Coming soon",
+      "viewFullAnalysis": "View full analysis"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "allGood": "All metrics are within the optimal range.",
+      "staleSyncHours": "Not synced for {hours} hr",
+      "staleSyncMinutes": "Not synced for {minutes} min",
+      "spendSpike": "Spend is {pct}% higher than the channel's usual average",
+      "spendDrop": "Spend is {pct}% lower than the channel's usual average"
+    }
+  },
+  "campaignLinks": {
+    "page": {
+      "title": "Link Builder",
+      "subtitle": "Create trackable campaign links and monitor the orders and revenue they generate.",
+      "installSnippetButton": "Install tracking snippet",
+      "createLinkButton": "Create new link",
+      "viewingData": "Viewing data for",
+      "removeSelection": "Remove",
+      "kpis": {
+        "totalRevenue": "Total revenue",
+        "totalOrders": "Total orders",
+        "totalClicks": "Total clicks",
+        "activeLinks": "Active links"
+      },
+      "changeFromPreviousPeriod": "{sign}{value}% vs previous period",
+      "searchPlaceholder": "Search for a campaign or link...",
+      "filterButton": "Filter",
+      "periods": {
+        "last7Days": "Last 7 days",
+        "last30Days": "Last 30 days",
+        "last90Days": "Last 90 days"
+      },
+      "statusFilters": {
+        "all": "All statuses",
+        "enabled": "Active",
+        "disabled": "Disabled"
+      },
+      "sectionTitle": "Campaign links",
+      "loadingLinks": "Loading links...",
+      "loadError": "Couldn't load campaign links. Please try again.",
+      "emptyNoLinks": {
+        "title": "No links yet",
+        "description": "Create your first tracking link to start measuring your campaigns' performance.",
+        "action": "Create link"
+      },
+      "emptyNoResults": {
+        "title": "No results",
+        "description": "Try changing your search term or filter."
+      },
+      "createDialog": {
+        "title": "Create campaign link",
+        "close": "Close",
+        "noCampaignsTitle": "No campaigns yet",
+        "noCampaignsDescription": "Your connected ad campaigns can't be linked until they're imported. Choose a platform to import its campaigns now.",
+        "importFromOtherPlatform": "Import campaigns from another platform"
+      },
+      "deleteDialog": {
+        "title": "Delete campaign link?",
+        "description": "\"{name}\" will stop redirecting and will be removed from this list. This action can't be undone.",
+        "confirm": "Delete"
+      },
+      "toasts": {
+        "importNone": "There are no campaigns to import from {platform}. Make sure the platform is connected and its campaigns are synced first.",
+        "importSuccess": "Imported {count} campaign(s) from {platform}.",
+        "importError": "Couldn't import campaigns. Please try again.",
+        "linkEnabled": "Link activated",
+        "linkDisabled": "Link disabled",
+        "toggleError": "Couldn't update the link",
+        "linkDeleted": "Link deleted",
+        "deleteError": "Couldn't delete the link",
+        "linkCopied": "Link copied"
+      },
+      "csv": {
+        "name": "Name",
+        "id": "ID",
+        "campaign": "Campaign",
+        "status": "Status",
+        "clicks": "Clicks",
+        "orders": "Orders",
+        "revenue": "Revenue",
+        "createdAt": "Created at"
+      }
+    },
+    "form": {
+      "platformNone": "No ad platform",
+      "toasts": {
+        "missingFields": "Please fill in all required fields",
+        "createSuccess": "Campaign link created successfully",
+        "createError": "Failed to create campaign link"
+      },
+      "sections": {
+        "campaignDetails": {
+          "title": "Campaign details",
+          "description": "What this link is for and how it's tracked"
+        },
+        "destination": {
+          "title": "Link destination and UTM parameters",
+          "description": "Where the click lands and how it's tagged for tracking"
+        },
+        "advanced": {
+          "title": "Advanced options",
+          "description": "Additional options (optional)"
+        }
+      },
+      "fields": {
+        "campaign": {
+          "label": "Campaign",
+          "placeholder": "Select a campaign"
+        },
+        "name": {
+          "label": "Link name",
+          "placeholder": "e.g. TikTok story ad"
+        },
+        "trackingType": {
+          "label": "Tracking type",
+          "shortLink": "Short link",
+          "fullUrl": "Full URL"
+        },
+        "platform": {
+          "label": "Ad platform",
+          "placeholder": "Choose a platform (optional)"
+        },
+        "destination": {
+          "label": "Destination URL",
+          "helper": "The URL must start with https://"
+        },
+        "adGroup": {
+          "placeholder": "e.g. Audience 1"
+        },
+        "adName": {
+          "placeholder": "e.g. New products ad"
+        },
+        "utmTerm": {
+          "label": "utm_term (optional)",
+          "placeholder": "e.g. running shoes"
+        },
+        "utmContent": {
+          "label": "utm_content (optional)",
+          "placeholder": "e.g. shop button"
+        },
+        "customParams": {
+          "label": "Additional information",
+          "keyPlaceholder": "Key",
+          "valuePlaceholder": "Value",
+          "removeRow": "Remove",
+          "addRow": "Add field"
+        }
+      },
+      "submit": "Create link"
+    },
+    "editDialog": {
+      "toasts": {
+        "loadError": "Couldn't load link data",
+        "nameRequired": "Link name is required",
+        "updateSuccess": "Campaign link updated",
+        "updateError": "Couldn't update campaign link"
+      },
+      "title": "Edit campaign link",
+      "close": "Close",
+      "destinationLabel": "Destination:",
+      "adGroupAdNameLabel": "Ad group / Ad name:",
+      "lockedFieldsNotice": "UTM parameters, tracking type, campaign, and Ad group/Ad name can't be changed after the link is created.",
+      "nameLabel": "Link name",
+      "customParamsLabel": "Additional information",
+      "keyPlaceholder": "Key",
+      "valuePlaceholder": "Value",
+      "removeRow": "Remove",
+      "addRow": "Add field",
+      "save": "Save changes"
+    },
+    "table": {
+      "headers": {
+        "link": "Link",
+        "campaign": "Campaign",
+        "status": "Status",
+        "clicks": "Clicks",
+        "orders": "Orders",
+        "revenue": "Revenue",
+        "createdAt": "Created at",
+        "actions": "Actions"
+      },
+      "status": {
+        "enabled": "Active",
+        "disabled": "Disabled"
+      },
+      "openLinkAria": "Open link",
+      "actionsAria": "Actions",
+      "actionsMenu": {
+        "copyLink": "Copy link",
+        "edit": "Edit",
+        "enable": "Enable",
+        "disable": "Disable",
+        "delete": "Delete"
+      }
+    },
+    "trackingSnippet": {
+      "loadError": "Couldn't load the tracking snippet. Please try again.",
+      "copySuccess": "Snippet copied",
+      "title": "Install tracking snippet",
+      "close": "Close",
+      "description": "Paste this snippet once into your store's template (Salla / Shopify / Zid) to track visits coming from links that weren't created through the link builder, such as links where the advertiser adds UTM parameters manually inside the ad platform.",
+      "copied": "Copied",
+      "copyButton": "Copy snippet"
+    },
+    "preview": {
+      "title": "Live preview",
+      "subtitle": "Fill in the required fields to see a preview of the link",
+      "copyAria": "Copy link",
+      "readyBadge": "Ready to track",
+      "finalDestinationLabel": "Final destination",
+      "updating": "Updating...",
+      "emptyTitle": "Your link preview will appear here",
+      "emptyDescription": "Once you enter the required data"
+    },
+    "detailPanel": {
+      "empty": {
+        "title": "No activity yet",
+        "description": "Clicks and orders will appear here once this link starts getting traffic."
+      },
+      "attributionBreakdown": "Attribution breakdown",
+      "matchMethodBadge": "{label}: {count} orders ({revenue})",
+      "dailyPerformance": "Daily performance",
+      "tableHeaders": {
+        "date": "Date",
+        "clicks": "Clicks",
+        "orders": "Orders",
+        "revenue": "Revenue"
+      },
+      "matchMethods": {
+        "explicit_id": "Explicit ID",
+        "campaign_link_id": "Link ID",
+        "session_id": "Session",
+        "customer_ref": "Returning customer",
+        "utm_match": "UTM match",
+        "unattributed": "Unattributed"
+      }
     }
   }
 }

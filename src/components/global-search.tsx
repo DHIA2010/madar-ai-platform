@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import {
   CommandDialog,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react"
 
 export function GlobalSearch() {
+  const t = useTranslations("shared.globalSearch")
   const [open, setOpen] = React.useState(false)
   const router = useRouter()
 
@@ -60,7 +62,7 @@ export function GlobalSearch() {
       >
         <div className="flex items-center gap-2 text-muted-foreground">
           <Search className="size-5" />
-          <span className="text-sm">ابحث...</span>
+          <span className="text-sm">{t("triggerPlaceholder")}</span>
         </div>
 
         {/* Shortcut */}
@@ -72,22 +74,22 @@ export function GlobalSearch() {
       {/* Dialog */}
       <CommandDialog open={open} onOpenChange={setOpen}>
         <VisuallyHidden>
-          <DialogTitle>Global Search</DialogTitle>
+          <DialogTitle>{t("dialogTitle")}</DialogTitle>
         </VisuallyHidden>
 
         {/* Input */}
         <div className="border-b px-3">
-          <CommandInput placeholder="Search pages, actions..." className="h-11 text-sm" />
+          <CommandInput placeholder={t("inputPlaceholder")} className="h-11 text-sm" />
         </div>
 
         <CommandList className="max-h-[400px] overflow-y-auto">
           <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
-            No results found.
+            {t("noResults")}
           </CommandEmpty>
 
           {/* Dashboard */}
           <CommandGroup
-            heading="Dashboard"
+            heading={t("groups.dashboard.heading")}
             className="px-2 text-xs font-semibold text-muted-foreground"
           >
             <CommandItem
@@ -95,7 +97,7 @@ export function GlobalSearch() {
               className="flex items-center gap-2 px-2 py-2 rounded-md cursor-pointer"
             >
               <LayoutDashboard className="size-4 text-muted-foreground" />
-              <span>Dashboard</span>
+              <span>{t("groups.dashboard.dashboard")}</span>
               <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
 
@@ -104,7 +106,7 @@ export function GlobalSearch() {
               className="flex items-center gap-2 px-2 py-2 rounded-md"
             >
               <BarChart3 className="size-4 text-muted-foreground" />
-              <span>Analytics</span>
+              <span>{t("groups.dashboard.analytics")}</span>
               <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
 
@@ -113,7 +115,7 @@ export function GlobalSearch() {
               className="flex items-center gap-2 px-2 py-2 rounded-md"
             >
               <Users className="size-4 text-muted-foreground" />
-              <span>CRM</span>
+              <span>{t("groups.dashboard.crm")}</span>
               <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
           </CommandGroup>
@@ -122,24 +124,24 @@ export function GlobalSearch() {
 
           {/* Settings */}
           <CommandGroup
-            heading="Settings"
+            heading={t("groups.settings.heading")}
             className="px-2 text-xs font-semibold text-muted-foreground"
           >
             <CommandItem
-              onSelect={() => alert("Profile")}
+              onSelect={() => alert(t("groups.settings.profile"))}
               className="flex items-center gap-2 px-2 py-2 rounded-md"
             >
               <User className="size-4 text-muted-foreground" />
-              <span>Profile</span>
+              <span>{t("groups.settings.profile")}</span>
               <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
 
             <CommandItem
-              onSelect={() => alert("Billing")}
+              onSelect={() => alert(t("groups.settings.billing"))}
               className="flex items-center gap-2 px-2 py-2 rounded-md"
             >
               <CreditCard className="size-4 text-muted-foreground" />
-              <span>Billing</span>
+              <span>{t("groups.settings.billing")}</span>
               <ArrowRight className="ms-auto size-3 opacity-40 rtl:rotate-180" />
             </CommandItem>
           </CommandGroup>

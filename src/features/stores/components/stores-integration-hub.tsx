@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { endOfDay, formatDistanceToNow, startOfDay } from "date-fns"
-import { ar } from "date-fns/locale"
+import { ar, enUS } from "date-fns/locale"
 import {
   CheckCircle2,
   ChevronLeft,
@@ -54,6 +55,7 @@ import {
 } from "../services"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const platformOptions = ["All Platforms", "Salla", "Shopify", "Zid"]
 const connectionStatusOptions = [
@@ -74,60 +76,68 @@ const FILTER_TRIGGER_CLASS =
 const PAGER_BUTTON_CLASS =
   "flex size-9 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-40"
 
-// The filter values are the tokens the filtering runs on, so only their display is localised.
-const FILTER_LABEL_AR: Record<string, string> = {
-  "All Platforms": "جميع المنصات",
-  "All Statuses": "جميع الحالات",
-  Salla: "Salla",
-  Shopify: "Shopify",
-  Zid: "Zid",
-  Connected: "متصل",
-  Pending: "قيد الانتظار",
-  Paused: "متوقف",
-  Disconnected: "غير متصل",
-  Error: "خطأ",
+type StoresTranslator = ReturnType<typeof useTranslations<"stores">>
+
+// Data-only: colours/dots live here, the actual label text comes from the `stores` namespace
+// via connectionStatusLabel()/syncHealthLabel() below -- same module-level data+function split
+// used by administration/components/permission-matrix.tsx and the taxes settings screen.
+const CONNECTION_STATUS_META: Record<StoreConnectionStatus, { className: string; dot: string }> = {
+  connected: { className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
+  pending: { className: "bg-[#eef2f8] text-[#5b6b85]", dot: "bg-[#95a4bd]" },
+  paused: { className: "bg-[#fff7e6] text-[#e08b00]", dot: "bg-[#e08b00]" },
+  disconnected: { className: "bg-[#eef2f8] text-[#5b6b85]", dot: "bg-[#95a4bd]" },
+  error: { className: "bg-[#fdeeee] text-[#e0484d]", dot: "bg-[#e0484d]" },
 }
 
-const CONNECTION_PILL_AR: Record<
-  StoreConnectionStatus,
-  { label: string; className: string; dot: string }
-> = {
-  connected: { label: "متصل", className: "bg-[#e9f8ef] text-[#1f9d55]", dot: "bg-[#1f9d55]" },
-  pending: { label: "قيد الانتظار", className: "bg-[#eef2f8] text-[#5b6b85]", dot: "bg-[#95a4bd]" },
-  paused: { label: "متوقف", className: "bg-[#fff7e6] text-[#e08b00]", dot: "bg-[#e08b00]" },
-  disconnected: {
-    label: "غير متصل",
-    className: "bg-[#eef2f8] text-[#5b6b85]",
-    dot: "bg-[#95a4bd]",
-  },
-  error: { label: "خطأ", className: "bg-[#fdeeee] text-[#e0484d]", dot: "bg-[#e0484d]" },
+const SYNC_HEALTH_META: Record<StoreSyncHealth, { className: string }> = {
+  healthy: { className: "bg-[#e9f8ef] text-[#1f9d55]" },
+  stale: { className: "bg-[#fff7e6] text-[#e08b00]" },
+  failed: { className: "bg-[#fdeeee] text-[#e0484d]" },
+  never_synced: { className: "bg-[#eef2f8] text-[#5b6b85]" },
 }
 
-const SYNC_HEALTH_AR: Record<StoreSyncHealth, { label: string; className: string }> = {
-  healthy: { label: "سليم", className: "bg-[#e9f8ef] text-[#1f9d55]" },
-  stale: { label: "يحتاج انتباه", className: "bg-[#fff7e6] text-[#e08b00]" },
-  failed: { label: "فشل", className: "bg-[#fdeeee] text-[#e0484d]" },
-  never_synced: { label: "لم تتم مزامنة", className: "bg-[#eef2f8] text-[#5b6b85]" },
+function connectionStatusLabel(status: StoreConnectionStatus, t: StoresTranslator): string {
+  return t(`connectionStatus.${status}.label` as "connectionStatus.connected.label")
 }
 
-const ARABIC_DATE_TIME = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-})
+function syncHealthLabel(health: StoreSyncHealth, t: StoresTranslator): string {
+  const key = health === "never_synced" ? "neverSynced" : health
+  return t(`syncHealth.${key}.label` as "syncHealth.healthy.label")
+}
+
+function absoluteDateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value)
 }
 
-function connectionStatusLabel(status: StoreConnectionStatus): string {
+// The filter values themselves are the English tokens the filtering logic runs on -- only their
+// displayed label is localised, and platform brand names (Salla/Shopify/Zid) are real stored
+// enum values that stay as-is in every locale.
+function connectionStatusFilterToken(status: StoreConnectionStatus): string {
   if (status === "connected") return "Connected"
   if (status === "paused") return "Paused"
   if (status === "disconnected") return "Disconnected"
   if (status === "error") return "Error"
   return "Pending"
+}
+
+function platformFilterLabel(option: string, t: StoresTranslator): string {
+  if (option === "All Platforms") return t("filters.allPlatforms")
+  return option
+}
+
+function statusFilterLabel(option: string, t: StoresTranslator): string {
+  if (option === "All Statuses") return t("filters.allStatuses")
+  return connectionStatusLabel(option.toLowerCase() as StoreConnectionStatus, t)
 }
 
 interface StoreKpiCardData {
@@ -180,18 +190,24 @@ function StoreKpiCard({ kpi }: { kpi: StoreKpiCardData }) {
           className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2878ff] transition-colors hover:text-[#1f66e0]"
         >
           {kpi.linkLabel}
-          <ChevronLeft className="size-3.5" />
+          <ChevronLeft className="size-3.5 rtl:rotate-180" />
         </Link>
       </div>
     </div>
   )
 }
 
-function getSyncHealthTooltip(health: StoreSyncHealth, lastSyncError: string | null) {
-  if (health === "healthy") return "Last successful synchronization completed recently."
-  if (health === "stale") return "No successful synchronization in the last 7 days."
-  if (health === "failed") return lastSyncError ?? "The most recent synchronization failed."
-  return "This store has not synced yet."
+function getSyncHealthTooltip(
+  health: StoreSyncHealth,
+  lastSyncError: string | null,
+  t: StoresTranslator
+) {
+  if (health === "healthy") return t("syncHealth.healthy.tooltip")
+  if (health === "stale") return t("syncHealth.stale.tooltip")
+  // lastSyncError is the real error message synced from the integration, not a UI string --
+  // it's shown verbatim when present rather than translated.
+  if (health === "failed") return lastSyncError ?? t("syncHealth.failed.tooltip")
+  return t("syncHealth.neverSynced.tooltip")
 }
 
 function getLogoColor(logoText: string) {
@@ -212,6 +228,8 @@ function PlatformIcon({ platform }: { platform: StorePlatform }) {
 }
 
 export function StoresIntegrationHub() {
+  const t = useTranslations("stores")
+  const locale = useLocale() as Locale
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -247,7 +265,7 @@ export function StoresIntegrationHub() {
       } catch (error) {
         console.error("Failed to load stores", error)
         if (!cancelled) {
-          setLoadError("Couldn't load your connected stores. Please try again.")
+          setLoadError(t("hub.loadError"))
         }
       } finally {
         if (!cancelled) {
@@ -261,6 +279,9 @@ export function StoresIntegrationHub() {
     return () => {
       cancelled = true
     }
+    // Only runs once on mount -- re-running on every locale toggle would refetch the whole
+    // store list just from switching the language.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const selectedStoreId = selectedStoreIdOverride ?? activeStore?.id ?? null
@@ -270,7 +291,7 @@ export function StoresIntegrationHub() {
       const matchesPlatform = platform === "All Platforms" || store.platform === platform
       const matchesStatus =
         connectionStatus === "All Statuses" ||
-        connectionStatusLabel(store.connectionStatus) === connectionStatus
+        connectionStatusFilterToken(store.connectionStatus) === connectionStatus
       const matchesSearch =
         !search.trim() ||
         `${store.name} ${store.url ?? ""} ${store.platform}`
@@ -351,39 +372,48 @@ export function StoresIntegrationHub() {
 
   const noStoresExist = !isLoading && !loadError && stores.length === 0
 
+  const connectedPlatformWord = t(
+    connectedPlatformCount === 1
+      ? "kpis.connectedStores.platformSingular"
+      : "kpis.connectedStores.platformPlural"
+  )
+
   const kpiCards: StoreKpiCardData[] = [
     {
-      label: "العملاء المتزامنين",
+      label: t("kpis.customersSynced.label"),
       value: formatNumber(kpiMetrics.customersSynced),
-      footnote: "من جميع المتاجر",
-      linkLabel: "عرض العملاء",
+      footnote: t("kpis.customersSynced.footnote"),
+      linkLabel: t("kpis.customersSynced.link"),
       href: ROUTES.customers,
       icon: Users,
       tone: "orange",
     },
     {
-      label: "الطلبات المتزامنة",
+      label: t("kpis.ordersSynced.label"),
       value: formatNumber(kpiMetrics.ordersSynced),
-      footnote: "متاحة في النظام",
-      linkLabel: "عرض الطلبات",
+      footnote: t("kpis.ordersSynced.footnote"),
+      linkLabel: t("kpis.ordersSynced.link"),
       href: ROUTES.orders,
       icon: ShoppingCart,
       tone: "green",
     },
     {
-      label: "المنتجات المتزامنة",
+      label: t("kpis.productsSynced.label"),
       value: formatNumber(kpiMetrics.connectedProducts),
-      footnote: "من جميع المتاجر",
-      linkLabel: "عرض المنتجات",
+      footnote: t("kpis.productsSynced.footnote"),
+      linkLabel: t("kpis.productsSynced.link"),
       href: ROUTES.products,
       icon: Package,
       tone: "violet",
     },
     {
-      label: "المتاجر المتصلة",
+      label: t("kpis.connectedStores.label"),
       value: formatNumber(kpiMetrics.connectedStores),
-      footnote: `عبر ${connectedPlatformCount} ${connectedPlatformCount === 1 ? "منصة" : "منصات"} مختلفة`,
-      linkLabel: "عرض المتاجر",
+      footnote: t("kpis.connectedStores.footnote", {
+        count: connectedPlatformCount,
+        platform: connectedPlatformWord,
+      }),
+      linkLabel: t("kpis.connectedStores.link"),
       href: ROUTES.integrations,
       icon: Store,
       tone: "blue",
@@ -391,15 +421,18 @@ export function StoresIntegrationHub() {
   ]
 
   return (
-    <div className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")} dir="rtl">
+    <div
+      className={cn(cairo.className, "min-h-full bg-[#f7f9fd] px-6 py-5")}
+      dir={localeDirection(locale)}
+    >
       <div className="mx-auto w-full max-w-[1500px] space-y-4">
         {/* RTL: the title block is written first so it lands on the right, action left. */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>المتاجر</h1>
-            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>
-              اربط متاجرك، راقب أداءها، وحلل بيانات التجارة الإلكترونية من مكان واحد.
-            </p>
+            <h1 className={cn("text-[24px] font-extrabold leading-tight", HEADING)}>
+              {t("hub.heading")}
+            </h1>
+            <p className={cn("mt-1.5 text-[12.5px]", MUTED)}>{t("hub.subheading")}</p>
           </div>
 
           <AppButton
@@ -408,7 +441,7 @@ export function StoresIntegrationHub() {
           >
             <Link href={ROUTES.integrationsNew}>
               <span className="flex items-center justify-center gap-2">
-                ربط متجر جديد
+                {t("hub.connectNewStore")}
                 <Plus className="size-4" />
               </span>
             </Link>
@@ -427,7 +460,7 @@ export function StoresIntegrationHub() {
             <div className="w-full md:w-[300px] lg:w-[340px]">
               <AppSearchInput
                 startIcon={<Search className="size-4 text-[#95a4bd]" />}
-                placeholder="البحث في المتاجر، الرابط أو المنصة..."
+                placeholder={t("hub.searchPlaceholder")}
                 className="h-10 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] placeholder:text-[#95a4bd]"
                 value={search}
                 onChange={(event) => {
@@ -458,7 +491,7 @@ export function StoresIntegrationHub() {
               <AppSelectContent>
                 {platformOptions.map((option) => (
                   <AppSelectItem key={option} value={option}>
-                    {FILTER_LABEL_AR[option] ?? option}
+                    {platformFilterLabel(option, t)}
                   </AppSelectItem>
                 ))}
               </AppSelectContent>
@@ -477,7 +510,7 @@ export function StoresIntegrationHub() {
               <AppSelectContent>
                 {connectionStatusOptions.map((option) => (
                   <AppSelectItem key={option} value={option}>
-                    {FILTER_LABEL_AR[option] ?? option}
+                    {statusFilterLabel(option, t)}
                   </AppSelectItem>
                 ))}
               </AppSelectContent>
@@ -492,9 +525,9 @@ export function StoresIntegrationHub() {
                   className={cn("cursor-pointer text-[12px] font-semibold", MUTED)}
                   onClick={clearStoreContext}
                 >
-                  المتاجر
+                  {t("hub.heading")}
                 </button>
-                <ChevronLeft className="size-3.5 text-[#b6c2d4]" />
+                <ChevronLeft className="size-3.5 text-[#b6c2d4] rtl:rotate-180" />
                 <span className={cn("text-[12px] font-bold", HEADING)}>{selectedStore.name}</span>
               </div>
 
@@ -503,7 +536,7 @@ export function StoresIntegrationHub() {
                 className="h-8 rounded-[8px] border-[#e1e7f0] bg-white px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
                 onClick={clearStoreContext}
               >
-                إلغاء تحديد المتجر
+                {t("hub.clearStoreSelection")}
               </AppButton>
             </div>
           ) : null}
@@ -516,7 +549,7 @@ export function StoresIntegrationHub() {
               )}
             >
               <Loader2 className="size-4 animate-spin" />
-              جارٍ تحميل متاجرك المتصلة...
+              {t("hub.loading")}
             </div>
           ) : loadError ? (
             <div className="rounded-[12px] border border-[#f7c9ca] bg-[#fdeeee] px-4 py-8 text-center text-[12.5px] text-[#e0484d]">
@@ -527,10 +560,8 @@ export function StoresIntegrationHub() {
               <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-[14px] bg-[#eef4ff] text-[#2878ff]">
                 <Store className="size-7" />
               </span>
-              <p className={cn("text-[14px] font-extrabold", HEADING)}>اربط متجرك الأول</p>
-              <p className={cn("mt-2 text-[12.5px]", MUTED)}>
-                اربط منصة التجارة الإلكترونية الخاصة بك لتبدأ بتحليل بياناتك في مدار.
-              </p>
+              <p className={cn("text-[14px] font-extrabold", HEADING)}>{t("hub.emptyTitle")}</p>
+              <p className={cn("mt-2 text-[12.5px]", MUTED)}>{t("hub.emptySubtitle")}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -538,15 +569,35 @@ export function StoresIntegrationHub() {
                 <thead>
                   <tr>
                     {[
-                      { key: "store", label: "المتجر", align: "text-right" },
-                      { key: "platform", label: "المنصة", align: "text-center" },
-                      { key: "connection", label: "حالة الاتصال", align: "text-center" },
-                      { key: "customers", label: "العملاء", align: "text-center" },
-                      { key: "orders", label: "الطلبات", align: "text-center" },
-                      { key: "products", label: "المنتجات", align: "text-center" },
-                      { key: "lastSync", label: "آخر مزامنة", align: "text-center" },
-                      { key: "health", label: "حالة المزامنة", align: "text-center" },
-                      { key: "actions", label: "إجراء", align: "text-center" },
+                      { key: "store", label: t("table.columns.store"), align: "text-right" },
+                      { key: "platform", label: t("table.columns.platform"), align: "text-center" },
+                      {
+                        key: "connection",
+                        label: t("table.columns.connection"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "customers",
+                        label: t("table.columns.customers"),
+                        align: "text-center",
+                      },
+                      { key: "orders", label: t("table.columns.orders"), align: "text-center" },
+                      {
+                        key: "products",
+                        label: t("table.columns.products"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "lastSync",
+                        label: t("table.columns.lastSync"),
+                        align: "text-center",
+                      },
+                      { key: "health", label: t("table.columns.health"), align: "text-center" },
+                      {
+                        key: "actions",
+                        label: t("table.columns.actions"),
+                        align: "text-center",
+                      },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -566,18 +617,16 @@ export function StoresIntegrationHub() {
                     <tr>
                       <td colSpan={9} className="px-4 py-12 text-center">
                         <p className={cn("text-[13.5px] font-bold", HEADING)}>
-                          لا توجد متاجر مطابقة للفلاتر الحالية
+                          {t("table.noMatchTitle")}
                         </p>
-                        <p className={cn("mt-2 text-[12px]", MUTED)}>
-                          جرّب تغيير المنصة أو الحالة أو الفترة الزمنية أو نص البحث.
-                        </p>
+                        <p className={cn("mt-2 text-[12px]", MUTED)}>{t("table.noMatchHint")}</p>
                       </td>
                     </tr>
                   ) : (
                     paginatedRows.map((store) => {
                       const logoText = store.platform.slice(0, 2).toUpperCase()
-                      const connection = CONNECTION_PILL_AR[store.connectionStatus]
-                      const health = SYNC_HEALTH_AR[store.syncHealth]
+                      const connection = CONNECTION_STATUS_META[store.connectionStatus]
+                      const health = SYNC_HEALTH_META[store.syncHealth]
 
                       return (
                         <tr
@@ -632,7 +681,7 @@ export function StoresIntegrationHub() {
                               )}
                             >
                               <span className={cn("size-1.5 rounded-full", connection.dot)} />
-                              {connection.label}
+                              {connectionStatusLabel(store.connectionStatus, t)}
                             </span>
                           </td>
 
@@ -652,15 +701,19 @@ export function StoresIntegrationHub() {
                                 <p className={cn("text-[12px] font-semibold", HEADING)}>
                                   {formatDistanceToNow(new Date(store.lastSyncAt), {
                                     addSuffix: true,
-                                    locale: ar,
+                                    locale: locale === "ar" ? ar : enUS,
                                   })}
                                 </p>
                                 <p className={cn("mt-0.5 text-[10.5px]", MUTED)}>
-                                  {ARABIC_DATE_TIME.format(new Date(store.lastSyncAt))}
+                                  {absoluteDateTimeFormatter(locale).format(
+                                    new Date(store.lastSyncAt)
+                                  )}
                                 </p>
                               </>
                             ) : (
-                              <span className={cn("text-[12px]", MUTED)}>لم تتم مزامنة</span>
+                              <span className={cn("text-[12px]", MUTED)}>
+                                {syncHealthLabel("never_synced", t)}
+                              </span>
                             )}
                           </td>
 
@@ -670,7 +723,7 @@ export function StoresIntegrationHub() {
                                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
                                 health.className
                               )}
-                              title={getSyncHealthTooltip(store.syncHealth, store.lastSyncError)}
+                              title={getSyncHealthTooltip(store.syncHealth, store.lastSyncError, t)}
                             >
                               {store.syncHealth === "healthy" ? (
                                 <ShieldCheck className="size-3" />
@@ -681,14 +734,14 @@ export function StoresIntegrationHub() {
                               ) : (
                                 <CheckCircle2 className="size-3 opacity-60" />
                               )}
-                              {health.label}
+                              {syncHealthLabel(store.syncHealth, t)}
                             </span>
                           </td>
 
                           <td className="px-3 py-3.5">
                             <button
                               type="button"
-                              aria-label={`عرض تفاصيل ${store.name}`}
+                              aria-label={t("table.viewDetailsAriaLabel", { name: store.name })}
                               className="mx-auto flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#e1e7f0] bg-white text-[#5b6b85] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738]"
                               onClick={() => openStoreDetails(store)}
                             >
@@ -710,11 +763,15 @@ export function StoresIntegrationHub() {
               <div className="flex items-center gap-3">
                 <span className={cn("text-[12px]", MUTED)}>
                   {scopedStores.length === 0
-                    ? "لا توجد نتائج"
-                    : `عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, scopedStores.length)} من ${scopedStores.length}`}
+                    ? t("pagination.noResults")
+                    : t("pagination.showingRange", {
+                        from: (currentPage - 1) * pageSize + 1,
+                        to: Math.min(currentPage * pageSize, scopedStores.length),
+                        total: scopedStores.length,
+                      })}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-[12px]", MUTED)}>عدد النتائج في الصفحة</span>
+                  <span className={cn("text-[12px]", MUTED)}>{t("pagination.itemsPerPage")}</span>
                   <AppSelect
                     value={String(pageSize)}
                     onValueChange={(next) => {
@@ -741,19 +798,19 @@ export function StoresIntegrationHub() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة الأولى"
+                  aria-label={t("pagination.first")}
                   onClick={() => setPage(1)}
                 >
-                  <ChevronsRight className="size-4" />
+                  <ChevronsLeft className="size-4 rtl:rotate-180" />
                 </button>
                 <button
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === 1}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("pagination.previous")}
                   onClick={() => setPage((previous) => Math.max(1, previous - 1))}
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronLeft className="size-4 rtl:rotate-180" />
                 </button>
                 <span className="flex h-9 min-w-9 items-center justify-center rounded-[8px] border border-[#2878ff] bg-white px-2 text-[12px] font-bold text-[#2878ff]">
                   {currentPage}
@@ -762,19 +819,19 @@ export function StoresIntegrationHub() {
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("pagination.next")}
                   onClick={() => setPage((previous) => Math.min(totalPages, previous + 1))}
                 >
-                  <ChevronLeft className="size-4" />
+                  <ChevronRight className="size-4 rtl:rotate-180" />
                 </button>
                 <button
                   type="button"
                   className={PAGER_BUTTON_CLASS}
                   disabled={currentPage === totalPages}
-                  aria-label="الصفحة الأخيرة"
+                  aria-label={t("pagination.last")}
                   onClick={() => setPage(totalPages)}
                 >
-                  <ChevronsLeft className="size-4" />
+                  <ChevronsRight className="size-4 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -786,18 +843,18 @@ export function StoresIntegrationHub() {
           <div className="grid gap-3.5 sm:grid-cols-3">
             {[
               {
-                title: "تحليلات موحدة",
-                body: "رؤية شاملة لأداء جميع متاجرك",
+                title: t("features.unifiedAnalytics.title"),
+                body: t("features.unifiedAnalytics.body"),
                 icon: Sparkles,
               },
               {
-                title: "مزامنة تلقائية",
-                body: "تحديث بياناتك بشكل دوري",
+                title: t("features.autoSync.title"),
+                body: t("features.autoSync.body"),
                 icon: RefreshCcw,
               },
               {
-                title: "دعم جميع المنصات",
-                body: "Zid, Salla, Shopify وأكثر",
+                title: t("features.allPlatformsSupport.title"),
+                body: t("features.allPlatformsSupport.body"),
                 icon: ShoppingBag,
               },
             ].map((feature) => (
@@ -815,12 +872,8 @@ export function StoresIntegrationHub() {
             <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-white text-[#2878ff] shadow-[0_4px_12px_rgba(11,23,56,0.08)]">
               <Store className="size-6" />
             </span>
-            <h3 className={cn("mt-3.5 text-[14px] font-extrabold", HEADING)}>
-              اربط المزيد من المتاجر
-            </h3>
-            <p className={cn("mt-2 text-[11.5px] leading-[19px]", MUTED)}>
-              وسّع نطاق عملك بربط متاجر إضافية وحلل جميع بياناتك في مكان واحد.
-            </p>
+            <h3 className={cn("mt-3.5 text-[14px] font-extrabold", HEADING)}>{t("cta.title")}</h3>
+            <p className={cn("mt-2 text-[11.5px] leading-[19px]", MUTED)}>{t("cta.body")}</p>
             <AppButton
               asChild
               variant="outline"
@@ -828,7 +881,7 @@ export function StoresIntegrationHub() {
             >
               <Link href={ROUTES.integrationsNew}>
                 <span className="flex items-center justify-center gap-2">
-                  ربط متجر جديد
+                  {t("hub.connectNewStore")}
                   <Plus className="size-4" />
                 </span>
               </Link>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Flag,
   Globe2,
@@ -35,6 +36,7 @@ import { SectionHeader } from "./design/section-header"
 import { SegmentedControl } from "./design/segmented-control"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 interface CustomParamRow {
   key: string
@@ -53,13 +55,22 @@ const COPY_RESET_MS = 1500
 // Radix Select items can't take an empty-string value, so "none" is a sentinel mapped back to
 // null when building the submitted/previewed input.
 const PLATFORM_NONE_VALUE = "none"
-const PLATFORM_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: PLATFORM_NONE_VALUE, label: "بدون منصة إعلانية" },
-  { value: "google_ads", label: "Google Ads" },
-  { value: "meta_ads", label: "Meta Ads" },
-  { value: "tiktok_ads", label: "TikTok Ads" },
-  { value: "snapchat_ads", label: "Snapchat Ads" },
-]
+
+type CampaignLinkFormTranslator = ReturnType<typeof useTranslations<"campaignLinks.form">>
+
+// Platform names (Google Ads, Meta Ads, ...) are brand names, identical in both locales, so
+// only the "none" option's label comes from the translator.
+function getPlatformOptions(
+  t: CampaignLinkFormTranslator
+): Array<{ value: string; label: string }> {
+  return [
+    { value: PLATFORM_NONE_VALUE, label: t("platformNone") },
+    { value: "google_ads", label: "Google Ads" },
+    { value: "meta_ads", label: "Meta Ads" },
+    { value: "tiktok_ads", label: "TikTok Ads" },
+    { value: "snapchat_ads", label: "Snapchat Ads" },
+  ]
+}
 
 function isHttpsUrl(value: string): boolean {
   try {
@@ -70,6 +81,10 @@ function isHttpsUrl(value: string): boolean {
 }
 
 export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLinkFormProps) {
+  const t = useTranslations("campaignLinks.form")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
+  const platformOptions = useMemo(() => getPlatformOptions(t), [t])
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "")
   const [name, setName] = useState("")
   const [trackingType, setTrackingType] = useState<TrackingType>("SHORT_LINK")
@@ -196,17 +211,17 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!formInput) {
-      toast.error("يرجى تعبئة جميع الحقول المطلوبة")
+      toast.error(t("toasts.missingFields"))
       return
     }
 
     setIsSubmitting(true)
     try {
       const link = await linkListService.createCampaignLink(formInput)
-      toast.success("تم إنشاء رابط الحملة بنجاح")
+      toast.success(t("toasts.createSuccess"))
       onCreated(link)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "فشل إنشاء رابط الحملة")
+      toast.error(error instanceof Error ? error.message : t("toasts.createError"))
     } finally {
       setIsSubmitting(false)
     }
@@ -214,22 +229,27 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
 
   return (
     <AppForm
-      dir="rtl"
+      dir={localeDirection(locale)}
       onSubmit={handleSubmit}
       className={`${cairo.variable} flex flex-col gap-6 font-[family-name:var(--font-cairo)]`}
     >
       <div className="flex flex-col gap-0 lg:flex-row">
         <div className="flex-1 space-y-8 lg:pe-6">
           <AppFormSection
-            title={<SectionHeader icon={<Megaphone className="size-4" />} title="تفاصيل الحملة" />}
-            description="ما الغرض من هذا الرابط وكيف يتم تتبعه"
+            title={
+              <SectionHeader
+                icon={<Megaphone className="size-4" />}
+                title={t("sections.campaignDetails.title")}
+              />
+            }
+            description={t("sections.campaignDetails.description")}
             className="space-y-4"
           >
             <DialogSelect
               id="campaign-link-campaign"
-              label="الحملة"
+              label={t("fields.campaign.label")}
               required
-              placeholder="اختر حملة"
+              placeholder={t("fields.campaign.placeholder")}
               value={campaignId}
               onValueChange={setCampaignId}
               options={campaigns.map((campaign) => ({
@@ -240,47 +260,58 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
 
             <DialogInput
               id="campaign-link-name"
-              label="اسم الرابط"
+              label={t("fields.name.label")}
               required
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="مثال: إعلان قصة تيك توك"
+              placeholder={t("fields.name.placeholder")}
             />
 
-            <AppFormField label="نوع التتبع" required>
+            <AppFormField label={t("fields.trackingType.label")} required>
               <SegmentedControl
                 value={trackingType}
                 onChange={setTrackingType}
                 options={[
-                  { value: "SHORT_LINK", label: "رابط مختصر", icon: <Link2 className="size-4" /> },
-                  { value: "FULL_URL", label: "رابط كامل", icon: <Globe2 className="size-4" /> },
+                  {
+                    value: "SHORT_LINK",
+                    label: t("fields.trackingType.shortLink"),
+                    icon: <Link2 className="size-4" />,
+                  },
+                  {
+                    value: "FULL_URL",
+                    label: t("fields.trackingType.fullUrl"),
+                    icon: <Globe2 className="size-4" />,
+                  },
                 ]}
               />
             </AppFormField>
 
             <DialogSelect
               id="campaign-link-platform"
-              label="المنصة الإعلانية"
-              placeholder="اختر منصة (اختياري)"
+              label={t("fields.platform.label")}
+              placeholder={t("fields.platform.placeholder")}
               value={platform}
               onValueChange={setPlatform}
-              options={PLATFORM_OPTIONS}
+              options={platformOptions}
             />
           </AppFormSection>
 
           <AppFormSection
             title={
-              <SectionHeader icon={<Target className="size-4" />} title="وجهة الرابط ومعلمات UTM" />
+              <SectionHeader
+                icon={<Target className="size-4" />}
+                title={t("sections.destination.title")}
+              />
             }
-            description="أين يصل النقر وكيف يتم تمييزه للتتبع"
+            description={t("sections.destination.description")}
             className="space-y-4"
           >
             <DialogInput
               id="campaign-link-destination"
-              label="رابط الوجهة"
+              label={t("fields.destination.label")}
               required
               startIcon={<Link2 className="size-4" />}
-              helperText="يجب أن يبدأ الرابط بـ https://"
+              helperText={t("fields.destination.helper")}
               value={destinationBaseUrl}
               onChange={(event) => setDestinationBaseUrl(event.target.value)}
               placeholder="https://yourstore.com/product"
@@ -324,7 +355,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
                 endIcon={<Users className="size-4" />}
                 value={adGroupName}
                 onChange={(event) => setAdGroupName(event.target.value)}
-                placeholder="مثال: الجمهور 1"
+                placeholder={t("fields.adGroup.placeholder")}
               />
               <DialogInput
                 id="campaign-link-ad-name"
@@ -333,7 +364,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
                 endIcon={<TypeIcon className="size-4" />}
                 value={adName}
                 onChange={(event) => setAdName(event.target.value)}
-                placeholder="مثال: إعلان المنتجات الجديدة"
+                placeholder={t("fields.adName.placeholder")}
               />
             </div>
           </AppFormSection>
@@ -342,45 +373,45 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
             title={
               <SectionHeader
                 icon={<SlidersHorizontal className="size-4" />}
-                title="خيارات متقدمة"
+                title={t("sections.advanced.title")}
               />
             }
-            description="خيارات إضافية (اختيارية)"
+            description={t("sections.advanced.description")}
             className="space-y-4"
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DialogInput
                 id="campaign-link-utm-term"
-                label="utm_term (اختياري)"
+                label={t("fields.utmTerm.label")}
                 endIcon={<Search className="size-4" />}
                 value={utmTerm}
                 onChange={(event) => setUtmTerm(event.target.value)}
-                placeholder="مثال: أحذية رياضية"
+                placeholder={t("fields.utmTerm.placeholder")}
               />
               <DialogInput
                 id="campaign-link-utm-content"
-                label="utm_content (اختياري)"
+                label={t("fields.utmContent.label")}
                 endIcon={<List className="size-4" />}
                 value={utmContent}
                 onChange={(event) => setUtmContent(event.target.value)}
-                placeholder="مثال: زر التسوق"
+                placeholder={t("fields.utmContent.placeholder")}
               />
             </div>
 
-            <AppFormField label="معلومات إضافية">
+            <AppFormField label={t("fields.customParams.label")}>
               <div className="space-y-2">
                 {customParamRows.map((row, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <DialogInput
                       value={row.key}
                       onChange={(event) => updateCustomParamRow(index, "key", event.target.value)}
-                      placeholder="المفتاح"
+                      placeholder={t("fields.customParams.keyPlaceholder")}
                       wrapperClassName="w-1/3"
                     />
                     <DialogInput
                       value={row.value}
                       onChange={(event) => updateCustomParamRow(index, "value", event.target.value)}
-                      placeholder="القيمة"
+                      placeholder={t("fields.customParams.valuePlaceholder")}
                       wrapperClassName="flex-1"
                     />
                     <AppButton
@@ -388,7 +419,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
                       variant="ghost"
                       size="icon"
                       onClick={() => removeCustomParamRow(index)}
-                      aria-label="حذف"
+                      aria-label={t("fields.customParams.removeRow")}
                       className="mt-6"
                     >
                       <Trash2 className="size-4" />
@@ -403,7 +434,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
                   onClick={() => setCustomParamRows((rows) => [...rows, { key: "", value: "" }])}
                   className="rounded-xl border-[#E2E8F0]"
                 >
-                  إضافة حقل
+                  {t("fields.customParams.addRow")}
                 </AppButton>
               </div>
             </AppFormField>
@@ -431,7 +462,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
           onClick={onCancel}
           className="h-11 rounded-xl border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC]"
         >
-          إلغاء
+          {tCommon("cancel")}
         </AppButton>
         <AppButton
           type="submit"
@@ -440,7 +471,7 @@ export function CampaignLinkForm({ campaigns, onCreated, onCancel }: CampaignLin
           icon={<Link2 className="size-4" />}
           className="h-11 rounded-xl bg-[#4F46E5] text-white hover:bg-[#4338CA]"
         >
-          إنشاء الرابط
+          {t("submit")}
         </AppButton>
       </div>
     </AppForm>

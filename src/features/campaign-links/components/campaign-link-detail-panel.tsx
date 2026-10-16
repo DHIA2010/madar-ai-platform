@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { Loader2 } from "lucide-react"
 
 import {
@@ -21,27 +22,58 @@ import {
   linkListService,
 } from "../services/link-list.service"
 
+import { type Locale } from "@/i18n/locales"
+
 interface CampaignLinkDetailPanelProps {
   link: CampaignLinkSummaryRecord | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-function formatCurrency(value: number, currency = "SAR") {
+type DetailPanelTranslator = ReturnType<typeof useTranslations<"campaignLinks.detailPanel">>
+
+function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)
 }
 
-const MATCH_METHOD_LABELS: Record<string, string> = {
-  explicit_id: "Explicit ID",
-  campaign_link_id: "Link ID",
-  session_id: "Session",
-  customer_ref: "Returning customer",
-  utm_match: "UTM match",
-  unattributed: "Unattributed",
+// Mirrors the suffix/prefix convention used across the app (ر.س for ar, SAR for en). Rows are
+// always SAR in practice; a different currency code is shown as-is rather than guessed at.
+function formatCurrency(value: number, locale: Locale, currency = "SAR"): string {
+  const amount = formatMoney(value)
+  if (locale === "ar") {
+    return `${amount} ${currency === "SAR" ? "ر.س" : currency}`
+  }
+  return `${currency === "SAR" ? "SAR" : currency} ${amount}`
+}
+
+function formatMetricDate(value: string, locale: Locale): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date)
+}
+
+// Data-only: the real attribution match-method taxonomy lives in the backend's own enum.
+// `matchMethodLabel` below pairs it with its translated display label, falling back to the raw
+// key for anything not in this known set.
+const KNOWN_MATCH_METHODS = new Set([
+  "explicit_id",
+  "campaign_link_id",
+  "session_id",
+  "customer_ref",
+  "utm_match",
+  "unattributed",
+])
+
+function matchMethodLabel(method: string, t: DetailPanelTranslator): string {
+  if (!KNOWN_MATCH_METHODS.has(method)) return method
+  return t(`matchMethods.${method}` as "matchMethods.explicit_id")
 }
 
 export function CampaignLinkDetailPanel({
@@ -49,6 +81,8 @@ export function CampaignLinkDetailPanel({
   open,
   onOpenChange,
 }: CampaignLinkDetailPanelProps) {
+  const t = useTranslations("campaignLinks.detailPanel")
+  const locale = useLocale() as Locale
   const [detail, setDetail] = useState<CampaignLinkAttributionDetailRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -98,22 +132,22 @@ export function CampaignLinkDetailPanel({
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : !detail || (detail.daily.length === 0 && detail.byMatchMethod.length === 0) ? (
-        <AppEmpty
-          title="No activity yet"
-          description="Clicks and orders will appear here once this link starts getting traffic."
-        />
+        <AppEmpty title={t("empty.title")} description={t("empty.description")} />
       ) : (
         <div className="space-y-6 overflow-y-auto">
           {detail.byMatchMethod.length > 0 ? (
             <div>
               <p className="mb-2 text-xs font-medium text-muted-foreground">
-                Attribution breakdown
+                {t("attributionBreakdown")}
               </p>
               <div className="flex flex-wrap gap-2">
                 {detail.byMatchMethod.map((row) => (
                   <AppBadge key={row.matchMethod} variant="outline">
-                    {MATCH_METHOD_LABELS[row.matchMethod] ?? row.matchMethod}:{" "}
-                    {row.ordersCount ?? 0} orders ({formatCurrency(row.revenue ?? 0)})
+                    {t("matchMethodBadge", {
+                      label: matchMethodLabel(row.matchMethod, t),
+                      count: row.ordersCount ?? 0,
+                      revenue: formatCurrency(row.revenue ?? 0, locale),
+                    })}
                   </AppBadge>
                 ))}
               </div>
@@ -122,24 +156,26 @@ export function CampaignLinkDetailPanel({
 
           {detail.daily.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">Daily performance</p>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                {t("dailyPerformance")}
+              </p>
               <AppTable>
                 <AppTableHeader>
                   <AppTableRow>
-                    <AppTableHead>Date</AppTableHead>
-                    <AppTableHead>Clicks</AppTableHead>
-                    <AppTableHead>Orders</AppTableHead>
-                    <AppTableHead>Revenue</AppTableHead>
+                    <AppTableHead>{t("tableHeaders.date")}</AppTableHead>
+                    <AppTableHead>{t("tableHeaders.clicks")}</AppTableHead>
+                    <AppTableHead>{t("tableHeaders.orders")}</AppTableHead>
+                    <AppTableHead>{t("tableHeaders.revenue")}</AppTableHead>
                   </AppTableRow>
                 </AppTableHeader>
                 <AppTableBody>
                   {detail.daily.map((point) => (
                     <AppTableRow key={point.metricDate}>
-                      <AppTableCell>{point.metricDate}</AppTableCell>
+                      <AppTableCell>{formatMetricDate(point.metricDate, locale)}</AppTableCell>
                       <AppTableCell>{point.clicks ?? 0}</AppTableCell>
                       <AppTableCell>{point.ordersCount ?? 0}</AppTableCell>
                       <AppTableCell>
-                        {formatCurrency(point.revenue ?? 0, point.currency ?? "SAR")}
+                        {formatCurrency(point.revenue ?? 0, locale, point.currency ?? "SAR")}
                       </AppTableCell>
                     </AppTableRow>
                   ))}

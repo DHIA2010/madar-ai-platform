@@ -5280,6 +5280,25 @@
       "title": "تحتاج مساعدة؟",
       "description": "تواصل مع فريق الدعم للمساعدة في الإعدادات.",
       "contactUs": "تواصل معنا"
+    },
+    "globalSearch": {
+      "triggerPlaceholder": "ابحث...",
+      "dialogTitle": "البحث الشامل",
+      "inputPlaceholder": "ابحث في الصفحات والإجراءات...",
+      "noResults": "لا توجد نتائج.",
+      "groups": {
+        "dashboard": {
+          "heading": "لوحة التحكم",
+          "dashboard": "لوحة التحكم",
+          "analytics": "التحليلات",
+          "crm": "إدارة علاقات العملاء"
+        },
+        "settings": {
+          "heading": "الإعدادات",
+          "profile": "الملف الشخصي",
+          "billing": "الفوترة"
+        }
+      }
     }
   },
   "liveVisitors": {
@@ -5424,6 +5443,443 @@
         "workspaceDeactivateFailed": "تعذر إيقاف مساحة العمل."
       },
       "initialsFallback": "؟"
+    }
+  },
+  "stores": {
+    "hub": {
+      "heading": "المتاجر",
+      "subheading": "اربط متاجرك، راقب أداءها، وحلل بيانات التجارة الإلكترونية من مكان واحد.",
+      "connectNewStore": "ربط متجر جديد",
+      "searchPlaceholder": "البحث في المتاجر، الرابط أو المنصة...",
+      "clearStoreSelection": "إلغاء تحديد المتجر",
+      "loading": "جارٍ تحميل متاجرك المتصلة...",
+      "loadError": "تعذّر تحميل متاجرك المتصلة. حاول مرة أخرى.",
+      "emptyTitle": "اربط متجرك الأول",
+      "emptySubtitle": "اربط منصة التجارة الإلكترونية الخاصة بك لتبدأ بتحليل بياناتك في مدار."
+    },
+    "filters": {
+      "allPlatforms": "جميع المنصات",
+      "allStatuses": "جميع الحالات"
+    },
+    "connectionStatus": {
+      "connected": {
+        "label": "متصل"
+      },
+      "pending": {
+        "label": "قيد الانتظار"
+      },
+      "paused": {
+        "label": "متوقف"
+      },
+      "disconnected": {
+        "label": "غير متصل"
+      },
+      "error": {
+        "label": "خطأ"
+      }
+    },
+    "syncHealth": {
+      "healthy": {
+        "label": "سليم",
+        "tooltip": "تمت آخر مزامنة ناجحة مؤخراً."
+      },
+      "stale": {
+        "label": "يحتاج انتباه",
+        "tooltip": "لم تحدث مزامنة ناجحة خلال آخر 7 أيام."
+      },
+      "failed": {
+        "label": "فشل",
+        "tooltip": "فشلت آخر عملية مزامنة."
+      },
+      "neverSynced": {
+        "label": "لم تتم مزامنة",
+        "tooltip": "لم تتم مزامنة هذا المتجر بعد."
+      }
+    },
+    "kpis": {
+      "customersSynced": {
+        "label": "العملاء المتزامنين",
+        "footnote": "من جميع المتاجر",
+        "link": "عرض العملاء"
+      },
+      "ordersSynced": {
+        "label": "الطلبات المتزامنة",
+        "footnote": "متاحة في النظام",
+        "link": "عرض الطلبات"
+      },
+      "productsSynced": {
+        "label": "المنتجات المتزامنة",
+        "footnote": "من جميع المتاجر",
+        "link": "عرض المنتجات"
+      },
+      "connectedStores": {
+        "label": "المتاجر المتصلة",
+        "footnote": "عبر {count} {platform} مختلفة",
+        "platformSingular": "منصة",
+        "platformPlural": "منصات",
+        "link": "عرض المتاجر"
+      }
+    },
+    "table": {
+      "columns": {
+        "store": "المتجر",
+        "platform": "المنصة",
+        "connection": "حالة الاتصال",
+        "customers": "العملاء",
+        "orders": "الطلبات",
+        "products": "المنتجات",
+        "lastSync": "آخر مزامنة",
+        "health": "حالة المزامنة",
+        "actions": "إجراء"
+      },
+      "viewDetailsAriaLabel": "عرض تفاصيل {name}",
+      "noMatchTitle": "لا توجد متاجر مطابقة للفلاتر الحالية",
+      "noMatchHint": "جرّب تغيير المنصة أو الحالة أو الفترة الزمنية أو نص البحث."
+    },
+    "pagination": {
+      "noResults": "لا توجد نتائج",
+      "showingRange": "عرض {from} - {to} من {total}",
+      "itemsPerPage": "عدد النتائج في الصفحة",
+      "first": "الصفحة الأولى",
+      "previous": "الصفحة السابقة",
+      "next": "الصفحة التالية",
+      "last": "الصفحة الأخيرة"
+    },
+    "features": {
+      "unifiedAnalytics": {
+        "title": "تحليلات موحدة",
+        "body": "رؤية شاملة لأداء جميع متاجرك"
+      },
+      "autoSync": {
+        "title": "مزامنة تلقائية",
+        "body": "تحديث بياناتك بشكل دوري"
+      },
+      "allPlatformsSupport": {
+        "title": "دعم جميع المنصات",
+        "body": "Zid, Salla, Shopify وأكثر"
+      }
+    },
+    "cta": {
+      "title": "اربط المزيد من المتاجر",
+      "body": "وسّع نطاق عملك بربط متاجر إضافية وحلل جميع بياناتك في مكان واحد."
+    }
+  },
+  "channels": {
+    "title": "القنوات",
+    "subtitle": "نظرة عامة على أداء قنواتك التسويقية",
+    "loading": "جارٍ تحميل بيانات القنوات...",
+    "loadError": "تعذر تحميل بيانات القنوات. الرجاء المحاولة مرة أخرى.",
+    "noChannelsConnected": "لا توجد قنوات إعلانية متصلة بعد.",
+    "insufficientData": "لا توجد بيانات كافية بعد.",
+    "listSeparator": "، ",
+    "dateRange": {
+      "yesterday": "أمس",
+      "last7Days": "آخر 7 أيام",
+      "last30Days": "آخر 30 يوماً",
+      "thisMonth": "هذا الشهر",
+      "lastMonth": "الشهر الماضي",
+      "allTime": "كل الوقت"
+    },
+    "time": {
+      "neverSynced": "لم تتم المزامنة بعد",
+      "justNow": "قبل لحظات",
+      "minutesAgo": "قبل {minutes} دقيقة",
+      "hoursAgo": "قبل {hours} ساعة",
+      "daysAgo": "قبل {days} يوم"
+    },
+    "health": {
+      "healthy": "ممتاز",
+      "stale": "جيد",
+      "failed": "خطأ في الاتصال",
+      "never_synced": "لم تتم المزامنة"
+    },
+    "kpis": {
+      "changeVsPreviousPeriod": "عن الفترة السابقة",
+      "notEnoughDataToCompare": "لا توجد بيانات كافية للمقارنة",
+      "activeChannels": "القنوات النشطة",
+      "activeChannelsFootnote": "من أصل {total} قنوات",
+      "avgCpa": "متوسط CPA",
+      "totalConversions": "إجمالي التحويلات",
+      "roas": "عائد الإنفاق الإعلاني",
+      "totalRevenue": "إجمالي الإيرادات",
+      "totalSpend": "إجمالي الإنفاق",
+      "otherCurrenciesNotConverted": "{amounts} غير محول"
+    },
+    "card": {
+      "connected": "متصل",
+      "revenue": "الإيرادات",
+      "spend": "الإنفاق",
+      "conversions": "التحويلات",
+      "campaigns": "الحملات",
+      "health": "الصحة",
+      "otherCurrenciesNote": "(غير محول — لا يوجد سعر صرف حقيقي)",
+      "lastSynced": "آخر مزامنة: {time}"
+    },
+    "charts": {
+      "comparisonTitle": "مقارنة القنوات",
+      "comparisonSubtitle": "عائد الإنفاق الإعلاني (ROAS)",
+      "spendDistributionTitle": "توزيع الإنفاق",
+      "spendLabel": "الإنفاق",
+      "trendTitle": "اتجاه الأداء",
+      "trendSubtitle": "الإنفاق ({currency})"
+    },
+    "topProducts": {
+      "title": "أفضل المنتجات أداءً",
+      "columns": {
+        "product": "المنتج",
+        "orders": "الطلبات",
+        "quantitySold": "الكمية المباعة"
+      }
+    },
+    "bestChannel": {
+      "title": "أفضل قناة أداء"
+    },
+    "attentionChannel": {
+      "title": "تحتاج إلى انتباه",
+      "highCpa": "CPA مرتفع",
+      "aboveAverage": "{pct}% عن المتوسط"
+    },
+    "insight": {
+      "title": "رؤية ذكية من مدار",
+      "description": "توصيات إعادة توزيع الميزانية الذكية قيد التطوير حالياً.",
+      "comingSoon": "قريباً",
+      "viewFullAnalysis": "عرض التحليل الكامل"
+    },
+    "alerts": {
+      "title": "تنبيهات",
+      "allGood": "جميع المؤشرات ضمن النطاق المثالي.",
+      "staleSyncHours": "لم تتم المزامنة منذ {hours} ساعة",
+      "staleSyncMinutes": "لم تتم المزامنة منذ {minutes} دقيقة",
+      "spendSpike": "الإنفاق أعلى من المعدل المعتاد للقناة بنسبة {pct}%",
+      "spendDrop": "الإنفاق أقل من المعدل المعتاد للقناة بنسبة {pct}%"
+    }
+  },
+  "campaignLinks": {
+    "page": {
+      "title": "منشئ الروابط",
+      "subtitle": "أنشئ روابط حملات قابلة للتتبع وراقب الطلبات والإيرادات المتولدة منها.",
+      "installSnippetButton": "تثبيت سنيبت التتبع",
+      "createLinkButton": "إنشاء رابط جديد",
+      "viewingData": "عرض بيانات",
+      "removeSelection": "إزالة",
+      "kpis": {
+        "totalRevenue": "إجمالي الإيرادات",
+        "totalOrders": "إجمالي الطلبات",
+        "totalClicks": "إجمالي النقرات",
+        "activeLinks": "الروابط النشطة"
+      },
+      "changeFromPreviousPeriod": "{sign}{value}% عن الفترة السابقة",
+      "searchPlaceholder": "ابحث عن حملة أو رابط...",
+      "filterButton": "تصفية",
+      "periods": {
+        "last7Days": "آخر 7 أيام",
+        "last30Days": "آخر 30 يوم",
+        "last90Days": "آخر 90 يوم"
+      },
+      "statusFilters": {
+        "all": "كل الحالات",
+        "enabled": "نشط",
+        "disabled": "معطل"
+      },
+      "sectionTitle": "روابط الحملات",
+      "loadingLinks": "جارٍ تحميل الروابط...",
+      "loadError": "تعذّر تحميل روابط الحملات. حاول مرة أخرى.",
+      "emptyNoLinks": {
+        "title": "لا توجد روابط بعد",
+        "description": "أنشئ أول رابط تتبع لك لتبدأ بقياس أداء حملاتك.",
+        "action": "إنشاء رابط"
+      },
+      "emptyNoResults": {
+        "title": "لا توجد نتائج",
+        "description": "جرّب تغيير كلمة البحث أو الفلتر."
+      },
+      "createDialog": {
+        "title": "إنشاء رابط حملة",
+        "close": "إغلاق",
+        "noCampaignsTitle": "لا توجد حملات بعد",
+        "noCampaignsDescription": "حملاتك الإعلانية المتصلة لا تصبح قابلة للربط إلا بعد استيرادها. اختر منصة لاستيراد حملاتها الآن.",
+        "importFromOtherPlatform": "استيراد حملات من منصة أخرى"
+      },
+      "deleteDialog": {
+        "title": "حذف رابط الحملة؟",
+        "description": "سيتوقف \"{name}\" عن إعادة التوجيه وسيُحذف من هذه القائمة. لا يمكن التراجع عن هذا الإجراء.",
+        "confirm": "حذف"
+      },
+      "toasts": {
+        "importNone": "لا توجد حملات لاستيرادها من {platform}. تأكد من ربط المنصة ومزامنة حملاتها أولاً.",
+        "importSuccess": "تم استيراد {count} حملة من {platform}.",
+        "importError": "تعذّر استيراد الحملات. حاول مرة أخرى.",
+        "linkEnabled": "تم تفعيل الرابط",
+        "linkDisabled": "تم تعطيل الرابط",
+        "toggleError": "تعذّر تحديث الرابط",
+        "linkDeleted": "تم حذف الرابط",
+        "deleteError": "تعذّر حذف الرابط",
+        "linkCopied": "تم نسخ الرابط"
+      },
+      "csv": {
+        "name": "الاسم",
+        "id": "المعرف",
+        "campaign": "الحملة",
+        "status": "الحالة",
+        "clicks": "النقرات",
+        "orders": "الطلبات",
+        "revenue": "الإيرادات",
+        "createdAt": "تاريخ الإنشاء"
+      }
+    },
+    "form": {
+      "platformNone": "بدون منصة إعلانية",
+      "toasts": {
+        "missingFields": "يرجى تعبئة جميع الحقول المطلوبة",
+        "createSuccess": "تم إنشاء رابط الحملة بنجاح",
+        "createError": "فشل إنشاء رابط الحملة"
+      },
+      "sections": {
+        "campaignDetails": {
+          "title": "تفاصيل الحملة",
+          "description": "ما الغرض من هذا الرابط وكيف يتم تتبعه"
+        },
+        "destination": {
+          "title": "وجهة الرابط ومعلمات UTM",
+          "description": "أين يصل النقر وكيف يتم تمييزه للتتبع"
+        },
+        "advanced": {
+          "title": "خيارات متقدمة",
+          "description": "خيارات إضافية (اختيارية)"
+        }
+      },
+      "fields": {
+        "campaign": {
+          "label": "الحملة",
+          "placeholder": "اختر حملة"
+        },
+        "name": {
+          "label": "اسم الرابط",
+          "placeholder": "مثال: إعلان قصة تيك توك"
+        },
+        "trackingType": {
+          "label": "نوع التتبع",
+          "shortLink": "رابط مختصر",
+          "fullUrl": "رابط كامل"
+        },
+        "platform": {
+          "label": "المنصة الإعلانية",
+          "placeholder": "اختر منصة (اختياري)"
+        },
+        "destination": {
+          "label": "رابط الوجهة",
+          "helper": "يجب أن يبدأ الرابط بـ https://"
+        },
+        "adGroup": {
+          "placeholder": "مثال: الجمهور 1"
+        },
+        "adName": {
+          "placeholder": "مثال: إعلان المنتجات الجديدة"
+        },
+        "utmTerm": {
+          "label": "utm_term (اختياري)",
+          "placeholder": "مثال: أحذية رياضية"
+        },
+        "utmContent": {
+          "label": "utm_content (اختياري)",
+          "placeholder": "مثال: زر التسوق"
+        },
+        "customParams": {
+          "label": "معلومات إضافية",
+          "keyPlaceholder": "المفتاح",
+          "valuePlaceholder": "القيمة",
+          "removeRow": "حذف",
+          "addRow": "إضافة حقل"
+        }
+      },
+      "submit": "إنشاء الرابط"
+    },
+    "editDialog": {
+      "toasts": {
+        "loadError": "تعذّر تحميل بيانات الرابط",
+        "nameRequired": "اسم الرابط مطلوب",
+        "updateSuccess": "تم تحديث رابط الحملة",
+        "updateError": "تعذّر تحديث رابط الحملة"
+      },
+      "title": "تعديل رابط الحملة",
+      "close": "إغلاق",
+      "destinationLabel": "الوجهة:",
+      "adGroupAdNameLabel": "Ad group / Ad name:",
+      "lockedFieldsNotice": "لا يمكن تغيير معلمات UTM أو نوع التتبع أو الحملة أو Ad group/Ad name بعد إنشاء الرابط.",
+      "nameLabel": "اسم الرابط",
+      "customParamsLabel": "معلومات إضافية",
+      "keyPlaceholder": "المفتاح",
+      "valuePlaceholder": "القيمة",
+      "removeRow": "حذف",
+      "addRow": "إضافة حقل",
+      "save": "حفظ التغييرات"
+    },
+    "table": {
+      "headers": {
+        "link": "الرابط",
+        "campaign": "الحملة",
+        "status": "الحالة",
+        "clicks": "النقرات",
+        "orders": "الطلبات",
+        "revenue": "الإيرادات",
+        "createdAt": "تاريخ الإنشاء",
+        "actions": "الإجراءات"
+      },
+      "status": {
+        "enabled": "نشط",
+        "disabled": "معطل"
+      },
+      "openLinkAria": "فتح الرابط",
+      "actionsAria": "الإجراءات",
+      "actionsMenu": {
+        "copyLink": "نسخ الرابط",
+        "edit": "تعديل",
+        "enable": "تفعيل",
+        "disable": "تعطيل",
+        "delete": "حذف"
+      }
+    },
+    "trackingSnippet": {
+      "loadError": "تعذّر تحميل سنيبت التتبع. حاول مرة أخرى.",
+      "copySuccess": "تم نسخ السنيبت",
+      "title": "تثبيت سنيبت التتبع",
+      "close": "إغلاق",
+      "description": "الصق هذا السنيبت مرة واحدة داخل قالب متجرك (Salla / Shopify / Zid) لتتبّع الزيارات القادمة من روابط لم يتم إنشاؤها عبر منشئ الروابط، مثل الروابط التي يضيف فيها المُعلن معلمات UTM يدويًا داخل منصة الإعلانات مباشرة.",
+      "copied": "تم النسخ",
+      "copyButton": "نسخ السنيبت"
+    },
+    "preview": {
+      "title": "معاينة مباشرة",
+      "subtitle": "املأ الحقول المطلوبة لرؤية معاينة الرابط",
+      "copyAria": "نسخ الرابط",
+      "readyBadge": "جاهز للتتبع",
+      "finalDestinationLabel": "الوجهة النهائية",
+      "updating": "جارٍ التحديث...",
+      "emptyTitle": "ستظهر معاينة الرابط هنا",
+      "emptyDescription": "بعد إدخال البيانات المطلوبة"
+    },
+    "detailPanel": {
+      "empty": {
+        "title": "لا يوجد نشاط بعد",
+        "description": "ستظهر النقرات والطلبات هنا بعد أن يبدأ هذا الرابط باستقبال الزيارات."
+      },
+      "attributionBreakdown": "تفصيل الإسناد",
+      "matchMethodBadge": "{label}: {count} طلب ({revenue})",
+      "dailyPerformance": "الأداء اليومي",
+      "tableHeaders": {
+        "date": "التاريخ",
+        "clicks": "النقرات",
+        "orders": "الطلبات",
+        "revenue": "الإيرادات"
+      },
+      "matchMethods": {
+        "explicit_id": "معرف صريح",
+        "campaign_link_id": "معرف الرابط",
+        "session_id": "الجلسة",
+        "customer_ref": "عميل عائد",
+        "utm_match": "تطابق UTM",
+        "unattributed": "غير محدد المصدر"
+      }
     }
   }
 }

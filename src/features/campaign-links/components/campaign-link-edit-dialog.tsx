@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { Link2, Loader2, Plus, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -14,6 +15,7 @@ import {
 import { DialogInput } from "./design/dialog-input"
 
 import { cairo } from "@/components/design/fonts"
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 interface CustomParamRow {
   key: string
@@ -37,6 +39,9 @@ export function CampaignLinkEditDialog({
   onOpenChange,
   onSaved,
 }: CampaignLinkEditDialogProps) {
+  const t = useTranslations("campaignLinks.editDialog")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
   const [detail, setDetail] = useState<CampaignLinkRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -63,7 +68,7 @@ export function CampaignLinkEditDialog({
         }
       } catch {
         if (!cancelled) {
-          toast.error("تعذّر تحميل بيانات الرابط")
+          toast.error(t("toasts.loadError"))
           onOpenChange(false)
         }
       } finally {
@@ -94,7 +99,7 @@ export function CampaignLinkEditDialog({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!detail || !name.trim()) {
-      toast.error("اسم الرابط مطلوب")
+      toast.error(t("toasts.nameRequired"))
       return
     }
 
@@ -111,10 +116,10 @@ export function CampaignLinkEditDialog({
         name: name.trim(),
         customParams,
       })
-      toast.success("تم تحديث رابط الحملة")
+      toast.success(t("toasts.updateSuccess"))
       onSaved()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذّر تحديث رابط الحملة")
+      toast.error(error instanceof Error ? error.message : t("toasts.updateError"))
     } finally {
       setIsSaving(false)
     }
@@ -128,7 +133,7 @@ export function CampaignLinkEditDialog({
       contentClassName="w-[560px] max-w-[95vw] max-h-[90vh] rounded-[20px] border border-[#E2E8F0] bg-white p-0 shadow-xl"
     >
       <div
-        dir="rtl"
+        dir={localeDirection(locale)}
         className={`${cairo.variable} flex h-full flex-col font-[family-name:var(--font-cairo)]`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
@@ -137,14 +142,14 @@ export function CampaignLinkEditDialog({
               <Link2 className="size-4" />
             </span>
             <div>
-              <h2 className="text-[18px] font-bold leading-6 text-[#172033]">تعديل رابط الحملة</h2>
+              <h2 className="text-[18px] font-bold leading-6 text-[#172033]">{t("title")}</h2>
               {link ? <p className="text-xs text-[#64748B]">{link.displayId}</p> : null}
             </div>
           </div>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            aria-label="إغلاق"
+            aria-label={t("close")}
             className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#E2E8F0] text-[#64748B] transition-colors hover:bg-[#F8FAFC] hover:text-[#172033]"
           >
             <X className="size-4" />
@@ -160,7 +165,7 @@ export function CampaignLinkEditDialog({
             <AppForm onSubmit={handleSubmit} className="space-y-5">
               <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 text-xs text-[#64748B]">
                 <p className="break-all">
-                  <span className="font-medium text-[#172033]">الوجهة:</span>{" "}
+                  <span className="font-medium text-[#172033]">{t("destinationLabel")}</span>{" "}
                   {detail.destinationBaseUrl}
                 </p>
                 <p className="mt-1">
@@ -168,37 +173,34 @@ export function CampaignLinkEditDialog({
                   {detail.utmMedium} / {detail.utmCampaign}
                 </p>
                 <p className="mt-1">
-                  <span className="font-medium text-[#172033]">Ad group / Ad name:</span>{" "}
+                  <span className="font-medium text-[#172033]">{t("adGroupAdNameLabel")}</span>{" "}
                   {detail.adGroupName ?? "—"} / {detail.adName ?? "—"}
                 </p>
-                <p className="mt-1">
-                  لا يمكن تغيير معلمات UTM أو نوع التتبع أو الحملة أو Ad group/Ad name بعد إنشاء
-                  الرابط.
-                </p>
+                <p className="mt-1">{t("lockedFieldsNotice")}</p>
               </div>
 
               <DialogInput
                 id="edit-link-name"
-                label="اسم الرابط"
+                label={t("nameLabel")}
                 required
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
 
-              <AppFormField label="معلومات إضافية">
+              <AppFormField label={t("customParamsLabel")}>
                 <div className="space-y-2">
                   {customParamRows.map((row, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <DialogInput
                         value={row.key}
                         onChange={(event) => updateRow(index, "key", event.target.value)}
-                        placeholder="المفتاح"
+                        placeholder={t("keyPlaceholder")}
                         wrapperClassName="w-1/3"
                       />
                       <DialogInput
                         value={row.value}
                         onChange={(event) => updateRow(index, "value", event.target.value)}
-                        placeholder="القيمة"
+                        placeholder={t("valuePlaceholder")}
                         wrapperClassName="flex-1"
                       />
                       <AppButton
@@ -206,7 +208,7 @@ export function CampaignLinkEditDialog({
                         variant="ghost"
                         size="icon"
                         onClick={() => removeRow(index)}
-                        aria-label="حذف"
+                        aria-label={t("removeRow")}
                         className="mt-6"
                       >
                         <Trash2 className="size-4" />
@@ -221,7 +223,7 @@ export function CampaignLinkEditDialog({
                     onClick={() => setCustomParamRows((rows) => [...rows, { key: "", value: "" }])}
                     className="rounded-xl border-[#E2E8F0]"
                   >
-                    إضافة حقل
+                    {t("addRow")}
                   </AppButton>
                 </div>
               </AppFormField>
@@ -232,7 +234,7 @@ export function CampaignLinkEditDialog({
                   onClick={() => onOpenChange(false)}
                   className="flex h-11 cursor-pointer items-center rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium text-[#334155] transition-colors hover:bg-[#F8FAFC]"
                 >
-                  إلغاء
+                  {tCommon("cancel")}
                 </button>
                 <button
                   type="submit"
@@ -240,7 +242,7 @@ export function CampaignLinkEditDialog({
                   className="flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-[#4F46E5] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
-                  حفظ التغييرات
+                  {t("save")}
                 </button>
               </div>
             </AppForm>

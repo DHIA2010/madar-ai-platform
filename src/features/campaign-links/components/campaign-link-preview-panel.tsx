@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import {
   Check,
   CheckCircle2,
@@ -54,15 +55,16 @@ export function CampaignLinkPreviewPanel({
   adGroupName,
   adName,
 }: CampaignLinkPreviewPanelProps) {
+  const t = useTranslations("campaignLinks.preview")
   return (
     <div className="w-full rounded-s-2xl border-s border-[#EEF2F7] bg-[#FAFBFF] p-6 lg:sticky lg:top-0 lg:h-full lg:w-[280px]">
       <div className="flex items-center justify-between gap-2">
         <IconBadge icon={<Eye className="size-4" />} />
         <div className="flex-1 text-end">
-          <p className="text-[16px] font-semibold leading-6 text-[#172033]">معاينة مباشرة</p>
+          <p className="text-[16px] font-semibold leading-6 text-[#172033]">{t("title")}</p>
         </div>
       </div>
-      <p className="mt-1 text-xs text-[#64748B]">املأ الحقول المطلوبة لرؤية معاينة الرابط</p>
+      <p className="mt-1 text-xs text-[#64748B]">{t("subtitle")}</p>
 
       {previewUrl ? (
         <div className="mt-5 space-y-3">
@@ -77,7 +79,7 @@ export function CampaignLinkPreviewPanel({
                 variant="ghost"
                 size="icon-sm"
                 onClick={onCopy}
-                aria-label="نسخ الرابط"
+                aria-label={t("copyAria")}
                 className="shrink-0"
               >
                 {copied ? (
@@ -99,19 +101,19 @@ export function CampaignLinkPreviewPanel({
 
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#10B981]/10 px-2.5 py-1 text-xs font-medium text-[#10B981]">
             <CheckCircle2 className="size-3.5" />
-            جاهز للتتبع
+            {t("readyBadge")}
           </span>
 
           {previewShortUrl ? (
             <div>
-              <p className="mb-1 text-xs text-[#64748B]">الوجهة النهائية</p>
+              <p className="mb-1 text-xs text-[#64748B]">{t("finalDestinationLabel")}</p>
               <p className="break-all rounded-lg bg-white px-3 py-2 text-xs text-[#64748B]">
                 {previewUrl}
               </p>
             </div>
           ) : null}
 
-          {isPreviewLoading ? <p className="text-xs text-[#64748B]">جارٍ التحديث...</p> : null}
+          {isPreviewLoading ? <p className="text-xs text-[#64748B]">{t("updating")}</p> : null}
         </div>
       ) : (
         <div className="mt-8 flex flex-col items-center justify-center gap-4 text-center">
@@ -132,8 +134,8 @@ export function CampaignLinkPreviewPanel({
             </div>
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-medium text-[#172033]">ستظهر معاينة الرابط هنا</p>
-            <p className="text-xs text-[#64748B]">بعد إدخال البيانات المطلوبة</p>
+            <p className="text-sm font-medium text-[#172033]">{t("emptyTitle")}</p>
+            <p className="text-xs text-[#64748B]">{t("emptyDescription")}</p>
           </div>
         </div>
       )}

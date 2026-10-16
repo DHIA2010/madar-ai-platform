@@ -18,8 +18,10 @@ import {
   Wallet,
   X,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { toast } from "sonner"
 
+import { localeDirection, type Locale } from "@/i18n/locales"
 import {
   AppButton,
   AppDialog,
@@ -54,20 +56,31 @@ import {
 type PeriodOption = "7" | "30" | "90"
 type StatusFilter = "all" | "enabled" | "disabled"
 
-const PERIOD_OPTIONS: Array<{ value: PeriodOption; label: string }> = [
-  { value: "7", label: "آخر 7 أيام" },
-  { value: "30", label: "آخر 30 يوم" },
-  { value: "90", label: "آخر 90 يوم" },
-]
+type CampaignLinksPageTranslator = ReturnType<typeof useTranslations<"campaignLinks.page">>
 
-const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
-  { value: "all", label: "كل الحالات" },
-  { value: "enabled", label: "نشط" },
-  { value: "disabled", label: "معطل" },
-]
+function getPeriodOptions(
+  t: CampaignLinksPageTranslator
+): Array<{ value: PeriodOption; label: string }> {
+  return [
+    { value: "7", label: t("periods.last7Days") },
+    { value: "30", label: t("periods.last30Days") },
+    { value: "90", label: t("periods.last90Days") },
+  ]
+}
+
+function getStatusFilterOptions(
+  t: CampaignLinksPageTranslator
+): Array<{ value: StatusFilter; label: string }> {
+  return [
+    { value: "all", label: t("statusFilters.all") },
+    { value: "enabled", label: t("statusFilters.enabled") },
+    { value: "disabled", label: t("statusFilters.disabled") },
+  ]
+}
 
 // The 4 ad platforms campaigns can be imported from (CAMPAIGN_PLATFORMS in
 // identity-platform/campaigns/types.ts). Badge keys match PLATFORM_ICON's own keys.
+// Brand names -- identical in both locales, so they're plain data rather than translation keys.
 const CAMPAIGN_PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   google_ads: "Google Ads",
   meta_ads: "Meta Ads",
@@ -96,12 +109,16 @@ function previousPeriodRange(period: PeriodOption) {
   return { startDate: start.toISOString(), endDate: end.toISOString() }
 }
 
-function formatCurrency(value: number, currency = "SAR") {
+function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)
+}
+
+function formatCurrency(value: number, locale: Locale): string {
+  const amount = formatMoney(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
 // No previous-period baseline (previous === 0) is treated as a full increase when there's any
@@ -124,23 +141,27 @@ function sumTotals(rows: CampaignLinkSummaryRecord[]) {
   )
 }
 
-function exportCsv(rows: CampaignLinkSummaryRecord[], campaignNameById: Record<string, string>) {
+function exportCsv(
+  rows: CampaignLinkSummaryRecord[],
+  campaignNameById: Record<string, string>,
+  t: CampaignLinksPageTranslator
+) {
   const header = [
-    "الاسم",
-    "المعرف",
-    "الحملة",
-    "الحالة",
-    "النقرات",
-    "الطلبات",
-    "الإيرادات",
-    "تاريخ الإنشاء",
+    t("csv.name"),
+    t("csv.id"),
+    t("csv.campaign"),
+    t("csv.status"),
+    t("csv.clicks"),
+    t("csv.orders"),
+    t("csv.revenue"),
+    t("csv.createdAt"),
   ]
   const lines = rows.map((row) =>
     [
       row.name,
       row.displayId,
       campaignNameById[row.campaignId] ?? "",
-      row.enabled ? "نشط" : "معطل",
+      row.enabled ? t("statusFilters.enabled") : t("statusFilters.disabled"),
       String(row.clicks ?? 0),
       String(row.ordersCount ?? 0),
       String(row.revenue ?? 0),
@@ -167,10 +188,18 @@ interface KpiCardProps {
   title: string
   value: React.ReactNode
   changePct: number | null
+  t: CampaignLinksPageTranslator
 }
 
-function KpiCard({ icon, tone, title, value, changePct }: KpiCardProps) {
+function KpiCard({ icon, tone, title, value, changePct, t }: KpiCardProps) {
   const isPositive = (changePct ?? 0) >= 0
+  const changeLabel =
+    changePct !== null
+      ? t("changeFromPreviousPeriod", {
+          sign: isPositive ? "+" : "",
+          value: changePct.toFixed(1),
+        })
+      : null
   return (
     <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.05)]">
       <div className="flex items-start justify-between gap-3">
@@ -189,8 +218,7 @@ function KpiCard({ icon, tone, title, value, changePct }: KpiCardProps) {
           }
         >
           {isPositive ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
-          {isPositive ? "+" : ""}
-          {changePct.toFixed(1)}% عن الفترة السابقة
+          {changeLabel}
         </p>
       ) : null}
     </div>
@@ -201,6 +229,9 @@ const TOOLBAR_TRIGGER_CLASSNAME =
   "flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3.5 text-sm font-medium text-[#334155] shadow-[0_1px_2px_0_rgba(15,23,42,0.05)] transition-colors hover:bg-[#F8FAFC] focus:outline-none"
 
 export default function CampaignLinksPage() {
+  const t = useTranslations("campaignLinks.page")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
   const [rows, setRows] = useState<CampaignLinkSummaryRecord[]>([])
   const [previousTotals, setPreviousTotals] = useState<ReturnType<typeof sumTotals> | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignRecord[]>([])
@@ -234,15 +265,18 @@ export default function CampaignLinksPage() {
       setCampaigns(campaignList)
     } catch (error) {
       console.error("Failed to load campaign links", error)
-      setLoadError("تعذّر تحميل روابط الحملات. حاول مرة أخرى.")
+      setLoadError(t("loadError"))
     } finally {
       setIsLoading(false)
     }
-  }, [period])
+  }, [period, t])
 
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  const periodOptions = useMemo(() => getPeriodOptions(t), [t])
+  const statusFilterOptions = useMemo(() => getStatusFilterOptions(t), [t])
 
   const campaignNameById = useMemo(
     () => Object.fromEntries(campaigns.map((campaign) => [campaign.id, campaign.displayName])),
@@ -285,17 +319,20 @@ export default function CampaignLinksPage() {
     try {
       const result = await campaignPickerService.importCampaignsFromPlatform(platform)
       if (result.imported === 0) {
-        toast.info(
-          `لا توجد حملات لاستيرادها من ${CAMPAIGN_PLATFORM_LABELS[platform]}. تأكد من ربط المنصة ومزامنة حملاتها أولاً.`
-        )
+        toast.info(t("toasts.importNone", { platform: CAMPAIGN_PLATFORM_LABELS[platform] }))
         return
       }
-      toast.success(`تم استيراد ${result.imported} حملة من ${CAMPAIGN_PLATFORM_LABELS[platform]}.`)
+      toast.success(
+        t("toasts.importSuccess", {
+          count: result.imported,
+          platform: CAMPAIGN_PLATFORM_LABELS[platform],
+        })
+      )
       const campaignList = await campaignPickerService.listCampaigns()
       setCampaigns(campaignList)
     } catch (error) {
       console.error("Failed to import campaigns", error)
-      toast.error("تعذّر استيراد الحملات. حاول مرة أخرى.")
+      toast.error(t("toasts.importError"))
     } finally {
       setImportingPlatform(null)
     }
@@ -327,10 +364,10 @@ export default function CampaignLinksPage() {
   async function handleToggleEnabled(row: CampaignLinkSummaryRecord) {
     try {
       await linkListService.setCampaignLinkEnabled(row.id, !row.enabled)
-      toast.success(row.enabled ? "تم تعطيل الرابط" : "تم تفعيل الرابط")
+      toast.success(row.enabled ? t("toasts.linkDisabled") : t("toasts.linkEnabled"))
       void loadData()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذّر تحديث الرابط")
+      toast.error(error instanceof Error ? error.message : t("toasts.toggleError"))
     }
   }
 
@@ -339,14 +376,14 @@ export default function CampaignLinksPage() {
     setIsDeleting(true)
     try {
       await linkListService.archiveCampaignLink(deletingRow.id)
-      toast.success("تم حذف الرابط")
+      toast.success(t("toasts.linkDeleted"))
       if (selectedRowId === deletingRow.id) {
         setSelectedRowId(null)
       }
       setDeletingRow(null)
       void loadData()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذّر حذف الرابط")
+      toast.error(error instanceof Error ? error.message : t("toasts.deleteError"))
     } finally {
       setIsDeleting(false)
     }
@@ -355,7 +392,7 @@ export default function CampaignLinksPage() {
   function handleCopyLink(row: CampaignLinkSummaryRecord) {
     const value = row.shortUrl ?? row.finalUrl
     void navigator.clipboard.writeText(value)
-    toast.success("تم نسخ الرابط")
+    toast.success(t("toasts.linkCopied"))
   }
 
   const revenueChangePct = previousTotals
@@ -373,17 +410,15 @@ export default function CampaignLinksPage() {
 
   return (
     <div
-      dir="rtl"
+      dir={localeDirection(locale)}
       className={`${cairo.variable} min-h-full space-y-6 bg-[#F8FAFC] p-6 font-[family-name:var(--font-cairo)]`}
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <IconBadge icon={<Link2 className="size-5" />} className="size-11" />
           <div>
-            <h1 className="text-[20px] font-bold leading-7 text-[#172033]">منشئ الروابط</h1>
-            <p className="text-sm text-[#64748B]">
-              أنشئ روابط حملات قابلة للتتبع وراقب الطلبات والإيرادات المتولدة منها.
-            </p>
+            <h1 className="text-[20px] font-bold leading-7 text-[#172033]">{t("title")}</h1>
+            <p className="text-sm text-[#64748B]">{t("subtitle")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -393,7 +428,7 @@ export default function CampaignLinksPage() {
             className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium text-[#334155] shadow-[0_1px_2px_0_rgba(15,23,42,0.05)] transition-colors hover:bg-[#F8FAFC]"
           >
             <Code2 className="size-4" />
-            تثبيت سنيبت التتبع
+            {t("installSnippetButton")}
           </button>
           <button
             type="button"
@@ -405,14 +440,14 @@ export default function CampaignLinksPage() {
             className="flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-[#4F46E5] px-5 text-sm font-medium text-white transition-colors hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="size-4" />
-            إنشاء رابط جديد
+            {t("createLinkButton")}
           </button>
         </div>
       </div>
 
       {selectedRow ? (
         <div className="flex items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm">
-          <span className="text-[#64748B]">عرض بيانات</span>
+          <span className="text-[#64748B]">{t("viewingData")}</span>
           <span className="font-medium text-[#172033]">{selectedRow.name}</span>
           <button
             type="button"
@@ -423,7 +458,7 @@ export default function CampaignLinksPage() {
             className="ms-auto flex cursor-pointer items-center gap-1 text-[#64748B] hover:text-[#172033]"
           >
             <X className="size-3.5" />
-            إزالة
+            {t("removeSelection")}
           </button>
         </div>
       ) : null}
@@ -432,30 +467,34 @@ export default function CampaignLinksPage() {
         <KpiCard
           icon={<Wallet className="size-5" />}
           tone="success"
-          title="إجمالي الإيرادات"
-          value={formatCurrency(totals.revenue)}
+          title={t("kpis.totalRevenue")}
+          value={formatCurrency(totals.revenue, locale)}
           changePct={revenueChangePct}
+          t={t}
         />
         <KpiCard
           icon={<ShoppingCart className="size-5" />}
           tone="info"
-          title="إجمالي الطلبات"
+          title={t("kpis.totalOrders")}
           value={totals.orders}
           changePct={ordersChangePct}
+          t={t}
         />
         <KpiCard
           icon={<MousePointerClick className="size-5" />}
           tone="violet"
-          title="إجمالي النقرات"
+          title={t("kpis.totalClicks")}
           value={totals.clicks}
           changePct={clicksChangePct}
+          t={t}
         />
         <KpiCard
           icon={<Link2 className="size-5" />}
           tone="warning"
-          title="الروابط النشطة"
+          title={t("kpis.activeLinks")}
           value={totals.active}
           changePct={activeChangePct}
+          t={t}
         />
       </div>
 
@@ -466,7 +505,7 @@ export default function CampaignLinksPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ابحث عن حملة أو رابط..."
+              placeholder={t("searchPlaceholder")}
               className="h-10 w-full rounded-xl border border-[#E2E8F0] bg-white ps-9 pe-3.5 text-sm text-[#172033] shadow-[0_1px_2px_0_rgba(15,23,42,0.05)] placeholder:text-[#94A3B8] focus:border-[#4F46E5] focus:outline-none focus:ring-[3px] focus:ring-[#4F46E5]/15"
             />
           </div>
@@ -474,12 +513,12 @@ export default function CampaignLinksPage() {
           <AppDropdownMenu>
             <AppDropdownMenuTrigger asChild>
               <button type="button" className={TOOLBAR_TRIGGER_CLASSNAME}>
-                تصفية
+                {t("filterButton")}
                 <Filter className="size-4" />
               </button>
             </AppDropdownMenuTrigger>
             <AppDropdownMenuContent align="end">
-              {STATUS_FILTER_OPTIONS.map((option) => (
+              {statusFilterOptions.map((option) => (
                 <AppDropdownMenuItem
                   key={option.value}
                   onClick={() => setStatusFilter(option.value)}
@@ -500,12 +539,12 @@ export default function CampaignLinksPage() {
           <AppDropdownMenu>
             <AppDropdownMenuTrigger asChild>
               <button type="button" className={TOOLBAR_TRIGGER_CLASSNAME}>
-                {PERIOD_OPTIONS.find((option) => option.value === period)?.label}
+                {periodOptions.find((option) => option.value === period)?.label}
                 <Calendar className="size-4" />
               </button>
             </AppDropdownMenuTrigger>
             <AppDropdownMenuContent align="start">
-              {PERIOD_OPTIONS.map((option) => (
+              {periodOptions.map((option) => (
                 <AppDropdownMenuItem key={option.value} onClick={() => setPeriod(option.value)}>
                   {option.value === period ? (
                     <Check className="size-4 text-[#4F46E5]" />
@@ -520,10 +559,10 @@ export default function CampaignLinksPage() {
 
           <button
             type="button"
-            onClick={() => exportCsv(visibleRows, campaignNameById)}
+            onClick={() => exportCsv(visibleRows, campaignNameById, t)}
             className={TOOLBAR_TRIGGER_CLASSNAME}
           >
-            تصدير
+            {tCommon("export")}
             <Download className="size-4" />
           </button>
         </div>
@@ -531,7 +570,7 @@ export default function CampaignLinksPage() {
 
       <div className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_1px_2px_0_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-2 border-b border-[#E2E8F0] px-6 py-4">
-          <h2 className="text-[16px] font-semibold text-[#172033]">روابط الحملات</h2>
+          <h2 className="text-[16px] font-semibold text-[#172033]">{t("sectionTitle")}</h2>
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#EEF2FF] px-1.5 text-xs font-medium text-[#4F46E5]">
             {visibleRows.length}
           </span>
@@ -540,19 +579,22 @@ export default function CampaignLinksPage() {
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-[#64748B]">
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل الروابط...
+            {t("loadingLinks")}
           </div>
         ) : loadError ? (
           <div className="p-6 text-sm text-[#EF4444]">{loadError}</div>
         ) : rows.length === 0 ? (
           <AppEmpty
-            title="لا توجد روابط بعد"
-            description="أنشئ أول رابط تتبع لك لتبدأ بقياس أداء حملاتك."
-            actionLabel="إنشاء رابط"
+            title={t("emptyNoLinks.title")}
+            description={t("emptyNoLinks.description")}
+            actionLabel={t("emptyNoLinks.action")}
             onAction={() => setIsCreateOpen(true)}
           />
         ) : visibleRows.length === 0 ? (
-          <AppEmpty title="لا توجد نتائج" description="جرّب تغيير كلمة البحث أو الفلتر." />
+          <AppEmpty
+            title={t("emptyNoResults.title")}
+            description={t("emptyNoResults.description")}
+          />
         ) : (
           <CampaignLinksTable
             rows={visibleRows}
@@ -574,7 +616,7 @@ export default function CampaignLinksPage() {
         contentClassName="w-[1040px] max-w-[95vw] max-h-[92vh] rounded-[20px] border border-[#E2E8F0] bg-white p-0 shadow-xl"
       >
         <div
-          dir="rtl"
+          dir={localeDirection(locale)}
           className={`${cairo.variable} flex h-full flex-col font-[family-name:var(--font-cairo)]`}
         >
           <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
@@ -582,12 +624,14 @@ export default function CampaignLinksPage() {
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
                 <Link2 className="size-4" />
               </span>
-              <h2 className="text-[20px] font-bold leading-7 text-[#172033]">إنشاء رابط حملة</h2>
+              <h2 className="text-[20px] font-bold leading-7 text-[#172033]">
+                {t("createDialog.title")}
+              </h2>
             </div>
             <button
               type="button"
               onClick={() => setIsCreateOpen(false)}
-              aria-label="إغلاق"
+              aria-label={t("createDialog.close")}
               className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#E2E8F0] text-[#64748B] transition-colors hover:bg-[#F8FAFC] hover:text-[#172033]"
             >
               <X className="size-4" />
@@ -607,14 +651,17 @@ export default function CampaignLinksPage() {
             >
               {campaigns.length === 0 ? (
                 <>
-                  <h3 className="text-[15px] font-bold text-[#172033]">لا توجد حملات بعد</h3>
+                  <h3 className="text-[15px] font-bold text-[#172033]">
+                    {t("createDialog.noCampaignsTitle")}
+                  </h3>
                   <p className="mx-auto mt-2 max-w-[520px] text-[13px] leading-6 text-[#64748B]">
-                    حملاتك الإعلانية المتصلة لا تصبح قابلة للربط إلا بعد استيرادها. اختر منصة
-                    لاستيراد حملاتها الآن.
+                    {t("createDialog.noCampaignsDescription")}
                   </p>
                 </>
               ) : (
-                <p className="text-[13px] font-medium text-[#64748B]">استيراد حملات من منصة أخرى</p>
+                <p className="text-[13px] font-medium text-[#64748B]">
+                  {t("createDialog.importFromOtherPlatform")}
+                </p>
               )}
 
               <div
@@ -684,14 +731,12 @@ export default function CampaignLinksPage() {
         contentClassName="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-0 shadow-xl"
       >
         <div
-          dir="rtl"
+          dir={localeDirection(locale)}
           className={`${cairo.variable} space-y-4 p-6 font-[family-name:var(--font-cairo)]`}
         >
-          <h2 className="text-[16px] font-bold text-[#172033]">حذف رابط الحملة؟</h2>
+          <h2 className="text-[16px] font-bold text-[#172033]">{t("deleteDialog.title")}</h2>
           <p className="text-sm text-[#64748B]">
-            {deletingRow
-              ? `سيتوقف "${deletingRow.name}" عن إعادة التوجيه وسيُحذف من هذه القائمة. لا يمكن التراجع عن هذا الإجراء.`
-              : null}
+            {deletingRow ? t("deleteDialog.description", { name: deletingRow.name }) : null}
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <button
@@ -700,7 +745,7 @@ export default function CampaignLinksPage() {
               disabled={isDeleting}
               className="flex h-10 cursor-pointer items-center rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium text-[#334155] transition-colors hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              إلغاء
+              {tCommon("cancel")}
             </button>
             <button
               type="button"
@@ -709,7 +754,7 @@ export default function CampaignLinksPage() {
               className="flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-[#EF4444] px-4 text-sm font-medium text-white transition-colors hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isDeleting ? <Loader2 className="size-4 animate-spin" /> : null}
-              حذف
+              {t("deleteDialog.confirm")}
             </button>
           </div>
         </div>

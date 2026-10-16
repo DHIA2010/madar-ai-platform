@@ -30,7 +30,9 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 import { formatMoney } from "@/lib/currency"
 
@@ -83,54 +85,83 @@ function isGoodDelta(value: number, invert: boolean) {
   return invert ? value <= 0 : value >= 0
 }
 
-function formatRelativeTimeAr(value: string | null): string {
-  if (!value) return "لم تتم المزامنة بعد"
+type ChannelsTranslator = ReturnType<typeof useTranslations<"channels">>
+
+function formatRelativeTime(value: string | null, t: ChannelsTranslator): string {
+  if (!value) return t("time.neverSynced")
   const target = new Date(value)
-  if (Number.isNaN(target.getTime())) return "لم تتم المزامنة بعد"
+  if (Number.isNaN(target.getTime())) return t("time.neverSynced")
   const diffMinutes = Math.floor((Date.now() - target.getTime()) / 60000)
-  if (diffMinutes < 1) return "قبل لحظات"
-  if (diffMinutes < 60) return `قبل ${diffMinutes} دقيقة`
+  if (diffMinutes < 1) return t("time.justNow")
+  if (diffMinutes < 60) return t("time.minutesAgo", { minutes: diffMinutes })
   const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `قبل ${diffHours} ساعة`
+  if (diffHours < 24) return t("time.hoursAgo", { hours: diffHours })
   const diffDays = Math.floor(diffHours / 24)
-  return `قبل ${diffDays} يوم`
+  return t("time.daysAgo", { days: diffDays })
 }
 
-const HEALTH_META: Record<ChannelHealth, { label: string; tone: string }> = {
-  healthy: { label: "ممتاز", tone: "text-emerald-600" },
-  stale: { label: "جيد", tone: "text-amber-600" },
-  failed: { label: "خطأ في الاتصال", tone: "text-rose-600" },
-  never_synced: { label: "لم تتم المزامنة", tone: "text-slate-500" },
+const HEALTH_TONE: Record<ChannelHealth, string> = {
+  healthy: "text-emerald-600",
+  stale: "text-amber-600",
+  failed: "text-rose-600",
+  never_synced: "text-slate-500",
+}
+
+function healthLabel(health: ChannelHealth, t: ChannelsTranslator): string {
+  return t(`health.${health}` as "health.healthy")
 }
 
 interface DateRangeOption {
+  id: string
   label: string
   startDate: string
   endDate: string
 }
 
-function getDateRangeOptions(): DateRangeOption[] {
+function getDateRangeOptions(t: ChannelsTranslator): DateRangeOption[] {
   const today = new Date()
   const lastMonth = subMonths(today, 1)
   const toSql = (d: Date) => d.toISOString().slice(0, 10)
 
   return [
-    { label: "أمس", startDate: toSql(subDays(today, 1)), endDate: toSql(subDays(today, 1)) },
-    { label: "آخر 7 أيام", startDate: toSql(subDays(today, 6)), endDate: toSql(today) },
-    { label: "آخر 30 يوماً", startDate: toSql(subDays(today, 29)), endDate: toSql(today) },
     {
-      label: "هذا الشهر",
+      id: "yesterday",
+      label: t("dateRange.yesterday"),
+      startDate: toSql(subDays(today, 1)),
+      endDate: toSql(subDays(today, 1)),
+    },
+    {
+      id: "last7Days",
+      label: t("dateRange.last7Days"),
+      startDate: toSql(subDays(today, 6)),
+      endDate: toSql(today),
+    },
+    {
+      id: "last30Days",
+      label: t("dateRange.last30Days"),
+      startDate: toSql(subDays(today, 29)),
+      endDate: toSql(today),
+    },
+    {
+      id: "thisMonth",
+      label: t("dateRange.thisMonth"),
       startDate: toSql(startOfMonth(today)),
       endDate: toSql(endOfMonth(today)),
     },
     {
-      label: "الشهر الماضي",
+      id: "lastMonth",
+      label: t("dateRange.lastMonth"),
       startDate: toSql(startOfMonth(lastMonth)),
       endDate: toSql(endOfMonth(lastMonth)),
     },
     // No unbounded query on the backend (matches the Campaigns page's own "All Time" preset) --
     // 2018 is the earliest selectable year across this app's other date pickers.
-    { label: "كل الوقت", startDate: toSql(new Date(2018, 0, 1)), endDate: toSql(today) },
+    {
+      id: "allTime",
+      label: t("dateRange.allTime"),
+      startDate: toSql(new Date(2018, 0, 1)),
+      endDate: toSql(today),
+    },
   ]
 }
 
@@ -141,8 +172,9 @@ function DateRangeFilter({
   value: DateRangeOption
   onChange: (next: DateRangeOption) => void
 }) {
+  const t = useTranslations("channels")
   const [open, setOpen] = useState(false)
-  const options = useMemo(() => getDateRangeOptions(), [])
+  const options = useMemo(() => getDateRangeOptions(t), [t])
 
   return (
     <AppPopover open={open} onOpenChange={setOpen}>
@@ -154,11 +186,11 @@ function DateRangeFilter({
       <AppPopoverContent align="start" className="w-48 rounded-2xl border border-border p-1.5">
         {options.map((option) => (
           <button
-            key={option.label}
+            key={option.id}
             type="button"
             className={cn(
               "w-full rounded-xl px-3 py-2 text-start text-sm transition-colors hover:bg-muted",
-              option.label === value.label
+              option.id === value.id
                 ? "bg-sky-500/10 font-semibold text-sky-600"
                 : "text-foreground"
             )}
@@ -196,6 +228,7 @@ const KPI_TONE_CLASSNAMES: Record<KpiCardData["tone"], string> = {
 }
 
 function KpiCard({ kpi }: { kpi: KpiCardData }) {
+  const t = useTranslations("channels")
   const Icon = kpi.icon
   const formatted = kpi.changePct === undefined ? null : formatChangePct(kpi.changePct)
   const good = kpi.changePct ? isGoodDelta(kpi.changePct, Boolean(kpi.invertTrend)) : true
@@ -233,10 +266,10 @@ function KpiCard({ kpi }: { kpi: KpiCardData }) {
             <TrendIcon className="size-3.5" />
             {formatted}
           </span>
-          <span className="text-muted-foreground">عن الفترة السابقة</span>
+          <span className="text-muted-foreground">{t("kpis.changeVsPreviousPeriod")}</span>
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted-foreground">لا توجد بيانات كافية للمقارنة</p>
+        <p className="mt-2 text-xs text-muted-foreground">{t("kpis.notEnoughDataToCompare")}</p>
       )}
     </AppCard>
   )
@@ -297,7 +330,8 @@ function ProductThumbnail({ src }: { src: string | null }) {
 }
 
 function ChannelCard({ channel }: { channel: ChannelRow }) {
-  const health = HEALTH_META[channel.health]
+  const t = useTranslations("channels")
+  const tone = HEALTH_TONE[channel.health]
   const { currentOrganization } = useWorkspace()
   const currency = currentOrganization?.currency ?? "USD"
 
@@ -310,7 +344,7 @@ function ChannelCard({ channel }: { channel: ChannelRow }) {
         </div>
         <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600">
           <span className="size-1.5 rounded-full bg-emerald-500" />
-          متصل
+          {t("card.connected")}
         </span>
       </div>
 
@@ -322,13 +356,13 @@ function ChannelCard({ channel }: { channel: ChannelRow }) {
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">الإيرادات</p>
+          <p className="text-xs text-muted-foreground">{t("card.revenue")}</p>
           <p className="mt-1 text-sm font-semibold text-foreground">
             {formatMoney(channel.revenue, currency)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">الإنفاق</p>
+          <p className="text-xs text-muted-foreground">{t("card.spend")}</p>
           <p className="mt-1 text-sm font-semibold text-foreground">
             {formatMoney(channel.spend, currency)}
           </p>
@@ -339,32 +373,32 @@ function ChannelCard({ channel }: { channel: ChannelRow }) {
         <p className="mt-2 text-[11px] text-muted-foreground">
           {channel.otherCurrencies
             .map((entry) => `+ ${formatMoney(entry.spend, entry.currency)}`)
-            .join("، ")}{" "}
-          (غير محول — لا يوجد سعر صرف حقيقي)
+            .join(t("listSeparator"))}{" "}
+          {t("card.otherCurrenciesNote")}
         </p>
       ) : null}
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div>
-          <p className="text-xs text-muted-foreground">التحويلات</p>
+          <p className="text-xs text-muted-foreground">{t("card.conversions")}</p>
           <p className="mt-1 text-sm font-semibold text-foreground">
             {channel.conversions.toLocaleString()}
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">الحملات</p>
+          <p className="text-xs text-muted-foreground">{t("card.campaigns")}</p>
           <p className="mt-1 text-sm font-semibold text-foreground">{channel.campaigns}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">الصحة</p>
+          <p className="text-xs text-muted-foreground">{t("card.health")}</p>
           <p
             className={cn(
               "mt-1 flex items-center justify-center gap-1 text-sm font-semibold",
-              health.tone
+              tone
             )}
           >
             <span className="size-1.5 rounded-full bg-current" />
-            {health.label}
+            {healthLabel(channel.health, t)}
           </p>
         </div>
       </div>
@@ -373,29 +407,31 @@ function ChannelCard({ channel }: { channel: ChannelRow }) {
 
       <div className="mt-2 border-t border-border/60 pt-3">
         <p className="text-xs text-muted-foreground">
-          آخر مزامنة: {formatRelativeTimeAr(channel.lastSyncedAt)}
+          {t("card.lastSynced", { time: formatRelativeTime(channel.lastSyncedAt, t) })}
         </p>
       </div>
     </AppCard>
   )
 }
 
-function formatAlertMessage(alert: ChannelAlert): string {
+function formatAlertMessage(alert: ChannelAlert, t: ChannelsTranslator): string {
   if (alert.type === "stale_sync") {
-    if (alert.minutesSinceSync === undefined) return "لم تتم المزامنة بعد"
+    if (alert.minutesSinceSync === undefined) return t("time.neverSynced")
     if (alert.minutesSinceSync >= 60) {
-      return `لم تتم المزامنة منذ ${Math.floor(alert.minutesSinceSync / 60)} ساعة`
+      return t("alerts.staleSyncHours", { hours: Math.floor(alert.minutesSinceSync / 60) })
     }
-    return `لم تتم المزامنة منذ ${alert.minutesSinceSync} دقيقة`
+    return t("alerts.staleSyncMinutes", { minutes: alert.minutesSinceSync })
   }
   const pct = alert.changePct !== undefined ? Math.abs(alert.changePct).toFixed(0) : "0"
   return alert.type === "spend_spike"
-    ? `الإنفاق أعلى من المعدل المعتاد للقناة بنسبة ${pct}%`
-    : `الإنفاق أقل من المعدل المعتاد للقناة بنسبة ${pct}%`
+    ? t("alerts.spendSpike", { pct })
+    : t("alerts.spendDrop", { pct })
 }
 
 export default function ChannelsDashboard() {
-  const [dateRange, setDateRange] = useState<DateRangeOption>(() => getDateRangeOptions()[2])
+  const t = useTranslations("channels")
+  const locale = useLocale() as Locale
+  const [dateRange, setDateRange] = useState<DateRangeOption>(() => getDateRangeOptions(t)[2])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [summary, setSummary] = useState<ChannelsSummary | null>(null)
@@ -430,7 +466,7 @@ export default function ChannelsDashboard() {
       } catch (error) {
         console.error("Failed to load channel performance", error)
         if (!cancelled) {
-          setLoadError("تعذر تحميل بيانات القنوات. الرجاء المحاولة مرة أخرى.")
+          setLoadError(t("loadError"))
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -441,29 +477,28 @@ export default function ChannelsDashboard() {
     return () => {
       cancelled = true
     }
-  }, [dateRange])
+  }, [dateRange, t])
 
   const otherCurrenciesFootnote = useMemo(() => {
     if (!summary || summary.otherCurrencies.length === 0) return undefined
-    return (
-      summary.otherCurrencies
-        .map((entry) => `+ ${formatMoney(entry.spend, entry.currency)}`)
-        .join("، ") + " غير محول"
-    )
-  }, [summary])
+    const amounts = summary.otherCurrencies
+      .map((entry) => `+ ${formatMoney(entry.spend, entry.currency)}`)
+      .join(t("listSeparator"))
+    return t("kpis.otherCurrenciesNotConverted", { amounts })
+  }, [summary, t])
 
   const kpiCards = useMemo<KpiCardData[]>(() => {
     if (!summary) return []
     return [
       {
-        label: "القنوات النشطة",
+        label: t("kpis.activeChannels"),
         value: `${summary.activeChannels}`,
-        footnote: `من أصل ${summary.totalChannels} قنوات`,
+        footnote: t("kpis.activeChannelsFootnote", { total: summary.totalChannels }),
         icon: Layers,
         tone: "indigo",
       },
       {
-        label: "متوسط CPA",
+        label: t("kpis.avgCpa"),
         value: formatPlainNumber(summary.cpa),
         unit: summary.currency,
         changePct: summary.cpaChangePct,
@@ -472,21 +507,21 @@ export default function ChannelsDashboard() {
         tone: "rose",
       },
       {
-        label: "إجمالي التحويلات",
+        label: t("kpis.totalConversions"),
         value: summary.conversions.toLocaleString(),
         changePct: summary.conversionsChangePct,
         icon: Users,
         tone: "orange",
       },
       {
-        label: "عائد الإنفاق الإعلاني",
+        label: t("kpis.roas"),
         value: summary.roas.toFixed(2),
         changePct: summary.roasChangePct,
         icon: Target,
         tone: "violet",
       },
       {
-        label: "إجمالي الإيرادات",
+        label: t("kpis.totalRevenue"),
         value: formatPlainNumber(summary.revenue),
         unit: summary.currency,
         footnote: otherCurrenciesFootnote,
@@ -495,7 +530,7 @@ export default function ChannelsDashboard() {
         tone: "green",
       },
       {
-        label: "إجمالي الإنفاق",
+        label: t("kpis.totalSpend"),
         value: formatPlainNumber(summary.spend),
         unit: summary.currency,
         footnote: otherCurrenciesFootnote,
@@ -504,7 +539,7 @@ export default function ChannelsDashboard() {
         tone: "blue",
       },
     ]
-  }, [summary, otherCurrenciesFootnote])
+  }, [summary, otherCurrenciesFootnote, t])
 
   const channelComparison = useMemo(
     () =>
@@ -529,12 +564,12 @@ export default function ChannelsDashboard() {
   const trendChartData = useMemo(
     () =>
       trendPoints.map((point) => ({
-        date: new Intl.DateTimeFormat("ar", { day: "numeric", month: "short" }).format(
+        date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(
           new Date(point.bucketStart)
         ),
         ...point.spendByChannel,
       })),
-    [trendPoints]
+    [trendPoints, locale]
   )
 
   const connectedWithSpend = useMemo(() => channelRows.filter((c) => c.spend > 0), [channelRows])
@@ -572,15 +607,15 @@ export default function ChannelsDashboard() {
       config[item.channel] = { label: item.label, color: item.color }
       return config
     },
-    { value: { label: "الإنفاق" } } as ChartConfig
+    { value: { label: t("charts.spendLabel") } } as ChartConfig
   )
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={localeDirection(locale)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">القنوات</h1>
-          <p className="text-sm text-muted-foreground">نظرة عامة على أداء قنواتك التسويقية</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
@@ -595,7 +630,7 @@ export default function ChannelsDashboard() {
 
       {!summary && isLoading ? (
         <AppCard className="rounded-2xl border-border/60 p-8 text-center text-sm text-muted-foreground">
-          جارٍ تحميل بيانات القنوات...
+          {t("loading")}
         </AppCard>
       ) : null}
 
@@ -615,15 +650,15 @@ export default function ChannelsDashboard() {
             </div>
           ) : (
             <AppCard className="rounded-2xl border-border/60 p-8 text-center text-sm text-muted-foreground">
-              لا توجد قنوات إعلانية متصلة بعد.
+              {t("noChannelsConnected")}
             </AppCard>
           )}
 
           {channelRows.length > 0 ? (
             <div className="grid gap-4 xl:grid-cols-3">
               <AppCard
-                title="مقارنة القنوات"
-                subtitle="عائد الإنفاق الإعلاني (ROAS)"
+                title={t("charts.comparisonTitle")}
+                subtitle={t("charts.comparisonSubtitle")}
                 className="rounded-2xl border-border/60 shadow-sm"
               >
                 <ChartContainer config={comparisonChartConfig} className="h-64 w-full" dir="ltr">
@@ -648,7 +683,10 @@ export default function ChannelsDashboard() {
                 </ChartContainer>
               </AppCard>
 
-              <AppCard title="توزيع الإنفاق" className="rounded-2xl border-border/60 shadow-sm">
+              <AppCard
+                title={t("charts.spendDistributionTitle")}
+                className="rounded-2xl border-border/60 shadow-sm"
+              >
                 <div className="flex flex-col items-center gap-4">
                   <ChartContainer
                     config={spendChartConfig}
@@ -717,8 +755,8 @@ export default function ChannelsDashboard() {
               </AppCard>
 
               <AppCard
-                title="اتجاه الأداء"
-                subtitle={`الإنفاق (${summary?.currency ?? "USD"})`}
+                title={t("charts.trendTitle")}
+                subtitle={t("charts.trendSubtitle", { currency: summary?.currency ?? "USD" })}
                 className="rounded-2xl border-border/60 shadow-sm"
               >
                 <ChartContainer config={trendChartConfig} className="h-64 w-full" dir="ltr">
@@ -768,7 +806,7 @@ export default function ChannelsDashboard() {
 
           {topProducts.length > 0 ? (
             <AppCard
-              title="أفضل المنتجات أداءً"
+              title={t("topProducts.title")}
               icon={<Package className="size-4 text-muted-foreground" />}
               className="rounded-2xl border-border/60 shadow-sm"
             >
@@ -777,13 +815,13 @@ export default function ChannelsDashboard() {
                   <AppTableHeader>
                     <AppTableRow className="border-border hover:bg-transparent">
                       <AppTableHead className="text-left text-muted-foreground">
-                        المنتج
+                        {t("topProducts.columns.product")}
                       </AppTableHead>
                       <AppTableHead className="!text-center text-muted-foreground">
-                        الطلبات
+                        {t("topProducts.columns.orders")}
                       </AppTableHead>
                       <AppTableHead className="!text-center text-muted-foreground">
-                        الكمية المباعة
+                        {t("topProducts.columns.quantitySold")}
                       </AppTableHead>
                     </AppTableRow>
                   </AppTableHeader>
@@ -811,7 +849,10 @@ export default function ChannelsDashboard() {
           ) : null}
 
           <div className="grid gap-4 lg:grid-cols-4">
-            <AppCard title="أفضل قناة أداء" className="rounded-2xl border-border/60 shadow-sm">
+            <AppCard
+              title={t("bestChannel.title")}
+              className="rounded-2xl border-border/60 shadow-sm"
+            >
               {bestChannel ? (
                 <>
                   <div className="flex items-center gap-2.5">
@@ -828,18 +869,23 @@ export default function ChannelsDashboard() {
                   </div>
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">لا توجد بيانات كافية بعد.</p>
+                <p className="text-xs text-muted-foreground">{t("insufficientData")}</p>
               )}
             </AppCard>
 
-            <AppCard title="تحتاج إلى انتباه" className="rounded-2xl border-border/60 shadow-sm">
+            <AppCard
+              title={t("attentionChannel.title")}
+              className="rounded-2xl border-border/60 shadow-sm"
+            >
               {attentionChannel ? (
                 <>
                   <div className="flex items-center gap-2.5">
                     <PlatformBadge platform={attentionChannel.name} className="size-9" />
                     <span className="font-semibold text-foreground">{attentionChannel.name}</span>
                   </div>
-                  <p className="mt-3 text-xs text-muted-foreground">CPA مرتفع</p>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {t("attentionChannel.highCpa")}
+                  </p>
                   <div className="mt-1 flex items-end justify-between">
                     <p className="text-xl font-bold text-foreground">
                       {formatPlainNumber(attentionChannel.cpa)} {summary?.currency ?? "USD"}
@@ -847,37 +893,39 @@ export default function ChannelsDashboard() {
                     {attentionCpaDeltaPct !== null && attentionCpaDeltaPct > 0 ? (
                       <span className="inline-flex items-center gap-0.5 text-xs font-medium text-rose-600">
                         <ArrowUpRight className="size-3.5" />
-                        {attentionCpaDeltaPct.toFixed(0)}% عن المتوسط
+                        {t("attentionChannel.aboveAverage", {
+                          pct: attentionCpaDeltaPct.toFixed(0),
+                        })}
                       </span>
                     ) : null}
                   </div>
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">لا توجد بيانات كافية بعد.</p>
+                <p className="text-xs text-muted-foreground">{t("insufficientData")}</p>
               )}
             </AppCard>
 
-            <AppCard title="رؤية ذكية من مدار" className="rounded-2xl border-border/60 shadow-sm">
+            <AppCard title={t("insight.title")} className="rounded-2xl border-border/60 shadow-sm">
               <div className="flex items-start gap-2.5">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white">
                   <Sparkles className="size-4" />
                 </span>
                 <div>
                   <p className="text-xs leading-6 text-muted-foreground">
-                    توصيات إعادة توزيع الميزانية الذكية قيد التطوير حالياً.
+                    {t("insight.description")}
                   </p>
                   <span className="mt-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    قريباً
+                    {t("insight.comingSoon")}
                   </span>
                 </div>
               </div>
               <AppButton variant="outline" size="sm" className="mt-3 w-full" disabled>
-                عرض التحليل الكامل
+                {t("insight.viewFullAnalysis")}
               </AppButton>
             </AppCard>
 
             <AppCard
-              title="تنبيهات"
+              title={t("alerts.title")}
               icon={<Bell className="size-4 text-muted-foreground" />}
               className="rounded-2xl border-border/60 shadow-sm"
             >
@@ -896,7 +944,9 @@ export default function ChannelsDashboard() {
                       />
                       <div>
                         <p className="text-xs font-medium text-foreground">{alert.channel}</p>
-                        <p className="text-xs text-muted-foreground">{formatAlertMessage(alert)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatAlertMessage(alert, t)}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -904,7 +954,7 @@ export default function ChannelsDashboard() {
               ) : (
                 <div className="flex items-start gap-2">
                   <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-emerald-500" />
-                  <p className="text-xs text-muted-foreground">جميع المؤشرات ضمن النطاق المثالي.</p>
+                  <p className="text-xs text-muted-foreground">{t("alerts.allGood")}</p>
                 </div>
               )}
             </AppCard>
