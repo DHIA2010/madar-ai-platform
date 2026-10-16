@@ -1,5 +1,6 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CreditCard, Landmark } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -17,6 +18,8 @@ import { useWorkspace } from "@/features/workspace"
 import { isSupportedOrgCurrency, type SupportedOrgCurrency } from "../services"
 import type { SupplierVoucherPaymentMethod, SupplierVoucherType } from "../types"
 
+import type { Locale } from "@/i18n/locales"
+
 // Same design language as CustomerStatement's own سند dialog -- duplicated locally rather than
 // imported, matching this codebase's per-feature-duplication convention for page-local styling.
 export const HEADING = "text-[#0d1b3e]"
@@ -28,43 +31,41 @@ export const FIELD_CLASS =
 // module is frontend-only) -- same hardcoded fallback CustomerStatement itself falls back to.
 export const VOUCHER_VAT_RATE = 0.15
 
+// Display text (label/verb, payment-method name) lives in the "suppliers.vouchers" i18n
+// namespace, resolved via useTranslations("suppliers.vouchers") at each call site -- this object
+// only keeps the locale-independent visual facts.
 export const VOUCHER_TYPE_META: Record<
   SupplierVoucherType,
-  { label: string; verb: string; icon: typeof ArrowDownCircle; color: string; bg: string }
+  { icon: typeof ArrowDownCircle; color: string; bg: string }
 > = {
-  receipt: {
-    label: "سند قبض",
-    verb: "قبض",
-    icon: ArrowDownCircle,
-    color: "#16a34a",
-    bg: "#f0fdf4",
-  },
-  payment: { label: "سند صرف", verb: "صرف", icon: ArrowUpCircle, color: "#dc2626", bg: "#fef2f2" },
+  receipt: { icon: ArrowDownCircle, color: "#16a34a", bg: "#f0fdf4" },
+  payment: { icon: ArrowUpCircle, color: "#dc2626", bg: "#fef2f2" },
 }
 
 export const PAYMENT_METHOD_OPTIONS: Array<{
   code: SupplierVoucherPaymentMethod
-  name: string
   icon: typeof Banknote
 }> = [
-  { code: "cash", name: "نقدًا", icon: Banknote },
-  { code: "card", name: "بطاقة", icon: CreditCard },
-  { code: "transfer", name: "تحويل بنكي", icon: Landmark },
+  { code: "cash", icon: Banknote },
+  { code: "card", icon: CreditCard },
+  { code: "transfer", icon: Landmark },
 ]
-export const PAYMENT_METHOD_NAME: Record<SupplierVoucherPaymentMethod, string> = Object.fromEntries(
-  PAYMENT_METHOD_OPTIONS.map((method) => [method.code, method.name])
-) as Record<SupplierVoucherPaymentMethod, string>
 
 // Vouchers have no currency field of their own -- their amount is always treated as already being
 // in the organization's default currency, so this only needs to label the number correctly, never
 // convert it (see currency-conversion.service.ts for the suppliers/purchases that do need real
 // cross-currency conversion before they reach this kind of formatter).
-export function formatVoucherAmount(value: number, currency: SupportedOrgCurrency): string {
-  const formatted = new Intl.NumberFormat("ar-SA-u-nu-latn", {
+export function formatVoucherAmount(
+  value: number,
+  currency: SupportedOrgCurrency,
+  locale: Locale
+): string {
+  const formatted = new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)
-  return currency === "USD" ? `${formatted} $` : `${formatted} ر.س`
+  if (currency === "USD") return `${formatted} $`
+  return locale === "ar" ? `${formatted} ر.س` : `${formatted} SAR`
 }
 
 // The سند قبض/صرف creation dialog -- shared by SupplierStatement (supplier already fixed by the
@@ -124,12 +125,18 @@ export function SupplierVoucherDialog({
   onCancel: () => void
   onSubmit: () => void
 }) {
+  const t = useTranslations("suppliers.vouchers")
+  const tDialog = useTranslations("suppliers.vouchers.dialog")
+  const tPaymentMethod = useTranslations("suppliers.vouchers.paymentMethod")
+  const tCommon = useTranslations("common")
+  const locale = useLocale()
   const { currentOrganization } = useWorkspace()
   const rawOrgCurrency = currentOrganization?.currency ?? ""
   const orgCurrency: SupportedOrgCurrency = isSupportedOrgCurrency(rawOrgCurrency)
     ? rawOrgCurrency
     : "SAR"
   const meta = VOUCHER_TYPE_META[type]
+  const typeLabel = t(`type.${type}.label`)
   const Icon = meta.icon
   const numericAmount = Math.round((Number(amount) || 0) * 100) / 100
   const taxAmount = taxInclusive
@@ -139,10 +146,7 @@ export function SupplierVoucherDialog({
   // (-1) -- same sign convention buildSupplierTransactions (SupplierStatement) uses.
   const direction = type === "receipt" ? 1 : -1
   const balanceAfter = supplierBalance + direction * numericAmount
-  const subtitle =
-    type === "receipt"
-      ? "تسجيل مبلغ حقيقي تم استلامه من المورد (مثل استرداد أو رصيد دائن)"
-      : "تسجيل مبلغ تم دفعه فعليًا للمورد، يخصم من المبلغ المستحق له"
+  const subtitle = tDialog(type === "receipt" ? "receiptSubtitle" : "paymentSubtitle")
 
   return (
     <AppDialog
@@ -150,7 +154,10 @@ export function SupplierVoucherDialog({
       onOpenChange={(next) => {
         if (!next && !isSaving) onCancel()
       }}
-      contentClassName="w-[92vw] max-w-[34rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName={cn(
+        "w-[92vw] max-w-[34rem] rounded-[16px] p-5",
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+      )}
       title={
         <div className="flex items-center gap-2.5">
           <span
@@ -159,7 +166,7 @@ export function SupplierVoucherDialog({
           >
             <Icon className="size-[18px]" />
           </span>
-          <span className={cn("text-[15px] font-extrabold", HEADING)}>{meta.label}</span>
+          <span className={cn("text-[15px] font-extrabold", HEADING)}>{typeLabel}</span>
         </div>
       }
       description={<span className={cn("text-[12px]", MUTED)}>{subtitle}</span>}
@@ -171,7 +178,7 @@ export function SupplierVoucherDialog({
             disabled={isSaving}
             onClick={onSubmit}
           >
-            {isSaving ? "جارٍ الحفظ..." : `حفظ ${meta.label}`}
+            {isSaving ? tDialog("saving") : tDialog("save", { type: typeLabel })}
           </AppButton>
           <AppButton
             variant="outline"
@@ -179,7 +186,7 @@ export function SupplierVoucherDialog({
             disabled={isSaving}
             onClick={onCancel}
           >
-            إلغاء
+            {tCommon("cancel")}
           </AppButton>
         </>
       }
@@ -187,16 +194,18 @@ export function SupplierVoucherDialog({
       <div className="flex flex-col gap-3 pt-1">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>التاريخ</label>
+            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+              {tDialog("dateLabel")}
+            </label>
             <AppDateField value={transactionDate} onChange={onTransactionDateChange} />
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              رقم السند
+              {tDialog("referenceLabel")}
             </label>
             <input
               disabled
-              value="سيُنشأ تلقائياً بعد الحفظ"
+              value={tDialog("referencePlaceholder")}
               className={cn(FIELD_CLASS, "h-11 w-full px-3 text-[11px] text-[#8098b4]")}
             />
           </div>
@@ -204,64 +213,62 @@ export function SupplierVoucherDialog({
 
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            المورد <span className="text-[#dc2626]">*</span>
+            {tDialog("supplierLabel")} <span className="text-[#dc2626]">*</span>
           </label>
           <AppSearchableSelect
             value={supplierId}
             onChange={onSupplierIdChange}
             options={supplierOptions}
             disabled={supplierLocked}
-            placeholder="اختر المورد"
-            searchPlaceholder="ابحث عن مورد..."
-            emptyLabel="لا يوجد موردون"
-            ariaLabel="المورد"
+            placeholder={tDialog("supplierPlaceholder")}
+            searchPlaceholder={tDialog("supplierSearchPlaceholder")}
+            emptyLabel={tDialog("supplierEmptyLabel")}
+            ariaLabel={tDialog("supplierLabel")}
             triggerClassName="h-11"
           />
         </div>
 
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            ربط بفاتورة شراء (اختياري)
+            {tDialog("invoiceLabel")}
           </label>
           <AppSearchableSelect
             value={invoiceId}
             onChange={onInvoiceIdChange}
-            options={[{ value: "", label: "بدون ربط بفاتورة" }, ...invoiceOptions]}
+            options={[{ value: "", label: tDialog("invoiceNoLink") }, ...invoiceOptions]}
             disabled={!supplierId || invoiceOptions.length === 0}
-            placeholder="بدون ربط بفاتورة"
-            searchPlaceholder="ابحث برقم الفاتورة..."
-            emptyLabel="لا توجد فواتير"
-            ariaLabel="الفاتورة المرتبطة"
+            placeholder={tDialog("invoiceNoLink")}
+            searchPlaceholder={tDialog("invoiceSearchPlaceholder")}
+            emptyLabel={tDialog("invoiceEmptyLabel")}
+            ariaLabel={tDialog("invoiceAriaLabel")}
             triggerClassName="h-11"
           />
           {supplierId && invoiceOptions.length === 0 ? (
-            <p className="mt-1 text-[10.5px] text-[#95a4bd]">
-              لا توجد فواتير شراء مسجلة لهذا المورد.
-            </p>
+            <p className="mt-1 text-[10.5px] text-[#95a4bd]">{tDialog("noInvoicesForSupplier")}</p>
           ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              طريقة الدفع <span className="text-[#dc2626]">*</span>
+              {tDialog("paymentMethodLabel")} <span className="text-[#dc2626]">*</span>
             </label>
             <AppSearchableSelect
               value={paymentMethod}
               onChange={(value) => onPaymentMethodChange(value as SupplierVoucherPaymentMethod)}
               options={PAYMENT_METHOD_OPTIONS.map((method) => ({
                 value: method.code,
-                label: method.name,
+                label: tPaymentMethod(method.code),
                 icon: method.icon,
               }))}
-              placeholder="اختر طريقة الدفع"
-              ariaLabel="طريقة الدفع"
+              placeholder={tDialog("paymentMethodPlaceholder")}
+              ariaLabel={tDialog("paymentMethodLabel")}
               triggerClassName="h-11"
             />
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              المبلغ <span className="text-[#dc2626]">*</span>
+              {tDialog("amountLabel")} <span className="text-[#dc2626]">*</span>
             </label>
             <input
               type="number"
@@ -284,10 +291,12 @@ export function SupplierVoucherDialog({
               onChange={(event) => onTaxInclusiveChange(event.target.checked)}
               className="size-4 rounded border-[#e8edf3]"
             />
-            <span className={HEADING}>يشمل الضريبة؟</span>
+            <span className={HEADING}>{tDialog("taxInclusiveLabel")}</span>
           </label>
           <div>
-            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>الضريبة</label>
+            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+              {tDialog("taxLabel")}
+            </label>
             <input
               disabled
               dir="ltr"
@@ -299,7 +308,7 @@ export function SupplierVoucherDialog({
 
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            ملاحظات (اختياري)
+            {tDialog("notesLabel")}
           </label>
           <textarea
             value={notes}
@@ -314,25 +323,25 @@ export function SupplierVoucherDialog({
         </div>
 
         <div className="rounded-[12px] border border-[#e8edf3] bg-[#f8fafc] p-3.5">
-          <p className={cn("mb-2 text-[12px] font-bold", HEADING)}>ملخص العملية</p>
+          <p className={cn("mb-2 text-[12px] font-bold", HEADING)}>{tDialog("summaryTitle")}</p>
           <div className="flex flex-col gap-1.5 text-[12px]">
             <div className="flex items-center justify-between">
-              <span className={MUTED}>المبلغ</span>
+              <span className={MUTED}>{tDialog("summaryAmount")}</span>
               <span className={cn("font-semibold", HEADING)}>
-                {formatVoucherAmount(numericAmount, orgCurrency)}
+                {formatVoucherAmount(numericAmount, orgCurrency, locale as Locale)}
               </span>
             </div>
             {taxInclusive ? (
               <div className="flex items-center justify-between">
-                <span className={MUTED}>منها ضريبة القيمة المضافة</span>
+                <span className={MUTED}>{tDialog("summaryTax")}</span>
                 <span className={cn("font-semibold", HEADING)}>
-                  {formatVoucherAmount(taxAmount, orgCurrency)}
+                  {formatVoucherAmount(taxAmount, orgCurrency, locale as Locale)}
                 </span>
               </div>
             ) : null}
             {invoiceId ? (
               <div className="flex items-center justify-between">
-                <span className={MUTED}>مرتبط بفاتورة</span>
+                <span className={MUTED}>{tDialog("summaryLinkedInvoice")}</span>
                 <span className={cn("font-semibold", HEADING)}>
                   {invoiceOptions.find((option) => option.value === invoiceId)?.label ?? invoiceId}
                 </span>
@@ -340,25 +349,25 @@ export function SupplierVoucherDialog({
             ) : null}
             {invoiceId && selectedInvoiceAmount !== null ? (
               <div className="flex items-center justify-between">
-                <span className={MUTED}>إجمالي الفاتورة</span>
+                <span className={MUTED}>{tDialog("summaryInvoiceTotal")}</span>
                 <span className={cn("font-semibold", HEADING)}>
-                  {formatVoucherAmount(selectedInvoiceAmount, orgCurrency)}
+                  {formatVoucherAmount(selectedInvoiceAmount, orgCurrency, locale as Locale)}
                 </span>
               </div>
             ) : null}
             <div className="mt-1 flex items-center justify-between border-t border-[#e8edf3] pt-1.5">
-              <span className={MUTED}>رصيد المورد الحالي</span>
+              <span className={MUTED}>{tDialog("summaryCurrentBalance")}</span>
               <span className={cn("font-semibold", HEADING)}>
-                {formatVoucherAmount(supplierBalance, orgCurrency)}
+                {formatVoucherAmount(supplierBalance, orgCurrency, locale as Locale)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={MUTED}>رصيد المورد بعد العملية</span>
+              <span className={MUTED}>{tDialog("summaryBalanceAfter")}</span>
               <span
                 className="font-bold"
                 style={{ color: balanceAfter >= 0 ? "#16a34a" : "#dc2626" }}
               >
-                {formatVoucherAmount(balanceAfter, orgCurrency)}
+                {formatVoucherAmount(balanceAfter, orgCurrency, locale as Locale)}
               </span>
             </div>
           </div>

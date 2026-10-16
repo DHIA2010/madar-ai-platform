@@ -1010,5 +1010,362 @@
         }
       }
     }
+  },
+  "suppliers": {
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "kind": {
+      "local": "Local",
+      "international": "International"
+    },
+    "accountType": {
+      "savings": "Savings",
+      "current": "Current",
+      "other": "Other"
+    },
+    "paymentTerms": {
+      "prepaid": "Prepaid",
+      "cod": "Cash on delivery",
+      "net15": "Net 15 days",
+      "net30": "Net 30 days",
+      "net45": "Net 45 days",
+      "net60": "Net 60 days"
+    },
+    "vatType": {
+      "standard": "Standard VAT",
+      "zeroRated": "Zero-rated",
+      "exempt": "Exempt",
+      "notRegistered": "Not VAT-registered"
+    },
+    "kpis": {
+      "count": "Number of Suppliers",
+      "activeCount": "Active Suppliers",
+      "totalPurchases": "Total Purchases",
+      "totalBalance": "Total Balances"
+    },
+    "list": {
+      "heading": "Suppliers",
+      "subheading": "Manage all purchase suppliers and their banking and company details.",
+      "searchPlaceholder": "Search for a supplier...",
+      "statusPlaceholder": "Status",
+      "allStatuses": "All Statuses",
+      "export": "Export",
+      "addSupplier": "Add Supplier",
+      "selectedCount": "{count} supplier(s) selected",
+      "bulkActivate": "Activate",
+      "bulkDeactivate": "Deactivate",
+      "bulkDelete": "Delete",
+      "clearSelection": "Clear Selection",
+      "selectAll": "Select All",
+      "selectRow": "Select {name}",
+      "table": {
+        "code": "Supplier ID",
+        "supplier": "Supplier",
+        "companyName": "Company Name",
+        "totalPurchases": "Total Purchases",
+        "contact": "Contact",
+        "status": "Status",
+        "balance": "Balance",
+        "actions": "Actions"
+      },
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "view": "View",
+      "statement": "Statement",
+      "edit": "Edit",
+      "delete": "Delete",
+      "loading": "Loading...",
+      "emptyTitle": "No matching suppliers",
+      "emptyDescription": "Try adjusting the filters or search.",
+      "showingCount": "Showing {shown} of {total} results",
+      "toasts": {
+        "activateSuccess": "{name} activated.",
+        "deactivateSuccess": "{name} deactivated.",
+        "statusError": "Couldn't update the supplier's status.",
+        "bulkActivateSuccess": "{count} supplier(s) activated.",
+        "bulkDeactivateSuccess": "{count} supplier(s) deactivated.",
+        "bulkStatusError": "Couldn't update the selected suppliers' status.",
+        "bulkDeleteSuccess": "{count} supplier(s) deleted.",
+        "bulkDeleteError": "Couldn't delete some of the selected suppliers."
+      },
+      "bulkDeleteDialog": {
+        "title": "Delete {count} supplier(s)",
+        "description": "The selected suppliers will be permanently deleted. This action cannot be undone."
+      }
+    },
+    "form": {
+      "backToSuppliers": "Back to Suppliers",
+      "editHeading": "Edit {name}",
+      "addHeading": "Add New Supplier",
+      "loading": "Loading...",
+      "supplierSection": "Supplier Information",
+      "companySection": "Company Information",
+      "bankSection": "Bank Details",
+      "name": "Supplier Name",
+      "namePlaceholder": "Supplier name",
+      "email": "Email Address",
+      "phone": "Phone Number",
+      "phonePlaceholder": "+966 5xxxxxxxx",
+      "kindLabel": "Supplier Type",
+      "country": "Country",
+      "countryPlaceholder": "Choose a country or type a new one",
+      "countrySearchPlaceholder": "Search or type a new country...",
+      "countryEmptyLabel": "No matching country",
+      "createCountryLabel": "Add country \"{draft}\"",
+      "city": "City",
+      "cityPlaceholder": "City",
+      "paymentTermsLabel": "Payment Terms",
+      "paymentTermsPlaceholder": "Choose terms",
+      "paymentTermsSearchPlaceholder": "Search payment terms...",
+      "paymentTermsEmptyLabel": "No results",
+      "companyLogo": "Company Logo",
+      "dropzoneLabel": "Drag and drop an image or tap to upload",
+      "companyName": "Company Name",
+      "companyNamePlaceholder": "Company name",
+      "companyEmail": "Company Email",
+      "companyPhone": "Company Phone",
+      "website": "Website",
+      "companyAddress": "Company Address",
+      "companyAddressPlaceholder": "Company address",
+      "taxNumber": "Tax Number",
+      "taxNumberPlaceholder": "Tax number",
+      "vatTypeLabel": "VAT Type",
+      "vatTypePlaceholder": "Choose VAT type",
+      "vatTypeSearchPlaceholder": "Search...",
+      "vatTypeEmptyLabel": "No results",
+      "industryType": "Industry Type",
+      "industryTypePlaceholder": "e.g. Retail trade",
+      "bankName": "Bank Name",
+      "bankNamePlaceholder": "Bank name",
+      "accountName": "Account Name",
+      "accountNamePlaceholder": "Account name",
+      "accountTypeLabel": "Account Type",
+      "accountNumber": "Account Number",
+      "accountNumberPlaceholder": "Account number",
+      "swiftIban": "Swift / IBAN",
+      "branchCode": "Branch Code",
+      "branchCodePlaceholder": "Branch code",
+      "bankCity": "Bank City",
+      "bankCityPlaceholder": "Bank city",
+      "saveChanges": "Save Changes",
+      "submit": "Add Supplier",
+      "toasts": {
+        "invalidImage": "Please choose a valid image file.",
+        "imageTooLarge": "The image must not exceed 3 MB.",
+        "uploadError": "Couldn't upload the image. Try again.",
+        "validationRequired": "Please fill in the supplier name, email, and phone.",
+        "updateSuccess": "{name}'s details updated.",
+        "createSuccess": "{name} added to the supplier list.",
+        "saveError": "Couldn't save the supplier's details. Try again."
+      }
+    },
+    "view": {
+      "close": "Close",
+      "balanceLabel": "Balance: {amount}",
+      "supplierInfo": "Supplier Information",
+      "email": "Email Address",
+      "phone": "Phone Number",
+      "kindLabel": "Supplier Type",
+      "paymentTermsLabel": "Payment Terms",
+      "country": "Country",
+      "city": "City",
+      "address": "Address",
+      "bankInfo": "Bank Details",
+      "bankName": "Bank Name",
+      "accountName": "Account Name",
+      "accountTypeLabel": "Account Type",
+      "accountNumber": "Account Number",
+      "swiftIban": "Swift / IBAN",
+      "branchCode": "Branch Code",
+      "bankCity": "Bank City",
+      "companyInfo": "Company Information",
+      "companyName": "Company Name",
+      "companyEmail": "Company Email",
+      "companyPhone": "Company Phone",
+      "website": "Website",
+      "taxNumber": "Tax Number",
+      "vatTypeLabel": "VAT Type",
+      "industryType": "Industry Type"
+    },
+    "deleteDialog": {
+      "title": "Delete {name}",
+      "description": "This supplier will be permanently deleted from the list. This action cannot be undone.",
+      "confirmLabel": "Delete",
+      "toastSuccess": "{name} deleted.",
+      "toastError": "Couldn't delete the supplier. Try again."
+    },
+    "errors": {
+      "loadSuppliers": "Couldn't load suppliers. Try again.",
+      "loadVouchers": "Couldn't load vouchers. Try again."
+    },
+    "vouchers": {
+      "type": {
+        "receipt": {
+          "label": "Receipt Voucher",
+          "verb": "Receipt"
+        },
+        "payment": {
+          "label": "Payment Voucher",
+          "verb": "Payment"
+        }
+      },
+      "paymentMethod": {
+        "cash": "Cash",
+        "card": "Card",
+        "transfer": "Bank transfer"
+      },
+      "pageHeading": "Supplier Vouchers",
+      "pageSubheading": "Record receipt and payment vouchers with suppliers and track each supplier's balance from here.",
+      "newReceipt": "Receipt Voucher",
+      "newPayment": "Payment Voucher",
+      "stats": {
+        "totalReceipts": "Total Receipt Vouchers",
+        "totalPayments": "Total Payment Vouchers",
+        "count": "Number of Vouchers",
+        "linkedSuppliers": "Linked Suppliers"
+      },
+      "searchLabel": "Search",
+      "searchPlaceholder": "Search by supplier or voucher number...",
+      "typeLabel": "Voucher Type",
+      "allTypes": "All Vouchers",
+      "periodLabel": "Date Range",
+      "table": {
+        "reference": "Reference",
+        "supplier": "Supplier",
+        "type": "Voucher Type",
+        "paymentMethod": "Payment Method",
+        "linkedInvoice": "Linked Invoice",
+        "amount": "Amount",
+        "date": "Date",
+        "actions": "Actions"
+      },
+      "view": "View",
+      "print": {
+        "vatLine": "Of which VAT",
+        "totalLine": "{label} - Total Amount",
+        "reference": "Voucher Number",
+        "type": "Voucher Type",
+        "date": "Voucher Date",
+        "paymentMethod": "Payment Method",
+        "supplierName": "Supplier Name",
+        "supplierPhone": "Supplier Phone",
+        "supplierTaxNumber": "Supplier Tax Number",
+        "linkedInvoice": "Linked Invoice",
+        "notes": "Notes"
+      },
+      "loading": "Loading...",
+      "emptyTitle": "No vouchers yet",
+      "emptyDescription": "Tap \"Receipt Voucher\" or \"Payment Voucher\" above to record the first one.",
+      "showingCount": "Showing {shown} of {total} results",
+      "toasts": {
+        "selectSupplier": "Choose a supplier.",
+        "invalidAmount": "Enter a valid amount.",
+        "selectPaymentMethod": "Choose a payment method.",
+        "selectDate": "Choose the voucher date.",
+        "saveSuccess": "{type} {reference} saved.",
+        "saveError": "Couldn't save the voucher. Try again."
+      },
+      "dialog": {
+        "dateLabel": "Date",
+        "referenceLabel": "Voucher Number",
+        "referencePlaceholder": "Will be generated automatically after saving",
+        "supplierLabel": "Supplier",
+        "supplierPlaceholder": "Choose a supplier",
+        "supplierSearchPlaceholder": "Search for a supplier...",
+        "supplierEmptyLabel": "No suppliers",
+        "invoiceLabel": "Link to a purchase invoice (optional)",
+        "invoiceNoLink": "No linked invoice",
+        "invoiceSearchPlaceholder": "Search by invoice number...",
+        "invoiceEmptyLabel": "No invoices",
+        "invoiceAriaLabel": "Linked invoice",
+        "noInvoicesForSupplier": "No purchase invoices recorded for this supplier.",
+        "paymentMethodLabel": "Payment Method",
+        "paymentMethodPlaceholder": "Choose a payment method",
+        "amountLabel": "Amount",
+        "taxInclusiveLabel": "Includes tax?",
+        "taxLabel": "Tax",
+        "notesLabel": "Notes (optional)",
+        "summaryTitle": "Transaction Summary",
+        "summaryAmount": "Amount",
+        "summaryTax": "Of which VAT",
+        "summaryLinkedInvoice": "Linked invoice",
+        "summaryInvoiceTotal": "Invoice total",
+        "summaryCurrentBalance": "Supplier's current balance",
+        "summaryBalanceAfter": "Supplier's balance after this transaction",
+        "saving": "Saving...",
+        "save": "Save {type}",
+        "receiptSubtitle": "Record a real amount received from the supplier (such as a refund or credit balance)",
+        "paymentSubtitle": "Record an amount actually paid to the supplier, deducted from the amount owed to them"
+      },
+      "viewDialog": {
+        "close": "Close",
+        "amountLabel": "Amount: {amount}",
+        "reference": "Voucher Number",
+        "date": "Date",
+        "paymentMethod": "Payment Method",
+        "linkedInvoice": "Linked Invoice",
+        "taxInclusive": "Includes tax",
+        "yes": "Yes",
+        "taxAmount": "Tax Amount",
+        "notes": "Notes"
+      }
+    },
+    "statement": {
+      "breadcrumb": "Supplier Vouchers",
+      "heading": "Supplier Statement",
+      "subheading": "View every financial transaction on this supplier's account",
+      "localBadge": "Local",
+      "internationalBadge": "International",
+      "addedDate": "Added on: {date}",
+      "city": "City: {city}",
+      "balanceOwed": "Supplier Balance (owed to them)",
+      "balanceDue": "Supplier Balance (owed by them)",
+      "totalPurchases": "Total Purchases",
+      "totalPaid": "Total Paid",
+      "transactionCount": "Number of Transactions",
+      "periodLabel": "Date Range",
+      "transactionTypeLabel": "Transaction Type",
+      "allTransactionTypes": "All Transactions",
+      "transactionLog": "Transaction Log",
+      "transactionLogSubtitle": "Shows purchase invoices, returns, and receipt/payment vouchers, and their effect on the supplier's balance",
+      "downloadCsv": "Download CSV",
+      "print": "Print",
+      "emptyTitle": "No transactions yet",
+      "emptyDescription": "Purchase invoices, returns, and receipt/payment vouchers will appear here as they happen",
+      "table": {
+        "index": "#",
+        "reference": "Reference",
+        "type": "Transaction Type",
+        "description": "Description",
+        "amount": "Amount",
+        "balanceAfter": "Balance After",
+        "date": "Date"
+      },
+      "showingRange": "Showing {from}-{to} of {total} transaction(s)",
+      "prevPage": "Previous page",
+      "nextPage": "Next page",
+      "loading": "Loading...",
+      "notFound": "Couldn't find this supplier.",
+      "printGeneratedAt": "Generated on {date}",
+      "transactionType": {
+        "purchase": {
+          "label": "Purchase Invoice",
+          "verb": "Purchase"
+        },
+        "return": {
+          "label": "Purchase Return",
+          "verb": "Return"
+        }
+      },
+      "descriptions": {
+        "purchaseInvoice": "Purchase invoice {code}",
+        "purchaseReturn": "Purchase return {code} ({purchaseCode})",
+        "receivedVia": "Received via {method}",
+        "paidVia": "Paid via {method}"
+      },
+      "csvFilenamePrefix": "statement"
+    }
   }
 }

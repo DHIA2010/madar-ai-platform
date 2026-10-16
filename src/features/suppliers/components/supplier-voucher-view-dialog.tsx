@@ -1,5 +1,9 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
+
+import { cn } from "@/lib/utils"
+
 import { AppButton, AppDialog } from "@/components/app"
 
 import { useWorkspace } from "@/features/workspace"
@@ -7,11 +11,9 @@ import { useWorkspace } from "@/features/workspace"
 import { isSupportedOrgCurrency } from "../services"
 import type { SupplierVoucher } from "../types"
 import { SupplierAvatar } from "./supplier-avatar"
-import {
-  formatVoucherAmount,
-  PAYMENT_METHOD_NAME,
-  VOUCHER_TYPE_META,
-} from "./supplier-voucher-dialog"
+import { formatVoucherAmount, VOUCHER_TYPE_META } from "./supplier-voucher-dialog"
+
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -29,6 +31,11 @@ export function SupplierVoucherViewDialog({
   voucher: SupplierVoucher | null
   onOpenChange: (open: boolean) => void
 }) {
+  const t = useTranslations("suppliers.vouchers")
+  const tView = useTranslations("suppliers.vouchers.viewDialog")
+  const tPaymentMethod = useTranslations("suppliers.vouchers.paymentMethod")
+  const locale = useLocale()
+  const dir = localeDirection(locale as Locale)
   const { currentOrganization } = useWorkspace()
   const rawOrgCurrency = currentOrganization?.currency ?? ""
   const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
@@ -40,7 +47,7 @@ export function SupplierVoucherViewDialog({
       onOpenChange={onOpenChange}
       title={
         voucher ? (
-          <span dir="rtl" className="flex items-center gap-3.5">
+          <span dir={dir} className="flex items-center gap-3.5">
             <SupplierAvatar
               name={voucher.supplierName}
               imageUrl={voucher.supplierImageUrl}
@@ -59,54 +66,59 @@ export function SupplierVoucherViewDialog({
           ""
         )
       }
-      contentClassName="[direction:rtl] max-w-[32rem] gap-5 p-6"
+      contentClassName={cn(
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+        "max-w-[32rem] gap-5 p-6"
+      )}
       footer={
         <AppButton
           variant="outline"
           className="h-11 w-full rounded-[10px] text-[13.5px] font-semibold"
           onClick={() => onOpenChange(false)}
         >
-          إغلاق
+          {tView("close")}
         </AppButton>
       }
     >
       {voucher && meta ? (
-        <div dir="rtl" className="space-y-4">
+        <div dir={dir} className="space-y-4">
           <div className="flex items-center justify-between rounded-[12px] bg-[#f7f9fd] px-4 py-3">
             <span
               className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
               style={{ backgroundColor: meta.bg, color: meta.color }}
             >
-              {meta.label}
+              {t(`type.${voucher.type}.label`)}
             </span>
             <p className="text-[13px] font-bold text-[#0b1738]">
-              المبلغ: {formatVoucherAmount(voucher.amount, orgCurrency)}
+              {tView("amountLabel", {
+                amount: formatVoucherAmount(voucher.amount, orgCurrency, locale as Locale),
+              })}
             </p>
           </div>
 
           <div className="rounded-[12px] border border-[#e1e7f0] p-4">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <Field label="رقم السند" value={voucher.reference} />
-              <Field label="التاريخ" value={voucher.transactionDate} />
-              <Field label="طريقة الدفع" value={PAYMENT_METHOD_NAME[voucher.paymentMethod]} />
-              <Field label="الفاتورة المرتبطة" value={voucher.purchaseCode ?? "—"} />
+              <Field label={tView("reference")} value={voucher.reference} />
+              <Field label={tView("date")} value={voucher.transactionDate} />
+              <Field label={tView("paymentMethod")} value={tPaymentMethod(voucher.paymentMethod)} />
+              <Field label={tView("linkedInvoice")} value={voucher.purchaseCode ?? "—"} />
             </div>
           </div>
 
           {voucher.taxInclusive ? (
             <div className="rounded-[12px] border border-[#e1e7f0] p-4">
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <Field label="يشمل الضريبة" value="نعم" />
+                <Field label={tView("taxInclusive")} value={tView("yes")} />
                 <Field
-                  label="قيمة الضريبة"
-                  value={formatVoucherAmount(voucher.taxAmount, orgCurrency)}
+                  label={tView("taxAmount")}
+                  value={formatVoucherAmount(voucher.taxAmount, orgCurrency, locale as Locale)}
                 />
               </div>
             </div>
           ) : null}
 
           <div className="rounded-[12px] border border-[#e1e7f0] p-4">
-            <p className="mb-1.5 text-[11px] font-semibold text-[#95a4bd]">ملاحظات</p>
+            <p className="mb-1.5 text-[11px] font-semibold text-[#95a4bd]">{tView("notes")}</p>
             <p className="text-[13px] font-medium whitespace-pre-wrap text-[#0b1738]">
               {voucher.notes || "—"}
             </p>

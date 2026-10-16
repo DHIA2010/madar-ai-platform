@@ -1,14 +1,14 @@
 "use client"
 
+import { useLocale, useTranslations } from "next-intl"
+
 import { useWorkspace } from "@/features/workspace"
 
 import { isSupportedOrgCurrency } from "../services"
 import type { Supplier, SupplierVoucher } from "../types"
-import {
-  formatVoucherAmount,
-  PAYMENT_METHOD_NAME,
-  VOUCHER_TYPE_META,
-} from "./supplier-voucher-dialog"
+import { formatVoucherAmount } from "./supplier-voucher-dialog"
+
+import type { Locale } from "@/i18n/locales"
 
 function DetailLine({ label, value }: { label: string; value: string }) {
   return (
@@ -30,10 +30,14 @@ export function SupplierVoucherPrintDocument({
   voucher: SupplierVoucher
   supplier: Supplier | null
 }) {
+  const t = useTranslations("suppliers.vouchers")
+  const tPrint = useTranslations("suppliers.vouchers.print")
+  const tPaymentMethod = useTranslations("suppliers.vouchers.paymentMethod")
+  const locale = useLocale()
   const { currentOrganization } = useWorkspace()
   const rawOrgCurrency = currentOrganization?.currency ?? ""
   const orgCurrency = isSupportedOrgCurrency(rawOrgCurrency) ? rawOrgCurrency : "SAR"
-  const meta = VOUCHER_TYPE_META[voucher.type]
+  const typeLabel = t(`type.${voucher.type}.label`)
 
   return (
     <div
@@ -43,7 +47,7 @@ export function SupplierVoucherPrintDocument({
       dir="rtl"
     >
       <div className="mb-2 flex items-start justify-between">
-        <h1 className="text-[22px] font-extrabold">{meta.label}</h1>
+        <h1 className="text-[22px] font-extrabold">{typeLabel}</h1>
         {currentOrganization?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -61,19 +65,22 @@ export function SupplierVoucherPrintDocument({
 
       <div className="mb-10 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px]">
         <div className="space-y-2 text-right">
-          <DetailLine label="رقم السند" value={voucher.reference} />
-          <DetailLine label="نوع السند" value={meta.label} />
-          <DetailLine label="تاريخ السند" value={voucher.transactionDate} />
-          <DetailLine label="طريقة الدفع" value={PAYMENT_METHOD_NAME[voucher.paymentMethod]} />
+          <DetailLine label={tPrint("reference")} value={voucher.reference} />
+          <DetailLine label={tPrint("type")} value={typeLabel} />
+          <DetailLine label={tPrint("date")} value={voucher.transactionDate} />
+          <DetailLine
+            label={tPrint("paymentMethod")}
+            value={tPaymentMethod(voucher.paymentMethod)}
+          />
         </div>
         <div className="space-y-2 text-right">
-          <DetailLine label="اسم المورد" value={voucher.supplierName} />
-          <DetailLine label="رقم جوال المورد" value={supplier?.phone ?? ""} />
+          <DetailLine label={tPrint("supplierName")} value={voucher.supplierName} />
+          <DetailLine label={tPrint("supplierPhone")} value={supplier?.phone ?? ""} />
           <DetailLine
-            label="الرقم الضريبي للمورد"
+            label={tPrint("supplierTaxNumber")}
             value={supplier?.companyDetails.taxNumber ?? ""}
           />
-          <DetailLine label="الفاتورة المرتبطة" value={voucher.purchaseCode ?? "—"} />
+          <DetailLine label={tPrint("linkedInvoice")} value={voucher.purchaseCode ?? "—"} />
         </div>
       </div>
 
@@ -81,14 +88,14 @@ export function SupplierVoucherPrintDocument({
         <div className="w-[95mm] space-y-2.5">
           {voucher.taxInclusive ? (
             <div className="flex items-center justify-between text-[13px]">
-              <span>منها ضريبة القيمة المضافة</span>
-              <span>{formatVoucherAmount(voucher.taxAmount, orgCurrency)}</span>
+              <span>{tPrint("vatLine")}</span>
+              <span>{formatVoucherAmount(voucher.taxAmount, orgCurrency, locale as Locale)}</span>
             </div>
           ) : null}
           <div className="flex items-center justify-between border-b-2 border-[#0b1738] pb-2 text-[16px]">
-            <span className="font-extrabold">{meta.label} - المبلغ الإجمالي</span>
+            <span className="font-extrabold">{tPrint("totalLine", { label: typeLabel })}</span>
             <span className="font-extrabold">
-              {formatVoucherAmount(voucher.amount, orgCurrency)}
+              {formatVoucherAmount(voucher.amount, orgCurrency, locale as Locale)}
             </span>
           </div>
         </div>
@@ -96,7 +103,7 @@ export function SupplierVoucherPrintDocument({
 
       {voucher.notes ? (
         <div className="mt-6 border-t border-[#e1e7f0] pt-4">
-          <p className="text-[11px] font-semibold text-[#95a4bd]">ملاحظات</p>
+          <p className="text-[11px] font-semibold text-[#95a4bd]">{tPrint("notes")}</p>
           <p className="mt-1 text-[12px]">{voucher.notes}</p>
         </div>
       ) : null}

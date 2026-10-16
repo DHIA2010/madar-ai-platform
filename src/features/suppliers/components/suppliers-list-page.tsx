@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Ban,
   CheckCircle2,
@@ -65,11 +66,7 @@ import { SupplierStatusBadge } from "./supplier-status-badge"
 import { SupplierViewDialog } from "./supplier-view-dialog"
 import { SuppliersKpiCards } from "./suppliers-kpi-cards"
 
-const STATUS_OPTIONS = [
-  { value: "all", label: "جميع الحالات" },
-  { value: "active", label: "نشط" },
-  { value: "inactive", label: "غير نشط" },
-]
+import { type Locale, localeDirection } from "@/i18n/locales"
 
 const ACTION_ICON_CLASS = "rounded-[8px] border"
 
@@ -91,6 +88,15 @@ function formatBalance(value: number, currency: SupportedOrgCurrency) {
 }
 
 export function SuppliersListPage() {
+  const t = useTranslations("suppliers.list")
+  const tCommon = useTranslations("common")
+  const tStatus = useTranslations("suppliers.status")
+  const locale = useLocale()
+  const statusOptions = [
+    { value: "all", label: t("allStatuses") },
+    { value: "active", label: tStatus("active") },
+    { value: "inactive", label: tStatus("inactive") },
+  ]
   const router = useRouter()
   const { suppliers, isLoading, refetch } = useSuppliers()
   const { purchases, returns } = useCrossFeaturePurchaseData()
@@ -183,11 +189,13 @@ export function SuppliersListPage() {
     try {
       await supplierService.setStatus([supplier.id], next)
       toast.success(
-        next === "active" ? `تم تفعيل ${supplier.name}.` : `تم إلغاء تفعيل ${supplier.name}.`
+        t(next === "active" ? "toasts.activateSuccess" : "toasts.deactivateSuccess", {
+          name: supplier.name,
+        })
       )
       void refetch()
     } catch {
-      toast.error("تعذر تحديث حالة المورد.")
+      toast.error(t("toasts.statusError"))
     }
   }
 
@@ -195,14 +203,14 @@ export function SuppliersListPage() {
     try {
       await supplierService.setStatus([...selectedIds], next)
       toast.success(
-        next === "active"
-          ? `تم تفعيل ${selectedIds.size} مورد.`
-          : `تم إلغاء تفعيل ${selectedIds.size} مورد.`
+        t(next === "active" ? "toasts.bulkActivateSuccess" : "toasts.bulkDeactivateSuccess", {
+          count: selectedIds.size,
+        })
       )
       setSelectedIds(new Set())
       void refetch()
     } catch {
-      toast.error("تعذر تحديث حالة الموردين المحددين.")
+      toast.error(t("toasts.bulkStatusError"))
     }
   }
 
@@ -210,25 +218,23 @@ export function SuppliersListPage() {
     setBulkDeleting(true)
     try {
       await Promise.all([...selectedIds].map((id) => supplierService.remove(id)))
-      toast.success(`تم حذف ${selectedIds.size} مورد.`)
+      toast.success(t("toasts.bulkDeleteSuccess", { count: selectedIds.size }))
       setSelectedIds(new Set())
       setBulkDeleteOpen(false)
       void refetch()
     } catch {
-      toast.error("تعذر حذف بعض الموردين المحددين.")
+      toast.error(t("toasts.bulkDeleteError"))
     } finally {
       setBulkDeleting(false)
     }
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale as Locale)} className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={cn("text-2xl font-bold", HEADING)}>قائمة الموردين</h1>
-          <p className={cn("mt-1 text-sm", MUTED)}>
-            إدارة جميع موردي المشتريات وبياناتهم البنكية والتجارية.
-          </p>
+          <h1 className={cn("text-2xl font-bold", HEADING)}>{t("heading")}</h1>
+          <p className={cn("mt-1 text-sm", MUTED)}>{t("subheading")}</p>
         </div>
       </div>
 
@@ -241,7 +247,7 @@ export function SuppliersListPage() {
 
       <div className={cn(PANEL, "flex flex-wrap items-center justify-between gap-3 p-4")}>
         <AppSearchInput
-          placeholder="البحث عن مورد..."
+          placeholder={t("searchPlaceholder")}
           value={list.search}
           onChange={(event) => list.setSearch(event.target.value)}
           wrapperClassName="w-full sm:w-72"
@@ -251,10 +257,10 @@ export function SuppliersListPage() {
         <div className="flex flex-wrap items-center gap-2">
           <AppSearchableSelect
             value={list.status}
-            options={STATUS_OPTIONS}
+            options={statusOptions}
             onChange={(value) => list.setStatus(value as typeof list.status)}
-            placeholder="الحالة"
-            ariaLabel="الحالة"
+            placeholder={t("statusPlaceholder")}
+            ariaLabel={t("statusPlaceholder")}
             triggerClassName="w-[160px]"
           />
 
@@ -264,7 +270,7 @@ export function SuppliersListPage() {
             className={SECONDARY_BUTTON_CLASS}
             onClick={() => exportSuppliersToCsv(list.filteredSuppliers, balanceBySupplier)}
           >
-            تصدير
+            {t("export")}
           </AppButton>
 
           <AppButton
@@ -276,42 +282,44 @@ export function SuppliersListPage() {
             onClick={() => router.push(ROUTES.suppliersAdd)}
             className="h-11 gap-2 rounded-full bg-[#2878ff] px-5 text-[13.5px] font-semibold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] transition-all hover:-translate-y-px hover:bg-[#1f63d6] hover:shadow-[0_8px_20px_rgba(40,120,255,0.34)] active:translate-y-0"
           >
-            إضافة مورد
+            {t("addSupplier")}
           </AppButton>
         </div>
       </div>
 
       {selectedIds.size > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#c4d5f0] bg-[#eef4ff] px-4 py-3">
-          <p className="text-[12.5px] font-semibold text-[#2878ff]">{selectedIds.size} مورد محدد</p>
+          <p className="text-[12.5px] font-semibold text-[#2878ff]">
+            {t("selectedCount", { count: selectedIds.size })}
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <AppButton
               variant="outline"
               className="h-9 rounded-[10px] border-emerald-200 bg-white px-3 text-[12px] font-semibold text-emerald-600 hover:bg-emerald-50"
               onClick={() => void handleBulkStatus("active")}
             >
-              تفعيل
+              {t("bulkActivate")}
             </AppButton>
             <AppButton
               variant="outline"
               className="h-9 rounded-[10px] border-amber-200 bg-white px-3 text-[12px] font-semibold text-amber-600 hover:bg-amber-50"
               onClick={() => void handleBulkStatus("inactive")}
             >
-              إلغاء التفعيل
+              {t("bulkDeactivate")}
             </AppButton>
             <AppButton
               variant="outline"
               className="h-9 rounded-[10px] border-rose-200 bg-white px-3 text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
               onClick={() => setBulkDeleteOpen(true)}
             >
-              حذف
+              {t("bulkDelete")}
             </AppButton>
             <AppButton
               variant="ghost"
               className="h-9 rounded-[10px] px-3 text-[12px] font-semibold text-[#6b7b96]"
               onClick={() => setSelectedIds(new Set())}
             >
-              إلغاء التحديد
+              {t("clearSelection")}
             </AppButton>
           </div>
         </div>
@@ -326,19 +334,19 @@ export function SuppliersListPage() {
                   <AppCheckbox
                     checked={someOnPageSelected ? "indeterminate" : allOnPageSelected}
                     onCheckedChange={(checked) => toggleAllOnPage(checked === true)}
-                    aria-label="تحديد الكل"
+                    aria-label={t("selectAll")}
                     className="size-[18px] rounded-[5px] border-[#c4d5f0] bg-white data-checked:border-[#2878ff] data-checked:bg-[#2878ff]"
                   />
                 </div>
               </AppTableHead>
-              <AppTableHead>معرف المورد</AppTableHead>
-              <AppTableHead>المورد</AppTableHead>
-              <AppTableHead>اسم الشركة</AppTableHead>
-              <AppTableHead>إجمالي المشتريات</AppTableHead>
-              <AppTableHead>التواصل</AppTableHead>
-              <AppTableHead>الحالة</AppTableHead>
-              <AppTableHead>الرصيد</AppTableHead>
-              <AppTableHead className="w-40">الإجراءات</AppTableHead>
+              <AppTableHead>{t("table.code")}</AppTableHead>
+              <AppTableHead>{t("table.supplier")}</AppTableHead>
+              <AppTableHead>{t("table.companyName")}</AppTableHead>
+              <AppTableHead>{t("table.totalPurchases")}</AppTableHead>
+              <AppTableHead>{t("table.contact")}</AppTableHead>
+              <AppTableHead>{t("table.status")}</AppTableHead>
+              <AppTableHead>{t("table.balance")}</AppTableHead>
+              <AppTableHead className="w-40">{t("table.actions")}</AppTableHead>
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
@@ -351,7 +359,7 @@ export function SuppliersListPage() {
                       <AppCheckbox
                         checked={selectedIds.has(supplier.id)}
                         onCheckedChange={(checked) => toggleRow(supplier.id, checked === true)}
-                        aria-label={`تحديد ${supplier.name}`}
+                        aria-label={t("selectRow", { name: supplier.name })}
                         className="size-[18px] rounded-[5px] border-[#c4d5f0] bg-white data-checked:border-[#2878ff] data-checked:bg-[#2878ff]"
                       />
                     </div>
@@ -390,7 +398,7 @@ export function SuppliersListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={supplier.status === "active" ? "إلغاء التفعيل" : "تفعيل"}
+                        aria-label={supplier.status === "active" ? t("deactivate") : t("activate")}
                         className={cn(
                           ACTION_ICON_CLASS,
                           supplier.status === "active"
@@ -408,7 +416,7 @@ export function SuppliersListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="عرض"
+                        aria-label={t("view")}
                         className={cn(
                           ACTION_ICON_CLASS,
                           "border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700"
@@ -420,7 +428,7 @@ export function SuppliersListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="كشف الحساب"
+                        aria-label={t("statement")}
                         className={cn(
                           ACTION_ICON_CLASS,
                           "border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700"
@@ -432,7 +440,7 @@ export function SuppliersListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="تعديل"
+                        aria-label={t("edit")}
                         className={cn(
                           ACTION_ICON_CLASS,
                           "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-700"
@@ -444,7 +452,7 @@ export function SuppliersListPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="حذف"
+                        aria-label={t("delete")}
                         className={cn(
                           ACTION_ICON_CLASS,
                           "border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700"
@@ -464,18 +472,15 @@ export function SuppliersListPage() {
         {isLoading ? (
           <div className={cn("flex items-center justify-center gap-2 py-16 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ التحميل...
+            {t("loading")}
           </div>
         ) : list.rows.length === 0 ? (
-          <AppTableEmpty
-            title="لا يوجد موردون مطابقون"
-            description="جرّب تعديل الفلاتر أو البحث."
-          />
+          <AppTableEmpty title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
           <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-            عرض {list.rows.length} من {list.totalCount} نتيجة
+            {t("showingCount", { shown: list.rows.length, total: list.totalCount })}
           </p>
           <SupplierPagination
             page={list.page}
@@ -499,23 +504,29 @@ export function SuppliersListPage() {
         open={bulkDeleteOpen}
         onOpenChange={(open) => !bulkDeleting && setBulkDeleteOpen(open)}
         title={
-          <span dir="rtl" className="text-[17px] font-extrabold text-[#0b1738]">
-            حذف {selectedIds.size} مورد
+          <span
+            dir={localeDirection(locale as Locale)}
+            className="text-[17px] font-extrabold text-[#0b1738]"
+          >
+            {t("bulkDeleteDialog.title", { count: selectedIds.size })}
           </span>
         }
         description={
-          <span dir="rtl" className="text-[13px] text-[#6b7b96]">
-            سيتم حذف الموردين المحددين نهائيًا. لا يمكن التراجع عن هذا الإجراء.
+          <span dir={localeDirection(locale as Locale)} className="text-[13px] text-[#6b7b96]">
+            {t("bulkDeleteDialog.description")}
           </span>
         }
-        confirmLabel="حذف"
-        cancelLabel="إلغاء"
+        confirmLabel={t("bulkDelete")}
+        cancelLabel={tCommon("cancel")}
         confirmButtonClassName="rounded-[10px] bg-rose-600 font-bold text-white hover:bg-rose-700"
         cancelButtonClassName="rounded-[10px] border-[#e1e7f0] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"
         loading={bulkDeleting}
         onConfirm={() => void handleBulkDelete()}
         onCancel={() => setBulkDeleteOpen(false)}
-        contentClassName="[direction:rtl] max-w-[26rem] gap-5 p-6"
+        contentClassName={cn(
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]",
+          "max-w-[26rem] gap-5 p-6"
+        )}
       />
     </div>
   )

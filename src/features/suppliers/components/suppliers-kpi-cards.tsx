@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { ShoppingBag, UserCheck, Users, Wallet } from "lucide-react"
 
@@ -70,20 +71,21 @@ export function SuppliersKpiCards({
   totalBalance: number
   currency: SupportedOrgCurrency
 }) {
+  const t = useTranslations("suppliers.kpis")
   const activeCount = suppliers.filter((supplier) => supplier.status === "active").length
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Card label="عدد الموردين" value={String(suppliers.length)} icon={Users} tone="blue" />
-      <Card label="موردون نشطون" value={String(activeCount)} icon={UserCheck} tone="emerald" />
+      <Card label={t("count")} value={String(suppliers.length)} icon={Users} tone="blue" />
+      <Card label={t("activeCount")} value={String(activeCount)} icon={UserCheck} tone="emerald" />
       <Card
-        label="إجمالي المشتريات"
+        label={t("totalPurchases")}
         value={formatCurrency(totalPurchases, currency)}
         icon={ShoppingBag}
         tone="violet"
       />
       <Card
-        label="إجمالي الأرصدة"
+        label={t("totalBalance")}
         value={formatCurrency(totalBalance, currency)}
         icon={Wallet}
         tone="amber"

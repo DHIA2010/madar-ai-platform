@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { voucherService } from "../services"
 import type { SupplierVoucher } from "../types"
 
 export function useSupplierVouchers() {
+  const t = useTranslations("suppliers.errors")
   const [vouchers, setVouchers] = useState<SupplierVoucher[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -16,11 +18,11 @@ export function useSupplierVouchers() {
     try {
       setVouchers(await voucherService.list())
     } catch {
-      setError("تعذر تحميل السندات. حاول مرة أخرى.")
+      setError(t("loadVouchers"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void refetch()

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import type { ReactNode } from "react"
 
@@ -36,6 +37,7 @@ export function SupplierPagination({
   totalPages: number
   onPageChange: (page: number) => void
 }) {
+  const t = useTranslations("common")
   if (totalPages <= 1) return null
   const pages = visiblePages(page, totalPages)
 
@@ -47,8 +49,8 @@ export function SupplierPagination({
         onClick={() => onPageChange(page - 1)}
         className="flex h-10 items-center gap-1 rounded-[10px] border border-[#e1e7f0] bg-white px-3 text-[12.5px] font-semibold text-[#6b7b96] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <ChevronRight className="size-4" />
-        السابق
+        <ChevronLeft className="size-4 rtl:rotate-180" />
+        {t("previous")}
       </button>
 
       {pages.map((pageNumber, index) => {
@@ -80,8 +82,8 @@ export function SupplierPagination({
         onClick={() => onPageChange(page + 1)}
         className="flex h-10 items-center gap-1 rounded-[10px] border border-[#e1e7f0] bg-white px-3 text-[12.5px] font-semibold text-[#6b7b96] transition-colors hover:border-[#c4d5f0] hover:text-[#0b1738] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        التالي
-        <ChevronLeft className="size-4" />
+        {t("next")}
+        <ChevronRight className="size-4 rtl:rotate-180" />
       </button>
     </div>
   )

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useLocale, useTranslations } from "next-intl"
 import { ArrowDownCircle, ArrowUpCircle, Eye, Layers, Loader2, Printer, Users } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 import { createPortal } from "react-dom"
@@ -42,7 +43,6 @@ import { SupplierAvatar } from "./supplier-avatar"
 import { FIELD_CLASS, HEADING, MUTED, PANEL, SupplierPagination } from "./supplier-field"
 import {
   formatVoucherAmount,
-  PAYMENT_METHOD_NAME,
   SupplierVoucherDialog,
   VOUCHER_TYPE_META,
   VOUCHER_VAT_RATE,
@@ -50,21 +50,9 @@ import {
 import { SupplierVoucherPrintDocument } from "./supplier-voucher-print-document"
 import { SupplierVoucherViewDialog } from "./supplier-voucher-view-dialog"
 
-const PAGE_SIZE = 10
+import { type Locale, localeDirection } from "@/i18n/locales"
 
-const TYPE_FILTER_OPTIONS: AppSearchableSelectOption[] = [
-  { value: "all", label: "جميع السندات" },
-  {
-    value: "receipt",
-    label: VOUCHER_TYPE_META.receipt.label,
-    icon: VOUCHER_TYPE_META.receipt.icon,
-  },
-  {
-    value: "payment",
-    label: VOUCHER_TYPE_META.payment.label,
-    icon: VOUCHER_TYPE_META.payment.icon,
-  },
-]
+const PAGE_SIZE = 10
 
 function StatCard({
   icon: Icon,
@@ -100,6 +88,14 @@ function StatCard({
 // SupplierStatement's own dialog, since this page isn't scoped to one supplier). Each row still
 // links out to that supplier's full ledger (purchases/returns included) via "كشف الحساب".
 export function SupplierVouchersPage() {
+  const t = useTranslations("suppliers.vouchers")
+  const tPaymentMethod = useTranslations("suppliers.vouchers.paymentMethod")
+  const locale = useLocale()
+  const typeFilterOptions: AppSearchableSelectOption[] = [
+    { value: "all", label: t("allTypes") },
+    { value: "receipt", label: t("type.receipt.label"), icon: VOUCHER_TYPE_META.receipt.icon },
+    { value: "payment", label: t("type.payment.label"), icon: VOUCHER_TYPE_META.payment.icon },
+  ]
   const { suppliers } = useSuppliers()
   const { vouchers, isLoading, refetch } = useSupplierVouchers()
   const { purchases, returns } = useCrossFeaturePurchaseData()
@@ -247,10 +243,10 @@ export function SupplierVouchersPage() {
         return {
           value: purchase.id,
           label: purchase.code,
-          hint: formatVoucherAmount(converted, orgCurrency),
+          hint: formatVoucherAmount(converted, orgCurrency, locale as Locale),
         }
       })
-  }, [purchases, supplierId, orgCurrency])
+  }, [purchases, supplierId, orgCurrency, locale])
 
   const selectedInvoiceAmount = useMemo(() => {
     const invoice = purchases.find((purchase) => purchase.id === invoiceId)
@@ -284,20 +280,20 @@ export function SupplierVouchersPage() {
     if (!dialogType) return
     const supplier = suppliers.find((entry) => entry.id === supplierId)
     if (!supplier) {
-      toast.error("اختر المورد.")
+      toast.error(t("toasts.selectSupplier"))
       return
     }
     const numericAmount = Math.round((Number(amount) || 0) * 100) / 100
     if (!(numericAmount > 0)) {
-      toast.error("أدخل مبلغاً صحيحاً.")
+      toast.error(t("toasts.invalidAmount"))
       return
     }
     if (!paymentMethod) {
-      toast.error("اختر طريقة الدفع.")
+      toast.error(t("toasts.selectPaymentMethod"))
       return
     }
     if (!transactionDate) {
-      toast.error("اختر تاريخ السند.")
+      toast.error(t("toasts.selectDate"))
       return
     }
 
@@ -318,24 +314,27 @@ export function SupplierVouchersPage() {
         notes: notes.trim(),
         transactionDate,
       })
-      toast.success(`تم حفظ ${VOUCHER_TYPE_META[dialogType].label} ${voucher.reference}.`)
+      toast.success(
+        t("toasts.saveSuccess", {
+          type: t(`type.${dialogType}.label`),
+          reference: voucher.reference,
+        })
+      )
       closeDialog()
       void refetch()
     } catch {
-      toast.error("تعذر حفظ السند. حاول مرة أخرى.")
+      toast.error(t("toasts.saveError"))
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-4">
+    <div dir={localeDirection(locale as Locale)} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className={cn("text-2xl font-bold", HEADING)}>سندات الموردين</h1>
-          <p className={cn("mt-1 text-sm", MUTED)}>
-            سجّل سندات القبض والصرف مع الموردين وتابع رصيد كل مورد من هنا.
-          </p>
+          <h1 className={cn("text-2xl font-bold", HEADING)}>{t("pageHeading")}</h1>
+          <p className={cn("mt-1 text-sm", MUTED)}>{t("pageSubheading")}</p>
         </div>
         <div className="flex items-center gap-2">
           <AppButton
@@ -343,14 +342,14 @@ export function SupplierVouchersPage() {
             className="h-11 gap-1.5 rounded-[10px] bg-[#16a34a] px-4 text-[13px] font-semibold text-white hover:bg-[#15803d]"
             onClick={() => openDialog("receipt")}
           >
-            سند قبض
+            {t("newReceipt")}
           </AppButton>
           <AppButton
             icon={<ArrowUpCircle className="size-4" />}
             className="h-11 gap-1.5 rounded-[10px] bg-[#dc2626] px-4 text-[13px] font-semibold text-white hover:bg-[#b91c1c]"
             onClick={() => openDialog("payment")}
           >
-            سند صرف
+            {t("newPayment")}
           </AppButton>
         </div>
       </div>
@@ -358,25 +357,25 @@ export function SupplierVouchersPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={ArrowDownCircle}
-          label="إجمالي سندات القبض"
-          value={formatVoucherAmount(totalReceipts, orgCurrency)}
+          label={t("stats.totalReceipts")}
+          value={formatVoucherAmount(totalReceipts, orgCurrency, locale as Locale)}
           tone="#16a34a"
         />
         <StatCard
           icon={ArrowUpCircle}
-          label="إجمالي سندات الصرف"
-          value={formatVoucherAmount(totalPayments, orgCurrency)}
+          label={t("stats.totalPayments")}
+          value={formatVoucherAmount(totalPayments, orgCurrency, locale as Locale)}
           tone="#dc2626"
         />
         <StatCard
           icon={Layers}
-          label="عدد السندات"
+          label={t("stats.count")}
           value={String(vouchers.length)}
           tone="#2878ff"
         />
         <StatCard
           icon={Users}
-          label="عدد الموردين المرتبطين"
+          label={t("stats.linkedSuppliers")}
           value={String(distinctSuppliers)}
           tone="#5b6b85"
         />
@@ -384,9 +383,9 @@ export function SupplierVouchersPage() {
 
       <div className={cn(PANEL, "flex flex-wrap items-end gap-3 p-4")}>
         <div className="grid gap-1">
-          <span className={cn("text-[11px] font-semibold", HEADING)}>البحث</span>
+          <span className={cn("text-[11px] font-semibold", HEADING)}>{t("searchLabel")}</span>
           <AppSearchInput
-            placeholder="البحث بالمورد أو رقم السند..."
+            placeholder={t("searchPlaceholder")}
             value={search}
             onChange={(event) => {
               setSearch(event.target.value)
@@ -397,20 +396,20 @@ export function SupplierVouchersPage() {
           />
         </div>
         <div className="grid min-w-[160px] gap-1">
-          <span className={cn("text-[11px] font-semibold", HEADING)}>نوع السند</span>
+          <span className={cn("text-[11px] font-semibold", HEADING)}>{t("typeLabel")}</span>
           <AppSearchableSelect
             value={typeFilter}
             onChange={(next) => {
               setTypeFilter(next as SupplierVoucherType | "all")
               setPage(1)
             }}
-            options={TYPE_FILTER_OPTIONS}
-            ariaLabel="نوع السند"
+            options={typeFilterOptions}
+            ariaLabel={t("typeLabel")}
             triggerClassName="h-11"
           />
         </div>
         <div className="grid gap-1">
-          <span className={cn("text-[11px] font-semibold", HEADING)}>الفترة الزمنية</span>
+          <span className={cn("text-[11px] font-semibold", HEADING)}>{t("periodLabel")}</span>
           <AppDateRangeFilter
             value={dateRange}
             onChange={(next) => {
@@ -425,14 +424,14 @@ export function SupplierVouchersPage() {
         <AppTable>
           <AppTableHeader>
             <AppTableRow>
-              <AppTableHead>المرجع</AppTableHead>
-              <AppTableHead>المورد</AppTableHead>
-              <AppTableHead>نوع السند</AppTableHead>
-              <AppTableHead>طريقة الدفع</AppTableHead>
-              <AppTableHead>الفاتورة المرتبطة</AppTableHead>
-              <AppTableHead>المبلغ</AppTableHead>
-              <AppTableHead>التاريخ</AppTableHead>
-              <AppTableHead className="w-24">الإجراءات</AppTableHead>
+              <AppTableHead>{t("table.reference")}</AppTableHead>
+              <AppTableHead>{t("table.supplier")}</AppTableHead>
+              <AppTableHead>{t("table.type")}</AppTableHead>
+              <AppTableHead>{t("table.paymentMethod")}</AppTableHead>
+              <AppTableHead>{t("table.linkedInvoice")}</AppTableHead>
+              <AppTableHead>{t("table.amount")}</AppTableHead>
+              <AppTableHead>{t("table.date")}</AppTableHead>
+              <AppTableHead className="w-24">{t("table.actions")}</AppTableHead>
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
@@ -458,20 +457,21 @@ export function SupplierVouchersPage() {
                       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
                       style={{ backgroundColor: meta.bg, color: meta.color }}
                     >
-                      {meta.label}
+                      {t(`type.${voucher.type}.label`)}
                     </span>
                   </AppTableCell>
                   <AppTableCell className={MUTED}>
-                    {PAYMENT_METHOD_NAME[voucher.paymentMethod]}
+                    {tPaymentMethod(voucher.paymentMethod)}
                   </AppTableCell>
                   <AppTableCell className={cn("font-mono text-[12px]", MUTED)}>
                     {voucher.purchaseCode ?? "—"}
                   </AppTableCell>
                   <AppTableCell className="font-bold" style={{ color: meta.color }}>
-                    {meta.verb === "قبض" ? "+" : "-"}
+                    {voucher.type === "receipt" ? "+" : "-"}
                     {formatVoucherAmount(
                       convertVoucherAmount(voucher, voucher.amount),
-                      orgCurrency
+                      orgCurrency,
+                      locale as Locale
                     )}
                   </AppTableCell>
                   <AppTableCell className={MUTED}>{voucher.transactionDate}</AppTableCell>
@@ -480,7 +480,7 @@ export function SupplierVouchersPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="عرض"
+                        aria-label={t("view")}
                         className="rounded-[8px] border border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100"
                         onClick={() => setViewTarget(toConvertedVoucher(voucher))}
                       >
@@ -489,7 +489,7 @@ export function SupplierVouchersPage() {
                       <AppButton
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="طباعة"
+                        aria-label={t("print")}
                         className="rounded-[8px] border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
                         onClick={() => setPrintTarget(toConvertedVoucher(voucher))}
                       >
@@ -506,18 +506,15 @@ export function SupplierVouchersPage() {
         {isLoading ? (
           <div className={cn("flex items-center justify-center gap-2 py-16 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ التحميل...
+            {t("loading")}
           </div>
         ) : rows.length === 0 ? (
-          <AppTableEmpty
-            title="لا توجد سندات بعد"
-            description='اضغط "سند قبض" أو "سند صرف" أعلاه لتسجيل أول سند.'
-          />
+          <AppTableEmpty title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e7f0] px-4 py-3">
           <p className={cn("shrink-0 text-sm whitespace-nowrap", MUTED)}>
-            عرض {rows.length} من {filtered.length} نتيجة
+            {t("showingCount", { shown: rows.length, total: filtered.length })}
           </p>
           <SupplierPagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
         </div>

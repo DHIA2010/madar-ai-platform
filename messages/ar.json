@@ -1010,5 +1010,362 @@
         }
       }
     }
+  },
+  "suppliers": {
+    "status": {
+      "active": "نشط",
+      "inactive": "غير نشط"
+    },
+    "kind": {
+      "local": "محلي",
+      "international": "دولي"
+    },
+    "accountType": {
+      "savings": "توفير",
+      "current": "جاري",
+      "other": "أخرى"
+    },
+    "paymentTerms": {
+      "prepaid": "دفع مسبق",
+      "cod": "الدفع عند الاستلام",
+      "net15": "صافي 15 يومًا",
+      "net30": "صافي 30 يومًا",
+      "net45": "صافي 45 يومًا",
+      "net60": "صافي 60 يومًا"
+    },
+    "vatType": {
+      "standard": "ضريبة مبيعات",
+      "zeroRated": "نسبة صفرية",
+      "exempt": "معفاة",
+      "notRegistered": "غير مسجل ضريبيًا"
+    },
+    "kpis": {
+      "count": "عدد الموردين",
+      "activeCount": "موردون نشطون",
+      "totalPurchases": "إجمالي المشتريات",
+      "totalBalance": "إجمالي الأرصدة"
+    },
+    "list": {
+      "heading": "قائمة الموردين",
+      "subheading": "إدارة جميع موردي المشتريات وبياناتهم البنكية والتجارية.",
+      "searchPlaceholder": "البحث عن مورد...",
+      "statusPlaceholder": "الحالة",
+      "allStatuses": "جميع الحالات",
+      "export": "تصدير",
+      "addSupplier": "إضافة مورد",
+      "selectedCount": "{count} مورد محدد",
+      "bulkActivate": "تفعيل",
+      "bulkDeactivate": "إلغاء التفعيل",
+      "bulkDelete": "حذف",
+      "clearSelection": "إلغاء التحديد",
+      "selectAll": "تحديد الكل",
+      "selectRow": "تحديد {name}",
+      "table": {
+        "code": "معرف المورد",
+        "supplier": "المورد",
+        "companyName": "اسم الشركة",
+        "totalPurchases": "إجمالي المشتريات",
+        "contact": "التواصل",
+        "status": "الحالة",
+        "balance": "الرصيد",
+        "actions": "الإجراءات"
+      },
+      "activate": "تفعيل",
+      "deactivate": "إلغاء التفعيل",
+      "view": "عرض",
+      "statement": "كشف الحساب",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "loading": "جارٍ التحميل...",
+      "emptyTitle": "لا يوجد موردون مطابقون",
+      "emptyDescription": "جرّب تعديل الفلاتر أو البحث.",
+      "showingCount": "عرض {shown} من {total} نتيجة",
+      "toasts": {
+        "activateSuccess": "تم تفعيل {name}.",
+        "deactivateSuccess": "تم إلغاء تفعيل {name}.",
+        "statusError": "تعذر تحديث حالة المورد.",
+        "bulkActivateSuccess": "تم تفعيل {count} مورد.",
+        "bulkDeactivateSuccess": "تم إلغاء تفعيل {count} مورد.",
+        "bulkStatusError": "تعذر تحديث حالة الموردين المحددين.",
+        "bulkDeleteSuccess": "تم حذف {count} مورد.",
+        "bulkDeleteError": "تعذر حذف بعض الموردين المحددين."
+      },
+      "bulkDeleteDialog": {
+        "title": "حذف {count} مورد",
+        "description": "سيتم حذف الموردين المحددين نهائيًا. لا يمكن التراجع عن هذا الإجراء."
+      }
+    },
+    "form": {
+      "backToSuppliers": "العودة إلى الموردين",
+      "editHeading": "تعديل {name}",
+      "addHeading": "إضافة مورد جديد",
+      "loading": "جارٍ التحميل...",
+      "supplierSection": "بيانات المورد",
+      "companySection": "بيانات الشركة",
+      "bankSection": "البيانات البنكية",
+      "name": "اسم المورد",
+      "namePlaceholder": "اسم المورد",
+      "email": "البريد الإلكتروني",
+      "phone": "رقم الهاتف",
+      "phonePlaceholder": "+966 5xxxxxxxx",
+      "kindLabel": "نوع المورد",
+      "country": "الدولة",
+      "countryPlaceholder": "اختر الدولة أو اكتب دولة جديدة",
+      "countrySearchPlaceholder": "ابحث أو اكتب دولة جديدة...",
+      "countryEmptyLabel": "لا توجد دولة مطابقة",
+      "createCountryLabel": "إضافة دولة \"{draft}\"",
+      "city": "المدينة",
+      "cityPlaceholder": "المدينة",
+      "paymentTermsLabel": "شروط الدفع",
+      "paymentTermsPlaceholder": "اختر الشروط",
+      "paymentTermsSearchPlaceholder": "ابحث عن شروط الدفع...",
+      "paymentTermsEmptyLabel": "لا توجد نتائج",
+      "companyLogo": "شعار الشركة",
+      "dropzoneLabel": "اسحب وأفلت صورة أو اضغط للرفع",
+      "companyName": "اسم الشركة",
+      "companyNamePlaceholder": "اسم الشركة",
+      "companyEmail": "بريد الشركة",
+      "companyPhone": "هاتف الشركة",
+      "website": "الموقع الإلكتروني",
+      "companyAddress": "عنوان الشركة",
+      "companyAddressPlaceholder": "عنوان الشركة",
+      "taxNumber": "الرقم الضريبي",
+      "taxNumberPlaceholder": "الرقم الضريبي",
+      "vatTypeLabel": "نوع الضريبة",
+      "vatTypePlaceholder": "اختر نوع الضريبة",
+      "vatTypeSearchPlaceholder": "ابحث...",
+      "vatTypeEmptyLabel": "لا توجد نتائج",
+      "industryType": "نوع النشاط",
+      "industryTypePlaceholder": "مثال: تجارة التجزئة",
+      "bankName": "اسم البنك",
+      "bankNamePlaceholder": "اسم البنك",
+      "accountName": "اسم الحساب",
+      "accountNamePlaceholder": "اسم الحساب",
+      "accountTypeLabel": "نوع الحساب",
+      "accountNumber": "رقم الحساب",
+      "accountNumberPlaceholder": "رقم الحساب",
+      "swiftIban": "Swift / IBAN",
+      "branchCode": "رمز الفرع",
+      "branchCodePlaceholder": "رمز الفرع",
+      "bankCity": "مدينة البنك",
+      "bankCityPlaceholder": "مدينة البنك",
+      "saveChanges": "حفظ التغييرات",
+      "submit": "إضافة المورد",
+      "toasts": {
+        "invalidImage": "يرجى اختيار ملف صورة صالح.",
+        "imageTooLarge": "يجب ألا يتجاوز حجم الصورة 3 ميجابايت.",
+        "uploadError": "تعذر رفع الصورة. حاول مرة أخرى.",
+        "validationRequired": "يرجى تعبئة اسم المورد والبريد الإلكتروني والهاتف.",
+        "updateSuccess": "تم تحديث بيانات {name}.",
+        "createSuccess": "تم إضافة {name} إلى قائمة الموردين.",
+        "saveError": "تعذر حفظ بيانات المورد. حاول مرة أخرى."
+      }
+    },
+    "view": {
+      "close": "إغلاق",
+      "balanceLabel": "الرصيد: {amount}",
+      "supplierInfo": "بيانات المورد",
+      "email": "البريد الإلكتروني",
+      "phone": "رقم الهاتف",
+      "kindLabel": "نوع المورد",
+      "paymentTermsLabel": "شروط الدفع",
+      "country": "الدولة",
+      "city": "المدينة",
+      "address": "العنوان",
+      "bankInfo": "البيانات البنكية",
+      "bankName": "اسم البنك",
+      "accountName": "اسم الحساب",
+      "accountTypeLabel": "نوع الحساب",
+      "accountNumber": "رقم الحساب",
+      "swiftIban": "Swift / IBAN",
+      "branchCode": "رمز الفرع",
+      "bankCity": "مدينة البنك",
+      "companyInfo": "بيانات الشركة",
+      "companyName": "اسم الشركة",
+      "companyEmail": "بريد الشركة",
+      "companyPhone": "هاتف الشركة",
+      "website": "الموقع الإلكتروني",
+      "taxNumber": "الرقم الضريبي",
+      "vatTypeLabel": "نوع الضريبة",
+      "industryType": "نوع النشاط"
+    },
+    "deleteDialog": {
+      "title": "حذف {name}",
+      "description": "سيتم حذف هذا المورد نهائيًا من القائمة. لا يمكن التراجع عن هذا الإجراء.",
+      "confirmLabel": "حذف",
+      "toastSuccess": "تم حذف {name}.",
+      "toastError": "تعذر حذف المورد. حاول مرة أخرى."
+    },
+    "errors": {
+      "loadSuppliers": "تعذر تحميل الموردين. حاول مرة أخرى.",
+      "loadVouchers": "تعذر تحميل السندات. حاول مرة أخرى."
+    },
+    "vouchers": {
+      "type": {
+        "receipt": {
+          "label": "سند قبض",
+          "verb": "قبض"
+        },
+        "payment": {
+          "label": "سند صرف",
+          "verb": "صرف"
+        }
+      },
+      "paymentMethod": {
+        "cash": "نقدًا",
+        "card": "بطاقة",
+        "transfer": "تحويل بنكي"
+      },
+      "pageHeading": "سندات الموردين",
+      "pageSubheading": "سجّل سندات القبض والصرف مع الموردين وتابع رصيد كل مورد من هنا.",
+      "newReceipt": "سند قبض",
+      "newPayment": "سند صرف",
+      "stats": {
+        "totalReceipts": "إجمالي سندات القبض",
+        "totalPayments": "إجمالي سندات الصرف",
+        "count": "عدد السندات",
+        "linkedSuppliers": "عدد الموردين المرتبطين"
+      },
+      "searchLabel": "البحث",
+      "searchPlaceholder": "البحث بالمورد أو رقم السند...",
+      "typeLabel": "نوع السند",
+      "allTypes": "جميع السندات",
+      "periodLabel": "الفترة الزمنية",
+      "table": {
+        "reference": "المرجع",
+        "supplier": "المورد",
+        "type": "نوع السند",
+        "paymentMethod": "طريقة الدفع",
+        "linkedInvoice": "الفاتورة المرتبطة",
+        "amount": "المبلغ",
+        "date": "التاريخ",
+        "actions": "الإجراءات"
+      },
+      "view": "عرض",
+      "print": {
+        "vatLine": "منها ضريبة القيمة المضافة",
+        "totalLine": "{label} - المبلغ الإجمالي",
+        "reference": "رقم السند",
+        "type": "نوع السند",
+        "date": "تاريخ السند",
+        "paymentMethod": "طريقة الدفع",
+        "supplierName": "اسم المورد",
+        "supplierPhone": "رقم جوال المورد",
+        "supplierTaxNumber": "الرقم الضريبي للمورد",
+        "linkedInvoice": "الفاتورة المرتبطة",
+        "notes": "ملاحظات"
+      },
+      "loading": "جارٍ التحميل...",
+      "emptyTitle": "لا توجد سندات بعد",
+      "emptyDescription": "اضغط \"سند قبض\" أو \"سند صرف\" أعلاه لتسجيل أول سند.",
+      "showingCount": "عرض {shown} من {total} نتيجة",
+      "toasts": {
+        "selectSupplier": "اختر المورد.",
+        "invalidAmount": "أدخل مبلغاً صحيحاً.",
+        "selectPaymentMethod": "اختر طريقة الدفع.",
+        "selectDate": "اختر تاريخ السند.",
+        "saveSuccess": "تم حفظ {type} {reference}.",
+        "saveError": "تعذر حفظ السند. حاول مرة أخرى."
+      },
+      "dialog": {
+        "dateLabel": "التاريخ",
+        "referenceLabel": "رقم السند",
+        "referencePlaceholder": "سيُنشأ تلقائياً بعد الحفظ",
+        "supplierLabel": "المورد",
+        "supplierPlaceholder": "اختر المورد",
+        "supplierSearchPlaceholder": "ابحث عن مورد...",
+        "supplierEmptyLabel": "لا يوجد موردون",
+        "invoiceLabel": "ربط بفاتورة شراء (اختياري)",
+        "invoiceNoLink": "بدون ربط بفاتورة",
+        "invoiceSearchPlaceholder": "ابحث برقم الفاتورة...",
+        "invoiceEmptyLabel": "لا توجد فواتير",
+        "invoiceAriaLabel": "الفاتورة المرتبطة",
+        "noInvoicesForSupplier": "لا توجد فواتير شراء مسجلة لهذا المورد.",
+        "paymentMethodLabel": "طريقة الدفع",
+        "paymentMethodPlaceholder": "اختر طريقة الدفع",
+        "amountLabel": "المبلغ",
+        "taxInclusiveLabel": "يشمل الضريبة؟",
+        "taxLabel": "الضريبة",
+        "notesLabel": "ملاحظات (اختياري)",
+        "summaryTitle": "ملخص العملية",
+        "summaryAmount": "المبلغ",
+        "summaryTax": "منها ضريبة القيمة المضافة",
+        "summaryLinkedInvoice": "مرتبط بفاتورة",
+        "summaryInvoiceTotal": "إجمالي الفاتورة",
+        "summaryCurrentBalance": "رصيد المورد الحالي",
+        "summaryBalanceAfter": "رصيد المورد بعد العملية",
+        "saving": "جارٍ الحفظ...",
+        "save": "حفظ {type}",
+        "receiptSubtitle": "تسجيل مبلغ حقيقي تم استلامه من المورد (مثل استرداد أو رصيد دائن)",
+        "paymentSubtitle": "تسجيل مبلغ تم دفعه فعليًا للمورد، يخصم من المبلغ المستحق له"
+      },
+      "viewDialog": {
+        "close": "إغلاق",
+        "amountLabel": "المبلغ: {amount}",
+        "reference": "رقم السند",
+        "date": "التاريخ",
+        "paymentMethod": "طريقة الدفع",
+        "linkedInvoice": "الفاتورة المرتبطة",
+        "taxInclusive": "يشمل الضريبة",
+        "yes": "نعم",
+        "taxAmount": "قيمة الضريبة",
+        "notes": "ملاحظات"
+      }
+    },
+    "statement": {
+      "breadcrumb": "سندات الموردين",
+      "heading": "كشف حساب المورد",
+      "subheading": "عرض جميع العمليات المالية المتعلقة بحساب المورد",
+      "localBadge": "محلي",
+      "internationalBadge": "دولي",
+      "addedDate": "تاريخ الإضافة: {date}",
+      "city": "المدينة: {city}",
+      "balanceOwed": "رصيد المورد (له)",
+      "balanceDue": "رصيد المورد (عليه)",
+      "totalPurchases": "إجمالي المشتريات",
+      "totalPaid": "إجمالي المسدد",
+      "transactionCount": "عدد العمليات",
+      "periodLabel": "الفترة الزمنية",
+      "transactionTypeLabel": "نوع العملية",
+      "allTransactionTypes": "جميع العمليات",
+      "transactionLog": "سجل العمليات",
+      "transactionLogSubtitle": "يعرض فواتير الشراء والمرتجعات وسندات القبض والصرف، وأثرها على رصيد المورد",
+      "downloadCsv": "تحميل CSV",
+      "print": "طباعة",
+      "emptyTitle": "لا توجد عمليات بعد",
+      "emptyDescription": "ستظهر فواتير الشراء والمرتجعات وسندات القبض والصرف هنا فور حدوثها",
+      "table": {
+        "index": "#",
+        "reference": "المرجع",
+        "type": "نوع العملية",
+        "description": "الوصف",
+        "amount": "المبلغ",
+        "balanceAfter": "الرصيد بعد العملية",
+        "date": "التاريخ"
+      },
+      "showingRange": "عرض {from}–{to} من {total} عملية",
+      "prevPage": "الصفحة السابقة",
+      "nextPage": "الصفحة التالية",
+      "loading": "جارٍ التحميل...",
+      "notFound": "تعذر العثور على هذا المورد.",
+      "printGeneratedAt": "تم إنشاؤه في {date}",
+      "transactionType": {
+        "purchase": {
+          "label": "فاتورة شراء",
+          "verb": "شراء"
+        },
+        "return": {
+          "label": "مرتجع مشتريات",
+          "verb": "إرجاع"
+        }
+      },
+      "descriptions": {
+        "purchaseInvoice": "فاتورة شراء {code}",
+        "purchaseReturn": "مرتجع مشتريات {code} ({purchaseCode})",
+        "receivedVia": "مقبوض عبر {method}",
+        "paidVia": "مصروف عبر {method}"
+      },
+      "csvFilenamePrefix": "كشف-حساب"
+    }
   }
 }
