@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import {
   CheckCircle2,
@@ -71,6 +72,7 @@ export function ActivationRequestDialog({
   onSubmit: (input: ActivationRequestInput) => Promise<void>
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
+  const t = useTranslations("applications.requestDialog")
   const router = useRouter()
   const [selectedTier, setSelectedTier] = useState<SubscriptionPlanTier>("growth")
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank_transfer">("card")
@@ -105,15 +107,15 @@ export function ActivationRequestDialog({
   async function handleSubmit() {
     if (!target) return
     if (!file) {
-      toast.error("يرجى إرفاق إيصال التحويل البنكي.")
+      toast.error(t("toastAttachRequired"))
       return
     }
     if (!ACCEPTED_CONTENT_TYPES.includes(file.type)) {
-      toast.error("الملفات المقبولة: صور (PNG/JPEG/WebP) أو PDF فقط.")
+      toast.error(t("toastInvalidFileType"))
       return
     }
     if (file.size > MAX_FILE_BYTES) {
-      toast.error("يجب ألا يتجاوز حجم الملف 5 ميجابايت.")
+      toast.error(t("toastFileTooLarge"))
       return
     }
 
@@ -126,11 +128,11 @@ export function ActivationRequestDialog({
         attachmentContentType: file.type,
         attachmentDataBase64,
       })
-      toast.success(`تم إرسال طلب تفعيل ${target.name} للمراجعة.`)
+      toast.success(t("toastRequestSubmitted", { name: target.name }))
       reset()
       onOpenChange(false)
     } catch {
-      toast.error("تعذر إرسال طلب التفعيل. حاول مرة أخرى.")
+      toast.error(t("toastRequestError"))
     } finally {
       setSubmitting(false)
     }
@@ -141,11 +143,11 @@ export function ActivationRequestDialog({
     setStartingTrial(true)
     try {
       await onStartTrial(target.applicationId)
-      toast.success(`تم تفعيل تجربة ${target.name} المجانية لمدة 7 أيام.`)
+      toast.success(t("toastTrialActivated", { name: target.name }))
       reset()
       onOpenChange(false)
     } catch {
-      toast.error("تعذر بدء التجربة المجانية. حاول مرة أخرى.")
+      toast.error(t("toastTrialError"))
     } finally {
       setStartingTrial(false)
     }
@@ -174,7 +176,7 @@ export function ActivationRequestDialog({
                 </span>
               ) : null}
               <span className="text-[19px] font-extrabold text-[#0b1738]">
-                طلب تفعيل {target.name}
+                {t("title", { name: target.name })}
               </span>
             </span>
           ) : (
@@ -184,8 +186,7 @@ export function ActivationRequestDialog({
         description={
           target ? (
             <span dir="rtl" className="text-[13.5px] leading-[22px] text-[#6b7b96]">
-              اختر الباقة المناسبة، وادفع ببطاقتك فورًا أو أرفق إيصال تحويل بنكي -- التفعيل عبر
-              البطاقة فوري، وعبر التحويل البنكي بعد مراجعة الطلب.
+              {t("description")}
             </span>
           ) : null
         }
@@ -198,7 +199,7 @@ export function ActivationRequestDialog({
               disabled={submitting || startingTrial}
               onClick={() => onOpenChange(false)}
             >
-              إلغاء
+              {t("cancel")}
             </AppButton>
             <AppButton
               className="h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm"
@@ -206,7 +207,7 @@ export function ActivationRequestDialog({
               disabled={startingTrial}
               onClick={isCardCheckout ? goToCardCheckout : handleSubmit}
             >
-              {isCardCheckout ? "ادفع الآن" : "إرسال الطلب"}
+              {isCardCheckout ? t("payNow") : t("submitRequest")}
             </AppButton>
           </div>
         }
@@ -220,9 +221,9 @@ export function ActivationRequestDialog({
                     <Sparkles className="size-5" />
                   </span>
                   <div>
-                    <p className="text-[14px] font-extrabold text-white">جرّب مجانًا لمدة 7 أيام</p>
+                    <p className="text-[14px] font-extrabold text-white">{t("trialBannerTitle")}</p>
                     <p className="text-[11.5px] font-medium text-white/80">
-                      بدون دفع، وبدون انتظار موافقة.
+                      {t("trialBannerSubtitle")}
                     </p>
                   </div>
                 </div>
@@ -232,21 +233,23 @@ export function ActivationRequestDialog({
                   disabled={submitting}
                   onClick={handleStartTrial}
                 >
-                  ابدأ التجربة
+                  {t("startTrial")}
                 </AppButton>
               </div>
             ) : null}
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="text-[12.5px] font-semibold text-[#0b1738]">الباقة</label>
+                <label className="text-[12.5px] font-semibold text-[#0b1738]">
+                  {t("planLabel")}
+                </label>
                 <button
                   type="button"
                   onClick={() => setComparisonOpen(true)}
                   className="flex items-center gap-1 text-[11.5px] font-semibold text-[#2878ff] hover:underline"
                 >
                   <Scale className="size-3.5" />
-                  مقارنة الباقات
+                  {t("comparePlans")}
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -315,7 +318,7 @@ export function ActivationRequestDialog({
                   )}
                 >
                   <CreditCard className="size-3.5" />
-                  ادفع الآن
+                  {t("payNow")}
                 </button>
                 <button
                   type="button"
@@ -328,7 +331,7 @@ export function ActivationRequestDialog({
                   )}
                 >
                   <Landmark className="size-3.5" />
-                  تحويل بنكي
+                  {t("bankTransfer")}
                 </button>
               </div>
             ) : null}
@@ -337,14 +340,13 @@ export function ActivationRequestDialog({
               <div className="flex items-start gap-2.5 rounded-[12px] border border-[#e1e7f0] bg-[#f7f9fd] p-3.5">
                 <ShieldCheck className="size-4 shrink-0 text-[#2878ff]" />
                 <p className="text-[12px] leading-[20px] text-[#6b7b96]">
-                  اضغط &quot;ادفع الآن&quot; للانتقال إلى صفحة دفع آمنة عبر ميسر، ثم أدخل بيانات
-                  بطاقتك لإتمام الاشتراك فورًا.
+                  {t("cardCheckoutNotice")}
                 </p>
               </div>
             ) : (
               <div>
                 <label className="mb-2 block text-[12.5px] font-semibold text-[#0b1738]">
-                  إيصال التحويل البنكي
+                  {t("receiptLabel")}
                 </label>
                 <label
                   className={cn(
@@ -368,9 +370,7 @@ export function ActivationRequestDialog({
                   ) : (
                     <>
                       <Upload className="size-5 text-[#95a4bd]" />
-                      <span className="text-[11.5px] text-[#6b7b96]">
-                        اضغط لإرفاق صورة أو ملف PDF (حتى 5 ميجابايت)
-                      </span>
+                      <span className="text-[11.5px] text-[#6b7b96]">{t("uploadPrompt")}</span>
                     </>
                   )}
                 </label>

@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 import { cn } from "@/lib/utils"
 
 import {
@@ -29,13 +31,14 @@ export function PlanComparisonDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const t = useTranslations("applications.planComparison")
   return (
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
       title={
         <span dir="rtl" className="text-[17px] font-extrabold text-[#0b1738]">
-          مقارنة الباقات
+          {t("title")}
         </span>
       }
       contentClassName="[direction:rtl] max-w-[46rem] gap-4 p-6"
@@ -44,7 +47,7 @@ export function PlanComparisonDialog({
         <AppTable>
           <AppTableHeader>
             <AppTableRow>
-              <AppTableHead>الميزة</AppTableHead>
+              <AppTableHead>{t("featureHeader")}</AppTableHead>
               {PLAN_TIER_ORDER.map((tier) => {
                 const accent = PLAN_TIER_ACCENT[tier]
                 const Icon = accent.icon
@@ -78,7 +81,9 @@ export function PlanComparisonDialog({
               </AppTableRow>
             ))}
             <AppTableRow>
-              <AppTableCell className="font-medium text-[#0b1738]">السعر الشهري</AppTableCell>
+              <AppTableCell className="font-medium text-[#0b1738]">
+                {t("monthlyPrice")}
+              </AppTableCell>
               {PLAN_TIER_ORDER.map((tier) => (
                 <AppTableCell key={tier} className="font-semibold text-[#0b1738]">
                   {PLAN_TIER_META[tier].priceLabel}

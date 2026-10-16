@@ -558,5 +558,185 @@
   "dateField": {
     "placeholder": "Select date",
     "ariaLabel": "Date"
+  },
+  "applications": {
+    "header": {
+      "tagline": "One platform, multiple apps",
+      "title": "Applications",
+      "description": "Choose the apps you need to run your business and activate them. Each app runs in its own independent workspace with its own data and settings.",
+      "howItWorks": "How do apps work?"
+    },
+    "searchPlaceholder": "Search for an app...",
+    "searchAriaLabel": "Search for an app",
+    "emptyState": "No app matches your search.",
+    "categories": {
+      "all": "All",
+      "advertising": "Ad Campaigns",
+      "ecommerce": "Online Stores",
+      "pos": "Point of Sale",
+      "madarApps": "Madar Apps"
+    },
+    "card": {
+      "free": "Free",
+      "paid": "Paid",
+      "trial": "Free trial",
+      "learnMore": "Learn more",
+      "pendingReview": "Under review",
+      "deactivate": "Deactivate"
+    },
+    "backToApplications": "Back to Applications",
+    "confirmDialog": {
+      "activateVerb": "Activate",
+      "deactivateVerb": "Deactivate",
+      "activateDescription": "{name} will be activated on your current workspace and you'll be able to access it right away.",
+      "deactivateDescription": "{name} will be deactivated and its sections hidden from the sidebar. You can reactivate it anytime.",
+      "cancelLabel": "Cancel",
+      "defaultConfirmLabel": "Activate",
+      "subscriptionPrice": "Subscription price",
+      "toastActivateSuccess": "{name} activated.",
+      "toastDeactivateSuccess": "{name} deactivated.",
+      "toastActivateError": "Couldn't activate {name}.",
+      "toastDeactivateError": "Couldn't deactivate {name}."
+    },
+    "requestDialog": {
+      "title": "Activation request for {name}",
+      "description": "Choose the right plan, then pay instantly by card or attach a bank-transfer receipt -- card activation is instant, and bank-transfer activation happens after the request is reviewed.",
+      "trialBannerTitle": "Try free for 7 days",
+      "trialBannerSubtitle": "No payment, no waiting for approval.",
+      "startTrial": "Start trial",
+      "planLabel": "Plan",
+      "comparePlans": "Compare plans",
+      "payNow": "Pay now",
+      "bankTransfer": "Bank transfer",
+      "cardCheckoutNotice": "Tap \"Pay now\" to go to a secure Moyasar payment page, then enter your card details to complete the subscription instantly.",
+      "receiptLabel": "Bank transfer receipt",
+      "uploadPrompt": "Tap to attach an image or PDF file (up to 5 MB)",
+      "cancel": "Cancel",
+      "submitRequest": "Submit request",
+      "toastAttachRequired": "Please attach the bank transfer receipt.",
+      "toastInvalidFileType": "Accepted files: images (PNG/JPEG/WebP) or PDF only.",
+      "toastFileTooLarge": "The file must not exceed 5 MB.",
+      "toastRequestSubmitted": "The activation request for {name} was submitted for review.",
+      "toastRequestError": "Couldn't submit the activation request. Try again.",
+      "toastTrialActivated": "{name}'s 7-day free trial has been activated.",
+      "toastTrialError": "Couldn't start the free trial. Try again."
+    },
+    "planComparison": {
+      "title": "Compare plans",
+      "featureHeader": "Feature",
+      "monthlyPrice": "Monthly price"
+    },
+    "catalog": {
+      "advertising-campaigns": {
+        "name": "Ad Campaigns",
+        "shortDescription": "Analyze your ad campaign performance and make decisions based on accurate data.",
+        "detailDescription": "Connect the major digital ad platforms and track your campaign performance in one place -- conversions, return on ad spend (ROAS), customer acquisition cost (CAC), and cross-channel attribution -- with ready-made reports and recommendations based on your real numbers.",
+        "priceLabel": "Starting from SAR 129 / month",
+        "features": [
+          "Connect ad platforms (Google, Meta, Snapchat, TikTok)",
+          "Performance analysis and return on ad spend (ROAS)",
+          "Custom reports for every campaign",
+          "Comparisons across platforms and campaigns",
+          "Recommendations based on your performance data"
+        ],
+        "primaryCta": "Activate app"
+      },
+      "ecommerce": {
+        "name": "Online Stores",
+        "shortDescription": "Connect your online store with ad and analytics systems and track your customer's full journey.",
+        "detailDescription": "Connect your store on Salla, Zid, Shopify, or WooCommerce and track your sales, products, customers, and live visitors in one place, with precise conversion tracking via UTM and click IDs for every campaign that sends traffic.",
+        "priceLabel": "Starting from SAR 129 / month",
+        "features": [
+          "Connect stores (Salla, Zid, Shopify, and more)",
+          "Track products and orders",
+          "Sales and conversion analysis",
+          "Live store visitors",
+          "Connect with ads (UTM / Click IDs)"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "pos": {
+        "name": "Point of Sale",
+        "shortDescription": "A complete cashier system to manage your sales and branches with ease.",
+        "detailDescription": "A complete point-of-sale system that manages the cashier, inventory, invoices, shifts, and suppliers, compliant with ZATCA's e-invoicing requirements, and designed to manage one branch or several from a single place.",
+        "priceLabel": "Starting from SAR 149 / month",
+        "features": [
+          "Manage products and inventory",
+          "Manage sales and invoices",
+          "Manage customers and loyalty",
+          "Manage branches and employees",
+          "Compliant with ZATCA requirements"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "madar-apps-reports": {
+        "name": "Reports",
+        "shortDescription": "Ready-made reports and comprehensive analytics for your business performance in one place.",
+        "detailDescription": "Track your business performance through ready-made and custom reports that bring together your data from every active Madar app -- sales, campaigns, store, and POS -- with export and recurring scheduling.",
+        "features": [
+          "Ready-made reports for every active app",
+          "Export reports in multiple formats",
+          "Automatic recurring report scheduling"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "madar-apps-expenses": {
+        "name": "Expenses",
+        "shortDescription": "Track and categorize your business expenses easily in one place.",
+        "detailDescription": "Record your operating expenses and categorize them by category or branch, and continuously track your business's cash flow with ready-made expense reports to help you make better financial decisions.",
+        "features": [
+          "Record and categorize expenses",
+          "Link expenses to branches and categories",
+          "Recurring expense reports"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "madar-apps-tasks": {
+        "name": "Tasks",
+        "shortDescription": "Organize your team's tasks and track their completion as it happens.",
+        "detailDescription": "Create tasks for your team, set priorities and deadlines, and track the completion status of every task from a single board that brings together everything your team needs to focus on.",
+        "features": [
+          "Create tasks and assign them to the team",
+          "Set priorities and deadlines",
+          "Track completion status in real time"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "madar-apps-accounting": {
+        "name": "Accounting",
+        "shortDescription": "Manage your finances and invoices in one place.",
+        "detailDescription": "Track accounting entries, invoices, suppliers, and customers, and issue your periodic financial reports -- profit and loss, and the balance sheet -- in compliance with ZATCA's requirements.",
+        "features": [
+          "Issue invoices and accounting entries",
+          "Track suppliers and customers",
+          "Ready-made financial reports (profit and loss)"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "madar-apps-documents": {
+        "name": "Documents",
+        "shortDescription": "Store and organize your business documents in one secure place.",
+        "detailDescription": "Upload your important business documents -- contracts, invoices, and licenses -- and organize them into folders, with the ability to access and share them securely at any time.",
+        "features": [
+          "Upload documents and organize them into folders",
+          "Share documents securely",
+          "Quick search across all documents"
+        ],
+        "primaryCta": "Subscribe now"
+      }
+    },
+    "bundle": {
+      "name": "Madar Complete",
+      "badgeLabel": "Best value",
+      "description": "Get all of Madar's current and future apps in a single subscription at a better price.",
+      "benefits": [
+        "All current and future features",
+        "Independent workspace for every app",
+        "Dedicated technical support",
+        "Priority access to new features"
+      ],
+      "primaryCtaLabel": "Subscribe to Madar Complete",
+      "secondaryCtaLabel": "Learn more"
+    }
   }
 }

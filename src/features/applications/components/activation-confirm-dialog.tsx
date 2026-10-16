@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import { CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
@@ -34,6 +35,7 @@ export function ActivationConfirmDialog({
   onOpenChange: (open: boolean) => void
   onConfirm: (target: ActivationTarget) => Promise<void>
 }) {
+  const t = useTranslations("applications.confirmDialog")
   const [loading, setLoading] = useState(false)
 
   const isDeactivate = target?.intent === "deactivate"
@@ -43,10 +45,14 @@ export function ActivationConfirmDialog({
     setLoading(true)
     try {
       await onConfirm(target)
-      toast.success(isDeactivate ? `تم إلغاء تفعيل ${target.name}.` : `تم تفعيل ${target.name}.`)
+      toast.success(
+        t(isDeactivate ? "toastDeactivateSuccess" : "toastActivateSuccess", { name: target.name })
+      )
       onOpenChange(false)
     } catch {
-      toast.error(isDeactivate ? `تعذر إلغاء تفعيل ${target.name}.` : `تعذر تفعيل ${target.name}.`)
+      toast.error(
+        t(isDeactivate ? "toastDeactivateError" : "toastActivateError", { name: target.name })
+      )
     } finally {
       setLoading(false)
     }
@@ -74,7 +80,7 @@ export function ActivationConfirmDialog({
               </span>
             ) : null}
             <span className="text-[19px] font-extrabold text-[#0b1738]">
-              {isDeactivate ? "إلغاء تفعيل" : "تفعيل"} {target.name}
+              {isDeactivate ? t("deactivateVerb") : t("activateVerb")} {target.name}
             </span>
           </span>
         ) : (
@@ -84,14 +90,14 @@ export function ActivationConfirmDialog({
       description={
         target ? (
           <span dir="rtl" className="text-[13.5px] leading-[22px] text-[#6b7b96]">
-            {isDeactivate
-              ? `سيتم إلغاء تفعيل ${target.name} وإخفاء أقسامه من القائمة الجانبية. يمكنك إعادة تفعيله في أي وقت.`
-              : `سيتم تفعيل ${target.name} على مساحة العمل الحالية وستتمكن من الوصول إليه فورًا.`}
+            {t(isDeactivate ? "deactivateDescription" : "activateDescription", {
+              name: target.name,
+            })}
           </span>
         ) : null
       }
-      confirmLabel={target?.confirmLabel ?? "تفعيل"}
-      cancelLabel="إلغاء"
+      confirmLabel={target?.confirmLabel ?? t("defaultConfirmLabel")}
+      cancelLabel={t("cancelLabel")}
       confirmButtonClassName={cn(
         "h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm",
         isDeactivate
@@ -111,7 +117,7 @@ export function ActivationConfirmDialog({
         >
           <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#6b7b96]">
             <CheckCircle2 className="size-4 text-[#16a34a]" />
-            سعر الاشتراك
+            {t("subscriptionPrice")}
           </span>
           <span className="text-[15px] font-extrabold text-[#0b1738]">{target.priceLabel}</span>
         </div>

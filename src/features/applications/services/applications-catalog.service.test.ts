@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  APPLICATION_CATALOG,
+  APPLICATION_CATALOG_DATA,
   APPLICATION_SETTINGS_KEY,
   APPLICATION_TRIAL_ENDS_AT_KEY,
   resolveApplicationStatus,
 } from "./applications-catalog.service"
 
 describe("resolveApplicationStatus", () => {
-  const application = APPLICATION_CATALOG.find((entry) => entry.category === "advertising")!
+  const application = APPLICATION_CATALOG_DATA.find((entry) => entry.category === "advertising")!
   const enabledKey = APPLICATION_SETTINGS_KEY.advertising
   const trialEndsAtKey = APPLICATION_TRIAL_ENDS_AT_KEY.advertising
 

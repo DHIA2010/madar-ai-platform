@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { ArrowRight, Check, Clock, Crown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -28,11 +29,6 @@ const PRICING_BADGE_CLASS: Record<"free" | "paid", string> = {
   paid: "bg-[#fff2e8] text-[#c2540c]",
 }
 
-const PRICING_BADGE_LABEL: Record<"free" | "paid", string> = {
-  free: "مجاني",
-  paid: "مدفوع",
-}
-
 export function ApplicationDetailScreen({
   entry,
   trialAvailable,
@@ -48,6 +44,7 @@ export function ApplicationDetailScreen({
   onSubmitActivationRequest: (input: ActivationRequestInput) => Promise<void>
   onStartTrial: (applicationId: string) => Promise<void>
 }) {
+  const t = useTranslations("applications")
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
   const [pendingRequest, setPendingRequest] = useState<ActivationRequestTarget | null>(null)
   const isBundle = isMadarCompleteBundle(entry)
@@ -59,7 +56,7 @@ export function ApplicationDetailScreen({
         className="mb-3.5 flex w-fit items-center gap-1.5 text-[12.5px] font-semibold text-[#5b6b85] hover:text-[#2878ff]"
       >
         <ArrowRight className="size-3.5" />
-        العودة إلى التطبيقات
+        {t("backToApplications")}
       </Link>
 
       <div className="rounded-[14px] border border-[#e1e7f0] bg-white p-6">
@@ -84,7 +81,7 @@ export function ApplicationDetailScreen({
                   </span>
                 ) : entry.subscriptionStatus === "trial" ? (
                   <span className="rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]">
-                    تجربة مجانية
+                    {t("card.trial")}
                   </span>
                 ) : (
                   <span
@@ -93,7 +90,7 @@ export function ApplicationDetailScreen({
                       PRICING_BADGE_CLASS[entry.pricingModel]
                     )}
                   >
-                    {PRICING_BADGE_LABEL[entry.pricingModel]}
+                    {t(`card.${entry.pricingModel}`)}
                   </span>
                 )}
               </div>
@@ -131,19 +128,19 @@ export function ApplicationDetailScreen({
                     setPendingActivation({
                       id: entry.id,
                       name: entry.name,
-                      confirmLabel: "إلغاء التفعيل",
+                      confirmLabel: t("card.deactivate"),
                       icon: entry.icon,
                       iconWrapperClassName: entry.accent.iconWrapperClassName,
                       intent: "deactivate",
                     })
                   }
                 >
-                  إلغاء التفعيل
+                  {t("card.deactivate")}
                 </AppButton>
               ) : entry.subscriptionStatus === "pending_review" ? (
                 <span className="flex h-11 items-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-4 text-[13px] font-semibold text-[#b45309]">
                   <Clock className="size-4" />
-                  قيد المراجعة
+                  {t("card.pendingReview")}
                 </span>
               ) : (
                 <AppButton

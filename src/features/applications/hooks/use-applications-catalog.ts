@@ -1,15 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { useWorkspace } from "@/features/workspace"
 
 import {
-  APPLICATION_CATALOG,
   APPLICATION_SETTINGS_KEY,
   APPLICATION_TRIAL_ENDS_AT_KEY,
+  buildApplicationCatalog,
+  buildMadarCompleteBundle,
   isTrialAvailable,
-  MADAR_COMPLETE_BUNDLE,
   resolveApplicationStatus,
 } from "../services"
 import type {
@@ -29,13 +30,6 @@ export interface ApplicationCategoryTab {
   count: number
 }
 
-const CATEGORY_LABELS: Record<ApplicationCategoryId, string> = {
-  advertising: "الحملات الإعلانية",
-  ecommerce: "المتاجر الإلكترونية",
-  pos: "نقطة البيع",
-  madarApps: "تطبيقات مدار",
-}
-
 const CATEGORY_ORDER: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
 
 // Activating a paid application now submits a SubscriptionActivationRequestDto (tier + receipt)
@@ -50,10 +44,14 @@ export function useApplicationsCatalog() {
     listMyOrganizationSubscriptionRequests,
     startApplicationTrial,
   } = useWorkspace()
+  const t = useTranslations("applications")
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState<ApplicationCategoryId | "all">("all")
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [pendingRequests, setPendingRequests] = useState<SubscriptionActivationRequestDto[]>([])
+
+  const catalog = useMemo(() => buildApplicationCatalog(t), [t])
+  const bundle = useMemo(() => buildMadarCompleteBundle(t), [t])
 
   const organizationId = currentOrganization?.id ?? null
 
@@ -75,12 +73,12 @@ export function useApplicationsCatalog() {
   const statusById = useMemo<Record<string, ApplicationSubscriptionStatus>>(() => {
     const settings = currentOrganization?.settings
     return Object.fromEntries(
-      APPLICATION_CATALOG.map((application) => [
+      catalog.map((application) => [
         application.id,
         resolveApplicationStatus(application, settings, pendingApplications),
       ])
     )
-  }, [currentOrganization?.settings, pendingApplications])
+  }, [catalog, currentOrganization?.settings, pendingApplications])
 
   const trialAvailableByCategory = useMemo<Record<ApplicationCategoryId, boolean>>(() => {
     const settings = currentOrganization?.settings
@@ -94,7 +92,7 @@ export function useApplicationsCatalog() {
 
   const searchMatchedApplications = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    const withCurrentStatus = APPLICATION_CATALOG.map((application) => ({
+    const withCurrentStatus = catalog.map((application) => ({
       ...application,
       subscriptionStatus: statusById[application.id] ?? application.subscriptionStatus,
     }))
@@ -106,22 +104,22 @@ export function useApplicationsCatalog() {
         application.name.toLowerCase().includes(query) ||
         application.shortDescription.toLowerCase().includes(query)
     )
-  }, [searchQuery, statusById])
+  }, [catalog, searchQuery, statusById])
 
   const categoryTabs = useMemo<ApplicationCategoryTab[]>(() => {
     const all: ApplicationCategoryTab = {
       id: "all",
-      label: "الكل",
+      label: t("categories.all"),
       count: searchMatchedApplications.length,
     }
     const rest = CATEGORY_ORDER.map((category) => ({
       id: category,
-      label: CATEGORY_LABELS[category],
+      label: t(`categories.${category}`),
       count: searchMatchedApplications.filter((application) => application.category === category)
         .length,
     }))
     return [all, ...rest]
-  }, [searchMatchedApplications])
+  }, [searchMatchedApplications, t])
 
   const visibleApplications = useMemo<ApplicationDefinition[]>(() => {
     if (activeCategory === "all") {
@@ -134,7 +132,7 @@ export function useApplicationsCatalog() {
 
   async function deactivateApplication(id: string) {
     if (!currentOrganization) return
-    const application = APPLICATION_CATALOG.find((entry) => entry.id === id)
+    const application = catalog.find((entry) => entry.id === id)
     if (!application) return
 
     setActivatingId(id)
@@ -157,7 +155,7 @@ export function useApplicationsCatalog() {
 
   async function startTrial(id: string) {
     if (!currentOrganization) return
-    const application = APPLICATION_CATALOG.find((entry) => entry.id === id)
+    const application = catalog.find((entry) => entry.id === id)
     if (!application) return
 
     setActivatingId(id)
@@ -175,7 +173,7 @@ export function useApplicationsCatalog() {
     attachmentDataBase64: string
   }) {
     if (!currentOrganization) return
-    const application = APPLICATION_CATALOG.find((entry) => entry.id === input.applicationId)
+    const application = catalog.find((entry) => entry.id === input.applicationId)
     if (!application) return
 
     setActivatingId(input.applicationId)
@@ -197,7 +195,7 @@ export function useApplicationsCatalog() {
   // does. Aligning it with the same request/approval flow is a follow-up, not part of this pass.
   async function activateAllApplications() {
     if (!currentOrganization) return
-    setActivatingId(MADAR_COMPLETE_BUNDLE.id)
+    setActivatingId(bundle.id)
     try {
       await updateOrganization(currentOrganization.id, {
         settings: {
@@ -220,10 +218,12 @@ export function useApplicationsCatalog() {
     categoryTabs,
     visibleApplications,
     // Exposed so a single-application view (the [appId] detail page) can resolve one
-    // application's live status without duplicating the settings+pending-request logic above.
+    // application's live status, and look itself up via getApplicationById, without duplicating
+    // the settings+pending-request logic or the translation-merge logic above.
+    catalog,
     statusById,
     trialAvailableByCategory,
-    bundle: MADAR_COMPLETE_BUNDLE,
+    bundle,
     deactivateApplication,
     submitActivationRequest,
     startTrial,

@@ -1,3 +1,5 @@
+import type { useTranslations } from "next-intl"
+import type { LucideIcon } from "lucide-react"
 import {
   BarChart3,
   Calculator,
@@ -12,9 +14,12 @@ import {
 import type { OrganizationSettings } from "@/features/workspace"
 
 import type {
+  ApplicationAccentTheme,
   ApplicationCatalogEntry,
   ApplicationCategoryId,
   ApplicationDefinition,
+  ApplicationFeaturesDisplay,
+  ApplicationPricingModel,
   ApplicationSubscriptionStatus,
   MadarCompleteBundle,
 } from "../types"
@@ -81,80 +86,67 @@ export function trialDaysRemaining(
 // layer. This is deliberately the ONE place that will need to change when a real
 // subscriptions/applications backend lands; nothing in components/ or hooks/ should reach past
 // this file to know the data is local.
-export const APPLICATION_CATALOG: ApplicationDefinition[] = [
+//
+// Display text (name/description/features/price/CTA label) lives in the "applications.catalog"
+// i18n namespace, keyed by `id`, and is resolved by buildApplicationCatalog() below -- this array
+// holds only the locale-independent facts (icon, accent, pricing model, subscription state).
+interface ApplicationCatalogItem {
+  id: string
+  category: ApplicationCategoryId
+  icon: LucideIcon
+  accent: ApplicationAccentTheme
+  pricingModel: ApplicationPricingModel
+  hasPriceLabel: boolean
+  featuresDisplay: ApplicationFeaturesDisplay
+  featureCount: number
+  hasPrimaryCta: boolean
+  subscriptionStatus: ApplicationSubscriptionStatus
+}
+
+export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
   {
     id: "advertising-campaigns",
     category: "advertising",
-    name: "الحملات الإعلانية",
-    shortDescription: "تحليل أداء حملاتك الإعلانية واتخاذ قرارات مبنية على بيانات دقيقة.",
-    detailDescription:
-      "اربط منصات الإعلانات الرقمية الرئيسية وتابع أداء حملاتك من مكان واحد -- التحويلات، العائد على الإنفاق الإعلاني (ROAS)، تكلفة اكتساب العميل (CAC)، والإسناد عبر القنوات -- مع تقارير جاهزة وتوصيات مبنية على أرقامك الفعلية.",
     icon: Radio,
     accent: {
       iconWrapperClassName: "bg-[#eef4ff] text-[#2878ff]",
       primaryButtonClassName: "bg-[#2878ff] text-white hover:bg-[#1f66e0]",
     },
     pricingModel: "paid",
-    priceLabel: "يبدأ من 129 ر.س / شهر",
+    hasPriceLabel: true,
     featuresDisplay: "checklist",
-    features: [
-      { label: "ربط منصات الإعلانات (Google، Meta، Snapchat، TikTok)" },
-      { label: "تحليل الأداء وعائد الإنفاق الإعلاني (ROAS)" },
-      { label: "تقارير مخصصة لكل حملة" },
-      { label: "مقارنات بين المنصات والحملات" },
-      { label: "توصيات مبنية على بيانات أدائك" },
-    ],
-    primaryCta: { label: "تفعيل التطبيق" },
+    featureCount: 5,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   {
     id: "ecommerce",
     category: "ecommerce",
-    name: "المتاجر الإلكترونية",
-    shortDescription: "اربط متجرك الإلكتروني مع أنظمة الإعلانات والتحليلات وتابع رحلة عميلك كاملة.",
-    detailDescription:
-      "اربط متجرك على سلة أو زد أو Shopify أو WooCommerce وتابع مبيعاتك ومنتجاتك وعملاءك وزوارك المباشرين من مكان واحد، مع تتبع دقيق للتحويلات عبر UTM ومعرّفات النقر (Click IDs) لكل حملة تصل منها زيارة.",
     icon: ShoppingBag,
     accent: {
       iconWrapperClassName: "bg-[#f5f0ff] text-[#7c4dff]",
       primaryButtonClassName: "bg-[#7c4dff] text-white hover:bg-[#6a3ce0]",
     },
     pricingModel: "paid",
-    priceLabel: "يبدأ من 129 ر.س / شهر",
+    hasPriceLabel: true,
     featuresDisplay: "checklist",
-    features: [
-      { label: "ربط المتاجر (سلة، زد، Shopify وغيرها)" },
-      { label: "تتبع المنتجات والطلبات" },
-      { label: "تحليل المبيعات والتحويلات" },
-      { label: "الزوار المباشرون على المتجر" },
-      { label: "ربط مع الإعلانات (UTM / Click IDs)" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 5,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   {
     id: "pos",
     category: "pos",
-    name: "نقطة البيع",
-    shortDescription: "نظام كاشير متكامل لإدارة مبيعاتك وفروعك بكل سهولة.",
-    detailDescription:
-      "نظام نقطة بيع متكامل يدير الكاشير والمخزون والفواتير والورديات والموردين، متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA) للفوترة الإلكترونية، مصمم لإدارة فرع واحد أو عدة فروع من مكان واحد.",
     icon: CreditCard,
     accent: {
       iconWrapperClassName: "bg-[#fff2e8] text-[#ff7a3d]",
       primaryButtonClassName: "bg-[#ff7a3d] text-white hover:bg-[#e8672e]",
     },
     pricingModel: "paid",
-    priceLabel: "يبدأ من 149 ر.س / شهر",
+    hasPriceLabel: true,
     featuresDisplay: "checklist",
-    features: [
-      { label: "إدارة المنتجات والمخزون" },
-      { label: "إدارة المبيعات والفواتير" },
-      { label: "إدارة العملاء والولاء" },
-      { label: "إدارة الفروع والموظفين" },
-      { label: "متوافق مع متطلبات هيئة الزكاة (ZATCA)" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 5,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   // تطبيقات مدار -- previously one card showing these 5 as a mini icon-grid; now each is its
@@ -165,135 +157,124 @@ export const APPLICATION_CATALOG: ApplicationDefinition[] = [
   {
     id: "madar-apps-reports",
     category: "madarApps",
-    name: "التقارير",
-    shortDescription: "تقارير جاهزة وتحليلات شاملة لأداء أعمالك في مكان واحد.",
-    detailDescription:
-      "تابع أداء أعمالك عبر تقارير جاهزة ومخصصة تجمع بياناتك من جميع تطبيقات مدار المفعّلة -- المبيعات، الحملات، المتجر، ونقطة البيع -- مع إمكانية التصدير والجدولة الدورية.",
     icon: BarChart3,
     accent: {
       iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
       primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
     },
     pricingModel: "paid",
+    hasPriceLabel: false,
     featuresDisplay: "checklist",
-    features: [
-      { label: "تقارير جاهزة لكل تطبيق مفعّل" },
-      { label: "تصدير التقارير بصيغ متعددة" },
-      { label: "جدولة تقارير دورية تلقائية" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 3,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   {
     id: "madar-apps-expenses",
     category: "madarApps",
-    name: "المصروفات",
-    shortDescription: "تتبع مصروفات أعمالك وتصنيفها بسهولة في مكان واحد.",
-    detailDescription:
-      "سجّل مصروفاتك التشغيلية وصنّفها حسب الفئة أو الفرع، وتابع التدفق النقدي لأعمالك بشكل مستمر مع تقارير مصروفات جاهزة لمساعدتك على اتخاذ قرارات مالية أفضل.",
     icon: Wallet,
     accent: {
       iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
       primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
     },
     pricingModel: "paid",
+    hasPriceLabel: false,
     featuresDisplay: "checklist",
-    features: [
-      { label: "تسجيل المصروفات وتصنيفها" },
-      { label: "ربط المصروفات بالفروع والفئات" },
-      { label: "تقارير مصروفات دورية" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 3,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   {
     id: "madar-apps-tasks",
     category: "madarApps",
-    name: "المهام",
-    shortDescription: "نظّم مهام فريقك وتابع إنجازها أولاً بأول.",
-    detailDescription:
-      "أنشئ مهامًا لفريقك، وحدد الأولويات والمواعيد النهائية، وتابع حالة الإنجاز لكل مهمة من لوحة واحدة تجمع كل ما يحتاج فريقك للتركيز عليه.",
     icon: ListChecks,
     accent: {
       iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
       primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
     },
     pricingModel: "paid",
+    hasPriceLabel: false,
     featuresDisplay: "checklist",
-    features: [
-      { label: "إنشاء المهام وتوزيعها على الفريق" },
-      { label: "تحديد الأولويات والمواعيد النهائية" },
-      { label: "متابعة حالة الإنجاز لحظة بلحظة" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 3,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   {
     id: "madar-apps-accounting",
     category: "madarApps",
-    name: "المحاسبة",
-    shortDescription: "إدارة حساباتك المالية وفواتيرك في مكان واحد.",
-    detailDescription:
-      "تابع القيود المحاسبية والفواتير والموردين والعملاء، وأصدر تقاريرك المالية الدورية -- الأرباح والخسائر، والميزانية العمومية -- بما يتوافق مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA).",
     icon: Calculator,
     accent: {
       iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
       primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
     },
     pricingModel: "paid",
+    hasPriceLabel: false,
     featuresDisplay: "checklist",
-    features: [
-      { label: "إصدار الفواتير والقيود المحاسبية" },
-      { label: "متابعة الموردين والعملاء" },
-      { label: "تقارير مالية جاهزة (أرباح وخسائر)" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 3,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
   {
     id: "madar-apps-documents",
     category: "madarApps",
-    name: "المستندات",
-    shortDescription: "احفظ مستندات أعمالك ونظّمها في مكان واحد آمن.",
-    detailDescription:
-      "ارفع مستندات أعمالك المهمة -- العقود، الفواتير، والتراخيص -- ونظّمها في مجلدات، مع إمكانية الوصول إليها ومشاركتها بأمان في أي وقت.",
     icon: FileText,
     accent: {
       iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
       primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
     },
     pricingModel: "paid",
+    hasPriceLabel: false,
     featuresDisplay: "checklist",
-    features: [
-      { label: "رفع المستندات وتنظيمها في مجلدات" },
-      { label: "مشاركة المستندات بأمان" },
-      { label: "بحث سريع ضمن جميع المستندات" },
-    ],
-    primaryCta: { label: "اشتراك الآن" },
+    featureCount: 3,
+    hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
 ]
 
-export const MADAR_COMPLETE_BUNDLE: MadarCompleteBundle = {
-  id: "madar-complete",
-  name: "مدار الكامل",
-  badgeLabel: "الأكثر توفيراً",
-  description: "احصل على جميع تطبيقات مدار الحالية والمستقبلية في اشتراك واحد وبسعر أفضل.",
-  benefits: [
-    "جميع المزايا الحالية والمستقبلية",
-    "مساحات عمل مستقلة لكل تطبيق",
-    "دعم فني مخصص",
-    "أولوية في الميزات الجديدة",
-  ],
-  primaryCtaLabel: "الاشتراك في مدار الكامل",
-  secondaryCtaLabel: "معرفة المزيد",
+type ApplicationsCatalogTranslator = ReturnType<typeof useTranslations<"applications">>
+
+// Merges the locale-independent catalog facts above with the active locale's text from the
+// "applications.catalog"/"applications.bundle" messages -- called from useApplicationsCatalog(),
+// which already has a live `t` from useTranslations("applications").
+export function buildApplicationCatalog(t: ApplicationsCatalogTranslator): ApplicationDefinition[] {
+  return APPLICATION_CATALOG_DATA.map((item) => ({
+    id: item.id,
+    category: item.category,
+    name: t(`catalog.${item.id}.name`),
+    shortDescription: t(`catalog.${item.id}.shortDescription`),
+    detailDescription: t(`catalog.${item.id}.detailDescription`),
+    icon: item.icon,
+    accent: item.accent,
+    pricingModel: item.pricingModel,
+    priceLabel: item.hasPriceLabel ? t(`catalog.${item.id}.priceLabel`) : undefined,
+    featuresDisplay: item.featuresDisplay,
+    features: (t.raw(`catalog.${item.id}.features`) as string[]).map((label) => ({ label })),
+    primaryCta: { label: item.hasPrimaryCta ? t(`catalog.${item.id}.primaryCta`) : null },
+    subscriptionStatus: item.subscriptionStatus,
+  }))
 }
 
-export function getApplicationById(id: string): ApplicationCatalogEntry | undefined {
-  if (id === MADAR_COMPLETE_BUNDLE.id) {
-    return MADAR_COMPLETE_BUNDLE
+export function buildMadarCompleteBundle(t: ApplicationsCatalogTranslator): MadarCompleteBundle {
+  return {
+    id: "madar-complete",
+    name: t("bundle.name"),
+    badgeLabel: t("bundle.badgeLabel"),
+    description: t("bundle.description"),
+    benefits: t.raw("bundle.benefits") as string[],
+    primaryCtaLabel: t("bundle.primaryCtaLabel"),
+    secondaryCtaLabel: t("bundle.secondaryCtaLabel"),
   }
-  return APPLICATION_CATALOG.find((application) => application.id === id)
+}
+
+export function getApplicationById(
+  id: string,
+  catalog: ApplicationDefinition[],
+  bundle: MadarCompleteBundle
+): ApplicationCatalogEntry | undefined {
+  if (id === bundle.id) {
+    return bundle
+  }
+  return catalog.find((application) => application.id === id)
 }
 
 // The single place that turns the organization's persisted activation flags (+ any pending
@@ -302,7 +283,7 @@ export function getApplicationById(id: string): ApplicationCatalogEntry | undefi
 // review, or neither. `pendingApplications` is the set of application ids with an unresolved
 // (status "pending") SubscriptionActivationRequestDto for this organization.
 export function resolveApplicationStatus(
-  application: ApplicationDefinition,
+  application: Pick<ApplicationDefinition, "category">,
   settings: OrganizationSettings | undefined,
   pendingApplications?: ReadonlySet<ApplicationCategoryId>
 ): ApplicationSubscriptionStatus {

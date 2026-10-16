@@ -12,6 +12,8 @@ import {
 export default function Page() {
   const params = useParams<{ appId: string }>()
   const {
+    catalog,
+    bundle,
     statusById,
     trialAvailableByCategory,
     submitActivationRequest,
@@ -19,7 +21,7 @@ export default function Page() {
     activateAllApplications,
     startTrial,
   } = useApplicationsCatalog()
-  const entry = getApplicationById(params.appId)
+  const entry = getApplicationById(params.appId, catalog, bundle)
 
   if (!entry) {
     notFound()

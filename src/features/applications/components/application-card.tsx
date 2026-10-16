@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { Check, Clock, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -18,11 +19,6 @@ const PRICING_BADGE_CLASS: Record<ApplicationDefinition["pricingModel"], string>
   paid: "bg-[#fff2e8] text-[#c2540c]",
 }
 
-const PRICING_BADGE_LABEL: Record<ApplicationDefinition["pricingModel"], string> = {
-  free: "مجاني",
-  paid: "مدفوع",
-}
-
 export function ApplicationCard({
   application,
   activating,
@@ -34,6 +30,7 @@ export function ApplicationCard({
   onActivate: (application: ApplicationDefinition) => void
   onDeactivate: (application: ApplicationDefinition) => void
 }) {
+  const t = useTranslations("applications.card")
   const Icon = application.icon
   const isSubscribed = application.subscriptionStatus === "subscribed"
   const isTrial = application.subscriptionStatus === "trial"
@@ -61,7 +58,7 @@ export function ApplicationCard({
         {isTrial ? (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#eef4ff] px-2.5 py-1 text-[10.5px] font-semibold text-[#2878ff]">
             <Sparkles className="size-3" />
-            تجربة مجانية
+            {t("trial")}
           </span>
         ) : (
           <span
@@ -70,7 +67,7 @@ export function ApplicationCard({
               PRICING_BADGE_CLASS[application.pricingModel]
             )}
           >
-            {PRICING_BADGE_LABEL[application.pricingModel]}
+            {t(application.pricingModel)}
           </span>
         )}
       </div>
@@ -117,13 +114,13 @@ export function ApplicationCard({
               fullWidth
               className="h-10 rounded-[10px] border-[#e1e7f0] text-[12.5px] font-semibold text-[#0b1738] hover:bg-[#f7f9fd]"
             >
-              معرفة المزيد
+              {t("learnMore")}
             </AppButton>
           </Link>
           {isPendingReview ? (
             <span className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[#fde68a] bg-[#fffbeb] text-[12.5px] font-semibold text-[#b45309]">
               <Clock className="size-3.5" />
-              قيد المراجعة
+              {t("pendingReview")}
             </span>
           ) : application.primaryCta.label ? (
             <AppButton
@@ -137,7 +134,7 @@ export function ApplicationCard({
               loading={activating}
               onClick={() => (isActive ? onDeactivate(application) : onActivate(application))}
             >
-              {isActive ? "إلغاء التفعيل" : application.primaryCta.label}
+              {isActive ? t("deactivate") : application.primaryCta.label}
             </AppButton>
           ) : null}
         </div>

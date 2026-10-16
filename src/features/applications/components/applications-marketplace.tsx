@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Crown, PlayCircle, Search, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -18,6 +19,7 @@ import { MadarCompleteCard } from "./madar-complete-card"
 import { cairo } from "@/components/design/fonts"
 
 export function ApplicationsMarketplace() {
+  const t = useTranslations("applications")
   const {
     searchQuery,
     setSearchQuery,
@@ -53,7 +55,7 @@ export function ApplicationsMarketplace() {
     setPendingActivation({
       id: application.id,
       name: application.name,
-      confirmLabel: "إلغاء التفعيل",
+      confirmLabel: t("card.deactivate"),
       icon: application.icon,
       iconWrapperClassName: application.accent.iconWrapperClassName,
       intent: "deactivate",
@@ -82,14 +84,13 @@ export function ApplicationsMarketplace() {
           <div>
             <div className="flex items-center gap-1.5 text-[#2878ff]">
               <Sparkles className="size-4" />
-              <span className="text-[12.5px] font-semibold">منصة واحدة .. عدة تطبيقات</span>
+              <span className="text-[12.5px] font-semibold">{t("header.tagline")}</span>
             </div>
             <h1 className="mt-1.5 text-[26px] font-extrabold leading-tight text-[#0b1738]">
-              التطبيقات
+              {t("header.title")}
             </h1>
             <p className="mt-2 max-w-2xl text-[13px] leading-[22px] text-[#4c5d79]">
-              اختر التطبيقات التي تحتاجها لإدارة أعمالك وفعّلها. كل تطبيق يعمل في مساحة عمل مستقلة
-              ببياناته وإعداداته الخاصة.
+              {t("header.description")}
             </p>
           </div>
           <button
@@ -97,7 +98,7 @@ export function ApplicationsMarketplace() {
             className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#dbe6ff] bg-white px-3 py-1.5 text-[11.5px] font-semibold text-[#2878ff] transition-colors hover:border-[#c4d5f0]"
           >
             <PlayCircle className="size-3.5" />
-            كيف تعمل التطبيقات؟
+            {t("header.howItWorks")}
           </button>
         </div>
       </div>
@@ -107,8 +108,8 @@ export function ApplicationsMarketplace() {
         <AppInput
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="ابحث عن تطبيق..."
-          aria-label="ابحث عن تطبيق"
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchAriaLabel")}
           startIcon={<Search className="size-4 text-[#95a4bd]" />}
           className="h-11 rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px] text-[#0b1738] placeholder:text-[#95a4bd]"
         />
@@ -138,7 +139,7 @@ export function ApplicationsMarketplace() {
         >
           {visibleApplications.length === 0 ? (
             <div className="rounded-[14px] border border-[#e1e7f0] bg-white px-5 py-10 text-center text-[13px] text-[#6b7b96]">
-              لا يوجد تطبيق مطابق لبحثك.
+              {t("emptyState")}
             </div>
           ) : (
             <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
