@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -31,16 +32,16 @@ import {
 import { useAuth } from "@/features/authentication/hooks/use-auth"
 import { cn } from "@/lib/utils"
 
-function getInitials(fullName: string | undefined) {
+function getInitials(fullName: string | undefined, fallback: string) {
   if (!fullName) {
-    return "?"
+    return fallback
   }
   const parts = fullName.trim().split(/\s+/)
   const initials = parts
     .slice(0, 2)
     .map((part) => part[0])
     .join("")
-  return initials.toUpperCase() || "?"
+  return initials.toUpperCase() || fallback
 }
 
 interface NavUserProps {
@@ -53,6 +54,7 @@ interface NavUserProps {
 }
 
 export function NavUser({ variant = "sidebar" }: NavUserProps) {
+  const t = useTranslations("shared.navUser")
   const { currentUser, logout } = useAuth()
   const router = useRouter()
   const { isMobile, state } = useSidebar()
@@ -62,7 +64,7 @@ export function NavUser({ variant = "sidebar" }: NavUserProps) {
   const name = currentUser?.fullName ?? "—"
   const email = currentUser?.email ?? ""
   const avatarUrl = currentUser?.avatarUrl ?? undefined
-  const initials = getInitials(currentUser?.fullName)
+  const initials = getInitials(currentUser?.fullName, t("initialsFallback"))
 
   const handleLogout = async () => {
     if (isLoggingOut) {
@@ -158,7 +160,7 @@ export function NavUser({ variant = "sidebar" }: NavUserProps) {
         <DropdownMenuGroup>
           <DropdownMenuItem className="gap-2 h-9">
             <ShieldPlus className="!size-5" />
-            Upgrade to Pro
+            {t("upgradeToPro")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator className="my-2" />
@@ -168,21 +170,21 @@ export function NavUser({ variant = "sidebar" }: NavUserProps) {
             onClick={() => router.push("/account/edit-profile")}
           >
             <BadgeCheckIcon className="!size-5" />
-            Account
+            {t("account")}
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2 h-9">
             <CreditCardIcon className="!size-5" />
-            Billing
+            {t("billing")}
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2 h-9">
             <BellIcon className="!size-5" />
-            Notifications
+            {t("notifications")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator className="my-2" />
         <DropdownMenuItem className="gap-2 h-9" onSelect={() => void handleLogout()}>
           <LogOutIcon className="!size-5" />
-          {isLoggingOut ? "Logging out..." : "Log out"}
+          {isLoggingOut ? t("loggingOut") : t("logOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

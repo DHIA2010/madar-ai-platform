@@ -5384,6 +5384,58 @@
           "billing": "Billing"
         }
       }
+    },
+    "navUser": {
+      "initialsFallback": "?",
+      "upgradeToPro": "Upgrade to Pro",
+      "account": "Account",
+      "billing": "Billing",
+      "notifications": "Notifications",
+      "loggingOut": "Logging out...",
+      "logOut": "Log out"
+    },
+    "notificationDropdown": {
+      "title": "Notifications",
+      "unreadCount": "{count} unread",
+      "viewAll": "View all notifications",
+      "timeAgo": {
+        "minutes": "{count}m ago",
+        "hours": "{count}h ago"
+      },
+      "items": {
+        "1": {
+          "title": "New order placed",
+          "description": "Order #1234 has been placed"
+        },
+        "2": {
+          "title": "Payment received",
+          "description": "SAR 4,500 received from client"
+        },
+        "3": {
+          "title": "New user registered",
+          "description": "A new user joined your platform"
+        },
+        "4": {
+          "title": "Password changed",
+          "description": "A user updated their account password"
+        },
+        "5": {
+          "title": "Subscription renewed",
+          "description": "A user renewed their subscription plan"
+        },
+        "6": {
+          "title": "Support ticket opened",
+          "description": "A user submitted a new support request"
+        },
+        "7": {
+          "title": "New review received",
+          "description": "A customer left a 5-star review"
+        },
+        "8": {
+          "title": "Server restarted",
+          "description": "Production server was successfully restarted"
+        }
+      }
     }
   },
   "liveVisitors": {
