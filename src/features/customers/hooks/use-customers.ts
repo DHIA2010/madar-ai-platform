@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 import { customerListService } from "../services"
 import type { CustomerRecord } from "../types"
 
 export function useCustomers() {
+  const t = useTranslations("customers")
   const [records, setRecords] = useState<CustomerRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,11 +21,11 @@ export function useCustomers() {
       setRecords(items)
     } catch (loadError) {
       console.error("Failed to load customers", loadError)
-      setError("Couldn't load customers from your connected stores. Please try again.")
+      setError(t("loadError"))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void load()

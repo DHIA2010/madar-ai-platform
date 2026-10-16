@@ -226,7 +226,7 @@ describe("CustomersOverview", () => {
   it("shows a load error message when the request fails", async () => {
     listCustomers.mockRejectedValue(new Error("network down"))
     render(<CustomersOverview />)
-    expect(await screen.findByText(/couldn't load customers/i)).toBeTruthy()
+    expect(await screen.findByText(/تعذر تحميل العملاء/)).toBeTruthy()
   })
 
   it("shows edit and delete icon buttons only for a native customer, never a synced one", async () => {

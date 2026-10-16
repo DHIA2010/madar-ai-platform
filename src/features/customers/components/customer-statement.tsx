@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useLocale, useTranslations } from "next-intl"
 import { format } from "date-fns"
 import {
   ArrowDownCircle,
-  ArrowRight,
+  ArrowLeft,
   ArrowUpCircle,
   Banknote,
   Building2,
@@ -56,45 +57,59 @@ import type {
   CustomerSegment,
 } from "../types"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
 const FIELD_CLASS =
   "h-10 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 const PAGE_SIZE = 10
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+type CustomersTranslator = ReturnType<typeof useTranslations<"customers">>
+
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-})
-function formatDate(value: string | null): string {
-  return value ? DATE_FORMAT.format(new Date(value)) : "—"
+function dateFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
+function formatDate(value: string | null, locale: Locale): string {
+  return value ? dateFormatter(locale).format(new Date(value)) : "—"
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
-function formatDateTime(value: string): string {
-  return DATE_TIME_FORMAT.format(new Date(value))
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+function formatDateTime(value: string, locale: Locale): string {
+  return dateTimeFormatter(locale).format(new Date(value))
 }
 
-const SEGMENT_META: Record<CustomerSegment, { label: string; bg: string; text: string }> = {
-  VIP: { label: "VIP", bg: "bg-[#f5f0ff]", text: "text-[#7c3aed]" },
-  Loyal: { label: "دائم", bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
-  "One Time": { label: "لمرة واحدة", bg: "bg-[#f4f6fa]", text: "text-[#5b6b85]" },
-  New: { label: "جديد", bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+function getSegmentMeta(
+  t: CustomersTranslator
+): Record<CustomerSegment, { label: string; bg: string; text: string }> {
+  return {
+    VIP: { label: t("segment.vip"), bg: "bg-[#f5f0ff]", text: "text-[#7c3aed]" },
+    Loyal: { label: t("segment.loyal"), bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+    "One Time": { label: t("segment.oneTime"), bg: "bg-[#f4f6fa]", text: "text-[#5b6b85]" },
+    New: { label: t("segment.new"), bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+  }
 }
 
 // A method-code -> name lookup is loaded lazily on demand from the real POS payment-methods
@@ -117,7 +132,7 @@ interface AccountMethodOption {
 // feature (see the payment-methods import below).
 const VAT_RATE = 0.15
 
-const TRANSACTION_TYPE_META: Record<
+function getTransactionTypeMeta(t: CustomersTranslator): Record<
   AccountTransactionType,
   {
     label: string
@@ -127,50 +142,55 @@ const TRANSACTION_TYPE_META: Record<
     bg: string
     direction: 1 | -1
   }
-> = {
-  receipt: {
-    label: "سند قبض",
-    verb: "قبض",
-    icon: ArrowDownCircle,
-    color: "#16a34a",
-    bg: "#f0fdf4",
-    direction: 1,
-  },
-  payment: {
-    label: "سند صرف",
-    verb: "صرف",
-    icon: ArrowUpCircle,
-    color: "#dc2626",
-    bg: "#fef2f2",
-    direction: -1,
-  },
-  sale: {
-    label: "فاتورة بيع",
-    verb: "بيع",
-    icon: ShoppingBag,
-    color: "#dc2626",
-    bg: "#fef2f2",
-    direction: -1,
-  },
-  return: {
-    label: "إرجاع فاتورة",
-    verb: "إرجاع",
-    icon: RotateCcw,
-    color: "#16a34a",
-    bg: "#f0fdf4",
-    direction: 1,
-  },
+> {
+  return {
+    receipt: {
+      label: t("statement.transactionType.receipt.label"),
+      verb: t("statement.transactionType.receipt.verb"),
+      icon: ArrowDownCircle,
+      color: "#16a34a",
+      bg: "#f0fdf4",
+      direction: 1,
+    },
+    payment: {
+      label: t("statement.transactionType.payment.label"),
+      verb: t("statement.transactionType.payment.verb"),
+      icon: ArrowUpCircle,
+      color: "#dc2626",
+      bg: "#fef2f2",
+      direction: -1,
+    },
+    sale: {
+      label: t("statement.transactionType.sale.label"),
+      verb: t("statement.transactionType.sale.verb"),
+      icon: ShoppingBag,
+      color: "#dc2626",
+      bg: "#fef2f2",
+      direction: -1,
+    },
+    return: {
+      label: t("statement.transactionType.return.label"),
+      verb: t("statement.transactionType.return.verb"),
+      icon: RotateCcw,
+      color: "#16a34a",
+      bg: "#f0fdf4",
+      direction: 1,
+    },
+  }
 }
 
-const TRANSACTION_TYPE_OPTIONS: AppSearchableSelectOption[] = [
-  { value: "all", label: "جميع العمليات" },
-  ...(Object.keys(TRANSACTION_TYPE_META) as AccountTransactionType[]).map((type) => ({
-    value: type,
-    label: TRANSACTION_TYPE_META[type].label,
-    icon: TRANSACTION_TYPE_META[type].icon,
-    tint: `bg-[${TRANSACTION_TYPE_META[type].bg}] text-[${TRANSACTION_TYPE_META[type].color}]`,
-  })),
-]
+function getTransactionTypeOptions(t: CustomersTranslator): AppSearchableSelectOption[] {
+  const meta = getTransactionTypeMeta(t)
+  return [
+    { value: "all", label: t("statement.filters.allTypes") },
+    ...(Object.keys(meta) as AccountTransactionType[]).map((type) => ({
+      value: type,
+      label: meta[type].label,
+      icon: meta[type].icon,
+      tint: `bg-[${meta[type].bg}] text-[${meta[type].color}]`,
+    })),
+  ]
+}
 
 const PAYMENT_METHOD_KIND_ICON: Record<string, typeof Banknote> = {
   cash: Banknote,
@@ -202,17 +222,27 @@ function fileToAttachment(file: File): Promise<{ contentType: string; dataBase64
   })
 }
 
-function describeTransaction(transaction: AccountTransaction, methodNames: MethodNameMap): string {
+function describeTransaction(
+  transaction: AccountTransaction,
+  methodNames: MethodNameMap,
+  t: CustomersTranslator
+): string {
   if (transaction.type === "receipt" || transaction.type === "payment") {
     const methodName = transaction.paymentMethodCode
       ? (methodNames[transaction.paymentMethodCode] ?? transaction.paymentMethodCode)
-      : "غير محدد"
-    return transaction.type === "receipt" ? `مقبوض عبر ${methodName}` : `مصروف عبر ${methodName}`
+      : t("statement.descriptions.unspecifiedMethod")
+    return transaction.type === "receipt"
+      ? t("statement.descriptions.receivedVia", { method: methodName })
+      : t("statement.descriptions.paidVia", { method: methodName })
   }
   if (transaction.type === "sale") {
-    return transaction.invoiceNumber ? `فاتورة بيع ${transaction.invoiceNumber}` : "فاتورة بيع"
+    return transaction.invoiceNumber
+      ? t("statement.descriptions.saleInvoiceWithNumber", { number: transaction.invoiceNumber })
+      : t("statement.descriptions.saleInvoice")
   }
-  return transaction.invoiceNumber ? `إرجاع فاتورة ${transaction.invoiceNumber}` : "إرجاع فاتورة"
+  return transaction.invoiceNumber
+    ? t("statement.descriptions.returnInvoiceWithNumber", { number: transaction.invoiceNumber })
+    : t("statement.descriptions.returnInvoice")
 }
 
 function StatCard({
@@ -260,22 +290,25 @@ function StatementTable({
   methodNames: MethodNameMap
   canvasText?: boolean
 }) {
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
+  const meta = getTransactionTypeMeta(t)
   return (
     <table className="w-full text-right" style={{ borderCollapse: "collapse" }}>
       <thead>
         <tr className="border-b border-[#e1e7f0] text-[11px] font-semibold text-[#5b6b85]">
-          <th className="px-3 py-2">#</th>
-          <th className="px-3 py-2">المرجع</th>
-          <th className="px-3 py-2">نوع العملية</th>
-          <th className="px-3 py-2">الوصف</th>
-          <th className="px-3 py-2">المبلغ</th>
-          <th className="px-3 py-2">الرصيد بعد العملية</th>
-          <th className="px-3 py-2">التاريخ والوقت</th>
+          <th className="px-3 py-2">{t("statement.table.columns.index")}</th>
+          <th className="px-3 py-2">{t("statement.table.columns.reference")}</th>
+          <th className="px-3 py-2">{t("statement.table.columns.type")}</th>
+          <th className="px-3 py-2">{t("statement.table.columns.description")}</th>
+          <th className="px-3 py-2">{t("statement.table.columns.amount")}</th>
+          <th className="px-3 py-2">{t("statement.table.columns.balanceAfter")}</th>
+          <th className="px-3 py-2">{t("statement.table.columns.dateTime")}</th>
         </tr>
       </thead>
       <tbody>
         {transactions.map((transaction, index) => {
-          const meta = TRANSACTION_TYPE_META[transaction.type]
+          const rowMeta = meta[transaction.type]
           return (
             <tr key={transaction.id} className="border-b border-[#f1f4f9] text-[12px]">
               <td className="px-3 py-2 text-[#5b6b85]">{index + 1}</td>
@@ -288,35 +321,35 @@ function StatementTable({
               <td
                 {...(canvasText ? { "data-canvas-text": true } : {})}
                 className="px-3 py-2"
-                style={{ color: meta.color }}
+                style={{ color: rowMeta.color }}
               >
-                {meta.verb}
+                {rowMeta.verb}
               </td>
               <td
                 {...(canvasText ? { "data-canvas-text": true } : {})}
                 className="px-3 py-2 text-[#5b6b85]"
               >
-                {describeTransaction(transaction, methodNames)}
+                {describeTransaction(transaction, methodNames, t)}
               </td>
               <td
                 {...(canvasText ? { "data-canvas-text": true } : {})}
                 className="px-3 py-2 font-bold"
-                style={{ color: meta.color }}
+                style={{ color: rowMeta.color }}
               >
-                {meta.direction > 0 ? "+" : "-"}
-                {formatAmount(transaction.amount)}
+                {rowMeta.direction > 0 ? "+" : "-"}
+                {formatAmount(transaction.amount, locale)}
               </td>
               <td
                 {...(canvasText ? { "data-canvas-text": true } : {})}
                 className="px-3 py-2 font-semibold text-[#0d1b3e]"
               >
-                {formatAmount(transaction.balanceAfter)}
+                {formatAmount(transaction.balanceAfter, locale)}
               </td>
               <td
                 {...(canvasText ? { "data-canvas-text": true } : {})}
                 className="px-3 py-2 text-[#5b6b85]"
               >
-                {formatDateTime(transaction.createdAt)}
+                {formatDateTime(transaction.createdAt, locale)}
               </td>
             </tr>
           )
@@ -327,6 +360,8 @@ function StatementTable({
 }
 
 export function CustomerStatement({ customerId }: { customerId: string }) {
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
   const { currentOrganization } = useWorkspace()
   const {
     customer,
@@ -379,9 +414,9 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
         type: transactionType === "all" ? undefined : transactionType,
       })
       .then(setStatement)
-      .catch(() => setStatementError("تعذر تحميل كشف الحساب. حاول مرة أخرى."))
+      .catch(() => setStatementError(t("statement.loadStatementFailed")))
       .finally(() => setIsStatementLoading(false))
-  }, [customerId, dateRange, transactionType])
+  }, [customerId, dateRange, transactionType, t])
 
   useEffect(() => {
     void refetchStatement()
@@ -444,11 +479,11 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
     const accepted: File[] = []
     for (const file of incoming) {
       if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
-        toast.error(`نوع الملف غير مدعوم: ${file.name}`)
+        toast.error(t("statement.toasts.unsupportedFileType", { name: file.name }))
         continue
       }
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        toast.error(`الملف كبير جداً (الحد الأقصى 5 ميجابايت): ${file.name}`)
+        toast.error(t("statement.toasts.fileTooLarge", { name: file.name }))
         continue
       }
       accepted.push(file)
@@ -460,15 +495,15 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
     if (!customer || !dialogType) return
     const numericAmount = Math.round((Number(amount) || 0) * 100) / 100
     if (!(numericAmount > 0)) {
-      toast.error("أدخل مبلغاً صحيحاً.")
+      toast.error(t("statement.toasts.invalidAmount"))
       return
     }
     if (!paymentMethodCode) {
-      toast.error("اختر طريقة الدفع.")
+      toast.error(t("statement.toasts.choosePaymentMethod"))
       return
     }
     if (!transactionDate) {
-      toast.error("اختر تاريخ السند.")
+      toast.error(t("statement.toasts.chooseDate"))
       return
     }
 
@@ -493,15 +528,16 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
           : await customerListService.createPayment(customerId, input)
 
       toast.success(
-        `تم حفظ ${TRANSACTION_TYPE_META[dialogType].label}. رصيد العميل الآن ${formatAmount(
-          updated.accountBalance ?? 0
-        )}.`
+        t("statement.toasts.savedWithBalance", {
+          label: getTransactionTypeMeta(t)[dialogType].label,
+          balance: formatAmount(updated.accountBalance ?? 0, locale),
+        })
       )
       closeDialog()
       void refetchCustomer()
       void refetchStatement()
     } catch {
-      toast.error("تعذر حفظ السند.")
+      toast.error(t("statement.toasts.saveFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -514,24 +550,32 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
   const paginatedTransactions = transactions.slice(pageStart, pageStart + PAGE_SIZE)
 
   const csvContent = useMemo(() => {
-    const header = ["المرجع", "النوع", "الوصف", "المبلغ", "الرصيد بعد العملية", "التاريخ والوقت"]
+    const transactionTypeMeta = getTransactionTypeMeta(t)
+    const header = [
+      t("statement.table.columns.reference"),
+      t("statement.table.columns.type"),
+      t("statement.table.columns.description"),
+      t("statement.table.columns.amount"),
+      t("statement.table.columns.balanceAfter"),
+      t("statement.table.columns.dateTime"),
+    ]
     const rows = transactions.map((transaction) => [
       transaction.reference,
-      TRANSACTION_TYPE_META[transaction.type].verb,
-      describeTransaction(transaction, methodNames),
+      transactionTypeMeta[transaction.type].verb,
+      describeTransaction(transaction, methodNames, t),
       transaction.amount.toFixed(2),
       transaction.balanceAfter.toFixed(2),
-      formatDateTime(transaction.createdAt),
+      formatDateTime(transaction.createdAt, locale),
     ])
     return [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n")
-  }, [transactions, methodNames])
+  }, [transactions, methodNames, t, locale])
 
   const downloadCsv = () => {
     const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `كشف-حساب-${customer?.name ?? customerId}.csv`
+    link.download = `${t("statement.csv.filenamePrefix")}-${customer?.name ?? customerId}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -654,7 +698,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
       }
 
       const safeName = customer.name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "customer"
-      pdf.save(`كشف-حساب-${safeName}.pdf`)
+      pdf.save(`${t("statement.pdf.filenamePrefix")}-${safeName}.pdf`)
     } finally {
       setExportingPdf(false)
     }
@@ -663,53 +707,54 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
   if (isCustomerLoading) {
     return (
       <div
-        dir="rtl"
+        dir={localeDirection(locale)}
         className={cn("flex items-center justify-center gap-2 p-16 text-[13px]", MUTED)}
       >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل بيانات العميل...
+        {t("statement.loadingCustomer")}
       </div>
     )
   }
 
   if (customerError || !customer) {
     return (
-      <div dir="rtl" className="p-6">
-        <p className="text-[13px] text-[#dc2626]">تعذر العثور على هذا العميل.</p>
+      <div dir={localeDirection(locale)} className="p-6">
+        <p className="text-[13px] text-[#dc2626]">{t("statement.customerNotFound")}</p>
       </div>
     )
   }
 
-  const segmentMeta = SEGMENT_META[customer.segment]
+  const segmentMeta = getSegmentMeta(t)[customer.segment]
   const accountBalance = customer.accountBalance ?? 0
   const balanceTone = accountBalance >= 0 ? "#16a34a" : "#dc2626"
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5 p-6">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-5 p-6">
       <div className="flex flex-col gap-1">
         <div className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
           <Link href={ROUTES.customers} className="hover:text-[#2563eb]">
-            العملاء
+            {t("heading")}
           </Link>
           <span>/</span>
-          <span className={HEADING}>كشف حساب العميل</span>
+          <span className={HEADING}>{t("statement.breadcrumbCurrent")}</span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link
               href={ROUTES.customers}
+              aria-label={t("statement.backAriaLabel")}
               className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-[#e8edf3] text-[#5b6b85] hover:bg-[#f4f6fa]"
             >
-              <ArrowRight className="size-4" />
+              <ArrowLeft className="size-4 rtl:rotate-180" />
             </Link>
             <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
               <FileText className="size-5" />
             </span>
             <div>
-              <h1 className={cn("text-[18px] font-extrabold", HEADING)}>كشف حساب العميل</h1>
-              <p className={cn("text-[12px]", MUTED)}>
-                عرض جميع العمليات المالية المتعلقة بحساب العميل
-              </p>
+              <h1 className={cn("text-[18px] font-extrabold", HEADING)}>
+                {t("statement.pageTitle")}
+              </h1>
+              <p className={cn("text-[12px]", MUTED)}>{t("statement.pageSubtitle")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -718,14 +763,14 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
               className="h-10 gap-1.5 rounded-[10px] bg-[#16a34a] px-3.5 text-[12.5px] font-semibold text-white hover:bg-[#15803d]"
               onClick={() => setDialogType("receipt")}
             >
-              سند قبض
+              {t("statement.receiptButton")}
             </AppButton>
             <AppButton
               icon={<ArrowUpCircle className="size-4" />}
               className="h-10 gap-1.5 rounded-[10px] bg-[#dc2626] px-3.5 text-[12.5px] font-semibold text-white hover:bg-[#b91c1c]"
               onClick={() => setDialogType("payment")}
             >
-              سند صرف
+              {t("statement.paymentButton")}
             </AppButton>
           </div>
         </div>
@@ -761,11 +806,13 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
         </div>
         <div className="flex flex-col justify-center gap-1 text-[12px]">
           <span className={cn("flex items-center gap-1.5", MUTED)}>
-            <Calendar className="size-3.5" /> تاريخ التسجيل: {formatDate(customer.createdAt)}
+            <Calendar className="size-3.5" />
+            {t("statement.registeredDate", { date: formatDate(customer.createdAt, locale) })}
           </span>
           {customer.region ? (
             <span className={cn("flex items-center gap-1.5", MUTED)}>
-              <Building2 className="size-3.5" /> المنطقة: {customer.region}
+              <Building2 className="size-3.5" />
+              {t("statement.region", { region: customer.region })}
             </span>
           ) : null}
         </div>
@@ -780,7 +827,9 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
             {segmentMeta.label}
           </span>
           <span className={cn("text-[11px]", MUTED)}>
-            منصة: {customer.platform === "Madar" ? "مدار" : customer.platform}
+            {t("statement.platformLabel", {
+              platform: customer.platform === "Madar" ? t("platform.madar") : customer.platform,
+            })}
           </span>
         </div>
       </div>
@@ -788,25 +837,29 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Wallet}
-          label={accountBalance >= 0 ? "رصيد العميل (له)" : "رصيد العميل (عليه)"}
-          value={formatAmount(Math.abs(accountBalance))}
+          label={
+            accountBalance >= 0
+              ? t("statement.stats.balanceOwedToCustomer")
+              : t("statement.stats.balanceOwedByCustomer")
+          }
+          value={formatAmount(Math.abs(accountBalance), locale)}
           tone={balanceTone}
         />
         <StatCard
           icon={ArrowDownCircle}
-          label="إجمالي الوارد"
-          value={formatAmount(statement?.totalCredits ?? 0)}
+          label={t("statement.stats.totalCredits")}
+          value={formatAmount(statement?.totalCredits ?? 0, locale)}
           tone="#16a34a"
         />
         <StatCard
           icon={ArrowUpCircle}
-          label="إجمالي الصادر"
-          value={formatAmount(statement?.totalDebits ?? 0)}
+          label={t("statement.stats.totalDebits")}
+          value={formatAmount(statement?.totalDebits ?? 0, locale)}
           tone="#dc2626"
         />
         <StatCard
           icon={Layers}
-          label="عدد العمليات"
+          label={t("statement.stats.transactionCount")}
           value={String(statement?.transactionCount ?? 0)}
           tone="#5b6b85"
         />
@@ -815,7 +868,9 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
       <div className="rounded-[16px] border border-[#e8edf3] bg-white p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid gap-1">
-            <span className={cn("text-[11px] font-semibold", HEADING)}>الفترة الزمنية</span>
+            <span className={cn("text-[11px] font-semibold", HEADING)}>
+              {t("statement.filters.periodLabel")}
+            </span>
             <AppDateRangeFilter
               value={dateRange}
               onChange={(next) => {
@@ -825,15 +880,17 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
             />
           </div>
           <div className="grid min-w-[150px] gap-1">
-            <span className={cn("text-[11px] font-semibold", HEADING)}>نوع العملية</span>
+            <span className={cn("text-[11px] font-semibold", HEADING)}>
+              {t("statement.filters.typeLabel")}
+            </span>
             <AppSearchableSelect
               value={transactionType}
               onChange={(next) => {
                 setTransactionType(next as AccountTransactionType | "all")
                 setPage(1)
               }}
-              options={TRANSACTION_TYPE_OPTIONS}
-              ariaLabel="نوع العملية"
+              options={getTransactionTypeOptions(t)}
+              ariaLabel={t("statement.filters.typeLabel")}
               triggerClassName="h-10"
             />
           </div>
@@ -843,10 +900,10 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
       <div className="rounded-[16px] border border-[#e8edf3] bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8edf3] p-4">
           <div>
-            <p className={cn("text-[14px] font-extrabold", HEADING)}>سجل العمليات</p>
-            <p className={cn("text-[11.5px]", MUTED)}>
-              يعرض جميع سندات القبض والصرف، وعمليات البيع والإرجاع، وأثرها على رصيد العميل
+            <p className={cn("text-[14px] font-extrabold", HEADING)}>
+              {t("statement.table.sectionTitle")}
             </p>
+            <p className={cn("text-[11.5px]", MUTED)}>{t("statement.table.sectionSubtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <AppButton
@@ -856,7 +913,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
               disabled={transactions.length === 0}
               className="h-9 gap-1.5 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85]"
             >
-              تحميل CSV
+              {t("statement.table.downloadCsv")}
             </AppButton>
             <AppButton
               variant="outline"
@@ -865,7 +922,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
               disabled={transactions.length === 0}
               className="h-9 gap-1.5 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85]"
             >
-              طباعة
+              {t("statement.table.print")}
             </AppButton>
             <AppButton
               variant="outline"
@@ -874,7 +931,7 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
               disabled={transactions.length === 0 || exportingPdf}
               className="h-9 gap-1.5 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85]"
             >
-              {exportingPdf ? "جاري التصدير..." : "تصدير PDF"}
+              {exportingPdf ? t("statement.table.exportingPdf") : t("statement.table.exportPdf")}
             </AppButton>
           </div>
         </div>
@@ -882,17 +939,17 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
         {isStatementLoading ? (
           <div className={cn("flex items-center justify-center gap-2 py-16 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل العمليات...
+            {t("statement.table.loadingTransactions")}
           </div>
         ) : statementError ? (
           <p className="px-4 py-8 text-center text-[13px] text-[#dc2626]">{statementError}</p>
         ) : transactions.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <Wallet className="size-9 text-[#c7cedb]" />
-            <p className={cn("text-[13px] font-bold", HEADING)}>لا توجد عمليات بعد</p>
-            <p className={cn("text-[11.5px]", MUTED)}>
-              ستظهر سندات القبض والصرف وعمليات البيع والإرجاع هنا فور حدوثها
+            <p className={cn("text-[13px] font-bold", HEADING)}>
+              {t("statement.table.emptyTitle")}
             </p>
+            <p className={cn("text-[11.5px]", MUTED)}>{t("statement.table.emptyHint")}</p>
           </div>
         ) : (
           <>
@@ -900,18 +957,18 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
               <table className="w-full min-w-[820px] text-right">
                 <thead>
                   <tr className="border-b border-[#e8edf3] text-[11px] font-semibold text-[#8098b4]">
-                    <th className="px-4 py-3">#</th>
-                    <th className="px-4 py-3">المرجع</th>
-                    <th className="px-4 py-3">نوع العملية</th>
-                    <th className="px-4 py-3">الوصف</th>
-                    <th className="px-4 py-3">المبلغ</th>
-                    <th className="px-4 py-3">الرصيد بعد العملية</th>
-                    <th className="px-4 py-3">التاريخ والوقت</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.index")}</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.reference")}</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.type")}</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.description")}</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.amount")}</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.balanceAfter")}</th>
+                    <th className="px-4 py-3">{t("statement.table.columns.dateTime")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedTransactions.map((transaction, index) => {
-                    const meta = TRANSACTION_TYPE_META[transaction.type]
+                    const meta = getTransactionTypeMeta(t)[transaction.type]
                     return (
                       <tr
                         key={transaction.id}
@@ -930,17 +987,17 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
                           </span>
                         </td>
                         <td className={cn("px-4 py-3", MUTED)}>
-                          {describeTransaction(transaction, methodNames)}
+                          {describeTransaction(transaction, methodNames, t)}
                         </td>
                         <td className="px-4 py-3 font-bold" style={{ color: meta.color }}>
                           {meta.direction > 0 ? "+" : "-"}
-                          {formatAmount(transaction.amount)}
+                          {formatAmount(transaction.amount, locale)}
                         </td>
                         <td className={cn("px-4 py-3 font-semibold", HEADING)}>
-                          {formatAmount(transaction.balanceAfter)}
+                          {formatAmount(transaction.balanceAfter, locale)}
                         </td>
                         <td className={cn("px-4 py-3", MUTED)}>
-                          {formatDateTime(transaction.createdAt)}
+                          {formatDateTime(transaction.createdAt, locale)}
                         </td>
                       </tr>
                     )
@@ -951,8 +1008,11 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
 
             <div className="flex items-center justify-between border-t border-[#e8edf3] px-4 py-3">
               <p className={cn("text-[11.5px]", MUTED)}>
-                عرض {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, transactions.length)} من{" "}
-                {transactions.length} عملية
+                {t("statement.table.showingRange", {
+                  from: pageStart + 1,
+                  to: Math.min(pageStart + PAGE_SIZE, transactions.length),
+                  total: transactions.length,
+                })}
               </p>
               <div className="flex items-center gap-2">
                 <AppButton
@@ -960,9 +1020,9 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
                   className="size-8 rounded-[8px] border-[#e8edf3] p-0"
                   disabled={currentPage === 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("statement.table.previous")}
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronLeft className="size-4 rtl:rotate-180" />
                 </AppButton>
                 <span className={cn("text-[11.5px]", MUTED)}>
                   {currentPage} / {totalPages}
@@ -972,9 +1032,9 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
                   className="size-8 rounded-[8px] border-[#e8edf3] p-0"
                   disabled={currentPage === totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("statement.table.next")}
                 >
-                  <ChevronLeft className="size-4" />
+                  <ChevronRight className="size-4 rtl:rotate-180" />
                 </AppButton>
               </div>
             </div>
@@ -1021,14 +1081,17 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
             <div id="statement-print-target" className="hidden p-6 print:block" dir="rtl">
               <div className="mb-4 flex items-center justify-between gap-4 border-b border-[#e1e7f0] pb-3">
                 <div>
-                  <h1 className="text-[16px] font-extrabold text-[#0d1b3e]">كشف حساب العميل</h1>
+                  <h1 className="text-[16px] font-extrabold text-[#0d1b3e]">
+                    {t("statement.print.title")}
+                  </h1>
                   <p className="mt-0.5 text-[12px] text-[#5b6b85]">{customer.name}</p>
                   <p className="mt-0.5 text-[11px] text-[#5b6b85]">
-                    تم إنشاؤه في{" "}
-                    {new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-                      dateStyle: "long",
-                      timeStyle: "short",
-                    }).format(new Date())}
+                    {t("statement.print.generatedAt", {
+                      date: new Intl.DateTimeFormat(
+                        locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US",
+                        { dateStyle: "long", timeStyle: "short" }
+                      ).format(new Date()),
+                    })}
                   </p>
                 </div>
                 {currentOrganization ? (
@@ -1073,16 +1136,19 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
           >
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <h1 className="mb-1 text-xl font-bold text-[#0d1b3e]">كشف حساب العميل</h1>
+                <h1 className="mb-1 text-xl font-bold text-[#0d1b3e]">
+                  {t("statement.print.title")}
+                </h1>
                 <p data-canvas-text className="mb-1 text-sm text-[#5b6b85]">
                   {customer.name}
                 </p>
                 <p data-canvas-text className="text-[11px] text-[#95a4bd]">
-                  تم إنشاؤه في{" "}
-                  {new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-                    dateStyle: "long",
-                    timeStyle: "short",
-                  }).format(new Date())}
+                  {t("statement.print.generatedAt", {
+                    date: new Intl.DateTimeFormat(
+                      locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US",
+                      { dateStyle: "long", timeStyle: "short" }
+                    ).format(new Date()),
+                  })}
                 </p>
               </div>
               {currentOrganization ? (
@@ -1108,30 +1174,34 @@ export function CustomerStatement({ customerId }: { customerId: string }) {
             <div className="grid grid-cols-4 gap-3">
               <div className="rounded-[10px] border border-[#e1e7f0] p-3">
                 <p className="text-[10.5px] text-[#5b6b85]">
-                  {(customer.accountBalance ?? 0) >= 0 ? "رصيد العميل (له)" : "رصيد العميل (عليه)"}
+                  {(customer.accountBalance ?? 0) >= 0
+                    ? t("statement.stats.balanceOwedToCustomer")
+                    : t("statement.stats.balanceOwedByCustomer")}
                 </p>
                 <p
                   data-canvas-text
                   className="mt-1 text-[15px] font-extrabold"
                   style={{ color: (customer.accountBalance ?? 0) >= 0 ? "#16a34a" : "#dc2626" }}
                 >
-                  {formatAmount(Math.abs(customer.accountBalance ?? 0))}
+                  {formatAmount(Math.abs(customer.accountBalance ?? 0), locale)}
                 </p>
               </div>
               <div className="rounded-[10px] border border-[#e1e7f0] p-3">
-                <p className="text-[10.5px] text-[#5b6b85]">إجمالي الوارد</p>
+                <p className="text-[10.5px] text-[#5b6b85]">{t("statement.stats.totalCredits")}</p>
                 <p data-canvas-text className="mt-1 text-[15px] font-extrabold text-[#16a34a]">
-                  {formatAmount(statement?.totalCredits ?? 0)}
+                  {formatAmount(statement?.totalCredits ?? 0, locale)}
                 </p>
               </div>
               <div className="rounded-[10px] border border-[#e1e7f0] p-3">
-                <p className="text-[10.5px] text-[#5b6b85]">إجمالي الصادر</p>
+                <p className="text-[10.5px] text-[#5b6b85]">{t("statement.stats.totalDebits")}</p>
                 <p data-canvas-text className="mt-1 text-[15px] font-extrabold text-[#dc2626]">
-                  {formatAmount(statement?.totalDebits ?? 0)}
+                  {formatAmount(statement?.totalDebits ?? 0, locale)}
                 </p>
               </div>
               <div className="rounded-[10px] border border-[#e1e7f0] p-3">
-                <p className="text-[10.5px] text-[#5b6b85]">عدد العمليات</p>
+                <p className="text-[10.5px] text-[#5b6b85]">
+                  {t("statement.stats.transactionCount")}
+                </p>
                 <p data-canvas-text className="mt-1 text-[15px] font-extrabold text-[#0d1b3e]">
                   {String(statement?.transactionCount ?? 0)}
                 </p>
@@ -1203,7 +1273,9 @@ function AccountTransactionDialog({
   onCancel: () => void
   onSubmit: () => void
 }) {
-  const meta = TRANSACTION_TYPE_META[type]
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
+  const meta = getTransactionTypeMeta(t)[type]
   const Icon = meta.icon
   const numericAmount = Math.round((Number(amount) || 0) * 100) / 100
   const taxAmount = taxInclusive
@@ -1215,8 +1287,8 @@ function AccountTransactionDialog({
     customerAccountBalance + (type === "receipt" ? numericAmount : -numericAmount)
   const subtitle =
     type === "receipt"
-      ? "تسجيل مبلغ حقيقي تم استلامه من العميل، يضاف إلى رصيده"
-      : "تسجيل مبلغ يُمنح للعميل كسلفة/رصيد آجل، يخصم من رصيده"
+      ? t("statement.dialog.receiptSubtitle")
+      : t("statement.dialog.paymentSubtitle")
 
   return (
     <AppDialog
@@ -1224,7 +1296,10 @@ function AccountTransactionDialog({
       onOpenChange={(next) => {
         if (!next && !isSaving) onCancel()
       }}
-      contentClassName="w-[92vw] max-w-[34rem] rounded-[16px] p-5 [direction:rtl]"
+      contentClassName={cn(
+        "w-[92vw] max-w-[34rem] rounded-[16px] p-5",
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+      )}
       title={
         <div className="flex items-center gap-2.5">
           <span
@@ -1245,7 +1320,9 @@ function AccountTransactionDialog({
             disabled={isSaving}
             onClick={onSubmit}
           >
-            {isSaving ? "جارٍ الحفظ..." : `حفظ ${meta.label}`}
+            {isSaving
+              ? t("statement.dialog.saving")
+              : t("statement.dialog.save", { label: meta.label })}
           </AppButton>
           <AppButton
             variant="outline"
@@ -1253,7 +1330,7 @@ function AccountTransactionDialog({
             disabled={isSaving}
             onClick={onCancel}
           >
-            إلغاء
+            {t("statement.dialog.cancel")}
           </AppButton>
         </>
       }
@@ -1261,23 +1338,27 @@ function AccountTransactionDialog({
       <div className="flex flex-col gap-3 pt-1">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>التاريخ</label>
+            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+              {t("statement.dialog.dateLabel")}
+            </label>
             <AppDateField value={transactionDate} onChange={onTransactionDateChange} />
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              رقم السند
+              {t("statement.dialog.voucherNumberLabel")}
             </label>
             <input
               disabled
-              value="سيُنشأ تلقائياً بعد الحفظ"
+              value={t("statement.dialog.voucherNumberPlaceholder")}
               className={cn(FIELD_CLASS, "h-11 w-full px-3 text-[11px] text-[#8098b4]")}
             />
           </div>
         </div>
 
         <div>
-          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>العميل</label>
+          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+            {t("statement.dialog.customerLabel")}
+          </label>
           <input
             disabled
             value={customerName}
@@ -1288,7 +1369,7 @@ function AccountTransactionDialog({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              طريقة الدفع <span className="text-[#dc2626]">*</span>
+              {t("statement.dialog.paymentMethodLabel")} <span className="text-[#dc2626]">*</span>
             </label>
             <AppSearchableSelect
               value={paymentMethodCode}
@@ -1298,19 +1379,19 @@ function AccountTransactionDialog({
                 label: method.name,
                 icon: PAYMENT_METHOD_KIND_ICON[method.kind],
               }))}
-              placeholder="اختر طريقة الدفع"
-              ariaLabel="طريقة الدفع"
+              placeholder={t("statement.dialog.paymentMethodPlaceholder")}
+              ariaLabel={t("statement.dialog.paymentMethodAriaLabel")}
               triggerClassName="h-11"
             />
             {eligibleMethods.length === 0 ? (
               <p className="mt-1 text-[10.5px] text-[#c2410c]">
-                لا توجد طريقة دفع مناسبة مفعّلة. فعّل واحدة من إعدادات نقطة البيع أولاً.
+                {t("statement.dialog.noEligibleMethod")}
               </p>
             ) : null}
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              المبلغ <span className="text-[#dc2626]">*</span>
+              {t("statement.dialog.amountLabel")} <span className="text-[#dc2626]">*</span>
             </label>
             <input
               type="number"
@@ -1333,10 +1414,12 @@ function AccountTransactionDialog({
               onChange={(event) => onTaxInclusiveChange(event.target.checked)}
               className="size-4 rounded border-[#e8edf3]"
             />
-            <span className={HEADING}>يشمل الضريبة؟</span>
+            <span className={HEADING}>{t("statement.dialog.taxInclusiveLabel")}</span>
           </label>
           <div>
-            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>الضريبة</label>
+            <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+              {t("statement.dialog.taxLabel")}
+            </label>
             <input
               disabled
               dir="ltr"
@@ -1348,7 +1431,7 @@ function AccountTransactionDialog({
 
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            ملاحظات (اختياري)
+            {t("statement.dialog.notesLabel")}
           </label>
           <textarea
             value={notes}
@@ -1363,14 +1446,16 @@ function AccountTransactionDialog({
         </div>
 
         <div>
-          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>المرفقات</label>
+          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+            {t("statement.dialog.attachmentsLabel")}
+          </label>
           <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border border-dashed border-[#c7d3e3] bg-[#fafbfd] px-4 py-5 text-center hover:border-[#93a6c9]">
             <Paperclip className="size-5 text-[#2563eb]" />
             <span className={cn("text-[12px] font-semibold", HEADING)}>
-              اسحب الملفات هنا أو اضغط للاختيار
+              {t("statement.dialog.attachmentsDropLabel")}
             </span>
             <span className={cn("text-[10.5px]", MUTED)}>
-              يدعم PDF, JPG, PNG (الحد الأقصى 5 ميجابايت)
+              {t("statement.dialog.attachmentsHint")}
             </span>
             <input
               type="file"
@@ -1394,7 +1479,9 @@ function AccountTransactionDialog({
                   <AppButton
                     variant="ghost"
                     onClick={() => onRemoveAttachment(index)}
-                    aria-label={`إزالة ${file.name}`}
+                    aria-label={t("statement.dialog.removeAttachmentAriaLabel", {
+                      name: file.name,
+                    })}
                     className="size-5 shrink-0 rounded-full p-0 text-[#8098b4] hover:bg-[#fef2f2] hover:text-[#dc2626]"
                   >
                     <X className="size-3.5" />
@@ -1406,31 +1493,37 @@ function AccountTransactionDialog({
         </div>
 
         <div className="rounded-[12px] border border-[#e8edf3] bg-[#f8fafc] p-3.5">
-          <p className={cn("mb-2 text-[12px] font-bold", HEADING)}>ملخص العملية</p>
+          <p className={cn("mb-2 text-[12px] font-bold", HEADING)}>
+            {t("statement.dialog.summaryTitle")}
+          </p>
           <div className="flex flex-col gap-1.5 text-[12px]">
             <div className="flex items-center justify-between">
-              <span className={MUTED}>المبلغ</span>
-              <span className={cn("font-semibold", HEADING)}>{formatAmount(numericAmount)}</span>
+              <span className={MUTED}>{t("statement.dialog.summaryAmount")}</span>
+              <span className={cn("font-semibold", HEADING)}>
+                {formatAmount(numericAmount, locale)}
+              </span>
             </div>
             {taxInclusive ? (
               <div className="flex items-center justify-between">
-                <span className={MUTED}>منها ضريبة القيمة المضافة</span>
-                <span className={cn("font-semibold", HEADING)}>{formatAmount(taxAmount)}</span>
+                <span className={MUTED}>{t("statement.dialog.summaryVat")}</span>
+                <span className={cn("font-semibold", HEADING)}>
+                  {formatAmount(taxAmount, locale)}
+                </span>
               </div>
             ) : null}
             <div className="mt-1 flex items-center justify-between border-t border-[#e8edf3] pt-1.5">
-              <span className={MUTED}>رصيد العميل الحالي</span>
+              <span className={MUTED}>{t("statement.dialog.summaryCurrentBalance")}</span>
               <span className={cn("font-semibold", HEADING)}>
-                {formatAmount(customerAccountBalance)}
+                {formatAmount(customerAccountBalance, locale)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={MUTED}>رصيد العميل بعد العملية</span>
+              <span className={MUTED}>{t("statement.dialog.summaryBalanceAfter")}</span>
               <span
                 className="font-bold"
                 style={{ color: balanceAfter >= 0 ? "#16a34a" : "#dc2626" }}
               >
-                {formatAmount(balanceAfter)}
+                {formatAmount(balanceAfter, locale)}
               </span>
             </div>
           </div>

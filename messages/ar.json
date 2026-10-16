@@ -2092,5 +2092,290 @@
       "noDetailsForOrder": "لا تتوفر تفاصيل منتجات لهذا الطلب.",
       "pricesUnavailable": "لم تتوفر تفاصيل الأسعار لهذا الطلب."
     }
+  },
+  "customers": {
+    "heading": "العملاء",
+    "subheading": "سجلات العملاء الفعلية من متاجرك المتصلة",
+    "export": "تصدير",
+    "import": "استيراد",
+    "addCustomer": "إضافة عميل",
+    "loadError": "تعذر تحميل العملاء من متاجرك المتصلة. حاول مرة أخرى.",
+    "searchLabel": "البحث",
+    "searchAriaLabel": "البحث عن العملاء",
+    "searchPlaceholder": "البحث بالاسم أو البريد الإلكتروني أو رقم الجوال...",
+    "statusLabel": "الحالة",
+    "segmentLabel": "الشريحة",
+    "platformLabel": "المنصة",
+    "allStatuses": "جميع الحالات",
+    "allSegments": "جميع الشرائح",
+    "allPlatforms": "جميع المنصات",
+    "clearFilters": "مسح الفلاتر",
+    "loadingCustomers": "جارٍ تحميل العملاء من متاجرك المتصلة...",
+    "status": {
+      "new": "جديد",
+      "active": "نشط",
+      "at_risk": "معرض للخطر",
+      "churned": "منقطع",
+      "inactive": "غير نشط"
+    },
+    "segment": {
+      "vip": "VIP",
+      "loyal": "دائم",
+      "oneTime": "لمرة واحدة",
+      "new": "جديد"
+    },
+    "platform": {
+      "salla": "سلة",
+      "shopify": "Shopify",
+      "zid": "زد",
+      "madar": "مدار"
+    },
+    "summary": {
+      "totalTitle": "إجمالي العملاء",
+      "totalInsight": "في جميع المتاجر المتصلة",
+      "activeTitle": "العملاء النشطون",
+      "activeInsightWithBase": "من قاعدة {total} عميل ({percent}٪)",
+      "activeInsightEmpty": "لا يوجد عملاء بعد",
+      "atRiskTitle": "العملاء المعرضون للمخاطر",
+      "atRiskInsight": "لم يتم الشراء منذ 90 – 180 يوم",
+      "newTitle": "عملاء جدد",
+      "newInsight": "انضموا خلال آخر 30 يوم"
+    },
+    "table": {
+      "columns": {
+        "customer": "العميل",
+        "contact": "التواصل",
+        "status": "الحالة",
+        "segment": "الشريحة",
+        "platform": "المنصة",
+        "ltv": "قيمة العميل (LTV)",
+        "walletBalance": "رصيد المحفظة",
+        "orderCount": "عدد الطلبات",
+        "lastPurchase": "آخر عملية شراء"
+      },
+      "statement": "كشف الحساب",
+      "editAriaLabel": "تعديل {name}",
+      "deleteAriaLabel": "حذف {name}"
+    },
+    "emptyNoSync": {
+      "message": "لا يوجد عملاء متزامنون بعد",
+      "hint": "اربط متجراً إلكترونياً ونفّذ مزامنة لعرض العملاء هنا"
+    },
+    "emptyNoMatch": {
+      "message": "لا يوجد عملاء مطابقون للفلاتر",
+      "hint": "جرّب تعديل البحث أو الفلاتر"
+    },
+    "pagination": {
+      "showingRange": "{from}–{to} من {total} عميل",
+      "previous": "الصفحة السابقة",
+      "next": "الصفحة التالية"
+    },
+    "deleteDialog": {
+      "title": "حذف العميل",
+      "description": "هل أنت متأكد من حذف \"{name}\"؟ لا يمكن التراجع عن هذا الإجراء.",
+      "confirmLabel": "حذف",
+      "confirmingLabel": "جارٍ الحذف...",
+      "cancelLabel": "إلغاء"
+    },
+    "toasts": {
+      "deleted": "تم حذف {name}.",
+      "deleteBlockedBalance": "لا يمكن حذف هذا العميل لوجود رصيد غير صفري في حسابه ({amount}). يجب تسوية الرصيد إلى صفر أولاً عبر سند قبض أو سند صرف.",
+      "deleteFailed": "تعذر حذف العميل.",
+      "nameRequired": "أدخل اسم العميل.",
+      "created": "تم إضافة العميل.",
+      "createFailed": "تعذر إضافة العميل.",
+      "updated": "تم حفظ التعديلات.",
+      "updateFailed": "تعذر حفظ التعديلات.",
+      "importFileRequired": "اختر ملف CSV يحتوي على عملاء أولاً.",
+      "imported": "تم إضافة {count} عميل.",
+      "importFailed": "تعذر استيراد الملف."
+    },
+    "businessInfo": {
+      "toggleTitle": "عميل تجاري (B2B)",
+      "toggleHint": "فعّل هذا الخيار لإضافة السجل التجاري والرقم الضريبي والعنوان الوطني",
+      "commercialRegistration": "السجل التجاري",
+      "vatNumber": "الرقم الضريبي",
+      "buildingNumber": "رقم المبنى",
+      "secondaryNumber": "الرقم الإضافي",
+      "postalCode": "الرمز البريدي",
+      "street": "اسم الشارع",
+      "city": "المدينة",
+      "cityPlaceholder": "الرياض",
+      "district": "الحي",
+      "districtPlaceholder": "العليا",
+      "countryCode": "رمز البلد"
+    },
+    "addDialog": {
+      "title": "إضافة عميل",
+      "description": "عميل حقيقي يُضاف مباشرة إلى منصة مدار",
+      "fullName": "الاسم الكامل",
+      "fullNamePlaceholder": "أدخل اسم العميل",
+      "phone": "رقم الجوال",
+      "email": "البريد الإلكتروني",
+      "address": "العنوان",
+      "addressPlaceholder": "مثال: الرياض",
+      "notes": "ملاحظات (اختياري)",
+      "save": "حفظ العميل",
+      "saving": "جارٍ الحفظ...",
+      "cancel": "إلغاء"
+    },
+    "editDialog": {
+      "title": "تعديل بيانات العميل",
+      "save": "حفظ التعديلات",
+      "saving": "جارٍ الحفظ...",
+      "cancel": "إلغاء"
+    },
+    "importDialog": {
+      "title": "استيراد عملاء",
+      "description": "ارفع ملف CSV بالأعمدة name وphone وemail وregion لإضافة عدة عملاء دفعة واحدة",
+      "dropLabel": "اضغط لاختيار ملف CSV",
+      "columnsHint": "الأعمدة: name, phone, email, region",
+      "rowsFound": "تم العثور على {count} صف",
+      "downloadTemplate": "تحميل نموذج CSV",
+      "importing": "جارٍ الاستيراد...",
+      "close": "إغلاق",
+      "resultCreated": "تم إضافة {count} عميل",
+      "resultSkippedSuffix": "، وتخطي {count} صف",
+      "skippedRowLabel": "السطر {row} في الملف: {reason}"
+    },
+    "csv": {
+      "exportFilename": "العملاء.csv",
+      "templateFilename": "نموذج-استيراد-العملاء.csv",
+      "templateExampleName": "أحمد العتيبي",
+      "templateExampleCity": "الرياض",
+      "headerName": "الاسم",
+      "headerEmail": "البريد الإلكتروني",
+      "headerPhone": "رقم الجوال",
+      "headerPlatform": "المنصة",
+      "headerStatus": "الحالة",
+      "headerSegment": "الشريحة",
+      "headerLtv": "قيمة العميل (LTV)",
+      "headerOrderCount": "عدد الطلبات",
+      "headerLastPurchase": "آخر عملية شراء",
+      "headerAccountBalance": "رصيد الحساب"
+    },
+    "statement": {
+      "breadcrumbCurrent": "كشف حساب العميل",
+      "pageTitle": "كشف حساب العميل",
+      "pageSubtitle": "عرض جميع العمليات المالية المتعلقة بحساب العميل",
+      "backAriaLabel": "العودة إلى العملاء",
+      "receiptButton": "سند قبض",
+      "paymentButton": "سند صرف",
+      "registeredDate": "تاريخ التسجيل: {date}",
+      "region": "المنطقة: {region}",
+      "platformLabel": "منصة: {platform}",
+      "loadingCustomer": "جارٍ تحميل بيانات العميل...",
+      "customerNotFound": "تعذر العثور على هذا العميل.",
+      "loadStatementFailed": "تعذر تحميل كشف الحساب. حاول مرة أخرى.",
+      "stats": {
+        "balanceOwedToCustomer": "رصيد العميل (له)",
+        "balanceOwedByCustomer": "رصيد العميل (عليه)",
+        "totalCredits": "إجمالي الوارد",
+        "totalDebits": "إجمالي الصادر",
+        "transactionCount": "عدد العمليات"
+      },
+      "filters": {
+        "periodLabel": "الفترة الزمنية",
+        "typeLabel": "نوع العملية",
+        "allTypes": "جميع العمليات"
+      },
+      "transactionType": {
+        "receipt": {
+          "label": "سند قبض",
+          "verb": "قبض"
+        },
+        "payment": {
+          "label": "سند صرف",
+          "verb": "صرف"
+        },
+        "sale": {
+          "label": "فاتورة بيع",
+          "verb": "بيع"
+        },
+        "return": {
+          "label": "إرجاع فاتورة",
+          "verb": "إرجاع"
+        }
+      },
+      "descriptions": {
+        "unspecifiedMethod": "غير محدد",
+        "receivedVia": "مقبوض عبر {method}",
+        "paidVia": "مصروف عبر {method}",
+        "saleInvoiceWithNumber": "فاتورة بيع {number}",
+        "saleInvoice": "فاتورة بيع",
+        "returnInvoiceWithNumber": "إرجاع فاتورة {number}",
+        "returnInvoice": "إرجاع فاتورة"
+      },
+      "table": {
+        "sectionTitle": "سجل العمليات",
+        "sectionSubtitle": "يعرض جميع سندات القبض والصرف، وعمليات البيع والإرجاع، وأثرها على رصيد العميل",
+        "downloadCsv": "تحميل CSV",
+        "print": "طباعة",
+        "exportPdf": "تصدير PDF",
+        "exportingPdf": "جاري التصدير...",
+        "loadingTransactions": "جارٍ تحميل العمليات...",
+        "emptyTitle": "لا توجد عمليات بعد",
+        "emptyHint": "ستظهر سندات القبض والصرف وعمليات البيع والإرجاع هنا فور حدوثها",
+        "columns": {
+          "index": "#",
+          "reference": "المرجع",
+          "type": "نوع العملية",
+          "description": "الوصف",
+          "amount": "المبلغ",
+          "balanceAfter": "الرصيد بعد العملية",
+          "dateTime": "التاريخ والوقت"
+        },
+        "showingRange": "عرض {from}–{to} من {total} عملية",
+        "previous": "الصفحة السابقة",
+        "next": "الصفحة التالية"
+      },
+      "print": {
+        "title": "كشف حساب العميل",
+        "generatedAt": "تم إنشاؤه في {date}"
+      },
+      "csv": {
+        "filenamePrefix": "كشف-حساب"
+      },
+      "pdf": {
+        "filenamePrefix": "كشف-حساب"
+      },
+      "toasts": {
+        "unsupportedFileType": "نوع الملف غير مدعوم: {name}",
+        "fileTooLarge": "الملف كبير جداً (الحد الأقصى 5 ميجابايت): {name}",
+        "invalidAmount": "أدخل مبلغاً صحيحاً.",
+        "choosePaymentMethod": "اختر طريقة الدفع.",
+        "chooseDate": "اختر تاريخ السند.",
+        "savedWithBalance": "تم حفظ {label}. رصيد العميل الآن {balance}.",
+        "saveFailed": "تعذر حفظ السند."
+      },
+      "dialog": {
+        "receiptSubtitle": "تسجيل مبلغ حقيقي تم استلامه من العميل، يضاف إلى رصيده",
+        "paymentSubtitle": "تسجيل مبلغ يُمنح للعميل كسلفة/رصيد آجل، يخصم من رصيده",
+        "save": "حفظ {label}",
+        "saving": "جارٍ الحفظ...",
+        "cancel": "إلغاء",
+        "dateLabel": "التاريخ",
+        "voucherNumberLabel": "رقم السند",
+        "voucherNumberPlaceholder": "سيُنشأ تلقائياً بعد الحفظ",
+        "customerLabel": "العميل",
+        "paymentMethodLabel": "طريقة الدفع",
+        "paymentMethodPlaceholder": "اختر طريقة الدفع",
+        "paymentMethodAriaLabel": "طريقة الدفع",
+        "noEligibleMethod": "لا توجد طريقة دفع مناسبة مفعّلة. فعّل واحدة من إعدادات نقطة البيع أولاً.",
+        "amountLabel": "المبلغ",
+        "taxInclusiveLabel": "يشمل الضريبة؟",
+        "taxLabel": "الضريبة",
+        "notesLabel": "ملاحظات (اختياري)",
+        "attachmentsLabel": "المرفقات",
+        "attachmentsDropLabel": "اسحب الملفات هنا أو اضغط للاختيار",
+        "attachmentsHint": "يدعم PDF, JPG, PNG (الحد الأقصى 5 ميجابايت)",
+        "removeAttachmentAriaLabel": "إزالة {name}",
+        "summaryTitle": "ملخص العملية",
+        "summaryAmount": "المبلغ",
+        "summaryVat": "منها ضريبة القيمة المضافة",
+        "summaryCurrentBalance": "رصيد العميل الحالي",
+        "summaryBalanceAfter": "رصيد العميل بعد العملية"
+      }
+    }
   }
 }

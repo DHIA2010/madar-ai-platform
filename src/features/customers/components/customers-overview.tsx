@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Activity,
   AlertTriangle,
@@ -46,48 +47,90 @@ import type {
   CustomerStatus,
 } from "../types"
 
+import { type Locale, localeDirection } from "@/i18n/locales"
+
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
 const FIELD_CLASS =
   "h-10 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", { maximumFractionDigits: 0 })
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+type CustomersTranslator = ReturnType<typeof useTranslations<"customers">>
+
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    maximumFractionDigits: 0,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
 }
 
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-})
-function formatDate(value: string | null): string {
-  return value ? DATE_FORMAT.format(new Date(value)) : "—"
+function dateFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+}
+function formatDate(value: string | null, locale: Locale): string {
+  return value ? dateFormatter(locale).format(new Date(value)) : "—"
 }
 
-const STATUS_META: Record<
-  CustomerStatus,
-  { label: string; bg: string; text: string; dot: string }
-> = {
-  new: { label: "جديد", bg: "bg-[#eff6ff]", text: "text-[#2563eb]", dot: "bg-[#2563eb]" },
-  active: { label: "نشط", bg: "bg-[#f0fdf4]", text: "text-[#16a34a]", dot: "bg-[#16a34a]" },
-  at_risk: { label: "معرض للخطر", bg: "bg-[#fff7ed]", text: "text-[#c2410c]", dot: "bg-[#c2410c]" },
-  churned: { label: "منقطع", bg: "bg-[#fef2f2]", text: "text-[#dc2626]", dot: "bg-[#dc2626]" },
-  inactive: { label: "غير نشط", bg: "bg-[#f4f6fa]", text: "text-[#5b6b85]", dot: "bg-[#8098b4]" },
+function getStatusMeta(
+  t: CustomersTranslator
+): Record<CustomerStatus, { label: string; bg: string; text: string; dot: string }> {
+  return {
+    new: {
+      label: t("status.new"),
+      bg: "bg-[#eff6ff]",
+      text: "text-[#2563eb]",
+      dot: "bg-[#2563eb]",
+    },
+    active: {
+      label: t("status.active"),
+      bg: "bg-[#f0fdf4]",
+      text: "text-[#16a34a]",
+      dot: "bg-[#16a34a]",
+    },
+    at_risk: {
+      label: t("status.at_risk"),
+      bg: "bg-[#fff7ed]",
+      text: "text-[#c2410c]",
+      dot: "bg-[#c2410c]",
+    },
+    churned: {
+      label: t("status.churned"),
+      bg: "bg-[#fef2f2]",
+      text: "text-[#dc2626]",
+      dot: "bg-[#dc2626]",
+    },
+    inactive: {
+      label: t("status.inactive"),
+      bg: "bg-[#f4f6fa]",
+      text: "text-[#5b6b85]",
+      dot: "bg-[#8098b4]",
+    },
+  }
 }
 
-const SEGMENT_META: Record<CustomerSegment, { label: string; bg: string; text: string }> = {
-  VIP: { label: "VIP", bg: "bg-[#f5f0ff]", text: "text-[#7c3aed]" },
-  Loyal: { label: "دائم", bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
-  "One Time": { label: "لمرة واحدة", bg: "bg-[#f4f6fa]", text: "text-[#5b6b85]" },
-  New: { label: "جديد", bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+function getSegmentMeta(
+  t: CustomersTranslator
+): Record<CustomerSegment, { label: string; bg: string; text: string }> {
+  return {
+    VIP: { label: t("segment.vip"), bg: "bg-[#f5f0ff]", text: "text-[#7c3aed]" },
+    Loyal: { label: t("segment.loyal"), bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+    "One Time": { label: t("segment.oneTime"), bg: "bg-[#f4f6fa]", text: "text-[#5b6b85]" },
+    New: { label: t("segment.new"), bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+  }
 }
 
-const PLATFORM_LABEL: Record<CustomerPlatform, string> = {
-  Salla: "سلة",
-  Shopify: "Shopify",
-  Zid: "زد",
-  Madar: "مدار",
+function getPlatformLabel(t: CustomersTranslator): Record<CustomerPlatform, string> {
+  return {
+    Salla: t("platform.salla"),
+    Shopify: t("platform.shopify"),
+    Zid: t("platform.zid"),
+    Madar: t("platform.madar"),
+  }
 }
 
 function toCsvCell(value: string): string {
@@ -107,38 +150,45 @@ function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url)
 }
 
-function exportCustomersCsv(records: CustomerRecord[]) {
+function exportCustomersCsv(
+  records: CustomerRecord[],
+  t: CustomersTranslator,
+  locale: Locale,
+  statusMeta: Record<CustomerStatus, { label: string }>,
+  segmentMeta: Record<CustomerSegment, { label: string }>,
+  platformLabel: Record<CustomerPlatform, string>
+) {
   const header = [
-    "الاسم",
-    "البريد الإلكتروني",
-    "رقم الجوال",
-    "المنصة",
-    "الحالة",
-    "الشريحة",
-    "قيمة العميل (LTV)",
-    "عدد الطلبات",
-    "آخر عملية شراء",
-    "رصيد الحساب",
+    t("csv.headerName"),
+    t("csv.headerEmail"),
+    t("csv.headerPhone"),
+    t("csv.headerPlatform"),
+    t("csv.headerStatus"),
+    t("csv.headerSegment"),
+    t("csv.headerLtv"),
+    t("csv.headerOrderCount"),
+    t("csv.headerLastPurchase"),
+    t("csv.headerAccountBalance"),
   ]
   const rows = records.map((record) => [
     record.name,
     record.email,
     record.phone ?? "",
-    PLATFORM_LABEL[record.platform],
-    STATUS_META[record.status].label,
-    SEGMENT_META[record.segment].label,
+    platformLabel[record.platform],
+    statusMeta[record.status].label,
+    segmentMeta[record.segment].label,
     String(record.lifetimeValue),
     String(record.totalOrders),
-    formatDate(record.lastPurchaseAt),
+    formatDate(record.lastPurchaseAt, locale),
     record.accountBalance !== null ? String(record.accountBalance) : "",
   ])
-  downloadCsv("العملاء.csv", [header, ...rows])
+  downloadCsv(t("csv.exportFilename"), [header, ...rows])
 }
 
-function downloadImportTemplateCsv() {
-  downloadCsv("نموذج-استيراد-العملاء.csv", [
+function downloadImportTemplateCsv(t: CustomersTranslator) {
+  downloadCsv(t("csv.templateFilename"), [
     ["name", "phone", "email", "region"],
-    ["أحمد العتيبي", "0501234567", "ahmed@example.com", "الرياض"],
+    [t("csv.templateExampleName"), "0501234567", "ahmed@example.com", t("csv.templateExampleCity")],
   ])
 }
 
@@ -360,7 +410,13 @@ function EmptyState({ message, hint }: { message: string; hint: string }) {
 }
 
 export function CustomersOverview() {
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
   const { records, isLoading, error, refetch } = useCustomers()
+
+  const statusMeta = useMemo(() => getStatusMeta(t), [t])
+  const segmentMeta = useMemo(() => getSegmentMeta(t), [t])
+  const platformLabel = useMemo(() => getPlatformLabel(t), [t])
 
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<CustomerStatus | "all">("all")
@@ -410,9 +466,9 @@ export function CustomersOverview() {
   }> = [
     {
       key: "total",
-      title: "إجمالي العملاء",
+      title: t("summary.totalTitle"),
       value: totalCustomers,
-      insight: "في جميع المتاجر المتصلة",
+      insight: t("summary.totalInsight"),
       icon: Users,
       accent: "#2563eb",
       trend: totalTrend,
@@ -420,28 +476,28 @@ export function CustomersOverview() {
     },
     {
       key: "active",
-      title: "العملاء النشطون",
+      title: t("summary.activeTitle"),
       value: statusCounts.active,
       insight:
         totalCustomers > 0
-          ? `من قاعدة ${totalCustomers} عميل (${activePercent}٪)`
-          : "لا يوجد عملاء بعد",
+          ? t("summary.activeInsightWithBase", { total: totalCustomers, percent: activePercent })
+          : t("summary.activeInsightEmpty"),
       icon: Activity,
       accent: "#16a34a",
     },
     {
       key: "at_risk",
-      title: "العملاء المعرضون للمخاطر",
+      title: t("summary.atRiskTitle"),
       value: statusCounts.at_risk,
-      insight: "لم يتم الشراء منذ 90 – 180 يوم",
+      insight: t("summary.atRiskInsight"),
       icon: AlertTriangle,
       accent: "#c2410c",
     },
     {
       key: "new",
-      title: "عملاء جدد",
+      title: t("summary.newTitle"),
       value: statusCounts.new,
-      insight: "انضموا خلال آخر 30 يوم",
+      insight: t("summary.newInsight"),
       icon: Sparkles,
       accent: "#2563eb",
       trend: newTrend,
@@ -493,7 +549,7 @@ export function CustomersOverview() {
     setIsDeleting(true)
     try {
       await customerListService.deleteCustomer(deletingCustomer.id)
-      toast.success(`تم حذف ${deletingCustomer.name}.`)
+      toast.success(t("toasts.deleted", { name: deletingCustomer.name }))
       setDeletingCustomer(null)
       void refetch()
     } catch (error) {
@@ -504,12 +560,12 @@ export function CustomersOverview() {
           : undefined
       if (code === "CUSTOMER_HAS_NONZERO_BALANCE" && typeof details?.accountBalance === "number") {
         toast.error(
-          `لا يمكن حذف هذا العميل لوجود رصيد غير صفري في حسابه (${formatAmount(
-            details.accountBalance
-          )}). يجب تسوية الرصيد إلى صفر أولاً عبر سند قبض أو سند صرف.`
+          t("toasts.deleteBlockedBalance", {
+            amount: formatAmount(details.accountBalance, locale),
+          })
         )
       } else {
-        toast.error("تعذر حذف العميل.")
+        toast.error(t("toasts.deleteFailed"))
       }
     } finally {
       setIsDeleting(false)
@@ -517,15 +573,15 @@ export function CustomersOverview() {
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-6 p-6">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#eff6ff] text-[#2563eb]">
             <Users className="size-5" />
           </span>
           <div>
-            <h1 className={cn("text-[20px] font-extrabold", HEADING)}>العملاء</h1>
-            <p className={cn("text-[12.5px]", MUTED)}>سجلات العملاء الفعلية من متاجرك المتصلة</p>
+            <h1 className={cn("text-[20px] font-extrabold", HEADING)}>{t("heading")}</h1>
+            <p className={cn("text-[12.5px]", MUTED)}>{t("subheading")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -534,9 +590,11 @@ export function CustomersOverview() {
             icon={<Download className="size-4" />}
             className="h-10 gap-1.5 rounded-[10px] border-[#e8edf3] px-3.5 text-[12.5px] font-semibold text-[#5b6b85]"
             disabled={filteredRecords.length === 0}
-            onClick={() => exportCustomersCsv(filteredRecords)}
+            onClick={() =>
+              exportCustomersCsv(filteredRecords, t, locale, statusMeta, segmentMeta, platformLabel)
+            }
           >
-            تصدير
+            {t("export")}
           </AppButton>
           <AppButton
             variant="outline"
@@ -544,7 +602,7 @@ export function CustomersOverview() {
             className="h-10 gap-1.5 rounded-[10px] border-[#e8edf3] px-3.5 text-[12.5px] font-semibold text-[#5b6b85]"
             onClick={() => setIsImportOpen(true)}
           >
-            استيراد
+            {t("import")}
           </AppButton>
           <Can permission="customers:create">
             <AppButton
@@ -552,7 +610,7 @@ export function CustomersOverview() {
               className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
               onClick={() => setIsAddOpen(true)}
             >
-              إضافة عميل
+              {t("addCustomer")}
             </AppButton>
           </Can>
         </div>
@@ -609,12 +667,12 @@ export function CustomersOverview() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-1 flex-wrap items-end gap-3">
             <div className="grid min-w-[240px] flex-1 gap-1">
-              <span className={cn("text-[11px] font-semibold", HEADING)}>البحث</span>
+              <span className={cn("text-[11px] font-semibold", HEADING)}>{t("searchLabel")}</span>
               <div className="relative">
                 <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
                 <AppInput
-                  aria-label="البحث عن العملاء"
-                  placeholder="البحث بالاسم أو البريد الإلكتروني أو رقم الجوال..."
+                  aria-label={t("searchAriaLabel")}
+                  placeholder={t("searchPlaceholder")}
                   value={search}
                   onChange={(event) => {
                     setSearch(event.target.value)
@@ -626,47 +684,47 @@ export function CustomersOverview() {
             </div>
 
             <FilterSelect
-              label="الحالة"
+              label={t("statusLabel")}
               value={status}
               onChange={(value) => {
                 setStatus(value)
                 setPage(1)
               }}
               options={[
-                { value: "all", label: "جميع الحالات" },
-                ...(Object.keys(STATUS_META) as CustomerStatus[]).map((key) => ({
+                { value: "all", label: t("allStatuses") },
+                ...(Object.keys(statusMeta) as CustomerStatus[]).map((key) => ({
                   value: key,
-                  label: STATUS_META[key].label,
+                  label: statusMeta[key].label,
                 })),
               ]}
             />
             <FilterSelect
-              label="الشريحة"
+              label={t("segmentLabel")}
               value={segment}
               onChange={(value) => {
                 setSegment(value)
                 setPage(1)
               }}
               options={[
-                { value: "all", label: "جميع الشرائح" },
-                ...(Object.keys(SEGMENT_META) as CustomerSegment[]).map((key) => ({
+                { value: "all", label: t("allSegments") },
+                ...(Object.keys(segmentMeta) as CustomerSegment[]).map((key) => ({
                   value: key,
-                  label: SEGMENT_META[key].label,
+                  label: segmentMeta[key].label,
                 })),
               ]}
             />
             <FilterSelect
-              label="المنصة"
+              label={t("platformLabel")}
               value={platform}
               onChange={(value) => {
                 setPlatform(value)
                 setPage(1)
               }}
               options={[
-                { value: "all", label: "جميع المنصات" },
-                ...(Object.keys(PLATFORM_LABEL) as CustomerPlatform[]).map((key) => ({
+                { value: "all", label: t("allPlatforms") },
+                ...(Object.keys(platformLabel) as CustomerPlatform[]).map((key) => ({
                   value: key,
-                  label: PLATFORM_LABEL[key],
+                  label: platformLabel[key],
                 })),
               ]}
             />
@@ -679,7 +737,7 @@ export function CustomersOverview() {
               className="h-10 shrink-0 gap-1.5 rounded-[10px] border-[#e8edf3] px-3 text-[12.5px] font-semibold text-[#5b6b85]"
               onClick={resetFilters}
             >
-              مسح الفلاتر
+              {t("clearFilters")}
             </AppButton>
           ) : null}
         </div>
@@ -689,7 +747,7 @@ export function CustomersOverview() {
         {isLoading ? (
           <div className={cn("flex items-center justify-center gap-2 py-16 text-[13px]", MUTED)}>
             <Loader2 className="size-4 animate-spin" />
-            جارٍ تحميل العملاء من متاجرك المتصلة...
+            {t("loadingCustomers")}
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-center text-[13px] text-[#dc2626]">{error}</div>
@@ -699,15 +757,15 @@ export function CustomersOverview() {
               <table className="w-full min-w-[900px] text-right">
                 <thead>
                   <tr className="border-b border-[#e8edf3] text-[11.5px] font-semibold text-[#8098b4]">
-                    <th className="px-4 py-3">العميل</th>
-                    <th className="px-4 py-3 text-center">التواصل</th>
-                    <th className="px-4 py-3">الحالة</th>
-                    <th className="px-4 py-3">الشريحة</th>
-                    <th className="px-4 py-3">المنصة</th>
-                    <th className="px-4 py-3">قيمة العميل (LTV)</th>
-                    <th className="px-4 py-3">رصيد المحفظة</th>
-                    <th className="px-4 py-3">عدد الطلبات</th>
-                    <th className="px-4 py-3">آخر عملية شراء</th>
+                    <th className="px-4 py-3">{t("table.columns.customer")}</th>
+                    <th className="px-4 py-3 text-center">{t("table.columns.contact")}</th>
+                    <th className="px-4 py-3">{t("table.columns.status")}</th>
+                    <th className="px-4 py-3">{t("table.columns.segment")}</th>
+                    <th className="px-4 py-3">{t("table.columns.platform")}</th>
+                    <th className="px-4 py-3">{t("table.columns.ltv")}</th>
+                    <th className="px-4 py-3">{t("table.columns.walletBalance")}</th>
+                    <th className="px-4 py-3">{t("table.columns.orderCount")}</th>
+                    <th className="px-4 py-3">{t("table.columns.lastPurchase")}</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -724,15 +782,9 @@ export function CustomersOverview() {
               </table>
               {paginatedRecords.length === 0 ? (
                 records.length === 0 ? (
-                  <EmptyState
-                    message="لا يوجد عملاء متزامنون بعد"
-                    hint="اربط متجراً إلكترونياً ونفّذ مزامنة لعرض العملاء هنا"
-                  />
+                  <EmptyState message={t("emptyNoSync.message")} hint={t("emptyNoSync.hint")} />
                 ) : (
-                  <EmptyState
-                    message="لا يوجد عملاء مطابقون للفلاتر"
-                    hint="جرّب تعديل البحث أو الفلاتر"
-                  />
+                  <EmptyState message={t("emptyNoMatch.message")} hint={t("emptyNoMatch.hint")} />
                 )
               ) : null}
             </div>
@@ -740,8 +792,11 @@ export function CustomersOverview() {
             {filteredRecords.length > 0 ? (
               <div className="flex items-center justify-between border-t border-[#e8edf3] px-4 py-3">
                 <p className={cn("text-[11.5px]", MUTED)}>
-                  {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredRecords.length)} من{" "}
-                  {filteredRecords.length} عميل
+                  {t("pagination.showingRange", {
+                    from: pageStart + 1,
+                    to: Math.min(pageStart + PAGE_SIZE, filteredRecords.length),
+                    total: filteredRecords.length,
+                  })}
                 </p>
                 <div className="flex items-center gap-2">
                   <AppButton
@@ -749,9 +804,9 @@ export function CustomersOverview() {
                     className="size-8 rounded-[8px] border-[#e8edf3] p-0"
                     disabled={currentPage === 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    aria-label="الصفحة السابقة"
+                    aria-label={t("pagination.previous")}
                   >
-                    <ChevronRight className="size-4" />
+                    <ChevronLeft className="size-4 rtl:rotate-180" />
                   </AppButton>
                   <span className={cn("text-[11.5px]", MUTED)}>
                     {currentPage} / {totalPages}
@@ -761,9 +816,9 @@ export function CustomersOverview() {
                     className="size-8 rounded-[8px] border-[#e8edf3] p-0"
                     disabled={currentPage === totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    aria-label="الصفحة التالية"
+                    aria-label={t("pagination.next")}
                   >
-                    <ChevronLeft className="size-4" />
+                    <ChevronRight className="size-4 rtl:rotate-180" />
                   </AppButton>
                 </div>
               </div>
@@ -806,16 +861,24 @@ export function CustomersOverview() {
           onOpenChange={(open) => {
             if (!open && !isDeleting) setDeletingCustomer(null)
           }}
-          contentClassName="w-[92vw] max-w-[26rem] rounded-[16px] p-5 [direction:rtl]"
-          title={<span className={cn("text-[15px] font-extrabold", HEADING)}>حذف العميل</span>}
-          description={
-            <span className={cn("text-[12.5px]", MUTED)}>
-              هل أنت متأكد من حذف &quot;{deletingCustomer.name}&quot;؟ لا يمكن التراجع عن هذا
-              الإجراء.
+          contentClassName={cn(
+            "w-[92vw] max-w-[26rem] rounded-[16px] p-5",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+          title={
+            <span className={cn("text-[15px] font-extrabold", HEADING)}>
+              {t("deleteDialog.title")}
             </span>
           }
-          confirmLabel={isDeleting ? "جارٍ الحذف..." : "حذف"}
-          cancelLabel="إلغاء"
+          description={
+            <span className={cn("text-[12.5px]", MUTED)}>
+              {t("deleteDialog.description", { name: deletingCustomer.name })}
+            </span>
+          }
+          confirmLabel={
+            isDeleting ? t("deleteDialog.confirmingLabel") : t("deleteDialog.confirmLabel")
+          }
+          cancelLabel={t("deleteDialog.cancelLabel")}
           confirmTone="destructive"
           loading={isDeleting}
           onConfirm={() => void confirmDelete()}
@@ -836,8 +899,10 @@ function CustomerRow({
   onDelete: (record: CustomerRecord) => void
 }) {
   const router = useRouter()
-  const statusMeta = STATUS_META[record.status]
-  const segmentMeta = SEGMENT_META[record.segment]
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
+  const statusMeta = getStatusMeta(t)[record.status]
+  const segmentMeta = getSegmentMeta(t)[record.segment]
   // Only a native ("Madar") customer has a real wallet statement to show -- a synced storefront
   // customer has no account of their own here, so their row has nothing further to open; every
   // real data point they have (LTV, orders, status, segment) is already on the row itself.
@@ -895,9 +960,9 @@ function CustomerRow({
           {segmentMeta.label}
         </span>
       </td>
-      <td className={cn("px-4 py-3 text-[12px]", MUTED)}>{PLATFORM_LABEL[record.platform]}</td>
+      <td className={cn("px-4 py-3 text-[12px]", MUTED)}>{getPlatformLabel(t)[record.platform]}</td>
       <td className={cn("px-4 py-3 text-[12.5px] font-bold", HEADING)}>
-        {formatAmount(record.lifetimeValue)}
+        {formatAmount(record.lifetimeValue, locale)}
       </td>
       <td
         className={cn(
@@ -909,7 +974,7 @@ function CustomerRow({
               : "text-[#dc2626]"
         )}
       >
-        {record.accountBalance !== null ? formatAmount(record.accountBalance) : "—"}
+        {record.accountBalance !== null ? formatAmount(record.accountBalance, locale) : "—"}
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
@@ -917,7 +982,9 @@ function CustomerRow({
           <span className={cn("text-[12.5px]", HEADING)}>{record.totalOrders}</span>
         </div>
       </td>
-      <td className={cn("px-4 py-3 text-[12px]", MUTED)}>{formatDate(record.lastPurchaseAt)}</td>
+      <td className={cn("px-4 py-3 text-[12px]", MUTED)}>
+        {formatDate(record.lastPurchaseAt, locale)}
+      </td>
       <td className="px-4 py-3">
         {isNative ? (
           <div className="flex items-center gap-1.5">
@@ -930,12 +997,12 @@ function CustomerRow({
                 router.push(ROUTES.customerStatement(record.id))
               }}
             >
-              كشف الحساب
+              {t("table.statement")}
             </AppButton>
             <Can permission="customers:edit">
               <AppButton
                 variant="outline"
-                aria-label={`تعديل ${record.name}`}
+                aria-label={t("table.editAriaLabel", { name: record.name })}
                 className="size-8 shrink-0 rounded-[8px] border-[#e8edf3] p-0 text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#2563eb]"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -948,7 +1015,7 @@ function CustomerRow({
             <Can permission="customers:delete">
               <AppButton
                 variant="outline"
-                aria-label={`حذف ${record.name}`}
+                aria-label={t("table.deleteAriaLabel", { name: record.name })}
                 className="size-8 shrink-0 rounded-[8px] border-[#e8edf3] p-0 text-[#5b6b85] hover:border-[#fecaca] hover:text-[#dc2626]"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -1032,6 +1099,7 @@ function BusinessInfoFields({
   value: BusinessInfoDraft
   onChange: (next: BusinessInfoDraft) => void
 }) {
+  const t = useTranslations("customers")
   const setField = (field: keyof BusinessInfoDraft) => (event: { target: { value: string } }) =>
     onChange({ ...value, [field]: event.target.value })
 
@@ -1049,10 +1117,10 @@ function BusinessInfoFields({
         )}
       >
         <span className="flex flex-col gap-0.5">
-          <span className={cn("text-[13px] font-bold", HEADING)}>عميل تجاري (B2B)</span>
-          <span className={cn("text-[11px]", MUTED)}>
-            فعّل هذا الخيار لإضافة السجل التجاري والرقم الضريبي والعنوان الوطني
+          <span className={cn("text-[13px] font-bold", HEADING)}>
+            {t("businessInfo.toggleTitle")}
           </span>
+          <span className={cn("text-[11px]", MUTED)}>{t("businessInfo.toggleHint")}</span>
         </span>
         <AppCheckbox
           className="size-5"
@@ -1068,7 +1136,7 @@ function BusinessInfoFields({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                السجل التجاري
+                {t("businessInfo.commercialRegistration")}
               </label>
               <AppInput
                 value={value.commercialRegistration}
@@ -1079,7 +1147,7 @@ function BusinessInfoFields({
             </div>
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الرقم الضريبي
+                {t("businessInfo.vatNumber")}
               </label>
               <AppInput
                 value={value.vatNumber}
@@ -1093,7 +1161,7 @@ function BusinessInfoFields({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                رقم المبنى
+                {t("businessInfo.buildingNumber")}
               </label>
               <AppInput
                 value={value.buildingNumber}
@@ -1104,7 +1172,7 @@ function BusinessInfoFields({
             </div>
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الرقم الإضافي
+                {t("businessInfo.secondaryNumber")}
               </label>
               <AppInput
                 value={value.secondaryNumber}
@@ -1115,7 +1183,7 @@ function BusinessInfoFields({
             </div>
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الرمز البريدي
+                {t("businessInfo.postalCode")}
               </label>
               <AppInput
                 value={value.postalCode}
@@ -1129,7 +1197,7 @@ function BusinessInfoFields({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                اسم الشارع
+                {t("businessInfo.street")}
               </label>
               <AppInput
                 value={value.street}
@@ -1139,21 +1207,23 @@ function BusinessInfoFields({
             </div>
             <div>
               <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                المدينة
+                {t("businessInfo.city")}
               </label>
               <AppInput
                 value={value.city}
                 onChange={setField("city")}
-                placeholder="الرياض"
+                placeholder={t("businessInfo.cityPlaceholder")}
                 className={cn(FIELD_CLASS, "h-11 w-full")}
               />
             </div>
             <div>
-              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>الحي</label>
+              <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                {t("businessInfo.district")}
+              </label>
               <AppInput
                 value={value.district}
                 onChange={setField("district")}
-                placeholder="العليا"
+                placeholder={t("businessInfo.districtPlaceholder")}
                 className={cn(FIELD_CLASS, "h-11 w-full")}
               />
             </div>
@@ -1161,7 +1231,7 @@ function BusinessInfoFields({
 
           <div className="w-1/3 pe-1.5">
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              رمز البلد
+              {t("businessInfo.countryCode")}
             </label>
             <AppInput
               value={value.countryCode}
@@ -1185,6 +1255,8 @@ function AddCustomerDialog({
   onOpenChange: (open: boolean) => void
   onCreated: () => void
 }) {
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
@@ -1204,7 +1276,7 @@ function AddCustomerDialog({
 
   const submit = async () => {
     if (!name.trim()) {
-      toast.error("أدخل اسم العميل.")
+      toast.error(t("toasts.nameRequired"))
       return
     }
     setIsSaving(true)
@@ -1217,11 +1289,11 @@ function AddCustomerDialog({
         region: region.trim() || null,
         ...trimBusinessInfoInput(businessInfo),
       })
-      toast.success("تم إضافة العميل.")
+      toast.success(t("toasts.created"))
       reset()
       onCreated()
     } catch {
-      toast.error("تعذر إضافة العميل.")
+      toast.error(t("toasts.createFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -1233,11 +1305,14 @@ function AddCustomerDialog({
       onOpenChange={(next) => {
         if (!isSaving) onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[45rem] rounded-[16px] p-5 [direction:rtl]"
-      title={<span className={cn("text-[16px] font-extrabold", HEADING)}>إضافة عميل</span>}
-      description={
-        <span className={cn("text-[12px]", MUTED)}>عميل حقيقي يُضاف مباشرة إلى منصة مدار</span>
+      contentClassName={cn(
+        "w-[92vw] max-w-[45rem] rounded-[16px] p-5",
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+      )}
+      title={
+        <span className={cn("text-[16px] font-extrabold", HEADING)}>{t("addDialog.title")}</span>
       }
+      description={<span className={cn("text-[12px]", MUTED)}>{t("addDialog.description")}</span>}
       footer={
         <>
           <AppButton
@@ -1245,7 +1320,7 @@ function AddCustomerDialog({
             disabled={isSaving}
             onClick={() => void submit()}
           >
-            {isSaving ? "جارٍ الحفظ..." : "حفظ العميل"}
+            {isSaving ? t("addDialog.saving") : t("addDialog.save")}
           </AppButton>
           <AppButton
             variant="outline"
@@ -1253,7 +1328,7 @@ function AddCustomerDialog({
             disabled={isSaving}
             onClick={() => onOpenChange(false)}
           >
-            إلغاء
+            {t("addDialog.cancel")}
           </AppButton>
         </>
       }
@@ -1261,19 +1336,19 @@ function AddCustomerDialog({
       <div className="flex flex-col gap-3 pt-1">
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            الاسم الكامل <span className="text-[#dc2626]">*</span>
+            {t("addDialog.fullName")} <span className="text-[#dc2626]">*</span>
           </label>
           <AppInput
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="أدخل اسم العميل"
+            placeholder={t("addDialog.fullNamePlaceholder")}
             className={cn(FIELD_CLASS, "h-11 w-full")}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              رقم الجوال
+              {t("addDialog.phone")}
             </label>
             <AppInput
               dir="ltr"
@@ -1285,7 +1360,7 @@ function AddCustomerDialog({
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              البريد الإلكتروني
+              {t("addDialog.email")}
             </label>
             <AppInput
               dir="ltr"
@@ -1297,17 +1372,19 @@ function AddCustomerDialog({
           </div>
         </div>
         <div>
-          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>العنوان</label>
+          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+            {t("addDialog.address")}
+          </label>
           <AppInput
             value={region}
             onChange={(event) => setRegion(event.target.value)}
-            placeholder="مثال: الرياض"
+            placeholder={t("addDialog.addressPlaceholder")}
             className={cn(FIELD_CLASS, "h-11 w-full")}
           />
         </div>
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            ملاحظات (اختياري)
+            {t("addDialog.notes")}
           </label>
           <textarea
             value={notes}
@@ -1335,6 +1412,8 @@ function ImportCustomersDialog({
   onOpenChange: (open: boolean) => void
   onImported: () => void
 }) {
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
   const [fileName, setFileName] = useState<string | null>(null)
   const [rows, setRows] = useState<BulkImportRow[]>([])
   const [isImporting, setIsImporting] = useState(false)
@@ -1358,7 +1437,7 @@ function ImportCustomersDialog({
 
   const submit = async () => {
     if (rows.length === 0) {
-      toast.error("اختر ملف CSV يحتوي على عملاء أولاً.")
+      toast.error(t("toasts.importFileRequired"))
       return
     }
     setIsImporting(true)
@@ -1366,11 +1445,11 @@ function ImportCustomersDialog({
       const outcome = await customerListService.bulkImportCustomers(rows)
       setResult(outcome)
       if (outcome.created > 0) {
-        toast.success(`تم إضافة ${outcome.created} عميل.`)
+        toast.success(t("toasts.imported", { count: outcome.created }))
         onImported()
       }
     } catch {
-      toast.error("تعذر استيراد الملف.")
+      toast.error(t("toasts.importFailed"))
     } finally {
       setIsImporting(false)
     }
@@ -1384,12 +1463,15 @@ function ImportCustomersDialog({
         if (!next) reset()
         onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[30rem] rounded-[16px] p-5 [direction:rtl]"
-      title={<span className={cn("text-[16px] font-extrabold", HEADING)}>استيراد عملاء</span>}
+      contentClassName={cn(
+        "w-[92vw] max-w-[30rem] rounded-[16px] p-5",
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+      )}
+      title={
+        <span className={cn("text-[16px] font-extrabold", HEADING)}>{t("importDialog.title")}</span>
+      }
       description={
-        <span className={cn("text-[12px]", MUTED)}>
-          ارفع ملف CSV بالأعمدة name وphone وemail وregion لإضافة عدة عملاء دفعة واحدة
-        </span>
+        <span className={cn("text-[12px]", MUTED)}>{t("importDialog.description")}</span>
       }
       footer={
         <>
@@ -1399,8 +1481,8 @@ function ImportCustomersDialog({
             onClick={() => void submit()}
           >
             {isImporting
-              ? "جارٍ الاستيراد..."
-              : `استيراد ${rows.length > 0 ? `(${rows.length})` : ""}`}
+              ? t("importDialog.importing")
+              : `${t("import")} ${rows.length > 0 ? `(${rows.length})` : ""}`}
           </AppButton>
           <AppButton
             variant="outline"
@@ -1408,7 +1490,7 @@ function ImportCustomersDialog({
             disabled={isImporting}
             onClick={() => onOpenChange(false)}
           >
-            إغلاق
+            {t("importDialog.close")}
           </AppButton>
         </>
       }
@@ -1417,12 +1499,12 @@ function ImportCustomersDialog({
         <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border border-dashed border-[#c7d3e3] bg-[#fafbfd] px-4 py-6 text-center hover:border-[#93a6c9]">
           <Upload className="size-5 text-[#2563eb]" />
           <span className={cn("text-[12px] font-semibold", HEADING)}>
-            {fileName ?? "اضغط لاختيار ملف CSV"}
+            {fileName ?? t("importDialog.dropLabel")}
           </span>
           <span className={cn("text-[10.5px]", MUTED)}>
             {rows.length > 0
-              ? `تم العثور على ${rows.length} صف`
-              : "الأعمدة: name, phone, email, region"}
+              ? t("importDialog.rowsFound", { count: rows.length })
+              : t("importDialog.columnsHint")}
           </span>
           <input
             type="file"
@@ -1438,23 +1520,28 @@ function ImportCustomersDialog({
 
         <button
           type="button"
-          onClick={downloadImportTemplateCsv}
+          onClick={() => downloadImportTemplateCsv(t)}
           className="self-start text-[11.5px] font-semibold text-[#2563eb] hover:underline"
         >
-          تحميل نموذج CSV
+          {t("importDialog.downloadTemplate")}
         </button>
 
         {result ? (
           <div className="rounded-[10px] border border-[#e8edf3] p-3">
             <p className={cn("text-[12.5px] font-bold", HEADING)}>
-              تم إضافة {result.created} عميل
-              {result.skipped.length > 0 ? `، وتخطي ${result.skipped.length} صف` : ""}
+              {t("importDialog.resultCreated", { count: result.created })}
+              {result.skipped.length > 0
+                ? t("importDialog.resultSkippedSuffix", { count: result.skipped.length })
+                : ""}
             </p>
             {result.skipped.length > 0 ? (
               <ul className="mt-1.5 flex flex-col gap-0.5">
                 {result.skipped.map((entry) => (
                   <li key={entry.row} className={cn("text-[11px]", MUTED)}>
-                    السطر {entry.row + 1} في الملف: {entry.reason}
+                    {t("importDialog.skippedRowLabel", {
+                      row: entry.row + 1,
+                      reason: entry.reason,
+                    })}
                   </li>
                 ))}
               </ul>
@@ -1475,6 +1562,8 @@ function EditCustomerDialog({
   onOpenChange: (open: boolean) => void
   onSaved: () => void
 }) {
+  const t = useTranslations("customers")
+  const locale = useLocale() as Locale
   const [name, setName] = useState(customer.name)
   const [phone, setPhone] = useState(customer.phone ?? "")
   const [email, setEmail] = useState(customer.email)
@@ -1486,7 +1575,7 @@ function EditCustomerDialog({
 
   const submit = async () => {
     if (!name.trim()) {
-      toast.error("أدخل اسم العميل.")
+      toast.error(t("toasts.nameRequired"))
       return
     }
     setIsSaving(true)
@@ -1509,10 +1598,10 @@ function EditCustomerDialog({
       }
 
       await customerListService.updateCustomer(customer.id, input)
-      toast.success("تم حفظ التعديلات.")
+      toast.success(t("toasts.updated"))
       onSaved()
     } catch {
-      toast.error("تعذر حفظ التعديلات.")
+      toast.error(t("toasts.updateFailed"))
     } finally {
       setIsSaving(false)
     }
@@ -1524,8 +1613,13 @@ function EditCustomerDialog({
       onOpenChange={(next) => {
         if (!isSaving) onOpenChange(next)
       }}
-      contentClassName="w-[92vw] max-w-[45rem] rounded-[16px] p-5 [direction:rtl]"
-      title={<span className={cn("text-[16px] font-extrabold", HEADING)}>تعديل بيانات العميل</span>}
+      contentClassName={cn(
+        "w-[92vw] max-w-[45rem] rounded-[16px] p-5",
+        locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+      )}
+      title={
+        <span className={cn("text-[16px] font-extrabold", HEADING)}>{t("editDialog.title")}</span>
+      }
       description={<span className={cn("text-[12px]", MUTED)}>{customer.name}</span>}
       footer={
         <>
@@ -1534,7 +1628,7 @@ function EditCustomerDialog({
             disabled={isSaving}
             onClick={() => void submit()}
           >
-            {isSaving ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+            {isSaving ? t("editDialog.saving") : t("editDialog.save")}
           </AppButton>
           <AppButton
             variant="outline"
@@ -1542,7 +1636,7 @@ function EditCustomerDialog({
             disabled={isSaving}
             onClick={() => onOpenChange(false)}
           >
-            إلغاء
+            {t("editDialog.cancel")}
           </AppButton>
         </>
       }
@@ -1550,19 +1644,19 @@ function EditCustomerDialog({
       <div className="flex flex-col gap-3 pt-1">
         <div>
           <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-            الاسم الكامل <span className="text-[#dc2626]">*</span>
+            {t("addDialog.fullName")} <span className="text-[#dc2626]">*</span>
           </label>
           <AppInput
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="أدخل اسم العميل"
+            placeholder={t("addDialog.fullNamePlaceholder")}
             className={cn(FIELD_CLASS, "h-11 w-full")}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              رقم الجوال
+              {t("addDialog.phone")}
             </label>
             <AppInput
               dir="ltr"
@@ -1574,7 +1668,7 @@ function EditCustomerDialog({
           </div>
           <div>
             <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              البريد الإلكتروني
+              {t("addDialog.email")}
             </label>
             <AppInput
               dir="ltr"
@@ -1586,11 +1680,13 @@ function EditCustomerDialog({
           </div>
         </div>
         <div>
-          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>العنوان</label>
+          <label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+            {t("addDialog.address")}
+          </label>
           <AppInput
             value={region}
             onChange={(event) => setRegion(event.target.value)}
-            placeholder="مثال: الرياض"
+            placeholder={t("addDialog.addressPlaceholder")}
             className={cn(FIELD_CLASS, "h-11 w-full")}
           />
         </div>

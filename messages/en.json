@@ -2092,5 +2092,290 @@
       "noDetailsForOrder": "No product details available for this order.",
       "pricesUnavailable": "Pricing details aren't available for this order."
     }
+  },
+  "customers": {
+    "heading": "Customers",
+    "subheading": "Real customer records from your connected stores",
+    "export": "Export",
+    "import": "Import",
+    "addCustomer": "Add customer",
+    "loadError": "Couldn't load customers from your connected stores. Please try again.",
+    "searchLabel": "Search",
+    "searchAriaLabel": "Search customers",
+    "searchPlaceholder": "Search by name, email, or phone number...",
+    "statusLabel": "Status",
+    "segmentLabel": "Segment",
+    "platformLabel": "Platform",
+    "allStatuses": "All statuses",
+    "allSegments": "All segments",
+    "allPlatforms": "All platforms",
+    "clearFilters": "Clear filters",
+    "loadingCustomers": "Loading customers from your connected stores...",
+    "status": {
+      "new": "New",
+      "active": "Active",
+      "at_risk": "At risk",
+      "churned": "Churned",
+      "inactive": "Inactive"
+    },
+    "segment": {
+      "vip": "VIP",
+      "loyal": "Loyal",
+      "oneTime": "One time",
+      "new": "New"
+    },
+    "platform": {
+      "salla": "Salla",
+      "shopify": "Shopify",
+      "zid": "Zid",
+      "madar": "Madar"
+    },
+    "summary": {
+      "totalTitle": "Total customers",
+      "totalInsight": "Across all connected stores",
+      "activeTitle": "Active customers",
+      "activeInsightWithBase": "Out of {total} customers ({percent}%)",
+      "activeInsightEmpty": "No customers yet",
+      "atRiskTitle": "Customers at risk",
+      "atRiskInsight": "No purchase in 90 – 180 days",
+      "newTitle": "New customers",
+      "newInsight": "Joined in the last 30 days"
+    },
+    "table": {
+      "columns": {
+        "customer": "Customer",
+        "contact": "Contact",
+        "status": "Status",
+        "segment": "Segment",
+        "platform": "Platform",
+        "ltv": "Customer value (LTV)",
+        "walletBalance": "Wallet balance",
+        "orderCount": "Order count",
+        "lastPurchase": "Last purchase"
+      },
+      "statement": "Account statement",
+      "editAriaLabel": "Edit {name}",
+      "deleteAriaLabel": "Delete {name}"
+    },
+    "emptyNoSync": {
+      "message": "No customers synced yet",
+      "hint": "Connect an online store and run a sync to see customers here"
+    },
+    "emptyNoMatch": {
+      "message": "No customers match these filters",
+      "hint": "Try adjusting the search or filters"
+    },
+    "pagination": {
+      "showingRange": "{from}–{to} of {total} customers",
+      "previous": "Previous page",
+      "next": "Next page"
+    },
+    "deleteDialog": {
+      "title": "Delete customer",
+      "description": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
+      "confirmLabel": "Delete",
+      "confirmingLabel": "Deleting...",
+      "cancelLabel": "Cancel"
+    },
+    "toasts": {
+      "deleted": "{name} deleted.",
+      "deleteBlockedBalance": "This customer can't be deleted because their account has a non-zero balance ({amount}). Settle the balance to zero first via a receipt or payment voucher.",
+      "deleteFailed": "Couldn't delete the customer.",
+      "nameRequired": "Enter the customer's name.",
+      "created": "Customer added.",
+      "createFailed": "Couldn't add the customer.",
+      "updated": "Changes saved.",
+      "updateFailed": "Couldn't save the changes.",
+      "importFileRequired": "Choose a CSV file with customers first.",
+      "imported": "{count} customers added.",
+      "importFailed": "Couldn't import the file."
+    },
+    "businessInfo": {
+      "toggleTitle": "Business customer (B2B)",
+      "toggleHint": "Enable this to add the commercial registration, VAT number, and national address",
+      "commercialRegistration": "Commercial registration",
+      "vatNumber": "VAT number",
+      "buildingNumber": "Building number",
+      "secondaryNumber": "Secondary number",
+      "postalCode": "Postal code",
+      "street": "Street name",
+      "city": "City",
+      "cityPlaceholder": "Riyadh",
+      "district": "District",
+      "districtPlaceholder": "Al Olaya",
+      "countryCode": "Country code"
+    },
+    "addDialog": {
+      "title": "Add customer",
+      "description": "A real customer added directly to the Madar platform",
+      "fullName": "Full name",
+      "fullNamePlaceholder": "Enter the customer's name",
+      "phone": "Phone number",
+      "email": "Email address",
+      "address": "Address",
+      "addressPlaceholder": "e.g. Riyadh",
+      "notes": "Notes (optional)",
+      "save": "Save customer",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    },
+    "editDialog": {
+      "title": "Edit customer details",
+      "save": "Save changes",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    },
+    "importDialog": {
+      "title": "Import customers",
+      "description": "Upload a CSV with the columns name, phone, email, and region to add several customers at once",
+      "dropLabel": "Click to choose a CSV file",
+      "columnsHint": "Columns: name, phone, email, region",
+      "rowsFound": "Found {count} rows",
+      "downloadTemplate": "Download CSV template",
+      "importing": "Importing...",
+      "close": "Close",
+      "resultCreated": "{count} customers added",
+      "resultSkippedSuffix": ", {count} rows skipped",
+      "skippedRowLabel": "Row {row} in the file: {reason}"
+    },
+    "csv": {
+      "exportFilename": "customers.csv",
+      "templateFilename": "customer-import-template.csv",
+      "templateExampleName": "John Smith",
+      "templateExampleCity": "Riyadh",
+      "headerName": "Name",
+      "headerEmail": "Email",
+      "headerPhone": "Phone",
+      "headerPlatform": "Platform",
+      "headerStatus": "Status",
+      "headerSegment": "Segment",
+      "headerLtv": "Customer value (LTV)",
+      "headerOrderCount": "Order count",
+      "headerLastPurchase": "Last purchase",
+      "headerAccountBalance": "Account balance"
+    },
+    "statement": {
+      "breadcrumbCurrent": "Customer account statement",
+      "pageTitle": "Customer account statement",
+      "pageSubtitle": "View every financial transaction on the customer's account",
+      "backAriaLabel": "Back to customers",
+      "receiptButton": "Receipt",
+      "paymentButton": "Payment",
+      "registeredDate": "Registered: {date}",
+      "region": "Region: {region}",
+      "platformLabel": "Platform: {platform}",
+      "loadingCustomer": "Loading customer data...",
+      "customerNotFound": "Couldn't find this customer.",
+      "loadStatementFailed": "Couldn't load the account statement. Try again.",
+      "stats": {
+        "balanceOwedToCustomer": "Customer balance (owed to)",
+        "balanceOwedByCustomer": "Customer balance (owed by)",
+        "totalCredits": "Total credits",
+        "totalDebits": "Total debits",
+        "transactionCount": "Transaction count"
+      },
+      "filters": {
+        "periodLabel": "Date range",
+        "typeLabel": "Transaction type",
+        "allTypes": "All transactions"
+      },
+      "transactionType": {
+        "receipt": {
+          "label": "Receipt",
+          "verb": "Received"
+        },
+        "payment": {
+          "label": "Payment",
+          "verb": "Paid"
+        },
+        "sale": {
+          "label": "Sale invoice",
+          "verb": "Sale"
+        },
+        "return": {
+          "label": "Invoice return",
+          "verb": "Return"
+        }
+      },
+      "descriptions": {
+        "unspecifiedMethod": "Unspecified",
+        "receivedVia": "Received via {method}",
+        "paidVia": "Paid via {method}",
+        "saleInvoiceWithNumber": "Sale invoice {number}",
+        "saleInvoice": "Sale invoice",
+        "returnInvoiceWithNumber": "Invoice return {number}",
+        "returnInvoice": "Invoice return"
+      },
+      "table": {
+        "sectionTitle": "Transaction history",
+        "sectionSubtitle": "Shows every receipt and payment voucher, and every sale and return, and their effect on the customer's balance",
+        "downloadCsv": "Download CSV",
+        "print": "Print",
+        "exportPdf": "Export PDF",
+        "exportingPdf": "Exporting...",
+        "loadingTransactions": "Loading transactions...",
+        "emptyTitle": "No transactions yet",
+        "emptyHint": "Receipts, payments, sales, and returns will appear here as they happen",
+        "columns": {
+          "index": "#",
+          "reference": "Reference",
+          "type": "Type",
+          "description": "Description",
+          "amount": "Amount",
+          "balanceAfter": "Balance after",
+          "dateTime": "Date & time"
+        },
+        "showingRange": "Showing {from}–{to} of {total} transactions",
+        "previous": "Previous page",
+        "next": "Next page"
+      },
+      "print": {
+        "title": "Customer account statement",
+        "generatedAt": "Generated on {date}"
+      },
+      "csv": {
+        "filenamePrefix": "account-statement"
+      },
+      "pdf": {
+        "filenamePrefix": "account-statement"
+      },
+      "toasts": {
+        "unsupportedFileType": "Unsupported file type: {name}",
+        "fileTooLarge": "File too large (max 5MB): {name}",
+        "invalidAmount": "Enter a valid amount.",
+        "choosePaymentMethod": "Choose a payment method.",
+        "chooseDate": "Choose the voucher date.",
+        "savedWithBalance": "{label} saved. The customer's balance is now {balance}.",
+        "saveFailed": "Couldn't save the voucher."
+      },
+      "dialog": {
+        "receiptSubtitle": "Record a real amount received from the customer, added to their balance",
+        "paymentSubtitle": "Record an amount granted to the customer as an advance/credit, deducted from their balance",
+        "save": "Save {label}",
+        "saving": "Saving...",
+        "cancel": "Cancel",
+        "dateLabel": "Date",
+        "voucherNumberLabel": "Voucher number",
+        "voucherNumberPlaceholder": "Generated automatically after saving",
+        "customerLabel": "Customer",
+        "paymentMethodLabel": "Payment method",
+        "paymentMethodPlaceholder": "Choose a payment method",
+        "paymentMethodAriaLabel": "Payment method",
+        "noEligibleMethod": "No suitable payment method is enabled. Enable one from the point-of-sale settings first.",
+        "amountLabel": "Amount",
+        "taxInclusiveLabel": "Includes tax?",
+        "taxLabel": "Tax",
+        "notesLabel": "Notes (optional)",
+        "attachmentsLabel": "Attachments",
+        "attachmentsDropLabel": "Drag files here or click to choose",
+        "attachmentsHint": "Supports PDF, JPG, PNG (max 5MB)",
+        "removeAttachmentAriaLabel": "Remove {name}",
+        "summaryTitle": "Transaction summary",
+        "summaryAmount": "Amount",
+        "summaryVat": "Of which VAT",
+        "summaryCurrentBalance": "Current customer balance",
+        "summaryBalanceAfter": "Customer balance after"
+      }
+    }
   }
 }
