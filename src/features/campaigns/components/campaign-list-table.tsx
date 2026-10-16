@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useLocale, useTranslations } from "next-intl"
 import {
   Archive,
   ArrowUpDown,
@@ -53,6 +54,8 @@ import {
 } from "./campaign-select-styles"
 import { CampaignStatusBadge } from "./campaign-status-badge"
 
+import { type Locale } from "@/i18n/locales"
+
 type SortableColumn =
   | "name"
   | "status"
@@ -94,16 +97,22 @@ type DecoratedCampaign = {
   conversions: number
 }
 
+// Mock/filter data values (objective and country names are stored/compared literally, like
+// campaign-form.tsx's own COUNTRY_OPTIONS/AUDIENCE_OPTIONS) -- left untranslated on purpose.
 const OBJECTIVES = ["Awareness", "Traffic", "Leads", "Conversions", "Sales", "Engagement"]
 const COUNTRIES = ["Saudi Arabia", "United Arab Emirates", "Qatar", "Kuwait", "Bahrain", "Jordan"]
 
-const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
-  { key: "all", label: "All" },
-  { key: "active", label: "Active" },
-  { key: "draft", label: "Draft" },
-  { key: "paused", label: "Paused" },
-  { key: "completed", label: "Completed" },
-]
+type CampaignsTranslator = ReturnType<typeof useTranslations<"campaigns">>
+
+function getQuickFilters(t: CampaignsTranslator): Array<{ key: QuickFilter; label: string }> {
+  return [
+    { key: "all", label: t("listTable.quickFilters.all") },
+    { key: "active", label: t("statusBadge.status.active") },
+    { key: "draft", label: t("statusBadge.status.draft") },
+    { key: "paused", label: t("statusBadge.status.paused") },
+    { key: "completed", label: t("statusBadge.status.completed") },
+  ]
+}
 
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 20, 50]
 
@@ -119,14 +128,29 @@ function parseDate(value: string) {
   return new Date(`${value}T00:00:00`).getTime()
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
+// Mirrors campaign-details-view.tsx's locale-aware date/number/currency helpers in this same
+// feature: Arabic numerals are forced to Western digits via -u-nu-latn so they match the plain
+// numbers coming from the backend, and the currency amount gets a trailing "ر.س" (Arabic) or a
+// leading "SAR " (English), the same convention LiveVisitorsPage established.
+function dateLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US"
+}
+
+function numberLocale(locale: Locale): string {
+  return locale === "ar" ? "ar-SA-u-nu-latn" : "en-US"
+}
+
+function formatDate(value: string, locale: Locale) {
+  return new Intl.DateTimeFormat(dateLocale(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
   }).format(new Date(`${value}T00:00:00`))
 }
 
+// The exported CSV's header row is left in English regardless of locale -- it's a data file for
+// spreadsheet tools and other systems rather than on-screen UI copy, so keeping it in one
+// language avoids breaking anything that parses it by header name.
 function exportSelectedRows(rows: DecoratedCampaign[]) {
   const header = [
     "Campaign",
@@ -181,6 +205,10 @@ export function CampaignListTable() {
   const router = useRouter()
   const { currentWorkspace } = useWorkspace()
   const { can } = usePermissions()
+  const t = useTranslations("campaigns")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
+  const quickFilters = useMemo(() => getQuickFilters(t), [t])
 
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -419,14 +447,14 @@ export function CampaignListTable() {
     <div className="space-y-4">
       <AppCard
         className="shadow-sm"
-        title="Search & Filters"
-        subtitle="Always-visible core filters with optional advanced controls."
+        title={t("listTable.filtersCard.title")}
+        subtitle={t("listTable.filtersCard.subtitle")}
       >
         <div className="space-y-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="grid flex-1 gap-3 md:grid-cols-[minmax(320px,1.2fr)_repeat(2,minmax(160px,0.5fr))]">
               <AppSearchInput
-                placeholder="Search campaign name, owner, objective..."
+                placeholder={t("listTable.searchPlaceholder")}
                 className="h-9"
                 value={search}
                 onChange={(event) => {
@@ -443,26 +471,26 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Status" />
+                  <AppSelectValue placeholder={t("metrics.columns.status")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Status
+                    {t("metrics.columns.status")}
                   </AppSelectItem>
                   <AppSelectItem value="draft" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Draft
+                    {t("statusBadge.status.draft")}
                   </AppSelectItem>
                   <AppSelectItem value="active" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Active
+                    {t("statusBadge.status.active")}
                   </AppSelectItem>
                   <AppSelectItem value="paused" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Paused
+                    {t("statusBadge.status.paused")}
                   </AppSelectItem>
                   <AppSelectItem value="completed" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Completed
+                    {t("statusBadge.status.completed")}
                   </AppSelectItem>
                   <AppSelectItem value="archived" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Archived
+                    {t("statusBadge.status.archived")}
                   </AppSelectItem>
                 </AppSelectContent>
               </AppSelect>
@@ -475,12 +503,14 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Channel" />
+                  <AppSelectValue placeholder={t("detailsView.detailLabels.channel")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Channel
+                    {t("detailsView.detailLabels.channel")}
                   </AppSelectItem>
+                  {/* Channel/platform brand names (Meta Ads, Google Ads, etc.) stay untranslated,
+                      matching the rest of this rollout. */}
                   <AppSelectItem value="meta" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
                     Meta Ads
                   </AppSelectItem>
@@ -510,11 +540,13 @@ export function CampaignListTable() {
                 icon={<Filter className="size-3.5" />}
                 onClick={() => setShowAdvancedFilters((current) => !current)}
               >
-                {showAdvancedFilters ? "Hide Filters" : "+ More Filters"}
+                {showAdvancedFilters
+                  ? t("listTable.toggleFilters.hide")
+                  : t("listTable.toggleFilters.show")}
               </AppButton>
               {hasActiveFilters ? (
                 <AppButton variant="ghost" size="sm" onClick={resetFilters}>
-                  Reset Filters
+                  {t("listTable.resetFilters")}
                 </AppButton>
               ) : null}
             </div>
@@ -530,12 +562,13 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Owner" />
+                  <AppSelectValue placeholder={t("detailsView.detailLabels.owner")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Owner
+                    {t("detailsView.detailLabels.owner")}
                   </AppSelectItem>
+                  {/* Owner names are literal data values (people's names), left untranslated. */}
                   {ownerOptions.map((owner) => (
                     <AppSelectItem
                       key={owner}
@@ -556,12 +589,14 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Objective" />
+                  <AppSelectValue placeholder={t("detailsView.detailLabels.objective")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Objective
+                    {t("detailsView.detailLabels.objective")}
                   </AppSelectItem>
+                  {/* Objective values are literal, compared-against data (OBJECTIVES above),
+                      left untranslated like campaign-form.tsx's own objective/country values. */}
                   {OBJECTIVES.map((objective) => (
                     <AppSelectItem
                       key={objective}
@@ -582,12 +617,14 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Country" />
+                  <AppSelectValue placeholder={t("form.fields.country.label")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Country
+                    {t("form.fields.country.label")}
                   </AppSelectItem>
+                  {/* Country values are literal, compared-against data (COUNTRIES above), left
+                      untranslated like campaign-form.tsx's own COUNTRY_OPTIONS. */}
                   {COUNTRIES.map((country) => (
                     <AppSelectItem
                       key={country}
@@ -608,20 +645,20 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Budget Range" />
+                  <AppSelectValue placeholder={t("listTable.filters.budgetRange.label")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Budget Range
+                    {t("listTable.filters.budgetRange.label")}
                   </AppSelectItem>
                   <AppSelectItem value="lt50k" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Less than $50K
+                    {t("listTable.filters.budgetRange.options.lt50k")}
                   </AppSelectItem>
                   <AppSelectItem value="50kTo100k" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    $50K - $100K
+                    {t("listTable.filters.budgetRange.options.range50to100k")}
                   </AppSelectItem>
                   <AppSelectItem value="gt100k" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    More than $100K
+                    {t("listTable.filters.budgetRange.options.gt100k")}
                   </AppSelectItem>
                 </AppSelectContent>
               </AppSelect>
@@ -634,20 +671,20 @@ export function CampaignListTable() {
                 }}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Date Range" />
+                  <AppSelectValue placeholder={t("listTable.filters.dateRange.label")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="all" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Date Range
+                    {t("listTable.filters.dateRange.label")}
                   </AppSelectItem>
                   <AppSelectItem value="thisMonth" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    This Month
+                    {t("listTable.filters.dateRange.options.thisMonth")}
                   </AppSelectItem>
                   <AppSelectItem value="thisQuarter" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    This Quarter
+                    {t("listTable.filters.dateRange.options.thisQuarter")}
                   </AppSelectItem>
                   <AppSelectItem value="next30" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Next 30 Days
+                    {t("listTable.filters.dateRange.options.next30")}
                   </AppSelectItem>
                 </AppSelectContent>
               </AppSelect>
@@ -657,32 +694,32 @@ export function CampaignListTable() {
                 onValueChange={(value) => setSortBy(value as SortableColumn)}
               >
                 <AppSelectTrigger className={CAMPAIGN_SELECT_TRIGGER_CLASSNAME}>
-                  <AppSelectValue placeholder="Sort By" />
+                  <AppSelectValue placeholder={t("listTable.filters.sortBy.label")} />
                 </AppSelectTrigger>
                 <AppSelectContent className={CAMPAIGN_SELECT_CONTENT_CLASSNAME}>
                   <AppSelectItem value="lastUpdated" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Last Updated
+                    {t("listTable.columns.lastUpdated")}
                   </AppSelectItem>
                   <AppSelectItem value="name" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Campaign Name
+                    {t("form.fields.name.label")}
                   </AppSelectItem>
                   <AppSelectItem value="status" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Status
+                    {t("metrics.columns.status")}
                   </AppSelectItem>
                   <AppSelectItem value="owner" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Owner
+                    {t("detailsView.detailLabels.owner")}
                   </AppSelectItem>
                   <AppSelectItem value="startDate" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Start Date
+                    {t("form.fields.startDate.label")}
                   </AppSelectItem>
                   <AppSelectItem value="budget" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Budget
+                    {t("form.fields.budget.label")}
                   </AppSelectItem>
                   <AppSelectItem value="revenue" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    Revenue
+                    {t("metrics.columns.revenue")}
                   </AppSelectItem>
                   <AppSelectItem value="roas" className={CAMPAIGN_SELECT_ITEM_CLASSNAME}>
-                    ROAS
+                    {t("metrics.columns.roas")}
                   </AppSelectItem>
                 </AppSelectContent>
               </AppSelect>
@@ -692,7 +729,9 @@ export function CampaignListTable() {
                 size="sm"
                 onClick={() => setSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
               >
-                {sortDirection === "asc" ? "Ascending" : "Descending"}
+                {sortDirection === "asc"
+                  ? t("listTable.sortDirection.asc")
+                  : t("listTable.sortDirection.desc")}
               </AppButton>
             </div>
           ) : null}
@@ -716,11 +755,11 @@ export function CampaignListTable() {
         </div>
       </AppCard>
 
-      <AppCard title="Campaign Table" subtitle="Operational campaign monitoring and execution.">
+      <AppCard title={t("listTable.tableCard.title")} subtitle={t("listTable.tableCard.subtitle")}>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-1.5">
-              {QUICK_FILTERS.map((filter) => (
+              {quickFilters.map((filter) => (
                 <button
                   key={filter.key}
                   type="button"
@@ -742,43 +781,45 @@ export function CampaignListTable() {
 
             <div className="flex flex-wrap items-center gap-1.5">
               <AppBadge variant="outline" className="rounded-full px-2 py-0.5 text-xs font-normal">
-                Saved Views (Soon)
+                {t("listTable.comingSoon.savedViews")}
               </AppBadge>
               <AppBadge variant="outline" className="rounded-full px-2 py-0.5 text-xs font-normal">
-                Export (Soon)
+                {t("listTable.comingSoon.export")}
               </AppBadge>
               <AppBadge variant="outline" className="rounded-full px-2 py-0.5 text-xs font-normal">
-                AI Recommendations (Soon)
+                {t("listTable.comingSoon.aiRecommendations")}
               </AppBadge>
               <AppBadge variant="outline" className="rounded-full px-2 py-0.5 text-xs font-normal">
-                Comparison (Soon)
+                {t("listTable.comingSoon.comparison")}
               </AppBadge>
             </div>
           </div>
 
           {selectedIds.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-              <span className="text-sm font-medium">{selectedIds.length} selected</span>
+              <span className="text-sm font-medium">
+                {t("listTable.bulkActions.selectedCount", { count: selectedIds.length })}
+              </span>
               <AppButton
                 size="sm"
                 variant="outline"
                 onClick={() => applyStatusToSelected("paused")}
               >
-                Pause
+                {t("listTable.actions.pause")}
               </AppButton>
               <AppButton
                 size="sm"
                 variant="outline"
                 onClick={() => applyStatusToSelected("active")}
               >
-                Resume
+                {t("listTable.actions.resume")}
               </AppButton>
               <AppButton
                 size="sm"
                 variant="outline"
                 onClick={() => applyStatusToSelected("archived")}
               >
-                Archive
+                {t("listTable.actions.archive")}
               </AppButton>
               <Can permission="campaigns:delete">
                 <AppButton
@@ -789,12 +830,12 @@ export function CampaignListTable() {
                     setSelectedIds([])
                   }}
                 >
-                  Delete
+                  {tCommon("delete")}
                 </AppButton>
               </Can>
               <AppSelect value={bulkOwner || ""} onValueChange={setBulkOwner}>
                 <AppSelectTrigger className="h-8 w-[180px]">
-                  <AppSelectValue placeholder="Assign Owner" />
+                  <AppSelectValue placeholder={t("listTable.actions.assignOwnerPlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
                   {ownerOptions.map((owner) => (
@@ -819,14 +860,14 @@ export function CampaignListTable() {
                   })
                 }}
               >
-                Apply Owner
+                {t("listTable.actions.applyOwner")}
               </AppButton>
               <AppButton
                 size="sm"
                 variant="outline"
                 onClick={() => exportSelectedRows(selectedCampaigns)}
               >
-                Export
+                {tCommon("export")}
               </AppButton>
             </div>
           ) : null}
@@ -837,16 +878,16 @@ export function CampaignListTable() {
                 <div className="flex size-12 items-center justify-center rounded-full border border-border/70 bg-background">
                   <CircleDashed className="size-5 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-semibold">No campaigns yet</h3>
+                <h3 className="text-lg font-semibold">{t("listTable.emptyState.title")}</h3>
                 <p className="text-sm text-muted-foreground">
-                  Create your first campaign to start tracking marketing performance.
+                  {t("listTable.emptyState.description")}
                 </p>
                 <div className="flex items-center gap-3">
                   <AppButton onClick={() => router.push(ROUTES.campaignsCreate)}>
-                    Create Campaign
+                    {t("listScreen.createCampaign")}
                   </AppButton>
                   <AppButton asChild variant="ghost">
-                    <Link href={ROUTES.campaignsCreate}>Learn about campaigns</Link>
+                    <Link href={ROUTES.campaignsCreate}>{t("listTable.emptyState.learnMore")}</Link>
                   </AppButton>
                 </div>
               </div>
@@ -860,14 +901,14 @@ export function CampaignListTable() {
                       <input
                         type="checkbox"
                         checked={allPageSelected}
-                        aria-label="Select all campaigns on page"
+                        aria-label={t("listTable.selectAllAriaLabel")}
                         onChange={(event) => handleSelectAllOnPage(event.target.checked)}
                         className="size-4 cursor-pointer rounded border-border"
                       />
                     </AppTableHead>
                     <AppTableHead className="sticky left-12 z-20 min-w-[220px] bg-card">
                       <SortHeader
-                        label="Campaign"
+                        label={t("metrics.entity.campaign")}
                         active={sortBy === "name"}
                         direction={sortDirection}
                         onClick={() => handleSort("name")}
@@ -875,7 +916,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Status"
+                        label={t("metrics.columns.status")}
                         active={sortBy === "status"}
                         direction={sortDirection}
                         onClick={() => handleSort("status")}
@@ -883,7 +924,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Channel"
+                        label={t("detailsView.detailLabels.channel")}
                         active={sortBy === "channel"}
                         direction={sortDirection}
                         onClick={() => handleSort("channel")}
@@ -891,7 +932,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Objective"
+                        label={t("detailsView.detailLabels.objective")}
                         active={sortBy === "objective"}
                         direction={sortDirection}
                         onClick={() => handleSort("objective")}
@@ -899,7 +940,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Owner"
+                        label={t("detailsView.detailLabels.owner")}
                         active={sortBy === "owner"}
                         direction={sortDirection}
                         onClick={() => handleSort("owner")}
@@ -907,7 +948,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Start"
+                        label={t("listTable.columns.start")}
                         active={sortBy === "startDate"}
                         direction={sortDirection}
                         onClick={() => handleSort("startDate")}
@@ -915,7 +956,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="End"
+                        label={t("listTable.columns.end")}
                         active={sortBy === "endDate"}
                         direction={sortDirection}
                         onClick={() => handleSort("endDate")}
@@ -923,7 +964,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Budget"
+                        label={t("form.fields.budget.label")}
                         active={sortBy === "budget"}
                         direction={sortDirection}
                         onClick={() => handleSort("budget")}
@@ -931,7 +972,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Spend"
+                        label={t("metrics.columns.spend")}
                         active={sortBy === "spend"}
                         direction={sortDirection}
                         onClick={() => handleSort("spend")}
@@ -939,7 +980,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Revenue"
+                        label={t("metrics.columns.revenue")}
                         active={sortBy === "revenue"}
                         direction={sortDirection}
                         onClick={() => handleSort("revenue")}
@@ -947,7 +988,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="ROAS"
+                        label={t("metrics.columns.roas")}
                         active={sortBy === "roas"}
                         direction={sortDirection}
                         onClick={() => handleSort("roas")}
@@ -955,7 +996,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="CTR"
+                        label={t("metrics.columns.ctr")}
                         active={sortBy === "ctr"}
                         direction={sortDirection}
                         onClick={() => handleSort("ctr")}
@@ -963,7 +1004,7 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Conversions"
+                        label={t("metrics.columns.conversions")}
                         active={sortBy === "conversions"}
                         direction={sortDirection}
                         onClick={() => handleSort("conversions")}
@@ -971,13 +1012,15 @@ export function CampaignListTable() {
                     </AppTableHead>
                     <AppTableHead>
                       <SortHeader
-                        label="Last Updated"
+                        label={t("listTable.columns.lastUpdated")}
                         active={sortBy === "lastUpdated"}
                         direction={sortDirection}
                         onClick={() => handleSort("lastUpdated")}
                       />
                     </AppTableHead>
-                    <AppTableHead className="text-right">Actions</AppTableHead>
+                    <AppTableHead className="text-right">
+                      {t("listTable.columns.actions")}
+                    </AppTableHead>
                   </AppTableRow>
                 </AppTableHeader>
 
@@ -997,7 +1040,9 @@ export function CampaignListTable() {
                             <input
                               type="checkbox"
                               checked={selectedIds.includes(campaign.id)}
-                              aria-label={`Select ${campaign.name}`}
+                              aria-label={t("listTable.selectRowAriaLabel", {
+                                name: campaign.name,
+                              })}
                               onChange={(event) => {
                                 if (event.target.checked) {
                                   setSelectedIds((current) => [...current, campaign.id])
@@ -1020,18 +1065,21 @@ export function CampaignListTable() {
                           <AppTableCell>
                             <CampaignStatusBadge status={campaign.status} />
                           </AppTableCell>
+                          {/* campaign.channel/objective are literal data values (brand/platform
+                              tokens, objective keys), left untranslated as elsewhere in this
+                              file. */}
                           <AppTableCell>{campaign.channel}</AppTableCell>
                           <AppTableCell>{campaign.objective}</AppTableCell>
                           <AppTableCell>{campaign.owner}</AppTableCell>
-                          <AppTableCell>{formatDate(campaign.startDate)}</AppTableCell>
-                          <AppTableCell>{formatDate(campaign.endDate)}</AppTableCell>
-                          <AppTableCell>{formatCurrency(campaign.budget)}</AppTableCell>
-                          <AppTableCell>{formatCurrency(campaign.spend)}</AppTableCell>
-                          <AppTableCell>{formatCurrency(campaign.revenue)}</AppTableCell>
+                          <AppTableCell>{formatDate(campaign.startDate, locale)}</AppTableCell>
+                          <AppTableCell>{formatDate(campaign.endDate, locale)}</AppTableCell>
+                          <AppTableCell>{formatCurrency(campaign.budget, locale)}</AppTableCell>
+                          <AppTableCell>{formatCurrency(campaign.spend, locale)}</AppTableCell>
+                          <AppTableCell>{formatCurrency(campaign.revenue, locale)}</AppTableCell>
                           <AppTableCell>{campaign.roas.toFixed(2)}x</AppTableCell>
                           <AppTableCell>{campaign.ctr.toFixed(2)}%</AppTableCell>
-                          <AppTableCell>{formatNumber(campaign.conversions)}</AppTableCell>
-                          <AppTableCell>{formatDate(campaign.lastUpdated)}</AppTableCell>
+                          <AppTableCell>{formatNumber(campaign.conversions, locale)}</AppTableCell>
+                          <AppTableCell>{formatDate(campaign.lastUpdated, locale)}</AppTableCell>
                           <AppTableCell
                             className="text-right"
                             onClick={(event) => event.stopPropagation()}
@@ -1041,7 +1089,9 @@ export function CampaignListTable() {
                                 <AppButton
                                   variant="ghost"
                                   size="icon-sm"
-                                  aria-label={`Actions for ${campaign.name}`}
+                                  aria-label={t("listTable.actionsForAriaLabel", {
+                                    name: campaign.name,
+                                  })}
                                 >
                                   <MoreHorizontal className="size-4" />
                                 </AppButton>
@@ -1050,16 +1100,16 @@ export function CampaignListTable() {
                                 <AppDropdownMenuItem
                                   onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
                                 >
-                                  Open
+                                  {t("listTable.actions.open")}
                                 </AppDropdownMenuItem>
                                 <AppDropdownMenuItem
                                   onClick={() => router.push(ROUTES.campaignsEdit(campaign.id))}
                                 >
-                                  Edit
+                                  {tCommon("edit")}
                                 </AppDropdownMenuItem>
                                 <AppDropdownMenuItem>
                                   <Copy className="size-4" />
-                                  Duplicate
+                                  {t("listTable.actions.duplicate")}
                                 </AppDropdownMenuItem>
                                 <AppDropdownMenuItem
                                   onClick={() =>
@@ -1070,7 +1120,7 @@ export function CampaignListTable() {
                                   }
                                 >
                                   <PauseCircle className="size-4" />
-                                  Pause
+                                  {t("listTable.actions.pause")}
                                 </AppDropdownMenuItem>
                                 <AppDropdownMenuItem
                                   onClick={() =>
@@ -1081,7 +1131,7 @@ export function CampaignListTable() {
                                   }
                                 >
                                   <PlayCircle className="size-4" />
-                                  Resume
+                                  {t("listTable.actions.resume")}
                                 </AppDropdownMenuItem>
                                 <AppDropdownMenuItem
                                   onClick={() =>
@@ -1092,7 +1142,7 @@ export function CampaignListTable() {
                                   }
                                 >
                                   <Archive className="size-4" />
-                                  Archive
+                                  {t("listTable.actions.archive")}
                                 </AppDropdownMenuItem>
                                 {can("campaigns:delete") ? (
                                   <AppDropdownMenuItem
@@ -1104,14 +1154,14 @@ export function CampaignListTable() {
                                     }
                                   >
                                     <Trash2Icon />
-                                    Delete
+                                    {tCommon("delete")}
                                   </AppDropdownMenuItem>
                                 ) : null}
                                 <AppDropdownMenuItem
                                   onClick={() => router.push(ROUTES.campaignsDetails(campaign.id))}
                                 >
                                   <TrendingDown className="size-4" />
-                                  Analytics
+                                  {t("listTable.actions.analytics")}
                                 </AppDropdownMenuItem>
                               </AppDropdownMenuContent>
                             </AppDropdownMenu>
@@ -1123,7 +1173,9 @@ export function CampaignListTable() {
 
               <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <span className="text-muted-foreground">Rows per page</span>
+                  <span className="text-muted-foreground">
+                    {t("listTable.pagination.rowsPerPage")}
+                  </span>
                   <AppSelect
                     value={String(rowsPerPage)}
                     onValueChange={(value) => {
@@ -1143,7 +1195,11 @@ export function CampaignListTable() {
                     </AppSelectContent>
                   </AppSelect>
                   <span className="text-muted-foreground">
-                    {pageStart}-{pageEnd} of {totalRows} campaigns
+                    {t("listTable.pagination.rangeSummary", {
+                      start: pageStart,
+                      end: pageEnd,
+                      total: totalRows,
+                    })}
                   </span>
                 </div>
 
@@ -1154,10 +1210,13 @@ export function CampaignListTable() {
                     disabled={safePage <= 1}
                     onClick={() => setPage((current) => Math.max(1, current - 1))}
                   >
-                    Previous
+                    {tCommon("previous")}
                   </AppButton>
                   <span className="px-2 text-sm text-muted-foreground">
-                    Page {safePage} / {totalPages}
+                    {t("listTable.pagination.pageIndicator", {
+                      page: safePage,
+                      total: totalPages,
+                    })}
                   </span>
                   <AppButton
                     size="sm"
@@ -1165,16 +1224,16 @@ export function CampaignListTable() {
                     disabled={safePage >= totalPages}
                     onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                   >
-                    Next
+                    {tCommon("next")}
                   </AppButton>
                   <AppInput
                     value={jumpPage}
                     onChange={(event) => setJumpPage(event.target.value.replace(/\D/g, ""))}
-                    placeholder="Page"
+                    placeholder={t("listTable.pagination.pageInputPlaceholder")}
                     className="h-8 w-20"
                   />
                   <AppButton size="sm" variant="outline" onClick={handleJumpToPage}>
-                    Go
+                    {t("listTable.pagination.go")}
                   </AppButton>
                 </div>
               </div>
@@ -1233,14 +1292,13 @@ function Trash2Icon() {
   )
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+function formatCurrency(value: number, locale: Locale) {
+  const amount = new Intl.NumberFormat(numberLocale(locale), {
     maximumFractionDigits: 0,
   }).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(value)
+function formatNumber(value: number, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale)).format(value)
 }

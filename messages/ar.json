@@ -11,7 +11,9 @@
     "loading": "جارٍ التحميل...",
     "previous": "السابق",
     "export": "تصدير",
-    "currency": "ر.س"
+    "currency": "ر.س",
+    "delete": "حذف",
+    "edit": "تعديل"
   },
   "authShowcase": {
     "preview": {
@@ -6476,6 +6478,201 @@
         "bodyText": "عناصر تحكم الإعدادات مبسطة بشكل متعمد في هذه النسخة وجاهزة للتوسيع مستقبلاً."
       },
       "dimensionsNotApplicable": "غير متاح"
+    },
+    "form": {
+      "title": "إعداد الحملة",
+      "subtitle": "أنشئ حملة تسويقية وقم بتكوينها قبل نشرها.",
+      "sections": {
+        "basics": {
+          "title": "أساسيات الحملة",
+          "description": "حدد هوية الحملة الأساسية ومسار الاستقطاب الرئيسي."
+        },
+        "budget": {
+          "title": "الموازنة والجدولة",
+          "description": "حدد سقف الإنفاق والتوقيت وحالة دورة حياة الحملة."
+        },
+        "targeting": {
+          "title": "الاستهداف",
+          "description": "اختر إعدادات الجمهور والسوق لهذه الحملة."
+        },
+        "creative": {
+          "description": "اختر مواد قابلة لإعادة الاستخدام من مكتبة المواد الإبداعية قبل النشر."
+        },
+        "notes": {
+          "title": "ملاحظات",
+          "description": "ملاحظات تخطيط اختيارية لفريقك."
+        }
+      },
+      "fields": {
+        "name": {
+          "label": "اسم الحملة"
+        },
+        "objective": {
+          "placeholder": "اختر الهدف",
+          "options": {
+            "awareness": "الوعي",
+            "traffic": "الزيارات",
+            "leads": "العملاء المحتملون",
+            "sales": "المبيعات",
+            "engagement": "التفاعل"
+          }
+        },
+        "channel": {
+          "placeholder": "اختر القناة"
+        },
+        "budget": {
+          "label": "الموازنة"
+        },
+        "status": {
+          "placeholder": "اختر الحالة",
+          "options": {
+            "draft": {
+              "description": "لم تُنشر الحملة بعد"
+            },
+            "scheduled": {
+              "description": "مجدولة للانطلاق في التاريخ المحدد"
+            },
+            "active": {
+              "description": "قيد التشغيل حاليًا"
+            },
+            "paused": {
+              "description": "متوقفة مؤقتًا"
+            },
+            "completed": {
+              "description": "تم تسليمها واكتملت"
+            },
+            "archived": {
+              "description": "محفوظة للرجوع إليها فقط"
+            }
+          }
+        },
+        "startDate": {
+          "label": "تاريخ البدء"
+        },
+        "endDate": {
+          "label": "تاريخ الانتهاء"
+        },
+        "country": {
+          "label": "الدولة",
+          "placeholder": "اختر الدولة",
+          "searchPlaceholder": "البحث عن الدول"
+        },
+        "language": {
+          "placeholder": "اختر اللغة",
+          "options": {
+            "arabic": "العربية",
+            "english": "الإنجليزية",
+            "both": "كلاهما"
+          }
+        },
+        "audience": {
+          "placeholder": "اختر الجمهور",
+          "searchPlaceholder": "البحث عن الجمهور"
+        },
+        "notes": {
+          "placeholder": "أضف ملاحظات التخطيط لفريقك...",
+          "optional": "اختياري"
+        }
+      },
+      "validation": {
+        "endDateAfterStart": "يجب أن يكون تاريخ الانتهاء بعد تاريخ البدء."
+      },
+      "creative": {
+        "selectedLabel": "المادة الإبداعية المحددة",
+        "creativeIdLabel": "رقم المادة الإبداعية: {id}",
+        "noneSelected": "لم يتم اختيار مادة إبداعية بعد.",
+        "openLibrary": "فتح مكتبة المواد الإبداعية"
+      },
+      "search": {
+        "noResults": "لم يتم العثور على نتائج."
+      },
+      "actions": {
+        "saveChanges": "حفظ التغييرات"
+      }
+    },
+    "listTable": {
+      "filtersCard": {
+        "title": "البحث والفلاتر",
+        "subtitle": "فلاتر أساسية ظاهرة دائمًا مع عناصر تحكم متقدمة اختيارية."
+      },
+      "searchPlaceholder": "البحث باسم الحملة أو المسؤول أو الهدف...",
+      "filters": {
+        "budgetRange": {
+          "label": "نطاق الموازنة",
+          "options": {
+            "lt50k": "أقل من 50 ألف دولار",
+            "range50to100k": "50 - 100 ألف دولار",
+            "gt100k": "أكثر من 100 ألف دولار"
+          }
+        },
+        "dateRange": {
+          "label": "النطاق الزمني",
+          "options": {
+            "thisMonth": "هذا الشهر",
+            "thisQuarter": "هذا الربع",
+            "next30": "الثلاثون يومًا القادمة"
+          }
+        },
+        "sortBy": {
+          "label": "الترتيب بحسب"
+        }
+      },
+      "sortDirection": {
+        "asc": "تصاعدي",
+        "desc": "تنازلي"
+      },
+      "toggleFilters": {
+        "show": "+ فلاتر إضافية",
+        "hide": "إخفاء الفلاتر"
+      },
+      "resetFilters": "إعادة ضبط الفلاتر",
+      "tableCard": {
+        "title": "جدول الحملات",
+        "subtitle": "مراقبة الحملات وتنفيذها التشغيلي."
+      },
+      "quickFilters": {
+        "all": "الكل"
+      },
+      "comingSoon": {
+        "savedViews": "طرق العرض المحفوظة (قريبًا)",
+        "export": "التصدير (قريبًا)",
+        "aiRecommendations": "توصيات الذكاء الاصطناعي (قريبًا)",
+        "comparison": "المقارنة (قريبًا)"
+      },
+      "bulkActions": {
+        "selectedCount": "تم تحديد {count}"
+      },
+      "actions": {
+        "open": "فتح",
+        "duplicate": "تكرار",
+        "pause": "إيقاف مؤقت",
+        "resume": "استئناف",
+        "archive": "أرشفة",
+        "analytics": "التحليلات",
+        "applyOwner": "تطبيق المسؤول",
+        "assignOwnerPlaceholder": "تعيين مسؤول"
+      },
+      "emptyState": {
+        "title": "لا توجد حملات بعد",
+        "description": "أنشئ أول حملة لك لبدء تتبع أداء التسويق.",
+        "learnMore": "تعرّف على الحملات"
+      },
+      "columns": {
+        "start": "البدء",
+        "end": "الانتهاء",
+        "lastUpdated": "آخر تحديث",
+        "actions": "الإجراءات"
+      },
+      "selectAllAriaLabel": "تحديد جميع الحملات في الصفحة",
+      "selectRowAriaLabel": "تحديد {name}",
+      "actionsForAriaLabel": "إجراءات {name}",
+      "pagination": {
+        "rowsPerPage": "صفوف لكل صفحة",
+        "rangeSummary": "{start}-{end} من {total} حملة",
+        "pageIndicator": "صفحة {page} / {total}",
+        "pageInputPlaceholder": "الصفحة",
+        "go": "انتقال"
+      }
     }
   }
 }

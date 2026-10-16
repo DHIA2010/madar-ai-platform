@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   addMonths,
@@ -101,15 +102,9 @@ const defaultValues: CampaignFormValues = {
   owner: DEFAULT_OWNER,
 }
 
-const OBJECTIVE_OPTIONS: SelectOption[] = [
-  { value: "awareness", label: "Awareness" },
-  { value: "traffic", label: "Traffic" },
-  { value: "leads", label: "Leads" },
-  { value: "conversions", label: "Conversions" },
-  { value: "sales", label: "Sales" },
-  { value: "engagement", label: "Engagement" },
-]
-
+// Campaign-form brand/channel names (Meta Ads, Google Ads, etc.) are left untranslated, matching
+// the rest of this rollout -- only the option labels built below from translations change with
+// locale.
 const CHANNEL_OPTIONS: SelectOption[] = [
   { value: "meta", label: "Meta Ads" },
   { value: "google", label: "Google Ads" },
@@ -119,56 +114,73 @@ const CHANNEL_OPTIONS: SelectOption[] = [
   { value: "email", label: "Email" },
 ]
 
-const LANGUAGE_OPTIONS: SelectOption[] = [
-  { value: "Arabic", label: "Arabic" },
-  { value: "English", label: "English" },
-  { value: "Both", label: "Both" },
-]
+type CampaignsTranslator = ReturnType<typeof useTranslations<"campaigns">>
 
-const STATUS_OPTIONS: StatusOption[] = [
-  {
-    value: "draft",
-    label: "Draft",
-    description: "Campaign not published yet",
-    icon: Circle,
-    indicatorClassName: "bg-amber-400",
-  },
-  {
-    value: "scheduled",
-    label: "Scheduled",
-    description: "Queued to launch at the selected date",
-    icon: Clock3,
-    indicatorClassName: "bg-sky-400",
-  },
-  {
-    value: "active",
-    label: "Active",
-    description: "Currently running",
-    icon: PlayCircle,
-    indicatorClassName: "bg-emerald-400",
-  },
-  {
-    value: "paused",
-    label: "Paused",
-    description: "Temporarily stopped",
-    icon: PauseCircle,
-    indicatorClassName: "bg-orange-400",
-  },
-  {
-    value: "completed",
-    label: "Completed",
-    description: "Delivered and finished",
-    icon: CheckCircle2,
-    indicatorClassName: "bg-violet-400",
-  },
-  {
-    value: "archived",
-    label: "Archived",
-    description: "Stored for reference only",
-    icon: Archive,
-    indicatorClassName: "bg-slate-400",
-  },
-]
+function getObjectiveOptions(t: CampaignsTranslator): SelectOption[] {
+  return [
+    { value: "awareness", label: t("form.fields.objective.options.awareness") },
+    { value: "traffic", label: t("form.fields.objective.options.traffic") },
+    { value: "leads", label: t("form.fields.objective.options.leads") },
+    { value: "conversions", label: t("metrics.columns.conversions") },
+    { value: "sales", label: t("form.fields.objective.options.sales") },
+    { value: "engagement", label: t("form.fields.objective.options.engagement") },
+  ]
+}
+
+function getLanguageOptions(t: CampaignsTranslator): SelectOption[] {
+  return [
+    { value: "Arabic", label: t("form.fields.language.options.arabic") },
+    { value: "English", label: t("form.fields.language.options.english") },
+    { value: "Both", label: t("form.fields.language.options.both") },
+  ]
+}
+
+function getStatusOptions(t: CampaignsTranslator): StatusOption[] {
+  return [
+    {
+      value: "draft",
+      label: t("statusBadge.status.draft"),
+      description: t("form.fields.status.options.draft.description"),
+      icon: Circle,
+      indicatorClassName: "bg-amber-400",
+    },
+    {
+      value: "scheduled",
+      label: t("statusBadge.status.scheduled"),
+      description: t("form.fields.status.options.scheduled.description"),
+      icon: Clock3,
+      indicatorClassName: "bg-sky-400",
+    },
+    {
+      value: "active",
+      label: t("statusBadge.status.active"),
+      description: t("form.fields.status.options.active.description"),
+      icon: PlayCircle,
+      indicatorClassName: "bg-emerald-400",
+    },
+    {
+      value: "paused",
+      label: t("statusBadge.status.paused"),
+      description: t("form.fields.status.options.paused.description"),
+      icon: PauseCircle,
+      indicatorClassName: "bg-orange-400",
+    },
+    {
+      value: "completed",
+      label: t("statusBadge.status.completed"),
+      description: t("form.fields.status.options.completed.description"),
+      icon: CheckCircle2,
+      indicatorClassName: "bg-violet-400",
+    },
+    {
+      value: "archived",
+      label: t("statusBadge.status.archived"),
+      description: t("form.fields.status.options.archived.description"),
+      icon: Archive,
+      indicatorClassName: "bg-slate-400",
+    },
+  ]
+}
 
 const DATE_INPUT_CLASSNAME =
   "h-12 rounded-xl border border-border/70 bg-background px-3 text-sm font-medium shadow-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
@@ -180,25 +192,12 @@ const MANUAL_DATE_FORMATS = [
   "dd/MM/yyyy",
   "yyyy-MM-dd",
 ] as const
-const MONTH_OPTIONS = [
-  "يناير",
-  "فبراير",
-  "مارس",
-  "أبريل",
-  "مايو",
-  "يونيو",
-  "يوليو",
-  "أغسطس",
-  "سبتمبر",
-  "أكتوبر",
-  "نوفمبر",
-  "ديسمبر",
-] as const
-// The conventional two-letter Arabic weekday abbreviations -- matches AppDateField/
+// Month names and the two-letter weekday abbreviations below come from the shared
+// `dateRangeFilter` namespace (months/weekdaysShort) instead of being hardcoded here -- this
+// calendar was previously Arabic-only regardless of the active locale, unlike AppDateField/
 // AppDateRangeFilter's own calendar headers (components/app/date-field.tsx,
-// date-range-filter.tsx) so every date picker in the app reads the same way, rather than
-// date-fns's own narrow single-letter format (ح ن ث ر خ ج س). Indexed by getDay() (0 = Sunday).
-const WEEKDAY_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"]
+// date-range-filter.tsx), which already read that same namespace so every date picker in the
+// app both reads the same way and follows the current locale.
 const YEAR_OPTIONS = Array.from({ length: 26 }, (_, index) => 2020 + index)
 
 function parseIsoDate(value: string) {
@@ -346,7 +345,9 @@ function StatusSelectField({
   onValueChange: (value: CampaignFormSchemaValues["status"]) => void
   errorText?: string
 }) {
-  const selected = STATUS_OPTIONS.find((option) => option.value === value)
+  const t = useTranslations("campaigns")
+  const statusOptions = useMemo(() => getStatusOptions(t), [t])
+  const selected = statusOptions.find((option) => option.value === value)
 
   return (
     <AppFormField label={label} required={required} errorText={errorText}>
@@ -370,7 +371,7 @@ function StatusSelectField({
           position="popper"
           align="start"
         >
-          {STATUS_OPTIONS.map((option) => (
+          {statusOptions.map((option) => (
             <AppSelectItem
               key={option.value}
               value={option.value}
@@ -407,6 +408,11 @@ function DatePickerField({
   onValueChange: (value: string) => void
   errorText?: string
 }) {
+  const t = useTranslations("dateRangeFilter")
+  const tDateField = useTranslations("dateField")
+  const monthOptions = t.raw("months") as string[]
+  const weekdayShort = t.raw("weekdaysShort") as string[]
+
   const id = useId()
   const [open, setOpen] = useState(false)
   const [inputText, setInputText] = useState(formatDateForInput(value))
@@ -446,7 +452,7 @@ function DatePickerField({
             required={required}
             value={displayValue}
             errorText={errorText}
-            placeholder="Select date"
+            placeholder={tDateField("placeholder")}
             startIcon={<CalendarDays className="size-4" />}
             className={DATE_INPUT_CLASSNAME}
             onFocus={() => {
@@ -491,9 +497,9 @@ function DatePickerField({
             variant="ghost"
             className="size-10 rounded-full border border-border/60 bg-background/70 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35 disabled:opacity-45"
             onClick={() => setDisplayMonth((current) => addMonths(current, -1))}
-            aria-label="Previous month"
+            aria-label={t("prevMonth")}
           >
-            <ChevronLeft className="size-4" />
+            <ChevronLeft className="size-4 rtl:rotate-180" />
           </AppButton>
 
           <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
@@ -504,13 +510,13 @@ function DatePickerField({
               }}
             >
               <AppSelectTrigger className="h-10 w-[8.75rem] rounded-full border border-border/50 bg-background/60 px-4 text-sm font-semibold text-foreground shadow-none transition-all duration-200 hover:border-primary/35 hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/35">
-                <span>{MONTH_OPTIONS[monthIndex]}</span>
+                <span>{monthOptions[monthIndex]}</span>
               </AppSelectTrigger>
               <AppSelectContent
                 className="rounded-2xl border border-border/60 bg-card p-1.5 text-foreground shadow-[0_18px_40px_-20px_rgba(2,6,23,0.88)]"
                 align="center"
               >
-                {MONTH_OPTIONS.map((monthLabel, idx) => (
+                {monthOptions.map((monthLabel, idx) => (
                   <AppSelectItem
                     key={monthLabel}
                     value={String(idx)}
@@ -554,9 +560,9 @@ function DatePickerField({
             variant="ghost"
             className="size-10 rounded-full border border-border/60 bg-background/70 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35 disabled:opacity-45"
             onClick={() => setDisplayMonth((current) => addMonths(current, 1))}
-            aria-label="Next month"
+            aria-label={t("nextMonth")}
           >
-            <ChevronRight className="size-4" />
+            <ChevronRight className="size-4 rtl:rotate-180" />
           </AppButton>
         </div>
 
@@ -580,7 +586,7 @@ function DatePickerField({
           endMonth={new Date(2035, 11)}
           className="rounded-[18px] bg-transparent p-0 [--cell-size:40px]"
           formatters={{
-            formatWeekdayName: (date) => WEEKDAY_SHORT[date.getDay()],
+            formatWeekdayName: (date) => weekdayShort[date.getDay()],
           }}
           classNames={{
             nav: "hidden",
@@ -614,7 +620,7 @@ function DatePickerField({
               setOpen(false)
             }}
           >
-            مسح التاريخ
+            {t("clear")}
           </AppButton>
           <AppButton
             type="button"
@@ -627,7 +633,7 @@ function DatePickerField({
               setOpen(false)
             }}
           >
-            اليوم
+            {t("today")}
           </AppButton>
         </div>
       </AppPopoverContent>
@@ -654,6 +660,7 @@ function SearchableSelectField({
   errorText?: string
   searchPlaceholder: string
 }) {
+  const t = useTranslations("campaigns")
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const selected = options.find((option) => option.value === value)
@@ -722,7 +729,9 @@ function SearchableSelectField({
                 </button>
               ))
             ) : (
-              <div className="px-3 py-3 text-sm text-muted-foreground">No results found.</div>
+              <div className="px-3 py-3 text-sm text-muted-foreground">
+                {t("form.search.noResults")}
+              </div>
             )}
           </div>
         </div>
@@ -736,6 +745,11 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
   const searchParams = useSearchParams()
   const { createCampaign, updateCampaign } = useCampaignMutations()
   const { currentWorkspace } = useWorkspace()
+  const t = useTranslations("campaigns")
+  const tCommon = useTranslations("common")
+
+  const objectiveOptions = useMemo(() => getObjectiveOptions(t), [t])
+  const languageOptions = useMemo(() => getLanguageOptions(t), [t])
 
   const selectedCreative = searchParams.get("creative")
 
@@ -758,11 +772,11 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
     }
 
     if (parsedEnd.getTime() < parsedStart.getTime()) {
-      return "End date must be after start date."
+      return t("form.validation.endDateAfterStart")
     }
 
     return undefined
-  }, [endDate, startDate])
+  }, [endDate, startDate, t])
 
   useEffect(() => {
     if (!initialDetails) {
@@ -815,8 +829,8 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
 
   return (
     <AppCard
-      title="Campaign Configuration"
-      subtitle="Create and configure a marketing campaign before publishing."
+      title={t("form.title")}
+      subtitle={t("form.subtitle")}
       className="overflow-visible shadow-none"
       headerClassName="border-b border-border/60 px-5 py-5 md:px-6"
       contentClassName="p-0"
@@ -824,12 +838,12 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
       <AppForm onSubmit={onSubmit}>
         <div className="space-y-6 px-5 py-5 md:px-6">
           <SectionCard
-            title="Campaign Basics"
-            description="Define the core campaign identity and primary acquisition path."
+            title={t("form.sections.basics.title")}
+            description={t("form.sections.basics.description")}
           >
             <div className="grid gap-4 md:grid-cols-2">
               <AppInput
-                label="Campaign Name"
+                label={t("form.fields.name.label")}
                 required
                 wrapperClassName="md:col-span-2"
                 errorText={form.formState.errors.name?.message}
@@ -841,11 +855,11 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 name="objective"
                 render={({ field, fieldState }) => (
                   <SelectField
-                    label="Objective"
+                    label={t("detailsView.detailLabels.objective")}
                     required
                     value={field.value}
-                    placeholder="Select objective"
-                    options={OBJECTIVE_OPTIONS}
+                    placeholder={t("form.fields.objective.placeholder")}
+                    options={objectiveOptions}
                     onValueChange={field.onChange}
                     errorText={fieldState.error?.message}
                   />
@@ -857,10 +871,10 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 name="channel"
                 render={({ field, fieldState }) => (
                   <SelectField
-                    label="Channel"
+                    label={t("detailsView.detailLabels.channel")}
                     required
                     value={field.value}
-                    placeholder="Select channel"
+                    placeholder={t("form.fields.channel.placeholder")}
                     options={CHANNEL_OPTIONS}
                     onValueChange={field.onChange}
                     errorText={fieldState.error?.message}
@@ -871,12 +885,12 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
           </SectionCard>
 
           <SectionCard
-            title="Budget & Schedule"
-            description="Set the spend envelope, timing, and campaign lifecycle status."
+            title={t("form.sections.budget.title")}
+            description={t("form.sections.budget.description")}
           >
             <div className="grid gap-4 md:grid-cols-2">
               <AppInput
-                label="Budget"
+                label={t("form.fields.budget.label")}
                 type="number"
                 required
                 inputMode="numeric"
@@ -884,7 +898,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 step="1"
                 endIcon={
                   <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    SAR
+                    {tCommon("currency")}
                   </span>
                 }
                 errorText={form.formState.errors.budget?.message}
@@ -896,10 +910,10 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 name="status"
                 render={({ field, fieldState }) => (
                   <StatusSelectField
-                    label="Status"
+                    label={t("metrics.columns.status")}
                     required
                     value={field.value}
-                    placeholder="Select status"
+                    placeholder={t("form.fields.status.placeholder")}
                     onValueChange={field.onChange}
                     errorText={fieldState.error?.message}
                   />
@@ -911,7 +925,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 name="startDate"
                 render={({ field, fieldState }) => (
                   <DatePickerField
-                    label="Start Date"
+                    label={t("form.fields.startDate.label")}
                     required
                     value={field.value}
                     onValueChange={field.onChange}
@@ -925,7 +939,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 name="endDate"
                 render={({ field, fieldState }) => (
                   <DatePickerField
-                    label="End Date"
+                    label={t("form.fields.endDate.label")}
                     required
                     value={field.value}
                     onValueChange={field.onChange}
@@ -937,20 +951,20 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
           </SectionCard>
 
           <SectionCard
-            title="Targeting"
-            description="Choose the audience and market settings for this campaign."
+            title={t("form.sections.targeting.title")}
+            description={t("form.sections.targeting.description")}
           >
             <div className="grid gap-4 md:grid-cols-2">
               <SearchableSelectField
-                label="Country"
+                label={t("form.fields.country.label")}
                 required
                 value={country}
-                placeholder="Choose country"
+                placeholder={t("form.fields.country.placeholder")}
                 options={COUNTRY_OPTIONS}
                 onValueChange={(value) =>
                   form.setValue("country", value, { shouldDirty: true, shouldValidate: true })
                 }
-                searchPlaceholder="Search countries"
+                searchPlaceholder={t("form.fields.country.searchPlaceholder")}
                 errorText={form.formState.errors.country?.message}
               />
 
@@ -959,11 +973,11 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
                 name="language"
                 render={({ field, fieldState }) => (
                   <SelectField
-                    label="Language"
+                    label={tCommon("language")}
                     required
                     value={field.value}
-                    placeholder="Select language"
-                    options={LANGUAGE_OPTIONS}
+                    placeholder={t("form.fields.language.placeholder")}
+                    options={languageOptions}
                     onValueChange={field.onChange}
                     errorText={fieldState.error?.message}
                   />
@@ -971,50 +985,53 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
               />
 
               <SearchableSelectField
-                label="Audience"
+                label={t("detailsView.detailLabels.audience")}
                 required
                 value={audience}
-                placeholder="Choose audience"
+                placeholder={t("form.fields.audience.placeholder")}
                 options={AUDIENCE_OPTIONS}
                 onValueChange={(value) =>
                   form.setValue("audience", value, { shouldDirty: true, shouldValidate: true })
                 }
-                searchPlaceholder="Search audiences"
+                searchPlaceholder={t("form.fields.audience.searchPlaceholder")}
                 errorText={form.formState.errors.audience?.message}
               />
             </div>
           </SectionCard>
 
           <SectionCard
-            title="Creative Library"
-            description="Select reusable assets from the Creative Library before publishing."
+            title={t("creativeLibrary.title")}
+            description={t("form.sections.creative.description")}
           >
             <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background p-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-medium">Selected creative</p>
+                <p className="text-sm font-medium">{t("form.creative.selectedLabel")}</p>
                 <p className="text-xs text-muted-foreground">
                   {selectedCreative
-                    ? `Creative ID: ${selectedCreative}`
-                    : "No creative selected yet."}
+                    ? t("form.creative.creativeIdLabel", { id: selectedCreative })
+                    : t("form.creative.noneSelected")}
                 </p>
               </div>
               <AppButton asChild variant="outline" size="sm">
                 <Link
                   href={`${ROUTES.campaigns}/creative-library?returnTo=${encodeURIComponent(ROUTES.campaignsCreate)}`}
                 >
-                  Open Creative Library
+                  {t("form.creative.openLibrary")}
                 </Link>
               </AppButton>
             </div>
           </SectionCard>
 
-          <SectionCard title="Notes" description="Optional planning notes for your team.">
+          <SectionCard
+            title={t("form.sections.notes.title")}
+            description={t("form.sections.notes.description")}
+          >
             <AppTextarea
-              label="Notes"
-              placeholder="Add planning notes for your team..."
+              label={t("form.sections.notes.title")}
+              placeholder={t("form.fields.notes.placeholder")}
               wrapperClassName="md:col-span-2"
               className="min-h-[96px] resize-y"
-              helperText="Optional"
+              helperText={t("form.fields.notes.optional")}
             />
           </SectionCard>
         </div>
@@ -1022,7 +1039,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
         <div className="sticky bottom-0 z-20 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur md:px-6">
           <div className="flex items-center justify-end gap-3">
             <AppButton type="button" variant="outline" size="lg" onClick={() => router.back()}>
-              Cancel
+              {tCommon("cancel")}
             </AppButton>
             <AppButton
               type="submit"
@@ -1030,7 +1047,7 @@ export function CampaignForm({ mode, campaignId, initialDetails }: CampaignFormP
               loading={isSubmitting}
               disabled={isSubmitting || Boolean(dateRangeError)}
             >
-              {mode === "create" ? "Create Campaign" : "Save Changes"}
+              {mode === "create" ? t("listScreen.createCampaign") : t("form.actions.saveChanges")}
             </AppButton>
           </div>
         </div>

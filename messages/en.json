@@ -11,7 +11,9 @@
     "loading": "Loading...",
     "previous": "Previous",
     "export": "Export",
-    "currency": "SAR"
+    "currency": "SAR",
+    "delete": "Delete",
+    "edit": "Edit"
   },
   "authShowcase": {
     "preview": {
@@ -6480,6 +6482,201 @@
         "bodyText": "Settings controls are intentionally lightweight in this sprint and ready for future expansion."
       },
       "dimensionsNotApplicable": "N/A"
+    },
+    "form": {
+      "title": "Campaign Configuration",
+      "subtitle": "Create and configure a marketing campaign before publishing.",
+      "sections": {
+        "basics": {
+          "title": "Campaign Basics",
+          "description": "Define the core campaign identity and primary acquisition path."
+        },
+        "budget": {
+          "title": "Budget & Schedule",
+          "description": "Set the spend envelope, timing, and campaign lifecycle status."
+        },
+        "targeting": {
+          "title": "Targeting",
+          "description": "Choose the audience and market settings for this campaign."
+        },
+        "creative": {
+          "description": "Select reusable assets from the Creative Library before publishing."
+        },
+        "notes": {
+          "title": "Notes",
+          "description": "Optional planning notes for your team."
+        }
+      },
+      "fields": {
+        "name": {
+          "label": "Campaign Name"
+        },
+        "objective": {
+          "placeholder": "Select objective",
+          "options": {
+            "awareness": "Awareness",
+            "traffic": "Traffic",
+            "leads": "Leads",
+            "sales": "Sales",
+            "engagement": "Engagement"
+          }
+        },
+        "channel": {
+          "placeholder": "Select channel"
+        },
+        "budget": {
+          "label": "Budget"
+        },
+        "status": {
+          "placeholder": "Select status",
+          "options": {
+            "draft": {
+              "description": "Campaign not published yet"
+            },
+            "scheduled": {
+              "description": "Queued to launch at the selected date"
+            },
+            "active": {
+              "description": "Currently running"
+            },
+            "paused": {
+              "description": "Temporarily stopped"
+            },
+            "completed": {
+              "description": "Delivered and finished"
+            },
+            "archived": {
+              "description": "Stored for reference only"
+            }
+          }
+        },
+        "startDate": {
+          "label": "Start Date"
+        },
+        "endDate": {
+          "label": "End Date"
+        },
+        "country": {
+          "label": "Country",
+          "placeholder": "Choose country",
+          "searchPlaceholder": "Search countries"
+        },
+        "language": {
+          "placeholder": "Select language",
+          "options": {
+            "arabic": "Arabic",
+            "english": "English",
+            "both": "Both"
+          }
+        },
+        "audience": {
+          "placeholder": "Choose audience",
+          "searchPlaceholder": "Search audiences"
+        },
+        "notes": {
+          "placeholder": "Add planning notes for your team...",
+          "optional": "Optional"
+        }
+      },
+      "validation": {
+        "endDateAfterStart": "End date must be after start date."
+      },
+      "creative": {
+        "selectedLabel": "Selected creative",
+        "creativeIdLabel": "Creative ID: {id}",
+        "noneSelected": "No creative selected yet.",
+        "openLibrary": "Open Creative Library"
+      },
+      "search": {
+        "noResults": "No results found."
+      },
+      "actions": {
+        "saveChanges": "Save Changes"
+      }
+    },
+    "listTable": {
+      "filtersCard": {
+        "title": "Search & Filters",
+        "subtitle": "Always-visible core filters with optional advanced controls."
+      },
+      "searchPlaceholder": "Search campaign name, owner, objective...",
+      "filters": {
+        "budgetRange": {
+          "label": "Budget Range",
+          "options": {
+            "lt50k": "Less than $50K",
+            "range50to100k": "$50K - $100K",
+            "gt100k": "More than $100K"
+          }
+        },
+        "dateRange": {
+          "label": "Date Range",
+          "options": {
+            "thisMonth": "This Month",
+            "thisQuarter": "This Quarter",
+            "next30": "Next 30 Days"
+          }
+        },
+        "sortBy": {
+          "label": "Sort By"
+        }
+      },
+      "sortDirection": {
+        "asc": "Ascending",
+        "desc": "Descending"
+      },
+      "toggleFilters": {
+        "show": "+ More Filters",
+        "hide": "Hide Filters"
+      },
+      "resetFilters": "Reset Filters",
+      "tableCard": {
+        "title": "Campaign Table",
+        "subtitle": "Operational campaign monitoring and execution."
+      },
+      "quickFilters": {
+        "all": "All"
+      },
+      "comingSoon": {
+        "savedViews": "Saved Views (Soon)",
+        "export": "Export (Soon)",
+        "aiRecommendations": "AI Recommendations (Soon)",
+        "comparison": "Comparison (Soon)"
+      },
+      "bulkActions": {
+        "selectedCount": "{count} selected"
+      },
+      "actions": {
+        "open": "Open",
+        "duplicate": "Duplicate",
+        "pause": "Pause",
+        "resume": "Resume",
+        "archive": "Archive",
+        "analytics": "Analytics",
+        "applyOwner": "Apply Owner",
+        "assignOwnerPlaceholder": "Assign Owner"
+      },
+      "emptyState": {
+        "title": "No campaigns yet",
+        "description": "Create your first campaign to start tracking marketing performance.",
+        "learnMore": "Learn about campaigns"
+      },
+      "columns": {
+        "start": "Start",
+        "end": "End",
+        "lastUpdated": "Last Updated",
+        "actions": "Actions"
+      },
+      "selectAllAriaLabel": "Select all campaigns on page",
+      "selectRowAriaLabel": "Select {name}",
+      "actionsForAriaLabel": "Actions for {name}",
+      "pagination": {
+        "rowsPerPage": "Rows per page",
+        "rangeSummary": "{start}-{end} of {total} campaigns",
+        "pageIndicator": "Page {page} / {total}",
+        "pageInputPlaceholder": "Page",
+        "go": "Go"
+      }
     }
   }
 }
