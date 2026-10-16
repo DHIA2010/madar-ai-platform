@@ -160,7 +160,10 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         </div>
       ) : null}
 
-      <AppForm onSubmit={onSubmit} className="space-y-3 [&_input]:h-11 [&_input]:text-[15px]">
+      <AppForm
+        onSubmit={onSubmit}
+        className="space-y-3 [&_input]:h-11 [&_input]:bg-white [&_input]:text-[15px]"
+      >
         <AppInput
           type="email"
           label={t("emailLabel")}
