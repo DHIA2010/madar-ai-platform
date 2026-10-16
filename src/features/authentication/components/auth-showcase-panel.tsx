@@ -83,47 +83,47 @@ export async function DashboardPreviewCard() {
 
   return (
     <div className="relative mx-auto w-full max-w-md">
-      <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/95 shadow-2xl backdrop-blur">
-        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
-          <span className="flex size-6 items-center justify-center rounded-md bg-blue-600 text-[10px] font-bold text-white">
+      <div className="overflow-hidden rounded-[18px] border border-white/60 bg-white/95 shadow-2xl backdrop-blur">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5">
+          <span className="flex size-5 items-center justify-center rounded-md bg-blue-600 text-[9px] font-bold text-white">
             م
           </span>
-          <p className="flex-1 truncate text-xs font-semibold text-slate-900">{t("title")}</p>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-500">
+          <p className="flex-1 truncate text-[11px] font-semibold text-slate-900">{t("title")}</p>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-500">
             {t("dateRange")}
           </span>
         </div>
 
         <div className="flex">
-          <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-e border-slate-100 bg-slate-50/70 py-3">
+          <div className="flex w-8 shrink-0 flex-col items-center gap-1.5 border-e border-slate-100 bg-slate-50/70 py-2">
             {KPI_ICONS.map((Icon, index) => (
               <span
                 key={index}
                 className={cn(
-                  "flex size-6 items-center justify-center rounded-md",
+                  "flex size-5 items-center justify-center rounded-md",
                   index === 0 ? "bg-blue-600 text-white" : "text-slate-300"
                 )}
               >
-                <Icon className="size-3.5" />
+                <Icon className="size-3" />
               </span>
             ))}
           </div>
 
-          <div className="min-w-0 flex-1 p-3.5">
-            <div className="grid grid-cols-2 gap-2">
+          <div className="min-w-0 flex-1 p-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {kpis.map((kpi) => (
-                <div key={kpi.label} className="rounded-xl bg-slate-50 p-2.5">
-                  <p className="truncate text-[10px] text-slate-500">{kpi.label}</p>
-                  <p className="text-sm font-bold text-slate-900">{kpi.value}</p>
-                  <p className="text-[10px] font-medium text-emerald-600">↑ {kpi.delta}</p>
+                <div key={kpi.label} className="rounded-lg bg-slate-50 p-1.5">
+                  <p className="truncate text-[9px] text-slate-500">{kpi.label}</p>
+                  <p className="text-[13px] font-bold text-slate-900">{kpi.value}</p>
+                  <p className="text-[9px] font-medium text-emerald-600">↑ {kpi.delta}</p>
                 </div>
               ))}
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-slate-100 p-2.5">
-                <p className="text-[9px] font-medium text-slate-500">{t("revenueTrend")}</p>
-                <svg viewBox="0 0 140 56" className="mt-1.5 h-12 w-full" preserveAspectRatio="none">
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <div className="rounded-lg border border-slate-100 p-1.5">
+                <p className="text-[8px] font-medium text-slate-500">{t("revenueTrend")}</p>
+                <svg viewBox="0 0 140 56" className="mt-0.5 h-6 w-full" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id="showcaseArea" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#2563eb" stopOpacity="0.25" />
@@ -145,11 +145,11 @@ export async function DashboardPreviewCard() {
                 </svg>
               </div>
 
-              <div className="rounded-xl border border-slate-100 p-2.5">
-                <p className="text-[9px] font-medium text-slate-500">{t("salesDistribution")}</p>
-                <div className="mt-1.5 flex items-center gap-2">
+              <div className="rounded-lg border border-slate-100 p-1.5">
+                <p className="text-[8px] font-medium text-slate-500">{t("salesDistribution")}</p>
+                <div className="mt-0.5 flex items-center gap-1.5">
                   <div
-                    className="size-10 shrink-0 rounded-full"
+                    className="size-7 shrink-0 rounded-full"
                     style={{
                       background: `conic-gradient(${(() => {
                         let start = 0
@@ -190,20 +190,20 @@ export async function DashboardPreviewCard() {
 
 function FeatureCardsGrid({ cards }: { cards: ShowcaseFeatureCard[] }) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-2.5">
       {cards.map((card) => {
         const style = FEATURE_CARD_STYLE[card.key] ?? FEATURE_CARD_STYLE.pos
         const Icon = style.icon
         return (
           <div
             key={card.key}
-            className="rounded-2xl border border-slate-100 bg-white/80 p-3.5 shadow-sm backdrop-blur"
+            className="rounded-xl border border-slate-100 bg-white/80 p-2 shadow-sm backdrop-blur"
           >
-            <span className={cn("flex size-9 items-center justify-center rounded-xl", style.tone)}>
-              <Icon className="size-4.5" />
+            <span className={cn("flex size-7 items-center justify-center rounded-lg", style.tone)}>
+              <Icon className="size-3.5" />
             </span>
-            <p className="mt-2.5 text-[13px] font-semibold text-slate-900">{card.title}</p>
-            <p className="mt-1 text-[11.5px] leading-5 text-slate-500">{card.description}</p>
+            <p className="mt-1.5 text-[12px] font-semibold text-slate-900">{card.title}</p>
+            <p className="mt-0.5 text-[10.5px] leading-[1.3] text-slate-500">{card.description}</p>
           </div>
         )
       })}
@@ -213,13 +213,13 @@ function FeatureCardsGrid({ cards }: { cards: ShowcaseFeatureCard[] }) {
 
 function FeatureList({ features }: { features: ShowcaseListFeature[] }) {
   return (
-    <ul className="space-y-4">
+    <ul className="space-y-3">
       {features.map((feature) => {
         const Icon = feature.icon
         return (
           <li key={feature.title} className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <Icon className="size-5" />
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Icon className="size-4.5" />
             </span>
             <div>
               <p className="text-sm font-semibold text-slate-900">{feature.title}</p>
@@ -234,15 +234,15 @@ function FeatureList({ features }: { features: ShowcaseListFeature[] }) {
 
 function TrustBadgesRow({ badges }: { badges: ShowcaseBadge[] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 border-t border-slate-200/70 pt-5 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 border-t border-slate-200/70 pt-2.5 sm:grid-cols-4">
       {badges.map((badge) => {
         const Icon = BADGE_ICON[badge.key] ?? ShieldCheck
         return (
-          <div key={badge.key} className="flex items-center gap-2">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-              <Icon className="size-4" />
+          <div key={badge.key} className="flex items-center gap-1.5">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <Icon className="size-3" />
             </span>
-            <span className="text-xs font-medium text-slate-700">{badge.label}</span>
+            <span className="text-[11.5px] font-medium text-slate-700">{badge.label}</span>
           </div>
         )
       })}
@@ -262,34 +262,34 @@ export function AuthShowcasePanel({
   footer,
 }: AuthShowcasePanelProps) {
   return (
-    <div className="relative hidden flex-col justify-center gap-8 bg-gradient-to-br from-blue-50 via-sky-50 to-white p-10 lg:flex xl:p-14">
+    <div className="relative hidden flex-col justify-center gap-3 overflow-hidden bg-gradient-to-br from-blue-50 via-sky-50 to-white p-5 lg:flex xl:p-6">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 -end-24 size-96 rounded-full bg-blue-200/40 blur-3xl" />
         <div className="absolute -bottom-24 -start-24 size-96 rounded-full bg-sky-200/40 blur-3xl" />
       </div>
 
-      <div className="relative space-y-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-blue-700 shadow-sm backdrop-blur">
-          <Sparkles className="size-3.5" />
+      <div className="relative space-y-1">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white/80 px-2.5 py-0.5 text-[10.5px] font-semibold text-blue-700 shadow-sm backdrop-blur">
+          <Sparkles className="size-3" />
           {eyebrow}
         </span>
-        <h2 className="text-3xl font-bold text-slate-900">
+        <h2 className="text-xl font-bold text-slate-900">
           {heading}{" "}
           {headingHighlight ? <span className="text-blue-600">{headingHighlight}</span> : null}
         </h2>
-        <p className="max-w-md text-sm leading-6 text-slate-600">{description}</p>
+        <p className="max-w-md text-[12.5px] leading-[1.35] text-slate-600">{description}</p>
       </div>
 
       <div className="relative">{visual ?? <DashboardPreviewCard />}</div>
 
-      <div className="relative space-y-6">
+      <div className="relative space-y-2.5">
         {featureCards ? <FeatureCardsGrid cards={featureCards} /> : null}
         {features ? <FeatureList features={features} /> : null}
         {badges ? <TrustBadgesRow badges={badges} /> : null}
       </div>
 
       {footer ? (
-        <div className="relative flex items-center gap-2 border-t border-slate-200/70 pt-5 text-sm text-slate-600">
+        <div className="relative flex items-center gap-2 border-t border-slate-200/70 pt-2.5 text-[12px] text-slate-600">
           {footer}
         </div>
       ) : null}

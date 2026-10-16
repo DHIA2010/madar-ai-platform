@@ -132,35 +132,35 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   })
 
   return (
-    <div className={cn("flex w-full max-w-lg flex-col gap-8", className)} {...props}>
-      <div className="flex flex-col items-center gap-6 text-center">
+    <div className={cn("flex w-full max-w-lg flex-col gap-4", className)} {...props}>
+      <div className="flex flex-col items-center gap-2 text-center">
         <Image
           src={ASSETS.logo}
           alt="مدار MADAR"
           width={778}
           height={325}
           priority
-          className="h-14 w-auto"
+          className="h-9 w-auto"
         />
-        <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold text-slate-900">{t("heading")}</h1>
-          <p className="text-sm text-slate-500">{t("subheading")}</p>
+        <div className="space-y-0.5">
+          <h1 className="text-lg font-bold text-slate-900">{t("heading")}</h1>
+          <p className="text-[12.5px] text-slate-500">{t("subheading")}</p>
         </div>
       </div>
 
       {invitationToken ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-[13px] text-blue-700">
           {t("invitationBanner")}
         </div>
       ) : null}
 
       {zidInstallToken ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-[13px] text-blue-700">
           {t("zidInstallBanner")}
         </div>
       ) : null}
 
-      <AppForm onSubmit={onSubmit} className="space-y-5">
+      <AppForm onSubmit={onSubmit} className="space-y-3">
         <AppInput
           type="email"
           label={t("emailLabel")}
@@ -207,7 +207,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           type="submit"
           fullWidth
           loading={form.formState.isSubmitting || authStatus === "loading"}
-          className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+          className="h-9 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
         >
           {t("submit")}
         </AppButton>
@@ -222,21 +222,21 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <GoogleIcon />
           </button>
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <MicrosoftIcon />
           </button>
           <button
             type="button"
             title={t("comingSoon")}
-            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <AppleIcon />
           </button>

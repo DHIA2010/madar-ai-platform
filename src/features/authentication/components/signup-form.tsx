@@ -91,22 +91,22 @@ function StepIndicator({
 
         return (
           <div key={item.step} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1">
               <span
                 className={cn(
-                  "flex size-9 items-center justify-center rounded-full text-sm font-semibold transition-colors",
+                  "flex size-7 items-center justify-center rounded-full text-[13px] font-semibold transition-colors",
                   isComplete
                     ? "bg-blue-600 text-white"
                     : isActive
-                      ? "bg-blue-600 text-white ring-4 ring-blue-100"
+                      ? "bg-blue-600 text-white ring-3 ring-blue-100"
                       : "bg-slate-100 text-slate-400"
                 )}
               >
-                {isComplete ? <Check className="size-4" /> : item.step}
+                {isComplete ? <Check className="size-3.5" /> : item.step}
               </span>
               <span
                 className={cn(
-                  "text-xs font-medium whitespace-nowrap",
+                  "text-[11px] font-medium whitespace-nowrap",
                   isActive || isComplete ? "text-slate-900" : "text-slate-400"
                 )}
               >
@@ -116,7 +116,7 @@ function StepIndicator({
             {index < steps.length - 1 ? (
               <span
                 className={cn(
-                  "mx-2 mb-5 h-0.5 flex-1",
+                  "mx-2 mb-4 h-0.5 flex-1",
                   isComplete ? "bg-blue-600" : "bg-slate-100"
                 )}
               />
@@ -278,37 +278,37 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   })
 
   return (
-    <div className={cn("flex w-full max-w-lg flex-col gap-8", className)} {...props}>
-      <div className="flex flex-col items-center gap-6 text-center">
+    <div className={cn("flex w-full max-w-lg flex-col gap-3", className)} {...props}>
+      <div className="flex flex-col items-center gap-2 text-center">
         <Image
           src={ASSETS.logo}
           alt="مدار MADAR"
           width={778}
           height={325}
           priority
-          className="h-14 w-auto"
+          className="h-9 w-auto"
         />
-        <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold text-slate-900">{t("heading")}</h1>
-          <p className="text-sm text-slate-500">{t("subheading")}</p>
+        <div className="space-y-0.5">
+          <h1 className="text-lg font-bold text-slate-900">{t("heading")}</h1>
+          <p className="text-[12.5px] text-slate-500">{t("subheading")}</p>
         </div>
       </div>
 
       {isInvitationMode ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-[12.5px] text-blue-700">
           {t("invitationBanner")}
         </div>
       ) : null}
 
       {zidInstallToken ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-[12.5px] text-blue-700">
           {t("zidInstallBanner")}
         </div>
       ) : null}
 
       <StepIndicator current={step} steps={steps} />
 
-      <AppForm onSubmit={onSubmit} className="space-y-5">
+      <AppForm onSubmit={onSubmit} className="space-y-3">
         {step === 1 ? (
           <>
             <AppInput
@@ -419,7 +419,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
               type="button"
               onClick={goNext}
               fullWidth
-              className="h-11 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+              className="h-9 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
             >
               {t("next")}
             </AppButton>
@@ -499,14 +499,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 type="button"
                 variant="outline"
                 onClick={goBack}
-                className="h-11 flex-1 text-base font-semibold"
+                className="h-9 flex-1 text-[14px] font-semibold"
               >
                 {t("back")}
               </AppButton>
               <AppButton
                 type="button"
                 onClick={goNext}
-                className="h-11 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+                className="h-9 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
               >
                 {t("next")}
               </AppButton>
@@ -557,14 +557,14 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
                 type="button"
                 variant="outline"
                 onClick={goBack}
-                className="h-11 flex-1 text-base font-semibold"
+                className="h-9 flex-1 text-[14px] font-semibold"
               >
                 {t("back")}
               </AppButton>
               <AppButton
                 type="submit"
                 loading={form.formState.isSubmitting}
-                className="h-11 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-base font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
+                className="h-9 flex-1 bg-gradient-to-l from-blue-600 to-sky-500 text-[14px] font-semibold shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-sky-400"
               >
                 {t("submit")}
               </AppButton>
