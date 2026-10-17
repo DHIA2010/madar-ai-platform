@@ -2481,8 +2481,8 @@
         "shiftOpenSince": "منذ {time}",
         "cashMovement": "سحب / إيداع",
         "noOpenShift": "لا توجد وردية مفتوحة",
-        "dashboard": "لوحة التحكم",
-        "fullscreenAriaLabel": "ملء الشاشة"
+        "fullscreenAriaLabel": "ملء الشاشة",
+        "closeShift": "إغلاق الوردية"
       },
       "categories": {
         "title": "الفئات",

@@ -2481,8 +2481,8 @@
         "shiftOpenSince": "Since {time}",
         "cashMovement": "Cash in / out",
         "noOpenShift": "No open shift",
-        "dashboard": "Dashboard",
-        "fullscreenAriaLabel": "Full screen"
+        "fullscreenAriaLabel": "Full screen",
+        "closeShift": "Close shift"
       },
       "categories": {
         "title": "Categories",

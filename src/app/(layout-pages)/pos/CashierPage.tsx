@@ -33,6 +33,7 @@ import {
   Landmark,
   Layers,
   List,
+  Lock,
   Loader2,
   LayoutGrid,
   Maximize,
@@ -48,6 +49,7 @@ import {
   Smartphone,
   StickyNote,
   Store,
+  Tag,
   Trash2,
   Undo2,
   UserPlus,
@@ -60,7 +62,6 @@ import { toast } from "sonner"
 import { AppError } from "@/lib/errors/app-error"
 import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
-import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { useAuth } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
@@ -162,6 +163,24 @@ function amountFormatter(locale: Locale) {
 }
 function formatAmount(value: number, locale: Locale): string {
   return `${amountFormatter(locale).format(value)} ${locale === "ar" ? "ر.س" : "SAR"}`
+}
+
+// Categories are free-text, workspace-defined data (not a fixed known set like the main nav), so
+// there's no real icon per name -- instead every row gets the same generic tag glyph, tinted from
+// a small fixed palette keyed off the category's own first character so the list still reads as
+// visually distinct rows rather than one flat list, same hash-to-color approach already used for
+// store logos in stores-integration-hub.tsx.
+const CATEGORY_TINTS = [
+  "bg-sky-50 text-sky-600",
+  "bg-emerald-50 text-emerald-600",
+  "bg-amber-50 text-amber-600",
+  "bg-rose-50 text-rose-600",
+  "bg-indigo-50 text-indigo-600",
+  "bg-violet-50 text-violet-600",
+  "bg-teal-50 text-teal-600",
+]
+function categoryTint(name: string) {
+  return CATEGORY_TINTS[name.charCodeAt(0) % CATEGORY_TINTS.length]
 }
 
 // One real icon per real payment kind -- not brand logos (no Visa/Mastercard/mada/Apple mark
@@ -1837,16 +1856,14 @@ export default function CashierPage() {
         <span className="flex items-center gap-1.5 rounded-full border border-[#e8edf3] bg-[#eff6ff] px-3 py-1.5 text-[11.5px] font-semibold text-[#2563eb]">
           <Wallet className="size-3.5" />
           {t("topBar.todaySales")}
-          {todaySummary ? formatAmount(todaySummary.totalCompletedAmount, locale) : "—"}
+          <span className={HEADING}>
+            {todaySummary ? formatAmount(todaySummary.totalCompletedAmount, locale) : "—"}
+          </span>
         </span>
 
         {myOpenShift ? (
           <>
-            <button
-              type="button"
-              onClick={() => setIsCloseShiftOpen(true)}
-              className="flex items-center gap-1.5 rounded-full border border-[#dcfce7] bg-[#f0fdf4] px-3 py-1.5 text-[11.5px] font-semibold text-[#15803d] hover:border-[#bbf7d0]"
-            >
+            <span className="flex items-center gap-1.5 rounded-full border border-[#dcfce7] bg-[#f0fdf4] py-1.5 ps-3 pe-1.5 text-[11.5px] font-semibold text-[#15803d]">
               <span className="size-1.5 rounded-full bg-[#22c55e]" />
               {t("topBar.shiftOpen")}
               <span className={HEADING}>
@@ -1854,7 +1871,16 @@ export default function CashierPage() {
                   time: TIME_FORMAT.format(new Date(myOpenShift.openedAt)),
                 })}
               </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setIsCloseShiftOpen(true)}
+                title={t("topBar.closeShift")}
+                className="flex items-center gap-1 rounded-full bg-[#15803d] px-2.5 py-1 text-white hover:bg-[#166534]"
+              >
+                <Lock className="size-3" />
+                {t("topBar.closeShift")}
+              </button>
+            </span>
             <button
               type="button"
               onClick={() => setIsCashMovementOpen(true)}
@@ -1876,17 +1902,16 @@ export default function CashierPage() {
         )}
 
         <div className="mr-auto flex items-center gap-2">
-          <Button
-            className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1d4ed8]"
-            onClick={() => (window.location.href = ROUTES.dashboard)}
-          >
-            <LayoutGrid className="size-4" />
-            {t("topBar.dashboard")}
-          </Button>
           <button
             type="button"
             aria-label={t("topBar.fullscreenAriaLabel")}
-            onClick={() => void document.documentElement.requestFullscreen().catch(() => {})}
+            onClick={() => {
+              if (document.fullscreenElement) {
+                void document.exitFullscreen().catch(() => {})
+              } else {
+                void document.documentElement.requestFullscreen().catch(() => {})
+              }
+            }}
             className="flex size-10 items-center justify-center rounded-[10px] border border-[#e8edf3] text-[#5b6b85] hover:border-[#c7d9ff]"
           >
             <Maximize className="size-4" />
@@ -1920,12 +1945,15 @@ export default function CashierPage() {
                 type="button"
                 onClick={() => selectCategory("all")}
                 className={cn(
-                  "rounded-[8px] px-2.5 py-2 text-start text-[12.5px] font-semibold",
+                  "flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-start text-[12.5px] font-semibold",
                   selectedCategory === "all"
                     ? "bg-[#eff6ff] text-[#2563eb]"
                     : "text-[#5b6b85] hover:bg-[#f7faff]"
                 )}
               >
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-[#eff6ff] text-[#2563eb]">
+                  <LayoutGrid className="size-3.5" />
+                </span>
                 {t("categories.all")}
               </button>
               {categories.map((category) => (
@@ -1934,12 +1962,20 @@ export default function CashierPage() {
                   type="button"
                   onClick={() => selectCategory(category)}
                   className={cn(
-                    "rounded-[8px] px-2.5 py-2 text-start text-[12.5px] font-semibold",
+                    "flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-start text-[12.5px] font-semibold",
                     selectedCategory === category
                       ? "bg-[#eff6ff] text-[#2563eb]"
                       : "text-[#5b6b85] hover:bg-[#f7faff]"
                   )}
                 >
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-[6px]",
+                      categoryTint(category)
+                    )}
+                  >
+                    <Tag className="size-3.5" />
+                  </span>
                   {category}
                 </button>
               ))}
