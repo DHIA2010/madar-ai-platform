@@ -7539,5 +7539,175 @@
         "setupDurationValue": "‏~30 ثانية"
       }
     }
+  },
+  "invoices": {
+    "status": {
+      "all": "جميع الحالات",
+      "completed": "مكتملة",
+      "cancelled": "ملغاة",
+      "returned": "مرتجعة",
+      "partiallyReturned": "مرتجعة جزئياً"
+    },
+    "page": {
+      "title": "الفواتير",
+      "subtitle": "إدارة ومراجعة جميع فواتير المبيعات.",
+      "returnedInvoicesLink": "الفواتير المرتجعة",
+      "newInvoiceButton": "فاتورة جديدة",
+      "searchPlaceholder": "البحث برقم الفاتورة أو اسم العميل...",
+      "loading": "جارٍ تحميل الفواتير...",
+      "retry": "إعادة المحاولة",
+      "empty": "لا توجد فواتير مطابقة.",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض الفواتير.",
+        "generic": "تعذر تحميل الفواتير. حاول مرة أخرى."
+      },
+      "stats": {
+        "average": "متوسط قيمة الفاتورة",
+        "cancelled": "الفواتير الملغاة",
+        "completed": "الفواتير المكتملة",
+        "total": "إجمالي الفواتير"
+      },
+      "filters": {
+        "statusAriaLabel": "الحالة",
+        "workspaceAriaLabel": "مساحة العمل",
+        "paymentMethodAriaLabel": "طريقة الدفع",
+        "allWorkspaces": "جميع مساحات العمل",
+        "allPaymentMethods": "جميع طرق الدفع"
+      },
+      "table": {
+        "columns": {
+          "number": "رقم الفاتورة",
+          "date": "التاريخ والوقت",
+          "customer": "العميل",
+          "workspace": "مساحة العمل",
+          "payment": "طريقة الدفع",
+          "amount": "المبلغ",
+          "status": "الحالة",
+          "actions": "الإجراءات"
+        },
+        "rowActionsAriaLabel": "إجراءات الفاتورة",
+        "viewDetails": "عرض التفاصيل",
+        "registerReturnAction": "تسجيل إرجاع"
+      },
+      "pagination": {
+        "previousAriaLabel": "الصفحة السابقة",
+        "nextAriaLabel": "الصفحة التالية",
+        "showing": "عرض {from} - {to} من {total} فاتورة"
+      },
+      "toasts": {
+        "createSuccess": "تم إنشاء الفاتورة {number}."
+      }
+    },
+    "detail": {
+      "closeAriaLabel": "إغلاق",
+      "dateTime": "التاريخ والوقت",
+      "customer": "العميل",
+      "phone": "رقم الجوال",
+      "workspace": "مساحة العمل",
+      "paymentMethod": "طريقة الدفع",
+      "zatcaStatusLabel": "حالة الهيئة (ZATCA)",
+      "zatcaReported": "تم الإبلاغ ({status})",
+      "zatcaAwaitingReport": "موقّعة -- بانتظار الإبلاغ",
+      "productsCount": "المنتجات ({count})",
+      "subtotal": "المجموع الفرعي",
+      "discount": "الخصم",
+      "taxWithPercent": "الضريبة ({percent}٪)",
+      "total": "الإجمالي",
+      "reportToZatca": "الإبلاغ إلى الهيئة (ZATCA)",
+      "print": "طباعة",
+      "sendInvoice": "إرسال الفاتورة",
+      "sendInvoiceDisabledTitle": "إرسال الفاتورة يتطلب ربط قناة تواصل (بريد أو رسالة) بالفاتورة، وهذا غير متاح بعد",
+      "toasts": {
+        "reportSuccess": "تم إبلاغ الفاتورة إلى الهيئة ({status}).",
+        "alreadyReported": "تم إبلاغ هذه الفاتورة مسبقاً.",
+        "notSigned": "لم تُوقَّع هذه الفاتورة عبر جهاز إنتاج تابع للهيئة.",
+        "reportFailed": "تعذر إبلاغ الفاتورة إلى الهيئة."
+      }
+    },
+    "returnDialog": {
+      "title": "تسجيل إرجاع",
+      "description": "الفاتورة #{number} -- حدد كمية كل صنف يُرجعه العميل فعلياً. الأصناف المُرجعة بالكامل من قبل لا تظهر هنا.",
+      "noItemsLeft": "لا توجد أصناف متبقية لإرجاعها على هذه الفاتورة.",
+      "remainingLabel": "المتبقي القابل للإرجاع: {remaining} من {quantity}",
+      "total": "الاجمالي",
+      "refundMethodLabel": "طريقة استرداد المبلغ",
+      "currencyUnit": "ر.س",
+      "notesLabel": "ملاحظة (اختياري)",
+      "notesPlaceholder": "سبب الإرجاع، مثلاً...",
+      "submitting": "جارٍ التسجيل...",
+      "submit": "تسجيل الإرجاع",
+      "toasts": {
+        "selectQuantity": "حدد كمية عنصر واحد على الأقل لإرجاعه.",
+        "selectPaymentMethod": "حدد طريقة الدفع المستخدمة لإعادة المبلغ.",
+        "amountMismatch": "المبلغ المُدخل ({amount}) لا يساوي إجمالي الإرجاع.",
+        "success": "تم تسجيل إشعار الإرجاع {number}.",
+        "failed": "تعذر تسجيل الإرجاع."
+      }
+    },
+    "createDialog": {
+      "title": "فاتورة جديدة",
+      "description": "ابحث عن المنتجات وأضفها، ثم أدخل بيانات العميل وطريقة الدفع.",
+      "addProductLabel": "إضافة منتج",
+      "productSearchPlaceholder": "ابحث بالاسم أو رمز المنتج...",
+      "removeLineAriaLabel": "حذف",
+      "customerLabel": "العميل (اختياري)",
+      "phoneLabel": "رقم الجوال (اختياري)",
+      "paymentMethodLabel": "طريقة الدفع",
+      "paymentMethodPlaceholder": "اختر طريقة الدفع",
+      "discountLabel": "الخصم (اختياري)",
+      "subtotal": "المجموع الفرعي",
+      "discount": "الخصم",
+      "taxWithPercent": "الضريبة ({percent}٪)",
+      "total": "الإجمالي",
+      "saving": "جارٍ الحفظ...",
+      "submit": "إنشاء الفاتورة",
+      "validation": {
+        "itemsRequired": "أضف منتجا واحدا على الأقل",
+        "paymentMethodRequired": "اختر طريقة الدفع"
+      },
+      "toasts": {
+        "forbidden": "لا تملك صلاحية إنشاء الفواتير.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
+        "genericError": "تعذر إنشاء الفاتورة."
+      }
+    },
+    "returns": {
+      "backToInvoices": "الفواتير",
+      "title": "الفواتير المرتجعة",
+      "subtitle": "كل إشعار دائن صدر فعلياً -- الفاتورة الأصلية تبقى مدرجة في الفواتير كما هي.",
+      "searchPlaceholder": "البحث برقم الإشعار أو رقم الفاتورة...",
+      "allWorkspaces": "جميع مساحات العمل",
+      "loading": "جارٍ تحميل الفواتير المرتجعة...",
+      "empty": "لا توجد فواتير مرتجعة مطابقة.",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض الفواتير المرتجعة.",
+        "generic": "تعذر تحميل الفواتير المرتجعة. حاول مرة أخرى."
+      },
+      "table": {
+        "columns": {
+          "returnNumber": "رقم الإشعار",
+          "invoiceNumber": "رقم الفاتورة الأصلية",
+          "date": "التاريخ والوقت",
+          "workspace": "مساحة العمل",
+          "items": "عدد الأصناف",
+          "quantity": "الكمية المرتجعة",
+          "paymentMethod": "طريقة الدفع",
+          "amount": "المبلغ"
+        }
+      },
+      "detail": {
+        "creditNoteFor": "إشعار دائن لفاتورة {number}",
+        "closeAriaLabel": "إغلاق",
+        "dateTime": "التاريخ والوقت",
+        "workspace": "مساحة العمل",
+        "paymentMethod": "طريقة الدفع",
+        "itemsCount": "الأصناف المرتجعة ({count})",
+        "taxableAmount": "المبلغ الخاضع للضريبة",
+        "discount": "الخصم",
+        "vat": "ضريبة القيمة المضافة",
+        "totalReturned": "الإجمالي المرتجع",
+        "printButton": "طباعة إشعار الدائن"
+      }
+    }
   }
 }

@@ -11,13 +11,15 @@ import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import { format } from "date-fns"
-import { ArrowRight, Loader2, Printer, Search, X } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
+import { ArrowLeft, Loader2, Printer, Search, X } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
 import { AppError } from "@/lib/errors/app-error"
 import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import {
   posInvoicesService,
@@ -43,26 +45,33 @@ const MUTED = "text-[#8098b4]"
 const FIELD_CLASS =
   "h-11 rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  const amount = amountFormatter(locale).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
-function formatDateTime(value: string): string {
-  return DATE_TIME_FORMAT.format(new Date(value))
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+function formatDateTime(value: string, locale: Locale): string {
+  return dateTimeFormatter(locale).format(new Date(value))
 }
 
 export default function ReturnedInvoicesPage() {
+  const t = useTranslations("invoices.returns")
+  const locale = useLocale() as Locale
   const { availableWorkspaces, currentOrganization } = useWorkspace()
 
   const workspaceName = useMemo(() => {
@@ -112,11 +121,7 @@ export default function ReturnedInvoicesPage() {
       )
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      setLoadError(
-        status === 403
-          ? "لا تملك صلاحية عرض الفواتير المرتجعة."
-          : "تعذر تحميل الفواتير المرتجعة. حاول مرة أخرى."
-      )
+      setLoadError(status === 403 ? t("loadError.forbidden") : t("loadError.generic"))
     } finally {
       setLoading(false)
     }
@@ -138,7 +143,7 @@ export default function ReturnedInvoicesPage() {
   const [selectedReturn, setSelectedReturn] = useState<InvoiceReturn | null>(null)
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="mb-1 flex items-center gap-2">
@@ -146,14 +151,12 @@ export default function ReturnedInvoicesPage() {
               href={ROUTES.invoices}
               className={cn("flex items-center gap-1 text-[12px] font-semibold", MUTED)}
             >
-              <ArrowRight className="size-3.5" />
-              الفواتير
+              <ArrowLeft className="size-3.5 rtl:rotate-180" />
+              {t("backToInvoices")}
             </Link>
           </div>
-          <h1 className={cn("text-[22px] font-extrabold", HEADING)}>الفواتير المرتجعة</h1>
-          <p className={cn("mt-1 text-[12.5px]", MUTED)}>
-            كل إشعار دائن صدر فعلياً -- الفاتورة الأصلية تبقى مدرجة في الفواتير كما هي.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold", HEADING)}>{t("title")}</h1>
+          <p className={cn("mt-1 text-[12.5px]", MUTED)}>{t("subtitle")}</p>
         </div>
       </div>
 
@@ -165,7 +168,7 @@ export default function ReturnedInvoicesPage() {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="البحث برقم الإشعار أو رقم الفاتورة..."
+                placeholder={t("searchPlaceholder")}
                 className={cn(FIELD_CLASS, "ps-9")}
               />
             </div>
@@ -176,7 +179,7 @@ export default function ReturnedInvoicesPage() {
                   <AppSelectValue />
                 </AppSelectTrigger>
                 <AppSelectContent>
-                  <AppSelectItem value="all">جميع مساحات العمل</AppSelectItem>
+                  <AppSelectItem value="all">{t("allWorkspaces")}</AppSelectItem>
                   {availableWorkspaces.map((workspace) => (
                     <AppSelectItem key={workspace.id} value={workspace.id}>
                       {workspace.name}
@@ -190,7 +193,7 @@ export default function ReturnedInvoicesPage() {
           {loading ? (
             <div className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
               <Loader2 className="size-4 animate-spin" />
-              جارٍ تحميل الفواتير المرتجعة...
+              {t("loading")}
             </div>
           ) : loadError ? (
             <p className={cn("p-8 text-center text-[13px]", MUTED)}>{loadError}</p>
@@ -201,7 +204,7 @@ export default function ReturnedInvoicesPage() {
                 MUTED
               )}
             >
-              لا توجد فواتير مرتجعة مطابقة.
+              {t("empty")}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -209,14 +212,18 @@ export default function ReturnedInvoicesPage() {
                 <thead>
                   <tr>
                     {[
-                      { key: "returnNumber", label: "رقم الإشعار", align: "text-right" },
-                      { key: "invoiceNumber", label: "رقم الفاتورة الأصلية" },
-                      { key: "date", label: "التاريخ والوقت" },
-                      { key: "workspace", label: "مساحة العمل" },
-                      { key: "items", label: "عدد الأصناف" },
-                      { key: "quantity", label: "الكمية المرتجعة" },
-                      { key: "paymentMethod", label: "طريقة الدفع" },
-                      { key: "amount", label: "المبلغ" },
+                      {
+                        key: "returnNumber",
+                        label: t("table.columns.returnNumber"),
+                        align: "text-right",
+                      },
+                      { key: "invoiceNumber", label: t("table.columns.invoiceNumber") },
+                      { key: "date", label: t("table.columns.date") },
+                      { key: "workspace", label: t("table.columns.workspace") },
+                      { key: "items", label: t("table.columns.items") },
+                      { key: "quantity", label: t("table.columns.quantity") },
+                      { key: "paymentMethod", label: t("table.columns.paymentMethod") },
+                      { key: "amount", label: t("table.columns.amount") },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -252,7 +259,7 @@ export default function ReturnedInvoicesPage() {
                         {item.invoiceNumber}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
-                        {formatDateTime(item.createdAt)}
+                        {formatDateTime(item.createdAt, locale)}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                         {workspaceName(item.workspaceId)}
@@ -267,7 +274,7 @@ export default function ReturnedInvoicesPage() {
                         {refundPaymentLabel(item)}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
-                        {formatAmount(item.totalAmount)}
+                        {formatAmount(item.totalAmount, locale)}
                       </td>
                     </tr>
                   ))}
@@ -285,13 +292,13 @@ export default function ReturnedInvoicesPage() {
                   #{selectedReturn.returnNumber}
                 </p>
                 <p className={cn("mt-1 text-[11.5px]", MUTED)}>
-                  إشعار دائن لفاتورة {selectedReturn.invoiceNumber}
+                  {t("detail.creditNoteFor", { number: selectedReturn.invoiceNumber })}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedReturn(null)}
-                aria-label="إغلاق"
+                aria-label={t("detail.closeAriaLabel")}
                 className="flex size-8 items-center justify-center rounded-lg text-[#8098b4] hover:bg-[#f2f5fa]"
               >
                 <X className="size-4" />
@@ -299,15 +306,15 @@ export default function ReturnedInvoicesPage() {
             </div>
 
             <dl className="grid grid-cols-2 gap-y-2.5 text-[12px]">
-              <dt className={MUTED}>التاريخ والوقت</dt>
+              <dt className={MUTED}>{t("detail.dateTime")}</dt>
               <dd className={cn("text-right font-semibold", HEADING)}>
-                {formatDateTime(selectedReturn.createdAt)}
+                {formatDateTime(selectedReturn.createdAt, locale)}
               </dd>
-              <dt className={MUTED}>مساحة العمل</dt>
+              <dt className={MUTED}>{t("detail.workspace")}</dt>
               <dd className={cn("text-right font-semibold", HEADING)}>
                 {workspaceName(selectedReturn.workspaceId)}
               </dd>
-              <dt className={MUTED}>طريقة الدفع</dt>
+              <dt className={MUTED}>{t("detail.paymentMethod")}</dt>
               <dd className={cn("text-right font-semibold", HEADING)}>
                 {refundPaymentLabel(selectedReturn)}
               </dd>
@@ -315,7 +322,7 @@ export default function ReturnedInvoicesPage() {
 
             <div className="border-t border-[#eef2f8] pt-3">
               <p className={cn("mb-2 text-[12.5px] font-bold", HEADING)}>
-                الأصناف المرتجعة ({selectedReturn.items.length})
+                {t("detail.itemsCount", { count: selectedReturn.items.length })}
               </p>
               <div className="flex flex-col gap-2.5">
                 {selectedReturn.items.map((item) => (
@@ -324,11 +331,14 @@ export default function ReturnedInvoicesPage() {
                       <p className={cn("font-semibold", HEADING)}>{item.productName}</p>
                       <p className={MUTED}>
                         {item.quantity} ×{" "}
-                        {formatAmount(item.quantity > 0 ? item.netAmount / item.quantity : 0)}
+                        {formatAmount(
+                          item.quantity > 0 ? item.netAmount / item.quantity : 0,
+                          locale
+                        )}
                       </p>
                     </div>
                     <p className={cn("font-semibold", HEADING)}>
-                      {formatAmount(item.netAmount + item.taxAmount)}
+                      {formatAmount(item.netAmount + item.taxAmount, locale)}
                     </p>
                   </div>
                 ))}
@@ -337,20 +347,26 @@ export default function ReturnedInvoicesPage() {
 
             <div className="flex flex-col gap-1.5 border-t border-[#eef2f8] pt-3 text-[12.5px]">
               <div className="flex items-center justify-between">
-                <span className={MUTED}>المبلغ الخاضع للضريبة</span>
-                <span className={HEADING}>{formatAmount(selectedReturn.subtotalAmount)}</span>
+                <span className={MUTED}>{t("detail.taxableAmount")}</span>
+                <span className={HEADING}>
+                  {formatAmount(selectedReturn.subtotalAmount, locale)}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className={MUTED}>الخصم</span>
-                <span className={HEADING}>-{formatAmount(selectedReturn.discountAmount)}</span>
+                <span className={MUTED}>{t("detail.discount")}</span>
+                <span className={HEADING}>
+                  -{formatAmount(selectedReturn.discountAmount, locale)}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className={MUTED}>ضريبة القيمة المضافة</span>
-                <span className={HEADING}>{formatAmount(selectedReturn.taxAmount)}</span>
+                <span className={MUTED}>{t("detail.vat")}</span>
+                <span className={HEADING}>{formatAmount(selectedReturn.taxAmount, locale)}</span>
               </div>
               <div className="mt-1 flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5 text-[14px] font-extrabold">
-                <span className={HEADING}>الإجمالي المرتجع</span>
-                <span className="text-[#b45309]">{formatAmount(selectedReturn.totalAmount)}</span>
+                <span className={HEADING}>{t("detail.totalReturned")}</span>
+                <span className="text-[#b45309]">
+                  {formatAmount(selectedReturn.totalAmount, locale)}
+                </span>
               </div>
             </div>
 
@@ -360,7 +376,7 @@ export default function ReturnedInvoicesPage() {
               className="flex h-10 items-center justify-center gap-2 rounded-[10px] border border-[#e8edf3] text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
             >
               <Printer className="size-4" />
-              طباعة إشعار الدائن
+              {t("detail.printButton")}
             </button>
           </section>
         ) : null}

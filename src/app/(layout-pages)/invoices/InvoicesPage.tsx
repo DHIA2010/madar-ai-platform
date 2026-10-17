@@ -18,6 +18,7 @@ import { createPortal } from "react-dom"
 import Link from "next/link"
 import QRCode from "qrcode"
 import { format } from "date-fns"
+import { useLocale, useTranslations } from "next-intl"
 import type { DateRange } from "react-day-picker"
 import {
   Calculator,
@@ -43,6 +44,7 @@ import { AppError } from "@/lib/errors/app-error"
 import { printThermalReceipt } from "@/lib/print-thermal-receipt"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import { ThermalInvoiceReceipt } from "@/app/(layout-pages)/pos/ThermalInvoiceReceipt"
 import { CreditNoteReceipt } from "@/app/(layout-pages)/pos/CreditNoteReceipt"
@@ -103,68 +105,90 @@ const FILTER_TRIGGER_CLASS =
   "h-10 w-[150px] rounded-[10px] border-[#e8edf3] bg-white text-[12.5px] text-[#0d1b3e]"
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
-const STATUS_FILTER_OPTIONS: AppSearchableSelectOption[] = [
-  { value: "all", label: "جميع الحالات" },
-  { value: "completed", label: "مكتملة" },
-  { value: "cancelled", label: "ملغاة" },
-  { value: "returned", label: "مرتجعة" },
-  { value: "partially_returned", label: "مرتجعة جزئياً" },
-]
+type InvoicesTranslator = ReturnType<typeof useTranslations<"invoices">>
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+function getStatusFilterOptions(t: InvoicesTranslator): AppSearchableSelectOption[] {
+  return [
+    { value: "all", label: t("status.all") },
+    { value: "completed", label: t("status.completed") },
+    { value: "cancelled", label: t("status.cancelled") },
+    { value: "returned", label: t("status.returned") },
+    { value: "partially_returned", label: t("status.partiallyReturned") },
+  ]
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
-
-function formatDateTime(value: string): string {
-  return DATE_TIME_FORMAT.format(new Date(value))
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
-const STATUS_META: Record<
-  InvoiceStatus,
-  { label: string; tint: string; dot: string; Icon: typeof CheckCircle2 }
-> = {
-  completed: {
-    label: "مكتملة",
-    tint: "bg-[#f0fdf4] text-[#15803d]",
-    dot: "bg-[#22c55e]",
-    Icon: CheckCircle2,
-  },
-  cancelled: {
-    label: "ملغاة",
-    tint: "bg-[#fef2f2] text-[#dc2626]",
-    dot: "bg-[#ef4444]",
-    Icon: XCircle,
-  },
-  returned: {
-    label: "مرتجعة",
-    tint: "bg-[#fffbeb] text-[#b45309]",
-    dot: "bg-[#f59e0b]",
-    Icon: RotateCcw,
-  },
-  partially_returned: {
-    label: "مرتجعة جزئياً",
-    tint: "bg-[#fff7ed] text-[#c2410c]",
-    dot: "bg-[#fb923c]",
-    Icon: RotateCcw,
-  },
+function formatAmount(value: number, locale: Locale): string {
+  const amount = amountFormatter(locale).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
+}
+
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+function formatDateTime(value: string, locale: Locale): string {
+  return dateTimeFormatter(locale).format(new Date(value))
+}
+
+// Module-level data+function split -- see translatedPlanTierMeta (plan-tiers.ts) /
+// translatedCampaignStatusMeta (campaign-status.service.ts) for the established pattern: icons/
+// colors stay plain data, the label comes from a function that takes `t`.
+const STATUS_META: Record<InvoiceStatus, { tint: string; dot: string; Icon: typeof CheckCircle2 }> =
+  {
+    completed: {
+      tint: "bg-[#f0fdf4] text-[#15803d]",
+      dot: "bg-[#22c55e]",
+      Icon: CheckCircle2,
+    },
+    cancelled: {
+      tint: "bg-[#fef2f2] text-[#dc2626]",
+      dot: "bg-[#ef4444]",
+      Icon: XCircle,
+    },
+    returned: {
+      tint: "bg-[#fffbeb] text-[#b45309]",
+      dot: "bg-[#f59e0b]",
+      Icon: RotateCcw,
+    },
+    partially_returned: {
+      tint: "bg-[#fff7ed] text-[#c2410c]",
+      dot: "bg-[#fb923c]",
+      Icon: RotateCcw,
+    },
+  }
+
+function getStatusLabel(status: InvoiceStatus, t: InvoicesTranslator): string {
+  switch (status) {
+    case "completed":
+      return t("status.completed")
+    case "cancelled":
+      return t("status.cancelled")
+    case "returned":
+      return t("status.returned")
+    case "partially_returned":
+      return t("status.partiallyReturned")
+  }
 }
 
 type StatusFilter = "all" | InvoiceStatus
 
 export default function InvoicesPage() {
+  const t = useTranslations("invoices")
+  const tCashierCommon = useTranslations("pos.cashier.common")
+  const locale = useLocale() as Locale
   const { availableWorkspaces, currentOrganization } = useWorkspace()
 
   const workspaceName = useMemo(() => {
@@ -208,9 +232,7 @@ export default function InvoicesPage() {
       setSummary(stats)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      setLoadError(
-        status === 403 ? "لا تملك صلاحية عرض الفواتير." : "تعذر تحميل الفواتير. حاول مرة أخرى."
-      )
+      setLoadError(status === 403 ? t("page.loadError.forbidden") : t("page.loadError.generic"))
     } finally {
       setLoading(false)
     }
@@ -297,15 +319,15 @@ export default function InvoicesPage() {
       setSelectedInvoice((current) =>
         current && current.id === invoice.id ? { ...current, ...patch } : current
       )
-      toast.success(`تم إبلاغ الفاتورة إلى الهيئة (${result.status}).`)
+      toast.success(t("detail.toasts.reportSuccess", { status: result.status }))
     } catch (error) {
       const code = error instanceof AppError ? error.code : undefined
       toast.error(
         code === "POS_INVOICE_ALREADY_REPORTED_TO_ZATCA"
-          ? "تم إبلاغ هذه الفاتورة مسبقاً."
+          ? t("detail.toasts.alreadyReported")
           : code === "POS_INVOICE_NOT_ZATCA_SIGNED"
-            ? "لم تُوقَّع هذه الفاتورة عبر جهاز إنتاج تابع للهيئة."
-            : "تعذر إبلاغ الفاتورة إلى الهيئة."
+            ? t("detail.toasts.notSigned")
+            : t("detail.toasts.reportFailed")
       )
     } finally {
       setReportingZatcaId(null)
@@ -400,15 +422,19 @@ export default function InvoicesPage() {
       }))
       .filter((entry) => entry.quantity > 0)
     if (items.length === 0) {
-      toast.error("حدد كمية عنصر واحد على الأقل لإرجاعه.")
+      toast.error(t("returnDialog.toasts.selectQuantity"))
       return
     }
     if (returnPaymentEntries.length === 0) {
-      toast.error("حدد طريقة الدفع المستخدمة لإعادة المبلغ.")
+      toast.error(t("returnDialog.toasts.selectPaymentMethod"))
       return
     }
     if (Math.abs(returnPaymentTotal - returnPreviewTotal) > 0.01) {
-      toast.error(`المبلغ المُدخل (${formatAmount(returnPaymentTotal)}) لا يساوي إجمالي الإرجاع.`)
+      toast.error(
+        t("returnDialog.toasts.amountMismatch", {
+          amount: formatAmount(returnPaymentTotal, locale),
+        })
+      )
       return
     }
 
@@ -422,7 +448,7 @@ export default function InvoicesPage() {
         })),
         notes: returnNotes.trim() || null,
       })
-      toast.success(`تم تسجيل إشعار الإرجاع ${created.returnNumber}.`)
+      toast.success(t("returnDialog.toasts.success", { number: created.returnNumber }))
       void load()
       void posInvoicesService.summary(backendFilter).then(setSummary)
       setSelectedInvoice(null)
@@ -440,7 +466,7 @@ export default function InvoicesPage() {
         setLastReturn(null)
       }, 150)
     } catch {
-      toast.error("تعذر تسجيل الإرجاع.")
+      toast.error(t("returnDialog.toasts.failed"))
     } finally {
       setSubmittingReturn(false)
     }
@@ -451,28 +477,28 @@ export default function InvoicesPage() {
   const statCards = [
     {
       key: "average",
-      label: "متوسط قيمة الفاتورة",
-      value: summary ? formatAmount(summary.averageCompletedValue) : "—",
+      label: t("page.stats.average"),
+      value: summary ? formatAmount(summary.averageCompletedValue, locale) : "—",
       Icon: Calculator,
       tint: "bg-[#eff6ff] text-[#2563eb]",
     },
     {
       key: "cancelled",
-      label: "الفواتير الملغاة",
+      label: t("page.stats.cancelled"),
       value: summary ? String(summary.cancelledCount) : "—",
       Icon: XCircle,
       tint: "bg-[#fef2f2] text-[#dc2626]",
     },
     {
       key: "completed",
-      label: "الفواتير المكتملة",
+      label: t("page.stats.completed"),
       value: summary ? String(summary.completedCount) : "—",
       Icon: CheckCircle2,
       tint: "bg-[#f0fdf4] text-[#15803d]",
     },
     {
       key: "total",
-      label: "إجمالي الفواتير",
+      label: t("page.stats.total"),
       value: summary ? String(summary.totalCount) : "—",
       Icon: FileText,
       tint: "bg-[#eff6ff] text-[#2563eb]",
@@ -481,31 +507,39 @@ export default function InvoicesPage() {
 
   if (loading && invoices.length === 0 && !loadError) {
     return (
-      <div dir="rtl" className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}
+      >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل الفواتير...
+        {t("page.loading")}
       </div>
     )
   }
 
   if (loadError) {
     return (
-      <div dir="rtl" className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}
+      >
         <p className={cn("text-[13px]", HEADING)}>{loadError}</p>
         <Button variant="outline" onClick={() => void load()}>
           <RotateCcw className="size-4" />
-          إعادة المحاولة
+          {t("page.retry")}
         </Button>
       </div>
     )
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-5 pb-10">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الفواتير</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>إدارة ومراجعة جميع فواتير المبيعات.</p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>
+            {t("page.title")}
+          </h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("page.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -515,7 +549,7 @@ export default function InvoicesPage() {
           >
             <Link href={ROUTES.invoicesReturns}>
               <RotateCcw className="size-4" />
-              الفواتير المرتجعة
+              {t("page.returnedInvoicesLink")}
             </Link>
           </Button>
           <Button
@@ -523,7 +557,7 @@ export default function InvoicesPage() {
             onClick={() => setIsCreateOpen(true)}
           >
             <Plus className="size-4" />
-            فاتورة جديدة
+            {t("page.newInvoiceButton")}
           </Button>
         </div>
       </div>
@@ -557,7 +591,7 @@ export default function InvoicesPage() {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="البحث برقم الفاتورة أو اسم العميل..."
+                placeholder={t("page.searchPlaceholder")}
                 className={cn(FIELD_CLASS, "ps-9")}
               />
             </div>
@@ -568,8 +602,8 @@ export default function InvoicesPage() {
               <AppSearchableSelect
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as StatusFilter)}
-                options={STATUS_FILTER_OPTIONS}
-                ariaLabel="الحالة"
+                options={getStatusFilterOptions(t)}
+                ariaLabel={t("page.filters.statusAriaLabel")}
                 triggerClassName={FILTER_TRIGGER_CLASS}
               />
 
@@ -577,13 +611,13 @@ export default function InvoicesPage() {
                 value={workspaceFilter}
                 onChange={setWorkspaceFilter}
                 options={[
-                  { value: "all", label: "جميع مساحات العمل" },
+                  { value: "all", label: t("page.filters.allWorkspaces") },
                   ...availableWorkspaces.map((workspace) => ({
                     value: workspace.id,
                     label: workspace.name,
                   })),
                 ]}
-                ariaLabel="مساحة العمل"
+                ariaLabel={t("page.filters.workspaceAriaLabel")}
                 triggerClassName={cn(FILTER_TRIGGER_CLASS, "w-[190px]")}
               />
 
@@ -591,10 +625,10 @@ export default function InvoicesPage() {
                 value={paymentMethodFilter}
                 onChange={setPaymentMethodFilter}
                 options={[
-                  { value: "all", label: "جميع طرق الدفع" },
+                  { value: "all", label: t("page.filters.allPaymentMethods") },
                   ...paymentMethods.map((method) => ({ value: method.code, label: method.name })),
                 ]}
-                ariaLabel="طريقة الدفع"
+                ariaLabel={t("page.filters.paymentMethodAriaLabel")}
                 triggerClassName={FILTER_TRIGGER_CLASS}
               />
             </div>
@@ -607,7 +641,7 @@ export default function InvoicesPage() {
                 MUTED
               )}
             >
-              لا توجد فواتير مطابقة.
+              {t("page.empty")}
             </div>
           ) : (
             <>
@@ -616,14 +650,42 @@ export default function InvoicesPage() {
                   <thead>
                     <tr>
                       {[
-                        { key: "number", label: "رقم الفاتورة", align: "text-right" },
-                        { key: "date", label: "التاريخ والوقت", align: "text-center" },
-                        { key: "customer", label: "العميل", align: "text-center" },
-                        { key: "workspace", label: "مساحة العمل", align: "text-center" },
-                        { key: "payment", label: "طريقة الدفع", align: "text-center" },
-                        { key: "amount", label: "المبلغ", align: "text-center" },
-                        { key: "status", label: "الحالة", align: "text-center" },
-                        { key: "actions", label: "الإجراءات", align: "text-center" },
+                        {
+                          key: "number",
+                          label: t("page.table.columns.number"),
+                          align: "text-right",
+                        },
+                        { key: "date", label: t("page.table.columns.date"), align: "text-center" },
+                        {
+                          key: "customer",
+                          label: t("page.table.columns.customer"),
+                          align: "text-center",
+                        },
+                        {
+                          key: "workspace",
+                          label: t("page.table.columns.workspace"),
+                          align: "text-center",
+                        },
+                        {
+                          key: "payment",
+                          label: t("page.table.columns.payment"),
+                          align: "text-center",
+                        },
+                        {
+                          key: "amount",
+                          label: t("page.table.columns.amount"),
+                          align: "text-center",
+                        },
+                        {
+                          key: "status",
+                          label: t("page.table.columns.status"),
+                          align: "text-center",
+                        },
+                        {
+                          key: "actions",
+                          label: t("page.table.columns.actions"),
+                          align: "text-center",
+                        },
                       ].map((column) => (
                         <th
                           key={column.key}
@@ -663,10 +725,10 @@ export default function InvoicesPage() {
                             {invoice.invoiceNumber}
                           </td>
                           <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
-                            {formatDateTime(invoice.createdAt)}
+                            {formatDateTime(invoice.createdAt, locale)}
                           </td>
                           <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
-                            {invoice.customerName ?? "عميل نقدي"}
+                            {invoice.customerName ?? tCashierCommon("cashCustomer")}
                           </td>
                           <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                             {workspaceName(invoice.workspaceId)}
@@ -675,7 +737,7 @@ export default function InvoicesPage() {
                             {paymentMethodLabel(invoice)}
                           </td>
                           <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
-                            {formatAmount(invoice.totalAmount)}
+                            {formatAmount(invoice.totalAmount, locale)}
                           </td>
                           <td className="px-3 py-3.5">
                             <span
@@ -685,7 +747,7 @@ export default function InvoicesPage() {
                               )}
                             >
                               <span className={cn("size-1.5 rounded-full", meta.dot)} />
-                              {meta.label}
+                              {getStatusLabel(invoice.status, t)}
                             </span>
                           </td>
                           <td className="px-3 py-3.5" onClick={(event) => event.stopPropagation()}>
@@ -693,7 +755,7 @@ export default function InvoicesPage() {
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  aria-label="إجراءات الفاتورة"
+                                  aria-label={t("page.table.rowActionsAriaLabel")}
                                   className="mx-auto flex size-8 items-center justify-center rounded-lg text-[#0d1b3e] transition-colors hover:bg-[#f2f5fa]"
                                 >
                                   ···
@@ -701,13 +763,16 @@ export default function InvoicesPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
-                                className="w-40 rounded-[12px] [direction:rtl]"
+                                className={cn(
+                                  "w-40 rounded-[12px]",
+                                  locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+                                )}
                               >
                                 <DropdownMenuItem
                                   className="cursor-pointer text-[12.5px]"
                                   onSelect={() => setSelectedInvoice(invoice)}
                                 >
-                                  عرض التفاصيل
+                                  {t("page.table.viewDetails")}
                                 </DropdownMenuItem>
                                 {invoice.status === "completed" ||
                                 invoice.status === "partially_returned" ? (
@@ -723,7 +788,7 @@ export default function InvoicesPage() {
                                     // menu already uses for exactly this reason.
                                     onSelect={() => setTimeout(() => openReturnDialog(invoice), 0)}
                                   >
-                                    تسجيل إرجاع
+                                    {t("page.table.registerReturnAction")}
                                   </DropdownMenuItem>
                                 ) : null}
                               </DropdownMenuContent>
@@ -756,8 +821,11 @@ export default function InvoicesPage() {
                     </AppSelect>
                   </div>
                   <span className={cn("text-[12px]", MUTED)}>
-                    عرض {(clampedPage - 1) * pageSize + 1} -{" "}
-                    {Math.min(clampedPage * pageSize, invoices.length)} من {invoices.length} فاتورة
+                    {t("page.pagination.showing", {
+                      from: (clampedPage - 1) * pageSize + 1,
+                      to: Math.min(clampedPage * pageSize, invoices.length),
+                      total: invoices.length,
+                    })}
                   </span>
                 </div>
 
@@ -766,10 +834,10 @@ export default function InvoicesPage() {
                     type="button"
                     disabled={clampedPage <= 1}
                     onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    aria-label="الصفحة السابقة"
+                    aria-label={t("page.pagination.previousAriaLabel")}
                     className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] transition-colors hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <ChevronRight className="size-3.5" />
+                    <ChevronLeft className="size-3.5 rtl:rotate-180" />
                   </button>
                   <span className="flex size-7 items-center justify-center rounded-[7px] bg-[#2563eb] text-[12.5px] font-bold text-white">
                     {clampedPage}
@@ -778,10 +846,10 @@ export default function InvoicesPage() {
                     type="button"
                     disabled={clampedPage >= pageCount}
                     onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                    aria-label="الصفحة التالية"
+                    aria-label={t("page.pagination.nextAriaLabel")}
                     className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] transition-colors hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <ChevronLeft className="size-3.5" />
+                    <ChevronRight className="size-3.5 rtl:rotate-180" />
                   </button>
                 </div>
               </div>
@@ -809,7 +877,7 @@ export default function InvoicesPage() {
           setInvoices((current) => [invoice, ...current])
           void posInvoicesService.summary(backendFilter).then(setSummary)
           setIsCreateOpen(false)
-          toast.success(`تم إنشاء الفاتورة ${invoice.invoiceNumber}.`)
+          toast.success(t("page.toasts.createSuccess", { number: invoice.invoiceNumber }))
         }}
       />
 
@@ -889,6 +957,9 @@ function InvoiceDetailPanel({
   onReportZatca: () => void
   onClose: () => void
 }) {
+  const t = useTranslations("invoices")
+  const tCashierCommon = useTranslations("pos.cashier.common")
+  const locale = useLocale() as Locale
   const meta = STATUS_META[invoice.status]
   // Derived from this invoice's own stored numbers, not the organization's CURRENT default rate
   // -- a real sale keeps the rate it was actually charged at forever, even after the org's
@@ -912,13 +983,13 @@ function InvoiceDetailPanel({
             )}
           >
             <span className={cn("size-1.5 rounded-full", meta.dot)} />
-            {meta.label}
+            {getStatusLabel(invoice.status, t)}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="إغلاق"
+          aria-label={t("detail.closeAriaLabel")}
           className="flex size-8 items-center justify-center rounded-lg text-[#8098b4] hover:bg-[#f2f5fa]"
         >
           ×
@@ -926,27 +997,27 @@ function InvoiceDetailPanel({
       </div>
 
       <dl className="grid grid-cols-2 gap-y-2.5 text-[12px]">
-        <dt className={MUTED}>التاريخ والوقت</dt>
+        <dt className={MUTED}>{t("detail.dateTime")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>
-          {formatDateTime(invoice.createdAt)}
+          {formatDateTime(invoice.createdAt, locale)}
         </dd>
-        <dt className={MUTED}>العميل</dt>
+        <dt className={MUTED}>{t("detail.customer")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>
-          {invoice.customerName ?? "عميل نقدي"}
+          {invoice.customerName ?? tCashierCommon("cashCustomer")}
         </dd>
-        <dt className={MUTED}>رقم الجوال</dt>
+        <dt className={MUTED}>{t("detail.phone")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{invoice.customerPhone ?? "—"}</dd>
-        <dt className={MUTED}>مساحة العمل</dt>
+        <dt className={MUTED}>{t("detail.workspace")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{workspaceName}</dd>
-        <dt className={MUTED}>طريقة الدفع</dt>
+        <dt className={MUTED}>{t("detail.paymentMethod")}</dt>
         <dd className={cn("text-right font-semibold", HEADING)}>{paymentMethodName}</dd>
         {invoice.zatcaSigned ? (
           <>
-            <dt className={MUTED}>حالة الهيئة (ZATCA)</dt>
+            <dt className={MUTED}>{t("detail.zatcaStatusLabel")}</dt>
             <dd className={cn("text-right font-semibold", HEADING)}>
               {invoice.zatcaReportedAt
-                ? `تم الإبلاغ (${invoice.zatcaStatus ?? "—"})`
-                : "موقّعة -- بانتظار الإبلاغ"}
+                ? t("detail.zatcaReported", { status: invoice.zatcaStatus ?? "—" })
+                : t("detail.zatcaAwaitingReport")}
             </dd>
           </>
         ) : null}
@@ -954,7 +1025,7 @@ function InvoiceDetailPanel({
 
       <div className="border-t border-[#eef2f8] pt-3">
         <p className={cn("mb-2 text-[12.5px] font-bold", HEADING)}>
-          المنتجات ({invoice.items.length})
+          {t("detail.productsCount", { count: invoice.items.length })}
         </p>
         <div className="flex flex-col gap-2.5">
           {invoice.items.map((item, index) => (
@@ -962,10 +1033,10 @@ function InvoiceDetailPanel({
               <div>
                 <p className={cn("font-semibold", HEADING)}>{item.productName}</p>
                 <p className={MUTED}>
-                  {item.quantity} × {formatAmount(item.unitPrice)}
+                  {item.quantity} × {formatAmount(item.unitPrice, locale)}
                 </p>
               </div>
-              <p className={cn("font-semibold", HEADING)}>{formatAmount(item.lineTotal)}</p>
+              <p className={cn("font-semibold", HEADING)}>{formatAmount(item.lineTotal, locale)}</p>
             </div>
           ))}
         </div>
@@ -973,20 +1044,22 @@ function InvoiceDetailPanel({
 
       <div className="flex flex-col gap-1.5 border-t border-[#eef2f8] pt-3 text-[12.5px]">
         <div className="flex items-center justify-between">
-          <span className={MUTED}>المجموع الفرعي</span>
-          <span className={HEADING}>{formatAmount(invoice.subtotalAmount)}</span>
+          <span className={MUTED}>{t("detail.subtotal")}</span>
+          <span className={HEADING}>{formatAmount(invoice.subtotalAmount, locale)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className={MUTED}>الخصم</span>
-          <span className={HEADING}>-{formatAmount(invoice.discountAmount)}</span>
+          <span className={MUTED}>{t("detail.discount")}</span>
+          <span className={HEADING}>-{formatAmount(invoice.discountAmount, locale)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className={MUTED}>الضريبة ({effectiveRatePercent}٪)</span>
-          <span className={HEADING}>{formatAmount(invoice.taxAmount)}</span>
+          <span className={MUTED}>
+            {t("detail.taxWithPercent", { percent: effectiveRatePercent })}
+          </span>
+          <span className={HEADING}>{formatAmount(invoice.taxAmount, locale)}</span>
         </div>
         <div className="mt-1 flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5 text-[14px] font-extrabold">
-          <span className={HEADING}>الإجمالي</span>
-          <span className="text-[#2563eb]">{formatAmount(invoice.totalAmount)}</span>
+          <span className={HEADING}>{t("detail.total")}</span>
+          <span className="text-[#2563eb]">{formatAmount(invoice.totalAmount, locale)}</span>
         </div>
       </div>
 
@@ -1001,7 +1074,7 @@ function InvoiceDetailPanel({
           ) : (
             <ShieldCheck className="size-4" />
           )}
-          الإبلاغ إلى الهيئة (ZATCA)
+          {t("detail.reportToZatca")}
         </Button>
       ) : null}
 
@@ -1012,15 +1085,15 @@ function InvoiceDetailPanel({
           onClick={() => printThermalReceipt("invoice-print-target")}
         >
           <Printer className="size-4" />
-          طباعة
+          {t("detail.print")}
         </Button>
         <Button
           disabled
-          title="إرسال الفاتورة يتطلب ربط قناة تواصل (بريد أو رسالة) بالفاتورة، وهذا غير متاح بعد"
+          title={t("detail.sendInvoiceDisabledTitle")}
           className="h-10 flex-1 cursor-not-allowed gap-2 rounded-[10px] bg-[#eff6ff] text-[12.5px] font-semibold text-[#2563eb] opacity-70"
         >
           <Send className="size-4" />
-          إرسال الفاتورة
+          {t("detail.sendInvoice")}
         </Button>
       </div>
     </section>
@@ -1047,6 +1120,7 @@ function ReturnPaymentTile({
   onAmountChange: (value: string) => void
   onSelectFull: () => void
 }) {
+  const t = useTranslations("invoices")
   return (
     <div
       onClick={onSelectFull}
@@ -1079,7 +1153,7 @@ function ReturnPaymentTile({
           className="h-10 rounded-[8px] border-[#e8edf3] pe-9 text-left text-[13px]"
         />
         <span className="pointer-events-none absolute inset-y-0 end-3 my-auto h-fit text-[11px] font-semibold text-[#8098b4]">
-          ر.س
+          {t("returnDialog.currencyUnit")}
         </span>
       </div>
     </div>
@@ -1113,26 +1187,33 @@ function ReturnDialog({
   onSubmit: () => void
   onClose: () => void
 }) {
+  const t = useTranslations("invoices")
+  const tCommon = useTranslations("common")
+  const locale = useLocale() as Locale
   const returnableItems = (invoice?.items ?? []).filter(
     (item) => item.quantity - item.returnedQuantity > 0
   )
 
   return (
     <Dialog open={invoice !== null} onOpenChange={(open) => !open && !submitting && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-[50rem] [direction:rtl]">
+      <DialogContent
+        className={cn(
+          "flex max-h-[85vh] flex-col sm:max-w-[50rem]",
+          locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+        )}
+      >
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-            تسجيل إرجاع
+            {t("returnDialog.title")}
           </DialogTitle>
           <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-            {invoice ? `الفاتورة #${invoice.invoiceNumber}` : ""} -- حدد كمية كل صنف يُرجعه العميل
-            فعلياً. الأصناف المُرجعة بالكامل من قبل لا تظهر هنا.
+            {invoice ? t("returnDialog.description", { number: invoice.invoiceNumber }) : ""}
           </DialogDescription>
         </DialogHeader>
 
         {returnableItems.length === 0 ? (
           <p className={cn("py-6 text-center text-[12.5px]", MUTED)}>
-            لا توجد أصناف متبقية لإرجاعها على هذه الفاتورة.
+            {t("returnDialog.noItemsLeft")}
           </p>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pe-1">
@@ -1148,7 +1229,7 @@ function ReturnDialog({
                       {item.productName}
                     </p>
                     <p className="text-[11px] text-[#e0484d]">
-                      المتبقي القابل للإرجاع: {remaining} من {item.quantity}
+                      {t("returnDialog.remainingLabel", { remaining, quantity: item.quantity })}
                     </p>
                   </div>
                   <Input
@@ -1168,15 +1249,17 @@ function ReturnDialog({
             })}
 
             <div className="flex items-center justify-between rounded-[10px] bg-[#f4f7fc] px-3 py-2.5">
-              <span className={cn("text-[13px] font-extrabold", HEADING)}>الاجمالي</span>
+              <span className={cn("text-[13px] font-extrabold", HEADING)}>
+                {t("returnDialog.total")}
+              </span>
               <span className={cn("text-[14px] font-extrabold", HEADING)}>
-                {formatAmount(previewTotal)}
+                {formatAmount(previewTotal, locale)}
               </span>
             </div>
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                طريقة استرداد المبلغ <span className="text-[#e0484d]">*</span>
+                {t("returnDialog.refundMethodLabel")} <span className="text-[#e0484d]">*</span>
               </Label>
               <div className="grid grid-cols-3 gap-2.5">
                 {paymentMethods.map((method) => (
@@ -1198,13 +1281,13 @@ function ReturnDialog({
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                ملاحظة (اختياري)
+                {t("returnDialog.notesLabel")}
               </Label>
               <Textarea
                 value={notes}
                 onChange={(event) => onNotesChange(event.target.value)}
                 rows={2}
-                placeholder="سبب الإرجاع، مثلاً..."
+                placeholder={t("returnDialog.notesPlaceholder")}
                 className="resize-none rounded-[10px] border-[#e8edf3] bg-white text-[13px] text-[#0d1b3e] placeholder:text-[#8098b4]"
               />
             </div>
@@ -1218,7 +1301,7 @@ function ReturnDialog({
               disabled={submitting}
               onClick={onSubmit}
             >
-              {submitting ? "جارٍ التسجيل..." : "تسجيل الإرجاع"}
+              {submitting ? t("returnDialog.submitting") : t("returnDialog.submit")}
             </Button>
           ) : null}
           <Button
@@ -1227,7 +1310,7 @@ function ReturnDialog({
             disabled={submitting}
             onClick={onClose}
           >
-            إلغاء
+            {tCommon("cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1250,6 +1333,10 @@ function CreateInvoiceDialog({
   paymentMethods: Array<{ code: string; name: string }>
   onCreated: (invoice: Invoice) => void
 }) {
+  const t = useTranslations("invoices")
+  const tCommon = useTranslations("common")
+  const tCashierCommon = useTranslations("pos.cashier.common")
+  const locale = useLocale() as Locale
   const { currentOrganization } = useWorkspace()
 
   const [products, setProducts] = useState<ProductRecord[]>([])
@@ -1347,8 +1434,8 @@ function CreateInvoiceDialog({
   const total = Math.round((taxable + tax) * 100) / 100
 
   const errors = {
-    items: lines.length > 0 ? null : "أضف منتجا واحدا على الأقل",
-    paymentMethod: paymentMethodCode ? null : "اختر طريقة الدفع",
+    items: lines.length > 0 ? null : t("createDialog.validation.itemsRequired"),
+    paymentMethod: paymentMethodCode ? null : t("createDialog.validation.paymentMethodRequired"),
   }
   const isValid = Object.values(errors).every((error) => error === null)
 
@@ -1379,9 +1466,12 @@ function CreateInvoiceDialog({
       onCreated(invoice)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      toast.error(status === 403 ? "لا تملك صلاحية إنشاء الفواتير." : "تعذر إنشاء الفاتورة.", {
-        description: status === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية pos:manage." : undefined,
-      })
+      toast.error(
+        status === 403 ? t("createDialog.toasts.forbidden") : t("createDialog.toasts.genericError"),
+        {
+          description: status === 403 ? t("createDialog.toasts.forbiddenDescription") : undefined,
+        }
+      )
     } finally {
       setSaving(false)
     }
@@ -1389,27 +1479,29 @@ function CreateInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-[30rem] [direction:rtl]">
+      <DialogContent
+        className={cn("sm:max-w-[30rem]", locale === "ar" ? "[direction:rtl]" : "[direction:ltr]")}
+      >
         <DialogHeader className="text-right">
           <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-            فاتورة جديدة
+            {t("createDialog.title")}
           </DialogTitle>
           <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-            ابحث عن المنتجات وأضفها، ثم أدخل بيانات العميل وطريقة الدفع.
+            {t("createDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto pe-1">
           <div>
             <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              إضافة منتج <span className="text-[#e0484d]">*</span>
+              {t("createDialog.addProductLabel")} <span className="text-[#e0484d]">*</span>
             </Label>
             <div className="relative">
               <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
               <Input
                 value={productQuery}
                 onChange={(event) => setProductQuery(event.target.value)}
-                placeholder="ابحث بالاسم أو رمز المنتج..."
+                placeholder={t("createDialog.productSearchPlaceholder")}
                 className={cn(FIELD_CLASS, "ps-9")}
               />
             </div>
@@ -1423,7 +1515,7 @@ function CreateInvoiceDialog({
                     className="flex items-center justify-between rounded-[8px] px-2.5 py-2 text-right text-[12.5px] hover:bg-[#f7faff]"
                   >
                     <span className={HEADING}>{product.name}</span>
-                    <span className={MUTED}>{formatAmount(product.sellingPrice)}</span>
+                    <span className={MUTED}>{formatAmount(product.sellingPrice, locale)}</span>
                   </button>
                 ))}
               </div>
@@ -1439,7 +1531,9 @@ function CreateInvoiceDialog({
                 <div key={line.key} className="flex items-center gap-2">
                   <div className="flex-1">
                     <p className={cn("text-[12.5px] font-semibold", HEADING)}>{line.productName}</p>
-                    <p className={cn("text-[11px]", MUTED)}>{formatAmount(line.unitPrice)}</p>
+                    <p className={cn("text-[11px]", MUTED)}>
+                      {formatAmount(line.unitPrice, locale)}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -1463,7 +1557,7 @@ function CreateInvoiceDialog({
                   <button
                     type="button"
                     onClick={() => removeLine(line.key)}
-                    aria-label="حذف"
+                    aria-label={tCommon("delete")}
                     className="flex size-7 items-center justify-center rounded-lg text-[#dc2626] hover:bg-[#fef2f2]"
                   >
                     <Trash2 className="size-3.5" />
@@ -1476,18 +1570,18 @@ function CreateInvoiceDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                العميل (اختياري)
+                {t("createDialog.customerLabel")}
               </Label>
               <Input
                 value={customerName}
                 onChange={(event) => setCustomerName(event.target.value)}
-                placeholder="عميل نقدي"
+                placeholder={tCashierCommon("cashCustomer")}
                 className={FIELD_CLASS}
               />
             </div>
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                رقم الجوال (اختياري)
+                {t("createDialog.phoneLabel")}
               </Label>
               <Input
                 value={customerPhone}
@@ -1500,11 +1594,11 @@ function CreateInvoiceDialog({
 
           <div>
             <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              طريقة الدفع <span className="text-[#e0484d]">*</span>
+              {t("createDialog.paymentMethodLabel")} <span className="text-[#e0484d]">*</span>
             </Label>
             <AppSelect value={paymentMethodCode} onValueChange={setPaymentMethodCode}>
               <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                <AppSelectValue placeholder="اختر طريقة الدفع" />
+                <AppSelectValue placeholder={t("createDialog.paymentMethodPlaceholder")} />
               </AppSelectTrigger>
               <AppSelectContent>
                 {paymentMethods.map((method) => (
@@ -1521,7 +1615,7 @@ function CreateInvoiceDialog({
 
           <div>
             <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-              الخصم (اختياري)
+              {t("createDialog.discountLabel")}
             </Label>
             <div className="relative">
               <Wallet className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
@@ -1538,20 +1632,22 @@ function CreateInvoiceDialog({
 
           <div className="flex flex-col gap-1.5 rounded-[10px] bg-[#f4f7fc] p-3 text-[12.5px]">
             <div className="flex items-center justify-between">
-              <span className={MUTED}>المجموع الفرعي</span>
-              <span className={HEADING}>{formatAmount(subtotal)}</span>
+              <span className={MUTED}>{t("createDialog.subtotal")}</span>
+              <span className={HEADING}>{formatAmount(subtotal, locale)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={MUTED}>الخصم</span>
-              <span className={HEADING}>-{formatAmount(discount)}</span>
+              <span className={MUTED}>{t("createDialog.discount")}</span>
+              <span className={HEADING}>-{formatAmount(discount, locale)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={MUTED}>الضريبة ({Math.round(vatRate * 100)}٪)</span>
-              <span className={HEADING}>{formatAmount(tax)}</span>
+              <span className={MUTED}>
+                {t("createDialog.taxWithPercent", { percent: Math.round(vatRate * 100) })}
+              </span>
+              <span className={HEADING}>{formatAmount(tax, locale)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-[14px] font-extrabold">
-              <span className={HEADING}>الإجمالي</span>
-              <span className="text-[#2563eb]">{formatAmount(total)}</span>
+              <span className={HEADING}>{t("createDialog.total")}</span>
+              <span className="text-[#2563eb]">{formatAmount(total, locale)}</span>
             </div>
           </div>
         </div>
@@ -1562,7 +1658,7 @@ function CreateInvoiceDialog({
             disabled={saving}
             onClick={() => void submit()}
           >
-            {saving ? "جارٍ الحفظ..." : "إنشاء الفاتورة"}
+            {saving ? t("createDialog.saving") : t("createDialog.submit")}
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
           </Button>
           <Button
@@ -1571,7 +1667,7 @@ function CreateInvoiceDialog({
             disabled={saving}
             onClick={() => onOpenChange(false)}
           >
-            إلغاء
+            {tCommon("cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>

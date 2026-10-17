@@ -7543,5 +7543,175 @@
         "setupDurationValue": "~30 seconds"
       }
     }
+  },
+  "invoices": {
+    "status": {
+      "all": "All statuses",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "returned": "Returned",
+      "partiallyReturned": "Partially returned"
+    },
+    "page": {
+      "title": "Invoices",
+      "subtitle": "Manage and review all sales invoices.",
+      "returnedInvoicesLink": "Returned invoices",
+      "newInvoiceButton": "New invoice",
+      "searchPlaceholder": "Search by invoice number or customer name...",
+      "loading": "Loading invoices...",
+      "retry": "Retry",
+      "empty": "No matching invoices.",
+      "loadError": {
+        "forbidden": "You don't have permission to view invoices.",
+        "generic": "Couldn't load invoices. Try again."
+      },
+      "stats": {
+        "average": "Average invoice value",
+        "cancelled": "Cancelled invoices",
+        "completed": "Completed invoices",
+        "total": "Total invoices"
+      },
+      "filters": {
+        "statusAriaLabel": "Status",
+        "workspaceAriaLabel": "Workspace",
+        "paymentMethodAriaLabel": "Payment method",
+        "allWorkspaces": "All workspaces",
+        "allPaymentMethods": "All payment methods"
+      },
+      "table": {
+        "columns": {
+          "number": "Invoice number",
+          "date": "Date & time",
+          "customer": "Customer",
+          "workspace": "Workspace",
+          "payment": "Payment method",
+          "amount": "Amount",
+          "status": "Status",
+          "actions": "Actions"
+        },
+        "rowActionsAriaLabel": "Invoice actions",
+        "viewDetails": "View details",
+        "registerReturnAction": "Register return"
+      },
+      "pagination": {
+        "previousAriaLabel": "Previous page",
+        "nextAriaLabel": "Next page",
+        "showing": "Showing {from} - {to} of {total} invoices"
+      },
+      "toasts": {
+        "createSuccess": "Invoice {number} created."
+      }
+    },
+    "detail": {
+      "closeAriaLabel": "Close",
+      "dateTime": "Date & time",
+      "customer": "Customer",
+      "phone": "Phone number",
+      "workspace": "Workspace",
+      "paymentMethod": "Payment method",
+      "zatcaStatusLabel": "ZATCA status",
+      "zatcaReported": "Reported ({status})",
+      "zatcaAwaitingReport": "Signed -- awaiting report",
+      "productsCount": "Products ({count})",
+      "subtotal": "Subtotal",
+      "discount": "Discount",
+      "taxWithPercent": "Tax ({percent}%)",
+      "total": "Total",
+      "reportToZatca": "Report to ZATCA",
+      "print": "Print",
+      "sendInvoice": "Send invoice",
+      "sendInvoiceDisabledTitle": "Sending an invoice requires linking a communication channel (email or SMS) to the invoice, which isn't available yet",
+      "toasts": {
+        "reportSuccess": "Invoice reported to ZATCA ({status}).",
+        "alreadyReported": "This invoice has already been reported.",
+        "notSigned": "This invoice wasn't signed through a ZATCA production device.",
+        "reportFailed": "Couldn't report the invoice to ZATCA."
+      }
+    },
+    "returnDialog": {
+      "title": "Register return",
+      "description": "Invoice #{number} -- specify the quantity of each item the customer is actually returning. Items already fully returned don't appear here.",
+      "noItemsLeft": "There are no items left to return on this invoice.",
+      "remainingLabel": "Remaining returnable: {remaining} of {quantity}",
+      "total": "Total",
+      "refundMethodLabel": "Refund method",
+      "currencyUnit": "SAR",
+      "notesLabel": "Note (optional)",
+      "notesPlaceholder": "Reason for the return, e.g...",
+      "submitting": "Registering...",
+      "submit": "Register return",
+      "toasts": {
+        "selectQuantity": "Select the quantity of at least one item to return.",
+        "selectPaymentMethod": "Select the payment method used to refund the amount.",
+        "amountMismatch": "The entered amount ({amount}) doesn't equal the return total.",
+        "success": "Return note {number} registered.",
+        "failed": "Couldn't register the return."
+      }
+    },
+    "createDialog": {
+      "title": "New invoice",
+      "description": "Search for products and add them, then enter the customer's details and payment method.",
+      "addProductLabel": "Add product",
+      "productSearchPlaceholder": "Search by name or product code...",
+      "removeLineAriaLabel": "Delete",
+      "customerLabel": "Customer (optional)",
+      "phoneLabel": "Phone number (optional)",
+      "paymentMethodLabel": "Payment method",
+      "paymentMethodPlaceholder": "Choose a payment method",
+      "discountLabel": "Discount (optional)",
+      "subtotal": "Subtotal",
+      "discount": "Discount",
+      "taxWithPercent": "Tax ({percent}%)",
+      "total": "Total",
+      "saving": "Saving...",
+      "submit": "Create invoice",
+      "validation": {
+        "itemsRequired": "Add at least one product",
+        "paymentMethodRequired": "Choose a payment method"
+      },
+      "toasts": {
+        "forbidden": "You don't have permission to create invoices.",
+        "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission.",
+        "genericError": "Couldn't create the invoice."
+      }
+    },
+    "returns": {
+      "backToInvoices": "Invoices",
+      "title": "Returned invoices",
+      "subtitle": "Every credit note actually issued -- the original invoice stays listed in Invoices as-is.",
+      "searchPlaceholder": "Search by return note number or invoice number...",
+      "allWorkspaces": "All workspaces",
+      "loading": "Loading returned invoices...",
+      "empty": "No matching returned invoices.",
+      "loadError": {
+        "forbidden": "You don't have permission to view returned invoices.",
+        "generic": "Couldn't load returned invoices. Try again."
+      },
+      "table": {
+        "columns": {
+          "returnNumber": "Return number",
+          "invoiceNumber": "Original invoice number",
+          "date": "Date & time",
+          "workspace": "Workspace",
+          "items": "Item count",
+          "quantity": "Returned quantity",
+          "paymentMethod": "Payment method",
+          "amount": "Amount"
+        }
+      },
+      "detail": {
+        "creditNoteFor": "Credit note for invoice {number}",
+        "closeAriaLabel": "Close",
+        "dateTime": "Date & time",
+        "workspace": "Workspace",
+        "paymentMethod": "Payment method",
+        "itemsCount": "Returned items ({count})",
+        "taxableAmount": "Taxable amount",
+        "discount": "Discount",
+        "vat": "VAT",
+        "totalReturned": "Total returned",
+        "printButton": "Print credit note"
+      }
+    }
   }
 }
