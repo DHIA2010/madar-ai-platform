@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import { useLocale } from "next-intl"
 
 import { ChevronRight } from "lucide-react"
 
@@ -16,6 +17,8 @@ import {
 } from "@/components/ui/sidebar"
 
 import { cn } from "@/lib/utils"
+
+import { localeDirection, type Locale } from "@/i18n/locales"
 
 // Sub-items carry their own icon and active treatment rather than inheriting the parent's:
 // a nested item reads as a different level, and the filled parent style at this depth made the
@@ -146,6 +149,8 @@ function ParentMenuItem({ item, pathname }: { item: NavWithChildren; pathname: s
 
 export function NavMain({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
+  const locale = useLocale() as Locale
+  const dir = localeDirection(locale)
 
   // Longest-prefix-match across the top-level items: when one item's url is itself a path
   // prefix of another's (e.g. "/campaigns" and "/campaigns/links"), only the most specific
@@ -158,7 +163,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
   const isActive = (url: string) => url === bestMatchUrl
 
   return (
-    <SidebarMenu className="gap-px px-2 py-2.5" dir="rtl">
+    <SidebarMenu className="gap-px px-2 py-2.5" dir={dir}>
       {items.map((item) => {
         return hasChildren(item) ? (
           <ParentMenuItem key={item.title} item={item} pathname={pathname} />

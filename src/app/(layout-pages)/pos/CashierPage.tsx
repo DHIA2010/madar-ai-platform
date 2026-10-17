@@ -1920,7 +1920,7 @@ export default function CashierPage() {
                 type="button"
                 onClick={() => selectCategory("all")}
                 className={cn(
-                  "rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold",
+                  "rounded-[8px] px-2.5 py-2 text-start text-[12.5px] font-semibold",
                   selectedCategory === "all"
                     ? "bg-[#eff6ff] text-[#2563eb]"
                     : "text-[#5b6b85] hover:bg-[#f7faff]"
@@ -1934,7 +1934,7 @@ export default function CashierPage() {
                   type="button"
                   onClick={() => selectCategory(category)}
                   className={cn(
-                    "rounded-[8px] px-2.5 py-2 text-right text-[12.5px] font-semibold",
+                    "rounded-[8px] px-2.5 py-2 text-start text-[12.5px] font-semibold",
                     selectedCategory === category
                       ? "bg-[#eff6ff] text-[#2563eb]"
                       : "text-[#5b6b85] hover:bg-[#f7faff]"
