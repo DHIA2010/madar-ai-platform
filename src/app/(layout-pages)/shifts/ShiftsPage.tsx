@@ -16,6 +16,8 @@ import { useEffect, useMemo, useState } from "react"
 import { endOfDay, isWithinInterval, startOfDay } from "date-fns"
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Eye,
   Lightbulb,
@@ -25,6 +27,7 @@ import {
   Search,
   Wallet,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
@@ -32,6 +35,7 @@ import { toast } from "sonner"
 import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import { useUsersQuery } from "@/features/administration/queries/use-users-query"
 import { useApplicationServices } from "@/application/context"
@@ -74,45 +78,48 @@ const BLUE_TINT = "bg-[#eff6ff] text-[#2563eb]"
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50]
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+type ShiftsTranslator = ReturnType<typeof useTranslations<"shifts">>
 
-function formatAmount(value: number | null): string {
-  return value === null ? "—" : `${AMOUNT_FORMAT.format(value)} ر.س`
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number | null, locale: Locale): string {
+  if (value === null) return "—"
+  const amount = amountFormatter(locale).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "short",
-  hour: "numeric",
-  minute: "2-digit",
-})
-
-function formatDateTime(value: string | null): string {
-  return value ? DATE_TIME_FORMAT.format(new Date(value)) : "—"
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+function formatDateTime(value: string | null, locale: Locale): string {
+  return value ? dateTimeFormatter(locale).format(new Date(value)) : "—"
 }
 
-// "3 س 20 د" between two timestamps -- open shifts measure against now, closed ones against
-// their own closedAt, so a shift closed yesterday does not keep counting up on screen.
-function formatDuration(openedAt: string, closedAt: string | null): string {
+// "3h 20m" between two timestamps -- open shifts measure against now, closed ones against their
+// own closedAt, so a shift closed yesterday does not keep counting up on screen.
+function formatDuration(openedAt: string, closedAt: string | null, t: ShiftsTranslator): string {
   const end = closedAt ? new Date(closedAt).getTime() : Date.now()
   const totalMinutes = Math.max(0, Math.round((end - new Date(openedAt).getTime()) / 60000))
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
-  if (hours === 0) return `${minutes} د`
-  return `${hours} س ${minutes} د`
+  if (hours === 0) return t("page.duration.minutesOnly", { minutes })
+  return t("page.duration.hoursAndMinutes", { hours, minutes })
 }
 
 type StatusFilter = "all" | ShiftStatus
 
-const STATUS_LABEL: Record<ShiftStatus, string> = {
-  open: "مفتوحة",
-  closed: "مغلقة",
-}
-
 export default function ShiftsPage() {
+  const t = useTranslations("shifts")
+  const locale = useLocale() as Locale
   const router = useRouter()
   const { currentOrganization, availableWorkspaces } = useWorkspace()
   const { administrationApplicationService } = useApplicationServices()
@@ -145,9 +152,7 @@ export default function ShiftsPage() {
       setShifts(await posShiftsService.list())
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      setLoadError(
-        status === 403 ? "لا تملك صلاحية عرض الورديات." : "تعذر تحميل الورديات. حاول مرة أخرى."
-      )
+      setLoadError(status === 403 ? t("page.loadError.forbidden") : t("page.loadError.generic"))
     } finally {
       setLoading(false)
     }
@@ -215,9 +220,12 @@ export default function ShiftsPage() {
   }
 
   const openErrors = {
-    workspace: openWorkspaceId ? null : "اختر مساحة العمل",
-    cashier: openCashierId ? null : "اختر الكاشير",
-    amount: openingCashAmount.trim() && Number(openingCashAmount) >= 0 ? null : "أدخل مبلغا صحيحا",
+    workspace: openWorkspaceId ? null : t("startDialog.errors.workspaceRequired"),
+    cashier: openCashierId ? null : t("startDialog.errors.cashierRequired"),
+    amount:
+      openingCashAmount.trim() && Number(openingCashAmount) >= 0
+        ? null
+        : t("startDialog.errors.invalidAmount"),
   }
   const isOpenFormValid = Object.values(openErrors).every((error) => error === null)
 
@@ -233,18 +241,21 @@ export default function ShiftsPage() {
         openingCashAmount: Number(openingCashAmount),
         openingNotes: openingNotes.trim() || null,
       })
-      toast.success("تم فتح الوردية.")
+      toast.success(t("startDialog.toasts.success"))
       setIsOpenDialogOpen(false)
       await load()
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
       const code = error instanceof AppError ? error.code : undefined
       if (code === "POS_SHIFT_ALREADY_OPEN") {
-        toast.error("هذا الكاشير لديه وردية مفتوحة بالفعل.")
+        toast.error(t("startDialog.toasts.alreadyOpen"))
       } else {
-        toast.error(status === 403 ? "لا تملك صلاحية إدارة الورديات." : "تعذر فتح الوردية.", {
-          description: status === 403 ? "تواصل مع مالك الحساب لمنحك صلاحية pos:manage." : undefined,
-        })
+        toast.error(
+          status === 403 ? t("startDialog.toasts.forbidden") : t("startDialog.toasts.genericError"),
+          {
+            description: status === 403 ? t("startDialog.toasts.forbiddenDescription") : undefined,
+          }
+        )
       }
     } finally {
       setOpening(false)
@@ -259,35 +270,40 @@ export default function ShiftsPage() {
 
   if (loading) {
     return (
-      <div dir="rtl" className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}
+      >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل الورديات...
+        {t("page.loading")}
       </div>
     )
   }
 
   if (loadError) {
     return (
-      <div dir="rtl" className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}
+      >
         <p className={cn("text-[13px]", HEADING)}>{loadError}</p>
         <Button variant="outline" onClick={() => void load()}>
           <RotateCcw className="size-4" />
-          إعادة المحاولة
+          {t("page.retry")}
         </Button>
       </div>
     )
   }
 
   return (
-    <div dir="rtl" className="flex flex-col gap-3">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-3">
       {/* RTL: the copy is written first so the icon tile lands on the left. */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الورديات</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>
-            إدارة ورديات الكاشير في جميع مساحات العمل: فتح وردية جديدة، إنهاء وردية مفتوحة، ومراجعة
-            السجل.
-          </p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>
+            {t("page.title")}
+          </h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("page.subtitle")}</p>
         </div>
         <span
           className={cn("flex size-12 shrink-0 items-center justify-center rounded-2xl", BLUE_TINT)}
@@ -304,18 +320,16 @@ export default function ShiftsPage() {
         >
           <CheckCircle2 className="size-4" />
           {openShiftsCount === 1
-            ? "توجد وردية واحدة مفتوحة الآن."
-            : `توجد ${openShiftsCount} ورديات مفتوحة الآن.`}
+            ? t("page.openBanner.one")
+            : t("page.openBanner.many", { count: openShiftsCount })}
         </div>
       ) : null}
 
       <section className={cn(PANEL, "p-4")}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className={cn("text-[16px] font-bold", HEADING)}>سجل الورديات</h2>
-            <p className={cn("mt-1 text-[11.5px]", MUTED)}>
-              كل وردية تم فتحها في المنظمة، عبر جميع مساحات العمل.
-            </p>
+            <h2 className={cn("text-[16px] font-bold", HEADING)}>{t("page.history.title")}</h2>
+            <p className={cn("mt-1 text-[11.5px]", MUTED)}>{t("page.history.subtitle")}</p>
           </div>
           <Button
             className="h-10 gap-2 rounded-[10px] bg-[#2563eb] px-4 text-[12.5px] font-semibold text-white hover:bg-[#1d4ed8]"
@@ -325,7 +339,7 @@ export default function ShiftsPage() {
             }}
           >
             <Plus className="size-4" />
-            بدء وردية جديدة
+            {t("page.startShiftButton")}
           </Button>
         </div>
 
@@ -335,7 +349,7 @@ export default function ShiftsPage() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="البحث باسم الكاشير..."
+              placeholder={t("page.searchPlaceholder")}
               className={cn(FIELD_CLASS, "ps-9")}
             />
           </div>
@@ -346,7 +360,7 @@ export default function ShiftsPage() {
                 <AppSelectValue />
               </AppSelectTrigger>
               <AppSelectContent>
-                <AppSelectItem value="all">جميع مساحات العمل</AppSelectItem>
+                <AppSelectItem value="all">{t("page.filters.allWorkspaces")}</AppSelectItem>
                 {availableWorkspaces.map((workspace) => (
                   <AppSelectItem key={workspace.id} value={workspace.id}>
                     {workspace.name}
@@ -364,9 +378,9 @@ export default function ShiftsPage() {
                 <AppSelectValue />
               </AppSelectTrigger>
               <AppSelectContent>
-                <AppSelectItem value="all">جميع الحالات</AppSelectItem>
-                <AppSelectItem value="open">مفتوحة</AppSelectItem>
-                <AppSelectItem value="closed">مغلقة</AppSelectItem>
+                <AppSelectItem value="all">{t("page.filters.allStatuses")}</AppSelectItem>
+                <AppSelectItem value="open">{t("page.statusLabel.open")}</AppSelectItem>
+                <AppSelectItem value="closed">{t("page.statusLabel.closed")}</AppSelectItem>
               </AppSelectContent>
             </AppSelect>
           </div>
@@ -379,7 +393,7 @@ export default function ShiftsPage() {
               MUTED
             )}
           >
-            لا توجد ورديات مسجلة بعد.
+            {t("page.emptyNoShifts")}
           </div>
         ) : filteredShifts.length === 0 ? (
           <div
@@ -388,7 +402,7 @@ export default function ShiftsPage() {
               MUTED
             )}
           >
-            لا توجد ورديات مطابقة لهذا البحث أو التصفية.
+            {t("page.emptyNoMatches")}
           </div>
         ) : (
           <>
@@ -397,13 +411,41 @@ export default function ShiftsPage() {
                 <thead>
                   <tr>
                     {[
-                      { key: "cashier", label: "الكاشير", align: "text-right" },
-                      { key: "workspace", label: "مساحة العمل", align: "text-center" },
-                      { key: "opening", label: "المبلغ الافتتاحي", align: "text-center" },
-                      { key: "closing", label: "المبلغ الختامي", align: "text-center" },
-                      { key: "duration", label: "المدة", align: "text-center" },
-                      { key: "status", label: "الحالة", align: "text-center" },
-                      { key: "actions", label: "الإجراءات", align: "text-center" },
+                      {
+                        key: "cashier",
+                        label: t("page.table.columns.cashier"),
+                        align: "text-right",
+                      },
+                      {
+                        key: "workspace",
+                        label: t("page.table.columns.workspace"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "opening",
+                        label: t("page.table.columns.opening"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "closing",
+                        label: t("page.table.columns.closing"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "duration",
+                        label: t("page.table.columns.duration"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "status",
+                        label: t("page.table.columns.status"),
+                        align: "text-center",
+                      },
+                      {
+                        key: "actions",
+                        label: t("page.table.columns.actions"),
+                        align: "text-center",
+                      },
                     ].map((column) => (
                       <th
                         key={column.key}
@@ -431,20 +473,22 @@ export default function ShiftsPage() {
                       <td className={cn("px-3 py-2.5 text-right text-[12.5px] font-bold", HEADING)}>
                         {cashierName(shift.cashierUserId)}
                         <p className={cn("mt-0.5 text-[11px] font-normal", MUTED)}>
-                          فُتحت {formatDateTime(shift.openedAt)}
+                          {t("page.table.openedAt", {
+                            time: formatDateTime(shift.openedAt, locale),
+                          })}
                         </p>
                       </td>
                       <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
                         {workspaceName(shift.workspaceId)}
                       </td>
                       <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
-                        {formatAmount(shift.openingCashAmount)}
+                        {formatAmount(shift.openingCashAmount, locale)}
                       </td>
                       <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
-                        {formatAmount(shift.closingCashAmount)}
+                        {formatAmount(shift.closingCashAmount, locale)}
                       </td>
                       <td className={cn("px-3 py-2.5 text-[12px] font-semibold", HEADING)}>
-                        {formatDuration(shift.openedAt, shift.closedAt)}
+                        {formatDuration(shift.openedAt, shift.closedAt, t)}
                       </td>
                       <td className="px-3 py-2.5">
                         <span
@@ -461,7 +505,7 @@ export default function ShiftsPage() {
                               shift.status === "open" ? "bg-[#22c55e]" : "bg-[#8098b4]"
                             )}
                           />
-                          {STATUS_LABEL[shift.status]}
+                          {t(`page.statusLabel.${shift.status}`)}
                         </span>
                       </td>
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
@@ -472,7 +516,7 @@ export default function ShiftsPage() {
                             onClick={() => router.push(ROUTES.shiftsDetails(shift.id))}
                           >
                             <Eye className="size-3.5" />
-                            عرض
+                            {t("page.table.viewAction")}
                           </Button>
                           {shift.status === "open" ? (
                             <Button
@@ -480,7 +524,7 @@ export default function ShiftsPage() {
                               className="h-8 rounded-[8px] border-[#e8edf3] px-3 text-[11.5px] font-semibold text-[#5b6b85] hover:border-[#c7d9ff] hover:text-[#0d1b3e]"
                               onClick={() => setCloseTarget(shift)}
                             >
-                              إنهاء الوردية
+                              {t("page.table.closeAction")}
                             </Button>
                           ) : null}
                         </div>
@@ -511,9 +555,11 @@ export default function ShiftsPage() {
                   </AppSelect>
                 </div>
                 <span className={cn("text-[12px]", MUTED)}>
-                  عرض {(clampedPage - 1) * pageSize + 1} -{" "}
-                  {Math.min(clampedPage * pageSize, filteredShifts.length)} من{" "}
-                  {filteredShifts.length} وردية
+                  {t("page.pagination.showing", {
+                    from: (clampedPage - 1) * pageSize + 1,
+                    to: Math.min(clampedPage * pageSize, filteredShifts.length),
+                    total: filteredShifts.length,
+                  })}
                 </span>
               </div>
 
@@ -522,10 +568,10 @@ export default function ShiftsPage() {
                   type="button"
                   disabled={clampedPage <= 1}
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  aria-label="الصفحة السابقة"
+                  aria-label={t("page.pagination.previousAriaLabel")}
                   className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] transition-colors hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  ‹
+                  <ChevronLeft className="size-3.5 rtl:rotate-180" />
                 </button>
                 <span className="flex size-7 items-center justify-center rounded-[7px] bg-[#2563eb] text-[12.5px] font-bold text-white">
                   {clampedPage}
@@ -534,10 +580,10 @@ export default function ShiftsPage() {
                   type="button"
                   disabled={clampedPage >= pageCount}
                   onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                  aria-label="الصفحة التالية"
+                  aria-label={t("page.pagination.nextAriaLabel")}
                   className="flex size-7 items-center justify-center rounded-[7px] border border-[#e8edf3] bg-white text-[#8098b4] transition-colors hover:border-[#c7d9ff] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  ›
+                  <ChevronRight className="size-3.5 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -552,24 +598,29 @@ export default function ShiftsPage() {
           if (!opening) setIsOpenDialogOpen(open)
         }}
       >
-        <DialogContent className="sm:max-w-[26rem] [direction:rtl]">
+        <DialogContent
+          className={cn(
+            "sm:max-w-[26rem]",
+            locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
+          )}
+        >
           <DialogHeader className="text-right">
             <DialogTitle className={cn("text-[15px] font-extrabold", HEADING)}>
-              بدء وردية جديدة
+              {t("startDialog.title")}
             </DialogTitle>
             <DialogDescription className={cn("text-[12.5px] leading-6", MUTED)}>
-              اختر الكاشير ومساحة العمل، ثم أدخل المبلغ النقدي في الدرج عند بداية الوردية.
+              {t("startDialog.description")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                مساحة العمل <span className="text-[#e0484d]">*</span>
+                {t("startDialog.workspaceLabel")} <span className="text-[#e0484d]">*</span>
               </Label>
               <AppSelect value={openWorkspaceId} onValueChange={setOpenWorkspaceId}>
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر مساحة العمل" />
+                  <AppSelectValue placeholder={t("startDialog.workspacePlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
                   {availableWorkspaces.map((workspace) => (
@@ -586,11 +637,11 @@ export default function ShiftsPage() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                الكاشير <span className="text-[#e0484d]">*</span>
+                {t("startDialog.cashierLabel")} <span className="text-[#e0484d]">*</span>
               </Label>
               <AppSelect value={openCashierId} onValueChange={setOpenCashierId}>
                 <AppSelectTrigger className={cn(FIELD_CLASS, "w-full")}>
-                  <AppSelectValue placeholder="اختر الكاشير" />
+                  <AppSelectValue placeholder={t("startDialog.cashierPlaceholder")} />
                 </AppSelectTrigger>
                 <AppSelectContent>
                   {employees.map((employee) => (
@@ -607,7 +658,7 @@ export default function ShiftsPage() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                المبلغ النقدي الافتتاحي <span className="text-[#e0484d]">*</span>
+                {t("startDialog.openingAmountLabel")} <span className="text-[#e0484d]">*</span>
               </Label>
               <div className="relative">
                 <Wallet className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-[#8098b4]" />
@@ -628,12 +679,12 @@ export default function ShiftsPage() {
 
             <div>
               <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
-                ملاحظات (اختياري)
+                {t("startDialog.notesLabel")}
               </Label>
               <Input
                 value={openingNotes}
                 onChange={(event) => setOpeningNotes(event.target.value)}
-                placeholder="مثال: بداية الوردية الصباحية"
+                placeholder={t("startDialog.notesPlaceholder")}
                 className={FIELD_CLASS}
               />
             </div>
@@ -645,7 +696,7 @@ export default function ShiftsPage() {
               disabled={opening}
               onClick={() => void submitOpenShift()}
             >
-              {opening ? "جارٍ الفتح..." : "بدء الوردية"}
+              {opening ? t("startDialog.opening") : t("startDialog.submit")}
               {opening ? <Loader2 className="size-4 animate-spin" /> : null}
             </Button>
             <Button
@@ -654,7 +705,7 @@ export default function ShiftsPage() {
               disabled={opening}
               onClick={() => setIsOpenDialogOpen(false)}
             >
-              إلغاء
+              {t("startDialog.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -671,10 +722,7 @@ export default function ShiftsPage() {
 
       <section className={cn(PANEL, "flex items-start gap-3 p-3")}>
         <Lightbulb className="mt-0.5 size-[18px] shrink-0 text-[#e08b00]" />
-        <p className={cn("text-[12px] leading-6", MUTED)}>
-          إغلاق الوردية يحسب المبيعات والمرتجعات والسحب والإيداع الفعلية لهذه الوردية تلقائيا. سجّل
-          أي سحب أو إيداع نقدي أثناء الوردية من شاشة الكاشير حتى يظهر هنا عند الإغلاق.
-        </p>
+        <p className={cn("text-[12px] leading-6", MUTED)}>{t("page.tip")}</p>
       </section>
     </div>
   )

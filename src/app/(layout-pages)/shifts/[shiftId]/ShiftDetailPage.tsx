@@ -29,11 +29,13 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react"
+import { useLocale, useTranslations } from "next-intl"
 import Link from "next/link"
 
 import { AppError } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
+import { localeDirection, type Locale } from "@/i18n/locales"
 import { useWorkspace } from "@/features/workspace"
 import { useUsersQuery } from "@/features/administration/queries/use-users-query"
 import { useApplicationServices } from "@/application/context"
@@ -55,23 +57,30 @@ const PANEL =
 const HEADING = "text-[#0d1b3e]"
 const MUTED = "text-[#5b6b85]"
 
-const AMOUNT_FORMAT = new Intl.NumberFormat("ar-SA-u-nu-latn", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMAT.format(value)} ر.س`
+type ShiftsTranslator = ReturnType<typeof useTranslations<"shifts">>
+
+function amountFormatter(locale: Locale) {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+function formatAmount(value: number, locale: Locale): string {
+  const amount = amountFormatter(locale).format(value)
+  return locale === "ar" ? `${amount} ر.س` : `SAR ${amount}`
 }
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
-function formatDateTime(value: string | null): string {
-  return value ? DATE_TIME_FORMAT.format(new Date(value)) : "—"
+function dateTimeFormatter(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+function formatDateTime(value: string | null, locale: Locale): string {
+  return value ? dateTimeFormatter(locale).format(new Date(value)) : "—"
 }
 
 const PAYMENT_KIND_ICON: Record<PaymentKind, typeof Wallet> = {
@@ -84,16 +93,31 @@ const PAYMENT_KIND_ICON: Record<PaymentKind, typeof Wallet> = {
   prepaid: PiggyBank,
 }
 
-const ACTIVITY_META: Record<ShiftActivityType, { label: string; tint: string }> = {
-  open: { label: "افتتاح", tint: "bg-[#f0fdf4] text-[#15803d]" },
-  close: { label: "إغلاق الوردية", tint: "bg-[#eff6ff] text-[#2563eb]" },
-  withdrawal: { label: "سحب من الصندوق", tint: "bg-[#fffbeb] text-[#92400e]" },
-  deposit: { label: "إيداع في الصندوق", tint: "bg-[#ecfeff] text-[#0e7490]" },
-  sale: { label: "عملية بيع", tint: "bg-[#eff6ff] text-[#2563eb]" },
-  return: { label: "مرتجع", tint: "bg-[#fef2f2] text-[#dc2626]" },
+// Module-level data+function split -- see translatedPlanTierMeta (plan-tiers.ts) /
+// translatedCampaignStatusMeta (campaign-status.service.ts) for the established pattern: the tint
+// stays plain data, the label comes from a function that takes `t`.
+const ACTIVITY_TINT: Record<ShiftActivityType, string> = {
+  open: "bg-[#f0fdf4] text-[#15803d]",
+  close: "bg-[#eff6ff] text-[#2563eb]",
+  withdrawal: "bg-[#fffbeb] text-[#92400e]",
+  deposit: "bg-[#ecfeff] text-[#0e7490]",
+  sale: "bg-[#eff6ff] text-[#2563eb]",
+  return: "bg-[#fef2f2] text-[#dc2626]",
+}
+
+function translatedActivityMeta(
+  type: ShiftActivityType,
+  t: ShiftsTranslator
+): { label: string; tint: string } {
+  return {
+    label: t(`detail.activity.types.${type}`),
+    tint: ACTIVITY_TINT[type],
+  }
 }
 
 export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
+  const t = useTranslations("shifts")
+  const locale = useLocale() as Locale
   const { currentOrganization, availableWorkspaces } = useWorkspace()
   const { administrationApplicationService } = useApplicationServices()
   const { data: usersData } = useUsersQuery(
@@ -124,10 +148,10 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
       const status = error instanceof AppError ? error.status : undefined
       setLoadError(
         status === 404
-          ? "الوردية غير موجودة."
+          ? t("detail.loadError.notFound")
           : status === 403
-            ? "لا تملك صلاحية عرض الورديات."
-            : "تعذر تحميل بيانات الوردية."
+            ? t("detail.loadError.forbidden")
+            : t("detail.loadError.generic")
       )
     } finally {
       setLoading(false)
@@ -145,19 +169,25 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
 
   if (loading) {
     return (
-      <div dir="rtl" className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}>
+      <div
+        dir={localeDirection(locale)}
+        className={cn("flex items-center gap-2 p-8 text-[13px]", MUTED)}
+      >
         <Loader2 className="size-4 animate-spin" />
-        جارٍ تحميل الوردية...
+        {t("detail.loading")}
       </div>
     )
   }
 
   if (loadError || !detail) {
     return (
-      <div dir="rtl" className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}>
-        <p className={cn("text-[13px]", HEADING)}>{loadError ?? "تعذر تحميل الوردية."}</p>
+      <div
+        dir={localeDirection(locale)}
+        className={cn(PANEL, "flex flex-col items-start gap-3 p-6")}
+      >
+        <p className={cn("text-[13px]", HEADING)}>{loadError ?? t("detail.loadError.fallback")}</p>
         <Button variant="outline" onClick={() => void load()}>
-          إعادة المحاولة
+          {t("detail.retry")}
         </Button>
       </div>
     )
@@ -174,22 +204,24 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
       : null
 
   return (
-    <div dir="rtl" className="flex flex-col gap-5 pb-10">
+    <div dir={localeDirection(locale)} className="flex flex-col gap-5 pb-10">
       <nav className={cn("flex items-center gap-1.5 text-[11.5px]", MUTED)}>
         <Link href={ROUTES.shifts} className="transition-colors hover:text-[#2563eb]">
-          الورديات
+          {t("detail.breadcrumb.shifts")}
         </Link>
         <span>/</span>
         <span className={cn("flex items-center gap-1 font-semibold", HEADING)}>
           <Home className="size-3.5" />
-          الوردية
+          {t("detail.breadcrumb.current")}
         </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>الوردية</h1>
-          <p className={cn("mt-1 text-[13px]", MUTED)}>إدارة الوردية ومتابعة المبيعات والصندوق.</p>
+          <h1 className={cn("text-[22px] font-extrabold leading-tight", HEADING)}>
+            {t("detail.title")}
+          </h1>
+          <p className={cn("mt-1 text-[13px]", MUTED)}>{t("detail.subtitle")}</p>
         </div>
       </div>
 
@@ -202,7 +234,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
             <Store className="size-4" />
           </span>
           <span className="flex flex-col">
-            <span className={cn("text-[11px]", MUTED)}>الوردية الحالية</span>
+            <span className={cn("text-[11px]", MUTED)}>{t("detail.statusStrip.currentShift")}</span>
             <span className="text-[14px] font-extrabold">
               {shift.shiftNumber !== null ? `#${shift.shiftNumber}` : "—"}
             </span>
@@ -211,23 +243,25 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
         </span>
 
         <span className={cn("flex flex-col gap-1 border-l border-[#eef2f8] pl-3", HEADING)}>
-          <span className={cn("text-[11px]", MUTED)}>وقت الفتح</span>
+          <span className={cn("text-[11px]", MUTED)}>{t("detail.statusStrip.openedAtLabel")}</span>
           <span className="flex items-center gap-1.5 text-[12.5px] font-bold">
             <Clock className="size-3.5 text-[#16a34a]" />
-            {formatDateTime(shift.openedAt)}
+            {formatDateTime(shift.openedAt, locale)}
           </span>
         </span>
 
         <span className={cn("flex flex-col gap-1 border-l border-[#eef2f8] pl-3", HEADING)}>
-          <span className={cn("text-[11px]", MUTED)}>وقت الإغلاق</span>
+          <span className={cn("text-[11px]", MUTED)}>{t("detail.statusStrip.closedAtLabel")}</span>
           <span className="flex items-center gap-1.5 text-[12.5px] font-bold">
             <Lock className="size-3.5 text-[#dc2626]" />
-            {formatDateTime(shift.closedAt)}
+            {formatDateTime(shift.closedAt, locale)}
           </span>
         </span>
 
         <span className={cn("flex flex-col gap-1 border-l border-[#eef2f8] pl-3", HEADING)}>
-          <span className={cn("text-[11px]", MUTED)}>عدد الفواتير</span>
+          <span className={cn("text-[11px]", MUTED)}>
+            {t("detail.statusStrip.invoiceCountLabel")}
+          </span>
           <span className="flex items-center gap-1.5 text-[13px] font-extrabold">
             <Eye className="size-3.5 text-[#8098b4]" />
             {detail.invoiceCount}
@@ -249,10 +283,12 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
             <span
               className={cn("size-1.5 rounded-full", isOpen ? "bg-[#22c55e]" : "bg-[#8098b4]")}
             />
-            {isOpen ? "وردية مفتوحة" : "وردية مغلقة"}
+            {isOpen ? t("detail.statusStrip.open") : t("detail.statusStrip.closed")}
           </span>
           <span className={cn("text-[10.5px]", MUTED)}>
-            منذ {formatDateTime(isOpen ? shift.openedAt : shift.closedAt)}
+            {t("detail.statusStrip.since", {
+              time: formatDateTime(isOpen ? shift.openedAt : shift.closedAt, locale),
+            })}
           </span>
         </span>
       </div>
@@ -267,10 +303,15 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
           </span>
           <div>
             <p className={cn("text-[11px]", MUTED)}>
-              {isOpen ? "المبلغ الحالي في الصندوق" : "المبلغ المبدئي في الصندوق"}
+              {isOpen
+                ? t("detail.cashCard.currentAmountLabel")
+                : t("detail.cashCard.initialAmountLabel")}
             </p>
             <p className={cn("text-[15px] font-extrabold", HEADING)}>
-              {formatAmount(isOpen ? cashSummary.expectedCashAmount : shift.openingCashAmount)}
+              {formatAmount(
+                isOpen ? cashSummary.expectedCashAmount : shift.openingCashAmount,
+                locale
+              )}
             </p>
           </div>
         </div>
@@ -286,7 +327,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
               }}
             >
               <ArrowUpFromLine className="size-3.5" />
-              سحب
+              {t("detail.cashCard.withdrawAction")}
             </Button>
             <Button
               variant="outline"
@@ -297,7 +338,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
               }}
             >
               <ArrowDownToLine className="size-3.5" />
-              إيداع
+              {t("detail.cashCard.depositAction")}
             </Button>
           </div>
         ) : variance !== null ? (
@@ -309,10 +350,14 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
           >
             {variance === 0 ? <CheckCircle2 className="size-4" /> : null}
             {variance === 0
-              ? "مطابق"
+              ? t("detail.cashCard.varianceMatches")
               : variance > 0
-                ? `زيادة ${formatAmount(Math.abs(variance))}`
-                : `عجز ${formatAmount(Math.abs(variance))}`}
+                ? t("detail.cashCard.varianceSurplus", {
+                    amount: formatAmount(Math.abs(variance), locale),
+                  })
+                : t("detail.cashCard.varianceShortage", {
+                    amount: formatAmount(Math.abs(variance), locale),
+                  })}
           </span>
         ) : null}
       </div>
@@ -325,48 +370,57 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
             <span className="flex size-8 items-center justify-center rounded-lg bg-[#eff6ff] text-[#2563eb]">
               <Wallet className="size-4" />
             </span>
-            <h2 className={cn("text-[14px] font-extrabold", HEADING)}>ملخص الصندوق النقدي</h2>
+            <h2 className={cn("text-[14px] font-extrabold", HEADING)}>
+              {t("detail.cashSummary.title")}
+            </h2>
           </div>
 
           <div className="flex flex-col gap-2.5">
             <CashRow
               icon={Wallet}
               iconClassName="text-[#5b6b85]"
-              label="رصيد الافتتاح"
+              label={t("detail.cashSummary.openingBalance")}
               value={cashSummary.openingCashAmount}
+              locale={locale}
             />
             <CashRow
               icon={Banknote}
               iconClassName="text-[#16a34a]"
-              label="مبيعات نقدية"
+              label={t("detail.cashSummary.cashSales")}
               value={cashSummary.cashSales}
+              locale={locale}
             />
             <CashRow
               icon={RotateCcw}
               iconClassName="text-[#dc2626]"
-              label="مرتجعات نقدية"
+              label={t("detail.cashSummary.cashReturns")}
               value={cashSummary.cashReturns}
               negative
+              locale={locale}
             />
             <CashRow
               icon={FileText}
               iconClassName="text-[#d97706]"
-              label="سحب من الصندوق"
+              label={t("detail.cashSummary.withdrawals")}
               value={cashSummary.withdrawals}
               negative
+              locale={locale}
             />
             <CashRow
               icon={FileText}
               iconClassName="text-[#0891b2]"
-              label="إيداع في الصندوق"
+              label={t("detail.cashSummary.deposits")}
               value={cashSummary.deposits}
+              locale={locale}
             />
           </div>
 
           <div className="mt-4 flex items-center justify-between rounded-[12px] bg-[#eff6ff] px-3.5 py-3">
-            <span className={cn("text-[13px] font-bold", HEADING)}>المتوقع في الدرج</span>
+            <span className={cn("text-[13px] font-bold", HEADING)}>
+              {t("detail.cashSummary.expectedInDrawer")}
+            </span>
             <span className="text-[16px] font-extrabold text-[#2563eb]">
-              {formatAmount(cashSummary.expectedCashAmount)}
+              {formatAmount(cashSummary.expectedCashAmount, locale)}
             </span>
           </div>
         </section>
@@ -377,26 +431,28 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
               <CreditCard className="size-4" />
             </span>
             <h2 className={cn("text-[14px] font-extrabold", HEADING)}>
-              مبيعات الوردية حسب طريقة الدفع
+              {t("detail.paymentBreakdown.title")}
             </h2>
           </div>
 
           {paymentBreakdown.length === 0 ? (
             <p className={cn("py-6 text-center text-[12px]", MUTED)}>
-              لا توجد مبيعات في هذه الوردية بعد.
+              {t("detail.paymentBreakdown.empty")}
             </p>
           ) : (
             <div className="flex flex-col gap-4">
               {paymentBreakdown.map((entry) => (
-                <PaymentBreakdownRow key={entry.code} entry={entry} />
+                <PaymentBreakdownRow key={entry.code} entry={entry} locale={locale} />
               ))}
             </div>
           )}
 
           <div className="mt-4 flex items-center justify-between rounded-[12px] bg-[#eff6ff] px-3.5 py-3">
-            <span className={cn("text-[13px] font-bold", HEADING)}>المبيعات الإجمالية</span>
+            <span className={cn("text-[13px] font-bold", HEADING)}>
+              {t("detail.paymentBreakdown.totalSalesLabel")}
+            </span>
             <span className="text-[16px] font-extrabold text-[#2563eb]">
-              {formatAmount(detail.totalSales)}
+              {formatAmount(detail.totalSales, locale)}
             </span>
           </div>
         </section>
@@ -408,23 +464,29 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
           <span className="flex size-8 items-center justify-center rounded-lg bg-[#eff6ff] text-[#2563eb]">
             <CalendarClock className="size-4" />
           </span>
-          <h2 className={cn("text-[14px] font-extrabold", HEADING)}>حركة الصندوق</h2>
+          <h2 className={cn("text-[14px] font-extrabold", HEADING)}>
+            {t("detail.activity.title")}
+          </h2>
         </div>
 
         {activity.length === 0 ? (
-          <p className={cn("py-6 text-center text-[12px]", MUTED)}>لا توجد حركات مسجلة بعد.</p>
+          <p className={cn("py-6 text-center text-[12px]", MUTED)}>{t("detail.activity.empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-center">
               <thead>
                 <tr>
                   {[
-                    { key: "amount", label: "المبلغ" },
-                    { key: "note", label: "الملاحظة" },
-                    { key: "cashier", label: "الكاشير" },
-                    { key: "reference", label: "المرجع" },
-                    { key: "type", label: "النوع" },
-                    { key: "time", label: "الوقت", align: "text-right" },
+                    { key: "amount", label: t("detail.activity.columns.amount") },
+                    { key: "note", label: t("detail.activity.columns.note") },
+                    { key: "cashier", label: t("detail.activity.columns.cashier") },
+                    { key: "reference", label: t("detail.activity.columns.reference") },
+                    { key: "type", label: t("detail.activity.columns.type") },
+                    {
+                      key: "time",
+                      label: t("detail.activity.columns.time"),
+                      align: "text-right",
+                    },
                   ].map((column) => (
                     <th
                       key={column.key}
@@ -441,7 +503,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
               </thead>
               <tbody>
                 {activity.map((entry, index) => {
-                  const meta = ACTIVITY_META[entry.type]
+                  const meta = translatedActivityMeta(entry.type, t)
                   return (
                     <tr
                       key={`${entry.type}-${entry.occurredAt}-${index}`}
@@ -451,7 +513,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
                       )}
                     >
                       <td className={cn("px-3 py-3.5 text-[12px] font-bold", HEADING)}>
-                        {formatAmount(entry.amount)}
+                        {formatAmount(entry.amount, locale)}
                       </td>
                       <td className={cn("px-3 py-3.5 text-[12px]", MUTED)}>{entry.note ?? "-"}</td>
                       <td className={cn("px-3 py-3.5 text-[12px] font-semibold", HEADING)}>
@@ -471,7 +533,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
                         </span>
                       </td>
                       <td className={cn("px-3 py-3.5 text-right text-[12px]", MUTED)}>
-                        {formatDateTime(entry.occurredAt)}
+                        {formatDateTime(entry.occurredAt, locale)}
                       </td>
                     </tr>
                   )
@@ -492,12 +554,12 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
             onClick={() => setIsCloseOpen(true)}
           >
             <Lock className="size-4" />
-            إغلاق الوردية
+            {t("detail.closeShiftButton")}
           </Button>
         ) : (
           <span className={cn("flex items-center gap-1.5 text-[12.5px] font-semibold", MUTED)}>
             <XCircle className="size-4" />
-            تم إغلاق هذه الوردية
+            {t("detail.alreadyClosedLabel")}
           </span>
         )}
         <Button
@@ -506,7 +568,7 @@ export default function ShiftDetailPage({ shiftId }: { shiftId: string }) {
           onClick={() => window.print()}
         >
           <Printer className="size-4" />
-          طباعة تقرير الوردية
+          {t("detail.printButton")}
         </Button>
       </div>
 
@@ -538,12 +600,14 @@ function CashRow({
   label,
   value,
   negative = false,
+  locale,
 }: {
   icon: typeof Wallet
   iconClassName?: string
   label: string
   value: number
   negative?: boolean
+  locale: Locale
 }) {
   return (
     <div className="flex items-center justify-between text-[12.5px]">
@@ -553,13 +617,13 @@ function CashRow({
       </span>
       <span className={cn("font-bold", HEADING)}>
         {negative && value > 0 ? "-" : ""}
-        {formatAmount(value)}
+        {formatAmount(value, locale)}
       </span>
     </div>
   )
 }
 
-function PaymentBreakdownRow({ entry }: { entry: PaymentBreakdownEntry }) {
+function PaymentBreakdownRow({ entry, locale }: { entry: PaymentBreakdownEntry; locale: Locale }) {
   const Icon = entry.kind ? PAYMENT_KIND_ICON[entry.kind] : CreditCard
   return (
     <div className="flex flex-col gap-1.5">
@@ -572,7 +636,7 @@ function PaymentBreakdownRow({ entry }: { entry: PaymentBreakdownEntry }) {
         </span>
         <span className={cn("flex items-center gap-2", HEADING)}>
           <span className={MUTED}>{entry.percentage}%</span>
-          <span className="font-bold">{formatAmount(entry.amount)}</span>
+          <span className="font-bold">{formatAmount(entry.amount, locale)}</span>
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[#f1f4f9]">

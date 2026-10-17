@@ -7713,5 +7713,158 @@
         "printButton": "Print credit note"
       }
     }
+  },
+  "shifts": {
+    "page": {
+      "title": "Shifts",
+      "subtitle": "Manage cashier shifts across all workspaces: start a new shift, close an open one, and review the history.",
+      "loading": "Loading shifts...",
+      "retry": "Retry",
+      "loadError": {
+        "forbidden": "You don't have permission to view shifts.",
+        "generic": "Couldn't load shifts. Try again."
+      },
+      "openBanner": {
+        "one": "There is one open shift right now.",
+        "many": "There are {count} open shifts right now."
+      },
+      "history": {
+        "title": "Shift history",
+        "subtitle": "Every shift opened across the organization, across all workspaces."
+      },
+      "startShiftButton": "Start new shift",
+      "searchPlaceholder": "Search by cashier name...",
+      "filters": {
+        "allWorkspaces": "All workspaces",
+        "allStatuses": "All statuses"
+      },
+      "statusLabel": {
+        "open": "Open",
+        "closed": "Closed"
+      },
+      "emptyNoShifts": "No shifts recorded yet.",
+      "emptyNoMatches": "No shifts match this search or filter.",
+      "table": {
+        "columns": {
+          "cashier": "Cashier",
+          "workspace": "Workspace",
+          "opening": "Opening amount",
+          "closing": "Closing amount",
+          "duration": "Duration",
+          "status": "Status",
+          "actions": "Actions"
+        },
+        "openedAt": "Opened {time}",
+        "viewAction": "View",
+        "closeAction": "Close shift"
+      },
+      "duration": {
+        "minutesOnly": "{minutes}m",
+        "hoursAndMinutes": "{hours}h {minutes}m"
+      },
+      "pagination": {
+        "previousAriaLabel": "Previous page",
+        "nextAriaLabel": "Next page",
+        "showing": "Showing {from} - {to} of {total} shifts"
+      },
+      "tip": "Closing a shift automatically calculates this shift's real sales, returns, withdrawals, and deposits. Record any cash withdrawal or deposit during the shift from the cashier screen so it shows up here when closing."
+    },
+    "startDialog": {
+      "title": "Start new shift",
+      "description": "Choose the cashier and workspace, then enter the cash amount in the drawer at the start of the shift.",
+      "workspaceLabel": "Workspace",
+      "workspacePlaceholder": "Choose a workspace",
+      "cashierLabel": "Cashier",
+      "cashierPlaceholder": "Choose a cashier",
+      "openingAmountLabel": "Opening cash amount",
+      "notesLabel": "Notes (optional)",
+      "notesPlaceholder": "e.g. Start of the morning shift",
+      "opening": "Starting...",
+      "submit": "Start shift",
+      "cancel": "Cancel",
+      "errors": {
+        "workspaceRequired": "Choose a workspace",
+        "cashierRequired": "Choose a cashier",
+        "invalidAmount": "Enter a valid amount"
+      },
+      "toasts": {
+        "success": "Shift started.",
+        "alreadyOpen": "This cashier already has an open shift.",
+        "forbidden": "You don't have permission to manage shifts.",
+        "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission.",
+        "genericError": "Couldn't start the shift."
+      }
+    },
+    "detail": {
+      "loading": "Loading shift...",
+      "retry": "Retry",
+      "loadError": {
+        "notFound": "Shift not found.",
+        "forbidden": "You don't have permission to view shifts.",
+        "generic": "Couldn't load the shift's data.",
+        "fallback": "Couldn't load the shift."
+      },
+      "breadcrumb": {
+        "shifts": "Shifts",
+        "current": "Shift"
+      },
+      "title": "Shift",
+      "subtitle": "Manage the shift and track sales and the cash drawer.",
+      "statusStrip": {
+        "currentShift": "Current shift",
+        "openedAtLabel": "Opened at",
+        "closedAtLabel": "Closed at",
+        "invoiceCountLabel": "Invoice count",
+        "open": "Open shift",
+        "closed": "Closed shift",
+        "since": "Since {time}"
+      },
+      "cashCard": {
+        "currentAmountLabel": "Current amount in drawer",
+        "initialAmountLabel": "Initial amount in drawer",
+        "withdrawAction": "Withdraw",
+        "depositAction": "Deposit",
+        "varianceMatches": "Matches",
+        "varianceSurplus": "Surplus of {amount}",
+        "varianceShortage": "Shortage of {amount}"
+      },
+      "cashSummary": {
+        "title": "Cash drawer summary",
+        "openingBalance": "Opening balance",
+        "cashSales": "Cash sales",
+        "cashReturns": "Cash returns",
+        "withdrawals": "Withdrawal from drawer",
+        "deposits": "Deposit to drawer",
+        "expectedInDrawer": "Expected in drawer"
+      },
+      "paymentBreakdown": {
+        "title": "Shift sales by payment method",
+        "empty": "No sales in this shift yet.",
+        "totalSalesLabel": "Total sales"
+      },
+      "activity": {
+        "title": "Cash drawer activity",
+        "empty": "No activity recorded yet.",
+        "columns": {
+          "amount": "Amount",
+          "note": "Note",
+          "cashier": "Cashier",
+          "reference": "Reference",
+          "type": "Type",
+          "time": "Time"
+        },
+        "types": {
+          "open": "Opened",
+          "close": "Shift closed",
+          "withdrawal": "Withdrawal from drawer",
+          "deposit": "Deposit to drawer",
+          "sale": "Sale",
+          "return": "Return"
+        }
+      },
+      "closeShiftButton": "Close shift",
+      "alreadyClosedLabel": "This shift has been closed",
+      "printButton": "Print shift report"
+    }
   }
 }

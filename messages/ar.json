@@ -7709,5 +7709,158 @@
         "printButton": "طباعة إشعار الدائن"
       }
     }
+  },
+  "shifts": {
+    "page": {
+      "title": "الورديات",
+      "subtitle": "إدارة ورديات الكاشير في جميع مساحات العمل: فتح وردية جديدة، إنهاء وردية مفتوحة، ومراجعة السجل.",
+      "loading": "جارٍ تحميل الورديات...",
+      "retry": "إعادة المحاولة",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض الورديات.",
+        "generic": "تعذر تحميل الورديات. حاول مرة أخرى."
+      },
+      "openBanner": {
+        "one": "توجد وردية واحدة مفتوحة الآن.",
+        "many": "توجد {count} ورديات مفتوحة الآن."
+      },
+      "history": {
+        "title": "سجل الورديات",
+        "subtitle": "كل وردية تم فتحها في المنظمة، عبر جميع مساحات العمل."
+      },
+      "startShiftButton": "بدء وردية جديدة",
+      "searchPlaceholder": "البحث باسم الكاشير...",
+      "filters": {
+        "allWorkspaces": "جميع مساحات العمل",
+        "allStatuses": "جميع الحالات"
+      },
+      "statusLabel": {
+        "open": "مفتوحة",
+        "closed": "مغلقة"
+      },
+      "emptyNoShifts": "لا توجد ورديات مسجلة بعد.",
+      "emptyNoMatches": "لا توجد ورديات مطابقة لهذا البحث أو التصفية.",
+      "table": {
+        "columns": {
+          "cashier": "الكاشير",
+          "workspace": "مساحة العمل",
+          "opening": "المبلغ الافتتاحي",
+          "closing": "المبلغ الختامي",
+          "duration": "المدة",
+          "status": "الحالة",
+          "actions": "الإجراءات"
+        },
+        "openedAt": "فُتحت {time}",
+        "viewAction": "عرض",
+        "closeAction": "إنهاء الوردية"
+      },
+      "duration": {
+        "minutesOnly": "{minutes} د",
+        "hoursAndMinutes": "{hours} س {minutes} د"
+      },
+      "pagination": {
+        "previousAriaLabel": "الصفحة السابقة",
+        "nextAriaLabel": "الصفحة التالية",
+        "showing": "عرض {from} - {to} من {total} وردية"
+      },
+      "tip": "إغلاق الوردية يحسب المبيعات والمرتجعات والسحب والإيداع الفعلية لهذه الوردية تلقائيا. سجّل أي سحب أو إيداع نقدي أثناء الوردية من شاشة الكاشير حتى يظهر هنا عند الإغلاق."
+    },
+    "startDialog": {
+      "title": "بدء وردية جديدة",
+      "description": "اختر الكاشير ومساحة العمل، ثم أدخل المبلغ النقدي في الدرج عند بداية الوردية.",
+      "workspaceLabel": "مساحة العمل",
+      "workspacePlaceholder": "اختر مساحة العمل",
+      "cashierLabel": "الكاشير",
+      "cashierPlaceholder": "اختر الكاشير",
+      "openingAmountLabel": "المبلغ النقدي الافتتاحي",
+      "notesLabel": "ملاحظات (اختياري)",
+      "notesPlaceholder": "مثال: بداية الوردية الصباحية",
+      "opening": "جارٍ الفتح...",
+      "submit": "بدء الوردية",
+      "cancel": "إلغاء",
+      "errors": {
+        "workspaceRequired": "اختر مساحة العمل",
+        "cashierRequired": "اختر الكاشير",
+        "invalidAmount": "أدخل مبلغا صحيحا"
+      },
+      "toasts": {
+        "success": "تم فتح الوردية.",
+        "alreadyOpen": "هذا الكاشير لديه وردية مفتوحة بالفعل.",
+        "forbidden": "لا تملك صلاحية إدارة الورديات.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
+        "genericError": "تعذر فتح الوردية."
+      }
+    },
+    "detail": {
+      "loading": "جارٍ تحميل الوردية...",
+      "retry": "إعادة المحاولة",
+      "loadError": {
+        "notFound": "الوردية غير موجودة.",
+        "forbidden": "لا تملك صلاحية عرض الورديات.",
+        "generic": "تعذر تحميل بيانات الوردية.",
+        "fallback": "تعذر تحميل الوردية."
+      },
+      "breadcrumb": {
+        "shifts": "الورديات",
+        "current": "الوردية"
+      },
+      "title": "الوردية",
+      "subtitle": "إدارة الوردية ومتابعة المبيعات والصندوق.",
+      "statusStrip": {
+        "currentShift": "الوردية الحالية",
+        "openedAtLabel": "وقت الفتح",
+        "closedAtLabel": "وقت الإغلاق",
+        "invoiceCountLabel": "عدد الفواتير",
+        "open": "وردية مفتوحة",
+        "closed": "وردية مغلقة",
+        "since": "منذ {time}"
+      },
+      "cashCard": {
+        "currentAmountLabel": "المبلغ الحالي في الصندوق",
+        "initialAmountLabel": "المبلغ المبدئي في الصندوق",
+        "withdrawAction": "سحب",
+        "depositAction": "إيداع",
+        "varianceMatches": "مطابق",
+        "varianceSurplus": "زيادة {amount}",
+        "varianceShortage": "عجز {amount}"
+      },
+      "cashSummary": {
+        "title": "ملخص الصندوق النقدي",
+        "openingBalance": "رصيد الافتتاح",
+        "cashSales": "مبيعات نقدية",
+        "cashReturns": "مرتجعات نقدية",
+        "withdrawals": "سحب من الصندوق",
+        "deposits": "إيداع في الصندوق",
+        "expectedInDrawer": "المتوقع في الدرج"
+      },
+      "paymentBreakdown": {
+        "title": "مبيعات الوردية حسب طريقة الدفع",
+        "empty": "لا توجد مبيعات في هذه الوردية بعد.",
+        "totalSalesLabel": "المبيعات الإجمالية"
+      },
+      "activity": {
+        "title": "حركة الصندوق",
+        "empty": "لا توجد حركات مسجلة بعد.",
+        "columns": {
+          "amount": "المبلغ",
+          "note": "الملاحظة",
+          "cashier": "الكاشير",
+          "reference": "المرجع",
+          "type": "النوع",
+          "time": "الوقت"
+        },
+        "types": {
+          "open": "افتتاح",
+          "close": "إغلاق الوردية",
+          "withdrawal": "سحب من الصندوق",
+          "deposit": "إيداع في الصندوق",
+          "sale": "عملية بيع",
+          "return": "مرتجع"
+        }
+      },
+      "closeShiftButton": "إغلاق الوردية",
+      "alreadyClosedLabel": "تم إغلاق هذه الوردية",
+      "printButton": "طباعة تقرير الوردية"
+    }
   }
 }
