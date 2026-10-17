@@ -2231,6 +2231,11 @@
       "items": {
         "addItem": "Add item",
         "productName": "Product",
+        "productPlaceholder": "Search or type a product name",
+        "productLoadingPlaceholder": "Loading products…",
+        "productSearchPlaceholder": "Search products by name or SKU...",
+        "productEmptyLabel": "No matching products",
+        "addCustomProduct": "Add \"{draft}\" as a custom item",
         "sku": "SKU",
         "unitPrice": "Unit price",
         "quantity": "Quantity",

@@ -2231,6 +2231,11 @@
       "items": {
         "addItem": "إضافة منتج",
         "productName": "المنتج",
+        "productPlaceholder": "ابحث أو اكتب اسم المنتج",
+        "productLoadingPlaceholder": "جارٍ تحميل المنتجات…",
+        "productSearchPlaceholder": "ابحث بالاسم أو رمز المنتج...",
+        "productEmptyLabel": "لا توجد منتجات مطابقة",
+        "addCustomProduct": "إضافة \"{draft}\" كمنتج مخصص",
         "sku": "رمز المنتج",
         "unitPrice": "سعر الوحدة",
         "quantity": "الكمية",

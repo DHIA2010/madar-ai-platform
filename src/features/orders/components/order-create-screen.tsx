@@ -9,8 +9,16 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
-import { AppButton, AppForm, AppInput, AppSearchableSelect, AppSwitch } from "@/components/app"
+import {
+  AppButton,
+  AppForm,
+  AppInput,
+  AppSearchableSelect,
+  type AppSearchableSelectOption,
+  AppSwitch,
+} from "@/components/app"
 
+import { useProductCatalog } from "../hooks/use-product-catalog"
 import {
   type CreateOrderInput,
   type CreateOrderItemInput,
@@ -21,6 +29,11 @@ import { FIELD_CLASS, HEADING, MUTED, OrderField, OrderSection, PANEL } from "./
 import { type Locale, localeDirection } from "@/i18n/locales"
 
 type OrdersTranslator = ReturnType<typeof useTranslations<"orders">>
+
+// A row that hasn't (or no longer) points at a real catalog product -- its productName is
+// hand-typed, matching the "free-text line" every POS/invoice item input in this app already
+// supports server-side (productId stays null in that case).
+const FREEFORM_PRODUCT_VALUE = "__freeform__"
 
 function emptyItem(): CreateOrderItemInput {
   return { productId: null, productName: "", sku: null, unitPrice: 0, quantity: 1 }
@@ -56,6 +69,7 @@ export function OrderCreateScreen() {
   const t = useTranslations("orders")
   const locale = useLocale() as Locale
   const router = useRouter()
+  const { products, isLoading: isLoadingProducts } = useProductCatalog()
 
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
@@ -92,6 +106,38 @@ export function OrderCreateScreen() {
     setItems((current) =>
       current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item))
     )
+  }
+
+  // The catalog options every row's product field shares, plus -- only when that specific row
+  // currently holds a hand-typed name -- a synthetic leading option so the trigger still shows
+  // it as "selected" (AppSearchableSelect only renders a label for a value present in options).
+  function productOptionsFor(item: CreateOrderItemInput): AppSearchableSelectOption[] {
+    const catalogOptions = products.map((product) => ({
+      value: product.id,
+      label: product.name,
+      hint: `${product.sku} — ${formatAmount(product.sellingPrice, locale)}`,
+    }))
+    if (!item.productId && item.productName.trim()) {
+      return [{ value: FREEFORM_PRODUCT_VALUE, label: item.productName }, ...catalogOptions]
+    }
+    return catalogOptions
+  }
+
+  function handleProductSelect(index: number, value: string) {
+    if (value === FREEFORM_PRODUCT_VALUE) return
+    const product = products.find((candidate) => candidate.id === value)
+    if (!product) return
+    updateItem(index, {
+      productId: product.id,
+      productName: product.name,
+      sku: product.sku,
+      unitPrice: product.sellingPrice,
+      costPrice: product.costPrice,
+    })
+  }
+
+  function handleProductCreate(index: number, draft: string) {
+    updateItem(index, { productId: null, productName: draft, sku: null })
   }
 
   const itemsSubtotal = items.reduce(
@@ -280,10 +326,22 @@ export function OrderCreateScreen() {
               >
                 <div className="col-span-2">
                   <OrderField label={t("create.items.productName")} required>
-                    <AppInput
-                      value={item.productName}
-                      onChange={(event) => updateItem(index, { productName: event.target.value })}
-                      className={FIELD_CLASS}
+                    <AppSearchableSelect
+                      value={item.productId ?? (item.productName ? FREEFORM_PRODUCT_VALUE : "")}
+                      onChange={(value) => handleProductSelect(index, value)}
+                      onCreate={(draft) => handleProductCreate(index, draft)}
+                      createLabel={(draft) => t("create.items.addCustomProduct", { draft })}
+                      options={productOptionsFor(item)}
+                      disabled={isLoadingProducts}
+                      placeholder={
+                        isLoadingProducts
+                          ? t("create.items.productLoadingPlaceholder")
+                          : t("create.items.productPlaceholder")
+                      }
+                      searchPlaceholder={t("create.items.productSearchPlaceholder")}
+                      emptyLabel={t("create.items.productEmptyLabel")}
+                      ariaLabel={t("create.items.productName")}
+                      triggerClassName={FIELD_CLASS}
                     />
                   </OrderField>
                 </div>
@@ -337,10 +395,10 @@ export function OrderCreateScreen() {
           <AppButton
             type="button"
             variant="outline"
-            className="mt-3 h-10 gap-2 rounded-[10px] border-[#c4d5f0] text-[12.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
+            icon={<Plus className="size-4" />}
+            className="mt-3 h-10 rounded-[10px] border-[#c4d5f0] px-4 text-[12.5px] font-semibold text-[#2878ff] hover:bg-[#eef4ff]"
             onClick={() => setItems((current) => [...current, emptyItem()])}
           >
-            <Plus className="size-4" />
             {t("create.items.addItem")}
           </AppButton>
         </OrderSection>
