@@ -17,6 +17,7 @@ export const ROUTES = {
   products: "/products",
   productsAdd: "/eCommerce/add-product",
   orders: "/orders",
+  ordersCreate: "/orders/new",
   pos: "/pos",
   shifts: "/shifts",
   shiftsDetails: (shiftId: string) => `/shifts/${shiftId}`,

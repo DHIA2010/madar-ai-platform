@@ -2172,6 +2172,83 @@
       "columnTotal": "Total",
       "noDetailsForOrder": "No product details available for this order.",
       "pricesUnavailable": "Pricing details aren't available for this order."
+    },
+    "newOrder": "New order",
+    "pushStatus": {
+      "notApplicable": "Local only",
+      "pending": "Pushing to Salla…",
+      "pushed": "Synced to Salla",
+      "failed": "Push failed",
+      "retry": "Retry push to Salla",
+      "retrySuccess": "Order pushed to Salla successfully.",
+      "retryError": "Couldn't push this order to Salla. Try again shortly."
+    },
+    "create": {
+      "heading": "New order",
+      "subheading": "Create an order directly in Madar — it will also sync to your connected Salla store",
+      "sections": {
+        "customer": "Customer",
+        "receiver": "Receiver",
+        "items": "Items",
+        "payment": "Payment",
+        "delivery": "Delivery",
+        "discounts": "Discounts",
+        "notes": "Notes"
+      },
+      "receiverHint": "Who the order is actually delivered to — defaults to the customer above, but can differ for gift orders.",
+      "fields": {
+        "customerName": "Name",
+        "customerPhone": "Phone",
+        "customerEmail": "Email",
+        "isGuest": "Guest customer",
+        "receiverSameAsCustomer": "Same as customer",
+        "receiverNotify": "Notify the receiver about this order",
+        "deliveryMethod": "Delivery method",
+        "shipping": "Shipping",
+        "pickup": "Pickup",
+        "shipToCountry": "Country",
+        "shipToCity": "City",
+        "shipToDistrict": "District",
+        "shipToAddress": "Address",
+        "courierId": "Courier",
+        "shippingCost": "Shipping cost",
+        "discountCode": "Discount code",
+        "discountAmount": "Discount amount",
+        "shippingDiscountAmount": "Shipping discount",
+        "paymentStatus": "Payment status",
+        "paymentMethod": "Payment method"
+      },
+      "paymentMethods": {
+        "cash": "Cash",
+        "card": "Card",
+        "bankTransfer": "Bank transfer",
+        "cod": "Cash on delivery"
+      },
+      "paymentStatuses": {
+        "paid": "Paid",
+        "pending": "Pending"
+      },
+      "items": {
+        "addItem": "Add item",
+        "productName": "Product",
+        "sku": "SKU",
+        "unitPrice": "Unit price",
+        "quantity": "Quantity",
+        "removeItem": "Remove item"
+      },
+      "estimatedTotal": "Estimated total",
+      "submit": "Create order",
+      "cancel": "Cancel",
+      "createSuccess": "Order {orderNumber} created.",
+      "createSuccessPushed": "Order {orderNumber} created and synced to Salla.",
+      "createSuccessPushFailed": "Order {orderNumber} created, but the push to Salla failed — you can retry it from the orders list.",
+      "createError": "Couldn't create the order. Check the form and try again.",
+      "validation": {
+        "customerRequired": "Enter the customer's name.",
+        "receiverRequired": "Receiver name and phone are required.",
+        "itemsRequired": "Add at least one item.",
+        "shipToRequired": "Enter the shipping city."
+      }
     }
   },
   "customers": {

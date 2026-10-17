@@ -2172,6 +2172,83 @@
       "columnTotal": "الإجمالي",
       "noDetailsForOrder": "لا تتوفر تفاصيل منتجات لهذا الطلب.",
       "pricesUnavailable": "لم تتوفر تفاصيل الأسعار لهذا الطلب."
+    },
+    "newOrder": "طلب جديد",
+    "pushStatus": {
+      "notApplicable": "محلي فقط",
+      "pending": "جارٍ الإرسال إلى سلة…",
+      "pushed": "مُزامن مع سلة",
+      "failed": "فشلت المزامنة",
+      "retry": "إعادة المزامنة مع سلة",
+      "retrySuccess": "تمت مزامنة الطلب مع سلة بنجاح.",
+      "retryError": "تعذرت مزامنة هذا الطلب مع سلة. حاول مرة أخرى بعد قليل."
+    },
+    "create": {
+      "heading": "طلب جديد",
+      "subheading": "أنشئ طلبًا مباشرة في مدار — سيتمت مزامنته أيضًا مع متجر سلة المتصل",
+      "sections": {
+        "customer": "العميل",
+        "receiver": "المستلم",
+        "items": "المنتجات",
+        "payment": "الدفع",
+        "delivery": "التوصيل",
+        "discounts": "الخصومات",
+        "notes": "ملاحظات"
+      },
+      "receiverHint": "الشخص الذي يُسلَّم إليه الطلب فعليًا — يُعبَّأ تلقائيًا من بيانات العميل أعلاه، ويمكن أن يختلف عنه في حال كان الطلب هدية.",
+      "fields": {
+        "customerName": "الاسم",
+        "customerPhone": "الهاتف",
+        "customerEmail": "البريد الإلكتروني",
+        "isGuest": "عميل زائر",
+        "receiverSameAsCustomer": "نفس بيانات العميل",
+        "receiverNotify": "إشعار المستلم بهذا الطلب",
+        "deliveryMethod": "طريقة التوصيل",
+        "shipping": "شحن",
+        "pickup": "استلام من الفرع",
+        "shipToCountry": "الدولة",
+        "shipToCity": "المدينة",
+        "shipToDistrict": "الحي",
+        "shipToAddress": "العنوان",
+        "courierId": "شركة الشحن",
+        "shippingCost": "تكلفة الشحن",
+        "discountCode": "كود الخصم",
+        "discountAmount": "قيمة الخصم",
+        "shippingDiscountAmount": "خصم الشحن",
+        "paymentStatus": "حالة الدفع",
+        "paymentMethod": "طريقة الدفع"
+      },
+      "paymentMethods": {
+        "cash": "نقدي",
+        "card": "بطاقة",
+        "bankTransfer": "تحويل بنكي",
+        "cod": "الدفع عند الاستلام"
+      },
+      "paymentStatuses": {
+        "paid": "مدفوع",
+        "pending": "معلق"
+      },
+      "items": {
+        "addItem": "إضافة منتج",
+        "productName": "المنتج",
+        "sku": "رمز المنتج",
+        "unitPrice": "سعر الوحدة",
+        "quantity": "الكمية",
+        "removeItem": "إزالة المنتج"
+      },
+      "estimatedTotal": "الإجمالي التقديري",
+      "submit": "إنشاء الطلب",
+      "cancel": "إلغاء",
+      "createSuccess": "تم إنشاء الطلب {orderNumber}.",
+      "createSuccessPushed": "تم إنشاء الطلب {orderNumber} ومزامنته مع سلة.",
+      "createSuccessPushFailed": "تم إنشاء الطلب {orderNumber}، لكن فشلت مزامنته مع سلة — يمكنك إعادة المحاولة من قائمة الطلبات.",
+      "createError": "تعذر إنشاء الطلب. تحقق من البيانات وحاول مرة أخرى.",
+      "validation": {
+        "customerRequired": "أدخل اسم العميل.",
+        "receiverRequired": "اسم المستلم وهاتفه مطلوبان.",
+        "itemsRequired": "أضف منتجًا واحدًا على الأقل.",
+        "shipToRequired": "أدخل مدينة الشحن."
+      }
     }
   },
   "customers": {

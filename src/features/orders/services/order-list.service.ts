@@ -29,9 +29,10 @@ function getWorkspaceIdFromStorage(): string | null {
   }
 }
 
-export type OrderPlatform = "Salla" | "Shopify" | "Zid"
+export type OrderPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
 export type OrderStatus = "Completed" | "Processing" | "Cancelled" | "Refunded"
 export type PaymentStatus = "Paid" | "Refunded" | "Pending"
+export type SallaPushStatus = "not_applicable" | "pending" | "pushed" | "failed"
 
 export interface OrderItemRecord {
   name: string
@@ -51,6 +52,8 @@ export interface OrderRecord {
   orderStatus: OrderStatus
   paymentStatus: PaymentStatus
   createdAt: string
+  // Only ever set for platform === "Madar" -- see MadarOrdersService/SallaOrderPushService.
+  sallaPushStatus?: SallaPushStatus
 }
 
 export interface OrdersSummary {
@@ -95,6 +98,64 @@ export interface OrderDetail {
   items: OrderDetailItem[]
 }
 
+export interface CreateOrderItemInput {
+  productId: string | null
+  productName: string
+  sku: string | null
+  unitPrice: number
+  quantity: number
+  discountAmount?: number
+  costPrice?: number | null
+  weight?: number | null
+}
+
+export interface CreateOrderReceiverInput {
+  name: string
+  phone: string
+  countryCode: string
+  email: string | null
+  notify: boolean
+}
+
+export interface CreateOrderShipToInput {
+  country: string
+  city: string
+  district?: string | null
+  address?: string | null
+  postalCode?: string | null
+}
+
+export interface CreateOrderInput {
+  customerName: string
+  customerPhone: string | null
+  customerEmail: string | null
+  customerId: string | null
+  isGuestCustomer: boolean
+  paymentStatus: "paid" | "pending"
+  paymentMethodCode: string
+  receiver: CreateOrderReceiverInput
+  deliveryMethod: "shipping" | "pickup" | null
+  shipTo: CreateOrderShipToInput | null
+  courierId: string | null
+  shippingCost: number
+  discountCode: string | null
+  discountAmount: number
+  shippingDiscountAmount: number
+  notes: string | null
+  items: CreateOrderItemInput[]
+}
+
+export interface MadarOrderRecord {
+  id: string
+  orderNumber: string
+  sallaPushStatus: SallaPushStatus
+  sallaOrderId: string | null
+  subtotalAmount: number
+  taxAmount: number
+  totalAmount: number
+  createdAt: string
+}
+
 // Avoids the slash-prefix literal lint rule (same trick as product-list.service.ts) -- this
 // is a real backend API path, not a frontend page route.
 const ORDERS_ENDPOINT = ["", "v1", "orders"].join(String.fromCharCode(47))
@@ -126,5 +187,21 @@ export const orderListService = {
       String.fromCharCode(47)
     )
     return client.get<OrderDetail>(endpoint)
+  },
+
+  // Creates an order directly in Madar -- if the organization has a connected Salla store, it's
+  // also pushed there as a side effect (see MadarOrdersService.create()); a push failure never
+  // fails this call, it only affects the returned record's own sallaPushStatus.
+  async createOrder(input: CreateOrderInput): Promise<MadarOrderRecord> {
+    return client.post<CreateOrderInput, MadarOrderRecord>(ORDERS_ENDPOINT, input)
+  },
+
+  // orderId here is the bare madar_orders.id (not the "madar:<id>" composite id used elsewhere
+  // in this file) -- this endpoint only ever operates on Madar-created orders.
+  async retryPush(orderId: string): Promise<MadarOrderRecord> {
+    const endpoint = [ORDERS_ENDPOINT, encodeURIComponent(orderId), "retry-push"].join(
+      String.fromCharCode(47)
+    )
+    return client.post<Record<string, never>, MadarOrderRecord>(endpoint, {})
   },
 }

@@ -14,8 +14,11 @@
 //   separate, on-demand order-detail endpoint opened via "عرض المنتجات".
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
+import { toast } from "sonner"
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -28,7 +31,9 @@ import {
   Loader2,
   MoreHorizontal,
   Package,
+  Plus,
   Receipt,
+  RotateCw,
   Search,
   ShoppingBag,
   ShoppingCart,
@@ -43,6 +48,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { cairo } from "@/components/design/fonts"
+import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import {
   orderListService,
@@ -129,12 +135,23 @@ const PLATFORM_TINT: Record<OrderRecord["platform"], string> = {
   Salla: "bg-[#e9f8ef] text-[#1f9d55]",
   Shopify: "bg-[#e9f8ef] text-[#1f9d55]",
   Zid: "bg-[#eef4ff] text-[#2878ff]",
+  Madar: "bg-[#f3eeff] text-[#8b5cf6]",
 }
 
 function PlatformIcon({ platform }: { platform: OrderRecord["platform"] }) {
   if (platform === "Shopify") return <ShoppingBag className="size-3.5" />
   if (platform === "Zid") return <Globe className="size-3.5" />
+  if (platform === "Madar") return <ShoppingCart className="size-3.5" />
   return <Store className="size-3.5" />
+}
+
+// Only ever rendered for platform === "Madar" rows -- the three synced platforms have no push
+// concept of their own (sallaPushStatus is undefined for them).
+const PUSH_STATUS_TINT: Record<NonNullable<OrderRecord["sallaPushStatus"]>, string> = {
+  not_applicable: "bg-[#f2f5fa] text-[#5b6b85]",
+  pending: "bg-[#fff3e3] text-[#e08b00]",
+  pushed: "bg-[#e9f8ef] text-[#1f9d55]",
+  failed: "bg-[#fdeeee] text-[#e0484d]",
 }
 
 function getStatusFilterOptions(t: OrdersTranslator) {
@@ -476,6 +493,7 @@ function OrderProductsDialog({
 export default function OrdersPage() {
   const t = useTranslations("orders")
   const locale = useLocale() as Locale
+  const router = useRouter()
   const [orders, setOrders] = useState<OrderRecord[]>([])
   const [summary, setSummary] = useState<OrdersSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -488,6 +506,30 @@ export default function OrdersPage() {
   const [paymentFilter, setPaymentFilter] = useState("All Payment")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [viewedOrder, setViewedOrder] = useState<OrderRecord | null>(null)
+  const [retryingOrderId, setRetryingOrderId] = useState<string | null>(null)
+
+  // order.id here is the "madar:<uuid>" composite id used everywhere else on this page --
+  // retry-push only ever operates on the bare madar_orders.id, hence the slice.
+  async function handleRetryPush(order: OrderRecord) {
+    const bareId = order.id.startsWith("madar:") ? order.id.slice("madar:".length) : order.id
+    setRetryingOrderId(order.id)
+    try {
+      const updated = await orderListService.retryPush(bareId)
+      setOrders((current) =>
+        current.map((candidate) =>
+          candidate.id === order.id
+            ? { ...candidate, sallaPushStatus: updated.sallaPushStatus }
+            : candidate
+        )
+      )
+      toast.success(t("pushStatus.retrySuccess"))
+    } catch (error) {
+      console.error("Failed to retry Salla push", error)
+      toast.error(t("pushStatus.retryError"))
+    } finally {
+      setRetryingOrderId(null)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -657,15 +699,24 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
-            disabled={filteredOrders.length === 0}
-            onClick={() => exportToCSV(filteredOrders)}
-          >
-            {t("export")}
-            <Download className="size-4" />
-          </Button>
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              className="h-11 gap-2 rounded-[10px] border-[#e1e7f0] bg-white px-4 text-[12.5px] font-semibold text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+              disabled={filteredOrders.length === 0}
+              onClick={() => exportToCSV(filteredOrders)}
+            >
+              {t("export")}
+              <Download className="size-4" />
+            </Button>
+            <Button
+              className="h-11 gap-2 rounded-[10px] bg-[#2878ff] px-4 text-[12.5px] font-bold text-white hover:bg-[#1f63d6]"
+              onClick={() => router.push(ROUTES.ordersCreate)}
+            >
+              <Plus className="size-4" />
+              {t("newOrder")}
+            </Button>
+          </div>
         </div>
 
         <section className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -812,6 +863,25 @@ export default function OrdersPage() {
                             <PlatformIcon platform={order.platform} />
                           </span>
                           <span className={cn("text-[12px]", MUTED)}>{order.channel}</span>
+                          {order.platform === "Madar" && order.sallaPushStatus ? (
+                            <span
+                              title={t(
+                                `pushStatus.${order.sallaPushStatus === "not_applicable" ? "notApplicable" : order.sallaPushStatus}`
+                              )}
+                              className={cn(
+                                "flex size-5 shrink-0 items-center justify-center rounded-full",
+                                PUSH_STATUS_TINT[order.sallaPushStatus]
+                              )}
+                            >
+                              {order.sallaPushStatus === "pushed" ? (
+                                <CheckCircle2 className="size-3" />
+                              ) : order.sallaPushStatus === "failed" ? (
+                                <AlertTriangle className="size-3" />
+                              ) : order.sallaPushStatus === "pending" ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : null}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td className={cn("px-3 py-3 text-[12.5px] font-bold tabular-nums", HEADING)}>
@@ -872,6 +942,21 @@ export default function OrdersPage() {
                               <Eye className="size-4" />
                               {t("table.viewProducts")}
                             </DropdownMenuItem>
+                            {order.platform === "Madar" && order.sallaPushStatus === "failed" ? (
+                              <DropdownMenuItem
+                                disabled={retryingOrderId === order.id}
+                                className="cursor-pointer gap-2 text-[12.5px]"
+                                onSelect={() => void handleRetryPush(order)}
+                              >
+                                <RotateCw
+                                  className={cn(
+                                    "size-4",
+                                    retryingOrderId === order.id && "animate-spin"
+                                  )}
+                                />
+                                {t("pushStatus.retry")}
+                              </DropdownMenuItem>
+                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
