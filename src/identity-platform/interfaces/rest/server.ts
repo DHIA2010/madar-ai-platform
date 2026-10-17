@@ -17,6 +17,7 @@ import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
+import { SallaOAuthService } from "../../salla-oauth/service"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
@@ -68,6 +69,8 @@ import {
   toNormalizedCustomerDetail,
 } from "../../customers/native-customers-service"
 import { OrdersAggregationService } from "../../orders/service"
+import { MadarOrdersService } from "../../orders/madar-orders-service"
+import { SallaOrderPushService } from "../../orders/salla-order-push-service"
 import { StoresAggregationService } from "../../stores/service"
 import { CampaignRepository } from "../../campaigns/repository"
 import { CampaignService } from "../../campaigns/service"
@@ -128,6 +131,7 @@ import {
   closeShiftSchema,
   recordCashMovementSchema,
   createInvoiceSchema,
+  createMadarOrderSchema,
   createBalanceVoucherSchema,
   bulkImportCustomersSchema,
   createCustomerSchema,
@@ -687,6 +691,17 @@ export function createIdentityApiServer(
   const ordersAggregationService = container.infrastructure.database
     ? new OrdersAggregationService(container.infrastructure.database)
     : null
+  const madarOrdersService =
+    container.infrastructure.database && taxRatesService
+      ? new MadarOrdersService(
+          container.infrastructure.database,
+          taxRatesService,
+          new SallaOAuthRepository(container.infrastructure.database),
+          new SallaOrderPushService(
+            new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database))
+          )
+        )
+      : null
   const campaignsPerformanceAggregationService = container.infrastructure.database
     ? new CampaignsPerformanceAggregationService(container.infrastructure.database)
     : null
@@ -4715,19 +4730,71 @@ export function createIdentityApiServer(
         return send(200, statement)
       }
 
-      if (method === "GET" && url.pathname === "/v1/orders") {
-        if (!ordersAggregationService) {
-          return send(503, {
-            code: "ORDERS_UNAVAILABLE",
-            message: "Order aggregation is unavailable in memory mode.",
+      if (url.pathname === "/v1/orders") {
+        if (method === "GET") {
+          if (!ordersAggregationService) {
+            return send(503, {
+              code: "ORDERS_UNAVAILABLE",
+              message: "Order aggregation is unavailable in memory mode.",
+            })
+          }
+
+          const result = await ordersAggregationService.listOrders(actor, {
+            startDate: url.searchParams.get("startDate") ?? undefined,
+            endDate: url.searchParams.get("endDate") ?? undefined,
           })
+          return send(200, result)
         }
 
-        const result = await ordersAggregationService.listOrders(actor, {
-          startDate: url.searchParams.get("startDate") ?? undefined,
-          endDate: url.searchParams.get("endDate") ?? undefined,
-        })
-        return send(200, result)
+        if (method === "POST") {
+          if (!madarOrdersService) {
+            return send(503, {
+              code: "MADAR_ORDERS_UNAVAILABLE",
+              message: "Order creation is unavailable in memory mode.",
+            })
+          }
+          if (!actor.modulePermissions.includes("orders:manage")) throw ERRORS.forbidden()
+
+          const payload = createMadarOrderSchema.parse(await readJsonBody(request))
+          const order = await madarOrdersService.create({
+            organizationId: actor.organizationId,
+            workspaceId: actor.workspaceId,
+            createdByUserId: actor.userId,
+            customerName: payload.customerName,
+            customerPhone: payload.customerPhone,
+            customerEmail: payload.customerEmail,
+            customerId: payload.customerId,
+            isGuestCustomer: payload.isGuestCustomer,
+            paymentStatus: payload.paymentStatus,
+            paymentMethodCode: payload.paymentMethodCode,
+            receiver: payload.receiver,
+            deliveryMethod: payload.deliveryMethod,
+            shipTo: payload.shipTo,
+            courierId: payload.courierId,
+            shippingCost: payload.shippingCost,
+            discountCode: payload.discountCode,
+            discountAmount: payload.discountAmount,
+            shippingDiscountAmount: payload.shippingDiscountAmount,
+            notes: payload.notes,
+            items: payload.items,
+          })
+          return send(201, order)
+        }
+      }
+
+      const orderRetryPushMatch = url.pathname.match(/^\/v1\/orders\/([^/]+)\/retry-push$/)
+      if (method === "POST" && orderRetryPushMatch) {
+        if (!madarOrdersService) {
+          return send(503, {
+            code: "MADAR_ORDERS_UNAVAILABLE",
+            message: "Order creation is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("orders:manage")) throw ERRORS.forbidden()
+
+        const orderId = decodeURIComponent(orderRetryPushMatch[1])
+        const order = await madarOrdersService.retryPush(actor, orderId)
+        return send(200, order)
       }
 
       const orderDetailMatch = url.pathname.match(/^\/v1\/orders\/([^/]+)\/details$/)
@@ -4740,6 +4807,27 @@ export function createIdentityApiServer(
         }
 
         const orderId = decodeURIComponent(orderDetailMatch[1])
+
+        // Madar-created orders have no OAuth connection to resolve and no live provider to fetch
+        // from -- Madar already has the full order locally, so this branches before
+        // resolveOrderConnection (which only ever knows about salla:/shopify:/zid: ids anyway).
+        if (orderId.startsWith("madar:")) {
+          if (!madarOrdersService) {
+            return send(503, {
+              code: "MADAR_ORDERS_UNAVAILABLE",
+              message: "Order creation is unavailable in memory mode.",
+            })
+          }
+          const detail = await madarOrdersService.getDetailView(
+            actor,
+            orderId.slice("madar:".length)
+          )
+          if (!detail) {
+            return send(404, { code: "ORDER_NOT_FOUND", message: "Order not found." })
+          }
+          return send(200, detail)
+        }
+
         const connectionRef = await ordersAggregationService.resolveOrderConnection(actor, orderId)
         if (!connectionRef) {
           return send(404, { code: "ORDER_NOT_FOUND", message: "Order not found." })

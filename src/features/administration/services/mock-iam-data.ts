@@ -30,7 +30,7 @@ export const IAM_PERMISSION_GROUPS: IamPermissionGroup[] = [
     label: "Products",
     actions: ["view", "create", "edit", "delete", "export", "import"],
   },
-  { module: "orders", label: "Orders", actions: ["view", "export"] },
+  { module: "orders", label: "Orders", actions: ["view", "export", "manage"] },
   { module: "pos", label: "POS", actions: ["view", "manage"] },
   {
     module: "customers",

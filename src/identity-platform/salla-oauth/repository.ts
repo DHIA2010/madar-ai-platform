@@ -306,6 +306,30 @@ export class SallaOAuthRepository
     return result.rows[0] ? mapConnection(result.rows[0]) : null
   }
 
+  // Scoped by org/workspace rather than by project (unlike findConnectionByProject above) --
+  // MadarOrdersService doesn't track a project_id for a locally-created order, it just needs
+  // "whichever connected Salla store this org/branch has" to decide whether to push at all.
+  // workspace_id IS NULL matches an org-wide connection the same way every other org/workspace
+  // filter in this codebase treats a null workspace scope as "applies everywhere".
+  async findActiveConnection(organizationId: string, workspaceId: string | null) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-oauth-connection-find-active",
+      text: `
+        SELECT *
+        FROM salla_oauth_connections
+        WHERE organization_id = $1
+          AND status = 'connected'
+          AND deleted_at IS NULL
+          AND ($2::uuid IS NULL OR workspace_id = $2::uuid OR workspace_id IS NULL)
+        ORDER BY last_connected_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      values: [organizationId, workspaceId],
+    })
+
+    return result.rows[0] ? mapConnection(result.rows[0]) : null
+  }
+
   async saveEvent(connectionId: string, eventType: string, metadata: Record<string, unknown>) {
     await this.db.query({
       name: "salla-oauth-event-insert",

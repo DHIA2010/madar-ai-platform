@@ -899,6 +899,64 @@ export const createInvoiceSchema = z.object({
   items: z.array(createInvoiceItemSchema).min(1),
 })
 
+// One line item of a Madar-created order -- see createMadarOrderSchema. Distinct from
+// createInvoiceItemSchema: no variantId (POS variant stock consumption doesn't apply here) but
+// adds sku/costPrice/weight, which Salla's External Orders API accepts per-product.
+export const createMadarOrderItemSchema = z.object({
+  productId: z.string().uuid().nullable().optional().default(null),
+  productName: z.string().min(1).max(200),
+  sku: z.string().max(100).nullable().optional().default(null),
+  unitPrice: z.number().min(0),
+  quantity: z.number().positive(),
+  discountAmount: z.number().min(0).optional().default(0),
+  costPrice: z.number().min(0).nullable().optional().default(null),
+  weight: z.number().min(0).nullable().optional().default(null),
+})
+
+// The receiver Salla's External Orders API requires -- all four fields are mandatory on Salla's
+// side, which is why none of them default to null the way the order-level customer fields do.
+export const madarOrderReceiverSchema = z.object({
+  name: z.string().min(1).max(120),
+  phone: z.string().min(1).max(30),
+  countryCode: z.string().min(2).max(3).default("SA"),
+  email: z.string().email().nullable().optional().default(null),
+  notify: z.boolean().default(true),
+})
+
+// Only present when deliveryMethod is 'shipping' -- Salla requires country+city together on its
+// own ship_to object, so this whole object is omitted rather than sent half-empty for pickup.
+export const madarOrderShipToSchema = z.object({
+  country: z.string().min(1).max(100),
+  city: z.string().min(1).max(100),
+  district: z.string().max(100).nullable().optional().default(null),
+  address: z.string().max(300).nullable().optional().default(null),
+  postalCode: z.string().max(20).nullable().optional().default(null),
+})
+
+// A Madar-created order ("طلب يدوي") -- see MadarOrdersService.create(). Distinct from
+// createInvoiceSchema: no payments[]/cashier/shift concepts (this isn't a POS sale), but adds
+// the receiver/shipping/discount shape Salla's External Orders API requires for the push that
+// follows local creation.
+export const createMadarOrderSchema = z.object({
+  customerName: z.string().min(1).max(120),
+  customerPhone: z.string().max(30).nullable().optional().default(null),
+  customerEmail: z.string().email().max(200).nullable().optional().default(null),
+  customerId: z.string().uuid().nullable().optional().default(null),
+  isGuestCustomer: z.boolean().default(true),
+  paymentStatus: z.enum(["paid", "pending"]).default("pending"),
+  paymentMethodCode: z.string().min(1).max(60),
+  receiver: madarOrderReceiverSchema,
+  deliveryMethod: z.enum(["shipping", "pickup"]).nullable().optional().default(null),
+  shipTo: madarOrderShipToSchema.nullable().optional().default(null),
+  courierId: z.string().max(100).nullable().optional().default(null),
+  shippingCost: z.number().min(0).default(0),
+  discountCode: z.string().max(60).nullable().optional().default(null),
+  discountAmount: z.number().min(0).default(0),
+  shippingDiscountAmount: z.number().min(0).default(0),
+  notes: z.string().max(500).nullable().optional().default(null),
+  items: z.array(createMadarOrderItemSchema).min(1),
+})
+
 // A parked cart -- same item/customer/discount/notes shape as createInvoiceSchema, minus a
 // payment method (not chosen yet, that only happens at actual checkout). workspaceId travels
 // explicitly in the body, the same way openShiftSchema takes it, rather than being inferred.

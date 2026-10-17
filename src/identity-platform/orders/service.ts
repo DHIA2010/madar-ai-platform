@@ -52,7 +52,7 @@ function daysBetweenDates(from: Date, to: Date): number {
   return Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1)
 }
 
-export type OrderPlatform = "Salla" | "Shopify" | "Zid"
+export type OrderPlatform = "Salla" | "Shopify" | "Zid" | "Madar"
 // Bucketed from each provider's own real status text (see bucketOrderStatus) -- not a field
 // any provider syncs directly, since each has its own status vocabulary.
 export type OrderStatusBucket = "Completed" | "Processing" | "Cancelled" | "Refunded"
@@ -80,6 +80,10 @@ export interface OrderSummaryView {
   orderStatus: OrderStatusBucket
   paymentStatus: PaymentStatus
   createdAt: string
+  // Only ever set for platform === "Madar" -- whether this order has been pushed to the
+  // merchant's connected Salla store yet (see MadarOrdersService/SallaOrderPushService).
+  // undefined for every synced provider, which never has a push concept of its own.
+  sallaPushStatus?: "not_applicable" | "pending" | "pushed" | "failed"
 }
 
 export interface OrdersSummaryStats {
@@ -284,6 +288,58 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
   }
 }
 
+// A Madar-created order (madar_orders) -- unlike the three synced providers, this never goes
+// through a connection-joined records table (see fetchMadarOrderRows), so its row shape is its
+// own, not an OrderRecordRow payload blob. status is already one of this bucket's own values
+// ('processing'/'completed'/'cancelled'/'refunded'), so no text-sniffing via bucketOrderStatus
+// is needed the way the three synced providers require.
+interface MadarOrderAggregateRow {
+  id: string
+  order_number: string
+  customer_name: string
+  status: string
+  payment_status: string
+  total_amount: string | number
+  currency: string
+  created_at: Date | string
+  salla_push_status: string
+  [key: string]: unknown
+}
+
+function normalizeMadarOrder(
+  row: MadarOrderAggregateRow,
+  items: Array<{ name: string; quantity: number }>
+): OrderSummaryView {
+  const paymentStatus: PaymentStatus =
+    row.payment_status === "paid"
+      ? "Paid"
+      : row.payment_status === "refunded"
+        ? "Refunded"
+        : "Pending"
+  const orderStatusByStatus: Record<string, OrderStatusBucket> = {
+    processing: "Processing",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    refunded: "Refunded",
+  }
+
+  return {
+    id: `madar:${row.id}`,
+    orderNumber: row.order_number,
+    customerName: row.customer_name,
+    channel: "madar",
+    platform: "Madar",
+    items,
+    productCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    amount: Number(row.total_amount) || 0,
+    currency: row.currency,
+    orderStatus: orderStatusByStatus[row.status] ?? "Processing",
+    paymentStatus,
+    createdAt: toIsoDate(row.created_at),
+    sallaPushStatus: row.salla_push_status as OrderSummaryView["sallaPushStatus"],
+  }
+}
+
 type ProviderKey = "salla" | "shopify" | "zid"
 
 const PROVIDER_CONFIG: Record<
@@ -390,21 +446,31 @@ export class OrdersAggregationService {
     actor: AuthenticatedActor
   ): Promise<{ earliestDate: string | null; latestDate: string | null }> {
     const tables = ["salla_sync_runs", "shopify_sync_runs", "zid_sync_runs"]
-    const results = await Promise.all(
-      tables.map((table) =>
-        this.db.query<{ earliest: string | null; latest: string | null }>(
-          `SELECT min(date_start) AS earliest, max(date_end) AS latest
-           FROM ${table}
-           WHERE organization_id = $1 AND status = 'completed'
-             AND ($2::uuid IS NULL OR workspace_id = $2::uuid)`,
-          [actor.organizationId, actor.workspaceId]
+    const [providerResults, madarResult] = await Promise.all([
+      Promise.all(
+        tables.map((table) =>
+          this.db.query<{ earliest: string | null; latest: string | null }>(
+            `SELECT min(date_start) AS earliest, max(date_end) AS latest
+             FROM ${table}
+             WHERE organization_id = $1 AND status = 'completed'
+               AND ($2::uuid IS NULL OR workspace_id = $2::uuid)`,
+            [actor.organizationId, actor.workspaceId]
+          )
         )
-      )
-    )
+      ),
+      // Madar orders have no sync_runs bookkeeping -- they're never synced, just created -- so
+      // this reads straight off the table's own created_at instead, no status filter needed.
+      this.db.query<{ earliest: string | null; latest: string | null }>(
+        `SELECT min(created_at) AS earliest, max(created_at) AS latest
+         FROM madar_orders
+         WHERE organization_id = $1 AND ($2::uuid IS NULL OR workspace_id = $2::uuid)`,
+        [actor.organizationId, actor.workspaceId]
+      ),
+    ])
 
     let earliest: string | null = null
     let latest: string | null = null
-    for (const result of results) {
+    for (const result of [...providerResults, madarResult]) {
       const row = result.rows[0]
       if (!row?.earliest || !row?.latest) continue
       const rowEarliest = new Date(row.earliest).toISOString().slice(0, 10)
@@ -451,8 +517,8 @@ export class OrdersAggregationService {
     start: Date,
     end: Date
   ): Promise<OrderSummaryView[]> {
-    const results = await Promise.all(
-      (Object.keys(PROVIDER_CONFIG) as ProviderKey[]).map(async (provider) => {
+    const providerPromises = (Object.keys(PROVIDER_CONFIG) as ProviderKey[]).map(
+      async (provider) => {
         const config = PROVIDER_CONFIG[provider]
         const result = await this.db.query<OrderRecordRow>({
           name: `orders-aggregation-${provider}`,
@@ -479,10 +545,71 @@ export class OrdersAggregationService {
           ],
         })
         return result.rows.map(config.normalize)
-      })
+      }
     )
 
+    const results = await Promise.all([
+      ...providerPromises,
+      this.fetchMadarOrderRows(actor, start, end),
+    ])
+
     return results.flat()
+  }
+
+  // Madar orders aren't shaped around a connection-joined records table the way the three
+  // synced providers are (see PROVIDER_CONFIG's own doc comment) -- they're created directly by
+  // a user in an org/workspace, with no OAuth connection of their own. Kept as its own parallel
+  // path rather than forced into PROVIDER_CONFIG's shape, per the plan's explicit decision.
+  private async fetchMadarOrderRows(
+    actor: AuthenticatedActor,
+    start: Date,
+    end: Date
+  ): Promise<OrderSummaryView[]> {
+    const result = await this.db.query<MadarOrderAggregateRow>({
+      name: "orders-aggregation-madar",
+      text: `
+        SELECT o.id, o.order_number, o.customer_name, o.status, o.payment_status,
+               o.total_amount, o.currency, o.created_at, o.salla_push_status
+        FROM madar_orders o
+        WHERE o.organization_id = $1
+          AND ($2::uuid IS NULL OR o.workspace_id = $2::uuid)
+          AND o.created_at::date >= $3::date
+          AND o.created_at::date <= $4::date
+        ORDER BY o.created_at DESC
+        LIMIT $5
+      `,
+      values: [
+        actor.organizationId,
+        actor.workspaceId ?? null,
+        start.toISOString().slice(0, 10),
+        end.toISOString().slice(0, 10),
+        MAX_ORDERS_PER_PROVIDER,
+      ],
+    })
+    if (result.rows.length === 0) return []
+
+    // A separate query merged in JS, not a correlated subquery or a JOIN+json_agg -- pg-mem (this
+    // codebase's test harness) can't resolve a subquery that references the outer query's own
+    // alias, the same class of gap already documented elsewhere in this codebase (ANY($1::uuid[]),
+    // FILTER). Matches PosInvoicesService.list()'s own items-merged-in-a-Map pattern.
+    const orderIds = result.rows.map((row) => row.id)
+    const idPlaceholders = orderIds.map((_, index) => `$${index + 1}`).join(", ")
+    const itemRows = await this.db.query<{
+      order_id: string
+      product_name: string
+      quantity: string | number
+    }>(
+      `SELECT order_id, product_name, quantity FROM madar_order_items WHERE order_id IN (${idPlaceholders})`,
+      orderIds
+    )
+    const itemsByOrder = new Map<string, Array<{ name: string; quantity: number }>>()
+    for (const item of itemRows.rows) {
+      const list = itemsByOrder.get(item.order_id) ?? []
+      list.push({ name: item.product_name, quantity: Number(item.quantity) || 0 })
+      itemsByOrder.set(item.order_id, list)
+    }
+
+    return result.rows.map((row) => normalizeMadarOrder(row, itemsByOrder.get(row.id) ?? []))
   }
 
   private buildSummary(
