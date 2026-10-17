@@ -45,8 +45,11 @@ const NAV_ITEM_CLASSNAME = cn(
   "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
   "data-active:bg-sidebar-active data-active:font-bold data-active:text-sidebar-active-foreground",
   "data-active:hover:bg-sidebar-active data-active:hover:text-sidebar-active-foreground",
-  // The glyph is muted until the row is active, so the column reads as one quiet list.
-  "[&>svg:first-child]:size-[17px] [&>svg:first-child]:text-sidebar-icon",
+  // Each item's icon carries its own accent color (set via its own className in app-sidebar.tsx's
+  // navMain list) so the column reads as a set of distinct destinations rather than one flat list.
+  // The active row still unifies to the shared active color, overriding whatever color the icon
+  // normally carries, to match the row's own blue tint/label/accent-bar treatment.
+  "[&>svg:first-child]:size-[17px]",
   "data-active:[&>svg:first-child]:text-sidebar-active-foreground"
 )
 

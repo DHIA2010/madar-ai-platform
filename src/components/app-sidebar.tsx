@@ -80,7 +80,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("home"),
       url: ROUTES.dashboard,
-      icon: <House />,
+      icon: <House className="text-blue-500" />,
       isActive: true,
       permission: "dashboard:view",
       applications: ANY_APPLICATION,
@@ -88,11 +88,15 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     // No permission key and no `applications` gate: unlike every other item here, this is the ONE
     // item that must always be reachable, since it's the page a brand-new organization (with
     // nothing activated yet) uses to activate its first application.
-    { title: t("applications"), url: ROUTES.marketplace, icon: <Blocks /> },
+    {
+      title: t("applications"),
+      url: ROUTES.marketplace,
+      icon: <Blocks className="text-violet-500" />,
+    },
     {
       title: t("liveVisitors"),
       url: ROUTES.liveVisitors,
-      icon: <Radio />,
+      icon: <Radio className="text-rose-500" />,
       // Same permission the underlying GET /v1/tracking/live-dashboard enforces -- hiding the
       // nav entry from someone the API would reject anyway.
       permission: "liveVisitors:view",
@@ -101,28 +105,28 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("channels"),
       url: "/channels",
-      icon: <Tv />,
+      icon: <Tv className="text-cyan-500" />,
       permission: "campaigns:view",
       applications: ["advertising"],
     },
     {
       title: t("campaigns"),
       url: "/campaigns",
-      icon: <SendIcon />,
+      icon: <SendIcon className="text-indigo-500" />,
       permission: "campaigns:view",
       applications: ["advertising"],
     },
     {
       title: t("linkBuilder"),
       url: ROUTES.campaignLinks,
-      icon: <Link2 />,
+      icon: <Link2 className="text-teal-500" />,
       permission: "campaigns:view",
       applications: ["advertising"],
     },
     {
       title: t("stores"),
       url: "/stores",
-      icon: <ShoppingBag />,
+      icon: <ShoppingBag className="text-amber-500" />,
       permission: "stores:view",
       applications: ["ecommerce"],
     },
@@ -131,7 +135,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("products"),
       url: "/products",
-      icon: <Grid2x2 />,
+      icon: <Grid2x2 className="text-sky-500" />,
       permission: "products:view",
       applications: ["ecommerce", "pos"],
     },
@@ -141,7 +145,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("suppliers"),
       url: ROUTES.suppliers,
-      icon: <Truck />,
+      icon: <Truck className="text-emerald-500" />,
       permission: "suppliers:view",
       applications: ["ecommerce", "pos"],
       items: [
@@ -158,7 +162,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("purchases"),
       url: ROUTES.purchases,
-      icon: <PackageSearch />,
+      icon: <PackageSearch className="text-orange-500" />,
       permission: "purchases:view",
       applications: ["ecommerce", "pos"],
       items: [
@@ -172,7 +176,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("expenses"),
       url: ROUTES.expenses,
-      icon: <Wallet />,
+      icon: <Wallet className="text-red-500" />,
       permission: "expenses:view",
       applications: ["ecommerce", "pos"],
       items: [
@@ -183,63 +187,63 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("orders"),
       url: ROUTES.orders,
-      icon: <ClipboardList />,
+      icon: <ClipboardList className="text-fuchsia-500" />,
       permission: "orders:view",
       applications: ["ecommerce"],
     },
     {
       title: t("pos"),
       url: ROUTES.pos,
-      icon: <CreditCard />,
+      icon: <CreditCard className="text-emerald-600" />,
       permission: "pos:view",
       applications: ["pos"],
     },
     {
       title: t("invoices"),
       url: ROUTES.invoices,
-      icon: <FileText />,
+      icon: <FileText className="text-blue-600" />,
       permission: "pos:view",
       applications: ["ecommerce", "pos"],
     },
     {
       title: t("shifts"),
       url: ROUTES.shifts,
-      icon: <Clock />,
+      icon: <Clock className="text-purple-500" />,
       permission: "pos:view",
       applications: ["pos"],
     },
     {
       title: t("customers"),
       url: "/customers",
-      icon: <CircleUserRound />,
+      icon: <CircleUserRound className="text-pink-500" />,
       permission: "customers:view",
       applications: ["ecommerce", "pos"],
     },
     {
       title: t("reports"),
       url: "/reports",
-      icon: <ChartNoAxesCombined />,
+      icon: <ChartNoAxesCombined className="text-green-500" />,
       permission: "reports:view",
       applications: ANY_APPLICATION,
     },
     {
       title: t("ai"),
       url: "/ai",
-      icon: <Gauge />,
+      icon: <Gauge className="text-violet-600" />,
       permission: "ai:view",
       applications: ANY_APPLICATION,
     },
     {
       title: t("integrations"),
       url: "/integrations",
-      icon: <LayoutGrid />,
+      icon: <LayoutGrid className="text-blue-500" />,
       permission: "connections:view",
       applications: ANY_APPLICATION,
     },
     {
       title: t("administration"),
       url: ROUTES.administration,
-      icon: <ShieldCheck />,
+      icon: <ShieldCheck className="text-red-600" />,
       permission: "users:view",
       applications: ANY_APPLICATION,
     },
@@ -248,7 +252,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     {
       title: t("settings"),
       url: ROUTES.settings,
-      icon: <Settings2 />,
+      icon: <Settings2 className="text-slate-500" />,
       applications: ANY_APPLICATION,
     },
   ]
