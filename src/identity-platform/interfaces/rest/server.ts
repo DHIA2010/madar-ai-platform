@@ -18,6 +18,10 @@ import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
 import { SallaOAuthService } from "../../salla-oauth/service"
+import { resolveSallaWebhookCredentials } from "../../salla-oauth/salla-credentials"
+import { SallaSyncRepository } from "../../salla-oauth/sync-repository"
+import { verifySallaWebhookSignature } from "../../salla-oauth/webhook-verification"
+import { SallaWebhookService, type SallaWebhookPayload } from "../../salla-oauth/webhook-service"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
@@ -276,6 +280,20 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
     return {}
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"))
+}
+
+// Same buffering loop as readJsonBody, minus the JSON.parse -- an HMAC-signature-verified webhook
+// (Salla's) needs the exact raw bytes the sender signed, not a round-tripped re-serialization of
+// the parsed object, which can differ in key order/whitespace and would make a correct signature
+// fail to verify. Only used by the Salla webhook route; readJsonBody is untouched for every other
+// caller (including Moyasar's webhook, whose secret is a plain field inside the JSON body, not a
+// signature over the raw bytes).
+async function readRawBody(request: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks)
 }
 
 function mapZodError(error: z.ZodError) {
@@ -788,6 +806,13 @@ export function createIdentityApiServer(
   const zidOAuthRepositoryForTracking = container.infrastructure.database
     ? new ZidOAuthRepository(container.infrastructure.database)
     : null
+  const sallaWebhookService = container.infrastructure.database
+    ? new SallaWebhookService(
+        sallaOAuthRepositoryForTracking ??
+          new SallaOAuthRepository(container.infrastructure.database),
+        new SallaSyncRepository(container.infrastructure.database)
+      )
+    : null
   const orderAttributionService = container.infrastructure.database
     ? new OrderAttributionService(
         new AttributionRepository(container.infrastructure.database),
@@ -982,6 +1007,48 @@ export function createIdentityApiServer(
         if (payload.type === "payment_paid") {
           await moyasarBillingService.handleWebhookEvent(payload)
         }
+        return send(200, { received: true })
+      }
+
+      // Unauthenticated, verified via an HMAC-SHA256-of-the-raw-body signature instead of a
+      // bearer token -- Salla calls this directly, server-to-server, with no MADAR session
+      // (https://docs.salla.dev/webhooks). Placed in the same unauthenticated zone as the
+      // Moyasar webhook above, before the bearer-token resolution below. Reads the raw body (not
+      // readJsonBody) since the signature is computed over the exact bytes Salla sent, not a
+      // round-tripped re-serialization of the parsed object.
+      if (method === "POST" && url.pathname === "/v1/integrations/salla/webhook") {
+        if (!sallaWebhookService) {
+          return send(503, {
+            code: "SALLA_WEBHOOK_UNAVAILABLE",
+            message: "Salla webhooks are unavailable in memory mode.",
+          })
+        }
+
+        const credentials = await resolveSallaWebhookCredentials()
+        if (!credentials?.webhookSecret) {
+          return send(503, {
+            code: "SALLA_WEBHOOK_UNAVAILABLE",
+            message: "Salla webhook verification is not configured.",
+          })
+        }
+
+        const rawBody = await readRawBody(request)
+        const signatureHeader = request.headers["x-salla-signature"]
+        if (!verifySallaWebhookSignature(rawBody, signatureHeader, credentials.webhookSecret)) {
+          return send(401, {
+            code: "SALLA_WEBHOOK_INVALID_SIGNATURE",
+            message: "Invalid webhook signature.",
+          })
+        }
+
+        let payload: SallaWebhookPayload
+        try {
+          payload = JSON.parse(rawBody.toString("utf8")) as SallaWebhookPayload
+        } catch {
+          return send(400, { code: "SALLA_WEBHOOK_INVALID_BODY", message: "Invalid JSON body." })
+        }
+
+        await sallaWebhookService.handleWebhookEvent(payload)
         return send(200, { received: true })
       }
 

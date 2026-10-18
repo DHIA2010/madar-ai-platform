@@ -288,6 +288,40 @@ export class SallaOAuthRepository
     return result.rows[0] ? String(result.rows[0].organization_id) : null
   }
 
+  // Webhook counterpart to findOrganizationIdByStoreId -- that one only returns organization_id,
+  // enough for the tracking-snippet resolver above; SallaSyncRepository.upsertRecords also needs
+  // connectionId and the connection's currently-selected store's customerId (salla_stores.
+  // account_id), so a webhook ingress handler needs this richer lookup instead. Same
+  // connected/not-deleted filtering as findOrganizationIdByStoreId.
+  async findWebhookTargetByStoreId(storeId: string): Promise<{
+    connectionId: string
+    organizationId: string
+    customerId: string
+  } | null> {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-oauth-connection-find-webhook-target",
+      text: `
+        SELECT c.id AS connection_id, c.organization_id, s.account_id AS customer_id
+        FROM salla_oauth_connections c
+        JOIN salla_stores s ON s.connection_id = c.id AND s.is_selected = true AND s.status = 'active'
+        WHERE c.provider_account_id = $1
+          AND c.status = 'connected'
+          AND c.deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [storeId],
+    })
+
+    const row = result.rows[0]
+    if (!row) return null
+
+    return {
+      connectionId: String(row.connection_id),
+      organizationId: String(row.organization_id),
+      customerId: String(row.customer_id),
+    }
+  }
+
   async findConnectionByProject(organizationId: string, projectId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "salla-oauth-connection-find-project",

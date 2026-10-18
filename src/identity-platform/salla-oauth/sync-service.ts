@@ -5,6 +5,7 @@ import type {
 } from "../integrations/provider-contracts"
 import { IntegrationProviderError } from "../integrations/provider-error"
 
+import { toRecordDate } from "./record-date"
 import type { SallaOAuthRepository } from "./repository"
 import type { SallaOAuthService } from "./service"
 import { SallaSyncRepository, type SallaSyncRecordInput } from "./sync-repository"
@@ -47,17 +48,6 @@ function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
   if (!actor.roles.includes("owner") && !actor.roles.includes("admin")) {
     throw new IntegrationProviderError("Forbidden.", "SALLA_SYNC_FORBIDDEN", false, 403)
   }
-}
-
-function toRecordDate(candidates: Array<string | undefined>): string {
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    const parsed = new Date(candidate)
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10)
-    }
-  }
-  return new Date().toISOString().slice(0, 10)
 }
 
 // Paginates by incrementing ?page= until the API signals it's done -- via pagination.totalPages

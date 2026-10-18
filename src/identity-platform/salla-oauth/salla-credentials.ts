@@ -6,6 +6,11 @@ export interface SallaOAuthCredentials {
   clientId: string
   clientSecret: string
   redirectUri?: string
+  // Optional, unlike clientId/clientSecret -- mirrors billing/moyasar/credentials.ts's own
+  // webhookSecret: a webhook can't be verified until the route is deployed and the Partner
+  // Portal's Webhook URL is pointed at it, so OAuth connect/token-refresh must keep working
+  // without one. The webhook route itself (server.ts) 503s if this is null.
+  webhookSecret?: string | null
 }
 
 export interface SallaOAuthCredentialsProvider {
@@ -19,6 +24,7 @@ function readEnvSallaCredentials(): SallaOAuthCredentials | null {
   const clientId = process.env.SALLA_CLIENT_ID?.trim() ?? ""
   const clientSecret = process.env.SALLA_CLIENT_SECRET?.trim() ?? ""
   const redirectUri = process.env.SALLA_REDIRECT_URI?.trim() ?? ""
+  const webhookSecret = process.env.SALLA_WEBHOOK_SECRET?.trim() ?? ""
 
   if (!clientId || !clientSecret) {
     return null
@@ -28,6 +34,7 @@ function readEnvSallaCredentials(): SallaOAuthCredentials | null {
     clientId,
     clientSecret,
     redirectUri: redirectUri || undefined,
+    webhookSecret: webhookSecret || null,
   }
 }
 
@@ -103,10 +110,12 @@ export class AwsSecretsSallaOAuthCredentialsProvider implements SallaOAuthCreden
     // This secret was provisioned with snake_case keys (client_id/client_secret/
     // redirect_uri) rather than the clientId/clientSecret convention the other
     // connectors' secrets use -- read both shapes so it works regardless.
+    const webhookSecret = String(parsed.webhook_secret ?? parsed.webhookSecret ?? "").trim()
     return validateCredentials({
       clientId: String(parsed.client_id ?? parsed.clientId ?? "").trim(),
       clientSecret: String(parsed.client_secret ?? parsed.clientSecret ?? "").trim(),
       redirectUri: String(parsed.redirect_uri ?? parsed.redirectUri ?? "").trim() || undefined,
+      webhookSecret: webhookSecret || null,
     })
   }
 }
@@ -122,5 +131,20 @@ export class EnvironmentFirstSallaOAuthCredentialsProvider implements SallaOAuth
       validate: validateCredentials,
       loadFromAws: () => this.fallback.load(),
     })
+  }
+}
+
+// Reuses the exact same env-first/AWS-Secrets-Manager-fallback credential load every OAuth
+// consumer already goes through (same madar/salla/production secret, same SALLA_WEBHOOK_SECRET
+// env var read inside readEnvSallaCredentials above) -- the webhook route just needs the one
+// field out of it, returning null (not throwing) when it isn't configured yet, matching Moyasar's
+// "webhook secret is optional, the route itself 503s" convention.
+export async function resolveSallaWebhookCredentials(): Promise<{ webhookSecret: string } | null> {
+  try {
+    const credentials = await new EnvironmentFirstSallaOAuthCredentialsProvider().load()
+    return credentials.webhookSecret ? { webhookSecret: credentials.webhookSecret } : null
+  } catch (error) {
+    console.error("salla.webhook_credentials_load_failed", error)
+    return null
   }
 }

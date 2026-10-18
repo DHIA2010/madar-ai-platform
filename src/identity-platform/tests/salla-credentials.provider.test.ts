@@ -75,7 +75,9 @@ describe("environment-first salla oauth credentials provider", () => {
     const provider = new EnvironmentFirstSallaOAuthCredentialsProvider(fallback)
     const resolved = await provider.load()
 
-    expect(resolved).toEqual(ENV_CREDENTIALS)
+    // webhookSecret is read from its own SALLA_WEBHOOK_SECRET env var (see
+    // salla-credentials.ts's readEnvSallaCredentials), left unset here -- null, not absent.
+    expect(resolved).toEqual({ ...ENV_CREDENTIALS, webhookSecret: null })
     expect(fallbackLoad).not.toHaveBeenCalled()
   })
 
