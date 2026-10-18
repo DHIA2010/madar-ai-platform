@@ -108,13 +108,13 @@ export class AwsSecretsSallaOAuthCredentialsProvider implements SallaOAuthCreden
     }
 
     // This secret was provisioned with snake_case keys (client_id/client_secret/
-    // redirect_uri) rather than the clientId/clientSecret convention the other
+    // redirect_url) rather than the clientId/clientSecret convention the other
     // connectors' secrets use -- read both shapes so it works regardless.
     const webhookSecret = String(parsed.webhook_secret ?? parsed.webhookSecret ?? "").trim()
     return validateCredentials({
       clientId: String(parsed.client_id ?? parsed.clientId ?? "").trim(),
       clientSecret: String(parsed.client_secret ?? parsed.clientSecret ?? "").trim(),
-      redirectUri: String(parsed.redirect_uri ?? parsed.redirectUri ?? "").trim() || undefined,
+      redirectUri: String(parsed.redirect_url ?? parsed.redirectUrl ?? "").trim() || undefined,
       webhookSecret: webhookSecret || null,
     })
   }
