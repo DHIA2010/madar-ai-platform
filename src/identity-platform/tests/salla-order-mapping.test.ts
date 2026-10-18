@@ -167,7 +167,10 @@ describe("mapMadarOrderToSallaExternalOrder", () => {
     expect(payload.ship_to).toBeUndefined()
   })
 
-  it("includes ship_to for a shipping order", () => {
+  // ship_to.country/city are Salla's own numeric location ids (resolved live against GET
+  // /countries and GET /countries/{id}/cities by SallaOrderPushService.pushOrder() before calling
+  // this function -- see ResolvedShipToLocation) -- this function just places them as given.
+  it("includes ship_to, using the resolved numeric country/city ids, for a shipping order", () => {
     const payload = mapMadarOrderToSallaExternalOrder(
       baseOrder({
         deliveryMethod: "shipping",
@@ -178,9 +181,24 @@ describe("mapMadarOrderToSallaExternalOrder", () => {
           address: null,
           postalCode: null,
         },
+      }),
+      { countryId: 1473353380, cityId: 1473353380 }
+    )
+    expect(payload.ship_to).toEqual({
+      country: 1473353380,
+      city: 1473353380,
+      district: "Al Olaya",
+    })
+  })
+
+  it("omits ship_to when deliveryMethod is shipping but the location wasn't resolved", () => {
+    const payload = mapMadarOrderToSallaExternalOrder(
+      baseOrder({
+        deliveryMethod: "shipping",
+        shipTo: { country: "SA", city: "Riyadh", district: null, address: null, postalCode: null },
       })
     )
-    expect(payload.ship_to).toEqual({ country: "SA", city: "Riyadh", district: "Al Olaya" })
+    expect(payload.ship_to).toBeUndefined()
   })
 
   it("never sends a source field", () => {

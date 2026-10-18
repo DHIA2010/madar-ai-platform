@@ -99,9 +99,22 @@ function toE164(phone: string, countryCode: string): string {
   return `+${dialingCode}${local}`
 }
 
+// Salla's ship_to.country/city are numeric ids into its own reference data (GET /countries,
+// GET /countries/{id}/cities), not free text -- confirmed by a real rejection ("ship_to.country
+// must be a number") against a plain "SA"/"Riyadh" payload. Resolved in SallaOrderPushService
+// before calling this function (an async lookup, so it can't happen inside this otherwise-pure
+// mapper) and passed in here already as ids.
+export interface ResolvedShipToLocation {
+  countryId: number
+  cityId: number
+}
+
 // The one pure, independently testable piece of this file: every Salla-field decision from the
 // plan lives here, nowhere else.
-export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
+export function mapMadarOrderToSallaExternalOrder(
+  order: MadarOrderPushInput,
+  resolvedShipTo?: ResolvedShipToLocation
+) {
   const isCod = COD_METHOD_CODES.has(order.paymentMethodCode)
   const paymentStatus = mapPaymentStatus(order.paymentStatus)
   const paymentMethod = isCod ? "cod" : "external_epayment"
@@ -175,10 +188,10 @@ export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
   if (order.courierId) payload.courier_id = order.courierId
   if (order.shippingCost > 0) payload.shipping_cost = order.shippingCost
 
-  if (order.deliveryMethod === "shipping" && order.shipTo) {
+  if (order.deliveryMethod === "shipping" && order.shipTo && resolvedShipTo) {
     const shipTo: Record<string, unknown> = {
-      country: order.shipTo.country,
-      city: order.shipTo.city,
+      country: resolvedShipTo.countryId,
+      city: resolvedShipTo.cityId,
     }
     if (order.shipTo.district) shipTo.district = order.shipTo.district
     if (order.shipTo.address) shipTo.address = order.shipTo.address
@@ -190,6 +203,76 @@ export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
   // unrecognized one silently falls back to "other". Revisit only if Salla's partner docs add a
   // dedicated value for this integration.
   return payload
+}
+
+// Salla's own country/city reference lists (GET /countries, GET /countries/{id}/cities) --
+// essentially static data (a government doesn't add a new country every day), so cached for this
+// process's lifetime rather than re-fetched on every shipping push. Keyed by apiBaseUrl so a
+// sandbox/production base URL override never shares a cache with the other.
+const countryIdCache = new Map<string, Map<string, number>>()
+const cityIdCache = new Map<string, Map<number, Map<string, number>>>()
+
+async function fetchJson(
+  url: string,
+  accessToken: string
+): Promise<{ data?: Array<Record<string, unknown>> } | null> {
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+  })
+  if (!response.ok) return null
+  return (await response.json()) as { data?: Array<Record<string, unknown>> }
+}
+
+async function resolveCountryId(
+  apiBaseUrl: string,
+  accessToken: string,
+  countryCode: string
+): Promise<number | null> {
+  const key = countryCode.trim().toUpperCase()
+  let countries = countryIdCache.get(apiBaseUrl)
+  if (!countries) {
+    const body = await fetchJson(`${apiBaseUrl}/countries?per_page=100`, accessToken)
+    countries = new Map()
+    for (const country of body?.data ?? []) {
+      const code = typeof country.code === "string" ? country.code.toUpperCase() : null
+      const id = typeof country.id === "number" ? country.id : null
+      if (code && id !== null) countries.set(code, id)
+    }
+    countryIdCache.set(apiBaseUrl, countries)
+  }
+  return countries.get(key) ?? null
+}
+
+async function resolveCityId(
+  apiBaseUrl: string,
+  accessToken: string,
+  countryId: number,
+  cityName: string
+): Promise<number | null> {
+  const key = cityName.trim().toLowerCase()
+  let byCountry = cityIdCache.get(apiBaseUrl)
+  if (!byCountry) {
+    byCountry = new Map()
+    cityIdCache.set(apiBaseUrl, byCountry)
+  }
+  let cities = byCountry.get(countryId)
+  if (!cities) {
+    const body = await fetchJson(
+      `${apiBaseUrl}/countries/${countryId}/cities?per_page=300`,
+      accessToken
+    )
+    cities = new Map()
+    // Matched against both the Arabic and English names -- a Madar user could reasonably type
+    // either ("الرياض" or "Riyadh") into the plain shipToCity text field.
+    for (const city of body?.data ?? []) {
+      const id = typeof city.id === "number" ? city.id : null
+      if (id === null) continue
+      if (typeof city.name === "string") cities.set(city.name.trim().toLowerCase(), id)
+      if (typeof city.name_en === "string") cities.set(city.name_en.trim().toLowerCase(), id)
+    }
+    byCountry.set(countryId, cities)
+  }
+  return cities.get(key) ?? null
 }
 
 export class SallaOrderPushService {
@@ -208,7 +291,31 @@ export class SallaOrderPushService {
 
   async pushOrder(connectionId: string, order: MadarOrderPushInput): Promise<SallaPushResult> {
     const accessToken = await this.sallaOAuthService.resolveAccessToken(connectionId)
-    const payload = mapMadarOrderToSallaExternalOrder(order)
+
+    let resolvedShipTo: ResolvedShipToLocation | undefined
+    if (order.deliveryMethod === "shipping" && order.shipTo) {
+      const countryId = await resolveCountryId(this.apiBaseUrl, accessToken, order.shipTo.country)
+      if (countryId === null) {
+        throw new IntegrationProviderError(
+          `Salla has no matching country for "${order.shipTo.country}".`,
+          "SALLA_PUSH_SHIP_TO_COUNTRY_NOT_FOUND",
+          false,
+          422
+        )
+      }
+      const cityId = await resolveCityId(this.apiBaseUrl, accessToken, countryId, order.shipTo.city)
+      if (cityId === null) {
+        throw new IntegrationProviderError(
+          `Salla has no matching city for "${order.shipTo.city}" in this country.`,
+          "SALLA_PUSH_SHIP_TO_CITY_NOT_FOUND",
+          false,
+          422
+        )
+      }
+      resolvedShipTo = { countryId, cityId }
+    }
+
+    const payload = mapMadarOrderToSallaExternalOrder(order, resolvedShipTo)
 
     const response = await fetch(`${this.apiBaseUrl}/orders/external`, {
       method: "POST",
