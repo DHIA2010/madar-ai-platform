@@ -76,6 +76,24 @@ function mapPaymentStatus(status: "paid" | "pending" | "refunded"): "paid" | "pe
   return status === "paid" ? "paid" : "pending_payment"
 }
 
+// Confirmed against Salla's real API: both customer.mobile and receiver.phone require full E.164
+// ("+966535585721") -- a local-format number ("0535585721") is rejected with alert.invalid_fields
+// on receiver.phone regardless of what the separate receiver.country_code says (tested every
+// combination). This platform is Saudi-only today (every receiver.countryCode this app ever sends
+// is "SA" -- see migration 099's default and the Create Order form), so only Saudi Arabia's
+// dialing code is mapped; an unrecognized country code falls back to a bare "+<digits>" rather
+// than guessing a dialing code that could be wrong.
+const COUNTRY_DIALING_CODES: Record<string, string> = { SA: "966" }
+
+function toE164(phone: string, countryCode: string): string {
+  const digits = phone.replace(/\D/g, "")
+  const dialingCode = COUNTRY_DIALING_CODES[countryCode.toUpperCase()]
+  if (!dialingCode) return `+${digits}`
+  if (digits.startsWith(dialingCode)) return `+${digits}`
+  const local = digits.startsWith("0") ? digits.slice(1) : digits
+  return `+${dialingCode}${local}`
+}
+
 // The one pure, independently testable piece of this file: every Salla-field decision from the
 // plan lives here, nowhere else.
 export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
@@ -95,7 +113,10 @@ export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
     name: order.customerName,
     is_guest: order.isGuestCustomer,
   }
-  if (order.customerPhone) customer.mobile = order.customerPhone
+  // No separate country code exists for the customer (only the receiver has one) -- reusing
+  // the receiver's is the only country signal this input shape carries, which is harmless given
+  // this platform is Saudi-only today (see COUNTRY_DIALING_CODES above).
+  if (order.customerPhone) customer.mobile = toE164(order.customerPhone, order.receiver.countryCode)
   if (order.customerEmail) customer.email = order.customerEmail
 
   const payload: Record<string, unknown> = {
@@ -120,7 +141,7 @@ export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
     payment,
     receiver: {
       name: order.receiver.name,
-      phone: order.receiver.phone,
+      phone: toE164(order.receiver.phone, order.receiver.countryCode),
       country_code: order.receiver.countryCode,
       email: order.receiver.email,
       notify: order.receiver.notify,

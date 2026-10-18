@@ -34,6 +34,26 @@ const MADAR_ORDER_ERRORS = {
     ),
 }
 
+// IntegrationProviderError.message alone is a static, generic string ("Salla rejected the order
+// payload.") -- the actually useful diagnostic (which field, why) only ever lives in .details,
+// Salla's own parsed response body. Surfacing it here is what makes a failed push's error_message
+// column self-diagnosable from the DB/UI instead of requiring a one-off repro against Salla's API
+// to find out what was actually wrong.
+function describePushError(error: unknown): string {
+  if (!(error instanceof IntegrationProviderError)) {
+    return error instanceof Error ? error.message : "The push to Salla failed."
+  }
+  const details = error.details as { error?: { fields?: Record<string, string[]> } } | undefined
+  const fields = details?.error?.fields
+  if (fields && Object.keys(fields).length > 0) {
+    const summary = Object.entries(fields)
+      .map(([field, messages]) => `${field}: ${messages.join("; ")}`)
+      .join(" | ")
+    return `${error.message} (${summary})`.slice(0, 2000)
+  }
+  return error.message
+}
+
 export interface MadarOrderItemInput {
   productId: string | null
   productName: string
@@ -574,7 +594,7 @@ export class MadarOrdersService {
 
       const code =
         error instanceof IntegrationProviderError ? error.code : "SALLA_PUSH_UNKNOWN_ERROR"
-      const message = error instanceof Error ? error.message : "The push to Salla failed."
+      const message = describePushError(error)
       await this.database.query(
         `UPDATE madar_orders
             SET salla_push_status = 'failed', salla_push_attempted_at = now(),
