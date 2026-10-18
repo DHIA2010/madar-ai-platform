@@ -63,6 +63,25 @@ describe("mapMadarOrderToSallaExternalOrder", () => {
     expect(customer.mobile).toBe("+966501234567")
   })
 
+  // Found live in stage testing: a number dialed with the "00" international access code
+  // ("00966501234567") was being mishandled as local format (stripping just one leading "0"
+  // instead of the whole "00" prefix), producing a malformed "+9660966501234567".
+  it("normalizes a phone number dialed with the 00 international access code", () => {
+    const payload = mapMadarOrderToSallaExternalOrder(
+      baseOrder({
+        receiver: {
+          name: "سارة أحمد",
+          phone: "00966501234567",
+          countryCode: "SA",
+          email: null,
+          notify: true,
+        },
+      })
+    )
+    const receiver = payload.receiver as { phone: string }
+    expect(receiver.phone).toBe("+966501234567")
+  })
+
   it("leaves an already-E.164 phone number untouched", () => {
     const payload = mapMadarOrderToSallaExternalOrder(
       baseOrder({
@@ -106,6 +125,24 @@ describe("mapMadarOrderToSallaExternalOrder", () => {
     expect(payment.method).toBe("external_epayment")
     expect(payment.gateway?.label).toBe("card")
     expect(payment.gateway?.reference_id).toBe("order-1")
+  })
+
+  // Found live in stage testing: Salla rejects a pending-payment order with
+  // "payment.accepted_methods is required" -- confirmed empirically that a single-element array
+  // matching the method already chosen (["cod"] or ["external_epayment"]) is what it wants.
+  it("includes payment.accepted_methods matching the method when payment status is pending", () => {
+    const payload = mapMadarOrderToSallaExternalOrder(
+      baseOrder({ paymentStatus: "pending", paymentMethodCode: "cash" })
+    )
+    const payment = payload.payment as { status: string; accepted_methods?: string[] }
+    expect(payment.status).toBe("pending_payment")
+    expect(payment.accepted_methods).toEqual(["external_epayment"])
+  })
+
+  it("omits payment.accepted_methods when payment status is paid", () => {
+    const payload = mapMadarOrderToSallaExternalOrder(baseOrder({ paymentStatus: "paid" }))
+    const payment = payload.payment as { accepted_methods?: string[] }
+    expect(payment.accepted_methods).toBeUndefined()
   })
 
   it("omits the discounts object when there is no discount", () => {

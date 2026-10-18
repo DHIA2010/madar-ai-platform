@@ -90,7 +90,12 @@ function toE164(phone: string, countryCode: string): string {
   const dialingCode = COUNTRY_DIALING_CODES[countryCode.toUpperCase()]
   if (!dialingCode) return `+${digits}`
   if (digits.startsWith(dialingCode)) return `+${digits}`
-  const local = digits.startsWith("0") ? digits.slice(1) : digits
+  // "00" is the international access code some people dial in place of "+" (e.g.
+  // "00966535585721") -- stripped before the local-format check below, so it isn't mistaken for
+  // just a single leading zero and left with a stray extra "0" in the result.
+  const withoutAccessCode = digits.startsWith("00") ? digits.slice(2) : digits
+  if (withoutAccessCode.startsWith(dialingCode)) return `+${withoutAccessCode}`
+  const local = withoutAccessCode.startsWith("0") ? withoutAccessCode.slice(1) : withoutAccessCode
   return `+${dialingCode}${local}`
 }
 
@@ -98,15 +103,25 @@ function toE164(phone: string, countryCode: string): string {
 // plan lives here, nowhere else.
 export function mapMadarOrderToSallaExternalOrder(order: MadarOrderPushInput) {
   const isCod = COD_METHOD_CODES.has(order.paymentMethodCode)
+  const paymentStatus = mapPaymentStatus(order.paymentStatus)
+  const paymentMethod = isCod ? "cod" : "external_epayment"
 
   const payment: Record<string, unknown> = {
-    status: mapPaymentStatus(order.paymentStatus),
-    method: isCod ? "cod" : "external_epayment",
+    status: paymentStatus,
+    method: paymentMethod,
   }
   if (isCod) {
     payment.cash_on_delivery = { amount: order.totalAmount }
   } else {
     payment.gateway = { label: order.paymentMethodCode, reference_id: order.id }
+  }
+  // Confirmed against Salla's real API: payment.accepted_methods is required whenever status is
+  // "pending_payment" -- Salla wants to know what method(s) will be accepted once the customer
+  // actually pays. The same single method already chosen above is the only one this order will
+  // ever settle through, so it's the only element. Not sent for "paid", which has nothing left to
+  // accept.
+  if (paymentStatus === "pending_payment") {
+    payment.accepted_methods = [paymentMethod]
   }
 
   const customer: Record<string, unknown> = {
