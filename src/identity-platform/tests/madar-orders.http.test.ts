@@ -168,6 +168,49 @@ describe("POST /v1/orders: Madar-created orders", () => {
     expect(detail.total).toBe(created.totalAmount)
     expect(detail.items).toHaveLength(1)
   })
+
+  // Found live in stage: a barcode-sized number pasted into the unit price field reached
+  // Postgres raw and failed with "numeric field overflow" instead of a clean validation error.
+  // schemas.ts now caps individual money fields well below that.
+  it("rejects a unit price large enough to overflow the database column", async () => {
+    const { login } = await registerAndProvisionOrg(
+      "madar-order-overflow-field@madar.test",
+      "Overflow Field Org"
+    )
+
+    const response = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productName: "فستان", unitPrice: 302013937800009, quantity: 10 }],
+      }),
+    })
+    expect(response.status).toBe(400)
+  })
+
+  // Individually-valid fields (each under schemas.ts's own per-field cap) can still combine past
+  // the numeric(12,2) column ceiling once multiplied together -- MadarOrdersService.create()'s own
+  // aggregate guard is what catches that case specifically, as a clean validation error rather
+  // than letting the INSERT itself fail.
+  it("rejects an order whose computed total overflows even though every individual field is within its own cap", async () => {
+    const { login } = await registerAndProvisionOrg(
+      "madar-order-overflow-total@madar.test",
+      "Overflow Total Org"
+    )
+
+    const response = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productName: "فستان", unitPrice: 999_999_999, quantity: 100_000 }],
+      }),
+    })
+    expect(response.status).toBe(400)
+    const body = (await response.json()) as { code?: string }
+    expect(body.code).toBe("MADAR_ORDER_AMOUNT_TOO_LARGE")
+  })
 })
 
 describe("POST /v1/orders with a connected Salla store: push + retry", () => {

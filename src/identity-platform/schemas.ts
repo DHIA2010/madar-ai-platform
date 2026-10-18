@@ -899,6 +899,14 @@ export const createInvoiceSchema = z.object({
   items: z.array(createInvoiceItemSchema).min(1),
 })
 
+// madar_orders/madar_order_items' money columns are all numeric(12, 2) -- max ~9,999,999,999.99.
+// This caps individual inputs well under that (a typo'd or scanned-barcode value like
+// "302013937800009" landing in a price field used to reach the INSERT raw and fail with Postgres's
+// own "numeric field overflow", surfaced to the user as an opaque generic error). The aggregate
+// subtotal/tax/total can still exceed the column even with every field individually under this
+// cap (e.g. a huge quantity) -- see MadarOrdersService.create()'s own total-amount guard for that.
+const MONEY_FIELD_MAX = 999_999_999.99
+
 // One line item of a Madar-created order -- see createMadarOrderSchema. Distinct from
 // createInvoiceItemSchema: no variantId (POS variant stock consumption doesn't apply here) but
 // adds sku/costPrice/weight, which Salla's External Orders API accepts per-product.
@@ -906,11 +914,11 @@ export const createMadarOrderItemSchema = z.object({
   productId: z.string().uuid().nullable().optional().default(null),
   productName: z.string().min(1).max(200),
   sku: z.string().max(100).nullable().optional().default(null),
-  unitPrice: z.number().min(0),
-  quantity: z.number().positive(),
-  discountAmount: z.number().min(0).optional().default(0),
-  costPrice: z.number().min(0).nullable().optional().default(null),
-  weight: z.number().min(0).nullable().optional().default(null),
+  unitPrice: z.number().min(0).max(MONEY_FIELD_MAX),
+  quantity: z.number().positive().max(100_000),
+  discountAmount: z.number().min(0).max(MONEY_FIELD_MAX).optional().default(0),
+  costPrice: z.number().min(0).max(MONEY_FIELD_MAX).nullable().optional().default(null),
+  weight: z.number().min(0).max(100_000).nullable().optional().default(null),
 })
 
 // The receiver Salla's External Orders API requires -- all four fields are mandatory on Salla's
@@ -949,10 +957,10 @@ export const createMadarOrderSchema = z.object({
   deliveryMethod: z.enum(["shipping", "pickup"]).nullable().optional().default(null),
   shipTo: madarOrderShipToSchema.nullable().optional().default(null),
   courierId: z.string().max(100).nullable().optional().default(null),
-  shippingCost: z.number().min(0).default(0),
+  shippingCost: z.number().min(0).max(MONEY_FIELD_MAX).default(0),
   discountCode: z.string().max(60).nullable().optional().default(null),
-  discountAmount: z.number().min(0).default(0),
-  shippingDiscountAmount: z.number().min(0).default(0),
+  discountAmount: z.number().min(0).max(MONEY_FIELD_MAX).default(0),
+  shippingDiscountAmount: z.number().min(0).max(MONEY_FIELD_MAX).default(0),
   notes: z.string().max(500).nullable().optional().default(null),
   items: z.array(createMadarOrderItemSchema).min(1),
 })

@@ -32,7 +32,21 @@ const MADAR_ORDER_ERRORS = {
       "business",
       "No connected Salla store was found to push this order to."
     ),
+  amountTooLarge: () =>
+    new IdentityError(
+      "MADAR_ORDER_AMOUNT_TOO_LARGE",
+      400,
+      "validation",
+      "The order total is too large. Check the unit prices and quantities and try again."
+    ),
 }
+
+// madar_orders' subtotal/tax/total columns are numeric(12, 2) -- schemas.ts bounds each
+// individual price/quantity field, but a large quantity times a large (still individually valid)
+// price can still combine past the column's own ~9,999,999,999.99 ceiling. Checked here, before
+// the transaction opens, so that case fails as a clean validation error instead of a raw
+// "numeric field overflow" from Postgres once the INSERT actually runs.
+const MAX_COMPUTED_AMOUNT = 9_999_999_999.99
 
 // IntegrationProviderError.message alone is a static, generic string ("Salla rejected the order
 // payload.") -- the actually useful diagnostic (which field, why) only ever lives in .details,
@@ -335,6 +349,14 @@ export class MadarOrdersService {
           input.shippingDiscountAmount) *
           100
       ) / 100
+
+    if (
+      Math.abs(subtotalAmount) > MAX_COMPUTED_AMOUNT ||
+      Math.abs(taxAmount) > MAX_COMPUTED_AMOUNT ||
+      Math.abs(totalAmount) > MAX_COMPUTED_AMOUNT
+    ) {
+      throw MADAR_ORDER_ERRORS.amountTooLarge()
+    }
 
     const connection = await this.sallaOAuthRepository.findActiveConnection(
       input.organizationId,
