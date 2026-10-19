@@ -663,7 +663,7 @@ export default function OrdersPage() {
           row.productCount,
           row.amount,
           paymentStatusMeta[row.paymentStatus].label,
-          orderStatusMeta[row.orderStatus].label,
+          row.statusLabel,
         ]
           .map((value) => `"${String(value).replace(/"/g, '""')}"`)
           .join(",")
@@ -904,7 +904,7 @@ export default function OrdersPage() {
                             orderStatusMeta[order.orderStatus].className
                           )}
                         >
-                          {orderStatusMeta[order.orderStatus].label}
+                          {order.statusLabel}
                         </span>
                       </td>
                       <td className="px-3 py-3">

@@ -50,6 +50,10 @@ export interface OrderRecord {
   amount: number
   currency: string
   orderStatus: OrderStatus
+  // The provider's own exact status text (e.g. Salla's merchant-facing status name, which can be
+  // merchant-customized, not just one of the 4 default buckets orderStatus collapses into). Use
+  // this for display; keep orderStatus for filtering/color-coding.
+  statusLabel: string
   paymentStatus: PaymentStatus
   createdAt: string
   // Only ever set for platform === "Madar" -- see MadarOrdersService/SallaOrderPushService.

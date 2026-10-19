@@ -232,6 +232,7 @@ describe("GET /v1/orders: real order aggregation", () => {
         productCount: number
         amount: number
         orderStatus: string
+        statusLabel: string
         paymentStatus: string
       }>
       summary: {
@@ -268,11 +269,16 @@ describe("GET /v1/orders: real order aggregation", () => {
       productCount: 2,
       amount: 349,
       orderStatus: "Completed",
+      statusLabel: "Completed",
       paymentStatus: "Paid",
     })
+    // "Under review" buckets into the "Processing" group for stats/filtering, but
+    // statusLabel must still carry Salla's own exact status text, not the bucket name --
+    // this is the whole point of the fix.
     const processing = body.items.find((o) => o.orderNumber === "400124")
     expect(processing).toMatchObject({
       orderStatus: "Processing",
+      statusLabel: "Under review",
       paymentStatus: "Pending",
     })
 

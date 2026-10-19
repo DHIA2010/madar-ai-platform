@@ -78,6 +78,11 @@ export interface OrderSummaryView {
   amount: number
   currency: string
   orderStatus: OrderStatusBucket
+  // The provider's own exact status text/name (e.g. Salla's merchant-facing status, which can be
+  // a merchant-customized name, not just one of the 4 default ones orderStatus buckets into).
+  // orderStatus stays bucketed because stats/filtering/AI-chat formatting (see usages below and
+  // in ai-chat/response-formatter.ts) need a small, fixed vocabulary; this is purely for display.
+  statusLabel: string
   paymentStatus: PaymentStatus
   createdAt: string
   // Only ever set for platform === "Madar" -- whether this order has been pushed to the
@@ -190,6 +195,7 @@ function normalizeSallaOrder(row: OrderRecordRow): OrderSummaryView {
     amount: Number(payload.total?.amount) || 0,
     currency: payload.total?.currency ?? "SAR",
     orderStatus: bucketOrderStatus(statusText),
+    statusLabel: statusText || bucketOrderStatus(statusText),
     paymentStatus,
     createdAt: payload.date?.date ? toIsoDate(payload.date.date) : toIsoDate(row.updated_at),
   }
@@ -221,6 +227,9 @@ function normalizeShopifyOrder(row: OrderRecordRow): OrderSummaryView {
     quantity: Number(item.quantity) || 0,
   }))
 
+  const rawStatusText = payload.cancelled_at
+    ? "cancelled"
+    : (payload.fulfillment_status ?? "processing")
   const orderStatus: OrderStatusBucket = payload.cancelled_at
     ? "Cancelled"
     : bucketOrderStatus(payload.fulfillment_status ?? "processing")
@@ -247,6 +256,7 @@ function normalizeShopifyOrder(row: OrderRecordRow): OrderSummaryView {
     amount: Number(payload.total_price) || 0,
     currency: payload.currency ?? "SAR",
     orderStatus,
+    statusLabel: rawStatusText,
     paymentStatus,
     createdAt: payload.created_at ? toIsoDate(payload.created_at) : toIsoDate(row.updated_at),
   }
@@ -283,6 +293,7 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
     amount: Number(payload.order_total) || 0,
     currency: payload.currency_code ?? "SAR",
     orderStatus: bucketOrderStatus(statusText),
+    statusLabel: statusText || bucketOrderStatus(statusText),
     paymentStatus,
     createdAt: payload.created_at ? toIsoDate(payload.created_at) : toIsoDate(row.updated_at),
   }
@@ -334,6 +345,7 @@ function normalizeMadarOrder(
     amount: Number(row.total_amount) || 0,
     currency: row.currency,
     orderStatus: orderStatusByStatus[row.status] ?? "Processing",
+    statusLabel: orderStatusByStatus[row.status] ?? "Processing",
     paymentStatus,
     createdAt: toIsoDate(row.created_at),
     sallaPushStatus: row.salla_push_status as OrderSummaryView["sallaPushStatus"],
