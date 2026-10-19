@@ -203,6 +203,61 @@ export class SallaSyncRepository {
     return written
   }
 
+  // Webhook counterpart to upsertRecords -- found live in production: a webhook event like
+  // product.price.updated carries only the fields that event actually changed (id/price/sku/tax/
+  // cost/etc, no name/image/status/...), not a full entity snapshot the way a poll-sync's
+  // fetchAllPages() result always is. upsertRecords' plain `payload = excluded.payload` is a full
+  // replace -- correct for a full poll snapshot, but applied to a partial webhook payload it wiped
+  // out every field the event didn't mention (a product's name, among others, going blank).
+  //
+  // Merges the new partial payload over the existing one so any key absent from this event keeps
+  // whatever the last full poll (or a previous webhook) wrote. Done in application code under a
+  // row lock, not via Postgres's own jsonb `||` merge operator -- pg-mem (this codebase's test
+  // harness) doesn't implement `||` for jsonb correctly (confirmed: it falls back to plain string
+  // concatenation, producing invalid JSON), so relying on it here would make this path untestable
+  // without exercising the real behavior in isolation. `SELECT ... FOR UPDATE` inside a transaction
+  // closes the read-then-write race a plain select-then-upsert would otherwise have if two webhook
+  // deliveries for the same entity arrive close together.
+  async upsertPartialRecord(input: {
+    connectionId: string
+    customerId: string
+    record: SallaSyncRecordInput
+  }): Promise<void> {
+    await this.db.withTransaction(async () => {
+      const existing = await this.db.query<{ payload: Record<string, unknown> }>(
+        `
+        select payload from salla_records
+         where connection_id = $1 and entity_type = $2 and entity_id = $3
+         for update
+        `,
+        [input.connectionId, input.record.entityType, input.record.entityId]
+      )
+      const mergedPayload = { ...(existing.rows[0]?.payload ?? {}), ...input.record.payload }
+
+      await this.db.query(
+        `
+        insert into salla_records (
+          id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at
+        ) values ($1, $2, $3, $4, $5, $6::date, $7::jsonb, now(), now())
+        on conflict (connection_id, entity_type, entity_id)
+        do update set
+          record_date = excluded.record_date,
+          payload = excluded.payload,
+          updated_at = now()
+        `,
+        [
+          randomUUID(),
+          input.connectionId,
+          input.customerId,
+          input.record.entityType,
+          input.record.entityId,
+          input.record.recordDate,
+          JSON.stringify(mergedPayload),
+        ]
+      )
+    })
+  }
+
   async listRecords(query: {
     connectionId: string
     customerId: string

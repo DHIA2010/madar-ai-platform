@@ -214,4 +214,39 @@ describe("POST /v1/integrations/salla/webhook", () => {
     expect(rows.rows).toHaveLength(1)
     expect(rows.rows[0]).toEqual({ entity_type: "products", entity_id: "777" })
   })
+
+  // Found live in production: product.price.updated's real payload carries only the fields that
+  // event actually changed (id/price/sku/tax/cost/...), never `name`. A full-replace upsert wiped
+  // the product's name (and every other previously-polled field) out entirely the moment a price
+  // changed. upsertPartialRecord's merge is what this guards against regressing.
+  it("merges a partial webhook payload into an existing full record instead of replacing it", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+
+    // Simulates what a full poll-sync would have already written for this product.
+    await database.query(
+      `insert into salla_records (id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at)
+       values ($1, $2, 'cust-1', 'products', '1450419203', now()::date, $3::jsonb, now(), now())`,
+      [
+        randomUUID(),
+        connectionId,
+        JSON.stringify({ id: 1450419203, name: "قميص قطن أزرق", sku: "SKU-1001", price: 80 }),
+      ]
+    )
+
+    const response = await signedPost("/v1/integrations/salla/webhook", {
+      event: "product.price.updated",
+      merchant: STORE_ID,
+      data: { id: 1450419203, price: 65, sku: "SKU-1001" },
+    })
+    expect(response.status).toBe(200)
+
+    const rows = await database.query<{ payload: { name?: string; price?: number; sku?: string } }>(
+      `select payload from salla_records where connection_id = $1 and entity_id = '1450419203'`,
+      [connectionId]
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0].payload.name).toBe("قميص قطن أزرق")
+    expect(rows.rows[0].payload.price).toBe(65)
+  })
 })

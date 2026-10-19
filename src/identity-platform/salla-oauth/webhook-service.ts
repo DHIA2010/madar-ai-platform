@@ -79,17 +79,20 @@ export class SallaWebhookService {
     // salla_records' own (connection_id, entity_type, entity_id) unique constraint is what makes
     // this safe against a replayed/duplicate delivery -- no separate dedup table needed, same as
     // upsertRecords already behaves for the poll-sync path.
-    await this.syncRepository.upsertRecords({
+    //
+    // upsertPartialRecord, not upsertRecords: a webhook event's payload.data is only the fields
+    // that event actually changed (confirmed live -- product.price.updated carries no `name` at
+    // all), not a full entity snapshot the way a poll-sync's own fetch always is. upsertRecords'
+    // full-column replace would wipe out every field this event didn't mention.
+    await this.syncRepository.upsertPartialRecord({
       connectionId: target.connectionId,
       customerId: target.customerId,
-      records: [
-        {
-          entityType,
-          entityId,
-          recordDate: recordDateFor(entityType, payload.data),
-          payload: payload.data,
-        },
-      ],
+      record: {
+        entityType,
+        entityId,
+        recordDate: recordDateFor(entityType, payload.data),
+        payload: payload.data,
+      },
     })
   }
 }
