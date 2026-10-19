@@ -229,23 +229,42 @@ describe("POST /v1/integrations/salla/webhook", () => {
     expect(rows.rows).toHaveLength(0)
   })
 
-  // product.updated is deliberately unmapped (see the comment above SALLA_EVENT_TO_ENTITY_TYPE) --
-  // Salla's own docs show it struck through with no description, so this guards against it
-  // silently starting to re-fetch records if it's ever added back without that being a deliberate
-  // decision.
-  it("acks with 200 and does nothing for the deliberately-unmapped product.updated event", async () => {
+  // product.updated covers name/SKU/cost/quantity changes -- Salla documents no other event for
+  // those four fields (see the comment above SALLA_EVENT_TO_ENTITY_TYPE).
+  it("re-fetches and stores the product for a product.updated event", async () => {
     const org = await seedOrganization()
-    await seedConnectedStore({ ...org, storeId: STORE_ID })
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    mockAccessToken("test-access-token")
+    mockSallaEntityFetch({
+      333: {
+        id: 333,
+        name: "Renamed Product",
+        sku: "NEW-SKU-1",
+        cost_price: "40",
+        quantity: 12,
+        updated_at: "2026-01-01 10:00:00",
+      },
+    })
 
     const response = await signedPost("/v1/integrations/salla/webhook", {
       event: "product.updated",
       merchant: STORE_ID,
-      data: { id: 1 },
+      data: { id: 333 },
     })
     expect(response.status).toBe(200)
 
-    const rows = await database.query(`select 1 from salla_records`)
-    expect(rows.rows).toHaveLength(0)
+    const rows = await database.query<{
+      payload: { name?: string; sku?: string; cost_price?: string; quantity?: number }
+    }>(`select payload from salla_records where connection_id = $1 and entity_id = '333'`, [
+      connectionId,
+    ])
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0].payload).toMatchObject({
+      name: "Renamed Product",
+      sku: "NEW-SKU-1",
+      cost_price: "40",
+      quantity: 12,
+    })
   })
 
   it("re-fetches and stores the product for each of the non-price product events (image/category/brand/tags)", async () => {

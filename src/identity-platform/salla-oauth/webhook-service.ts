@@ -23,12 +23,12 @@ export interface SallaWebhookPayload {
 // here) and every shipping/coupon/store/cart/invoice/special-offer/review event (outside the
 // products/orders/customers scope salla_records models at all today).
 //
-// Also NOT mapped, deliberately: product.updated. Salla's own docs page shows it struck through
-// with no description -- unclear if it's live, deprecated, or what it even fires on. Per Salla's
-// docs, a product name/SKU/cost change has no OTHER documented event either, so today those three
-// fields only ever get refreshed by the poll-sync safety net, not a webhook -- a real gap in
-// Salla's event catalog, not something fixable from this side. Confirm empirically against a real
-// sandbox edit before adding product.updated here.
+// product.updated is mapped per explicit instruction, covering name/SKU/cost/quantity changes --
+// Salla's docs show it struck through with no description and no OTHER documented event exists
+// for those four fields, so this is the only candidate for them. Not yet confirmed empirically
+// against a real sandbox edit (unclear if it's live, deprecated, or what exactly triggers it) --
+// if it never fires, this entry is simply inert; the re-fetch-on-any-mapped-event design means
+// there's no downside to having it mapped either way.
 const SALLA_EVENT_TO_ENTITY_TYPE: Record<string, "products" | "orders" | "customers"> = {
   "order.created": "orders",
   "order.updated": "orders",
@@ -40,6 +40,7 @@ const SALLA_EVENT_TO_ENTITY_TYPE: Record<string, "products" | "orders" | "custom
   "order.total.price.updated": "orders",
 
   "product.created": "products",
+  "product.updated": "products",
   "product.price.updated": "products",
   "product.status.updated": "products",
   "product.quantity.low": "products",
