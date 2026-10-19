@@ -109,15 +109,33 @@ function formatDateTime(value: string, locale: Locale): string {
 
 type OrdersTranslator = ReturnType<typeof useTranslations<"orders">>
 
-function getOrderStatusMeta(
-  t: OrdersTranslator
-): Record<OrderRecord["orderStatus"], { label: string; className: string }> {
-  return {
-    Completed: { label: t("status.completed"), className: "bg-[#e9f8ef] text-[#1f9d55]" },
-    Processing: { label: t("status.processing"), className: "bg-[#fff3e3] text-[#e08b00]" },
-    Cancelled: { label: t("status.cancelled"), className: "bg-[#fdeeee] text-[#e0484d]" },
-    Refunded: { label: t("status.refunded"), className: "bg-[#f3eeff] text-[#8b5cf6]" },
+// statusLabel is each provider's own exact status text -- for Salla that can be a merchant-
+// customized name, so there's no fixed, enumerable list of values to hand-map to a color the way
+// the 4-bucket orderStatus could be. Colors are instead assigned deterministically by hashing the
+// label text: the same exact label always gets the same color (stable across reloads/sorts), and
+// different labels spread across the palette without needing to know every possible status text
+// up front.
+const STATUS_LABEL_COLOR_PALETTE = [
+  "bg-[#e9f8ef] text-[#1f9d55]", // green
+  "bg-[#fff3e3] text-[#e08b00]", // amber
+  "bg-[#fdeeee] text-[#e0484d]", // red
+  "bg-[#f3eeff] text-[#8b5cf6]", // purple
+  "bg-[#eef4ff] text-[#2878ff]", // blue
+  "bg-[#e6fbf8] text-[#0d9488]", // teal
+  "bg-[#fdf0f7] text-[#db2777]", // pink
+  "bg-[#f2f5fa] text-[#5b6b85]", // slate
+] as const
+
+function hashStatusLabel(label: string): number {
+  let hash = 0
+  for (let index = 0; index < label.length; index += 1) {
+    hash = (hash * 31 + label.charCodeAt(index)) | 0
   }
+  return Math.abs(hash)
+}
+
+function getStatusLabelClassName(label: string): string {
+  return STATUS_LABEL_COLOR_PALETTE[hashStatusLabel(label) % STATUS_LABEL_COLOR_PALETTE.length]
 }
 
 // Real payment STATUS, not a method -- see the module comment above.
@@ -632,7 +650,6 @@ export default function OrdersPage() {
     ]
   }, [summary, locale, t])
 
-  const orderStatusMeta = useMemo(() => getOrderStatusMeta(t), [t])
   const paymentStatusMeta = useMemo(() => getPaymentStatusMeta(t), [t])
   const statusFilterOptions = useMemo(() => getStatusFilterOptions(t), [t])
   const paymentFilterOptions = useMemo(() => getPaymentFilterOptions(t), [t])
@@ -901,7 +918,7 @@ export default function OrdersPage() {
                         <span
                           className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold",
-                            orderStatusMeta[order.orderStatus].className
+                            getStatusLabelClassName(order.statusLabel)
                           )}
                         >
                           {order.statusLabel}
