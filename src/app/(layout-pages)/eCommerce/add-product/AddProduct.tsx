@@ -45,6 +45,7 @@ import { useWorkspace } from "@/features/workspace"
 import {
   productListService,
   type CreateProductInput,
+  type LinkableSallaProduct,
   type ProductDetail,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
@@ -58,7 +59,12 @@ import { Textarea } from "@/components/ui/textarea"
 
 import { AppDateField, AppSearchableSelect, type AppSearchableSelectOption } from "@/components/app"
 
-import { getProductTypes, type ProductTypeKey, TYPES_WITHOUT_SKU } from "./product-types"
+import {
+  getProductTypes,
+  STOCK_TRACKED_TYPES,
+  type ProductTypeKey,
+  TYPES_WITHOUT_SKU,
+} from "./product-types"
 import {
   CATEGORY_ICON,
   CATEGORY_TINT,
@@ -391,6 +397,26 @@ export default function AddProduct() {
   const [catalogue, setCatalogue] = useState<ProductRecord[]>([])
   const [catalogueLoaded, setCatalogueLoaded] = useState(false)
 
+  // Product-level "link to Salla product" -- see salla-product-links-service.ts. Only meaningful
+  // for a stock-tracked type (raw/simple/weighted); a bundle/variable/service/digital product has
+  // nothing of its own for a stock push to target (a bundle's components and a variable product's
+  // variants are linked separately -- variant-level linking isn't wired into this screen yet).
+  const [sallaLinkableProducts, setSallaLinkableProducts] = useState<LinkableSallaProduct[]>([])
+  const [sallaProductLinkId, setSallaProductLinkId] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    productListService
+      .listSallaLinkableProducts()
+      .then((products) => {
+        if (!cancelled) setSallaLinkableProducts(products)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // Every ProductTypeKey has an entry, so the fallback is unreachable -- it exists only to keep
   // the type non-optional. It is written as the first entry rather than a positional index, so
   // reordering PRODUCT_TYPES cannot quietly change which type a lookup miss lands on.
@@ -579,6 +605,22 @@ export default function AddProduct() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingId])
 
+  // Not part of ProductDetail -- a separate table/route (salla-product-links-service.ts), fetched
+  // independently so a failure here never blocks the rest of the form from hydrating.
+  useEffect(() => {
+    if (!editingId) return
+    let cancelled = false
+    productListService
+      .getSallaProductLink(editingId)
+      .then((link) => {
+        if (!cancelled) setSallaProductLinkId(link?.sallaProductId ?? "")
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [editingId])
+
   const knownCategories = useMemo(
     () => [...new Set(catalogue.map((product) => product.category).filter(Boolean))].sort(),
     [catalogue]
@@ -680,6 +722,19 @@ export default function AddProduct() {
   )
 
   const linkedUnitProduct = catalogue.find((product) => product.id === linkedUnitProductId) ?? null
+
+  const sallaLinkableProductOptions = useMemo<AppSearchableSelectOption[]>(
+    () =>
+      sallaLinkableProducts.map((product) => ({
+        value: product.sallaProductId,
+        label: product.name,
+        hint: product.sku,
+        keywords: product.sku,
+      })),
+    [sallaLinkableProducts]
+  )
+  const selectedSallaLinkableProduct =
+    sallaLinkableProducts.find((product) => product.sallaProductId === sallaProductLinkId) ?? null
 
   const componentOptions = useMemo<AppSearchableSelectOption[]>(
     () =>
@@ -1095,6 +1150,25 @@ export default function AddProduct() {
         ? await productListService.updateProduct(editingId, payload)
         : await productListService.createProduct(payload)
 
+      // Best-effort, after the product itself is safely saved -- the same "save basics, then a
+      // dependent follow-up call" shape image upload already uses. Only ever attempted for a
+      // stock-tracked type, since that's the only kind the picker above is even rendered for.
+      if (STOCK_TRACKED_TYPES.includes(productType)) {
+        try {
+          if (sallaProductLinkId) {
+            await productListService.upsertSallaProductLink(saved.id, {
+              sallaProductId: sallaProductLinkId,
+              sallaProductSku: selectedSallaLinkableProduct?.sku ?? null,
+              sallaProductName: selectedSallaLinkableProduct?.name ?? null,
+            })
+          } else if (isEditing) {
+            await productListService.removeSallaProductLink(saved.id)
+          }
+        } catch {
+          // Never fails the save itself -- the product is already safely stored either way.
+        }
+      }
+
       toast.success(
         isEditing
           ? tForm("errors.saveSuccessEdit")
@@ -1437,6 +1511,23 @@ export default function AddProduct() {
                     <p className={cn(HINT, MUTED)}>{tForm("stock.minHint")}</p>
                   </Field>
 
+                  <Field label={tForm("stock.sallaLinkLabel")}>
+                    <AppSearchableSelect
+                      value={sallaProductLinkId}
+                      options={sallaLinkableProductOptions}
+                      onChange={setSallaProductLinkId}
+                      placeholder={tForm("stock.sallaLinkPlaceholder")}
+                      searchPlaceholder={tForm("stock.sallaLinkSearchPlaceholder")}
+                      emptyLabel={
+                        sallaLinkableProductOptions.length === 0
+                          ? tForm("stock.sallaLinkEmptyNone")
+                          : tForm("stock.sallaLinkEmptyNoMatch")
+                      }
+                      ariaLabel={tForm("stock.sallaLinkAriaLabel")}
+                    />
+                    <p className={cn(HINT, MUTED)}>{tForm("stock.sallaLinkHint")}</p>
+                  </Field>
+
                   {/* Only asked for when the product is counted in pieces or cartons -- a carton's
                       size is a fact about this product, not about the unit itself. */}
                   {packagingApplies ? (
@@ -1588,6 +1679,23 @@ export default function AddProduct() {
                       className={FIELD_CLASS}
                     />
                     <p className={cn(HINT, MUTED)}>{tForm("stock.minHint")}</p>
+                  </Field>
+
+                  <Field label={tForm("stock.sallaLinkLabel")}>
+                    <AppSearchableSelect
+                      value={sallaProductLinkId}
+                      options={sallaLinkableProductOptions}
+                      onChange={setSallaProductLinkId}
+                      placeholder={tForm("stock.sallaLinkPlaceholder")}
+                      searchPlaceholder={tForm("stock.sallaLinkSearchPlaceholder")}
+                      emptyLabel={
+                        sallaLinkableProductOptions.length === 0
+                          ? tForm("stock.sallaLinkEmptyNone")
+                          : tForm("stock.sallaLinkEmptyNoMatch")
+                      }
+                      ariaLabel={tForm("stock.sallaLinkAriaLabel")}
+                    />
+                    <p className={cn(HINT, MUTED)}>{tForm("stock.sallaLinkHint")}</p>
                   </Field>
 
                   {/* Only asked for when the product is counted in pieces or cartons -- a carton's
@@ -1756,6 +1864,23 @@ export default function AddProduct() {
                         label={tForm("stock.minLabel")}
                       />
                       <p className={cn(HINT, MUTED)}>{tForm("stock.minHint")}</p>
+                    </Field>
+
+                    <Field label={tForm("stock.sallaLinkLabel")}>
+                      <AppSearchableSelect
+                        value={sallaProductLinkId}
+                        options={sallaLinkableProductOptions}
+                        onChange={setSallaProductLinkId}
+                        placeholder={tForm("stock.sallaLinkPlaceholder")}
+                        searchPlaceholder={tForm("stock.sallaLinkSearchPlaceholder")}
+                        emptyLabel={
+                          sallaLinkableProductOptions.length === 0
+                            ? tForm("stock.sallaLinkEmptyNone")
+                            : tForm("stock.sallaLinkEmptyNoMatch")
+                        }
+                        ariaLabel={tForm("stock.sallaLinkAriaLabel")}
+                      />
+                      <p className={cn(HINT, MUTED)}>{tForm("stock.sallaLinkHint")}</p>
                     </Field>
 
                     {/* No carton packaging here: a weighted product is sold by the kilo, and its

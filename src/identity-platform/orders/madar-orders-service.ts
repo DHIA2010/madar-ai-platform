@@ -5,6 +5,13 @@ import { IdentityError } from "../application/errors/IdentityError"
 import type { IntegrationProviderOrderDetail } from "../integrations/provider-contracts"
 import { IntegrationProviderError } from "../integrations/provider-error"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "../pos/pos-settings-service"
+import {
+  applyStockConsumption,
+  assertStockAvailability,
+  computeStockConsumption,
+} from "../products/stock-consumption"
+import type { SallaStockPushService } from "../products/salla-stock-push-service"
 import type { SallaOAuthRepository } from "../salla-oauth/repository"
 import type { TaxRatesService } from "../tax/tax-rates-service"
 import { SallaOrderPushService } from "./salla-order-push-service"
@@ -39,6 +46,15 @@ const MADAR_ORDER_ERRORS = {
       "validation",
       "The order total is too large. Check the unit prices and quantities and try again."
     ),
+  outOfStockSaleNotAllowed: (productName: string) =>
+    new IdentityError(
+      "MADAR_ORDER_OUT_OF_STOCK",
+      409,
+      "business",
+      productName
+        ? `"${productName}" is out of stock.`
+        : "One of the selected variants is out of stock."
+    ),
 }
 
 // madar_orders' subtotal/tax/total columns are numeric(12, 2) -- schemas.ts bounds each
@@ -70,6 +86,10 @@ function describePushError(error: unknown): string {
 
 export interface MadarOrderItemInput {
   productId: string | null
+  // Which specific combination of a "variable" product (size/color etc.) this line is --
+  // mirrors POS's InvoiceItemInput.variantId exactly, for the same reason: productId alone is
+  // never enough for a variable product, since it never carries any stock of its own.
+  variantId?: string | null
   productName: string
   sku: string | null
   unitPrice: number
@@ -211,6 +231,7 @@ interface MadarOrderItemRow {
   id: string
   order_id: string
   product_id: string | null
+  variant_id: string | null
   product_name: string
   sku: string | null
   unit_price: string | number
@@ -231,6 +252,7 @@ function mapItem(row: MadarOrderItemRow): MadarOrderItemView {
   return {
     id: row.id,
     productId: row.product_id,
+    variantId: row.variant_id,
     productName: row.product_name,
     sku: row.sku,
     unitPrice: Number(row.unit_price),
@@ -312,7 +334,18 @@ export class MadarOrdersService {
     private readonly database: PostgresDatabase,
     private readonly taxRatesService: TaxRatesService,
     private readonly sallaOAuthRepository: SallaOAuthRepository,
-    private readonly sallaPushService: SallaOrderPushService
+    private readonly sallaPushService: SallaOrderPushService,
+    // Optional -- when null (memory-mode/no infra, or an existing caller that hasn't been
+    // updated), create() simply never pushes a stock update anywhere; the order itself is
+    // entirely unaffected either way (this push is always best-effort, matching pushToSalla's own
+    // convention).
+    private readonly sallaStockPushService: SallaStockPushService | null = null,
+    // Optional -- when null, create() falls back to DEFAULT_POS_SETTINGS (allowOutOfStockSale:
+    // true), i.e. every behavior this service had before this field existed. Reuses the SAME
+    // org-wide "allow sale on out-of-stock" setting POS already respects, so an org that has
+    // turned it off for its cashiers doesn't silently oversell through the online-order path
+    // instead.
+    private readonly posSettingsService: PosSettingsService | null = null
   ) {}
 
   async create(input: CreateMadarOrderInput): Promise<MadarOrderView> {
@@ -356,6 +389,24 @@ export class MadarOrdersService {
       Math.abs(totalAmount) > MAX_COMPUTED_AMOUNT
     ) {
       throw MADAR_ORDER_ERRORS.amountTooLarge()
+    }
+
+    const stockConsumption = await computeStockConsumption(
+      this.database,
+      input.organizationId,
+      input.items.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+      }))
+    )
+    const posSettings = this.posSettingsService
+      ? await this.posSettingsService.get(input.organizationId, input.workspaceId)
+      : DEFAULT_POS_SETTINGS
+    if (!posSettings.allowOutOfStockSale) {
+      await assertStockAvailability(this.database, stockConsumption, new Map(), (name) =>
+        MADAR_ORDER_ERRORS.outOfStockSaleNotAllowed(name)
+      )
     }
 
     const connection = await this.sallaOAuthRepository.findActiveConnection(
@@ -435,13 +486,14 @@ export class MadarOrdersService {
       for (const [index, item] of input.items.entries()) {
         await this.database.query(
           `INSERT INTO madar_order_items
-             (id, order_id, product_id, product_name, sku, unit_price, quantity, tax_rate,
+             (id, order_id, product_id, variant_id, product_name, sku, unit_price, quantity, tax_rate,
               tax_amount, discount_amount, line_total, cost_price, weight)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             randomUUID(),
             id,
             item.productId,
+            item.variantId ?? null,
             item.productName,
             item.sku,
             item.unitPrice,
@@ -455,6 +507,8 @@ export class MadarOrdersService {
           ]
         )
       }
+
+      await applyStockConsumption(this.database, stockConsumption, -1)
     })
 
     // The local order is already committed at this point -- a push failure (or the entire
@@ -462,6 +516,24 @@ export class MadarOrdersService {
     // this same row's own salla_push_status/error_* columns afterwards.
     if (connection) {
       await this.pushToSalla(id).catch(() => {})
+    }
+
+    // Independent of the order push above (and of whether `connection` was truthy here) --
+    // SallaStockPushService does its own fresh findActiveConnection lookup internally, so a
+    // linked product's stock still gets pushed even on a retry or if only stock sync (not order
+    // push) ends up configured for this org later.
+    if (this.sallaStockPushService) {
+      await this.sallaStockPushService
+        .pushStockForLines(
+          input.organizationId,
+          input.workspaceId,
+          input.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+          })),
+          -1
+        )
+        .catch(() => {})
     }
 
     const created = await this.findById(input.organizationId, id)
@@ -536,7 +608,7 @@ export class MadarOrdersService {
     if (row.payment_status === "refunded") return
 
     const itemRows = await this.database.query<MadarOrderItemRow>(
-      `SELECT id, order_id, product_id, product_name, sku, unit_price, quantity, tax_amount,
+      `SELECT id, order_id, product_id, variant_id, product_name, sku, unit_price, quantity, tax_amount,
               discount_amount, line_total, cost_price, weight
          FROM madar_order_items WHERE order_id = $1`,
       [orderId]
@@ -638,7 +710,7 @@ export class MadarOrdersService {
     if (!row) return null
 
     const itemRows = await this.database.query<MadarOrderItemRow>(
-      `SELECT id, order_id, product_id, product_name, sku, unit_price, quantity, tax_amount,
+      `SELECT id, order_id, product_id, variant_id, product_name, sku, unit_price, quantity, tax_amount,
               discount_amount, line_total, cost_price, weight
          FROM madar_order_items WHERE order_id = $1`,
       [id]

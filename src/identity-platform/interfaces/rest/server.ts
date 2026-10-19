@@ -41,6 +41,8 @@ import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
+import { SallaProductLinksService } from "../../products/salla-product-links-service"
+import { SallaStockPushService } from "../../products/salla-stock-push-service"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { PurchasesService } from "../../procurement/purchases-service"
 import { ReturnsService } from "../../procurement/returns-service"
@@ -185,6 +187,7 @@ import {
   uploadMemberAvatarSchema,
   uploadOrganizationLogoSchema,
   uploadProductImageSchema,
+  upsertSallaProductLinkSchema,
   changePasswordSchema,
   verifyEmailSchema,
   requestApplicationActivationSchema,
@@ -671,6 +674,21 @@ export function createIdentityApiServer(
   const expensesService = container.infrastructure.database
     ? new ExpensesService(container.infrastructure.database)
     : null
+  const sallaProductLinksService = container.infrastructure.database
+    ? new SallaProductLinksService(
+        container.infrastructure.database,
+        new SallaOAuthRepository(container.infrastructure.database)
+      )
+    : null
+  const sallaStockPushService =
+    container.infrastructure.database && sallaProductLinksService
+      ? new SallaStockPushService(
+          new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database)),
+          new SallaOAuthRepository(container.infrastructure.database),
+          sallaProductLinksService,
+          container.infrastructure.database
+        )
+      : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
       ? new PosInvoicesService(
@@ -678,7 +696,8 @@ export function createIdentityApiServer(
           posPaymentMethodsService,
           taxRatesService,
           zatcaDevicesService,
-          posSettingsService
+          posSettingsService,
+          sallaStockPushService
         )
       : null
   const posShiftsService =
@@ -717,7 +736,9 @@ export function createIdentityApiServer(
           new SallaOAuthRepository(container.infrastructure.database),
           new SallaOrderPushService(
             new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database))
-          )
+          ),
+          sallaStockPushService,
+          posSettingsService
         )
       : null
   const campaignsPerformanceAggregationService = container.infrastructure.database
@@ -4253,6 +4274,77 @@ export function createIdentityApiServer(
         })
 
         return send(201, { url: imageUrl })
+      }
+
+      // Candidates for the "link to Salla product" picker -- checked ahead of the
+      // `/v1/products/:id` regex below, same reasoning as lookup-by-sku above.
+      if (method === "GET" && url.pathname === "/v1/products/salla-linkable") {
+        if (!sallaProductLinksService) {
+          return send(503, {
+            code: "SALLA_PRODUCT_LINKS_UNAVAILABLE",
+            message: "Salla product linking is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+
+        const search = url.searchParams.get("search")?.trim() || null
+        const products = await sallaProductLinksService.listLinkableSallaProducts(
+          actor.organizationId,
+          actor.workspaceId,
+          search
+        )
+        return send(200, { products })
+      }
+
+      const sallaProductLinkMatch = url.pathname.match(/^\/v1\/products\/([^/]+)\/salla-link$/)
+      if (sallaProductLinkMatch) {
+        if (!sallaProductLinksService) {
+          return send(503, {
+            code: "SALLA_PRODUCT_LINKS_UNAVAILABLE",
+            message: "Salla product linking is unavailable in memory mode.",
+          })
+        }
+        const productId = sallaProductLinkMatch[1]
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+          const link = await sallaProductLinksService.findLinkForLine(actor.organizationId, {
+            productId,
+          })
+          return send(200, { link })
+        }
+
+        if (
+          !actor.modulePermissions.includes("products:create") &&
+          !actor.modulePermissions.includes("products:edit")
+        ) {
+          throw ERRORS.forbidden()
+        }
+
+        if (method === "PUT") {
+          const payload = upsertSallaProductLinkSchema.parse(await readJsonBody(request))
+          await sallaProductLinksService.upsertLink(
+            actor.organizationId,
+            {
+              productId,
+              variantId: payload.variantId,
+              sallaProductId: payload.sallaProductId,
+              sallaProductSku: payload.sallaProductSku,
+              sallaProductName: payload.sallaProductName,
+            },
+            actor.userId
+          )
+          return send(200, { linked: true })
+        }
+
+        if (method === "DELETE") {
+          const variantId = url.searchParams.get("variantId")
+          await sallaProductLinksService.removeLink(actor.organizationId, {
+            productId,
+            variantId: variantId || null,
+          })
+          return send(200, { linked: false })
+        }
       }
 
       const nativeProductMatch = url.pathname.match(/^\/v1\/products\/([^/]+)$/)

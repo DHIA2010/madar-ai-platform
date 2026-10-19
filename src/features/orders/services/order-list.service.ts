@@ -104,6 +104,7 @@ export interface OrderDetail {
 
 export interface CreateOrderItemInput {
   productId: string | null
+  variantId?: string | null
   productName: string
   sku: string | null
   unitPrice: number

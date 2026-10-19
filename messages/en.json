@@ -1782,7 +1782,14 @@
       "stock": {
         "currentLabel": "Current stock quantity",
         "minLabel": "Minimum stock",
-        "minHint": "You'll be alerted when stock reaches this level"
+        "minHint": "You'll be alerted when stock reaches this level",
+        "sallaLinkLabel": "Linked Salla product",
+        "sallaLinkPlaceholder": "Choose a Salla product to sync stock with",
+        "sallaLinkSearchPlaceholder": "Search Salla products...",
+        "sallaLinkEmptyNone": "No synced Salla products with a SKU yet",
+        "sallaLinkEmptyNoMatch": "No matching product",
+        "sallaLinkAriaLabel": "Linked Salla product",
+        "sallaLinkHint": "Selling this product through Madar will update this Salla product's stock too"
       },
       "packaging": {
         "linkedProductLabel": "Linked product (by piece)",

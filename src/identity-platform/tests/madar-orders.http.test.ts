@@ -169,6 +169,35 @@ describe("POST /v1/orders: Madar-created orders", () => {
     expect(detail.items).toHaveLength(1)
   })
 
+  it("decrements a referenced native product's own stock on order creation", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "madar-order-stock@madar.test",
+      "Stock Org"
+    )
+    const productId = "11111111-1111-4111-8111-111111111111"
+    await database.query(
+      `insert into products (id, organization_id, product_type, name, stock_quantity)
+       values ($1, $2, 'simple', 'فستان', 10)`,
+      [productId, actor.organizationId]
+    )
+
+    const createResponse = await fetch(`${baseUrl}/v1/orders`, {
+      method: "POST",
+      headers: authHeaders(login),
+      body: JSON.stringify({
+        ...ORDER_PAYLOAD,
+        items: [{ productId, productName: "فستان", unitPrice: 100, quantity: 3 }],
+      }),
+    })
+    expect(createResponse.status).toBe(201)
+
+    const productRow = await database.query<{ stock_quantity: string }>(
+      `select stock_quantity from products where id = $1`,
+      [productId]
+    )
+    expect(Number(productRow.rows[0].stock_quantity)).toBe(7)
+  })
+
   // Found live in stage: a barcode-sized number pasted into the unit price field reached
   // Postgres raw and failed with "numeric field overflow" instead of a clean validation error.
   // schemas.ts now caps individual money fields well below that.

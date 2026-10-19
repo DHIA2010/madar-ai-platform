@@ -228,6 +228,15 @@ export const uploadProductImageSchema = z.object({
   dataBase64: z.string().min(1),
 })
 
+// Links a native Madar product (or one specific variant of it) to a Salla product -- see
+// SallaProductLinksService.upsertLink.
+export const upsertSallaProductLinkSchema = z.object({
+  variantId: z.string().uuid().nullable().optional().default(null),
+  sallaProductId: z.string().min(1),
+  sallaProductSku: z.string().nullable().optional().default(null),
+  sallaProductName: z.string().nullable().optional().default(null),
+})
+
 // Bank-transfer receipts are frequently scanned PDFs, not just images -- unlike every other
 // upload schema above (logo/avatar/product image), which is image-only.
 export const requestApplicationActivationSchema = z.object({
@@ -908,10 +917,12 @@ export const createInvoiceSchema = z.object({
 const MONEY_FIELD_MAX = 999_999_999.99
 
 // One line item of a Madar-created order -- see createMadarOrderSchema. Distinct from
-// createInvoiceItemSchema: no variantId (POS variant stock consumption doesn't apply here) but
-// adds sku/costPrice/weight, which Salla's External Orders API accepts per-product.
+// createInvoiceItemSchema: adds sku/costPrice/weight, which Salla's External Orders API accepts
+// per-product; variantId mirrors createInvoiceItemSchema's own field exactly (stock consumption
+// now applies here too -- see MadarOrdersService.create()).
 export const createMadarOrderItemSchema = z.object({
   productId: z.string().uuid().nullable().optional().default(null),
+  variantId: z.string().uuid().nullable().optional().default(null),
   productName: z.string().min(1).max(200),
   sku: z.string().max(100).nullable().optional().default(null),
   unitPrice: z.number().min(0).max(MONEY_FIELD_MAX),

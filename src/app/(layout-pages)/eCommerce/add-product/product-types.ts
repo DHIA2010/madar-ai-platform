@@ -78,3 +78,10 @@ export function getProductTypes(
 // A bundled product is identified by its components, and a raw material by its own stock
 // record, so neither carries a stock code.
 export const TYPES_WITHOUT_SKU: ProductTypeKey[] = ["raw", "bundle"]
+
+// Mirrors the backend's TYPES_REQUIRING_STOCK (products/catalog-types.ts) -- the only types that
+// carry their own stock_quantity, and so the only ones a product-level "link to Salla product"
+// (for pushing stock on a Madar sale) makes sense for. A bundle has its components linked
+// separately instead, and a variable product's own row never carries any stock of its own (only
+// its variants do).
+export const STOCK_TRACKED_TYPES: ProductTypeKey[] = ["raw", "simple", "weighted"]

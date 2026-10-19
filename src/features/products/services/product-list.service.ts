@@ -187,6 +187,23 @@ export interface BulkImportProductResult {
   skipped: Array<{ row: number; reason: string }>
 }
 
+export interface LinkableSallaProduct {
+  sallaProductId: string
+  name: string
+  sku: string
+}
+
+export interface SallaProductLink {
+  sallaProductId: string
+}
+
+export interface UpsertSallaProductLinkInput {
+  variantId?: string | null
+  sallaProductId: string
+  sallaProductSku: string | null
+  sallaProductName: string | null
+}
+
 export const productListService = {
   async listProducts(): Promise<ProductRecord[]> {
     const response = await client.get<{ items: ProductRecord[] }>(PRODUCTS_ENDPOINT)
@@ -251,6 +268,38 @@ export const productListService = {
   // ours to remove and the next sync would bring it back, so the caller must not offer it.
   async deleteProduct(id: string): Promise<void> {
     await client.delete<void>([PRODUCTS_ENDPOINT, encodeURIComponent(id)].join(PATH_SEPARATOR))
+  },
+
+  // Candidates for the "link to Salla product" picker -- already-synced Salla products that have
+  // a SKU (one without one can't be targeted by the stock push, so the backend filters it out).
+  async listSallaLinkableProducts(): Promise<LinkableSallaProduct[]> {
+    const response = await client.get<{ products: LinkableSallaProduct[] }>(
+      `${PRODUCTS_ENDPOINT}${String.fromCharCode(47)}salla-linkable`
+    )
+    return response.products
+  },
+
+  async getSallaProductLink(productId: string): Promise<SallaProductLink | null> {
+    const response = await client.get<{ link: SallaProductLink | null }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "salla-link"].join(PATH_SEPARATOR)
+    )
+    return response.link
+  },
+
+  async upsertSallaProductLink(
+    productId: string,
+    input: UpsertSallaProductLinkInput
+  ): Promise<void> {
+    await client.put<UpsertSallaProductLinkInput, { linked: boolean }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "salla-link"].join(PATH_SEPARATOR),
+      input
+    )
+  },
+
+  async removeSallaProductLink(productId: string): Promise<void> {
+    await client.delete<{ linked: boolean }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "salla-link"].join(PATH_SEPARATOR)
+    )
   },
 
   // Creates as many rows as are actually valid -- a bad row is skipped and reported back rather

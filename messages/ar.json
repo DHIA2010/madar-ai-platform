@@ -1782,7 +1782,14 @@
       "stock": {
         "currentLabel": "الكمية الحالية في المخزون",
         "minLabel": "الحد الأدنى للمخزون",
-        "minHint": "سيتم تنبيهك عند الوصول إلى هذا الحد"
+        "minHint": "سيتم تنبيهك عند الوصول إلى هذا الحد",
+        "sallaLinkLabel": "منتج سلة المرتبط",
+        "sallaLinkPlaceholder": "اختر منتج سلة لمزامنة المخزون معه",
+        "sallaLinkSearchPlaceholder": "ابحث في منتجات سلة...",
+        "sallaLinkEmptyNone": "لا توجد منتجات سلة متزامنة برمز SKU بعد",
+        "sallaLinkEmptyNoMatch": "لا يوجد منتج مطابق",
+        "sallaLinkAriaLabel": "منتج سلة المرتبط",
+        "sallaLinkHint": "بيع هذا المنتج عبر مدار سيحدّث مخزون هذا المنتج في سلة أيضاً"
       },
       "packaging": {
         "linkedProductLabel": "المنتج المرتبط (بالحبة)",

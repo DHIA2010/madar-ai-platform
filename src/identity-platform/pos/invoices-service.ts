@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto"
 import { IdentityError } from "../application/errors/IdentityError"
 import { writeAuditLog } from "../infrastructure/postgres/audit-log-writer"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import type { SallaStockPushService } from "../products/salla-stock-push-service"
 import {
-  convertRequiredQuantityToStock,
-  isProductUnit,
-  TYPES_REQUIRING_STOCK,
-  type ProductType,
-} from "../products/catalog-types"
+  applyStockConsumption as applyStockConsumptionShared,
+  assertStockAvailability as assertStockAvailabilityShared,
+  computeStockConsumption as computeStockConsumptionShared,
+  type StockConsumptionLine,
+  type StockConsumptionResult,
+} from "../products/stock-consumption"
 import type { TaxRatesService } from "../tax/tax-rates-service"
 import type { ZatcaDevicesService } from "../zatca/zatca-devices-service"
 import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "./pos-settings-service"
@@ -547,7 +549,10 @@ export class PosInvoicesService {
     // updated), create() falls back to DEFAULT_POS_SETTINGS, which is every one of this
     // platform's original unconditional behaviors, so nothing changes for a caller that never
     // passes this.
-    private readonly settingsService: PosSettingsService | null = null
+    private readonly settingsService: PosSettingsService | null = null,
+    // Optional -- when null, create()/createReturn() simply never push a stock update to Salla;
+    // the sale/return itself is entirely unaffected either way (always best-effort).
+    private readonly sallaStockPushService: SallaStockPushService | null = null
   ) {}
 
   async list(organizationId: string, filter: InvoiceListFilter): Promise<InvoiceView[]> {
@@ -1221,6 +1226,24 @@ export class PosInvoicesService {
       metadata: { invoiceNumber, totalAmount, status: "completed" },
     }).catch(() => {})
 
+    // Deliberately after the transaction commits, not alongside applyStockConsumption inside it
+    // above -- this reads each linked product's/variant's now-committed absolute stock figure, so
+    // it must run once that write is visible, and it must never be able to roll back a completed
+    // sale.
+    if (this.sallaStockPushService) {
+      await this.sallaStockPushService
+        .pushStockForLines(
+          input.organizationId,
+          input.workspaceId,
+          input.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+          })),
+          -1
+        )
+        .catch(() => {})
+    }
+
     return created
   }
 
@@ -1669,6 +1692,19 @@ export class PosInvoicesService {
       metadata: { invoiceId, returnNumber, totalAmount },
     }).catch(() => {})
 
+    // Symmetric with create()'s own push, after this transaction's own commit for the same reason
+    // -- reads the now-restocked, committed stock figure.
+    if (this.sallaStockPushService) {
+      await this.sallaStockPushService
+        .pushStockForLines(
+          organizationId,
+          invoiceRow.workspace_id,
+          returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
+          1
+        )
+        .catch(() => {})
+    }
+
     return created
   }
 
@@ -1782,209 +1818,31 @@ export class PosInvoicesService {
     )
   }
 
-  // How much of each REAL, tracked native product (and each real variant) a set of sale (or
-  // return) lines actually consumes -- a stock-tracked product (raw/simple/weighted) consumes
-  // itself directly, one unit per unit sold; a bundle consumes each of its own native components
-  // by the recipe's required_quantity converted into that component's own stock unit (see
-  // catalog-types.ts's convertRequiredQuantityToStock); a line carrying a variantId (a "variable"
-  // product's specific size/color combination) consumes that exact variant's own stock
-  // (product_variants.stock) directly, one unit per unit sold -- a variable product's own row
-  // never carries any stock to touch instead. A synced/storefront product, a free-text line, a
-  // service, and a component named by hand (no catalogue reference) can never appear here -- there
-  // is no products/product_variants row this organization owns to touch stock on for any of them.
-  // Shared by create() (subtracts the result) and createReturn() (adds it back) so a bundle's or
-  // variant's return restocks it exactly the same way its sale consumed it.
+  // Delegates to the shared products/stock-consumption.ts module -- extracted so
+  // MadarOrdersService can reuse the exact same consumption/availability/apply logic for online
+  // orders instead of duplicating it. Kept as private methods with the same names/signatures so
+  // every call site in this class is unaffected by the extraction.
   private async computeStockConsumption(
     organizationId: string,
-    lines: Array<{ productId: string | null; variantId?: string | null; quantity: number }>
-  ): Promise<{ products: Map<string, number>; variants: Map<string, number> }> {
-    const products = new Map<string, number>()
-    const variants = new Map<string, number>()
-
-    // Confirmed against this organization's own products before touching anything -- a
-    // variantId is entirely client-supplied, so without this check a line could name another
-    // organization's variant and have its stock silently adjusted.
-    const variantIds = [
-      ...new Set(
-        lines
-          .map((line) => line.variantId)
-          .filter((id): id is string => !!id && UUID_PATTERN.test(id))
-      ),
-    ]
-    if (variantIds.length > 0) {
-      const variantPlaceholders = variantIds.map((_, index) => `$${index + 2}`).join(", ")
-      const ownedVariants = await this.database.query<{ id: string }>(
-        `SELECT pv.id FROM product_variants pv
-           JOIN products p ON p.id = pv.product_id
-          WHERE p.organization_id = $1 AND pv.id IN (${variantPlaceholders})`,
-        [organizationId, ...variantIds]
-      )
-      const ownedVariantIds = new Set(ownedVariants.rows.map((row) => row.id))
-      for (const line of lines) {
-        if (line.variantId && ownedVariantIds.has(line.variantId)) {
-          variants.set(line.variantId, (variants.get(line.variantId) ?? 0) + line.quantity)
-        }
-      }
-    }
-
-    const nativeIds = [
-      ...new Set(
-        lines
-          .map((line) => line.productId)
-          .filter((id): id is string => id !== null && UUID_PATTERN.test(id))
-      ),
-    ]
-    if (nativeIds.length === 0) return { products, variants }
-
-    const placeholders = nativeIds.map((_, index) => `$${index + 2}`).join(", ")
-    const productRows = await this.database.query<{ id: string; product_type: string }>(
-      `SELECT id, product_type FROM products WHERE organization_id = $1 AND id IN (${placeholders})`,
-      [organizationId, ...nativeIds]
-    )
-    const typeById = new Map(productRows.rows.map((row) => [row.id, row.product_type]))
-
-    const bundleIds = nativeIds.filter((id) => typeById.get(id) === "bundle")
-    const componentsByBundle = new Map<
-      string,
-      Array<{
-        component_ref: string | null
-        required_quantity: string | number
-        required_unit: string
-        stock_unit: string
-        conversion_factor: string | number | null
-      }>
-    >()
-    if (bundleIds.length > 0) {
-      const bundlePlaceholders = bundleIds.map((_, index) => `$${index + 1}`).join(", ")
-      const componentRows = await this.database.query<{
-        product_id: string
-        component_ref: string | null
-        required_quantity: string | number
-        required_unit: string
-        stock_unit: string
-        conversion_factor: string | number | null
-      }>(
-        `SELECT product_id, component_ref, required_quantity, required_unit, stock_unit,
-                conversion_factor
-           FROM product_components WHERE product_id IN (${bundlePlaceholders})`,
-        bundleIds
-      )
-      for (const row of componentRows.rows) {
-        const list = componentsByBundle.get(row.product_id) ?? []
-        list.push(row)
-        componentsByBundle.set(row.product_id, list)
-      }
-    }
-
-    const addConsumption = (productId: string, amount: number) => {
-      products.set(productId, (products.get(productId) ?? 0) + amount)
-    }
-
-    for (const line of lines) {
-      // A variant line's own productId is the PARENT variable product -- it never carries stock
-      // of its own (not in TYPES_REQUIRING_STOCK, and never "bundle"), so it naturally falls
-      // through here with no effect; only the variants map above touches it, via variantId.
-      if (!line.productId || !UUID_PATTERN.test(line.productId)) continue
-      const type = typeById.get(line.productId)
-      if (!type) continue
-
-      if (TYPES_REQUIRING_STOCK.includes(type as ProductType)) {
-        addConsumption(line.productId, line.quantity)
-        continue
-      }
-
-      if (type === "bundle") {
-        for (const component of componentsByBundle.get(line.productId) ?? []) {
-          if (!component.component_ref || !UUID_PATTERN.test(component.component_ref)) continue
-          if (!isProductUnit(component.required_unit) || !isProductUnit(component.stock_unit))
-            continue
-          const perUnit = convertRequiredQuantityToStock(
-            {
-              requiredUnit: component.required_unit,
-              stockUnit: component.stock_unit,
-              conversionFactor:
-                component.conversion_factor === null ? null : Number(component.conversion_factor),
-            },
-            Number(component.required_quantity)
-          )
-          addConsumption(component.component_ref, perUnit * line.quantity)
-        }
-      }
-    }
-
-    return { products, variants }
+    lines: StockConsumptionLine[]
+  ): Promise<StockConsumptionResult> {
+    return computeStockConsumptionShared(this.database, organizationId, lines)
   }
 
-  // Only called when the organization has turned "السماح بالبيع عند نفاد المخزون" off --
-  // migration 079's platform-wide default is still to allow it unconditionally (never call this
-  // and stock_quantity/stock is free to go negative, exactly as before this setting existed).
-  // Reads current stock fresh right before the transaction rather than trusting anything cached
-  // earlier in create(), so a concurrent sale that already depleted stock is still caught.
   private async assertStockAvailability(
-    consumption: { products: Map<string, number>; variants: Map<string, number> },
+    consumption: StockConsumptionResult,
     nameByProduct: Map<string, string>
   ): Promise<void> {
-    if (consumption.products.size > 0) {
-      const ids = [...consumption.products.keys()]
-      const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ")
-      const rows = await this.database.query<{
-        id: string
-        stock_quantity: string | number | null
-        name: string
-      }>(`SELECT id, stock_quantity, name FROM products WHERE id IN (${placeholders})`, ids)
-      const stockById = new Map(rows.rows.map((row) => [row.id, row]))
-      for (const [productId, required] of consumption.products) {
-        const row = stockById.get(productId)
-        if (!row || row.stock_quantity === null) continue
-        if (Number(row.stock_quantity) < required) {
-          throw INVOICE_ERRORS.outOfStockSaleNotAllowed(
-            nameByProduct.get(productId) ?? row.name ?? ""
-          )
-        }
-      }
-    }
-
-    if (consumption.variants.size > 0) {
-      const ids = [...consumption.variants.keys()]
-      const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ")
-      const rows = await this.database.query<{ id: string; stock: string | number | null }>(
-        `SELECT id, stock FROM product_variants WHERE id IN (${placeholders})`,
-        ids
-      )
-      const stockById = new Map(rows.rows.map((row) => [row.id, row.stock]))
-      for (const [variantId, required] of consumption.variants) {
-        const stock = stockById.get(variantId)
-        if (stock === null || stock === undefined) continue
-        if (Number(stock) < required) {
-          throw INVOICE_ERRORS.outOfStockSaleNotAllowed("")
-        }
-      }
-    }
+    return assertStockAvailabilityShared(this.database, consumption, nameByProduct, (name) =>
+      INVOICE_ERRORS.outOfStockSaleNotAllowed(name)
+    )
   }
 
-  // Applies a computeStockConsumption() result -- sign -1 for a sale (subtracts), +1 for a return
-  // (adds back). Deliberately allows stock_quantity/stock to go negative (see migration 079):
-  // checkout must never be blocked by a stale/undercounted stock figure, so a negative number is
-  // treated as purely informational rather than an error state.
   private async applyStockConsumption(
-    consumption: { products: Map<string, number>; variants: Map<string, number> },
+    consumption: StockConsumptionResult,
     sign: 1 | -1
   ): Promise<void> {
-    for (const [productId, amount] of consumption.products) {
-      if (amount === 0) continue
-      await this.database.query(
-        `UPDATE products SET stock_quantity = stock_quantity + $2, updated_at = now()
-          WHERE id = $1 AND stock_quantity IS NOT NULL`,
-        [productId, sign * amount]
-      )
-    }
-    for (const [variantId, amount] of consumption.variants) {
-      if (amount === 0) continue
-      await this.database.query(
-        `UPDATE product_variants SET stock = stock + $2 WHERE id = $1 AND stock IS NOT NULL`,
-        [variantId, sign * amount]
-      )
-    }
+    return applyStockConsumptionShared(this.database, consumption, sign)
   }
 
   // Seller identity as of right now, read straight from organizations.settings -- the same jsonb
