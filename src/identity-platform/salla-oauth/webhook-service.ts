@@ -13,11 +13,22 @@ export interface SallaWebhookPayload {
 }
 
 // Fetched directly from https://docs.salla.dev/webhooks's own event catalog. Add/remove a row
-// here to change what the webhook path syncs -- no other code needs to change. Deliberately not
-// mapped: order.deleted/product.deleted (upsertRecords only ever inserts/updates -- a delete-shaped
-// event needs a distinct branch, flagged as follow-up work, not built here) and every
-// shipping/category/brand/store/cart/invoice/special-offer/review event (outside the
+// here to change what the webhook path syncs -- no other code needs to change. Since
+// handleWebhookEvent() below only uses an event to decide WHETHER to re-fetch the canonical
+// record (never what's inside the event's own payload), mapping a new event here is purely about
+// widening which triggers cause that re-fetch, not about any field-shape concern.
+//
+// Deliberately not mapped: order.deleted/product.deleted (upsertRecords only ever inserts/
+// updates -- a delete-shaped event needs a distinct branch, flagged as follow-up work, not built
+// here) and every shipping/coupon/store/cart/invoice/special-offer/review event (outside the
 // products/orders/customers scope salla_records models at all today).
+//
+// Also NOT mapped, deliberately: product.updated. Salla's own docs page shows it struck through
+// with no description -- unclear if it's live, deprecated, or what it even fires on. Per Salla's
+// docs, a product name/SKU/cost change has no OTHER documented event either, so today those three
+// fields only ever get refreshed by the poll-sync safety net, not a webhook -- a real gap in
+// Salla's event catalog, not something fixable from this side. Confirm empirically against a real
+// sandbox edit before adding product.updated here.
 const SALLA_EVENT_TO_ENTITY_TYPE: Record<string, "products" | "orders" | "customers"> = {
   "order.created": "orders",
   "order.updated": "orders",
@@ -32,6 +43,10 @@ const SALLA_EVENT_TO_ENTITY_TYPE: Record<string, "products" | "orders" | "custom
   "product.price.updated": "products",
   "product.status.updated": "products",
   "product.quantity.low": "products",
+  "product.image.updated": "products",
+  "product.category.updated": "products",
+  "product.brand.updated": "products",
+  "product.tags.updated": "products",
 
   "customer.created": "customers",
   "customer.updated": "customers",
