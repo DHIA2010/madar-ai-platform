@@ -6,6 +6,12 @@ export interface ZidOAuthCredentials {
   clientId: string
   clientSecret: string
   redirectUri?: string
+  // Optional, unlike clientId/clientSecret -- these are values WE generate and control (not
+  // something Zid issues), used to verify the Authorization: Basic header Zid sends on every
+  // webhook delivery (see zid-oauth/webhook-verification.ts). The webhook route itself 503s if
+  // this is null, same convention as Salla's webhookSecret (salla-credentials.ts).
+  webhookUsername?: string | null
+  webhookPassword?: string | null
 }
 
 export interface ZidOAuthCredentialsProvider {
@@ -19,6 +25,8 @@ function readEnvZidCredentials(): ZidOAuthCredentials | null {
   const clientId = process.env.ZID_CLIENT_ID?.trim() ?? ""
   const clientSecret = process.env.ZID_CLIENT_SECRET?.trim() ?? ""
   const redirectUri = process.env.ZID_REDIRECT_URI?.trim() ?? ""
+  const webhookUsername = process.env.ZID_WEBHOOK_USERNAME?.trim() ?? ""
+  const webhookPassword = process.env.ZID_WEBHOOK_PASSWORD?.trim() ?? ""
 
   if (!clientId || !clientSecret) {
     return null
@@ -28,6 +36,8 @@ function readEnvZidCredentials(): ZidOAuthCredentials | null {
     clientId,
     clientSecret,
     redirectUri: redirectUri || undefined,
+    webhookUsername: webhookUsername || null,
+    webhookPassword: webhookPassword || null,
   }
 }
 
@@ -100,10 +110,14 @@ export class AwsSecretsZidOAuthCredentialsProvider implements ZidOAuthCredential
       throw new Error("ZID_OAUTH_CONFIGURATION_ERROR")
     }
 
+    const webhookUsername = String(parsed.webhookUsername ?? parsed.webhook_username ?? "").trim()
+    const webhookPassword = String(parsed.webhookPassword ?? parsed.webhook_password ?? "").trim()
     return validateCredentials({
       clientId: String(parsed.clientId ?? parsed.client_id ?? "").trim(),
       clientSecret: String(parsed.clientSecret ?? parsed.client_secret ?? "").trim(),
       redirectUri: String(parsed.redirectUrl ?? parsed.redirect_url ?? "").trim() || undefined,
+      webhookUsername: webhookUsername || null,
+      webhookPassword: webhookPassword || null,
     })
   }
 }
@@ -119,5 +133,24 @@ export class EnvironmentFirstZidOAuthCredentialsProvider implements ZidOAuthCred
       validate: validateCredentials,
       loadFromAws: () => this.fallback.load(),
     })
+  }
+}
+
+// Reuses the exact same env-first/AWS-Secrets-Manager-fallback credential load every OAuth
+// consumer already goes through -- the webhook route just needs the one pair out of it, returning
+// null (not throwing) when not configured yet, matching Salla's resolveSallaWebhookCredentials
+// convention.
+export async function resolveZidWebhookCredentials(): Promise<{
+  username: string
+  password: string
+} | null> {
+  try {
+    const credentials = await new EnvironmentFirstZidOAuthCredentialsProvider().load()
+    return credentials.webhookUsername && credentials.webhookPassword
+      ? { username: credentials.webhookUsername, password: credentials.webhookPassword }
+      : null
+  } catch (error) {
+    console.error("zid.webhook_credentials_load_failed", error)
+    return null
   }
 }

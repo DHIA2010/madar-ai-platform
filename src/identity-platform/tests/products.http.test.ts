@@ -372,6 +372,53 @@ describe("GET /v1/products: real cross-connector product aggregation", () => {
     expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
   })
 
+  it("shows a promoted/linked Zid product only once, as the native Madar row", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "products-zid-promoted@madar.test",
+      "Products Zid Promoted Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001540"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      label: "Products Zid Promoted",
+    })
+    const zidConnectionId = await insertConnectedCommerceConnection({
+      provider: "zid",
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertProductRecord({
+      provider: "zid",
+      connectionId: zidConnectionId,
+      entityId: "555",
+      payload: { name: { en: "Sony A7S III" }, sku: "Z.1" },
+      updatedAt: "2026-08-10T00:00:00Z",
+    })
+
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, workspace_id, product_type, name, sku, sell_price, stock_quantity)
+       values ($1, $2, $3, 'simple', 'Sony A7S III', 'Z.1', 10000, 1)`,
+      [productId, actor.organizationId, workspaceId]
+    )
+    await database.query(
+      `insert into zid_product_links (id, organization_id, product_id, zid_product_id, created_at, updated_at)
+       values ($1, $2, $3, '555', now(), now())`,
+      [randomUUID(), actor.organizationId, productId]
+    )
+
+    const response = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(login) })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { items: Array<{ id: string; platform: string }> }
+
+    const matching = body.items.filter((item) => item.id === productId || item.id === "zid:555")
+    expect(matching).toHaveLength(1)
+    expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
+  })
+
   it("excludes products from disconnected connections and other organizations", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "products-scoped@madar.test",

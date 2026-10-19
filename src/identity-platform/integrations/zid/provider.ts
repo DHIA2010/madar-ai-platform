@@ -1,6 +1,10 @@
 import type { IncomingMessage } from "node:http"
 
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
+import { ProductCatalogRepository } from "../../products/catalog-repository"
+import { ProductCatalogService } from "../../products/catalog-service"
+import { ZidProductLinksService } from "../../products/zid-product-links-service"
+import { ZidProductPromotionService } from "../../products/zid-product-promotion-service"
 import {
   ZidMarketplaceAutoProvisionService,
   type ZidAutoProvisionDeps,
@@ -11,6 +15,7 @@ import { ZidOAuthService } from "../../zid-oauth/service"
 import { ZidSyncRepository } from "../../zid-oauth/sync-repository"
 import { ZidSyncService } from "../../zid-oauth/sync-service"
 import type { ZidOAuthConnectionView } from "../../zid-oauth/types"
+import { TaxRatesService } from "../../tax/tax-rates-service"
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 
 import { IntegrationProviderError } from "../provider-error"
@@ -53,10 +58,19 @@ export class ZidIntegrationProvider {
         )
       }
       this.controller = new ZidOAuthController(this.service, this.autoProvisionService)
+      const promotionService = new ZidProductPromotionService(
+        new ProductCatalogService(
+          new ProductCatalogRepository(database),
+          new TaxRatesService(database)
+        ),
+        new ZidProductLinksService(database, this.repository)
+      )
       this.syncService = new ZidSyncService(
         this.repository,
         new ZidSyncRepository(database),
-        this.service
+        this.service,
+        undefined,
+        promotionService
       )
     }
   }

@@ -4,7 +4,9 @@ import type {
   IntegrationProviderSyncInput,
 } from "../integrations/provider-contracts"
 import { IntegrationProviderError } from "../integrations/provider-error"
+import type { ZidProductPromotionService } from "../products/zid-product-promotion-service"
 
+import { toRecordDate } from "./record-date"
 import type { ZidOAuthRepository } from "./repository"
 import type { ZidOAuthService } from "./service"
 import { ZidSyncRepository, type ZidSyncRecordInput } from "./sync-repository"
@@ -43,17 +45,6 @@ function assertActorCanManageIntegrations(actor: AuthenticatedActor) {
   if (!actor.roles.includes("owner") && !actor.roles.includes("admin")) {
     throw new IntegrationProviderError("Forbidden.", "ZID_SYNC_FORBIDDEN", false, 403)
   }
-}
-
-function toRecordDate(candidates: Array<string | undefined>): string {
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    const parsed = new Date(candidate)
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10)
-    }
-  }
-  return new Date().toISOString().slice(0, 10)
 }
 
 // Confirmed against Zid's official docs (docs.zid.sa/retrieve-a-list-of-products): the
@@ -179,7 +170,11 @@ export class ZidSyncService {
     private readonly oauthRepository: ZidOAuthRepository,
     private readonly syncRepository: ZidSyncRepository,
     private readonly oauthService: ZidOAuthService,
-    config?: { apiBaseUrl?: string }
+    config?: { apiBaseUrl?: string },
+    // Optional -- when null (memory-mode/no infra, or an existing caller that hasn't been
+    // updated), sync() behaves exactly as it always has: zid_records gets written, no native
+    // product is ever created/updated from it.
+    private readonly promotionService: ZidProductPromotionService | null = null
   ) {
     this.apiBaseUrl = config?.apiBaseUrl ?? process.env.ZID_API_BASE_URL ?? DEFAULT_ZID_API_BASE_URL
   }
@@ -312,6 +307,19 @@ export class ZidSyncService {
         customerId: input.customerId,
         records,
       })
+
+      // Auto-promotes every synced product into a real, stock-trackable native product (create
+      // once, update thereafter -- see ZidProductPromotionService). Best-effort per product: one
+      // bad payload must never fail the whole sync run.
+      if (this.promotionService) {
+        for (const product of products) {
+          await this.promotionService
+            .promoteOrSync(connection.organizationId, connection.workspaceId, product)
+            .catch((error: unknown) => {
+              console.error("zid.product_promotion_failed", { id: product.id, error })
+            })
+        }
+      }
 
       const metrics = {
         products: products.length,

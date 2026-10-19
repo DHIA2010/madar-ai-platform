@@ -204,6 +204,23 @@ export interface UpsertSallaProductLinkInput {
   sallaProductName: string | null
 }
 
+export interface LinkableZidProduct {
+  zidProductId: string
+  name: string
+  sku: string
+}
+
+export interface ZidProductLink {
+  zidProductId: string
+}
+
+export interface UpsertZidProductLinkInput {
+  variantId?: string | null
+  zidProductId: string
+  zidProductSku: string | null
+  zidProductName: string | null
+}
+
 export const productListService = {
   async listProducts(): Promise<ProductRecord[]> {
     const response = await client.get<{ items: ProductRecord[] }>(PRODUCTS_ENDPOINT)
@@ -308,6 +325,40 @@ export const productListService = {
   async pushProductToSalla(productId: string): Promise<{ sallaProductId: string }> {
     return client.post<Record<string, never>, { sallaProductId: string }>(
       [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "push-to-salla"].join(PATH_SEPARATOR),
+      {}
+    )
+  },
+
+  async listZidLinkableProducts(): Promise<LinkableZidProduct[]> {
+    const response = await client.get<{ products: LinkableZidProduct[] }>(
+      `${PRODUCTS_ENDPOINT}${String.fromCharCode(47)}zid-linkable`
+    )
+    return response.products
+  },
+
+  async getZidProductLink(productId: string): Promise<ZidProductLink | null> {
+    const response = await client.get<{ link: ZidProductLink | null }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "zid-link"].join(PATH_SEPARATOR)
+    )
+    return response.link
+  },
+
+  async upsertZidProductLink(productId: string, input: UpsertZidProductLinkInput): Promise<void> {
+    await client.put<UpsertZidProductLinkInput, { linked: boolean }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "zid-link"].join(PATH_SEPARATOR),
+      input
+    )
+  },
+
+  async removeZidProductLink(productId: string): Promise<void> {
+    await client.delete<{ linked: boolean }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "zid-link"].join(PATH_SEPARATOR)
+    )
+  },
+
+  async pushProductToZid(productId: string): Promise<{ zidProductId: string }> {
+    return client.post<Record<string, never>, { zidProductId: string }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "push-to-zid"].join(PATH_SEPARATOR),
       {}
     )
   },

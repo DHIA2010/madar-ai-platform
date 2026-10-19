@@ -237,6 +237,15 @@ export const upsertSallaProductLinkSchema = z.object({
   sallaProductName: z.string().nullable().optional().default(null),
 })
 
+// Links a native Madar product (or one specific variant of it) to a Zid product -- see
+// ZidProductLinksService.upsertLink.
+export const upsertZidProductLinkSchema = z.object({
+  variantId: z.string().uuid().nullable().optional().default(null),
+  zidProductId: z.string().min(1),
+  zidProductSku: z.string().nullable().optional().default(null),
+  zidProductName: z.string().nullable().optional().default(null),
+})
+
 // Bank-transfer receipts are frequently scanned PDFs, not just images -- unlike every other
 // upload schema above (logo/avatar/product image), which is image-only.
 export const requestApplicationActivationSchema = z.object({

@@ -200,7 +200,7 @@ export class ProductsAggregationService {
   constructor(private readonly db: PostgresDatabase) {}
 
   async listProducts(actor: AuthenticatedActor): Promise<NormalizedProduct[]> {
-    const [salla, shopify, zid, promotedSallaIds] = await Promise.all([
+    const [salla, shopify, zid, promotedSallaIds, promotedZidIds] = await Promise.all([
       this.fetchProvider({
         recordsTable: "salla_records",
         connectionsTable: "salla_oauth_connections",
@@ -219,27 +219,34 @@ export class ProductsAggregationService {
         actor,
         normalize: normalizeZidProduct,
       }),
-      this.fetchPromotedSallaProductIds(actor.organizationId),
+      this.fetchPromotedProductIds("salla_product_links", "salla_product_id", actor.organizationId),
+      this.fetchPromotedProductIds("zid_product_links", "zid_product_id", actor.organizationId),
     ])
 
-    // A Salla product that's been auto-promoted/linked to a native product (see
-    // SallaProductPromotionService) already appears as that native row -- excluded here so it
-    // doesn't also show up as its own, now-stale, read-only synced display row too.
+    // A product that's been auto-promoted/linked to a native product (see
+    // SallaProductPromotionService/ZidProductPromotionService) already appears as that native
+    // row -- excluded here so it doesn't also show up as its own, now-stale, read-only synced
+    // display row too.
     const dedupedSalla = salla.filter(
       (product) => !promotedSallaIds.has(product.id.slice("salla:".length))
     )
+    const dedupedZid = zid.filter((product) => !promotedZidIds.has(product.id.slice("zid:".length)))
 
-    return [...dedupedSalla, ...shopify, ...zid].sort((a, b) =>
+    return [...dedupedSalla, ...shopify, ...dedupedZid].sort((a, b) =>
       b.activityDate.localeCompare(a.activityDate)
     )
   }
 
-  private async fetchPromotedSallaProductIds(organizationId: string): Promise<Set<string>> {
-    const result = await this.db.query<{ salla_product_id: string }>(
-      `SELECT salla_product_id FROM salla_product_links WHERE organization_id = $1`,
+  private async fetchPromotedProductIds(
+    table: "salla_product_links" | "zid_product_links",
+    column: "salla_product_id" | "zid_product_id",
+    organizationId: string
+  ): Promise<Set<string>> {
+    const result = await this.db.query<Record<string, string>>(
+      `SELECT ${column} FROM ${table} WHERE organization_id = $1`,
       [organizationId]
     )
-    return new Set(result.rows.map((row) => row.salla_product_id))
+    return new Set(result.rows.map((row) => row[column]))
   }
 
   private async fetchProvider(input: {

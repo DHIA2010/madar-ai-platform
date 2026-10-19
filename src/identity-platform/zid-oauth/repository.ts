@@ -495,6 +495,43 @@ export class ZidOAuthRepository
     return result.rows[0] ? String(result.rows[0].organization_id) : null
   }
 
+  // Webhook counterpart to findOrganizationIdByStoreId -- that one only returns organization_id,
+  // enough for the tracking-snippet resolver; a webhook handler also needs connectionId and the
+  // connection's selected store's customerId (zid_stores.account_id), plus workspaceId for the
+  // native-product-promotion path. Mirrors Salla's own findWebhookTargetByStoreId exactly
+  // (salla-oauth/repository.ts) -- including workspace_id, missing from Salla's first version and
+  // added only once the promotion path needed it.
+  async findWebhookTargetByStoreId(storeId: string): Promise<{
+    connectionId: string
+    organizationId: string
+    workspaceId: string | null
+    customerId: string
+  } | null> {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "zid-oauth-connection-find-webhook-target",
+      text: `
+        SELECT c.id AS connection_id, c.organization_id, c.workspace_id, s.account_id AS customer_id
+        FROM zid_oauth_connections c
+        JOIN zid_stores s ON s.connection_id = c.id AND s.is_selected = true AND s.status = 'active'
+        WHERE (c.store_uuid = $1 OR c.provider_account_id = $1)
+          AND c.status = 'connected'
+          AND c.deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [storeId],
+    })
+
+    const row = result.rows[0]
+    if (!row) return null
+
+    return {
+      connectionId: String(row.connection_id),
+      organizationId: String(row.organization_id),
+      workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+      customerId: String(row.customer_id),
+    }
+  }
+
   async findConnectionById(connectionId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "zid-oauth-connection-find",
@@ -546,6 +583,42 @@ export class ZidOAuthRepository
     })
 
     return result.rows[0] ? mapConnection(result.rows[0]) : null
+  }
+
+  // Scoped by org/workspace rather than by project (unlike findConnectionByProject above) --
+  // mirrors Salla's own findActiveConnection (salla-oauth/repository.ts) exactly: callers that
+  // just need "whichever connected Zid store this org/branch has" (the product-link picker, the
+  // stock-push service) don't track a project_id the way a locally-created order/invoice does.
+  // workspace_id IS NULL matches an org-wide connection the same way every other org/workspace
+  // filter in this codebase treats a null workspace scope as "applies everywhere".
+  async findActiveConnection(organizationId: string, workspaceId: string | null) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "zid-oauth-connection-find-active",
+      text: `
+        SELECT *
+        FROM zid_oauth_connections
+        WHERE organization_id = $1
+          AND status = 'connected'
+          AND deleted_at IS NULL
+          AND ($2::uuid IS NULL OR workspace_id = $2::uuid OR workspace_id IS NULL)
+        ORDER BY last_connected_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      values: [organizationId, workspaceId],
+    })
+
+    return result.rows[0] ? mapConnection(result.rows[0]) : null
+  }
+
+  // The "store-id" header value every Products-API call needs (access-token/store-id/role
+  // scheme) -- a connection can have more than one accessible store, but only the currently
+  // selected one is the merchant's active storefront.
+  async findSelectedStoreAccountId(connectionId: string): Promise<string | null> {
+    const result = await this.db.query<{ account_id: string }>(
+      `SELECT account_id FROM zid_stores WHERE connection_id = $1 AND is_selected = true AND status = 'active' LIMIT 1`,
+      [connectionId]
+    )
+    return result.rows[0] ? String(result.rows[0].account_id) : null
   }
 
   async saveEvent(connectionId: string, eventType: string, metadata: Record<string, unknown>) {

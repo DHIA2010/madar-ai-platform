@@ -1766,6 +1766,12 @@
         "failed": "Couldn't list this product on Salla",
         "needsImage": "Add at least one image before listing this product on Salla."
       },
+      "pushToZid": {
+        "button": "List on my Zid store",
+        "pushing": "Listing on Zid...",
+        "success": "Listed on your Zid store",
+        "failed": "Couldn't list this product on Zid"
+      },
       "loadingProduct": "Loading product data...",
       "typeLocked": "A saved product's type can't be changed — create a new product with the type you need",
       "basicInfo": {
@@ -1796,7 +1802,14 @@
         "sallaLinkEmptyNone": "No synced Salla products with a SKU yet",
         "sallaLinkEmptyNoMatch": "No matching product",
         "sallaLinkAriaLabel": "Linked Salla product",
-        "sallaLinkHint": "Selling this product through Madar will update this Salla product's stock too"
+        "sallaLinkHint": "Selling this product through Madar will update this Salla product's stock too",
+        "zidLinkLabel": "Linked Zid product",
+        "zidLinkPlaceholder": "Choose a Zid product to sync stock with",
+        "zidLinkSearchPlaceholder": "Search Zid products...",
+        "zidLinkEmptyNone": "No synced Zid products with a SKU yet",
+        "zidLinkEmptyNoMatch": "No matching product",
+        "zidLinkAriaLabel": "Linked Zid product",
+        "zidLinkHint": "Selling this product through Madar will update this Zid product's stock too"
       },
       "packaging": {
         "linkedProductLabel": "Linked product (by piece)",

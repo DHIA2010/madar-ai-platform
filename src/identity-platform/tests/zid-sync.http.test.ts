@@ -390,6 +390,22 @@ describe("zid data sync: real products/orders/customers pipeline", () => {
     const recordsBody = (await recordsResponse.json()) as { items: Array<{ entityId: string }> }
     expect(recordsBody.items).toHaveLength(1)
     expect(recordsBody.items[0]?.entityId).toBe("6001")
+
+    // Confirms the real DI wiring (ZidIntegrationProvider -> ZidProductPromotionService), not
+    // just the service in isolation: every synced product auto-promotes into a real native
+    // product row, self-linked to its own Zid id.
+    const nativeProductRows = await database.query<{ name: string }>(
+      `select name from products where organization_id = $1`,
+      [actor.organizationId]
+    )
+    expect(nativeProductRows.rows).toHaveLength(17)
+    const linkRows = await database.query<{ zid_product_id: string }>(
+      `select zid_product_id from zid_product_links where organization_id = $1`,
+      [actor.organizationId]
+    )
+    expect(linkRows.rows.map((r) => r.zid_product_id).sort()).toEqual(
+      products.map((p) => String(p.id)).sort()
+    )
   })
 
   it("is idempotent: re-running sync with the same idempotencyKey does not re-fetch from Zid", async () => {

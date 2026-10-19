@@ -30,6 +30,10 @@ import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-de
 import { ZidMarketplaceAutoProvisionService } from "../../zid-oauth/auto-provision-service"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
+import { ZidSyncRepository } from "../../zid-oauth/sync-repository"
+import { ZidWebhookService, type ZidWebhookPayload } from "../../zid-oauth/webhook-service"
+import { verifyZidWebhookBasicAuth } from "../../zid-oauth/webhook-verification"
+import { resolveZidWebhookCredentials } from "../../zid-oauth/zid-credentials"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
 import { TikTokAdsOAuthRepository } from "../../tiktok-ads-oauth/repository"
 import { PosDevicesService } from "../../pos/devices-service"
@@ -42,6 +46,9 @@ import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
 import { SallaProductCreatePushService } from "../../products/salla-product-create-push-service"
+import { ZidProductCreatePushService } from "../../products/zid-product-create-push-service"
+import { ZidProductLinksService } from "../../products/zid-product-links-service"
+import { ZidProductPromotionService } from "../../products/zid-product-promotion-service"
 import { SallaProductLinksService } from "../../products/salla-product-links-service"
 import { SallaProductPromotionService } from "../../products/salla-product-promotion-service"
 import { SallaStockPushService } from "../../products/salla-stock-push-service"
@@ -190,6 +197,7 @@ import {
   uploadOrganizationLogoSchema,
   uploadProductImageSchema,
   upsertSallaProductLinkSchema,
+  upsertZidProductLinkSchema,
   changePasswordSchema,
   verifyEmailSchema,
   requestApplicationActivationSchema,
@@ -682,6 +690,12 @@ export function createIdentityApiServer(
         new SallaOAuthRepository(container.infrastructure.database)
       )
     : null
+  const zidProductLinksService = container.infrastructure.database
+    ? new ZidProductLinksService(
+        container.infrastructure.database,
+        new ZidOAuthRepository(container.infrastructure.database)
+      )
+    : null
   const sallaStockPushService =
     container.infrastructure.database && sallaProductLinksService
       ? new SallaStockPushService(
@@ -694,6 +708,11 @@ export function createIdentityApiServer(
   const sallaProductCreatePushService = container.infrastructure.database
     ? new SallaProductCreatePushService(
         new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database))
+      )
+    : null
+  const zidProductCreatePushService = container.infrastructure.database
+    ? new ZidProductCreatePushService(
+        new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
       )
     : null
   const posInvoicesService =
@@ -849,6 +868,21 @@ export function createIdentityApiServer(
         ),
         undefined,
         sallaProductPromotionService
+      )
+    : null
+  const zidProductPromotionService =
+    container.infrastructure.database && productCatalogService && zidProductLinksService
+      ? new ZidProductPromotionService(productCatalogService, zidProductLinksService)
+      : null
+  const zidWebhookService = container.infrastructure.database
+    ? new ZidWebhookService(
+        zidOAuthRepositoryForTracking ?? new ZidOAuthRepository(container.infrastructure.database),
+        new ZidSyncRepository(container.infrastructure.database),
+        new ZidOAuthService(
+          zidOAuthRepositoryForTracking ?? new ZidOAuthRepository(container.infrastructure.database)
+        ),
+        undefined,
+        zidProductPromotionService
       )
     : null
   const orderAttributionService = container.infrastructure.database
@@ -1087,6 +1121,48 @@ export function createIdentityApiServer(
         }
 
         await sallaWebhookService.handleWebhookEvent(payload)
+        return send(200, { received: true })
+      }
+
+      if (method === "POST" && url.pathname === "/v1/integrations/zid/webhook") {
+        if (!zidWebhookService) {
+          return send(503, {
+            code: "ZID_WEBHOOK_UNAVAILABLE",
+            message: "Zid webhooks are unavailable in memory mode.",
+          })
+        }
+
+        const credentials = await resolveZidWebhookCredentials()
+        if (!credentials) {
+          return send(503, {
+            code: "ZID_WEBHOOK_UNAVAILABLE",
+            message: "Zid webhook verification is not configured.",
+          })
+        }
+
+        // Unlike Salla's HMAC-over-raw-body scheme, Zid's delivery auth (Basic, over a fixed
+        // header) doesn't need the raw bytes -- readJsonBody is fine here.
+        if (
+          !verifyZidWebhookBasicAuth(
+            request.headers.authorization,
+            credentials.username,
+            credentials.password
+          )
+        ) {
+          return send(401, {
+            code: "ZID_WEBHOOK_INVALID_AUTH",
+            message: "Invalid webhook credentials.",
+          })
+        }
+
+        let payload: ZidWebhookPayload
+        try {
+          payload = (await readJsonBody(request)) as ZidWebhookPayload
+        } catch {
+          return send(400, { code: "ZID_WEBHOOK_INVALID_BODY", message: "Invalid JSON body." })
+        }
+
+        await zidWebhookService.handleWebhookEvent(payload)
         return send(200, { received: true })
       }
 
@@ -4409,6 +4485,134 @@ export function createIdentityApiServer(
           actor.userId
         )
         return send(200, { sallaProductId: result.sallaProductId })
+      }
+
+      if (method === "GET" && url.pathname === "/v1/products/zid-linkable") {
+        if (!zidProductLinksService) {
+          return send(503, {
+            code: "ZID_PRODUCT_LINKS_UNAVAILABLE",
+            message: "Zid product linking is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+
+        const search = url.searchParams.get("search")?.trim() || null
+        const products = await zidProductLinksService.listLinkableZidProducts(
+          actor.organizationId,
+          actor.workspaceId,
+          search
+        )
+        return send(200, { products })
+      }
+
+      const zidProductLinkMatch = url.pathname.match(/^\/v1\/products\/([^/]+)\/zid-link$/)
+      if (zidProductLinkMatch) {
+        if (!zidProductLinksService) {
+          return send(503, {
+            code: "ZID_PRODUCT_LINKS_UNAVAILABLE",
+            message: "Zid product linking is unavailable in memory mode.",
+          })
+        }
+        const productId = zidProductLinkMatch[1]
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+          const link = await zidProductLinksService.findLinkForLine(actor.organizationId, {
+            productId,
+          })
+          return send(200, { link })
+        }
+
+        if (
+          !actor.modulePermissions.includes("products:create") &&
+          !actor.modulePermissions.includes("products:edit")
+        ) {
+          throw ERRORS.forbidden()
+        }
+
+        if (method === "PUT") {
+          const payload = upsertZidProductLinkSchema.parse(await readJsonBody(request))
+          await zidProductLinksService.upsertLink(
+            actor.organizationId,
+            {
+              productId,
+              variantId: payload.variantId,
+              zidProductId: payload.zidProductId,
+              zidProductSku: payload.zidProductSku,
+              zidProductName: payload.zidProductName,
+            },
+            actor.userId
+          )
+          return send(200, { linked: true })
+        }
+
+        if (method === "DELETE") {
+          const variantId = url.searchParams.get("variantId")
+          await zidProductLinksService.removeLink(actor.organizationId, {
+            productId,
+            variantId: variantId || null,
+          })
+          return send(200, { linked: false })
+        }
+      }
+
+      // Madar-first merchant: pushes a native product that has no existing Zid link to Zid as a
+      // brand-new product (POST /products/, confirmed real endpoint) -- the reverse of the
+      // manual-link picker above, which only ever links to a Zid product that already exists.
+      const pushToZidMatch = url.pathname.match(/^\/v1\/products\/([^/]+)\/push-to-zid$/)
+      if (method === "POST" && pushToZidMatch) {
+        if (!productCatalogService || !zidProductLinksService || !zidProductCreatePushService) {
+          return send(503, {
+            code: "ZID_PRODUCT_PUSH_UNAVAILABLE",
+            message: "Pushing products to Zid is unavailable in memory mode.",
+          })
+        }
+        if (
+          !actor.modulePermissions.includes("products:create") &&
+          !actor.modulePermissions.includes("products:edit")
+        ) {
+          throw ERRORS.forbidden()
+        }
+        const productId = pushToZidMatch[1]
+
+        const product = await productCatalogService.getById(actor.organizationId, productId)
+
+        const zidRepositoryForPush = new ZidOAuthRepository(container.infrastructure.database!)
+        const connection = await zidRepositoryForPush.findActiveConnection(
+          actor.organizationId,
+          actor.workspaceId
+        )
+        if (!connection) {
+          return send(409, {
+            code: "ZID_NO_ACTIVE_CONNECTION",
+            message: "No connected Zid store was found to push this product to.",
+          })
+        }
+        const storeId = await zidRepositoryForPush.findSelectedStoreAccountId(connection.id)
+        if (!storeId) {
+          return send(409, {
+            code: "ZID_NO_ACTIVE_CONNECTION",
+            message: "No connected Zid store was found to push this product to.",
+          })
+        }
+
+        const result = await zidProductCreatePushService.pushProduct(
+          connection.id,
+          storeId,
+          product
+        )
+        await zidProductLinksService.upsertLink(
+          actor.organizationId,
+          {
+            productId,
+            variantId: null,
+            zidProductId: result.zidProductId,
+            zidProductSku: product.sku,
+            zidProductName: product.name,
+          },
+          actor.userId
+        )
+        return send(200, { zidProductId: result.zidProductId })
       }
 
       const nativeProductMatch = url.pathname.match(/^\/v1\/products\/([^/]+)$/)

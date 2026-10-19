@@ -13,6 +13,7 @@ import type {
 } from "./types"
 import {
   EnvironmentFirstZidOAuthCredentialsProvider,
+  resolveZidWebhookCredentials,
   type ZidOAuthCredentialsProvider,
 } from "./zid-credentials"
 
@@ -365,6 +366,64 @@ async function exchangeAuthorizationCode(input: {
   )
 
   return body
+}
+
+// Zid's webhook subscription model is per-event, created via one API call per event
+// (POST /managers/webhooks, confirmed real shape: docs.zid.sa/create-a-webhook) -- unlike Salla's
+// single Partner-Portal URL field, this can (and should) be fully automated here, right after a
+// connection finishes, with no manual merchant/partner-dashboard step. Only the events
+// webhook-service.ts actually maps are registered (product.create/update/publish) -- registering
+// an event our own webhook route would just no-op for costs a real API call for nothing.
+// Best-effort: called from completeAuthorization inside a .catch(), a registration failure must
+// never fail the connection itself.
+const ZID_WEBHOOK_EVENTS = ["product.create", "product.update", "product.publish"] as const
+
+async function registerZidWebhooks(input: {
+  config: ZidOAuthServiceConfig
+  accessToken: string
+  authorizationHeader: string
+}): Promise<void> {
+  const targetUrl =
+    process.env.ZID_WEBHOOK_TARGET_URL ?? "http://localhost:4000/v1/integrations/zid/webhook"
+  const credentials = await resolveZidWebhookCredentials()
+  if (!credentials) {
+    console.error("zid.webhook_registration_skipped_not_configured")
+    return
+  }
+
+  for (const event of ZID_WEBHOOK_EVENTS) {
+    try {
+      const response = await fetch(
+        `${input.config.apiBaseUrl.replace(/\/$/, "")}/managers/webhooks`,
+        {
+          method: "POST",
+          headers: {
+            authorization: input.authorizationHeader,
+            "x-manager-token": input.accessToken,
+            "content-type": "application/json",
+            accept: "application/json",
+          },
+          body: JSON.stringify({
+            event,
+            target_url: targetUrl,
+            original_id: "madar-platform",
+            username: credentials.username,
+            password: credentials.password,
+          }),
+        }
+      )
+      if (!response.ok) {
+        const bodyText = await response.text().catch(() => "")
+        console.error("zid.webhook_registration_failed", {
+          event,
+          status: response.status,
+          body: bodyText.slice(0, 500),
+        })
+      }
+    } catch (error) {
+      console.error("zid.webhook_registration_failed", { event, error })
+    }
+  }
 }
 
 async function refreshAccessToken(input: {
@@ -721,6 +780,18 @@ export class ZidOAuthService {
         },
         "integration.zid_oauth.connected"
       )
+    })
+
+    // Best-effort, after the connection is safely committed -- a registration failure must never
+    // fail the connection itself (same convention as every other secondary side-effect in this
+    // session's work). Fire-and-forget: this is a one-time setup step, not on the hot path of any
+    // user-facing request, so it isn't awaited past its own errors.
+    registerZidWebhooks({
+      config,
+      accessToken: token.access_token,
+      authorizationHeader: buildAuthorizationHeader(token),
+    }).catch((error: unknown) => {
+      console.error("zid.webhook_registration_failed", error)
     })
 
     return {

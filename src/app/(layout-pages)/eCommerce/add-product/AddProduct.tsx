@@ -46,6 +46,7 @@ import {
   productListService,
   type CreateProductInput,
   type LinkableSallaProduct,
+  type LinkableZidProduct,
   type ProductDetail,
   type ProductRecord,
 } from "@/features/products/services/product-list.service"
@@ -418,6 +419,26 @@ export default function AddProduct() {
     }
   }, [])
 
+  // Same as the Salla link above, but for a Zid-connected store -- the two are independent (a
+  // product can be linked to a Salla product, a Zid product, both, or neither at once), since
+  // salla_product_links/zid_product_links are separate tables.
+  const [zidLinkableProducts, setZidLinkableProducts] = useState<LinkableZidProduct[]>([])
+  const [zidProductLinkId, setZidProductLinkId] = useState("")
+  const [pushingToZid, setPushingToZid] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    productListService
+      .listZidLinkableProducts()
+      .then((products) => {
+        if (!cancelled) setZidLinkableProducts(products)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // Every ProductTypeKey has an entry, so the fallback is unreachable -- it exists only to keep
   // the type non-optional. It is written as the first entry rather than a positional index, so
   // reordering PRODUCT_TYPES cannot quietly change which type a lookup miss lands on.
@@ -622,6 +643,20 @@ export default function AddProduct() {
     }
   }, [editingId])
 
+  useEffect(() => {
+    if (!editingId) return
+    let cancelled = false
+    productListService
+      .getZidProductLink(editingId)
+      .then((link) => {
+        if (!cancelled) setZidProductLinkId(link?.zidProductId ?? "")
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [editingId])
+
   const knownCategories = useMemo(
     () => [...new Set(catalogue.map((product) => product.category).filter(Boolean))].sort(),
     [catalogue]
@@ -736,6 +771,19 @@ export default function AddProduct() {
   )
   const selectedSallaLinkableProduct =
     sallaLinkableProducts.find((product) => product.sallaProductId === sallaProductLinkId) ?? null
+
+  const zidLinkableProductOptions = useMemo<AppSearchableSelectOption[]>(
+    () =>
+      zidLinkableProducts.map((product) => ({
+        value: product.zidProductId,
+        label: product.name,
+        hint: product.sku,
+        keywords: product.sku,
+      })),
+    [zidLinkableProducts]
+  )
+  const selectedZidLinkableProduct =
+    zidLinkableProducts.find((product) => product.zidProductId === zidProductLinkId) ?? null
 
   const componentOptions = useMemo<AppSearchableSelectOption[]>(
     () =>
@@ -1122,6 +1170,26 @@ export default function AddProduct() {
     }
   }
 
+  // Unlike Salla, Zid's create-product call doesn't require an image upfront (confirmed live
+  // against the sandbox store this session) -- no equivalent needsImage check here.
+  const handlePushToZid = async () => {
+    if (!editingId) return
+    setPushingToZid(true)
+    try {
+      const result = await productListService.pushProductToZid(editingId)
+      setZidProductLinkId(result.zidProductId)
+      toast.success(tForm("pushToZid.success"))
+    } catch (error) {
+      const status = error instanceof AppError ? error.status : undefined
+      toast.error(tForm("pushToZid.failed"), {
+        description:
+          status === 409 ? undefined : error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setPushingToZid(false)
+    }
+  }
+
   // The server validates the same rules again and answers with a field map, so its verdict is
   // shown against the fields rather than as one opaque failure.
   const applyServerErrors = (details: unknown): string[] => {
@@ -1186,6 +1254,19 @@ export default function AddProduct() {
             })
           } else if (isEditing) {
             await productListService.removeSallaProductLink(saved.id)
+          }
+        } catch {
+          // Never fails the save itself -- the product is already safely stored either way.
+        }
+        try {
+          if (zidProductLinkId) {
+            await productListService.upsertZidProductLink(saved.id, {
+              zidProductId: zidProductLinkId,
+              zidProductSku: selectedZidLinkableProduct?.sku ?? null,
+              zidProductName: selectedZidLinkableProduct?.name ?? null,
+            })
+          } else if (isEditing) {
+            await productListService.removeZidProductLink(saved.id)
           }
         } catch {
           // Never fails the save itself -- the product is already safely stored either way.
@@ -1304,6 +1385,22 @@ export default function AddProduct() {
                 <Send className="size-4" />
               )}
               {pushingToSalla ? tForm("pushToSalla.pushing") : tForm("pushToSalla.button")}
+            </Button>
+          ) : null}
+          {isEditing && STOCK_TRACKED_TYPES.includes(productType) && !zidProductLinkId ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={cn(sallaProductLinkId ? "" : "ms-auto")}
+              disabled={pushingToZid}
+              onClick={handlePushToZid}
+            >
+              {pushingToZid ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              {pushingToZid ? tForm("pushToZid.pushing") : tForm("pushToZid.button")}
             </Button>
           ) : null}
         </div>
@@ -1567,6 +1664,23 @@ export default function AddProduct() {
                     <p className={cn(HINT, MUTED)}>{tForm("stock.sallaLinkHint")}</p>
                   </Field>
 
+                  <Field label={tForm("stock.zidLinkLabel")}>
+                    <AppSearchableSelect
+                      value={zidProductLinkId}
+                      options={zidLinkableProductOptions}
+                      onChange={setZidProductLinkId}
+                      placeholder={tForm("stock.zidLinkPlaceholder")}
+                      searchPlaceholder={tForm("stock.zidLinkSearchPlaceholder")}
+                      emptyLabel={
+                        zidLinkableProductOptions.length === 0
+                          ? tForm("stock.zidLinkEmptyNone")
+                          : tForm("stock.zidLinkEmptyNoMatch")
+                      }
+                      ariaLabel={tForm("stock.zidLinkAriaLabel")}
+                    />
+                    <p className={cn(HINT, MUTED)}>{tForm("stock.zidLinkHint")}</p>
+                  </Field>
+
                   {/* Only asked for when the product is counted in pieces or cartons -- a carton's
                       size is a fact about this product, not about the unit itself. */}
                   {packagingApplies ? (
@@ -1735,6 +1849,23 @@ export default function AddProduct() {
                       ariaLabel={tForm("stock.sallaLinkAriaLabel")}
                     />
                     <p className={cn(HINT, MUTED)}>{tForm("stock.sallaLinkHint")}</p>
+                  </Field>
+
+                  <Field label={tForm("stock.zidLinkLabel")}>
+                    <AppSearchableSelect
+                      value={zidProductLinkId}
+                      options={zidLinkableProductOptions}
+                      onChange={setZidProductLinkId}
+                      placeholder={tForm("stock.zidLinkPlaceholder")}
+                      searchPlaceholder={tForm("stock.zidLinkSearchPlaceholder")}
+                      emptyLabel={
+                        zidLinkableProductOptions.length === 0
+                          ? tForm("stock.zidLinkEmptyNone")
+                          : tForm("stock.zidLinkEmptyNoMatch")
+                      }
+                      ariaLabel={tForm("stock.zidLinkAriaLabel")}
+                    />
+                    <p className={cn(HINT, MUTED)}>{tForm("stock.zidLinkHint")}</p>
                   </Field>
 
                   {/* Only asked for when the product is counted in pieces or cartons -- a carton's
@@ -1920,6 +2051,23 @@ export default function AddProduct() {
                         ariaLabel={tForm("stock.sallaLinkAriaLabel")}
                       />
                       <p className={cn(HINT, MUTED)}>{tForm("stock.sallaLinkHint")}</p>
+                    </Field>
+
+                    <Field label={tForm("stock.zidLinkLabel")}>
+                      <AppSearchableSelect
+                        value={zidProductLinkId}
+                        options={zidLinkableProductOptions}
+                        onChange={setZidProductLinkId}
+                        placeholder={tForm("stock.zidLinkPlaceholder")}
+                        searchPlaceholder={tForm("stock.zidLinkSearchPlaceholder")}
+                        emptyLabel={
+                          zidLinkableProductOptions.length === 0
+                            ? tForm("stock.zidLinkEmptyNone")
+                            : tForm("stock.zidLinkEmptyNoMatch")
+                        }
+                        ariaLabel={tForm("stock.zidLinkAriaLabel")}
+                      />
+                      <p className={cn(HINT, MUTED)}>{tForm("stock.zidLinkHint")}</p>
                     </Field>
 
                     {/* No carton packaging here: a weighted product is sold by the kilo, and its
