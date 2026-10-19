@@ -88,16 +88,33 @@ export class SallaWebhookService {
   }
 
   async handleWebhookEvent(payload: SallaWebhookPayload): Promise<void> {
+    // Every delivery is logged up front, mapped or not -- without this there is no way to tell
+    // "Salla never sent this event" apart from "Salla sent it and something downstream silently
+    // dropped it" (confirmed live: a product's name/SKU/cost/quantity change showed no server-side
+    // trace at all, and it was only by re-deriving the deploy timeline that the real cause -- the
+    // product.updated mapping not being live yet at test time -- was found, not from the logs).
+    console.log("salla.webhook_received", {
+      event: payload.event,
+      merchant: payload.merchant,
+      entityId: (payload.data as { id?: unknown })?.id,
+    })
+
     const entityType = SALLA_EVENT_TO_ENTITY_TYPE[payload.event]
     // Unhandled event type -- ack-but-no-op at the route level, same as Moyasar's non-payment_paid
     // event types. Not every event Salla can send is one this sync models.
-    if (!entityType) return
+    if (!entityType) {
+      console.log("salla.webhook_event_unmapped", { event: payload.event })
+      return
+    }
 
     const target = await this.oauthRepository.findWebhookTargetByStoreId(String(payload.merchant))
     // Unknown/disconnected store -- ack-but-no-op. Never a 4xx/5xx here: a store that disconnected
     // yesterday can still have in-flight deliveries, and this must never look like a failure to
     // Salla (which could trigger its own retry/backoff or auto-disable-on-repeated-failure).
-    if (!target) return
+    if (!target) {
+      console.log("salla.webhook_store_unknown", { merchant: payload.merchant })
+      return
+    }
 
     const entityId = String((payload.data as { id?: unknown })?.id ?? "")
     if (!entityId) return
@@ -156,5 +173,6 @@ export class SallaWebhookService {
         },
       ],
     })
+    console.log("salla.webhook_synced", { event: payload.event, entityType, entityId })
   }
 }
