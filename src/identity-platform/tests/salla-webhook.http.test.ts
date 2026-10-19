@@ -5,11 +5,12 @@ import { randomUUID } from "node:crypto"
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { SallaOAuthService } from "../salla-oauth/service"
 import { createIdentityApiServer } from "../interfaces/rest/server"
 
 let database: PostgresDatabase
@@ -19,6 +20,36 @@ let container: ReturnType<typeof createIdentityPlatform>
 
 const WEBHOOK_SECRET = "test-salla-webhook-secret"
 const STORE_ID = "998877"
+const SALLA_API_BASE_URL = "https://api.salla.dev/admin/v2"
+
+// handleWebhookEvent() no longer trusts a webhook delivery's own payload.data beyond its `id` --
+// confirmed live against the real Salla sandbox, a webhook's payload uses incompatible field
+// shapes compared to Salla's own REST API for the same entity (price/regular_price as bare
+// numbers vs GET /products/{id}'s {amount, currency} objects), so it re-fetches the canonical
+// record via Salla's REST API and stores that instead. Every test that expects a successful
+// write mocks both pieces this re-fetch needs: a resolved access token, and that REST GET call.
+function mockAccessToken(token: string) {
+  return vi.spyOn(SallaOAuthService.prototype, "resolveAccessToken").mockResolvedValue(token)
+}
+
+function mockSallaEntityFetch(entities: Record<string, Record<string, unknown>>) {
+  const nativeFetch = globalThis.fetch
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+    const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+    if (!url.startsWith(SALLA_API_BASE_URL)) {
+      return nativeFetch(rawInput, init)
+    }
+    const entityId = url.slice(SALLA_API_BASE_URL.length).split("/").filter(Boolean).pop() ?? ""
+    const data = entities[entityId]
+    if (!data) {
+      return new Response("{}", { status: 404 })
+    }
+    return new Response(JSON.stringify({ data }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  })
+}
 
 beforeEach(async () => {
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000"
@@ -48,6 +79,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.SALLA_WEBHOOK_SECRET
+  vi.restoreAllMocks()
   if (server) {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => {
@@ -128,14 +160,18 @@ function signedPost(path: string, bodyObject: unknown) {
 }
 
 describe("POST /v1/integrations/salla/webhook", () => {
-  it("verifies the signature, resolves the store, and upserts a salla_records row", async () => {
+  it("verifies the signature, resolves the store, and upserts a salla_records row re-fetched from Salla's API", async () => {
     const org = await seedOrganization()
     const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    mockAccessToken("test-access-token")
+    mockSallaEntityFetch({
+      555123: { id: 555123, status: { name: "Completed" }, updated_at: "2026-01-01 10:00:00" },
+    })
 
     const response = await signedPost("/v1/integrations/salla/webhook", {
       event: "order.updated",
       merchant: STORE_ID,
-      data: { id: 555123, status: { name: "Completed" }, updated_at: "2026-01-01 10:00:00" },
+      data: { id: 555123 },
     })
     expect(response.status).toBe(200)
 
@@ -196,11 +232,15 @@ describe("POST /v1/integrations/salla/webhook", () => {
   it("is idempotent against a duplicated/replayed delivery", async () => {
     const org = await seedOrganization()
     const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    mockAccessToken("test-access-token")
+    mockSallaEntityFetch({
+      777: { id: 777, price: { amount: 50, currency: "SAR" }, updated_at: "2026-01-01 10:00:00" },
+    })
 
     const payload = {
       event: "product.price.updated",
       merchant: STORE_ID,
-      data: { id: 777, price: 50, updated_at: "2026-01-01 10:00:00" },
+      data: { id: 777 },
     }
     const first = await signedPost("/v1/integrations/salla/webhook", payload)
     expect(first.status).toBe(200)
@@ -215,13 +255,25 @@ describe("POST /v1/integrations/salla/webhook", () => {
     expect(rows.rows[0]).toEqual({ entity_type: "products", entity_id: "777" })
   })
 
-  // Found live in production: product.price.updated's real payload carries only the fields that
-  // event actually changed (id/price/sku/tax/cost/...), never `name`. A full-replace upsert wiped
-  // the product's name (and every other previously-polled field) out entirely the moment a price
-  // changed. upsertPartialRecord's merge is what this guards against regressing.
-  it("merges a partial webhook payload into an existing full record instead of replacing it", async () => {
+  // Found live in production: a webhook event's own payload.data isn't just partial (missing
+  // fields a poll-sync's full fetch would have) -- fields it does include can use a different,
+  // incompatible shape. product.price.updated sent `price` as a bare number while GET
+  // /products/{id} (what poll-sync writes, and what the products list's read path expects) wraps
+  // it as {amount, currency}; storing the webhook's own payload (even merged over the existing
+  // row) corrupted price display to 0. Confirms the re-fetch fix: the webhook's own (shape-
+  // incompatible) data is never written -- only the freshly re-fetched, poll-shaped record is.
+  it("stores the re-fetched, poll-shaped record rather than the webhook delivery's own (differently-shaped) payload", async () => {
     const org = await seedOrganization()
     const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    mockAccessToken("test-access-token")
+    mockSallaEntityFetch({
+      1450419203: {
+        id: 1450419203,
+        name: "قميص قطن أزرق",
+        sku: "SKU-1001",
+        price: { amount: 65, currency: "SAR" },
+      },
+    })
 
     // Simulates what a full poll-sync would have already written for this product.
     await database.query(
@@ -230,10 +282,17 @@ describe("POST /v1/integrations/salla/webhook", () => {
       [
         randomUUID(),
         connectionId,
-        JSON.stringify({ id: 1450419203, name: "قميص قطن أزرق", sku: "SKU-1001", price: 80 }),
+        JSON.stringify({
+          id: 1450419203,
+          name: "قميص قطن أزرق",
+          sku: "SKU-1001",
+          price: { amount: 80, currency: "SAR" },
+        }),
       ]
     )
 
+    // A real delivery's own payload.data is shape-incompatible (a bare number, not
+    // {amount, currency}) -- this must never reach storage; only the re-fetched shape should.
     const response = await signedPost("/v1/integrations/salla/webhook", {
       event: "product.price.updated",
       merchant: STORE_ID,
@@ -241,12 +300,13 @@ describe("POST /v1/integrations/salla/webhook", () => {
     })
     expect(response.status).toBe(200)
 
-    const rows = await database.query<{ payload: { name?: string; price?: number; sku?: string } }>(
-      `select payload from salla_records where connection_id = $1 and entity_id = '1450419203'`,
-      [connectionId]
-    )
+    const rows = await database.query<{
+      payload: { name?: string; price?: { amount?: number; currency?: string }; sku?: string }
+    }>(`select payload from salla_records where connection_id = $1 and entity_id = '1450419203'`, [
+      connectionId,
+    ])
     expect(rows.rows).toHaveLength(1)
     expect(rows.rows[0].payload.name).toBe("قميص قطن أزرق")
-    expect(rows.rows[0].payload.price).toBe(65)
+    expect(rows.rows[0].payload.price).toEqual({ amount: 65, currency: "SAR" })
   })
 })

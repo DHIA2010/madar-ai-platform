@@ -1,6 +1,9 @@
 import { toRecordDate } from "./record-date"
 import type { SallaOAuthRepository } from "./repository"
+import type { SallaOAuthService } from "./service"
 import type { SallaSyncRepository } from "./sync-repository"
+
+const DEFAULT_SALLA_API_BASE_URL = "https://api.salla.dev/admin/v2"
 
 export interface SallaWebhookPayload {
   event: string
@@ -56,10 +59,17 @@ function recordDateFor(
 }
 
 export class SallaWebhookService {
+  private readonly apiBaseUrl: string
+
   constructor(
     private readonly oauthRepository: SallaOAuthRepository,
-    private readonly syncRepository: SallaSyncRepository
-  ) {}
+    private readonly syncRepository: SallaSyncRepository,
+    private readonly oauthService: SallaOAuthService,
+    config?: { apiBaseUrl?: string }
+  ) {
+    this.apiBaseUrl =
+      config?.apiBaseUrl ?? process.env.SALLA_API_BASE_URL ?? DEFAULT_SALLA_API_BASE_URL
+  }
 
   async handleWebhookEvent(payload: SallaWebhookPayload): Promise<void> {
     const entityType = SALLA_EVENT_TO_ENTITY_TYPE[payload.event]
@@ -76,23 +86,59 @@ export class SallaWebhookService {
     const entityId = String((payload.data as { id?: unknown })?.id ?? "")
     if (!entityId) return
 
-    // salla_records' own (connection_id, entity_type, entity_id) unique constraint is what makes
-    // this safe against a replayed/duplicate delivery -- no separate dedup table needed, same as
-    // upsertRecords already behaves for the poll-sync path.
-    //
-    // upsertPartialRecord, not upsertRecords: a webhook event's payload.data is only the fields
-    // that event actually changed (confirmed live -- product.price.updated carries no `name` at
-    // all), not a full entity snapshot the way a poll-sync's own fetch always is. upsertRecords'
-    // full-column replace would wipe out every field this event didn't mention.
-    await this.syncRepository.upsertPartialRecord({
-      connectionId: target.connectionId,
-      customerId: target.customerId,
-      record: {
+    // Confirmed live against the real Salla sandbox: a webhook event's own payload.data is not
+    // just partial (missing fields a poll-sync's full fetch would have) -- fields it DOES include
+    // can use a different, incompatible shape. product.price.updated sends `price`/`regular_price`
+    // as bare numbers and `sale_price` as {amount, expired_at}, while GET /products/{id} (what
+    // poll-sync writes) wraps all three as {amount, currency}. normalizeSallaProduct() (the
+    // products list's read path) expects the GET shape, so writing the webhook's own payload
+    // verbatim -- even merged over the existing row -- corrupted price display to 0. Rather than
+    // hand-reconcile every field Salla's webhooks happen to shape differently (and miss ones not
+    // yet discovered, across products/orders/customers), treat the webhook purely as "entity X on
+    // store Y changed" and re-fetch the canonical record the same way a poll run would, so a
+    // webhook-written row and a poll-written row for the same entity are always byte-for-byte the
+    // same shape.
+    let accessToken: string
+    try {
+      accessToken = await this.oauthService.resolveAccessToken(target.connectionId)
+    } catch (error) {
+      console.error("salla.webhook_access_token_failed", error)
+      return
+    }
+
+    const response = await fetch(
+      `${this.apiBaseUrl.replace(/\/$/, "")}/${entityType}/${entityId}`,
+      { headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" } }
+    )
+    if (!response.ok) {
+      // Most commonly a 404 (the entity was deleted between the event firing and this fetch) --
+      // nothing to store either way, and never treated as a failure Salla should retry/back off on.
+      console.error("salla.webhook_refetch_failed", {
         entityType,
         entityId,
-        recordDate: recordDateFor(entityType, payload.data),
-        payload: payload.data,
-      },
+        status: response.status,
+      })
+      return
+    }
+
+    const body = (await response.json()) as { data?: Record<string, unknown> }
+    if (!body.data) return
+
+    // salla_records' own (connection_id, entity_type, entity_id) unique constraint is what makes
+    // this safe against a replayed/duplicate delivery -- no separate dedup table needed, same as
+    // upsertRecords already behaves for the poll-sync path. A full-column replace is correct here
+    // (unlike the webhook's own partial payload) because body.data is always a complete snapshot.
+    await this.syncRepository.upsertRecords({
+      connectionId: target.connectionId,
+      customerId: target.customerId,
+      records: [
+        {
+          entityType,
+          entityId,
+          recordDate: recordDateFor(entityType, body.data),
+          payload: body.data,
+        },
+      ],
     })
   }
 }

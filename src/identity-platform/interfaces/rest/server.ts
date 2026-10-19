@@ -810,7 +810,11 @@ export function createIdentityApiServer(
     ? new SallaWebhookService(
         sallaOAuthRepositoryForTracking ??
           new SallaOAuthRepository(container.infrastructure.database),
-        new SallaSyncRepository(container.infrastructure.database)
+        new SallaSyncRepository(container.infrastructure.database),
+        new SallaOAuthService(
+          sallaOAuthRepositoryForTracking ??
+            new SallaOAuthRepository(container.infrastructure.database)
+        )
       )
     : null
   const orderAttributionService = container.infrastructure.database
