@@ -296,12 +296,13 @@ export class SallaOAuthRepository
   async findWebhookTargetByStoreId(storeId: string): Promise<{
     connectionId: string
     organizationId: string
+    workspaceId: string | null
     customerId: string
   } | null> {
     const result = await this.db.query<Record<string, unknown>>({
       name: "salla-oauth-connection-find-webhook-target",
       text: `
-        SELECT c.id AS connection_id, c.organization_id, s.account_id AS customer_id
+        SELECT c.id AS connection_id, c.organization_id, c.workspace_id, s.account_id AS customer_id
         FROM salla_oauth_connections c
         JOIN salla_stores s ON s.connection_id = c.id AND s.is_selected = true AND s.status = 'active'
         WHERE c.provider_account_id = $1
@@ -318,6 +319,7 @@ export class SallaOAuthRepository
     return {
       connectionId: String(row.connection_id),
       organizationId: String(row.organization_id),
+      workspaceId: row.workspace_id ? String(row.workspace_id) : null,
       customerId: String(row.customer_id),
     }
   }

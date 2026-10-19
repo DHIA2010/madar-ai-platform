@@ -5,6 +5,7 @@ import type {
 } from "../integrations/provider-contracts"
 import { IntegrationProviderError } from "../integrations/provider-error"
 
+import type { SallaProductPromotionService } from "../products/salla-product-promotion-service"
 import { toRecordDate } from "./record-date"
 import type { SallaOAuthRepository } from "./repository"
 import type { SallaOAuthService } from "./service"
@@ -112,7 +113,11 @@ export class SallaSyncService {
     private readonly oauthRepository: SallaOAuthRepository,
     private readonly syncRepository: SallaSyncRepository,
     private readonly oauthService: SallaOAuthService,
-    config?: { apiBaseUrl?: string }
+    config?: { apiBaseUrl?: string },
+    // Optional -- when null (memory-mode/no infra, or an existing caller that hasn't been
+    // updated), sync() behaves exactly as it always has: salla_records gets written, no native
+    // product is ever created/updated from it.
+    private readonly promotionService: SallaProductPromotionService | null = null
   ) {
     this.apiBaseUrl =
       config?.apiBaseUrl ?? process.env.SALLA_API_BASE_URL ?? DEFAULT_SALLA_API_BASE_URL
@@ -233,6 +238,19 @@ export class SallaSyncService {
         customerId: input.customerId,
         records,
       })
+
+      // Auto-promotes every synced product into a real, stock-trackable native product (create
+      // once, update thereafter -- see SallaProductPromotionService). Best-effort per product: one
+      // bad payload (a validation error, a SKU conflict) must never fail the whole sync run.
+      if (this.promotionService) {
+        for (const product of products) {
+          await this.promotionService
+            .promoteOrSync(connection.organizationId, connection.workspaceId, product)
+            .catch((error: unknown) => {
+              console.error("salla.product_promotion_failed", { id: product.id, error })
+            })
+        }
+      }
 
       const metrics = {
         products: products.length,

@@ -1,17 +1,18 @@
 // @vitest-environment node
 //
 // Covers the Salla product-link REST routes: GET /v1/products/salla-linkable,
-// PUT/DELETE /v1/products/:id/salla-link.
+// PUT/DELETE /v1/products/:id/salla-link, POST /v1/products/:id/push-to-salla.
 
 import { randomUUID } from "node:crypto"
 import type { AddressInfo } from "node:net"
 
 import { newDb } from "pg-mem"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations, runSqlFile } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
+import { SallaOAuthService } from "../salla-oauth/service"
 import { createIdentityApiServer } from "../interfaces/rest/server"
 
 let database: PostgresDatabase
@@ -42,6 +43,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   if (server) {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()))
@@ -208,5 +210,76 @@ describe("PUT/DELETE /v1/products/:id/salla-link", () => {
       body: JSON.stringify({ sallaProductId: "111" }),
     })
     expect(response.status).toBe(401)
+  })
+})
+
+describe("POST /v1/products/:id/push-to-salla", () => {
+  it("pushes a native product to Salla and records the returned id as a link", async () => {
+    const { token, actor } = await signIn("push-to-salla@madar.test", "Push To Salla Org")
+    await insertActiveSallaConnection(actor.organizationId, actor.workspaceId)
+
+    const productId = randomUUID()
+    await database.query(
+      `insert into products
+         (id, organization_id, workspace_id, product_type, name, sku, sell_price, stock_quantity, status, image_urls)
+       values ($1, $2, $3, 'simple', 'Test Product', 'SKU-1', 100, 10, 'active', '["https://cdn.example.com/a.jpg"]'::jsonb)`,
+      [productId, actor.organizationId, actor.workspaceId]
+    )
+
+    vi.spyOn(SallaOAuthService.prototype, "resolveAccessToken").mockResolvedValue(
+      "test-access-token"
+    )
+    const nativeFetch = globalThis.fetch
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      return new Response(JSON.stringify({ data: { id: 999888 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    })
+
+    const response = await fetch(`${baseUrl}/v1/products/${productId}/push-to-salla`, {
+      method: "POST",
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ sallaProductId: "999888" })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/products"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    const linkRow = await database.query(
+      `select salla_product_id from salla_product_links where product_id = $1`,
+      [productId]
+    )
+    expect(linkRow.rows).toEqual([{ salla_product_id: "999888" }])
+  })
+
+  it("rejects pushing a product with no images, before calling Salla at all", async () => {
+    const { token, actor } = await signIn("push-no-image@madar.test", "Push No Image Org")
+    await insertActiveSallaConnection(actor.organizationId, actor.workspaceId)
+
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, workspace_id, product_type, name, sku, sell_price, stock_quantity)
+       values ($1, $2, $3, 'simple', 'Test Product', 'SKU-2', 100, 10)`,
+      [productId, actor.organizationId, actor.workspaceId]
+    )
+
+    // Passes every call straight through to the real native fetch -- if the image check failed
+    // to block before issuing a call to Salla's own API, the assertion below (every recorded call
+    // stayed within baseUrl) would catch it.
+    const nativeFetch = globalThis.fetch
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (rawInput, init) => nativeFetch(rawInput, init))
+    const response = await fetch(`${baseUrl}/v1/products/${productId}/push-to-salla`, {
+      method: "POST",
+      headers: authHeaders(token),
+    })
+    expect(response.status).toBe(400)
+    expect(fetchSpy.mock.calls.every(([input]) => String(input).startsWith(baseUrl))).toBe(true)
   })
 })

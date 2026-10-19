@@ -55,7 +55,7 @@ export class SallaProductLinksService {
   async upsertLink(
     organizationId: string,
     input: UpsertSallaProductLinkInput,
-    createdByUserId: string
+    createdByUserId: string | null
   ): Promise<void> {
     const productRow = await this.database.query<{ product_type: string }>(
       `SELECT product_type FROM products WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
@@ -141,6 +141,32 @@ export class SallaProductLinksService {
     )
     const row = result.rows[0]
     return row ? { sallaProductId: row.salla_product_id } : null
+  }
+
+  // Reverse of findLinkForLine: has ANY of these Salla ids already been self-linked to a native
+  // product, and if so, to which one -- used by auto-promotion (salla-product-promotion-
+  // service.ts) to decide create-vs-update on every sync, and by the Products page's dedup
+  // filter. Takes an array, not a single id, because a *variable* Salla product is self-linked
+  // per-variant (each salla_product_links row's salla_product_id is one of its skus[].id values,
+  // never the parent product's own id) -- so "has this product already been promoted" means
+  // "does any one of its variants' ids already have a link", not a single-id lookup against the
+  // parent id. A simple product (no variants) just passes a one-element array of its own id.
+  // Unambiguous only because promotion guarantees at most one self-link per Salla id (create
+  // once, update thereafter -- never a second self-link for the same Salla id).
+  async findProductForAnySallaId(
+    organizationId: string,
+    sallaIds: string[]
+  ): Promise<{ productId: string } | null> {
+    if (sallaIds.length === 0) return null
+    const placeholders = sallaIds.map((_, index) => `$${index + 2}`).join(", ")
+    const result = await this.database.query<{ product_id: string }>(
+      `SELECT product_id FROM salla_product_links
+        WHERE organization_id = $1 AND salla_product_id IN (${placeholders})
+        LIMIT 1`,
+      [organizationId, ...sallaIds]
+    )
+    const row = result.rows[0]
+    return row ? { productId: row.product_id } : null
   }
 
   // Candidates for the link picker -- sourced from this org's already-synced salla_records

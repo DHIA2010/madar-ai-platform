@@ -403,6 +403,7 @@ export default function AddProduct() {
   // variants are linked separately -- variant-level linking isn't wired into this screen yet).
   const [sallaLinkableProducts, setSallaLinkableProducts] = useState<LinkableSallaProduct[]>([])
   const [sallaProductLinkId, setSallaProductLinkId] = useState("")
+  const [pushingToSalla, setPushingToSalla] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1099,6 +1100,28 @@ export default function AddProduct() {
 
   const cancel = () => router.push(ROUTES.products)
 
+  const handlePushToSalla = async () => {
+    if (!editingId) return
+    if (images.length === 0) {
+      toast.error(tForm("pushToSalla.needsImage"))
+      return
+    }
+    setPushingToSalla(true)
+    try {
+      const result = await productListService.pushProductToSalla(editingId)
+      setSallaProductLinkId(result.sallaProductId)
+      toast.success(tForm("pushToSalla.success"))
+    } catch (error) {
+      const status = error instanceof AppError ? error.status : undefined
+      toast.error(tForm("pushToSalla.failed"), {
+        description:
+          status === 409 ? undefined : error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setPushingToSalla(false)
+    }
+  }
+
   // The server validates the same rules again and answers with a field map, so its verdict is
   // shown against the fields rather than as one opaque failure.
   const applyServerErrors = (details: unknown): string[] => {
@@ -1267,6 +1290,22 @@ export default function AddProduct() {
             </h1>
             <p className={cn("mt-1 text-[12.5px]", MUTED)}>{type.pageSubtitle}</p>
           </div>
+          {isEditing && STOCK_TRACKED_TYPES.includes(productType) && !sallaProductLinkId ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="ms-auto"
+              disabled={pushingToSalla}
+              onClick={handlePushToSalla}
+            >
+              {pushingToSalla ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              {pushingToSalla ? tForm("pushToSalla.pushing") : tForm("pushToSalla.button")}
+            </Button>
+          ) : null}
         </div>
 
         {loadingProduct ? (

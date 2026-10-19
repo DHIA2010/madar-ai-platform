@@ -1759,6 +1759,13 @@
         "addGeneric": "Add new product",
         "editTyped": "Edit {type}"
       },
+      "pushToSalla": {
+        "button": "List on my Salla store",
+        "pushing": "Listing on Salla...",
+        "success": "Listed on your Salla store",
+        "failed": "Couldn't list this product on Salla",
+        "needsImage": "Add at least one image before listing this product on Salla."
+      },
       "loadingProduct": "Loading product data...",
       "typeLocked": "A saved product's type can't be changed — create a new product with the type you need",
       "basicInfo": {

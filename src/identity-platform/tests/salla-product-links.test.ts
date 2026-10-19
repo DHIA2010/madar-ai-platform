@@ -242,3 +242,63 @@ describe("SallaProductLinksService.findLinkForLine", () => {
     expect(await service.findLinkForLine(organizationId, { productId })).toBeNull()
   })
 })
+
+describe("SallaProductLinksService.findProductForAnySallaId", () => {
+  it("finds the native product for a simple product's own self-link", async () => {
+    const productId = await insertProduct("simple")
+    await service.upsertLink(
+      organizationId,
+      { productId, sallaProductId: "111", sallaProductSku: "SKU-1", sallaProductName: null },
+      null
+    )
+    expect(await service.findProductForAnySallaId(organizationId, ["111"])).toEqual({ productId })
+  })
+
+  it("finds the native product via ANY one of a variable product's per-variant self-links", async () => {
+    const productId = await insertProduct("variable")
+    const variantA = await insertVariant(productId)
+    const variantB = await insertVariant(productId)
+    await service.upsertLink(
+      organizationId,
+      {
+        productId,
+        variantId: variantA,
+        sallaProductId: "sku-a",
+        sallaProductSku: null,
+        sallaProductName: null,
+      },
+      null
+    )
+    await service.upsertLink(
+      organizationId,
+      {
+        productId,
+        variantId: variantB,
+        sallaProductId: "sku-b",
+        sallaProductSku: null,
+        sallaProductName: null,
+      },
+      null
+    )
+    // The parent Salla product's own id was never linked -- only its skus[] ids were -- so a
+    // batch lookup across all of a product's sku ids is what finds it, not a single-id lookup
+    // against the parent id.
+    expect(
+      await service.findProductForAnySallaId(organizationId, ["parent-id-never-linked", "sku-b"])
+    ).toEqual({ productId })
+  })
+
+  it("returns null when none of the given ids are linked", async () => {
+    const productId = await insertProduct("simple")
+    await service.upsertLink(
+      organizationId,
+      { productId, sallaProductId: "111", sallaProductSku: "SKU-1", sallaProductName: null },
+      null
+    )
+    expect(await service.findProductForAnySallaId(organizationId, ["222", "333"])).toBeNull()
+  })
+
+  it("returns null for an empty id list without querying", async () => {
+    expect(await service.findProductForAnySallaId(organizationId, [])).toBeNull()
+  })
+})

@@ -302,6 +302,16 @@ export const productListService = {
     )
   },
 
+  // Pushes an existing native product to Salla as a brand-new product (the reverse of linking to
+  // one that already exists) -- for a merchant who started in Madar and is only now opening an
+  // online store. Returns the new Salla product id; the server also records the link.
+  async pushProductToSalla(productId: string): Promise<{ sallaProductId: string }> {
+    return client.post<Record<string, never>, { sallaProductId: string }>(
+      [PRODUCTS_ENDPOINT, encodeURIComponent(productId), "push-to-salla"].join(PATH_SEPARATOR),
+      {}
+    )
+  },
+
   // Creates as many rows as are actually valid -- a bad row is skipped and reported back rather
   // than failing the whole file. See catalog-service.ts's bulkImport.
   async bulkImportProducts(rows: BulkImportProductRow[]): Promise<BulkImportProductResult> {

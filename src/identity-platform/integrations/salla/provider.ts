@@ -1,12 +1,17 @@
 import type { IncomingMessage } from "node:http"
 
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
+import { ProductCatalogRepository } from "../../products/catalog-repository"
+import { ProductCatalogService } from "../../products/catalog-service"
+import { SallaProductLinksService } from "../../products/salla-product-links-service"
+import { SallaProductPromotionService } from "../../products/salla-product-promotion-service"
 import { SallaOAuthController } from "../../salla-oauth/controller"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
 import { SallaOAuthService } from "../../salla-oauth/service"
 import { SallaSyncRepository } from "../../salla-oauth/sync-repository"
 import { SallaSyncService } from "../../salla-oauth/sync-service"
 import type { SallaOAuthConnectionView } from "../../salla-oauth/types"
+import { TaxRatesService } from "../../tax/tax-rates-service"
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 
 import { IntegrationProviderError } from "../provider-error"
@@ -104,10 +109,19 @@ export class SallaIntegrationProvider {
       this.repository = new SallaOAuthRepository(database)
       this.service = new SallaOAuthService(this.repository)
       this.controller = new SallaOAuthController(this.service)
+      const promotionService = new SallaProductPromotionService(
+        new ProductCatalogService(
+          new ProductCatalogRepository(database),
+          new TaxRatesService(database)
+        ),
+        new SallaProductLinksService(database, this.repository)
+      )
       this.syncService = new SallaSyncService(
         this.repository,
         new SallaSyncRepository(database),
-        this.service
+        this.service,
+        undefined,
+        promotionService
       )
     }
   }

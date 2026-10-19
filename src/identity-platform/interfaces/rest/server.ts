@@ -41,7 +41,9 @@ import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
+import { SallaProductCreatePushService } from "../../products/salla-product-create-push-service"
 import { SallaProductLinksService } from "../../products/salla-product-links-service"
+import { SallaProductPromotionService } from "../../products/salla-product-promotion-service"
 import { SallaStockPushService } from "../../products/salla-stock-push-service"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { PurchasesService } from "../../procurement/purchases-service"
@@ -689,6 +691,11 @@ export function createIdentityApiServer(
           container.infrastructure.database
         )
       : null
+  const sallaProductCreatePushService = container.infrastructure.database
+    ? new SallaProductCreatePushService(
+        new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database))
+      )
+    : null
   const posInvoicesService =
     container.infrastructure.database && posPaymentMethodsService && taxRatesService
       ? new PosInvoicesService(
@@ -827,6 +834,10 @@ export function createIdentityApiServer(
   const zidOAuthRepositoryForTracking = container.infrastructure.database
     ? new ZidOAuthRepository(container.infrastructure.database)
     : null
+  const sallaProductPromotionService =
+    container.infrastructure.database && productCatalogService && sallaProductLinksService
+      ? new SallaProductPromotionService(productCatalogService, sallaProductLinksService)
+      : null
   const sallaWebhookService = container.infrastructure.database
     ? new SallaWebhookService(
         sallaOAuthRepositoryForTracking ??
@@ -835,7 +846,9 @@ export function createIdentityApiServer(
         new SallaOAuthService(
           sallaOAuthRepositoryForTracking ??
             new SallaOAuthRepository(container.infrastructure.database)
-        )
+        ),
+        undefined,
+        sallaProductPromotionService
       )
     : null
   const orderAttributionService = container.infrastructure.database
@@ -4345,6 +4358,57 @@ export function createIdentityApiServer(
           })
           return send(200, { linked: false })
         }
+      }
+
+      // Madar-first merchant: pushes a native product that has no existing Salla link to Salla
+      // as a brand-new product (POST /products, confirmed real endpoint) -- the reverse of the
+      // manual-link picker above, which only ever links to a Salla product that already exists.
+      const pushToSallaMatch = url.pathname.match(/^\/v1\/products\/([^/]+)\/push-to-salla$/)
+      if (method === "POST" && pushToSallaMatch) {
+        if (!productCatalogService || !sallaProductLinksService || !sallaProductCreatePushService) {
+          return send(503, {
+            code: "SALLA_PRODUCT_PUSH_UNAVAILABLE",
+            message: "Pushing products to Salla is unavailable in memory mode.",
+          })
+        }
+        if (
+          !actor.modulePermissions.includes("products:create") &&
+          !actor.modulePermissions.includes("products:edit")
+        ) {
+          throw ERRORS.forbidden()
+        }
+        const productId = pushToSallaMatch[1]
+
+        const product = await productCatalogService.getById(actor.organizationId, productId)
+        if (product.imageUrls.length === 0) {
+          throw ERRORS.validation({
+            imageUrls: "Add at least one image before listing this product on Salla.",
+          })
+        }
+
+        const connection = await new SallaOAuthRepository(
+          container.infrastructure.database!
+        ).findActiveConnection(actor.organizationId, actor.workspaceId)
+        if (!connection) {
+          return send(409, {
+            code: "SALLA_NO_ACTIVE_CONNECTION",
+            message: "No connected Salla store was found to push this product to.",
+          })
+        }
+
+        const result = await sallaProductCreatePushService.pushProduct(connection.id, product)
+        await sallaProductLinksService.upsertLink(
+          actor.organizationId,
+          {
+            productId,
+            variantId: null,
+            sallaProductId: result.sallaProductId,
+            sallaProductSku: product.sku,
+            sallaProductName: product.name,
+          },
+          actor.userId
+        )
+        return send(200, { sallaProductId: result.sallaProductId })
       }
 
       const nativeProductMatch = url.pathname.match(/^\/v1\/products\/([^/]+)$/)
