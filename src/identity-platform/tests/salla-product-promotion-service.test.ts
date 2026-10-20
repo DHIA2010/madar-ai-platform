@@ -231,4 +231,56 @@ describe("SallaProductPromotionService.promoteOrSync -- variable product", () =>
     )
     expect(variantRows.rows).toHaveLength(2)
   })
+
+  it("updates the same product instead of failing when Salla regenerates its sku ids", async () => {
+    // Confirmed live on stage: editing a product's variants in Salla's dashboard can regenerate
+    // some or all of its skus[].id values. The next sync's candidateIds (built from the NEW ids)
+    // then match no existing link -- findProductForAnySallaId has no way to know this is the same
+    // product -- so it looks unpromoted and tries to create a second one, which collides on the
+    // same sku and threw PRODUCT_SKU_TAKEN forever instead of recognizing and updating it.
+    await service.promoteOrSync(organizationId, null, VARIABLE_PAYLOAD)
+    const firstRow = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1`,
+      [organizationId]
+    )
+    const firstProductId = firstRow.rows[0].id
+
+    const REGENERATED_PAYLOAD: SallaProductApiPayload = {
+      ...VARIABLE_PAYLOAD,
+      skus: [
+        {
+          id: 999111222, // a brand new sku id Salla issued after the merchant edited variants
+          sku: null,
+          price: { amount: 90 },
+          stock_quantity: 4,
+          related_option_values: [1465459335],
+        },
+        {
+          id: 999333444,
+          sku: null,
+          price: { amount: 93 },
+          stock_quantity: 6,
+          related_option_values: [556155264],
+        },
+      ],
+    }
+
+    await service.promoteOrSync(organizationId, null, REGENERATED_PAYLOAD)
+
+    const liveRows = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1 and deleted_at is null`,
+      [organizationId]
+    )
+    expect(liveRows.rows).toHaveLength(1)
+    expect(liveRows.rows[0].id).toBe(firstProductId)
+
+    const linkForNewSku = await linksService.findProductForAnySallaId(organizationId, ["999111222"])
+    expect(linkForNewSku).toEqual({ productId: firstProductId })
+
+    const variantRows = await database.query<{ stock: string }>(
+      `select stock from product_variants where product_id = $1 order by position`,
+      [firstProductId]
+    )
+    expect(variantRows.rows.map((r) => Number(r.stock))).toEqual([4, 6])
+  })
 })

@@ -41,15 +41,7 @@ export class SallaProductPromotionService {
 
     if (existing) {
       try {
-        await this.catalogService.update({
-          organizationId,
-          id: existing.productId,
-          updatedBy: null,
-          product: input,
-        })
-        if (input.productType === "variable") {
-          await this.relinkVariants(organizationId, existing.productId, payload)
-        }
+        await this.updateAndRelink(organizationId, existing.productId, input, payload)
         return
       } catch (error) {
         if (!(error instanceof IdentityError && error.code === "PRODUCT_NOT_FOUND")) {
@@ -65,12 +57,32 @@ export class SallaProductPromotionService {
       }
     }
 
-    const created = await this.catalogService.create({
-      organizationId,
-      workspaceId,
-      createdBy: null,
-      product: input,
-    })
+    let created
+    try {
+      created = await this.catalogService.create({
+        organizationId,
+        workspaceId,
+        createdBy: null,
+        product: input,
+      })
+    } catch (error) {
+      if (!(error instanceof IdentityError && error.code === "PRODUCT_SKU_TAKEN")) {
+        throw error
+      }
+      // Salla can regenerate a product's own sku ids when its variants are edited in its
+      // dashboard -- confirmed live (a real product.variant.updated/product.updated webhook
+      // delivery while a merchant edited variants). The new ids then match no existing link
+      // (candidateIds above is built from skus[], which just changed), so this looked like an
+      // unpromoted product -- but the native product itself already exists under this exact sku.
+      // Find it by its own sku instead of permanently failing every future sync for it.
+      // (input.sku is only ever null for a type the mapper never produces here, "raw"/"bundle" --
+      // a null sku could never have triggered PRODUCT_SKU_TAKEN in the first place.)
+      if (!input.sku) throw error
+      const bySku = await this.catalogService.lookupBySku(organizationId, input.sku)
+      if (!bySku) throw error
+      await this.updateAndRelink(organizationId, bySku.productId, input, payload)
+      return
+    }
 
     if (input.productType === "variable") {
       await this.linkVariants(organizationId, created.id, created.variants, payload)
@@ -88,6 +100,23 @@ export class SallaProductPromotionService {
       },
       null
     )
+  }
+
+  private async updateAndRelink(
+    organizationId: string,
+    productId: string,
+    input: ReturnType<typeof mapSallaProductToCreateInput>,
+    payload: SallaProductApiPayload
+  ): Promise<void> {
+    await this.catalogService.update({
+      organizationId,
+      id: productId,
+      updatedBy: null,
+      product: input,
+    })
+    if (input.productType === "variable") {
+      await this.relinkVariants(organizationId, productId, payload)
+    }
   }
 
   // Links each returned native variant to its originating Salla sku by array position -- both
