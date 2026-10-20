@@ -62,33 +62,42 @@ function buildVariantOptionsAndVariants(
   variantOptionGroups: SallaProductOption[],
   skus: SallaProductSku[]
 ): { variantOptions: ProductVariantOptionInput[]; variants: ProductVariantInput[] } {
-  const variantOptions: ProductVariantOptionInput[] = variantOptionGroups.map((group) => ({
-    name: group.name,
-    values: group.values.map((value) => value.name),
-  }))
-
   const groupIndexByValueId = new Map<number, number>()
+  const valueNameById = new Map<number, string>()
+  const valuesByGroup: string[][] = variantOptionGroups.map((group) =>
+    group.values.map((value) => value.name)
+  )
   variantOptionGroups.forEach((group, groupIndex) => {
     for (const value of group.values) {
       groupIndexByValueId.set(value.id, groupIndex)
-    }
-  })
-  const valueNameById = new Map<number, string>()
-  for (const group of variantOptionGroups) {
-    for (const value of group.values) {
       valueNameById.set(value.id, value.name)
     }
-  }
+  })
 
   const variants: ProductVariantInput[] = skus.map((sku) => {
     const optionValues = new Array<string>(variantOptionGroups.length).fill("")
+    const resolved = new Array<boolean>(variantOptionGroups.length).fill(false)
     for (const valueId of sku.related_option_values ?? []) {
       const groupIndex = groupIndexByValueId.get(valueId)
       const valueName = valueNameById.get(valueId)
       if (groupIndex !== undefined && valueName !== undefined) {
         optionValues[groupIndex] = valueName
+        resolved[groupIndex] = true
       }
     }
+    // Confirmed live: a real Salla product can leave related_option_values missing an id for one
+    // axis on some of its skus. Left blank, two such skus can collapse onto the same combination
+    // and get rejected as a duplicate by validateVariable (catalog-service.ts), failing promotion
+    // for the WHOLE product. A label built from the sku's own (always-unique) id keeps every real
+    // sku as its own distinct variant instead of silently losing the product to a validation error.
+    resolved.forEach((isResolved, groupIndex) => {
+      if (isResolved) return
+      const placeholder = `SKU ${sku.id}`
+      optionValues[groupIndex] = placeholder
+      if (!valuesByGroup[groupIndex].includes(placeholder)) {
+        valuesByGroup[groupIndex].push(placeholder)
+      }
+    })
     return {
       sku: sku.sku?.trim() || null,
       price: sku.price?.amount ?? sku.regular_price?.amount ?? 0,
@@ -96,6 +105,13 @@ function buildVariantOptionsAndVariants(
       optionValues,
     }
   })
+
+  const variantOptions: ProductVariantOptionInput[] = variantOptionGroups.map(
+    (group, groupIndex) => ({
+      name: group.name,
+      values: valuesByGroup[groupIndex],
+    })
+  )
 
   return { variantOptions, variants }
 }

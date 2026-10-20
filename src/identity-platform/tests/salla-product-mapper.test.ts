@@ -112,13 +112,67 @@ describe("mapSallaProductToCreateInput -- variable product", () => {
     expect(result.sellPrice).toBeNull()
     expect(result.stockQuantity).toBeNull()
     expect(result.variantOptions).toEqual([
-      { name: "المقاس", values: ["44 - XL", "42 - L", "40 - M"] },
+      { name: "المقاس", values: ["44 - XL", "42 - L", "40 - M", "SKU 1707844412"] },
     ])
     expect(result.variants).toEqual([
-      { sku: null, price: 83, stock: 0, optionValues: [""] }, // unresolved id -> blank
+      // unresolved id -> a placeholder built from the sku's own id, not a blank string
+      { sku: null, price: 83, stock: 0, optionValues: ["SKU 1707844412"] },
       { sku: null, price: 83, stock: 1, optionValues: ["44 - XL"] },
       { sku: null, price: 279, stock: 2, optionValues: ["42 - L"] },
     ])
+  })
+
+  it("disambiguates two skus that would otherwise collapse onto the same combination", () => {
+    // Trimmed from a real confirmed payload (product 1806978824, "فستان") -- two option groups,
+    // where several skus' related_option_values only carries an id for ONE of the two groups.
+    // Left blank, sku 2136697668 and sku 278787649 both resolve to `"" / "44 - XL"` and get
+    // rejected by validateVariable (catalog-service.ts) as a duplicate combination, failing
+    // promotion for the entire product (confirmed live: salla.product_promotion_failed).
+    const payload: SallaProductApiPayload = {
+      id: 1806978824,
+      name: "فستان",
+      sku: null,
+      is_available: true,
+      options: [
+        {
+          id: 233541313,
+          name: "المقاس",
+          purpose: "variants",
+          values: [{ id: 975290434, name: "فوشي" }],
+        },
+        {
+          id: 1605414338,
+          name: "اللون",
+          purpose: "variants",
+          values: [{ id: 1459750468, name: "44 - XL" }],
+        },
+      ],
+      skus: [
+        {
+          id: 2136697668,
+          sku: null,
+          price: { amount: 144 },
+          stock_quantity: 0,
+          related_option_values: [1459750468], // only the "اللون" group resolves
+        },
+        {
+          id: 278787649,
+          sku: null,
+          price: { amount: 144 },
+          stock_quantity: 5,
+          related_option_values: [1459750468], // same lone id -- would collide before the fix
+        },
+      ],
+    }
+
+    const result = mapSallaProductToCreateInput(payload, "متجر سلة")
+
+    expect(result.variants).toEqual([
+      { sku: null, price: 144, stock: 0, optionValues: ["SKU 2136697668", "44 - XL"] },
+      { sku: null, price: 144, stock: 5, optionValues: ["SKU 278787649", "44 - XL"] },
+    ])
+    const combos = result.variants.map((variant) => variant.optionValues.join(" / "))
+    expect(new Set(combos).size).toBe(combos.length)
   })
 
   it("uses a synthetic top-level sku when Salla's own is null, even for a variable product", () => {
