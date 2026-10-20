@@ -83,10 +83,17 @@ export class SallaStockPushService {
         // pushing it through PUT /products/{id} (the product-level path) 404s, since Salla has no
         // product by that id. Confirmed live on stage. Salla's bulk-quantities endpoint accepts
         // either kind via identifer_type, so which one to push is just that flag.
+        //
+        // Madar's own "allow out-of-stock sale" setting can let a sale oversell a product past
+        // zero (negative stock has a real meaning here: how far over-committed this product is).
+        // Salla has no such concept and rejects a negative quantity outright -- confirmed live on
+        // stage (422), which silently left Salla stuck showing its last valid, now-wrong figure.
+        // 0 is the truthful nearest thing Salla can represent for "oversold," so that's what gets
+        // pushed instead of the raw, possibly-negative number.
         await this.pushQuantity(
           accessToken,
           sallaProductId,
-          currentStock,
+          Math.max(0, currentStock),
           target.variantId ? "variant_id" : "id"
         )
       } catch (error) {

@@ -96,6 +96,29 @@ describe("SallaStockPushService.pushStockForLines", () => {
     })
   })
 
+  it("clamps a negative (oversold) stock figure to 0 before pushing -- Salla rejects negative quantities", async () => {
+    // Madar's "allow out-of-stock sale" setting can oversell a product past zero (confirmed live
+    // on stage); Salla's bulk-quantities endpoint has no concept of negative stock and rejects it
+    // outright (422, confirmed live), which silently left Salla stuck on its last valid figure.
+    const productId = await insertProduct(-3)
+    await linksService.upsertLink(
+      organizationId,
+      { productId, sallaProductId: "111", sallaProductSku: "SKU-111", sallaProductName: null },
+      userId
+    )
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 201 }))
+
+    await pushService.pushStockForLines(organizationId, null, [{ productId }], -1)
+
+    const [, init] = fetchSpy.mock.calls[0]
+    expect(JSON.parse(String(init?.body))).toEqual({
+      products: [{ identifer_type: "id", identifer: "111", quantity: 0, mode: "overwrite" }],
+    })
+  })
+
   it('pushes a variant-level link using identifer_type "variant_id", not the product-level path', async () => {
     // A variant-level link's sallaProductId is one of the product's own skus[].id, never the
     // parent product's own id -- PUT /products/{id} 404s for it (confirmed live on stage).
