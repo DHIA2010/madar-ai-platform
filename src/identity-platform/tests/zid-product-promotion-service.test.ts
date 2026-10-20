@@ -88,4 +88,34 @@ describe("ZidProductPromotionService.promoteOrSync", () => {
     expect(rows.rows).toHaveLength(1)
     expect(Number(rows.rows[0].stock_quantity)).toBe(2)
   })
+
+  it("re-creates a fresh product on the next sync after the promoted product was deleted", async () => {
+    // Mirrors SallaProductPromotionService's identical test -- the same orphaned-link bug,
+    // confirmed live on stage, applies to Zid's own promotion exactly the same way.
+    await service.promoteOrSync(organizationId, null, SIMPLE_PAYLOAD)
+    const firstRow = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1`,
+      [organizationId]
+    )
+    const firstProductId = firstRow.rows[0].id
+    await database.query(`update products set deleted_at = now() where id = $1`, [firstProductId])
+
+    await service.promoteOrSync(organizationId, null, {
+      ...SIMPLE_PAYLOAD,
+      stocks: [{ is_infinite: false, available_quantity: 3 }],
+    })
+
+    const liveRows = await database.query<{ id: string; stock_quantity: string }>(
+      `select id, stock_quantity from products where organization_id = $1 and deleted_at is null`,
+      [organizationId]
+    )
+    expect(liveRows.rows).toHaveLength(1)
+    expect(liveRows.rows[0].id).not.toBe(firstProductId)
+    expect(Number(liveRows.rows[0].stock_quantity)).toBe(3)
+
+    const link = await linksService.findProductForAnyZidId(organizationId, [
+      String(SIMPLE_PAYLOAD.id),
+    ])
+    expect(link).toEqual({ productId: liveRows.rows[0].id })
+  })
 })

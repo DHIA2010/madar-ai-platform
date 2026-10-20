@@ -169,6 +169,22 @@ export class SallaProductLinksService {
     return row ? { productId: row.product_id } : null
   }
 
+  // Called only when SallaProductPromotionService discovers an existing link's target product
+  // has been deleted (findProductForAnySallaId has no way to know that itself -- it never joins
+  // against products, see above) -- clears every link row for these candidate ids so the fresh
+  // create+relink that follows doesn't leave stale rows sharing the same salla_product_id behind,
+  // which would make the very next sync's own findProductForAnySallaId lookup ambiguous between
+  // the old, dead product and the new one.
+  async removeLinksBySallaIds(organizationId: string, sallaIds: string[]): Promise<void> {
+    if (sallaIds.length === 0) return
+    const placeholders = sallaIds.map((_, index) => `$${index + 2}`).join(", ")
+    await this.database.query(
+      `DELETE FROM salla_product_links
+        WHERE organization_id = $1 AND salla_product_id IN (${placeholders})`,
+      [organizationId, ...sallaIds]
+    )
+  }
+
   // Candidates for the link picker -- sourced from this org's already-synced salla_records
   // (entity_type='products'), the same JSON paths normalizeSallaProduct() reads
   // (products/service.ts). A Salla product with no SKU is filtered out: nothing for the stock

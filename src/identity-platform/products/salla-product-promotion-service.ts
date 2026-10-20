@@ -1,3 +1,5 @@
+import { IdentityError } from "../application/errors/IdentityError"
+
 import type { ProductCatalogService } from "./catalog-service"
 import { mapSallaProductToCreateInput, type SallaProductApiPayload } from "./salla-product-mapper"
 import type { SallaProductLinksService } from "./salla-product-links-service"
@@ -38,16 +40,29 @@ export class SallaProductPromotionService {
     const input = mapSallaProductToCreateInput(payload, DEFAULT_CATEGORY_FALLBACK)
 
     if (existing) {
-      await this.catalogService.update({
-        organizationId,
-        id: existing.productId,
-        updatedBy: null,
-        product: input,
-      })
-      if (input.productType === "variable") {
-        await this.relinkVariants(organizationId, existing.productId, payload)
+      try {
+        await this.catalogService.update({
+          organizationId,
+          id: existing.productId,
+          updatedBy: null,
+          product: input,
+        })
+        if (input.productType === "variable") {
+          await this.relinkVariants(organizationId, existing.productId, payload)
+        }
+        return
+      } catch (error) {
+        if (!(error instanceof IdentityError && error.code === "PRODUCT_NOT_FOUND")) {
+          throw error
+        }
+        // The native product this link pointed to was deleted since the link was created --
+        // findProductForAnySallaId has no way to know that itself (it never joins against
+        // products). Confirmed live: this previously left a Salla product permanently stuck,
+        // re-failing promotion on every future sync, since re-creating a product and adding a
+        // fresh link never cleared the dead one out first. Clear it and fall through to create a
+        // fresh product below, exactly as if this Salla product had never been promoted.
+        await this.linksService.removeLinksBySallaIds(organizationId, candidateIds)
       }
-      return
     }
 
     const created = await this.catalogService.create({

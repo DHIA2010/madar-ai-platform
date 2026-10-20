@@ -89,6 +89,33 @@ describe("SallaProductPromotionService.promoteOrSync -- simple product", () => {
     expect(rows.rows[0].name).toBe("diaa updated")
     expect(Number(rows.rows[0].stock_quantity)).toBe(7)
   })
+
+  it("re-creates a fresh product on the next sync after the promoted product was deleted", async () => {
+    // Confirmed live on stage: deleting a promoted product leaves its link orphaned --
+    // findProductForAnySallaId has no way to know the product it points to is gone, since it
+    // never joins against products. Before this fix, every future sync for this Salla product
+    // failed with PRODUCT_NOT_FOUND forever, never re-creating it.
+    await service.promoteOrSync(organizationId, null, SIMPLE_PAYLOAD)
+    const firstRow = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1`,
+      [organizationId]
+    )
+    const firstProductId = firstRow.rows[0].id
+    await database.query(`update products set deleted_at = now() where id = $1`, [firstProductId])
+
+    await service.promoteOrSync(organizationId, null, { ...SIMPLE_PAYLOAD, quantity: 3 })
+
+    const liveRows = await database.query<{ id: string; stock_quantity: string }>(
+      `select id, stock_quantity from products where organization_id = $1 and deleted_at is null`,
+      [organizationId]
+    )
+    expect(liveRows.rows).toHaveLength(1)
+    expect(liveRows.rows[0].id).not.toBe(firstProductId)
+    expect(Number(liveRows.rows[0].stock_quantity)).toBe(3)
+
+    const link = await linksService.findProductForAnySallaId(organizationId, ["496668399"])
+    expect(link).toEqual({ productId: liveRows.rows[0].id })
+  })
 })
 
 describe("SallaProductPromotionService.promoteOrSync -- variable product", () => {
@@ -175,5 +202,33 @@ describe("SallaProductPromotionService.promoteOrSync -- variable product", () =>
       [productRow.rows[0].id]
     )
     expect(variantRows.rows.map((r) => Number(r.stock))).toEqual([6, 7])
+  })
+
+  it("re-creates a fresh variable product on the next sync after the promoted product was deleted", async () => {
+    await service.promoteOrSync(organizationId, null, VARIABLE_PAYLOAD)
+    const firstRow = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1`,
+      [organizationId]
+    )
+    const firstProductId = firstRow.rows[0].id
+    await database.query(`update products set deleted_at = now() where id = $1`, [firstProductId])
+
+    await service.promoteOrSync(organizationId, null, VARIABLE_PAYLOAD)
+
+    const liveRows = await database.query<{ id: string }>(
+      `select id from products where organization_id = $1 and deleted_at is null`,
+      [organizationId]
+    )
+    expect(liveRows.rows).toHaveLength(1)
+    expect(liveRows.rows[0].id).not.toBe(firstProductId)
+
+    const linkForSkuA = await linksService.findProductForAnySallaId(organizationId, ["932233789"])
+    expect(linkForSkuA).toEqual({ productId: liveRows.rows[0].id })
+
+    const variantRows = await database.query<{ id: string }>(
+      `select id from product_variants where product_id = $1`,
+      [liveRows.rows[0].id]
+    )
+    expect(variantRows.rows).toHaveLength(2)
   })
 })

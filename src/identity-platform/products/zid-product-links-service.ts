@@ -146,6 +146,20 @@ export class ZidProductLinksService {
     return row ? { productId: row.product_id } : null
   }
 
+  // Called only when ZidProductPromotionService discovers an existing link's target product has
+  // been deleted (findProductForAnyZidId has no way to know that itself -- it never joins against
+  // products, see above) -- mirrors SallaProductLinksService.removeLinksBySallaIds exactly, for
+  // the same reason.
+  async removeLinksByZidIds(organizationId: string, zidIds: string[]): Promise<void> {
+    if (zidIds.length === 0) return
+    const placeholders = zidIds.map((_, index) => `$${index + 2}`).join(", ")
+    await this.database.query(
+      `DELETE FROM zid_product_links
+        WHERE organization_id = $1 AND zid_product_id IN (${placeholders})`,
+      [organizationId, ...zidIds]
+    )
+  }
+
   async listLinkableZidProducts(
     organizationId: string,
     workspaceId: string | null,

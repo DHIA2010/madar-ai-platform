@@ -1,3 +1,5 @@
+import { IdentityError } from "../application/errors/IdentityError"
+
 import type { ProductCatalogService } from "./catalog-service"
 import { mapZidProductToCreateInput, type ZidProductApiPayload } from "./zid-product-mapper"
 import type { ZidProductLinksService } from "./zid-product-links-service"
@@ -30,13 +32,23 @@ export class ZidProductPromotionService {
     const input = mapZidProductToCreateInput(payload, DEFAULT_CATEGORY_FALLBACK)
 
     if (existing) {
-      await this.catalogService.update({
-        organizationId,
-        id: existing.productId,
-        updatedBy: null,
-        product: input,
-      })
-      return
+      try {
+        await this.catalogService.update({
+          organizationId,
+          id: existing.productId,
+          updatedBy: null,
+          product: input,
+        })
+        return
+      } catch (error) {
+        if (!(error instanceof IdentityError && error.code === "PRODUCT_NOT_FOUND")) {
+          throw error
+        }
+        // The native product this link pointed to was deleted since the link was created -- see
+        // SallaProductPromotionService's identical fallthrough for the full reasoning. Clear the
+        // stale link and fall through to create a fresh product below.
+        await this.linksService.removeLinksByZidIds(organizationId, [zidProductId])
+      }
     }
 
     const created = await this.catalogService.create({
