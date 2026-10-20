@@ -419,6 +419,72 @@ describe("GET /v1/products: real cross-connector product aggregation", () => {
     expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
   })
 
+  it("shows a promoted/linked variable Salla product only once, even though it's linked per-variant, never by its own top-level id", async () => {
+    // A variable product is never self-linked by its own id (SallaProductPromotionService
+    // rejects a product-level link for a "variable" product type) -- it's linked per-variant,
+    // one salla_product_links row per sku, each carrying a SKU id the raw synced record never
+    // surfaces at its own top level. Confirmed live on stage: this used to leave the raw record
+    // showing twice, once as the native "Madar" row and once as its own stale "Salla" row.
+    const { login, actor } = await registerAndProvisionOrg(
+      "products-promoted-variable@madar.test",
+      "Products Promoted Variable Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001535"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      label: "Products Promoted Variable",
+    })
+    const sallaConnectionId = await insertConnectedCommerceConnection({
+      provider: "salla",
+      organizationId: actor.organizationId,
+      workspaceId,
+      userId: actor.userId,
+    })
+    await insertProductRecord({
+      provider: "salla",
+      connectionId: sallaConnectionId,
+      entityId: "1806978824",
+      payload: {
+        name: "فستان",
+        skus: [
+          { id: 1402023290, sku: null },
+          { id: 763251835, sku: null },
+        ],
+      },
+      updatedAt: "2026-08-10T00:00:00Z",
+    })
+
+    const productId = randomUUID()
+    await database.query(
+      `insert into products (id, organization_id, workspace_id, product_type, name, sku)
+       values ($1, $2, $3, 'variable', 'فستان', '15504449-300000237300-')`,
+      [productId, actor.organizationId, workspaceId]
+    )
+    const variantId = randomUUID()
+    await database.query(
+      `insert into product_variants (id, product_id, price, stock, option_values, position)
+       values ($1, $2, 144, 0, '["فوشي"]'::jsonb, 0)`,
+      [variantId, productId]
+    )
+    await database.query(
+      `insert into salla_product_links (id, organization_id, product_id, variant_id, salla_product_id, created_at, updated_at)
+       values ($1, $2, $3, $4, '1402023290', now(), now())`,
+      [randomUUID(), actor.organizationId, productId, variantId]
+    )
+
+    const response = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(login) })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { items: Array<{ id: string; platform: string }> }
+
+    const matching = body.items.filter(
+      (item) => item.id === productId || item.id === "salla:1806978824"
+    )
+    expect(matching).toHaveLength(1)
+    expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
+  })
+
   it("excludes products from disconnected connections and other organizations", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "products-scoped@madar.test",

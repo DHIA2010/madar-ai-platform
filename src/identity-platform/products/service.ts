@@ -200,12 +200,31 @@ export class ProductsAggregationService {
   constructor(private readonly db: PostgresDatabase) {}
 
   async listProducts(actor: AuthenticatedActor): Promise<NormalizedProduct[]> {
-    const [salla, shopify, zid, promotedSallaIds, promotedZidIds] = await Promise.all([
+    const [promotedSallaIds, promotedZidIds] = await Promise.all([
+      this.fetchPromotedProductIds("salla_product_links", "salla_product_id", actor.organizationId),
+      this.fetchPromotedProductIds("zid_product_links", "zid_product_id", actor.organizationId),
+    ])
+
+    const [salla, shopify, zid] = await Promise.all([
       this.fetchProvider({
         recordsTable: "salla_records",
         connectionsTable: "salla_oauth_connections",
         actor,
         normalize: normalizeSallaProduct,
+        // A variable Salla product is never self-linked by its own top-level id -- it's linked
+        // per-variant, one row per sku (see SallaProductPromotionService.linkVariants; a
+        // product-level link is actively rejected for a "variable" product type). So "already
+        // promoted" for a product with skus means "any one of its own sku ids is linked", not
+        // "the product's own id is linked" -- the same candidateIds rule promoteOrSync itself
+        // uses to decide whether a product has already been promoted.
+        isPromoted: (row, promotedIds) => {
+          const skuIds = ((row.payload as { skus?: Array<{ id?: unknown }> }).skus ?? []).map(
+            (sku) => String(sku.id)
+          )
+          const candidateIds = skuIds.length > 0 ? skuIds : [row.entity_id]
+          return candidateIds.some((id) => promotedIds.has(id))
+        },
+        promotedIds: promotedSallaIds,
       }),
       this.fetchProvider({
         recordsTable: "shopify_records",
@@ -218,21 +237,15 @@ export class ProductsAggregationService {
         connectionsTable: "zid_oauth_connections",
         actor,
         normalize: normalizeZidProduct,
+        // Zid has no variant support (products/zid-product-mapper.ts maps every product to
+        // "simple"), so a product is always self-linked by its own top-level id -- the plain
+        // single-id check is correct here, unlike Salla above.
+        isPromoted: (row, promotedIds) => promotedIds.has(row.entity_id),
+        promotedIds: promotedZidIds,
       }),
-      this.fetchPromotedProductIds("salla_product_links", "salla_product_id", actor.organizationId),
-      this.fetchPromotedProductIds("zid_product_links", "zid_product_id", actor.organizationId),
     ])
 
-    // A product that's been auto-promoted/linked to a native product (see
-    // SallaProductPromotionService/ZidProductPromotionService) already appears as that native
-    // row -- excluded here so it doesn't also show up as its own, now-stale, read-only synced
-    // display row too.
-    const dedupedSalla = salla.filter(
-      (product) => !promotedSallaIds.has(product.id.slice("salla:".length))
-    )
-    const dedupedZid = zid.filter((product) => !promotedZidIds.has(product.id.slice("zid:".length)))
-
-    return [...dedupedSalla, ...shopify, ...dedupedZid].sort((a, b) =>
+    return [...salla, ...shopify, ...zid].sort((a, b) =>
       b.activityDate.localeCompare(a.activityDate)
     )
   }
@@ -257,6 +270,13 @@ export class ProductsAggregationService {
       | "zid_oauth_connections"
     actor: AuthenticatedActor
     normalize: (row: CommerceRecordRow) => NormalizedProduct
+    // A product that's been auto-promoted/linked to a native product (see
+    // SallaProductPromotionService/ZidProductPromotionService) already appears as that native
+    // row -- excluded here (before normalizing) so it doesn't also show up as its own, now-stale,
+    // read-only synced display row too. Absent for a provider with no promotion/linking yet
+    // (Shopify), which keeps every row exactly as it always showed.
+    isPromoted?: (row: CommerceRecordRow, promotedIds: Set<string>) => boolean
+    promotedIds?: Set<string>
   }): Promise<NormalizedProduct[]> {
     const result = await this.db.query<CommerceRecordRow>({
       name: `products-aggregation-${input.recordsTable}`,
@@ -279,6 +299,11 @@ export class ProductsAggregationService {
       ],
     })
 
-    return result.rows.map(input.normalize)
+    const rows =
+      input.isPromoted && input.promotedIds
+        ? result.rows.filter((row) => !input.isPromoted!(row, input.promotedIds!))
+        : result.rows
+
+    return rows.map(input.normalize)
   }
 }
