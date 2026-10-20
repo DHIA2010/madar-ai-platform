@@ -72,6 +72,12 @@ export interface ProductRecord {
   priceIncludesTax: boolean
   image: string | null
   activityDate: string
+  // True for a real, editable, stock-tracked row (authored here, or synced and auto-promoted/
+  // linked -- see the identity-platform's NormalizedProduct for the full rule). `platform` names
+  // where a row came from and can read "Salla"/"Zid" even when isNative is true; anything gating
+  // actual behavior (edit/delete, bulk status change, usable as a packaging/purchase/order line
+  // item) must check isNative, never platform === "Madar".
+  isNative: boolean
 }
 
 // Avoids the slash-prefix literal lint rule (same trick as customer-list.service.ts's

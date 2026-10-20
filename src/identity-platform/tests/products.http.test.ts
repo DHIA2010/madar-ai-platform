@@ -323,7 +323,7 @@ describe("GET /v1/products: real cross-connector product aggregation", () => {
     expect(body.items[0]?.platform).toBe("Shopify")
   })
 
-  it("shows a promoted/linked Salla product only once, as the native Madar row", async () => {
+  it("shows a promoted/linked Salla product only once, labeled Salla, as a real editable row", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "products-promoted@madar.test",
       "Products Promoted Org"
@@ -363,16 +363,20 @@ describe("GET /v1/products: real cross-connector product aggregation", () => {
 
     const response = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(login) })
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { items: Array<{ id: string; platform: string }> }
+    const body = (await response.json()) as {
+      items: Array<{ id: string; platform: string; isNative: boolean }>
+    }
 
     const matching = body.items.filter(
       (item) => item.id === productId || item.id === "salla:496668399"
     )
     expect(matching).toHaveLength(1)
-    expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
+    // A promoted row keeps its real origin label (not relabeled "Madar") -- only `isNative`
+    // (not `platform`) says it's a real, editable, stock-tracked row underneath.
+    expect(matching[0]).toMatchObject({ id: productId, platform: "Salla", isNative: true })
   })
 
-  it("shows a promoted/linked Zid product only once, as the native Madar row", async () => {
+  it("shows a promoted/linked Zid product only once, labeled Zid, as a real editable row", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "products-zid-promoted@madar.test",
       "Products Zid Promoted Org"
@@ -412,11 +416,13 @@ describe("GET /v1/products: real cross-connector product aggregation", () => {
 
     const response = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(login) })
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { items: Array<{ id: string; platform: string }> }
+    const body = (await response.json()) as {
+      items: Array<{ id: string; platform: string; isNative: boolean }>
+    }
 
     const matching = body.items.filter((item) => item.id === productId || item.id === "zid:555")
     expect(matching).toHaveLength(1)
-    expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
+    expect(matching[0]).toMatchObject({ id: productId, platform: "Zid", isNative: true })
   })
 
   it("shows a promoted/linked variable Salla product only once, even though it's linked per-variant, never by its own top-level id", async () => {
@@ -476,13 +482,15 @@ describe("GET /v1/products: real cross-connector product aggregation", () => {
 
     const response = await fetch(`${baseUrl}/v1/products`, { headers: authHeaders(login) })
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { items: Array<{ id: string; platform: string }> }
+    const body = (await response.json()) as {
+      items: Array<{ id: string; platform: string; isNative: boolean }>
+    }
 
     const matching = body.items.filter(
       (item) => item.id === productId || item.id === "salla:1806978824"
     )
     expect(matching).toHaveLength(1)
-    expect(matching[0]).toMatchObject({ id: productId, platform: "Madar" })
+    expect(matching[0]).toMatchObject({ id: productId, platform: "Salla", isNative: true })
   })
 
   it("excludes products from disconnected connections and other organizations", async () => {

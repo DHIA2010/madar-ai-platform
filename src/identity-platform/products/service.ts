@@ -39,6 +39,16 @@ export interface NormalizedProduct {
   priceIncludesTax: boolean
   image: string | null
   activityDate: string
+  // True for every row backed by a real products.id -- a genuinely native product AND a
+  // synced product that's been auto-promoted/linked (see SallaProductPromotionService/
+  // ZidProductPromotionService). `platform` on a promoted row names where it came from (can read
+  // "Salla"/"Zid", not "Madar" -- see the /v1/products route's platform override), but it is
+  // still a real, editable, stock-tracked, sellable row underneath, unlike a raw synced display
+  // row (isNative: false) that has no products.id at all and is read-only here by nature.
+  // Anything that gates actual Madar-side behavior (edit/delete, bulk status change, "usable as a
+  // packaging/purchase/order line item") must check this, never `platform === "Madar"` -- that
+  // string comparison is only ever correct for telling origin apart, not for what a row can do.
+  isNative: boolean
 }
 
 interface CommerceRecordRow {
@@ -101,6 +111,7 @@ function normalizeSallaProduct(row: CommerceRecordRow): NormalizedProduct {
     priceIncludesTax: false,
     image: payload.main_image ?? payload.thumbnail ?? payload.images?.[0]?.url ?? null,
     activityDate: toIsoDate(row.updated_at),
+    isNative: false,
   }
 }
 
@@ -142,6 +153,7 @@ function normalizeShopifyProduct(row: CommerceRecordRow): NormalizedProduct {
     priceIncludesTax: false,
     image: payload.image?.src ?? payload.images?.[0]?.src ?? null,
     activityDate: toIsoDate(row.updated_at),
+    isNative: false,
   }
 }
 
@@ -191,6 +203,7 @@ function normalizeZidProduct(row: CommerceRecordRow): NormalizedProduct {
     priceIncludesTax: false,
     image: payload.images?.[0]?.image?.large ?? payload.images?.[0]?.image?.thumbnail ?? null,
     activityDate: toIsoDate(row.updated_at),
+    isNative: false,
   }
 }
 
@@ -248,6 +261,21 @@ export class ProductsAggregationService {
     return [...salla, ...shopify, ...zid].sort((a, b) =>
       b.activityDate.localeCompare(a.activityDate)
     )
+  }
+
+  // The reverse of fetchPromotedProductIds: which native products.id rows are actually a
+  // promoted/linked Salla or Zid product, keyed by the native row's own id rather than the
+  // provider's id -- what the /v1/products route needs to relabel a native row's `platform` to
+  // say where it actually came from, instead of always "Madar".
+  async fetchLinkedNativeProductIds(
+    table: "salla_product_links" | "zid_product_links",
+    organizationId: string
+  ): Promise<Set<string>> {
+    const result = await this.db.query<{ product_id: string }>(
+      `SELECT DISTINCT product_id FROM ${table} WHERE organization_id = $1`,
+      [organizationId]
+    )
+    return new Set(result.rows.map((row) => row.product_id))
   }
 
   private async fetchPromotedProductIds(

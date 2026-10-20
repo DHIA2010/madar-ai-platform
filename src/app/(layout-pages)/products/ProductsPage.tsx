@@ -322,7 +322,7 @@ function ProductRowActions({
 }) {
   const t = useTranslations("products.list")
   const locale = useLocale()
-  const isNative = product.platform === "Madar"
+  const isNative = product.isNative
 
   // Radix locks pointer events on the body while the menu is open and releases them as it
   // closes. Opening a dialog in the same tick mounts it under that lock and the whole page stops
@@ -936,7 +936,7 @@ export default function ProductsPage() {
   // store itself (same isNative rule the per-row edit/delete actions already enforce), so a
   // selection mixing both silently changes just the native ones and says so.
   const applyBulkStatus = async (nextStatus: "draft" | "active" | "archived") => {
-    const nativeSelected = selectedProducts.filter((product) => product.platform === "Madar")
+    const nativeSelected = selectedProducts.filter((product) => product.isNative)
     if (nativeSelected.length === 0) {
       toast.error(t("toasts.cannotChangeImported"))
       return
@@ -1744,7 +1744,7 @@ export default function ProductsPage() {
 
               {/* RTL: the primary action is written first so it sits at the right of the group. */}
               <DialogFooter className="mx-0 mb-0 flex-row items-center gap-2 rounded-b-[18px] border-t border-[#eef2f8] bg-[#fafbfe] p-4 sm:justify-start">
-                {detailProduct.platform === "Madar" ? (
+                {detailProduct.isNative ? (
                   <>
                     <Can permission="products:edit">
                       <Button

@@ -929,6 +929,7 @@ export default function CashierPage() {
         priceIncludesTax: created.priceIncludesTax,
         image: null,
         activityDate: new Date().toISOString(),
+        isNative: true,
       }
       setProducts((current) => [...current, newProduct])
       addToCart(newProduct)

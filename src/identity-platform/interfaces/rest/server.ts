@@ -4183,12 +4183,30 @@ export function createIdentityApiServer(
           // Products authored here and products synced from a storefront are one list to the
           // user, so both sources are merged and re-sorted by activity rather than returned as
           // two separate feeds the client would have to stitch together.
-          const [synced, native] = await Promise.all([
+          const [synced, native, sallaLinkedProductIds, zidLinkedProductIds] = await Promise.all([
             productsAggregationService.listProducts(actor),
             productCatalogService.list(actor.organizationId, actor.workspaceId),
+            productsAggregationService.fetchLinkedNativeProductIds(
+              "salla_product_links",
+              actor.organizationId
+            ),
+            productsAggregationService.fetchLinkedNativeProductIds(
+              "zid_product_links",
+              actor.organizationId
+            ),
           ])
 
-          const items = [...native.map(toNormalizedProduct), ...synced].sort((left, right) =>
+          // A promoted/linked native row stays a real, editable, stock-tracked product
+          // (isNative: true, untouched) -- only its displayed `platform` changes, from "Madar" to
+          // wherever it actually came from, so it reads as what it is instead of looking
+          // indistinguishable from a product authored directly in Madar.
+          const nativeItems = native.map(toNormalizedProduct).map((item) => {
+            if (sallaLinkedProductIds.has(item.id)) return { ...item, platform: "Salla" as const }
+            if (zidLinkedProductIds.has(item.id)) return { ...item, platform: "Zid" as const }
+            return item
+          })
+
+          const items = [...nativeItems, ...synced].sort((left, right) =>
             right.activityDate.localeCompare(left.activityDate)
           )
 

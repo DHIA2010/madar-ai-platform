@@ -737,9 +737,7 @@ export default function AddProduct() {
   const pieceProductOptions = useMemo<AppSearchableSelectOption[]>(
     () =>
       catalogue
-        .filter(
-          (product) => product.platform === "Madar" && (product.baseUnit ?? "").startsWith("حبة")
-        )
+        .filter((product) => product.isNative && (product.baseUnit ?? "").startsWith("حبة"))
         .map((product) => ({
           value: product.id,
           label: product.name,

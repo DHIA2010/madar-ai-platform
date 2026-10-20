@@ -390,6 +390,7 @@ export function toNormalizedProduct(product: ProductView): NormalizedProduct {
     priceIncludesTax: product.priceIncludesTax,
     image: product.imageUrls[0] ?? null,
     activityDate: product.updatedAt,
+    isNative: true,
   }
 }
 
