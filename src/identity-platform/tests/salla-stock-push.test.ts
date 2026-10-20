@@ -74,7 +74,7 @@ async function insertProduct(stockQuantity: number): Promise<string> {
 }
 
 describe("SallaStockPushService.pushStockForLines", () => {
-  it("pushes the current, already-committed stock figure for a linked product", async () => {
+  it("pushes the current, already-committed stock figure for a product-level linked product", async () => {
     const productId = await insertProduct(42)
     await linksService.upsertLink(
       organizationId,
@@ -84,14 +84,55 @@ describe("SallaStockPushService.pushStockForLines", () => {
 
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response("{}", { status: 200 }))
+      .mockResolvedValue(new Response("{}", { status: 201 }))
 
     await pushService.pushStockForLines(organizationId, null, [{ productId }], -1)
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const [url, init] = fetchSpy.mock.calls[0]
-    expect(String(url)).toContain("111")
-    expect(JSON.parse(String(init?.body))).toEqual({ quantity: 42 })
+    expect(String(url)).toContain("/products/quantities/bulk")
+    expect(JSON.parse(String(init?.body))).toEqual({
+      products: [{ identifer_type: "id", identifer: "111", quantity: 42, mode: "overwrite" }],
+    })
+  })
+
+  it('pushes a variant-level link using identifer_type "variant_id", not the product-level path', async () => {
+    // A variant-level link's sallaProductId is one of the product's own skus[].id, never the
+    // parent product's own id -- PUT /products/{id} 404s for it (confirmed live on stage).
+    // Salla's bulk-quantities endpoint handles this with identifer_type: "variant_id" instead.
+    const productId = await insertProduct(0)
+    const variantId = randomUUID()
+    await database.query(
+      `insert into product_variants (id, product_id, price, stock, option_values, position)
+       values ($1, $2, 100, 7, '[]'::jsonb, 0)`,
+      [variantId, productId]
+    )
+    await linksService.upsertLink(
+      organizationId,
+      {
+        productId,
+        variantId,
+        sallaProductId: "1402023290",
+        sallaProductSku: null,
+        sallaProductName: null,
+      },
+      userId
+    )
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 201 }))
+
+    await pushService.pushStockForLines(organizationId, null, [{ productId, variantId }], -1)
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(String(url)).toContain("/products/quantities/bulk")
+    expect(JSON.parse(String(init?.body))).toEqual({
+      products: [
+        { identifer_type: "variant_id", identifer: "1402023290", quantity: 7, mode: "overwrite" },
+      ],
+    })
   })
 
   it("is a silent no-op for a line with no link at all", async () => {

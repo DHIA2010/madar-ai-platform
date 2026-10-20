@@ -78,7 +78,17 @@ export class SallaStockPushService {
       try {
         const currentStock = await this.readCurrentStock(target)
         if (currentStock === null) continue
-        await this.pushQuantity(accessToken, sallaProductId, currentStock)
+        // A variant-level link's sallaProductId is one of the product's own skus[].id (see
+        // SallaProductPromotionService.linkVariants), never the parent product's own id --
+        // pushing it through PUT /products/{id} (the product-level path) 404s, since Salla has no
+        // product by that id. Confirmed live on stage. Salla's bulk-quantities endpoint accepts
+        // either kind via identifer_type, so which one to push is just that flag.
+        await this.pushQuantity(
+          accessToken,
+          sallaProductId,
+          currentStock,
+          target.variantId ? "variant_id" : "id"
+        )
       } catch (error) {
         // One failing SKU must never block another's push.
         console.error("salla.stock_push_failed", { sallaProductId, error })
@@ -106,32 +116,37 @@ export class SallaStockPushService {
     return stock === null || stock === undefined ? null : Number(stock)
   }
 
-  // Confirmed empirically against the real connected sandbox store: PUT /admin/v2/products/{id}
-  // with {quantity} in the body updates that exact field (verified via a before/after GET, and
-  // the response echoes the new value back on success). Salla rejects this with a 422
-  // ("لا يمكن تغيير الكمية لأن المنتج لديه خيارات" -- quantity can't be changed because the
-  // product has options/variants) for a Salla product that has its own variants -- confirmed live
-  // against a real product with options. Only a product-level link (the only kind this screen's
-  // UI exposes today) is safe to push through this method; a variant-level link would need
-  // Salla's variant-specific quantity endpoint instead, which hasn't been identified yet -- a
-  // 422 here is swallowed the same as any other failure (see pushStockForLines' try/catch), so
-  // this never breaks a sale, it just silently fails to sync for that one Salla product.
+  // Salla's bulk-quantities endpoint (docs.salla.dev: "Update Bulk Quantities",
+  // POST /products/quantities/bulk) replaces both of the endpoints this used to alternate
+  // between: PUT /products/{id} (product-level only -- a Salla product with options/variants
+  // rejects a direct quantity write on itself, confirmed live with a 422) and the deprecated
+  // PUT /products/quantities/variant/{variant}. One request body shape handles either kind via
+  // identifer_type, which is exactly the "product-level link vs. variant-level link" distinction
+  // pushStockForLines already has to make. A 201 only means Salla queued the update ("may take
+  // several minutes to finish the process") -- there is no synchronous per-item result to check,
+  // so this can't confirm the write actually landed, only that Salla accepted the request.
   private async pushQuantity(
     accessToken: string,
-    sallaProductId: string,
-    quantity: number
+    identifer: string,
+    quantity: number,
+    identiferType: "id" | "variant_id"
   ): Promise<void> {
-    const response = await fetch(`${this.apiBaseUrl}/products/${sallaProductId}`, {
-      method: "PUT",
+    const response = await fetch(`${this.apiBaseUrl}/products/quantities/bulk`, {
+      method: "POST",
       headers: {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
         accept: "application/json",
       },
-      body: JSON.stringify({ quantity }),
+      body: JSON.stringify({
+        products: [{ identifer_type: identiferType, identifer, quantity, mode: "overwrite" }],
+      }),
     })
     if (!response.ok) {
-      console.error("salla.stock_push_rejected", { sallaProductId, status: response.status })
+      console.error("salla.stock_push_rejected", {
+        sallaProductId: identifer,
+        status: response.status,
+      })
     }
   }
 }
