@@ -1176,9 +1176,16 @@ export default function CashierPage() {
 
   useEffect(() => {
     if (!isCheckoutOpen) return
+    // A fast cashier can complete the whole sale (which clears paymentAmounts/the cart) before
+    // this list() call resolves -- without this guard, the stale .then() below would land after
+    // close and overwrite that just-cleared state with a prefilled amount again, right as the
+    // dialog was supposed to be done with. The effect's own cleanup (fires on close or unmount)
+    // flips this so the callback can tell it's no longer for the open dialog it started as.
+    let isCurrent = true
     void posPaymentMethodsService
       .list()
       .then((methods) => {
+        if (!isCurrent) return
         const enabled = methods.filter((method) => method.enabled)
         setPaymentMethods(
           enabled.map((method) => ({
@@ -1206,7 +1213,12 @@ export default function CashierPage() {
           setPaymentAmounts({ [enabled[0].code]: total.toFixed(2) })
         }
       })
-      .catch(() => setPaymentMethods([]))
+      .catch(() => {
+        if (isCurrent) setPaymentMethods([])
+      })
+    return () => {
+      isCurrent = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheckoutOpen])
 
@@ -1462,19 +1474,29 @@ export default function CashierPage() {
       const qrDataUrl = invoice.qrCode
         ? await QRCode.toDataURL(invoice.qrCode, { margin: 0, width: 180 }).catch(() => null)
         : null
-      setSuccessQrDataUrl(qrDataUrl)
-      setSuccessInvoice(invoice)
-      if (posSettings.autoPrintInvoice) {
-        window.setTimeout(() => {
-          printThermalReceipt("zatca-print-invoice")
-          // window.print() blocks until the print dialog closes, so this runs right as the
-          // cashier lands back on the POS screen -- ready for the next barcode scan with no
-          // click needed.
+
+      // Same "Radix locks pointer events while a dialog is open and releases them as it closes"
+      // issue the row-action dropdown's afterClose helper works around (see its own comment
+      // above): opening the success dialog in the same tick the checkout dialog closes in -- which
+      // this always was for an invoice with no QR to await, and could still race even with one --
+      // sometimes left the checkout dialog looking "stuck" open on an already-emptied cart
+      // (confirmed report: total shows 0.00, the sale had already gone through). Deferred by a
+      // tick so the checkout dialog's close is never mid-flight when the success one mounts.
+      window.setTimeout(() => {
+        setSuccessQrDataUrl(qrDataUrl)
+        setSuccessInvoice(invoice)
+        if (posSettings.autoPrintInvoice) {
+          window.setTimeout(() => {
+            printThermalReceipt("zatca-print-invoice")
+            // window.print() blocks until the print dialog closes, so this runs right as the
+            // cashier lands back on the POS screen -- ready for the next barcode scan with no
+            // click needed.
+            searchInputRef.current?.focus()
+          }, 150)
+        } else {
           searchInputRef.current?.focus()
-        }, 150)
-      } else {
-        searchInputRef.current?.focus()
-      }
+        }
+      }, 0)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
       if (status === 403) {
