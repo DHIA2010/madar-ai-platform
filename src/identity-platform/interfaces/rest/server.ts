@@ -1164,10 +1164,15 @@ export function createIdentityApiServer(
 
         // TEMPORARY: the real delivery envelope shape was never confirmed against a live
         // delivery (see webhook-service.ts's ZidWebhookPayload comment) -- a real delivery is
-        // now reaching us but parsing as event/store_id/data.id all undefined, so this logs the
-        // raw body once to find the actual field names, then gets removed once the parsing
-        // below is fixed to match.
-        console.log("zid.webhook_raw_payload", JSON.stringify(payload).slice(0, 2000))
+        // now reaching us but event/data.id parse as undefined, and the body is the bare entity
+        // itself with no "event" field -- so the event name likely comes via a header or the
+        // target URL instead. Logs the full body, all non-auth headers, and the request URL once
+        // to find it; remove once the parsing below is fixed to match.
+        const headersForLog = { ...request.headers }
+        delete headersForLog.authorization
+        console.log("zid.webhook_raw_payload", JSON.stringify(payload))
+        console.log("zid.webhook_raw_headers", JSON.stringify(headersForLog))
+        console.log("zid.webhook_raw_url", request.url)
 
         await zidWebhookService.handleWebhookEvent(payload)
         return send(200, { received: true })
