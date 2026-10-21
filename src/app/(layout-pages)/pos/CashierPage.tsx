@@ -1477,9 +1477,27 @@ export default function CashierPage() {
       }
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      toast.error(status === 403 ? t("toasts.salePermissionDenied") : t("toasts.saleFailed"), {
-        description: status === 403 ? t("toasts.salePermissionDescription") : undefined,
-      })
+      if (status === 403) {
+        toast.error(t("toasts.salePermissionDenied"), {
+          description: t("toasts.salePermissionDescription"),
+        })
+      } else if (
+        error instanceof AppError &&
+        error.code === "POS_INVOICE_OUT_OF_STOCK_SALE_NOT_ALLOWED"
+      ) {
+        // The backend's own message always leads with the exact product name in quotes (see
+        // INVOICE_ERRORS.outOfStockSaleNotAllowed, invoices-service.ts) -- no structured field
+        // carries it separately, so it's pulled out of the message text itself rather than
+        // showing a vague "couldn't complete the sale" for what is actually a specific,
+        // actionable "this one item is short" case.
+        const product = /^"([^"]+)"/.exec(error.message)?.[1]
+        toast.error(
+          product ? t("toasts.saleOutOfStock", { product }) : t("toasts.saleOutOfStockGeneric"),
+          { description: t("toasts.saleOutOfStockDescription") }
+        )
+      } else {
+        toast.error(t("toasts.saleFailed"))
+      }
     } finally {
       setCheckingOut(false)
     }

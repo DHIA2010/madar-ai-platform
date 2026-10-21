@@ -2780,6 +2780,9 @@
         "salePermissionDenied": "You don't have permission to complete a sale.",
         "salePermissionDescription": "Contact the account owner to grant you the pos:manage permission.",
         "saleFailed": "Couldn't complete the sale.",
+        "saleOutOfStock": "\"{product}\" doesn't have enough stock for this sale.",
+        "saleOutOfStockDescription": "Turn on \"allow out-of-stock sale\" in POS settings to sell it anyway.",
+        "saleOutOfStockGeneric": "One of the items in this cart doesn't have enough stock for this sale.",
         "customerNameRequired": "Enter the customer's name.",
         "customerAdded": "Customer added.",
         "customerAddFailed": "Couldn't add the customer.",
@@ -7781,7 +7784,10 @@
       "toasts": {
         "forbidden": "You don't have permission to create invoices.",
         "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission.",
-        "genericError": "Couldn't create the invoice."
+        "genericError": "Couldn't create the invoice.",
+        "outOfStock": "\"{product}\" doesn't have enough stock for this sale.",
+        "outOfStockDescription": "Turn on \"allow out-of-stock sale\" in POS settings to sell it anyway.",
+        "outOfStockGeneric": "One of the items in this invoice doesn't have enough stock for this sale."
       }
     },
     "returns": {

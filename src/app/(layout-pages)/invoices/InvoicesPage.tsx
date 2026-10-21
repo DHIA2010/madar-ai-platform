@@ -1466,12 +1466,26 @@ function CreateInvoiceDialog({
       onCreated(invoice)
     } catch (error) {
       const status = error instanceof AppError ? error.status : undefined
-      toast.error(
-        status === 403 ? t("createDialog.toasts.forbidden") : t("createDialog.toasts.genericError"),
-        {
-          description: status === 403 ? t("createDialog.toasts.forbiddenDescription") : undefined,
-        }
-      )
+      if (status === 403) {
+        toast.error(t("createDialog.toasts.forbidden"), {
+          description: t("createDialog.toasts.forbiddenDescription"),
+        })
+      } else if (
+        error instanceof AppError &&
+        error.code === "POS_INVOICE_OUT_OF_STOCK_SALE_NOT_ALLOWED"
+      ) {
+        // See CashierPage.tsx's identical handling for why the product name is pulled out of the
+        // message text itself (INVOICE_ERRORS.outOfStockSaleNotAllowed, invoices-service.ts).
+        const product = /^"([^"]+)"/.exec(error.message)?.[1]
+        toast.error(
+          product
+            ? t("createDialog.toasts.outOfStock", { product })
+            : t("createDialog.toasts.outOfStockGeneric"),
+          { description: t("createDialog.toasts.outOfStockDescription") }
+        )
+      } else {
+        toast.error(t("createDialog.toasts.genericError"))
+      }
     } finally {
       setSaving(false)
     }

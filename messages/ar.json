@@ -2780,6 +2780,9 @@
         "salePermissionDenied": "لا تملك صلاحية إتمام البيع.",
         "salePermissionDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
         "saleFailed": "تعذر إتمام العملية.",
+        "saleOutOfStock": "الكمية المتوفرة من \"{product}\" غير كافية لإتمام هذا البيع.",
+        "saleOutOfStockDescription": "فعّل خيار \"السماح بالبيع عند نفاد المخزون\" من إعدادات الكاشير إن رغبت بإتمام البيع رغم ذلك.",
+        "saleOutOfStockGeneric": "أحد المنتجات في هذه الفاتورة لا يملك كمية كافية لإتمام هذا البيع.",
         "customerNameRequired": "أدخل اسم العميل.",
         "customerAdded": "تم إضافة العميل.",
         "customerAddFailed": "تعذر إضافة العميل.",
@@ -7777,7 +7780,10 @@
       "toasts": {
         "forbidden": "لا تملك صلاحية إنشاء الفواتير.",
         "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
-        "genericError": "تعذر إنشاء الفاتورة."
+        "genericError": "تعذر إنشاء الفاتورة.",
+        "outOfStock": "الكمية المتوفرة من \"{product}\" غير كافية لإتمام هذا البيع.",
+        "outOfStockDescription": "فعّل خيار \"السماح بالبيع عند نفاد المخزون\" من إعدادات الكاشير إن رغبت بإتمام البيع رغم ذلك.",
+        "outOfStockGeneric": "أحد المنتجات في هذه الفاتورة لا يملك كمية كافية لإتمام هذا البيع."
       }
     },
     "returns": {
