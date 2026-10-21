@@ -1162,6 +1162,13 @@ export function createIdentityApiServer(
           return send(400, { code: "ZID_WEBHOOK_INVALID_BODY", message: "Invalid JSON body." })
         }
 
+        // TEMPORARY: the real delivery envelope shape was never confirmed against a live
+        // delivery (see webhook-service.ts's ZidWebhookPayload comment) -- a real delivery is
+        // now reaching us but parsing as event/store_id/data.id all undefined, so this logs the
+        // raw body once to find the actual field names, then gets removed once the parsing
+        // below is fixed to match.
+        console.log("zid.webhook_raw_payload", JSON.stringify(payload).slice(0, 2000))
+
         await zidWebhookService.handleWebhookEvent(payload)
         return send(200, { received: true })
       }
