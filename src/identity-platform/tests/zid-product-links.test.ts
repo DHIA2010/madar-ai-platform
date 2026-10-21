@@ -56,6 +56,7 @@ describe("ZidProductLinksService", () => {
     )
     expect(await service.findLinkForLine(organizationId, { productId })).toEqual({
       zidProductId: "111",
+      zidProductSku: "SKU-1",
     })
     expect(await service.findProductForAnyZidId(organizationId, ["111"])).toEqual({ productId })
   })

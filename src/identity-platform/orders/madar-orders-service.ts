@@ -15,7 +15,10 @@ import type { SallaStockPushService } from "../products/salla-stock-push-service
 import type { ZidProductStockPushService } from "../products/zid-product-stock-push-service"
 import type { SallaOAuthRepository } from "../salla-oauth/repository"
 import type { TaxRatesService } from "../tax/tax-rates-service"
+import type { ZidOAuthRepository } from "../zid-oauth/repository"
+import type { ZidProductLinksService } from "../products/zid-product-links-service"
 import { SallaOrderPushService } from "./salla-order-push-service"
+import { ZidOrderPushService } from "./zid-order-push-service"
 
 const MADAR_ORDER_ERRORS = {
   notFound: () => new IdentityError("MADAR_ORDER_NOT_FOUND", 404, "business", "Order not found."),
@@ -70,18 +73,25 @@ const MAX_COMPUTED_AMOUNT = 9_999_999_999.99
 // Salla's own parsed response body. Surfacing it here is what makes a failed push's error_message
 // column self-diagnosable from the DB/UI instead of requiring a one-off repro against Salla's API
 // to find out what was actually wrong.
-function describePushError(error: unknown): string {
+function describePushError(error: unknown, providerName = "Salla"): string {
   if (!(error instanceof IntegrationProviderError)) {
-    return error instanceof Error ? error.message : "The push to Salla failed."
+    return error instanceof Error ? error.message : `The push to ${providerName} failed.`
   }
-  const details = error.details as { error?: { fields?: Record<string, string[]> } } | undefined
-  const fields = details?.error?.fields
+  const details = error.details as
+    | { error?: { fields?: Record<string, string[]> } }
+    | { message?: { description?: string } }
+    | undefined
+  const fields = (details as { error?: { fields?: Record<string, string[]> } })?.error?.fields
   if (fields && Object.keys(fields).length > 0) {
     const summary = Object.entries(fields)
       .map(([field, messages]) => `${field}: ${messages.join("; ")}`)
       .join(" | ")
     return `${error.message} (${summary})`.slice(0, 2000)
   }
+  // Zid's own error body shape (confirmed live, this session's other Zid work): {status,
+  // message: {description}}, nothing like Salla's {error:{fields}} above.
+  const zidDescription = (details as { message?: { description?: string } })?.message?.description
+  if (zidDescription) return `${error.message} (${zidDescription})`.slice(0, 2000)
   return error.message
 }
 
@@ -180,6 +190,11 @@ export interface MadarOrderView {
   sallaReferenceId: string | null
   sallaPushErrorCode: string | null
   sallaPushErrorMessage: string | null
+  zidConnectionId: string | null
+  zidPushStatus: MadarOrderPushStatus
+  zidOrderId: string | null
+  zidPushErrorCode: string | null
+  zidPushErrorMessage: string | null
   createdAt: string
   items: MadarOrderItemView[]
 }
@@ -224,6 +239,11 @@ interface MadarOrderRow {
   salla_reference_id: string | null
   salla_push_error_code: string | null
   salla_push_error_message: string | null
+  zid_connection_id: string | null
+  zid_push_status: string
+  zid_order_id: string | null
+  zid_push_error_code: string | null
+  zid_push_error_message: string | null
   created_at: Date | string
   [key: string]: unknown
 }
@@ -313,6 +333,11 @@ function mapOrder(row: MadarOrderRow, items: MadarOrderItemView[]): MadarOrderVi
     sallaReferenceId: row.salla_reference_id,
     sallaPushErrorCode: row.salla_push_error_code,
     sallaPushErrorMessage: row.salla_push_error_message,
+    zidConnectionId: row.zid_connection_id,
+    zidPushStatus: row.zid_push_status as MadarOrderPushStatus,
+    zidOrderId: row.zid_order_id,
+    zidPushErrorCode: row.zid_push_error_code,
+    zidPushErrorMessage: row.zid_push_error_message,
     createdAt: toIso(row.created_at),
     items,
   }
@@ -326,7 +351,9 @@ const ORDER_SELECT = `
          ship_to_district, ship_to_address, ship_to_postal_code, courier_id, shipping_cost,
          discount_code, discount_amount, shipping_discount_amount, subtotal_amount, tax_amount,
          total_amount, notes, salla_connection_id, salla_push_status, salla_order_id,
-         salla_reference_id, salla_push_error_code, salla_push_error_message, created_at
+         salla_reference_id, salla_push_error_code, salla_push_error_message,
+         zid_connection_id, zid_push_status, zid_order_id, zid_push_error_code,
+         zid_push_error_message, created_at
     FROM madar_orders
 `
 
@@ -343,6 +370,13 @@ export class MadarOrdersService {
     private readonly sallaStockPushService: SallaStockPushService | null = null,
     // Same as sallaStockPushService above, for a linked Zid product instead.
     private readonly zidStockPushService: ZidProductStockPushService | null = null,
+    // The three below mirror sallaOAuthRepository/sallaPushService above, for Zid's own order
+    // push (see zid-order-push-service.ts) -- all optional (null when infra isn't wired or Zid
+    // isn't connected), in which case create() simply never attempts a Zid push, same convention
+    // as every other optional push dependency here.
+    private readonly zidOAuthRepository: ZidOAuthRepository | null = null,
+    private readonly zidPushService: ZidOrderPushService | null = null,
+    private readonly zidProductLinksService: ZidProductLinksService | null = null,
     // Optional -- when null, create() falls back to DEFAULT_POS_SETTINGS (allowOutOfStockSale:
     // true), i.e. every behavior this service had before this field existed. Reuses the SAME
     // org-wide "allow sale on out-of-stock" setting POS already respects, so an org that has
@@ -416,10 +450,14 @@ export class MadarOrdersService {
       input.organizationId,
       input.workspaceId
     )
+    const zidConnection = this.zidOAuthRepository
+      ? await this.zidOAuthRepository.findActiveConnection(input.organizationId, input.workspaceId)
+      : null
 
     const id = randomUUID()
     const externalOrderId = `MADAR-${id}`
     const sallaPushStatus: MadarOrderPushStatus = connection ? "pending" : "not_applicable"
+    const zidPushStatus: MadarOrderPushStatus = zidConnection ? "pending" : "not_applicable"
 
     await this.database.withTransaction(async () => {
       // A per-workspace counter, incremented with a row-locked UPSERT inside this same
@@ -443,10 +481,11 @@ export class MadarOrdersService {
             delivery_method, ship_to_country, ship_to_city, ship_to_district, ship_to_address,
             ship_to_postal_code, courier_id, shipping_cost, discount_code, discount_amount,
             shipping_discount_amount, subtotal_amount, tax_amount, total_amount, notes,
-            created_by_user_id, salla_connection_id, salla_push_status, salla_external_order_id)
+            created_by_user_id, salla_connection_id, salla_push_status, salla_external_order_id,
+            zid_connection_id, zid_push_status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
                  $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34,
-                 $35)`,
+                 $35, $36, $37)`,
         [
           id,
           input.organizationId,
@@ -483,6 +522,8 @@ export class MadarOrdersService {
           connection?.id ?? null,
           sallaPushStatus,
           externalOrderId,
+          zidConnection?.id ?? null,
+          zidPushStatus,
         ]
       )
 
@@ -519,6 +560,9 @@ export class MadarOrdersService {
     // this same row's own salla_push_status/error_* columns afterwards.
     if (connection) {
       await this.pushToSalla(id).catch(() => {})
+    }
+    if (zidConnection) {
+      await this.pushToZid(id).catch(() => {})
     }
 
     // Independent of the order push above (and of whether `connection` was truthy here) --
@@ -710,6 +754,111 @@ export class MadarOrdersService {
             SET salla_push_status = 'failed', salla_push_attempted_at = now(),
                 salla_push_error_code = $2, salla_push_error_message = $3,
                 salla_push_attempt_count = salla_push_attempt_count + 1, updated_at = now()
+          WHERE id = $1`,
+        [orderId, code, message]
+      )
+      throw error
+    }
+  }
+
+  // Mirrors pushToSalla above, with two real differences: Zid's create-order schema has no
+  // idempotency key the way Salla's external_order_id duplicate-check gives one (see
+  // zid-order-push-service.ts's own module comment), so there is no success-reconciliation
+  // branch -- a retry after an unseen success risks a real duplicate draft order in Zid, a known,
+  // accepted limitation. And products[] only ever accepts a sku already in Zid's own catalog, so
+  // only this order's Zid-linked items (resolved via zidProductLinksService) are sent; an order
+  // with no linked items at all skips the push entirely rather than failing loudly for something
+  // the merchant has no way to act on from here.
+  private async pushToZid(orderId: string): Promise<void> {
+    if (!this.zidPushService || !this.zidProductLinksService) return
+
+    const result = await this.database.query<MadarOrderRow>(`${ORDER_SELECT} WHERE id = $1`, [
+      orderId,
+    ])
+    const row = result.rows[0]
+    if (!row || !row.zid_connection_id) return
+    if (row.payment_status === "refunded") return
+
+    const itemRows = await this.database.query<MadarOrderItemRow>(
+      `SELECT id, order_id, product_id, variant_id, product_name, sku, unit_price, quantity, tax_amount,
+              discount_amount, line_total, cost_price, weight
+         FROM madar_order_items WHERE order_id = $1`,
+      [orderId]
+    )
+
+    const linkedItems: Array<{ zidSku: string; quantity: number }> = []
+    for (const item of itemRows.rows) {
+      if (!item.product_id) continue
+      const link = await this.zidProductLinksService.findLinkForLine(row.organization_id, {
+        productId: item.product_id,
+        variantId: item.variant_id ?? null,
+      })
+      // A link's own zidProductSku snapshot (set at link time), not this line's own Madar sku --
+      // Zid's products[] has to match a sku it already recognizes in its own catalog.
+      if (link?.zidProductSku)
+        linkedItems.push({ zidSku: link.zidProductSku, quantity: Number(item.quantity) })
+    }
+    if (linkedItems.length === 0) return
+
+    try {
+      const pushResult = await this.zidPushService.pushOrder(
+        row.zid_connection_id,
+        {
+          id: row.id,
+          currency: row.currency,
+          subtotalAmount: Number(row.subtotal_amount),
+          taxAmount: Number(row.tax_amount),
+          customerName: row.customer_name,
+          customerPhone: row.customer_phone,
+          customerEmail: row.customer_email,
+          isGuestCustomer: row.is_guest_customer,
+          paymentStatus: row.payment_status as "paid" | "pending" | "refunded",
+          paymentMethodCode: row.payment_method_code,
+          totalAmount: Number(row.total_amount),
+          receiver: {
+            name: row.receiver_name,
+            phone: row.receiver_phone,
+            countryCode: row.receiver_country_code,
+            email: row.receiver_email,
+            notify: row.receiver_notify,
+          },
+          deliveryMethod: row.delivery_method as "shipping" | "pickup" | null,
+          shipTo: row.ship_to_country
+            ? {
+                country: row.ship_to_country,
+                city: row.ship_to_city ?? "",
+                district: row.ship_to_district,
+                address: row.ship_to_address,
+                postalCode: row.ship_to_postal_code,
+              }
+            : null,
+          courierId: row.courier_id,
+          shippingCost: Number(row.shipping_cost),
+          discountCode: row.discount_code,
+          discountAmount: Number(row.discount_amount),
+          shippingDiscountAmount: Number(row.shipping_discount_amount),
+          items: [],
+        },
+        linkedItems
+      )
+
+      await this.database.query(
+        `UPDATE madar_orders
+            SET zid_push_status = 'pushed', zid_order_id = $2,
+                zid_push_attempted_at = now(), zid_push_error_code = NULL,
+                zid_push_error_message = NULL,
+                zid_push_attempt_count = zid_push_attempt_count + 1, updated_at = now()
+          WHERE id = $1`,
+        [orderId, pushResult.zidOrderId]
+      )
+    } catch (error) {
+      const code = error instanceof IntegrationProviderError ? error.code : "ZID_PUSH_UNKNOWN_ERROR"
+      const message = describePushError(error, "Zid")
+      await this.database.query(
+        `UPDATE madar_orders
+            SET zid_push_status = 'failed', zid_push_attempted_at = now(),
+                zid_push_error_code = $2, zid_push_error_message = $3,
+                zid_push_attempt_count = zid_push_attempt_count + 1, updated_at = now()
           WHERE id = $1`,
         [orderId, code, message]
       )

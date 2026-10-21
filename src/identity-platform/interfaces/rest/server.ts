@@ -30,6 +30,7 @@ import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-de
 import { ZidMarketplaceAutoProvisionService } from "../../zid-oauth/auto-provision-service"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
+import { ZidOrderPushService } from "../../orders/zid-order-push-service"
 import { ZidSyncRepository } from "../../zid-oauth/sync-repository"
 import { ZidWebhookService } from "../../zid-oauth/webhook-service"
 import { verifyZidWebhookBasicAuth } from "../../zid-oauth/webhook-verification"
@@ -776,6 +777,13 @@ export function createIdentityApiServer(
           ),
           sallaStockPushService,
           zidStockPushService,
+          container.infrastructure.database
+            ? new ZidOAuthRepository(container.infrastructure.database)
+            : null,
+          new ZidOrderPushService(
+            new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database))
+          ),
+          zidProductLinksService,
           posSettingsService
         )
       : null
