@@ -138,6 +138,42 @@ function getStatusLabelClassName(label: string): string {
   return STATUS_LABEL_COLOR_PALETTE[hashStatusLabel(label) % STATUS_LABEL_COLOR_PALETTE.length]
 }
 
+// Only Madar's own 4-bucket status (Processing/Completed/Cancelled/Refunded, see
+// OrderStatusBucket) is a fully known, enumerable vocabulary -- a real Salla order's own
+// statusLabel can be a merchant-customized name with no fixed list to translate against (see this
+// file's module comment above), so that one is deliberately left exactly as the provider sent it.
+// This covers the rest of what's actually well-documented and finite: Zid's order_status.name/
+// code (docs.zid.sa/list-of-orders) and Shopify's fulfillment_status enum -- normalized
+// (lowercased, underscores as spaces) before lookup, with the raw label returned untouched for
+// anything outside this known set.
+const KNOWN_STATUS_LABEL_AR: Record<string, string> = {
+  processing: "قيد المعالجة",
+  completed: "مكتمل",
+  cancelled: "ملغى",
+  canceled: "ملغى",
+  refunded: "مسترجع",
+  new: "جديد",
+  preparing: "قيد التحضير",
+  ready: "جاهز",
+  indelivery: "قيد التوصيل",
+  "in delivery": "قيد التوصيل",
+  delivered: "تم التوصيل",
+  reversed: "مرتجع",
+  "partially reversed": "مرتجع جزئي",
+  "reverse in progress": "قيد الإرجاع",
+  initial: "ابتدائي",
+  fulfilled: "تم الشحن",
+  partial: "شحن جزئي",
+  unfulfilled: "لم يُشحن بعد",
+  restocked: "أُعيد للمخزون",
+}
+
+function translateStatusLabel(label: string, locale: Locale): string {
+  if (locale !== "ar") return label
+  const normalized = label.trim().toLowerCase().replace(/_/g, " ")
+  return KNOWN_STATUS_LABEL_AR[normalized] ?? label
+}
+
 // Real payment STATUS, not a method -- see the module comment above.
 function getPaymentStatusMeta(
   t: OrdersTranslator
@@ -680,7 +716,7 @@ export default function OrdersPage() {
           row.productCount,
           row.amount,
           paymentStatusMeta[row.paymentStatus].label,
-          row.statusLabel,
+          translateStatusLabel(row.statusLabel, locale),
         ]
           .map((value) => `"${String(value).replace(/"/g, '""')}"`)
           .join(",")
@@ -921,7 +957,7 @@ export default function OrdersPage() {
                             getStatusLabelClassName(order.statusLabel)
                           )}
                         >
-                          {order.statusLabel}
+                          {translateStatusLabel(order.statusLabel, locale)}
                         </span>
                       </td>
                       <td className="px-3 py-3">
