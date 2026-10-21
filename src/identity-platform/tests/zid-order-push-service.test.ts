@@ -195,6 +195,24 @@ describe("ZidOrderPushService.pushOrder", () => {
     ).rejects.toMatchObject({ code: "ZID_PUSH_UNAUTHORIZED" })
   })
 
+  it("throws ZID_PUSH_UNAUTHORIZED (not ZID_PUSH_NO_SHIPPING_METHOD) when delivery-options itself is unauthorized", async () => {
+    mockFetchSequence({ deliveryOptionsStatus: 401 })
+    const service = new ZidOrderPushService(new ZidOAuthService({} as never))
+
+    await expect(
+      service.pushOrder("connection-1", BASE_ORDER, [{ zidSku: "ZID-SKU-1", quantity: 1 }])
+    ).rejects.toMatchObject({ code: "ZID_PUSH_UNAUTHORIZED" })
+  })
+
+  it("throws ZID_PUSH_UNAUTHORIZED (not ZID_PUSH_NO_PAYMENT_METHOD) when payment-methods itself is unauthorized", async () => {
+    mockFetchSequence({ paymentMethodsStatus: 401 })
+    const service = new ZidOrderPushService(new ZidOAuthService({} as never))
+
+    await expect(
+      service.pushOrder("connection-1", BASE_ORDER, [{ zidSku: "ZID-SKU-1", quantity: 1 }])
+    ).rejects.toMatchObject({ code: "ZID_PUSH_UNAUTHORIZED" })
+  })
+
   it("throws ZID_PUSH_VALIDATION_FAILED for any other non-ok response", async () => {
     mockFetchSequence({ draftStatus: 422, draftBody: { message: { description: "bad request" } } })
     const service = new ZidOrderPushService(new ZidOAuthService({} as never))

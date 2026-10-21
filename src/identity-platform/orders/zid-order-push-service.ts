@@ -136,6 +136,14 @@ export class ZidOrderPushService {
         },
       }
     )
+    if (response.status === 401 || response.status === 403) {
+      throw new IntegrationProviderError(
+        "Zid rejected the push -- the connection is missing a required scope.",
+        "ZID_PUSH_UNAUTHORIZED",
+        false,
+        response.status
+      )
+    }
     if (!response.ok) return null
     const body = (await response.json()) as {
       delivery_options?: Array<{ id?: number; system_option_code?: string }>
@@ -161,6 +169,14 @@ export class ZidOrderPushService {
         accept: "application/json",
       },
     })
+    if (response.status === 401 || response.status === 403) {
+      throw new IntegrationProviderError(
+        "Zid rejected the push -- the connection is missing a required scope.",
+        "ZID_PUSH_UNAUTHORIZED",
+        false,
+        response.status
+      )
+    }
     if (!response.ok) return null
     const body = (await response.json()) as {
       data?: Array<{ id?: number; code?: string; name?: string; enabled?: boolean }>
