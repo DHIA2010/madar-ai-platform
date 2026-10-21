@@ -116,16 +116,25 @@ function basicAuthHeader() {
   return `Basic ${Buffer.from(`${WEBHOOK_USERNAME}:${WEBHOOK_PASSWORD}`).toString("base64")}`
 }
 
-function authedPost(path: string, bodyObject: unknown, authorization = basicAuthHeader()) {
+// Confirmed live against a real delivery: Zid sends the event name in this header, never in the
+// body -- there is no {event, data} envelope. A product.* event's body is the product resource
+// itself (id/store_id/... at the top level); a product.stock.* event's body is a different,
+// smaller shape with no store_id at all (see zid-oauth/webhook-service.ts).
+function authedPost(
+  path: string,
+  event: string,
+  bodyObject: unknown,
+  authorization = basicAuthHeader()
+) {
   return fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization },
+    headers: { "content-type": "application/json", authorization, "webhook-event": event },
     body: JSON.stringify(bodyObject),
   })
 }
 
 describe("POST /v1/integrations/zid/webhook", () => {
-  it("verifies Basic Auth, resolves the store, and re-fetches the canonical product record", async () => {
+  it("verifies Basic Auth, resolves the store from the body's own store_id, and re-fetches the canonical product record", async () => {
     const org = await seedOrganization()
     const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
 
@@ -148,10 +157,10 @@ describe("POST /v1/integrations/zid/webhook", () => {
       )
     })
 
-    const response = await authedPost("/v1/integrations/zid/webhook", {
-      event: "product.update",
-      store_id: STORE_ID,
-      data: { id: "555123" },
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.update", {
+      id: "555123",
+      store_id: Number(STORE_ID),
+      name: { en: "Test" },
     })
     expect(response.status).toBe(200)
 
@@ -163,13 +172,66 @@ describe("POST /v1/integrations/zid/webhook", () => {
     expect(rows.rows[0]).toEqual({ entity_type: "products", entity_id: "555123" })
   })
 
+  it("resolves a product.stock.update delivery (no store_id) via the product's own previously-synced record", async () => {
+    const org = await seedOrganization()
+    const { connectionId, customerId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+
+    // The product must already have been synced once (its own product.create/update delivery,
+    // which does carry store_id) before a stock-only delivery for it can be resolved.
+    await database.query(
+      `insert into zid_records (id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at)
+       values ($1, $2, $3, 'products', '555123', now()::date, '{}'::jsonb, now(), now())`,
+      [randomUUID(), connectionId, customerId]
+    )
+
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "test-access-token",
+      authorizationHeader: "Bearer test-access-token",
+    })
+    const nativeFetch = globalThis.fetch
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      expect(url).toContain("/products/555123/")
+      return new Response(
+        JSON.stringify({
+          id: "555123",
+          name: { en: "Test" },
+          quantity: 7,
+          updated_at: "2026-01-01T00:00:00Z",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    })
+
+    // The real body shape, confirmed live: no store_id, the stock entry's own id (not the
+    // product's) under `id`, and the product under `product_id`.
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.stock.update", {
+      id: "1f9cd41c-cf17-4746-8814-f61827b01604",
+      location: "93835d77-8eec-400d-a809-77657420d884",
+      available_quantity: 7,
+      is_infinite: false,
+      product_id: "555123",
+      sale_channels: ["catalog"],
+    })
+    expect(response.status).toBe(200)
+
+    const rows = await database.query<{ payload: { quantity?: number } }>(
+      `select payload from zid_records where connection_id = $1 and entity_id = '555123'`,
+      [connectionId]
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0].payload.quantity).toBe(7)
+  })
+
   it("rejects a request with invalid Basic Auth credentials", async () => {
     const org = await seedOrganization()
     await seedConnectedStore({ ...org, storeId: STORE_ID })
 
     const response = await authedPost(
       "/v1/integrations/zid/webhook",
-      { event: "product.update", store_id: STORE_ID, data: { id: "1" } },
+      "product.update",
+      { id: "1", store_id: Number(STORE_ID) },
       `Basic ${Buffer.from("wrong:credentials").toString("base64")}`
     )
     expect(response.status).toBe(401)
@@ -179,10 +241,9 @@ describe("POST /v1/integrations/zid/webhook", () => {
   })
 
   it("acks with 200 and does nothing for an unknown/disconnected store", async () => {
-    const response = await authedPost("/v1/integrations/zid/webhook", {
-      event: "product.update",
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.update", {
+      id: "1",
       store_id: "no-such-store",
-      data: { id: "1" },
     })
     expect(response.status).toBe(200)
 
@@ -194,10 +255,9 @@ describe("POST /v1/integrations/zid/webhook", () => {
     const org = await seedOrganization()
     await seedConnectedStore({ ...org, storeId: STORE_ID })
 
-    const response = await authedPost("/v1/integrations/zid/webhook", {
-      event: "order.create",
-      store_id: STORE_ID,
-      data: { id: "1" },
+    const response = await authedPost("/v1/integrations/zid/webhook", "order.create", {
+      id: "1",
+      store_id: Number(STORE_ID),
     })
     expect(response.status).toBe(200)
 
@@ -223,10 +283,10 @@ describe("POST /v1/integrations/zid/webhook", () => {
       )
     })
 
-    const payload = { event: "product.update", store_id: STORE_ID, data: { id: "777" } }
-    const first = await authedPost("/v1/integrations/zid/webhook", payload)
+    const body = { id: "777", store_id: Number(STORE_ID) }
+    const first = await authedPost("/v1/integrations/zid/webhook", "product.update", body)
     expect(first.status).toBe(200)
-    const second = await authedPost("/v1/integrations/zid/webhook", payload)
+    const second = await authedPost("/v1/integrations/zid/webhook", "product.update", body)
     expect(second.status).toBe(200)
 
     const rows = await database.query<{ entity_type: string; entity_id: string }>(

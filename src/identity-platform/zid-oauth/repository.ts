@@ -532,6 +532,42 @@ export class ZidOAuthRepository
     }
   }
 
+  // A real product.stock.* delivery (confirmed live) carries no store_id at all -- just the
+  // stock entry's own id and the parent product's id (product_id). The product itself was
+  // already synced earlier (via its own product.create/update delivery, which does carry
+  // store_id), so its connection is resolved by looking up that existing zid_records row instead.
+  async findWebhookTargetByZidProductId(zidProductId: string): Promise<{
+    connectionId: string
+    organizationId: string
+    workspaceId: string | null
+    customerId: string
+  } | null> {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "zid-oauth-connection-find-webhook-target-by-product",
+      text: `
+        SELECT c.id AS connection_id, c.organization_id, c.workspace_id, s.account_id AS customer_id
+        FROM zid_records r
+        JOIN zid_oauth_connections c ON c.id = r.connection_id
+        JOIN zid_stores s ON s.connection_id = c.id AND s.is_selected = true AND s.status = 'active'
+        WHERE r.entity_type = 'products' AND r.entity_id = $1
+          AND c.status = 'connected'
+          AND c.deleted_at IS NULL
+        LIMIT 1
+      `,
+      values: [zidProductId],
+    })
+
+    const row = result.rows[0]
+    if (!row) return null
+
+    return {
+      connectionId: String(row.connection_id),
+      organizationId: String(row.organization_id),
+      workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+      customerId: String(row.customer_id),
+    }
+  }
+
   async findConnectionById(connectionId: string) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "zid-oauth-connection-find",

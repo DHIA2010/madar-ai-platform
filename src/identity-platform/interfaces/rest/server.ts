@@ -31,7 +31,7 @@ import { ZidMarketplaceAutoProvisionService } from "../../zid-oauth/auto-provisi
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
 import { ZidSyncRepository } from "../../zid-oauth/sync-repository"
-import { ZidWebhookService, type ZidWebhookPayload } from "../../zid-oauth/webhook-service"
+import { ZidWebhookService } from "../../zid-oauth/webhook-service"
 import { verifyZidWebhookBasicAuth } from "../../zid-oauth/webhook-verification"
 import { resolveZidWebhookCredentials } from "../../zid-oauth/zid-credentials"
 import { TikTokAdsOAuthConnectionDeletionService } from "../../tiktok-ads-oauth/connection-deletion-service"
@@ -1155,26 +1155,20 @@ export function createIdentityApiServer(
           })
         }
 
-        let payload: ZidWebhookPayload
+        let payload: Record<string, unknown>
         try {
-          payload = (await readJsonBody(request)) as ZidWebhookPayload
+          payload = (await readJsonBody(request)) as Record<string, unknown>
         } catch {
           return send(400, { code: "ZID_WEBHOOK_INVALID_BODY", message: "Invalid JSON body." })
         }
 
-        // TEMPORARY: the real delivery envelope shape was never confirmed against a live
-        // delivery (see webhook-service.ts's ZidWebhookPayload comment) -- a real delivery is
-        // now reaching us but event/data.id parse as undefined, and the body is the bare entity
-        // itself with no "event" field -- so the event name likely comes via a header or the
-        // target URL instead. Logs the full body, all non-auth headers, and the request URL once
-        // to find it; remove once the parsing below is fixed to match.
-        const headersForLog = { ...request.headers }
-        delete headersForLog.authorization
-        console.log("zid.webhook_raw_payload", JSON.stringify(payload))
-        console.log("zid.webhook_raw_headers", JSON.stringify(headersForLog))
-        console.log("zid.webhook_raw_url", request.url)
+        // Confirmed live: Zid sends the event name in this header, never in the body -- there is
+        // no {event, data} envelope (see webhook-service.ts's ZidWebhookEnvelope comment).
+        const event = Array.isArray(request.headers["webhook-event"])
+          ? request.headers["webhook-event"][0]
+          : (request.headers["webhook-event"] ?? "")
 
-        await zidWebhookService.handleWebhookEvent(payload)
+        await zidWebhookService.handleWebhookEvent({ event, payload })
         return send(200, { received: true })
       }
 

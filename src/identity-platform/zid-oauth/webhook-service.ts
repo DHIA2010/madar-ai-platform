@@ -7,18 +7,15 @@ import type { ZidSyncRepository } from "./sync-repository"
 
 const DEFAULT_ZID_API_BASE_URL = "https://api.zid.sa/v1"
 
-// NOT YET EMPIRICALLY CONFIRMED against a real delivery (no webhook was registered yet at the
-// time this was written) -- modeled on Zid's own Create-Webhook response shape (id/event/
-// target_url/store_id/...), the same {event, <store identifier>, data} envelope Salla's real
-// webhooks use, and REST-webhook convention generally. Once a real subscription is registered
-// (see auto-registration in service.ts) and a real test edit triggers a delivery, verify the
-// actual field names against this shape and adjust here -- this is the only place that needs to
-// change if they differ, same discipline as salla-oauth/webhook-service.ts's own payload shape.
-export interface ZidWebhookPayload {
+// Confirmed live against a real delivery: Zid sends the event name in the `webhook-event` HTTP
+// header (e.g. "product.update"), never in the body -- there is no {event, data} envelope at all.
+// The body for a product.* event IS the product resource itself (same shape GET /products/{id}/
+// returns, id/store_id/... at the top level). A product.stock.* event's body is a completely
+// different, smaller shape: {id (the stock entry's own id), location, available_quantity,
+// is_infinite, product_id, sale_channels} -- no store_id at all.
+export interface ZidWebhookEnvelope {
   event: string
-  store_id?: number | string
-  merchant_id?: number | string
-  data: Record<string, unknown>
+  payload: Record<string, unknown>
 }
 
 // Confirmed real event catalog, https://docs.zid.sa/webhooks, but PRODUCTS ONLY for this pass --
@@ -28,12 +25,17 @@ export interface ZidWebhookPayload {
 // them here without a confirmed re-fetch path for that API surface would ship logic guaranteed to
 // break on the first real delivery -- flagged as explicit follow-up work, not guessed at. product
 // .delete is also deliberately unmapped, same reasoning as Salla's order.deleted/product.deleted
-// (upsertRecords only ever inserts/updates). No dedicated stock/quantity event exists either way,
-// same gap already accepted for Salla.
+// (upsertRecords only ever inserts/updates). product.stock.* IS mapped (confirmed live, a real
+// event Zid actually sends for a plain stock/quantity change) -- same re-fetch-and-promote flow as
+// a full product event, just resolved via product_id instead of store_id (see
+// findWebhookTargetByZidProductId).
 const ZID_EVENT_TO_ENTITY_TYPE: Record<string, "products"> = {
   "product.create": "products",
   "product.update": "products",
   "product.publish": "products",
+  "product.stock.create": "products",
+  "product.stock.update": "products",
+  "product.stock.delete": "products",
 }
 
 function recordDateFor(data: Record<string, unknown>): string {
@@ -58,30 +60,33 @@ export class ZidWebhookService {
     this.apiBaseUrl = apiBaseUrl ?? process.env.ZID_API_BASE_URL ?? DEFAULT_ZID_API_BASE_URL
   }
 
-  async handleWebhookEvent(payload: ZidWebhookPayload): Promise<void> {
-    console.log("zid.webhook_received", {
-      event: payload.event,
-      storeId: payload.store_id ?? payload.merchant_id,
-      entityId: (payload.data as { id?: unknown })?.id,
-    })
+  async handleWebhookEvent(envelope: ZidWebhookEnvelope): Promise<void> {
+    const { event, payload } = envelope
+    // A product.stock.* delivery's own `id` is the stock entry's id, not the product's -- the
+    // product itself is `product_id`. Every other mapped event's body is the product resource
+    // itself, so `id` at the top level already is the product's id.
+    const isStockEvent = event.startsWith("product.stock.")
+    const entityId = String((isStockEvent ? payload.product_id : payload.id) ?? "")
 
-    const entityType = ZID_EVENT_TO_ENTITY_TYPE[payload.event]
+    console.log("zid.webhook_received", { event, entityId })
+
+    const entityType = ZID_EVENT_TO_ENTITY_TYPE[event]
     if (!entityType) {
-      console.log("zid.webhook_event_unmapped", { event: payload.event })
+      console.log("zid.webhook_event_unmapped", { event })
       return
     }
-
-    const storeId = String(payload.store_id ?? payload.merchant_id ?? "")
-    if (!storeId) return
-
-    const target = await this.oauthRepository.findWebhookTargetByStoreId(storeId)
-    if (!target) {
-      console.log("zid.webhook_store_unknown", { storeId })
-      return
-    }
-
-    const entityId = String((payload.data as { id?: unknown })?.id ?? "")
     if (!entityId) return
+
+    // A stock event carries no store_id at all (confirmed live) -- the product it belongs to was
+    // already synced earlier via its own product.create/update delivery, so its connection is
+    // resolved from that existing record instead of from this payload.
+    const target = isStockEvent
+      ? await this.oauthRepository.findWebhookTargetByZidProductId(entityId)
+      : await this.oauthRepository.findWebhookTargetByStoreId(String(payload.store_id ?? ""))
+    if (!target) {
+      console.log("zid.webhook_target_unknown", { event, entityId })
+      return
+    }
 
     // Confirmed live (same sandbox store used for every other Zid finding this session):
     // GET /products/{id}/ returns the exact same full shape as the list endpoint's items, so
@@ -127,7 +132,7 @@ export class ZidWebhookService {
         },
       ],
     })
-    console.log("zid.webhook_synced", { event: payload.event, entityType, entityId })
+    console.log("zid.webhook_synced", { event, entityType, entityId })
 
     // Auto-promotes/reverse-syncs the linked native product (see ZidProductPromotionService) --
     // best-effort, a failure here must never fail the webhook's own 200 ack to Zid.
