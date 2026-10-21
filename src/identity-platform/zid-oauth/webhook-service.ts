@@ -18,24 +18,28 @@ export interface ZidWebhookEnvelope {
   payload: Record<string, unknown>
 }
 
-// Confirmed real event catalog, https://docs.zid.sa/webhooks, but PRODUCTS ONLY for this pass --
-// order.*/customer.* events exist too, but orders/customers sit on Zid's Merchant API (different
-// auth headers -- authorization+x-manager-token, not access-token+store-id -- and no single-
-// record GET endpoint confirmed, unlike the products one confirmed live this session). Mapping
-// them here without a confirmed re-fetch path for that API surface would ship logic guaranteed to
-// break on the first real delivery -- flagged as explicit follow-up work, not guessed at. product
-// .delete is also deliberately unmapped, same reasoning as Salla's order.deleted/product.deleted
-// (upsertRecords only ever inserts/updates). product.stock.* IS mapped (confirmed live, a real
-// event Zid actually sends for a plain stock/quantity change) -- same re-fetch-and-promote flow as
-// a full product event, just resolved via product_id instead of store_id (see
-// findWebhookTargetByZidProductId).
-const ZID_EVENT_TO_ENTITY_TYPE: Record<string, "products"> = {
+// Confirmed real event catalog, https://docs.zid.sa/webhooks. product.delete is deliberately
+// unmapped, same reasoning as Salla's order.deleted/product.deleted (upsertRecords only ever
+// inserts/updates). Everything else maps to the entity type its own record belongs under.
+// order.*/customer.* sit on Zid's Merchant API (different auth headers, no confirmed
+// single-record GET endpoint) -- but a product.* delivery's own body already turned out to BE
+// the canonical resource with no wrapper (confirmed live), so order/customer deliveries are
+// assumed to follow the same convention and are trusted directly rather than re-fetched; see
+// handleWebhookEvent's orders/customers branch for exactly where that assumption is used.
+type ZidWebhookEntityType = "products" | "orders" | "customers"
+const ZID_EVENT_TO_ENTITY_TYPE: Record<string, ZidWebhookEntityType> = {
   "product.create": "products",
   "product.update": "products",
   "product.publish": "products",
   "product.stock.create": "products",
   "product.stock.update": "products",
   "product.stock.delete": "products",
+  "order.create": "orders",
+  "order.status.update": "orders",
+  "order.payment_status.update": "orders",
+  "customer.create": "customers",
+  "customer.update": "customers",
+  "customer.merchant.update": "customers",
 }
 
 function recordDateFor(data: Record<string, unknown>): string {
@@ -85,6 +89,21 @@ export class ZidWebhookService {
       : await this.oauthRepository.findWebhookTargetByStoreId(String(payload.store_id ?? ""))
     if (!target) {
       console.log("zid.webhook_target_unknown", { event, entityId })
+      return
+    }
+
+    if (entityType !== "products") {
+      // Orders/customers sit on Zid's Merchant API (different auth headers than products, and
+      // no confirmed single-record GET endpoint) -- there is nothing to re-fetch against even if
+      // the defensive products pattern below were extended here. Assumed instead (not yet
+      // empirically confirmed the way products was) to follow the same convention products
+      // turned out to use: the webhook body IS the canonical resource already, trusted directly.
+      await this.syncRepository.upsertRecords({
+        connectionId: target.connectionId,
+        customerId: target.customerId,
+        records: [{ entityType, entityId, recordDate: recordDateFor(payload), payload }],
+      })
+      console.log("zid.webhook_synced", { event, entityType, entityId })
       return
     }
 

@@ -251,11 +251,11 @@ describe("POST /v1/integrations/zid/webhook", () => {
     expect(rows.rows).toHaveLength(0)
   })
 
-  it("acks with 200 and does nothing for an event type that isn't mapped (e.g. order events, not yet handled)", async () => {
+  it("acks with 200 and does nothing for an event type that isn't mapped (e.g. product.delete)", async () => {
     const org = await seedOrganization()
     await seedConnectedStore({ ...org, storeId: STORE_ID })
 
-    const response = await authedPost("/v1/integrations/zid/webhook", "order.create", {
+    const response = await authedPost("/v1/integrations/zid/webhook", "product.delete", {
       id: "1",
       store_id: Number(STORE_ID),
     })
@@ -263,6 +263,57 @@ describe("POST /v1/integrations/zid/webhook", () => {
 
     const rows = await database.query(`select 1 from zid_records`)
     expect(rows.rows).toHaveLength(0)
+  })
+
+  it("stores an order.create delivery's own body directly, no re-fetch (orders sit on a different API surface)", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+
+    const nativeFetch = globalThis.fetch
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (rawInput, init) => nativeFetch(rawInput, init))
+
+    const response = await authedPost("/v1/integrations/zid/webhook", "order.create", {
+      id: "900111",
+      store_id: Number(STORE_ID),
+      status: { code: "new" },
+      updated_at: "2026-01-01T00:00:00Z",
+    })
+    expect(response.status).toBe(200)
+
+    // No outbound call besides the test's own request to our server -- nothing is re-fetched.
+    for (const call of fetchSpy.mock.calls) {
+      const url = typeof call[0] === "string" ? call[0] : call[0].toString()
+      expect(url.startsWith(baseUrl)).toBe(true)
+    }
+
+    const rows = await database.query<{ entity_type: string; entity_id: string }>(
+      `select entity_type, entity_id from zid_records where connection_id = $1`,
+      [connectionId]
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0]).toEqual({ entity_type: "orders", entity_id: "900111" })
+  })
+
+  it("stores a customer.create delivery's own body directly", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+
+    const response = await authedPost("/v1/integrations/zid/webhook", "customer.create", {
+      id: "800222",
+      store_id: Number(STORE_ID),
+      name: "Test Customer",
+      updated_at: "2026-01-01T00:00:00Z",
+    })
+    expect(response.status).toBe(200)
+
+    const rows = await database.query<{ entity_type: string; entity_id: string }>(
+      `select entity_type, entity_id from zid_records where connection_id = $1`,
+      [connectionId]
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0]).toEqual({ entity_type: "customers", entity_id: "800222" })
   })
 
   it("is idempotent against a duplicated/replayed delivery", async () => {
