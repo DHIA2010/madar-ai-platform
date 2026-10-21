@@ -40,7 +40,10 @@ function localizedText(value: string | { en?: string; ar?: string } | undefined)
 // product as effectively untracked by reporting a large sentinel figure rather than 0 (0 would
 // make the product look falsely out-of-stock everywhere it's sold) -- otherwise sums each
 // location's own available_quantity, the real number for a store that doesn't use infinite stock.
-const INFINITE_STOCK_SENTINEL = 999_999
+// Exported so the reverse direction (zid-product-stock-push-service.ts, pushing a Madar sale's
+// new stock figure back to Zid) can recognize this exact figure and push `is_infinite: true`
+// instead of a concrete (and wrong) quantity for a product Zid itself tracks as unlimited.
+export const INFINITE_STOCK_SENTINEL = 999_999
 
 function resolveStockQuantity(payload: ZidProductApiPayload): number {
   const stocks = payload.stocks ?? []

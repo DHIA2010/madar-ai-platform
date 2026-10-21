@@ -12,6 +12,7 @@ import {
   computeStockConsumption,
 } from "../products/stock-consumption"
 import type { SallaStockPushService } from "../products/salla-stock-push-service"
+import type { ZidProductStockPushService } from "../products/zid-product-stock-push-service"
 import type { SallaOAuthRepository } from "../salla-oauth/repository"
 import type { TaxRatesService } from "../tax/tax-rates-service"
 import { SallaOrderPushService } from "./salla-order-push-service"
@@ -340,6 +341,8 @@ export class MadarOrdersService {
     // entirely unaffected either way (this push is always best-effort, matching pushToSalla's own
     // convention).
     private readonly sallaStockPushService: SallaStockPushService | null = null,
+    // Same as sallaStockPushService above, for a linked Zid product instead.
+    private readonly zidStockPushService: ZidProductStockPushService | null = null,
     // Optional -- when null, create() falls back to DEFAULT_POS_SETTINGS (allowOutOfStockSale:
     // true), i.e. every behavior this service had before this field existed. Reuses the SAME
     // org-wide "allow sale on out-of-stock" setting POS already respects, so an org that has
@@ -524,6 +527,19 @@ export class MadarOrdersService {
     // push) ends up configured for this org later.
     if (this.sallaStockPushService) {
       await this.sallaStockPushService
+        .pushStockForLines(
+          input.organizationId,
+          input.workspaceId,
+          input.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+          })),
+          -1
+        )
+        .catch(() => {})
+    }
+    if (this.zidStockPushService) {
+      await this.zidStockPushService
         .pushStockForLines(
           input.organizationId,
           input.workspaceId,

@@ -4,6 +4,7 @@ import { IdentityError } from "../application/errors/IdentityError"
 import { writeAuditLog } from "../infrastructure/postgres/audit-log-writer"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { SallaStockPushService } from "../products/salla-stock-push-service"
+import type { ZidProductStockPushService } from "../products/zid-product-stock-push-service"
 import {
   applyStockConsumption as applyStockConsumptionShared,
   assertStockAvailability as assertStockAvailabilityShared,
@@ -552,7 +553,9 @@ export class PosInvoicesService {
     private readonly settingsService: PosSettingsService | null = null,
     // Optional -- when null, create()/createReturn() simply never push a stock update to Salla;
     // the sale/return itself is entirely unaffected either way (always best-effort).
-    private readonly sallaStockPushService: SallaStockPushService | null = null
+    private readonly sallaStockPushService: SallaStockPushService | null = null,
+    // Same as sallaStockPushService above, for a linked Zid product instead.
+    private readonly zidStockPushService: ZidProductStockPushService | null = null
   ) {}
 
   async list(organizationId: string, filter: InvoiceListFilter): Promise<InvoiceView[]> {
@@ -1243,6 +1246,19 @@ export class PosInvoicesService {
         )
         .catch(() => {})
     }
+    if (this.zidStockPushService) {
+      await this.zidStockPushService
+        .pushStockForLines(
+          input.organizationId,
+          input.workspaceId,
+          input.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+          })),
+          -1
+        )
+        .catch(() => {})
+    }
 
     return created
   }
@@ -1696,6 +1712,16 @@ export class PosInvoicesService {
     // -- reads the now-restocked, committed stock figure.
     if (this.sallaStockPushService) {
       await this.sallaStockPushService
+        .pushStockForLines(
+          organizationId,
+          invoiceRow.workspace_id,
+          returnLines.map((line) => ({ productId: line.productId, variantId: line.variantId })),
+          1
+        )
+        .catch(() => {})
+    }
+    if (this.zidStockPushService) {
+      await this.zidStockPushService
         .pushStockForLines(
           organizationId,
           invoiceRow.workspace_id,

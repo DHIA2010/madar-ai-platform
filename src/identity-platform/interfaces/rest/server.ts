@@ -52,6 +52,7 @@ import { ZidProductPromotionService } from "../../products/zid-product-promotion
 import { SallaProductLinksService } from "../../products/salla-product-links-service"
 import { SallaProductPromotionService } from "../../products/salla-product-promotion-service"
 import { SallaStockPushService } from "../../products/salla-stock-push-service"
+import { ZidProductStockPushService } from "../../products/zid-product-stock-push-service"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { PurchasesService } from "../../procurement/purchases-service"
 import { ReturnsService } from "../../procurement/returns-service"
@@ -705,6 +706,15 @@ export function createIdentityApiServer(
           container.infrastructure.database
         )
       : null
+  const zidStockPushService =
+    container.infrastructure.database && zidProductLinksService
+      ? new ZidProductStockPushService(
+          new ZidOAuthService(new ZidOAuthRepository(container.infrastructure.database)),
+          new ZidOAuthRepository(container.infrastructure.database),
+          zidProductLinksService,
+          container.infrastructure.database
+        )
+      : null
   const sallaProductCreatePushService = container.infrastructure.database
     ? new SallaProductCreatePushService(
         new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database))
@@ -723,7 +733,8 @@ export function createIdentityApiServer(
           taxRatesService,
           zatcaDevicesService,
           posSettingsService,
-          sallaStockPushService
+          sallaStockPushService,
+          zidStockPushService
         )
       : null
   const posShiftsService =
@@ -764,6 +775,7 @@ export function createIdentityApiServer(
             new SallaOAuthService(new SallaOAuthRepository(container.infrastructure.database))
           ),
           sallaStockPushService,
+          zidStockPushService,
           posSettingsService
         )
       : null
