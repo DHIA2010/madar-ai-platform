@@ -234,6 +234,46 @@ describe("point-of-sale invoices", () => {
     expect(created.body.items).toHaveLength(2)
   })
 
+  it("replays the same idempotencyKey without creating a second invoice", async () => {
+    const { token } = await signIn("invoice-idempotency@example.com", "Invoice Idempotency")
+    const idempotencyKey = "11111111-1111-4111-8111-111111111111"
+
+    const first = await createInvoice(token, { ...COFFEE_SALE, idempotencyKey })
+    expect(first.status).toBe(201)
+
+    const replay = await createInvoice(token, { ...COFFEE_SALE, idempotencyKey })
+    expect(replay.status).toBe(201)
+    expect(replay.body.id).toBe(first.body.id)
+    expect(replay.body.invoiceNumber).toBe(first.body.invoiceNumber)
+
+    const different = await createInvoice(token, {
+      ...COFFEE_SALE,
+      idempotencyKey: "22222222-2222-4222-8222-222222222222",
+    })
+    expect(different.status).toBe(201)
+    expect(different.body.id).not.toBe(first.body.id)
+  })
+
+  it("resolves two concurrent requests sharing the same idempotencyKey to one invoice", async () => {
+    const { token } = await signIn("invoice-idempotency-race@example.com", "Invoice Race")
+    const idempotencyKey = "33333333-3333-4333-8333-333333333333"
+
+    const [first, second] = await Promise.all([
+      createInvoice(token, { ...COFFEE_SALE, idempotencyKey }),
+      createInvoice(token, { ...COFFEE_SALE, idempotencyKey }),
+    ])
+
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(201)
+    expect(first.body.id).toBe(second.body.id)
+
+    const invoices = await listInvoices(token)
+    const matching = invoices.body.items.filter(
+      (item) => (item as { invoiceNumber?: string }).invoiceNumber === first.body.invoiceNumber
+    )
+    expect(matching).toHaveLength(1)
+  })
+
   it("applies a discount before computing tax", async () => {
     const { token } = await signIn("invoice-discount@example.com", "Invoice Discount")
 
@@ -858,6 +898,7 @@ describe("point-of-sale invoices", () => {
     showListView: true,
     enableBarcodeScanner: true,
     playScanSound: false,
+    offlineModeEnabled: false,
   }
 
   async function savePosSettings(token: string, overrides: Record<string, unknown>) {

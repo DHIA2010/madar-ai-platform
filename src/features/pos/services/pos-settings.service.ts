@@ -48,6 +48,9 @@ export interface PosSettings {
   enableBarcodeScanner: boolean
   playScanSound: boolean
 
+  // Lets the cashier keep selling with no internet -- see features/pos/offline/. Off by default.
+  offlineModeEnabled: boolean
+
   updatedAt: string
 }
 
@@ -80,6 +83,7 @@ export const DEFAULT_POS_SETTINGS: PosSettings = {
   showListView: true,
   enableBarcodeScanner: true,
   playScanSound: false,
+  offlineModeEnabled: false,
   updatedAt: new Date(0).toISOString(),
 }
 

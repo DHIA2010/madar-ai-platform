@@ -391,6 +391,7 @@ export const posSettingsUpdateSchema = z.object({
   showListView: z.boolean(),
   enableBarcodeScanner: z.boolean(),
   playScanSound: z.boolean(),
+  offlineModeEnabled: z.boolean(),
 })
 
 const TIME_LOCAL_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -915,6 +916,9 @@ export const createInvoiceSchema = z.object({
   discountAmount: z.number().min(0).default(0),
   notes: z.string().max(500).nullable().optional().default(null),
   items: z.array(createInvoiceItemSchema).min(1),
+  // The POS offline queue's client-generated uuid for this sale attempt -- see
+  // PosInvoicesService.create()'s idempotency check. null/omitted for every ordinary online sale.
+  idempotencyKey: z.string().uuid().nullable().optional().default(null),
 })
 
 // madar_orders/madar_order_items' money columns are all numeric(12, 2) -- max ~9,999,999,999.99.

@@ -190,6 +190,11 @@ export interface CreateInvoiceInput {
   discountAmount: number
   notes: string | null
   items: InvoiceItemInput[]
+  // The POS offline queue's client-generated uuid for this sale attempt, reused unchanged across
+  // every retry -- lets create() recognize "this exact sale already went through" instead of
+  // creating a second invoice. null for every online, non-offline-mode sale (today's behavior,
+  // unchanged).
+  idempotencyKey: string | null
 }
 
 export interface InvoiceItemView extends InvoiceItemInput {
@@ -788,6 +793,17 @@ export class PosInvoicesService {
     if (!input.workspaceId) throw INVOICE_ERRORS.noWorkspace()
     if (input.payments.length === 0) throw INVOICE_ERRORS.invalidPaymentMethod()
 
+    // A retry of an already-completed offline sale (same client-generated key) returns the
+    // existing invoice instead of creating a second one -- handles the overwhelmingly common
+    // case (sequential retries from the same queue) cheaply, before any pricing/stock/wallet work
+    // below even starts. The rare true-concurrent race (e.g. the service worker's background sync
+    // and the foreground tab's own flush firing at once) is caught by the unique index further
+    // down instead.
+    if (input.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(input.organizationId, input.idempotencyKey)
+      if (existing) return existing
+    }
+
     // Every payment line can only name a method this branch has actually turned on -- the same
     // list the payment picker itself is built from, so a request can never name a method the UI
     // would never have offered.
@@ -1014,204 +1030,224 @@ export class PosInvoicesService {
     }
 
     let invoiceNumber = ""
-    await this.database.withTransaction(async () => {
-      // A per-workspace (branch) counter, incremented with a row-locked UPSERT inside this same
-      // transaction -- unlike the old global pos_invoice_number_seq (see migration 067), a
-      // rollback here reverts the counter along with everything else, so a failed create() can
-      // never burn a number and leave a real gap in this branch's own sequence. One sequence per
-      // workspace also means two different organizations' sales never interleave into what looks
-      // like a gap in either one's own invoice log.
-      const counterResult = await this.database.query<{ next_number: string }>(
-        `INSERT INTO pos_invoice_number_counters (workspace_id, next_number)
+    try {
+      await this.database.withTransaction(async () => {
+        // A per-workspace (branch) counter, incremented with a row-locked UPSERT inside this same
+        // transaction -- unlike the old global pos_invoice_number_seq (see migration 067), a
+        // rollback here reverts the counter along with everything else, so a failed create() can
+        // never burn a number and leave a real gap in this branch's own sequence. One sequence per
+        // workspace also means two different organizations' sales never interleave into what looks
+        // like a gap in either one's own invoice log.
+        const counterResult = await this.database.query<{ next_number: string }>(
+          `INSERT INTO pos_invoice_number_counters (workspace_id, next_number)
          VALUES ($1, 1)
          ON CONFLICT (workspace_id)
          DO UPDATE SET next_number = pos_invoice_number_counters.next_number + 1
          RETURNING next_number`,
-        [input.workspaceId]
-      )
-      invoiceNumber = `INV-${String(counterResult.rows[0].next_number).padStart(6, "0")}`
-
-      // Always generate the Phase 1 QR -- a merchant who hasn't finished their tax profile in
-      // Settings yet still gets one on every sale, just with an empty VAT-number tag rather than
-      // a fabricated value, instead of no QR at all until they do (see loadSellerSnapshot above).
-      let qrCode = generateZatcaQrCode({
-        sellerName: seller.name,
-        vatRegistrationNumber: seller.vatNumber ?? "",
-        timestamp: issuedAt.toISOString(),
-        invoiceTotal: totalAmount,
-        vatTotal: taxAmount,
-      })
-
-      // Phase 2: only once this organization has actually onboarded a production device (see
-      // zatca-devices-service.ts) -- every sale before that point behaves exactly as it always
-      // has. A signing failure here fails the whole sale rather than silently producing an
-      // invoice with a broken/skipped hash chain -- the same all-or-nothing guarantee the rest of
-      // this transaction already gives every other part of the sale.
-      let zatcaDeviceId: string | null = null
-      let zatcaIcv: number | null = null
-      let zatcaPreviousInvoiceHash: string | null = null
-      let zatcaInvoiceHash: string | null = null
-      let zatcaCryptographicStamp: string | null = null
-      let zatcaSignedXml: string | null = null
-      let zatcaUuid: string | null = null
-      const device = this.zatcaDevicesService
-        ? await this.zatcaDevicesService.findProductionDevice(
-            input.organizationId,
-            input.workspaceId
-          )
-        : null
-      if (device) {
-        const signed = await this.zatcaDevicesService!.signInvoice(
-          input.organizationId,
-          device.id,
-          {
-            invoiceNumber,
-            issuedAt,
-            sellerName: seller.name,
-            sellerVatNumber: seller.vatNumber ?? "",
-            sellerAddress: seller.structuredAddress,
-            customerName: input.customerName,
-            customerVatNumber: customerVatNumber,
-            subtotalAmount,
-            discountAmount,
-            taxAmount,
-            totalAmount,
-            taxRatePercent: Math.round((lineComputations[0]?.lineRate ?? 0) * 100),
-            lines: input.items.map((item, index) => ({
-              id: String(index + 1),
-              productName: item.productName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              netAmount: lineTaxDetails[index].netAmount,
-              taxAmount: lineTaxDetails[index].taxAmount,
-              taxRatePercent: Math.round(lineComputations[index].lineRate * 100),
-            })),
-            notes: input.notes,
-            advanceChain: true,
-          }
+          [input.workspaceId]
         )
-        qrCode = signed.qrCodeBase64
-        zatcaDeviceId = device.id
-        zatcaIcv = signed.icv
-        zatcaPreviousInvoiceHash = signed.previousInvoiceHashBase64
-        zatcaInvoiceHash = signed.invoiceHash.toString("base64")
-        zatcaCryptographicStamp = signed.digitalSignature.toString("base64")
-        zatcaSignedXml = Buffer.from(signed.signedXmlBase64, "base64").toString("utf8")
-        zatcaUuid = signed.uuid
-      }
+        invoiceNumber = `INV-${String(counterResult.rows[0].next_number).padStart(6, "0")}`
 
-      await this.database.query(
-        `INSERT INTO pos_invoices
+        // Always generate the Phase 1 QR -- a merchant who hasn't finished their tax profile in
+        // Settings yet still gets one on every sale, just with an empty VAT-number tag rather than
+        // a fabricated value, instead of no QR at all until they do (see loadSellerSnapshot above).
+        let qrCode = generateZatcaQrCode({
+          sellerName: seller.name,
+          vatRegistrationNumber: seller.vatNumber ?? "",
+          timestamp: issuedAt.toISOString(),
+          invoiceTotal: totalAmount,
+          vatTotal: taxAmount,
+        })
+
+        // Phase 2: only once this organization has actually onboarded a production device (see
+        // zatca-devices-service.ts) -- every sale before that point behaves exactly as it always
+        // has. A signing failure here fails the whole sale rather than silently producing an
+        // invoice with a broken/skipped hash chain -- the same all-or-nothing guarantee the rest of
+        // this transaction already gives every other part of the sale.
+        let zatcaDeviceId: string | null = null
+        let zatcaIcv: number | null = null
+        let zatcaPreviousInvoiceHash: string | null = null
+        let zatcaInvoiceHash: string | null = null
+        let zatcaCryptographicStamp: string | null = null
+        let zatcaSignedXml: string | null = null
+        let zatcaUuid: string | null = null
+        const device = this.zatcaDevicesService
+          ? await this.zatcaDevicesService.findProductionDevice(
+              input.organizationId,
+              input.workspaceId
+            )
+          : null
+        if (device) {
+          const signed = await this.zatcaDevicesService!.signInvoice(
+            input.organizationId,
+            device.id,
+            {
+              invoiceNumber,
+              issuedAt,
+              sellerName: seller.name,
+              sellerVatNumber: seller.vatNumber ?? "",
+              sellerAddress: seller.structuredAddress,
+              customerName: input.customerName,
+              customerVatNumber: customerVatNumber,
+              subtotalAmount,
+              discountAmount,
+              taxAmount,
+              totalAmount,
+              taxRatePercent: Math.round((lineComputations[0]?.lineRate ?? 0) * 100),
+              lines: input.items.map((item, index) => ({
+                id: String(index + 1),
+                productName: item.productName,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                netAmount: lineTaxDetails[index].netAmount,
+                taxAmount: lineTaxDetails[index].taxAmount,
+                taxRatePercent: Math.round(lineComputations[index].lineRate * 100),
+              })),
+              notes: input.notes,
+              advanceChain: true,
+            }
+          )
+          qrCode = signed.qrCodeBase64
+          zatcaDeviceId = device.id
+          zatcaIcv = signed.icv
+          zatcaPreviousInvoiceHash = signed.previousInvoiceHashBase64
+          zatcaInvoiceHash = signed.invoiceHash.toString("base64")
+          zatcaCryptographicStamp = signed.digitalSignature.toString("base64")
+          zatcaSignedXml = Buffer.from(signed.signedXmlBase64, "base64").toString("utf8")
+          zatcaUuid = signed.uuid
+        }
+
+        await this.database.query(
+          `INSERT INTO pos_invoices
            (id, organization_id, workspace_id, invoice_number, status, customer_name,
             customer_phone, customer_id, cashier_user_id, payment_method_code, subtotal_amount,
             discount_amount, tax_amount, total_amount, notes, created_at, qr_code, seller_name,
             seller_vat_number, seller_address, customer_vat_number, zatca_device_id, icv,
-            previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml, zatca_uuid)
+            previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml, zatca_uuid,
+            idempotency_key)
          VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
-        [
-          id,
-          input.organizationId,
-          input.workspaceId,
-          invoiceNumber,
-          input.customerName,
-          input.customerPhone,
-          input.customerId,
-          input.cashierUserId,
-          paymentMethodCode,
-          subtotalAmount,
-          discountAmount,
-          taxAmount,
-          totalAmount,
-          input.notes,
-          issuedAt,
-          qrCode,
-          seller.name || null,
-          seller.vatNumber,
-          seller.address,
-          customerVatNumber,
-          zatcaDeviceId,
-          zatcaIcv,
-          zatcaPreviousInvoiceHash,
-          zatcaInvoiceHash,
-          zatcaCryptographicStamp,
-          zatcaSignedXml,
-          zatcaUuid,
-        ]
-      )
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+          [
+            id,
+            input.organizationId,
+            input.workspaceId,
+            invoiceNumber,
+            input.customerName,
+            input.customerPhone,
+            input.customerId,
+            input.cashierUserId,
+            paymentMethodCode,
+            subtotalAmount,
+            discountAmount,
+            taxAmount,
+            totalAmount,
+            input.notes,
+            issuedAt,
+            qrCode,
+            seller.name || null,
+            seller.vatNumber,
+            seller.address,
+            customerVatNumber,
+            zatcaDeviceId,
+            zatcaIcv,
+            zatcaPreviousInvoiceHash,
+            zatcaInvoiceHash,
+            zatcaCryptographicStamp,
+            zatcaSignedXml,
+            zatcaUuid,
+            input.idempotencyKey,
+          ]
+        )
 
-      for (const [index, item] of input.items.entries()) {
-        await this.database.query(
-          `INSERT INTO pos_invoice_items
+        for (const [index, item] of input.items.entries()) {
+          await this.database.query(
+            `INSERT INTO pos_invoice_items
              (id, invoice_id, product_id, variant_id, product_name, unit_price, quantity,
               line_total, discount_amount, net_amount, tax_amount, line_net_amount)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [
-            randomUUID(),
-            id,
-            item.productId,
-            item.variantId ?? null,
-            item.productName,
-            item.unitPrice,
-            item.quantity,
-            // Never touched by the discount -- stays exactly what was actually charged per unit.
-            Math.round(item.unitPrice * item.quantity * 100) / 100,
-            Math.round(lineComputations[index].itemDiscount * 100) / 100,
-            lineTaxDetails[index].netAmount,
-            lineTaxDetails[index].taxAmount,
-            lineTaxDetails[index].lineNetAmount,
-          ]
-        )
-      }
-
-      for (const payment of input.payments) {
-        await this.database.query(
-          `INSERT INTO pos_invoice_payments (id, invoice_id, payment_method_code, amount)
-           VALUES ($1, $2, $3, $4)`,
-          [randomUUID(), id, payment.paymentMethodCode, payment.amount]
-        )
-      }
-
-      await this.applyStockConsumption(stockConsumption, -1)
-
-      // A deferred ("آجل") portion and a wallet-funded portion both draw down the SAME unified
-      // account -- one combined ledger entry for the sale, not two. Only the wallet-funded
-      // portion has a solvency floor (deferred has none, that is what deferred means), so the
-      // race-safe re-check below only guards on prepaidAmount even though the whole drawdown is
-      // debited together.
-      const accountDrawdown = Math.round((deferredAmount + prepaidAmount) * 100) / 100
-      if (accountDrawdown > 0) {
-        if (prepaidAmount > 0) {
-          const debited = await this.database.query(
-            `UPDATE customers SET account_balance = account_balance - $2, updated_at = now()
-              WHERE id = $1 AND account_balance >= $3`,
-            [input.customerId, accountDrawdown, prepaidAmount]
-          )
-          if (debited.rowCount === 0) throw INVOICE_ERRORS.insufficientWalletBalance()
-        } else {
-          await this.database.query(
-            `UPDATE customers SET account_balance = account_balance - $2, updated_at = now()
-              WHERE id = $1`,
-            [input.customerId, accountDrawdown]
+            [
+              randomUUID(),
+              id,
+              item.productId,
+              item.variantId ?? null,
+              item.productName,
+              item.unitPrice,
+              item.quantity,
+              // Never touched by the discount -- stays exactly what was actually charged per unit.
+              Math.round(item.unitPrice * item.quantity * 100) / 100,
+              Math.round(lineComputations[index].itemDiscount * 100) / 100,
+              lineTaxDetails[index].netAmount,
+              lineTaxDetails[index].taxAmount,
+              lineTaxDetails[index].lineNetAmount,
+            ]
           )
         }
 
-        await this.database.query(
-          `INSERT INTO customer_account_transactions
+        for (const payment of input.payments) {
+          await this.database.query(
+            `INSERT INTO pos_invoice_payments (id, invoice_id, payment_method_code, amount)
+           VALUES ($1, $2, $3, $4)`,
+            [randomUUID(), id, payment.paymentMethodCode, payment.amount]
+          )
+        }
+
+        await this.applyStockConsumption(stockConsumption, -1)
+
+        // A deferred ("آجل") portion and a wallet-funded portion both draw down the SAME unified
+        // account -- one combined ledger entry for the sale, not two. Only the wallet-funded
+        // portion has a solvency floor (deferred has none, that is what deferred means), so the
+        // race-safe re-check below only guards on prepaidAmount even though the whole drawdown is
+        // debited together.
+        const accountDrawdown = Math.round((deferredAmount + prepaidAmount) * 100) / 100
+        if (accountDrawdown > 0) {
+          if (prepaidAmount > 0) {
+            const debited = await this.database.query(
+              `UPDATE customers SET account_balance = account_balance - $2, updated_at = now()
+              WHERE id = $1 AND account_balance >= $3`,
+              [input.customerId, accountDrawdown, prepaidAmount]
+            )
+            if (debited.rowCount === 0) throw INVOICE_ERRORS.insufficientWalletBalance()
+          } else {
+            await this.database.query(
+              `UPDATE customers SET account_balance = account_balance - $2, updated_at = now()
+              WHERE id = $1`,
+              [input.customerId, accountDrawdown]
+            )
+          }
+
+          await this.database.query(
+            `INSERT INTO customer_account_transactions
              (id, organization_id, workspace_id, customer_id, type, reference, amount, invoice_id)
            VALUES ($1, $2, $3, $4, 'sale', $5, $6, $7)`,
-          [
-            randomUUID(),
-            input.organizationId,
-            input.workspaceId,
-            input.customerId,
-            invoiceNumber,
-            accountDrawdown,
-            id,
-          ]
-        )
+            [
+              randomUUID(),
+              input.organizationId,
+              input.workspaceId,
+              input.customerId,
+              invoiceNumber,
+              accountDrawdown,
+              id,
+            ]
+          )
+        }
+      })
+    } catch (error) {
+      // The pre-check above misses the rare true-concurrent race (e.g. the offline queue's
+      // service-worker background sync and the foreground tab's own flush both firing for the
+      // same queued sale at once) -- the unique index on (organization_id, idempotency_key) is
+      // the actual guarantee; this just turns the loser's error into "return the winner's
+      // invoice" instead of a failed sale. withTransaction has already rolled back everything
+      // this attempt itself wrote (stock, wallet, invoice number counter) before this runs.
+      // Code-only check (not constraint name, which pg-mem -- this project's test-only Postgres
+      // emulator, see expense-categories-repository.ts's identical precedent -- doesn't always
+      // report the same way real Postgres does): this insert is the only statement in this
+      // transaction a legitimate idempotent retry could ever collide on.
+      if (input.idempotencyKey && (error as { code?: string })?.code === "23505") {
+        const existing = await this.findByIdempotencyKey(input.organizationId, input.idempotencyKey)
+        if (existing) return existing
       }
-    })
+      throw error
+    }
 
     const created = await this.findById(input.organizationId, id)
     if (!created) throw INVOICE_ERRORS.notFound()
@@ -1943,7 +1979,21 @@ export class PosInvoicesService {
       `${INVOICE_SELECT} WHERE organization_id = $1 AND id = $2`,
       [organizationId, id]
     )
-    const row = result.rows[0]
+    return this.loadInvoiceView(result.rows[0])
+  }
+
+  private async findByIdempotencyKey(
+    organizationId: string,
+    idempotencyKey: string
+  ): Promise<InvoiceView | null> {
+    const result = await this.database.query<InvoiceRow>(
+      `${INVOICE_SELECT} WHERE organization_id = $1 AND idempotency_key = $2`,
+      [organizationId, idempotencyKey]
+    )
+    return this.loadInvoiceView(result.rows[0])
+  }
+
+  private async loadInvoiceView(row: InvoiceRow | undefined): Promise<InvoiceView | null> {
     if (!row) return null
 
     const [itemRows, paymentRows] = await Promise.all([
@@ -1952,13 +2002,13 @@ export class PosInvoicesService {
                  line_total, discount_amount, net_amount, tax_amount, returned_quantity
            FROM pos_invoice_items
           WHERE invoice_id = $1`,
-        [id]
+        [row.id]
       ),
       this.database.query<InvoicePaymentRow>(
         `SELECT invoice_id, payment_method_code, amount
            FROM pos_invoice_payments
           WHERE invoice_id = $1`,
-        [id]
+        [row.id]
       ),
     ])
     return mapInvoice(row, itemRows.rows.map(mapItem), paymentRows.rows.map(mapPayment))

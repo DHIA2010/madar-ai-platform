@@ -19,6 +19,11 @@ export const ROUTES = {
   orders: "/orders",
   ordersCreate: "/orders/new",
   pos: "/pos",
+  // Not a navigable page -- the offline-mode service worker's own static script path and
+  // registration scope (see features/pos/offline/PosServiceWorkerRegistration.tsx,
+  // public/pos-sw.js). Routed through here anyway since this file is the only one
+  // scripts/check-routes.mjs allows a hardcoded "/..." string literal in.
+  posServiceWorker: { script: "/pos-sw.js", scope: "/pos/" },
   shifts: "/shifts",
   shiftsDetails: (shiftId: string) => `/shifts/${shiftId}`,
   invoices: "/invoices",

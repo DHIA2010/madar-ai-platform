@@ -30,6 +30,11 @@ export interface PosSettingsView {
   enableBarcodeScanner: boolean
   playScanSound: boolean
 
+  // Lets a cashier keep selling with no internet: a sale is queued locally (IndexedDB) and
+  // synced once the connection returns. Off by default -- it registers a service worker and
+  // starts mirroring POS data into IndexedDB, which no store should get without opting in.
+  offlineModeEnabled: boolean
+
   updatedAt: string
 }
 
@@ -56,6 +61,7 @@ export interface PosSettingsUpdateInput {
   showListView: boolean
   enableBarcodeScanner: boolean
   playScanSound: boolean
+  offlineModeEnabled: boolean
 }
 
 // Every default here matches the platform's actual, already-shipped unconditional behavior --
@@ -84,6 +90,7 @@ export const DEFAULT_POS_SETTINGS: Omit<PosSettingsView, "updatedAt"> = {
   showListView: true,
   enableBarcodeScanner: true,
   playScanSound: false,
+  offlineModeEnabled: false,
 }
 
 function mapRow(row: Record<string, unknown>): PosSettingsView {
@@ -110,6 +117,7 @@ function mapRow(row: Record<string, unknown>): PosSettingsView {
     showListView: Boolean(row.show_list_view),
     enableBarcodeScanner: Boolean(row.enable_barcode_scanner),
     playScanSound: Boolean(row.play_scan_sound),
+    offlineModeEnabled: Boolean(row.offline_mode_enabled),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   }
 }
@@ -151,10 +159,10 @@ export class PosSettingsService {
         default_printer_device_id, paper_width, auto_print_invoice, print_kitchen_copy, copies_count,
         show_quick_payment_screen, allow_split_payment, remember_last_payment_method, require_payment_method_selection,
         show_product_images, use_compact_mode, show_category_panel, show_grid_view, show_list_view,
-        enable_barcode_scanner, play_scan_sound,
+        enable_barcode_scanner, play_scan_sound, offline_mode_enabled,
         created_by_user_id, updated_by_user_id, created_at, updated_at
       ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$26,now(),now()
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$27,now(),now()
       )
       on conflict (organization_id, coalesce(workspace_id, '00000000-0000-0000-0000-000000000000'))
       do update set
@@ -180,6 +188,7 @@ export class PosSettingsService {
         show_list_view = excluded.show_list_view,
         enable_barcode_scanner = excluded.enable_barcode_scanner,
         play_scan_sound = excluded.play_scan_sound,
+        offline_mode_enabled = excluded.offline_mode_enabled,
         updated_by_user_id = excluded.updated_by_user_id,
         updated_at = now()
       returning *
@@ -210,6 +219,7 @@ export class PosSettingsService {
         input.showListView,
         input.enableBarcodeScanner,
         input.playScanSound,
+        input.offlineModeEnabled,
         actorUserId,
       ]
     )

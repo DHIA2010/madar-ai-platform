@@ -69,6 +69,7 @@ import {
   posInvoicesService,
   VAT_RATE,
   type Invoice,
+  type InvoicePayment,
 } from "@/features/pos/services/pos-invoices.service"
 import { taxRatesService, type TaxRate } from "@/features/pos/services/tax-rates.service"
 import { posShiftsService, type Shift } from "@/features/pos/services/pos-shifts.service"
@@ -95,6 +96,12 @@ import {
   type PosSettings,
 } from "@/features/pos/services/pos-settings.service"
 import { openCashDrawerIfPaired } from "@/features/pos/services/pos-hardware"
+import { fetchWithOfflineFallback } from "@/features/pos/offline/cached-data"
+import { useOnlineStatus } from "@/features/pos/offline/use-online-status"
+import { useOfflineAwareCheckout } from "@/features/pos/offline/use-offline-aware-checkout"
+import { usePendingInvoices } from "@/features/pos/offline/use-pending-invoices"
+import { PendingSalesIndicator } from "@/features/pos/offline/PendingSalesIndicator"
+import { PosServiceWorkerRegistration } from "@/features/pos/offline/PosServiceWorkerRegistration"
 
 import { ThermalInvoiceReceipt } from "./ThermalInvoiceReceipt"
 
@@ -552,12 +559,33 @@ export default function CashierPage() {
   // hardcoded behavior before this settings page existed, so a workspace that never opens it
   // sees no change here either.
   const [posSettings, setPosSettings] = useState<PosSettings>(DEFAULT_POS_SETTINGS)
+  const isOnline = useOnlineStatus()
   useEffect(() => {
-    posSettingsService
-      .get()
+    if (!currentWorkspace) return
+    fetchWithOfflineFallback(
+      currentWorkspace.id,
+      "pos-settings",
+      () => posSettingsService.get(),
+      !isOnline
+    )
       .then(setPosSettings)
       .catch(() => setPosSettings(DEFAULT_POS_SETTINGS))
-  }, [])
+    // Settings themselves decide whether offline mode is even on -- re-running this whenever
+    // connectivity flips is what lets the very first online load prime the offline fallback that
+    // a later outage then reads back, without the cashier needing to do anything.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspace?.id, isOnline])
+
+  // One client-generated id per sale attempt, queued in IndexedDB on a network-level failure
+  // instead of surfacing an error -- see features/pos/offline/.
+  const offlineCheckout = useOfflineAwareCheckout(
+    currentWorkspace?.id ?? null,
+    posSettings.offlineModeEnabled
+  )
+  const pendingInvoices = usePendingInvoices(
+    currentWorkspace?.id ?? null,
+    posSettings.offlineModeEnabled
+  )
 
   // --- Real shift status ---------------------------------------------------------------------
 
@@ -642,13 +670,19 @@ export default function CashierPage() {
   const [products, setProducts] = useState<ProductRecord[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   useEffect(() => {
+    if (!currentWorkspace) return
     setLoadingProducts(true)
-    void productListService
-      .listProducts()
+    void fetchWithOfflineFallback(
+      currentWorkspace.id,
+      "products",
+      () => productListService.listProducts(),
+      !isOnline
+    )
       .then(setProducts)
       .catch(() => setProducts([]))
       .finally(() => setLoadingProducts(false))
-  }, [currentWorkspace?.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspace?.id, isOnline])
 
   // Built from whatever categories the real products actually carry -- not a fixed list, since
   // pos_invoices/products has no seeded taxonomy to match a fixed set against.
@@ -1165,6 +1199,18 @@ export default function CashierPage() {
   const [paymentMethods, setPaymentMethods] = useState<
     Array<{ code: string; name: string; subtitle: string; kind: PaymentKind }>
   >([])
+  // Wallet ("prepaid") and deferred ("credit"/آجل) both check a customer's live balance
+  // server-side (see invoices-service.ts's prepaidAmount/deferredAmount) -- offline, that balance
+  // can only ever be stale, and checking it on two different offline terminals risks double-
+  // spending it. Hidden here, not just blocked at submit time, so the cashier sees the
+  // restriction up front rather than picking one and having it fail.
+  const checkoutPaymentMethods = useMemo(
+    () =>
+      posSettings.offlineModeEnabled && !isOnline
+        ? paymentMethods.filter((method) => method.kind !== "credit" && method.kind !== "prepaid")
+        : paymentMethods,
+    [paymentMethods, posSettings.offlineModeEnabled, isOnline]
+  )
   const [checkingOut, setCheckingOut] = useState(false)
   // The just-issued invoice, rendered into the hidden #zatca-print-invoice target right after
   // checkout so the browser's print dialog opens straight onto the real receipt -- a real
@@ -1182,8 +1228,12 @@ export default function CashierPage() {
     // dialog was supposed to be done with. The effect's own cleanup (fires on close or unmount)
     // flips this so the callback can tell it's no longer for the open dialog it started as.
     let isCurrent = true
-    void posPaymentMethodsService
-      .list()
+    void fetchWithOfflineFallback(
+      currentWorkspace?.id ?? "no-workspace",
+      "payment-methods",
+      () => posPaymentMethodsService.list(),
+      !isOnline
+    )
       .then((methods) => {
         if (!isCurrent) return
         const enabled = methods.filter((method) => method.enabled)
@@ -1379,6 +1429,24 @@ export default function CashierPage() {
   // performCheckout() directly; the dialog's own confirm button is what actually calls it.
   const [isConfirmSaleOpen, setIsConfirmSaleOpen] = useState(false)
 
+  // How much of each simple/raw/weighted product (variantId === null -- a variable product's own
+  // stock lives on its variant, which this per-session net doesn't track; a known, disclosed gap,
+  // not something this best-effort check can close without caching every variant's own stock too)
+  // is already spoken for by a sale still sitting in this terminal's own offline queue. Nothing
+  // server-side can check this while offline, so this is the only thing stopping two offline
+  // sales on the SAME terminal from both selling the last cached unit -- it does not, and cannot,
+  // protect against a second, different offline terminal doing the same thing.
+  const offlineReservedStockByProductId = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const item of pendingInvoices.pending) {
+      for (const line of item.payload.items) {
+        if (!line.productId || line.variantId) continue
+        map.set(line.productId, (map.get(line.productId) ?? 0) + line.quantity)
+      }
+    }
+    return map
+  }, [pendingInvoices.pending])
+
   const completeCheckout = () => {
     // The checkout button itself is only ever shown when myOpenShift exists (see the cart
     // section below) -- this is a second, defensive check against calling this directly.
@@ -1406,6 +1474,20 @@ export default function CashierPage() {
       toast.error(t("toasts.insufficientWallet"))
       return
     }
+    if (posSettings.offlineModeEnabled && !isOnline && !posSettings.allowOutOfStockSale) {
+      for (const line of cart) {
+        if (!line.productId || line.variantId) continue
+        const product = products.find((candidate) => candidate.id === line.productId)
+        if (!product) continue
+        const reserved = offlineReservedStockByProductId.get(line.productId) ?? 0
+        if (product.availableStock - reserved < line.quantity) {
+          toast.error(t("toasts.saleOutOfStock", { product: line.productName }), {
+            description: t("toasts.saleOutOfStockDescription"),
+          })
+          return
+        }
+      }
+    }
 
     if (posSettings.confirmSale) {
       setIsConfirmSaleOpen(true)
@@ -1414,25 +1496,81 @@ export default function CashierPage() {
     void performCheckout()
   }
 
+  // Built only when a sale is queued offline instead of actually created -- there is no real
+  // server-assigned invoice number or ZATCA QR yet, so this is a best-effort local approximation
+  // for the printed receipt and the success screen, not an authoritative record (the real
+  // pos_invoices row this becomes once synced is what actually counts). subtotal/totalDiscount/
+  // tax/total are the same already-computed values the checkout dialog itself displays --
+  // identical arithmetic to invoices-service.ts's create() (see their own comments above), just
+  // without the per-product tax-rate overrides and ZATCA signing only the server can do.
+  const buildProvisionalInvoice = (localId: string, payments: InvoicePayment[]): Invoice => {
+    const now = new Date().toISOString()
+    return {
+      id: localId,
+      workspaceId: currentWorkspace?.id ?? "",
+      invoiceNumber: `OFFLINE-${localId.slice(0, 8).toUpperCase()}`,
+      status: "completed",
+      customerName: customerName.trim() || null,
+      customerPhone: customerPhone.trim() || null,
+      customerId,
+      cashierUserId: currentUser?.id ?? null,
+      paymentMethodCode: payments.length === 1 ? payments[0].paymentMethodCode : "split",
+      payments,
+      subtotalAmount: subtotal,
+      discountAmount: totalDiscount,
+      taxAmount: tax,
+      totalAmount: total,
+      notes: orderNotes.trim() || null,
+      createdAt: now,
+      items: cart.map((line, index) => {
+        const lineNet = Math.max(0, line.unitPrice * line.quantity - resolveLineDiscount(line))
+        return {
+          id: String(index + 1),
+          productId: line.productId,
+          variantId: line.variantId,
+          productName: line.productName,
+          unitPrice: line.unitPrice,
+          quantity: line.quantity,
+          lineTotal: Math.round(line.unitPrice * line.quantity * 100) / 100,
+          discountAmount: resolveLineDiscount(line),
+          netAmount: Math.round(lineNet * 100) / 100,
+          taxAmount: Math.round(lineNet * lineTaxRate(line) * 100) / 100,
+          returnedQuantity: 0,
+        }
+      }),
+      // No ZATCA Phase 1 QR without the server -- the printed receipt just omits it, same as any
+      // organization with no VAT number on file yet.
+      qrCode: null,
+      sellerName: null,
+      sellerVatNumber: null,
+      sellerAddress: null,
+      customerVatNumber: null,
+      zatcaSigned: false,
+      zatcaStatus: null,
+      zatcaReportedAt: null,
+    }
+  }
+
   const performCheckout = async () => {
     setIsConfirmSaleOpen(false)
     setCheckingOut(true)
     try {
-      const invoice: Invoice = await posInvoicesService.create({
+      const payments: InvoicePayment[] = [
+        ...nonCashEntries.map((entry) => ({
+          paymentMethodCode: entry.code,
+          amount: entry.amount,
+        })),
+        ...(appliedCash > 0 && cashEntries[0]
+          ? [{ paymentMethodCode: cashEntries[0].code, amount: appliedCash }]
+          : []),
+      ]
+      const result = await offlineCheckout({
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
         customerId,
         // Cash is capped at what the sale actually needs -- any excess the cashier typed is
         // physical change handed back, not extra revenue, so it never reaches the invoice.
-        payments: [
-          ...nonCashEntries.map((entry) => ({
-            paymentMethodCode: entry.code,
-            amount: entry.amount,
-          })),
-          ...(appliedCash > 0 && cashEntries[0]
-            ? [{ paymentMethodCode: cashEntries[0].code, amount: appliedCash }]
-            : []),
-        ],
+        payments,
         discountAmount: discount,
         notes: orderNotes.trim() || null,
         items: cart.map((line) => ({
@@ -1444,7 +1582,17 @@ export default function CashierPage() {
           discountAmount: resolveLineDiscount(line),
         })),
       })
-      toast.success(t("toasts.saleSuccess", { number: invoice.invoiceNumber }))
+      const invoice: Invoice = result.queued
+        ? buildProvisionalInvoice(result.localId, payments)
+        : result.invoice!
+      if (result.queued) {
+        void pendingInvoices.refresh()
+        toast.success(t("toasts.saleQueuedOffline"), {
+          description: t("toasts.saleQueuedOfflineDescription"),
+        })
+      } else {
+        toast.success(t("toasts.saleSuccess", { number: invoice.invoiceNumber }))
+      }
       if (posSettings.rememberLastPaymentMethod) {
         const usedCode = nonCashEntries[0]?.code ?? cashEntries[0]?.code
         if (usedCode) window.localStorage.setItem(LAST_PAYMENT_METHOD_STORAGE_KEY, usedCode)
@@ -1862,6 +2010,11 @@ export default function CashierPage() {
       dir={localeDirection(locale)}
       className="flex flex-col gap-3 lg:h-[calc(100vh-10.5rem)] lg:overflow-hidden"
     >
+      <PosServiceWorkerRegistration
+        workspaceId={currentWorkspace?.id ?? null}
+        offlineModeEnabled={posSettings.offlineModeEnabled}
+      />
+
       {/* Top bar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-2xl border border-[#e8edf3] bg-white px-3 py-2.5">
         <span
@@ -1901,6 +2054,17 @@ export default function CashierPage() {
             {todaySummary ? formatAmount(todaySummary.totalCompletedAmount, locale) : "—"}
           </span>
         </span>
+
+        {posSettings.offlineModeEnabled ? (
+          <PendingSalesIndicator
+            pending={pendingInvoices.pending}
+            pendingCount={pendingInvoices.pendingCount}
+            failedCount={pendingInvoices.failedCount}
+            isOnline={pendingInvoices.isOnline}
+            onFlushNow={() => void pendingInvoices.flushNow()}
+            onDiscard={(localId) => void pendingInvoices.discard(localId)}
+          />
+        ) : null}
 
         {myOpenShift ? (
           <>
@@ -2833,7 +2997,7 @@ export default function CashierPage() {
           </DialogHeader>
 
           <div className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto pe-1">
-            {paymentMethods.length === 0 ? (
+            {checkoutPaymentMethods.length === 0 ? (
               <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2.5 text-center text-[12px] font-semibold text-[#92400e]">
                 {t("checkoutDialog.noMethodEnabled")}
               </p>
@@ -2844,7 +3008,7 @@ export default function CashierPage() {
               // independent -- grow=1 spreads each row's own leftover space across just the
               // tiles actually on it, so a shorter last row's tiles end up wider, not squeezed.
               <div className="flex flex-wrap gap-2.5">
-                {paymentMethods.map((method) => (
+                {checkoutPaymentMethods.map((method) => (
                   <div key={method.code} className="grow shrink-0 basis-[260px]">
                     <PaymentTile
                       icon={PAYMENT_KIND_ICON[method.kind]}

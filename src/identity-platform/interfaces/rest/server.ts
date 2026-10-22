@@ -3956,6 +3956,7 @@ export function createIdentityApiServer(
               discountAmount: payload.discountAmount,
               notes: payload.notes,
               items: payload.items,
+              idempotencyKey: payload.idempotencyKey,
             })
           )
         }

@@ -215,6 +215,9 @@ export interface CreateInvoiceInput {
   discountAmount: number
   notes: string | null
   items: CreateInvoiceItemInput[]
+  // The offline queue's client-generated uuid for this sale attempt -- see
+  // features/pos/offline/use-offline-aware-checkout.ts. Omitted/null for an ordinary online sale.
+  idempotencyKey?: string | null
 }
 
 function buildQuery(filter: InvoiceListFilter): string {

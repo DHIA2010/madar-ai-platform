@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CreditCard, Monitor, Printer, ScanBarcode, ShoppingCart } from "lucide-react"
+import { CreditCard, Monitor, Printer, ScanBarcode, ShoppingCart, WifiOff } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
@@ -317,7 +317,7 @@ export function CashierSettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-3.5 lg:grid-cols-2">
+      <div className="grid gap-3.5 lg:grid-cols-3">
         {/* Interface settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
           <SectionHeader
@@ -379,9 +379,27 @@ export function CashierSettingsPage() {
             />
           </div>
         </div>
+
+        {/* Offline mode */}
+        <div className={cn(PANEL, "px-5 py-4")}>
+          <SectionHeader icon={<WifiOff className="size-4" />} title={t("offline.sectionTitle")} />
+          <div className="divide-y divide-[#eef1f6]">
+            <ToggleRow
+              title={t("offline.offlineModeEnabled.title")}
+              description={t("offline.offlineModeEnabled.description")}
+              checked={settings.offlineModeEnabled}
+              onChange={(checked) => patch({ offlineModeEnabled: checked })}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      {/* Sticky so it's always reachable without scrolling to the very bottom -- this page keeps
+          growing taller as sections get added (e.g. offline mode above), and the save button is
+          the one thing on the page a cashier manager always needs. -mx-[22px] cancels the
+          settings layout's own px-[22px] (see settings/layout.tsx) so the bar bleeds edge to
+          edge within the content pane rather than floating with gaps on each side. */}
+      <div className="sticky bottom-0 -mx-[22px] flex items-center gap-2.5 border-t border-[#e8edf3] bg-white px-[22px] py-3">
         <Button
           type="button"
           onClick={() => void onSave()}

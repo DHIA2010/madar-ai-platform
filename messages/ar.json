@@ -2593,6 +2593,17 @@
         "fullscreenAriaLabel": "ملء الشاشة",
         "closeShift": "إغلاق الوردية"
       },
+      "offlineQueue": {
+        "offline": "غير متصل",
+        "pendingCount": "{count} معلّقة",
+        "title": "المبيعات المعلّقة",
+        "empty": "لا توجد مبيعات معلّقة.",
+        "sale": "عملية بيع",
+        "statusFailed": "فشلت",
+        "statusPending": "معلّقة",
+        "discard": "تجاهل",
+        "syncNow": "مزامنة الآن"
+      },
       "categories": {
         "title": "الفئات",
         "all": "الكل"
@@ -2777,6 +2788,8 @@
         "needCustomerForPrepaid": "اختر عميلاً للخصم من رصيد محفظته.",
         "insufficientWallet": "رصيد محفظة العميل أقل من المبلغ المطلوب خصمه.",
         "saleSuccess": "تمت العملية بنجاح — فاتورة {number}",
+        "saleQueuedOffline": "تم تسجيل البيع — ستتم المزامنة تلقائياً",
+        "saleQueuedOfflineDescription": "لا يوجد اتصال بالإنترنت حالياً. تم حفظ هذه العملية على هذا الجهاز وسيتم إرسالها عند عودة الاتصال.",
         "salePermissionDenied": "لا تملك صلاحية إتمام البيع.",
         "salePermissionDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage.",
         "saleFailed": "تعذر إتمام العملية.",
@@ -4051,6 +4064,13 @@
         "playScanSound": {
           "title": "تشغيل صوت المسح",
           "description": "إصدار صوت عند قراءة الباركود"
+        }
+      },
+      "offline": {
+        "sectionTitle": "الوضع غير المتصل",
+        "offlineModeEnabled": {
+          "title": "تفعيل الوضع غير المتصل",
+          "description": "استمرار البيع بدون اتصال بالإنترنت -- تتم مزامنة المبيعات المعلّقة تلقائياً عند عودة الاتصال"
         }
       },
       "saving": "جارٍ الحفظ...",

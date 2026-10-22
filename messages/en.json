@@ -2593,6 +2593,17 @@
         "fullscreenAriaLabel": "Full screen",
         "closeShift": "Close shift"
       },
+      "offlineQueue": {
+        "offline": "Offline",
+        "pendingCount": "{count} pending",
+        "title": "Pending sales",
+        "empty": "No pending sales.",
+        "sale": "Sale",
+        "statusFailed": "Failed",
+        "statusPending": "Pending",
+        "discard": "Discard",
+        "syncNow": "Sync now"
+      },
       "categories": {
         "title": "Categories",
         "all": "All"
@@ -2777,6 +2788,8 @@
         "needCustomerForPrepaid": "Choose a customer to deduct from their wallet balance.",
         "insufficientWallet": "The customer's wallet balance is less than the amount to deduct.",
         "saleSuccess": "Sale completed successfully — invoice {number}",
+        "saleQueuedOffline": "Sale recorded — will sync automatically",
+        "saleQueuedOfflineDescription": "No internet connection right now. This sale is saved on this device and will be sent once it's back.",
         "salePermissionDenied": "You don't have permission to complete a sale.",
         "salePermissionDescription": "Contact the account owner to grant you the pos:manage permission.",
         "saleFailed": "Couldn't complete the sale.",
@@ -4051,6 +4064,13 @@
         "playScanSound": {
           "title": "Play scan sound",
           "description": "Play a sound when a barcode is scanned"
+        }
+      },
+      "offline": {
+        "sectionTitle": "Offline mode",
+        "offlineModeEnabled": {
+          "title": "Enable offline mode",
+          "description": "Keep selling with no internet connection -- pending sales sync automatically once it's back"
         }
       },
       "saving": "Saving...",
