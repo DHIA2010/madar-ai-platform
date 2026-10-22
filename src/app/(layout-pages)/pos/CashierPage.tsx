@@ -787,7 +787,12 @@ export default function CashierPage() {
     }
 
     try {
-      const detail = await productListService.getProduct(parent.id)
+      const detail = await fetchWithOfflineFallback(
+        currentWorkspace?.id ?? "no-workspace",
+        `product-detail:${parent.id}`,
+        () => productListService.getProduct(parent.id),
+        !isOnline
+      )
       const variant = detail.variants.find((entry) => entry.id === lookup.variantId)
       if (!variant) return
       addToCart(parent, {
@@ -1079,7 +1084,18 @@ export default function CashierPage() {
     setVariantPickerDetail(null)
     setLoadingVariantPicker(true)
     try {
-      setVariantPickerDetail(await productListService.getProduct(product.id))
+      // Offline, falls back to this exact product's last-cached detail (see
+      // features/pos/offline/cached-data.ts) -- only ever populated once this picker, or the
+      // barcode scan-fallback below, has successfully opened it while online at least once. A
+      // variable product never opened before offline is the same disclosed gap as an unrecognized
+      // barcode scan: nothing to fall back to, the error toast is the honest outcome.
+      const detail = await fetchWithOfflineFallback(
+        currentWorkspace?.id ?? "no-workspace",
+        `product-detail:${product.id}`,
+        () => productListService.getProduct(product.id),
+        !isOnline
+      )
+      setVariantPickerDetail(detail)
     } catch {
       toast.error(t("toasts.variantsLoadFailed"))
       setVariantPickerProduct(null)
