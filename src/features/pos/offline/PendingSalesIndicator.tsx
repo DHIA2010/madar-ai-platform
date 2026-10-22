@@ -80,10 +80,10 @@ export function PendingSalesIndicator({
                       type="button"
                       variant="outline"
                       size="sm"
+                      icon={<Trash2 className="size-3" />}
                       onClick={() => onDiscard(item.localId)}
                       className="mt-1.5 h-7 w-full rounded-[8px] text-[11px] text-[#b91c1c]"
                     >
-                      <Trash2 className="size-3" />
                       {t("discard")}
                     </AppButton>
                   ) : null}
@@ -97,11 +97,11 @@ export function PendingSalesIndicator({
             <AppButton
               type="button"
               variant="outline"
+              icon={<RefreshCw className="size-3.5" />}
               onClick={onFlushNow}
               disabled={!isOnline}
               className="h-8 w-full rounded-[8px] text-[11.5px]"
             >
-              <RefreshCw className="size-3.5" />
               {t("syncNow")}
             </AppButton>
           </div>
