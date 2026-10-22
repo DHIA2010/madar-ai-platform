@@ -25,6 +25,15 @@ import type {
   SubscriptionRequestStatus,
 } from "@/application/contracts"
 
+// True only for a failure the network itself caused, never a real rejection -- same check as
+// auth-provider.tsx's own restore flow (RestoreSessionUseCase), applied here too since this
+// provider has the identical shape of problem: a network call on every mount that must not wipe
+// out an already-valid, already-persisted (see workspace.store.ts's zustand persist) workspace
+// context just because it couldn't be refreshed right now.
+function isNetworkFailure(error: unknown): boolean {
+  return error instanceof AppError && error.kind === "network"
+}
+
 function getConfigurationErrorMessage(error: unknown): string | null {
   if (!(error instanceof AppError)) {
     return null
@@ -111,13 +120,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setWorkspaceStatus("ready")
       })
       .catch((error) => {
-        if (!cancelled) {
-          const message = getConfigurationErrorMessage(error)
-          if (message) {
-            setConfigurationError(message)
-          }
-          setWorkspaceStatus("error")
+        if (cancelled) return
+
+        // Couldn't refresh from the server, but the persisted store (zustand's own localStorage
+        // persistence, rehydrated before this effect ever ran) already has a workspace from a
+        // prior successful resolve -- trust it rather than blocking the whole app behind an
+        // error screen. This, together with RestoreSessionUseCase's own fallback, is what lets
+        // the POS offline-mode service worker's cached shell actually be usable with no network.
+        if (isNetworkFailure(error) && currentOrganization?.id && currentWorkspace?.id) {
+          setWorkspaceStatus("ready")
+          return
         }
+
+        const message = getConfigurationErrorMessage(error)
+        if (message) {
+          setConfigurationError(message)
+        }
+        setWorkspaceStatus("error")
       })
 
     return () => {

@@ -142,6 +142,14 @@ export interface SessionStoragePort {
   isExpired(session: AuthSessionDto | null): boolean
   isAccessTokenExpired(session: AuthSessionDto | null): boolean
   isRefreshTokenExpired(session: AuthSessionDto | null): boolean
+  // A local mirror of the last successfully-fetched user profile, written on every real
+  // GetCurrentUserQuery success and read back only when that same call fails for a network
+  // reason (not a real auth rejection) during session restore -- see RestoreSessionUseCase.
+  // Without this, the POS offline-mode service worker could serve the cached app shell with no
+  // network at all, but the app would still force a logout on boot (every reload re-verifies the
+  // session over the network with nothing to fall back to).
+  persistUser(user: AuthUserDto): void
+  restoreUser(): AuthUserDto | null
 }
 
 export type SessionStorageGateway = SessionStoragePort

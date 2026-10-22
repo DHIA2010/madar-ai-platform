@@ -18,16 +18,93 @@
 // deliberate, documented tradeoff, not an oversight.
 
 const SHELL_CACHE = "madar-pos-shell-v1"
+const POS_URL = "/pos/"
 const DB_NAME = "madar-pos-offline"
 const DB_VERSION = 1
 
+// Shown only if a navigation fails offline AND nothing was ever cached for it -- a constructed
+// Response, never left as `undefined` (a service worker's fetch handler resolving respondWith to
+// undefined is what produces the browser's own opaque ERR_FAILED page instead of this).
+const OFFLINE_FALLBACK_HTML =
+  '<!doctype html><html><head><meta charset="utf-8">' +
+  '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+  "<title>Madar POS</title></head>" +
+  '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;' +
+  'font-family:system-ui,sans-serif;background:#0b1738;color:#fff;text-align:center;padding:24px">' +
+  "<div><h1>Open this page once while online</h1>" +
+  "<p>Then it keeps working with no connection.</p></div></body></html>"
+
+// A service worker can never intercept the very navigation that caused it to register (that
+// request already completed before this worker existed), so without this, "visit /pos once, then
+// go offline and reload" would hit an empty cache -- confirmed live: Chrome showed ERR_FAILED, not
+// the offline fallback above, because the old fallback chain could resolve to undefined. Runs
+// once, at install time, while the browser still has the network access that made registering
+// this worker possible in the first place.
+async function precacheShell() {
+  const cache = await caches.open(SHELL_CACHE)
+  const response = await fetch(POS_URL, { credentials: "same-origin" })
+  if (!response.ok) return
+  await cache.put(POS_URL, response.clone())
+
+  const html = await response.text()
+  // Every same-origin /_next/static/... reference the document itself names directly -- covers
+  // first paint + hydration, the common case; a chunk only reachable by later client-side
+  // navigation within the page still depends on an earlier organic visit, same as before.
+  const assetUrls = new Set()
+  const pattern = /["'](\/_next\/static\/[^"']+)["']/g
+  let match
+  while ((match = pattern.exec(html))) {
+    assetUrls.add(match[1])
+  }
+
+  await Promise.all(
+    Array.from(assetUrls).map(async (assetUrl) => {
+      try {
+        const assetResponse = await fetch(assetUrl)
+        if (assetResponse.ok) await cache.put(assetUrl, assetResponse)
+      } catch {
+        // Best-effort -- a missed chunk just means that one piece won't work fully offline yet;
+        // the shell itself still loads, and a later online visit fills it in via the normal
+        // runtime-caching paths below.
+      }
+    })
+  )
+}
+
 self.addEventListener("install", (event) => {
+  event.waitUntil(precacheShell())
   self.skipWaiting()
 })
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim())
 })
+
+async function handleNavigate(request) {
+  try {
+    const response = await fetch(request)
+    const cache = await caches.open(SHELL_CACHE)
+    cache.put(request, response.clone())
+    return response
+  } catch {
+    const cache = await caches.open(SHELL_CACHE)
+    const cached = (await cache.match(request)) || (await cache.match(POS_URL))
+    if (cached) return cached
+    return new Response(OFFLINE_FALLBACK_HTML, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    })
+  }
+}
+
+async function handleStaticAsset(request) {
+  const cache = await caches.open(SHELL_CACHE)
+  const cached = await cache.match(request)
+  if (cached) return cached
+  const response = await fetch(request)
+  if (response.ok) cache.put(request, response.clone())
+  return response
+}
 
 self.addEventListener("fetch", (event) => {
   const request = event.request
@@ -36,29 +113,12 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url)
 
   if (request.mode === "navigate" && url.pathname.includes("/pos")) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone()
-          caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy))
-          return response
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match("/pos/")))
-    )
+    event.respondWith(handleNavigate(request))
     return
   }
 
   if (url.pathname.includes("/_next/static/")) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached
-        return fetch(request).then((response) => {
-          const copy = response.clone()
-          caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy))
-          return response
-        })
-      })
-    )
+    event.respondWith(handleStaticAsset(request))
   }
 })
 

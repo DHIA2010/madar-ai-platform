@@ -1,4 +1,4 @@
-import type { AuthSessionDto } from "@/application/contracts/authentication.contracts"
+import type { AuthSessionDto, AuthUserDto } from "@/application/contracts/authentication.contracts"
 import type { SessionStorageGateway } from "@/application/contracts/infrastructure.contracts"
 import { AuthenticationApiAdapter } from "@/infrastructure/data/adapters/authentication-api.adapter"
 import { createApiClient } from "@/infrastructure/http"
@@ -6,6 +6,7 @@ import { createApiClient } from "@/infrastructure/http"
 import { createStorageAdapter, type KeyValueStorage } from "../storage"
 
 const SESSION_STORAGE_KEY = "madar.auth.session"
+const USER_STORAGE_KEY = "madar.auth.user"
 
 // Module-level (not per-instance) so every SessionManager -- and every feature service creates
 // its own -- shares one in-flight refresh. Without this, several requests hitting a stale
@@ -58,6 +59,23 @@ export class SessionManager implements SessionStorageGateway {
 
   clear(): void {
     this.storage.removeItem(this.storageKey)
+    // An explicit logout/expired-refresh-token clear must never leave a stale offline-fallback
+    // profile behind for restoreUser() to hand back after someone else signs in on this device.
+    this.storage.removeItem(USER_STORAGE_KEY)
+  }
+
+  persistUser(user: AuthUserDto): void {
+    this.storage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+  }
+
+  restoreUser(): AuthUserDto | null {
+    const raw = this.storage.getItem(USER_STORAGE_KEY)
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as AuthUserDto
+    } catch {
+      return null
+    }
   }
 
   isExpired(session: AuthSessionDto | null): boolean {
