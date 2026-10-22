@@ -99,7 +99,10 @@ import { openCashDrawerIfPaired } from "@/features/pos/services/pos-hardware"
 import { fetchWithOfflineFallback } from "@/features/pos/offline/cached-data"
 import { useOnlineStatus } from "@/features/pos/offline/use-online-status"
 import { useOfflineAwareCheckout } from "@/features/pos/offline/use-offline-aware-checkout"
+import { isNetworkLevelFailure } from "@/features/pos/offline/offline-invoice-queue"
 import { usePendingInvoices } from "@/features/pos/offline/use-pending-invoices"
+import { enqueueShiftOpen } from "@/features/pos/offline/offline-shift-queue"
+import { usePendingShiftOpen } from "@/features/pos/offline/use-pending-shift-open"
 import { PendingSalesIndicator } from "@/features/pos/offline/PendingSalesIndicator"
 import { PosServiceWorkerRegistration } from "@/features/pos/offline/PosServiceWorkerRegistration"
 
@@ -590,14 +593,51 @@ export default function CashierPage() {
   // --- Real shift status ---------------------------------------------------------------------
 
   const [shifts, setShifts] = useState<Shift[] | null>(null)
-  const loadShifts = () =>
-    posShiftsService
-      .list()
+  const loadShifts = useCallback(() => {
+    if (!currentWorkspace) return Promise.resolve()
+    return fetchWithOfflineFallback(
+      currentWorkspace.id,
+      "shifts",
+      () => posShiftsService.list(),
+      !isOnline
+    )
       .then(setShifts)
       .catch(() => setShifts([]))
+  }, [currentWorkspace, isOnline])
   useEffect(() => {
     void loadShifts()
-  }, [])
+  }, [loadShifts])
+
+  // A shift opened while offline (see startShift below) that hasn't synced to the server yet --
+  // queued the same way an offline sale is (see features/pos/offline/offline-shift-queue.ts),
+  // since opening one is exactly as much "write a real row" as completing a sale is. Without
+  // this, a cashier who opened a shift offline and then reloaded the page would lose all record
+  // of it (shifts, unlike products/settings, are a real backend row, not something this screen
+  // can just assume) and get stuck unable to reopen one or sell anything -- confirmed live.
+  const pendingShiftOpen = usePendingShiftOpen(
+    currentWorkspace?.id ?? null,
+    posSettings.offlineModeEnabled,
+    () => void loadShifts()
+  )
+  const provisionalShift = useMemo((): Shift | null => {
+    const queued = pendingShiftOpen.pending.find((item) => item.status !== "failed")
+    if (!queued || !currentUser) return null
+    return {
+      id: queued.localId,
+      shiftNumber: null,
+      workspaceId: queued.payload.workspaceId,
+      cashierUserId: queued.payload.cashierUserId,
+      status: "open",
+      openingCashAmount: queued.payload.openingCashAmount,
+      openingNotes: queued.payload.openingNotes,
+      openedAt: new Date(queued.createdAt).toISOString(),
+      openedBy: currentUser.id,
+      closingCashAmount: null,
+      closingNotes: null,
+      closedAt: null,
+      closedBy: null,
+    }
+  }, [pendingShiftOpen.pending, currentUser])
 
   const myOpenShift = useMemo(
     () =>
@@ -606,8 +646,10 @@ export default function CashierPage() {
           shift.status === "open" &&
           shift.cashierUserId === currentUser?.id &&
           shift.workspaceId === currentWorkspace?.id
-      ) ?? null,
-    [shifts, currentUser?.id, currentWorkspace?.id]
+      ) ??
+      provisionalShift ??
+      null,
+    [shifts, currentUser?.id, currentWorkspace?.id, provisionalShift]
   )
 
   const [isOpenShiftDialogOpen, setIsOpenShiftDialogOpen] = useState(false)
@@ -617,19 +659,42 @@ export default function CashierPage() {
   const startShift = async () => {
     if (!currentUser || !currentWorkspace) return
     setOpeningShift(true)
-    try {
-      await posShiftsService.open({
-        workspaceId: currentWorkspace.id,
-        cashierUserId: currentUser.id,
-        openingCashAmount: Number(openingCashAmount) || 0,
-        openingNotes: null,
+    const payload = {
+      workspaceId: currentWorkspace.id,
+      cashierUserId: currentUser.id,
+      openingCashAmount: Number(openingCashAmount) || 0,
+      openingNotes: null,
+    }
+
+    const queueOffline = async () => {
+      await enqueueShiftOpen(crypto.randomUUID(), currentWorkspace.id, payload)
+      void pendingShiftOpen.refresh()
+      toast.success(t("toasts.shiftOpenedOffline"), {
+        description: t("toasts.shiftOpenedOfflineDescription"),
       })
+      setIsOpenShiftDialogOpen(false)
+      setOpeningCashAmount("")
+    }
+
+    try {
+      // Known offline already -- skip straight to queuing rather than waiting out a request that
+      // cannot succeed, same as useOfflineAwareCheckout's own short-circuit for a sale.
+      if (posSettings.offlineModeEnabled && !isOnline) {
+        await queueOffline()
+        return
+      }
+
+      await posShiftsService.open(payload)
       toast.success(t("toasts.shiftOpened"))
       setIsOpenShiftDialogOpen(false)
       setOpeningCashAmount("")
       await loadShifts()
-    } catch {
-      toast.error(t("toasts.shiftOpenFailed"))
+    } catch (error) {
+      if (posSettings.offlineModeEnabled && isNetworkLevelFailure(error)) {
+        await queueOffline()
+      } else {
+        toast.error(t("toasts.shiftOpenFailed"))
+      }
     } finally {
       setOpeningShift(false)
     }

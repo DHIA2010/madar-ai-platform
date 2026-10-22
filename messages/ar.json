@@ -2774,6 +2774,8 @@
       },
       "toasts": {
         "shiftOpened": "تم فتح الوردية.",
+        "shiftOpenedOffline": "تم فتح الوردية — ستتم المزامنة تلقائياً",
+        "shiftOpenedOfflineDescription": "لا يوجد اتصال بالإنترنت حالياً. تم حفظ الوردية على هذا الجهاز وستتم مزامنتها عند عودة الاتصال.",
         "shiftOpenFailed": "تعذر فتح الوردية.",
         "variantLoadFailed": "تعذر تحميل بيانات هذا المتغير.",
         "productNameRequired": "أدخل اسم المنتج.",

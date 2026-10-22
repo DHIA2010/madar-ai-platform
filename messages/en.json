@@ -2774,6 +2774,8 @@
       },
       "toasts": {
         "shiftOpened": "Shift opened.",
+        "shiftOpenedOffline": "Shift opened — will sync automatically",
+        "shiftOpenedOfflineDescription": "No internet connection right now. This shift is saved on this device and will be sent once it's back.",
         "shiftOpenFailed": "Couldn't open the shift.",
         "variantLoadFailed": "Couldn't load this variant's data.",
         "productNameRequired": "Enter the product name.",

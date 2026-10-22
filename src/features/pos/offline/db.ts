@@ -1,8 +1,10 @@
 import { type DBSchema, type IDBPDatabase, openDB } from "idb"
 
 import type { CreateInvoiceInput } from "../services/pos-invoices.service"
+import type { OpenShiftInput } from "../services/pos-shifts.service"
 
-export type PendingInvoiceStatus = "pending" | "syncing" | "failed"
+export type PendingRecordStatus = "pending" | "syncing" | "failed"
+export type PendingInvoiceStatus = PendingRecordStatus
 
 export interface PendingInvoiceRecord {
   // Client-generated uuid, reused directly as the idempotencyKey sent to the backend -- see
@@ -13,6 +15,16 @@ export interface PendingInvoiceRecord {
   createdAt: number
   attempts: number
   status: PendingInvoiceStatus
+  lastError: string | null
+}
+
+export interface PendingShiftOpenRecord {
+  localId: string
+  workspaceId: string
+  payload: OpenShiftInput
+  createdAt: number
+  attempts: number
+  status: PendingRecordStatus
   lastError: string | null
 }
 
@@ -41,6 +53,11 @@ interface MadarPosOfflineDB extends DBSchema {
     value: PendingInvoiceRecord
     indexes: { byWorkspace: string }
   }
+  pendingShiftOpens: {
+    key: string
+    value: PendingShiftOpenRecord
+    indexes: { byWorkspace: string }
+  }
   cachedData: {
     key: [string, string]
     value: CachedDataRecord
@@ -52,7 +69,7 @@ interface MadarPosOfflineDB extends DBSchema {
 }
 
 const DB_NAME = "madar-pos-offline"
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise: Promise<IDBPDatabase<MadarPosOfflineDB>> | null = null
 
@@ -62,12 +79,20 @@ export function getOfflineDb(): Promise<IDBPDatabase<MadarPosOfflineDB>> {
   }
   if (!dbPromise) {
     dbPromise = openDB<MadarPosOfflineDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const pendingInvoices = db.createObjectStore("pendingInvoices", { keyPath: "localId" })
-        pendingInvoices.createIndex("byWorkspace", "workspaceId")
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const pendingInvoices = db.createObjectStore("pendingInvoices", { keyPath: "localId" })
+          pendingInvoices.createIndex("byWorkspace", "workspaceId")
 
-        db.createObjectStore("cachedData", { keyPath: ["workspaceId", "key"] })
-        db.createObjectStore("authMirror", { keyPath: "id" })
+          db.createObjectStore("cachedData", { keyPath: ["workspaceId", "key"] })
+          db.createObjectStore("authMirror", { keyPath: "id" })
+        }
+        if (oldVersion < 2) {
+          const pendingShiftOpens = db.createObjectStore("pendingShiftOpens", {
+            keyPath: "localId",
+          })
+          pendingShiftOpens.createIndex("byWorkspace", "workspaceId")
+        }
       },
     })
   }
