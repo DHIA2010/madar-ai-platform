@@ -684,6 +684,48 @@ export default function CashierPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspace?.id, isOnline])
 
+  // Warms the per-product variant-detail cache (see openVariantPicker/handleScanFallback below)
+  // for every variable product up front, instead of waiting for a cashier to have happened to
+  // open each one at least once while online -- without this, "offline mode works" would really
+  // only mean "offline mode works for whichever handful of products someone already clicked
+  // through," which isn't a realistic expectation for a real catalog. Only runs while online
+  // (nothing to warm the cache FROM otherwise); a small sequential batch size keeps this from
+  // firing dozens of requests at once on a large catalog. Best-effort throughout -- a product
+  // this can't reach stays exactly as uncached as it already was, no worse off.
+  useEffect(() => {
+    if (!isOnline || !posSettings.offlineModeEnabled || !currentWorkspace || products.length === 0)
+      return
+    let cancelled = false
+    const workspaceId = currentWorkspace.id
+    const variableProductIds = products
+      .filter((product) => product.productType === "variable")
+      .map((product) => product.id)
+
+    async function warmCache() {
+      const BATCH_SIZE = 3
+      for (let i = 0; i < variableProductIds.length; i += BATCH_SIZE) {
+        if (cancelled) return
+        const batch = variableProductIds.slice(i, i + BATCH_SIZE)
+        await Promise.all(
+          batch.map((id) =>
+            fetchWithOfflineFallback(
+              workspaceId,
+              `product-detail:${id}`,
+              () => productListService.getProduct(id),
+              false
+            ).catch(() => {})
+          )
+        )
+      }
+    }
+
+    void warmCache()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline, posSettings.offlineModeEnabled, currentWorkspace?.id, products])
+
   // Built from whatever categories the real products actually carry -- not a fixed list, since
   // pos_invoices/products has no seeded taxonomy to match a fixed set against.
   const categories = useMemo(() => {
