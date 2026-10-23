@@ -226,3 +226,32 @@ export interface SalesByBranchDto {
   }
   branches: SalesByBranchRow[]
 }
+
+// ---- POS summary (home dashboard "نقاط البيع" tab) ---------------------------------------------
+// The one ready report that combines figures otherwise spread across several others (sales-by-
+// branch's totals, net-income's returns, sales-by-customer's customerCount) into a single call,
+// plus two things no existing report provides: a true daily sales trend over an arbitrary range,
+// and a payment-method breakdown read from pos_invoice_payments itself (so a split-tender sale is
+// divided across its real methods, not collapsed into one "split" bucket the way sales-by-user-
+// payment-method's own payment_method_code column reads it -- see ready-reports-repository.ts's
+// posSummaryPaymentBreakdown()).
+
+export interface PosSummaryKpiValue {
+  value: number
+  changePercent: number | null
+}
+
+export interface PosSummaryDto {
+  kpis: {
+    netSales: PosSummaryKpiValue
+    totalSales: PosSummaryKpiValue
+    invoiceCount: PosSummaryKpiValue
+    avgInvoiceValue: PosSummaryKpiValue
+    customerCount: PosSummaryKpiValue
+    returns: PosSummaryKpiValue
+  }
+  paymentBreakdown: Array<{ paymentMethodCode: string; amount: number; percentage: number }>
+  trend: Array<{ date: string; totalSales: number }>
+  topProducts: SalesByProductRow[]
+  branches: SalesByBranchRow[]
+}

@@ -191,6 +191,26 @@ export interface SalesByBranchDto {
   branches: SalesByBranchRow[]
 }
 
+export interface PosSummaryKpiValue {
+  value: number
+  changePercent: number | null
+}
+
+export interface PosSummaryDto {
+  kpis: {
+    netSales: PosSummaryKpiValue
+    totalSales: PosSummaryKpiValue
+    invoiceCount: PosSummaryKpiValue
+    avgInvoiceValue: PosSummaryKpiValue
+    customerCount: PosSummaryKpiValue
+    returns: PosSummaryKpiValue
+  }
+  paymentBreakdown: Array<{ paymentMethodCode: string; amount: number; percentage: number }>
+  trend: Array<{ date: string; totalSales: number }>
+  topProducts: SalesByProductRow[]
+  branches: SalesByBranchRow[]
+}
+
 export interface ReadyReportFilters {
   from: string
   to: string

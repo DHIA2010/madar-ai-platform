@@ -418,6 +418,85 @@
       "trend": "Not enough data for this period.",
       "channel": "No data yet.",
       "campaigns": "No campaigns for this period."
+    },
+    "homeTabs": {
+      "stores": "Online Stores",
+      "campaigns": "Ad Campaigns",
+      "pos": "Points of Sale",
+      "storesComingSoonTitle": "Coming soon",
+      "storesComingSoonSubtitle": "An overview of your online stores' performance is on the way."
+    },
+    "posSummary": {
+      "kpis": {
+        "netSales": "Net Sales",
+        "totalSales": "Total Sales",
+        "invoiceCount": "Invoice Count",
+        "avgInvoiceValue": "Avg Invoice Value",
+        "customerCount": "Customers",
+        "returns": "Returns"
+      },
+      "paymentMethodsTitle": "Payment Methods",
+      "trendTitle": "Sales Over Time",
+      "topProductsTitle": "Top Selling Products",
+      "branchesTitle": "Sales by Branch",
+      "viewAll": "View all",
+      "tooltipSales": "Sales",
+      "noData": "No data for this period."
+    },
+    "campaignsSummary": {
+      "kpis": {
+        "cost": "Cost",
+        "clicks": "Click",
+        "impressions": "Impression",
+        "ctr": "CTR",
+        "cpc": "Avg Click Cost",
+        "multipleSelected": "{count} selected"
+      },
+      "trendTitle": "Daily Trend",
+      "platformsTitle": "By Platform",
+      "objectivesTitle": "Performance by Campaign Goal",
+      "platformTrendTitle": "Trend by Platform",
+      "objectives": {
+        "Awareness": "Brand Awareness",
+        "Traffic": "Traffic",
+        "Leads": "Lead Generation",
+        "Conversions": "Conversions",
+        "Sales": "Sales",
+        "Other": "Other"
+      },
+      "noData": "No data for this period."
+    },
+    "storesSummary": {
+      "kpis": {
+        "orderCount": "Orders",
+        "totalSales": "Total Sales",
+        "avgOrderValue": "Avg Order Value"
+      },
+      "trendTitle": "Trend",
+      "trendTabs": {
+        "sales": "Sales",
+        "orders": "Orders"
+      },
+      "byStoreTitle": "Sales by Store",
+      "topProductsTitle": "Top Selling Products",
+      "storesTableTitle": "Your Stores",
+      "table": {
+        "store": "Store",
+        "status": "Status",
+        "orders": "Orders",
+        "sales": "Total Sales",
+        "viewReports": "View reports"
+      },
+      "status": {
+        "connected": "Connected",
+        "pending": "Pending setup",
+        "paused": "Paused",
+        "disconnected": "Disconnected",
+        "error": "Error"
+      },
+      "ordersUnit": "orders",
+      "noData": "No data for this period.",
+      "noStores": "No connected stores yet."
     }
   },
   "dateRangeFilter": {

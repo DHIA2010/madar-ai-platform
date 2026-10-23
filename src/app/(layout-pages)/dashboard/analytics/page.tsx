@@ -1,5 +1,5 @@
-import HomeDashboard from "./HomeDashboard"
+import { HomeTabs } from "./HomeTabs"
 
 export default function Page() {
-  return <HomeDashboard />
+  return <HomeTabs />
 }

@@ -69,6 +69,14 @@ export interface ChannelsSummary {
 export interface ChannelsTrendPoint {
   bucketStart: string
   spendByChannel: Record<ChannelName, number>
+  // Additive alongside spendByChannel -- real per-day click counts straight from each platform's
+  // own daily/insights tables (no currency conversion needed, clicks are just a count). Added for
+  // the home dashboard's Campaigns tab trend chart; existing spendByChannel consumers (Channels
+  // page, AI chat tool) are unaffected.
+  clicksByChannel: Record<ChannelName, number>
+  // Additive alongside clicksByChannel -- lets the Campaigns tab trend chart derive CTR/CPC per
+  // day per channel (ctr = clicks/impressions, cpc = spend/clicks) without a separate endpoint.
+  impressionsByChannel: Record<ChannelName, number>
 }
 
 export interface ChannelAlert {
@@ -432,6 +440,264 @@ async function fetchAllDailySpend(
   }
 }
 
+interface DailyClicksRow {
+  date: string | Date
+  clicks: string | number | null
+  [key: string]: unknown
+}
+
+// Same 4-platform shape as the fetch*DailySpend functions above, selecting clicks instead of
+// spend -- no currency conversion needed (a click count, not money), so these are simpler than
+// their spend counterparts. Field paths confirmed against campaigns/performance-service.ts's own
+// row reducers: Google's typed m.clicks column, Meta's payload->>'clicks', TikTok's nested
+// payload->'metrics'->>'clicks', and Snapchat's payload->>'swipes' (its real "clicks" equivalent,
+// see reduceSnapchatStats's own comment on Snap's vocabulary).
+async function fetchGoogleDailyClicks(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyClicksRow[]> {
+  const result = await db.query<DailyClicksRow>(
+    `
+    SELECT m.metric_date as date, SUM(m.clicks) as clicks
+    FROM google_ads_daily_metrics m
+    JOIN integration_connections conn ON conn.id = m.connection_id
+    WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND m.metric_scope = 'campaign'
+      AND m.metric_date BETWEEN $3::date AND $4::date
+    GROUP BY m.metric_date
+    ORDER BY m.metric_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchMetaDailyClicks(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyClicksRow[]> {
+  const result = await db.query<DailyClicksRow>(
+    `
+    SELECT r.record_date as date, SUM(COALESCE((r.payload->>'clicks')::numeric, 0)) as clicks
+    FROM meta_records r
+    JOIN meta_oauth_connections conn ON conn.id = r.connection_id
+    WHERE r.entity_type = 'insights' AND conn.organization_id = $1
+      AND conn.deleted_at IS NULL AND conn.status = 'connected'
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND r.record_date BETWEEN $3::date AND $4::date
+    GROUP BY r.record_date
+    ORDER BY r.record_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchTikTokDailyClicks(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyClicksRow[]> {
+  const result = await db.query<DailyClicksRow>(
+    `
+    SELECT r.record_date as date,
+      SUM(COALESCE((r.payload->'metrics'->>'clicks')::numeric, 0)) as clicks
+    FROM tiktok_ads_records r
+    JOIN tiktok_ads_oauth_connections conn ON conn.id = r.connection_id
+    WHERE r.entity_type = 'insights' AND conn.organization_id = $1
+      AND conn.deleted_at IS NULL AND conn.status = 'connected'
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND r.record_date BETWEEN $3::date AND $4::date
+    GROUP BY r.record_date
+    ORDER BY r.record_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchSnapchatDailyClicks(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyClicksRow[]> {
+  const result = await db.query<DailyClicksRow>(
+    `
+    SELECT r.record_date as date, SUM(COALESCE((r.payload->>'swipes')::numeric, 0)) as clicks
+    FROM snapchat_records r
+    JOIN snapchat_oauth_connections conn ON conn.id = r.connection_id
+    WHERE r.entity_type = 'stats' AND r.payload->>'level' = 'campaign'
+      AND conn.organization_id = $1
+      AND conn.deleted_at IS NULL AND conn.status = 'connected'
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND r.record_date BETWEEN $3::date AND $4::date
+    GROUP BY r.record_date
+    ORDER BY r.record_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchAllDailyClicks(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<Record<ChannelName, Map<string, number>>> {
+  const [google, meta, tiktok, snapchat] = await Promise.all([
+    fetchGoogleDailyClicks(db, actor, range),
+    fetchMetaDailyClicks(db, actor, range),
+    fetchTikTokDailyClicks(db, actor, range),
+    fetchSnapchatDailyClicks(db, actor, range),
+  ])
+
+  const toMap = (rows: DailyClicksRow[]) => {
+    const map = new Map<string, number>()
+    for (const row of rows) {
+      map.set(toDateOnlyString(row.date), Number(row.clicks) || 0)
+    }
+    return map
+  }
+
+  return {
+    "Google Ads": toMap(google),
+    "Meta Ads": toMap(meta),
+    "TikTok Ads": toMap(tiktok),
+    Snapchat: toMap(snapchat),
+  }
+}
+
+interface DailyImpressionsRow {
+  date: string | Date
+  impressions: string | number | null
+  [key: string]: unknown
+}
+
+// Same 4-platform shape as fetchAllDailyClicks -- field paths confirmed against
+// campaigns/performance-service.ts's own reducers: Google's typed m.impressions column, Meta's
+// payload->>'impressions', TikTok's nested payload->'metrics'->>'impressions', and Snapchat's
+// payload->>'impressions' (same field name as Meta, unlike its "swipes" clicks equivalent).
+async function fetchGoogleDailyImpressions(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyImpressionsRow[]> {
+  const result = await db.query<DailyImpressionsRow>(
+    `
+    SELECT m.metric_date as date, SUM(m.impressions) as impressions
+    FROM google_ads_daily_metrics m
+    JOIN integration_connections conn ON conn.id = m.connection_id
+    WHERE conn.provider_id = 'google-ads' AND conn.organization_id = $1
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND m.metric_scope = 'campaign'
+      AND m.metric_date BETWEEN $3::date AND $4::date
+    GROUP BY m.metric_date
+    ORDER BY m.metric_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchMetaDailyImpressions(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyImpressionsRow[]> {
+  const result = await db.query<DailyImpressionsRow>(
+    `
+    SELECT r.record_date as date, SUM(COALESCE((r.payload->>'impressions')::numeric, 0)) as impressions
+    FROM meta_records r
+    JOIN meta_oauth_connections conn ON conn.id = r.connection_id
+    WHERE r.entity_type = 'insights' AND conn.organization_id = $1
+      AND conn.deleted_at IS NULL AND conn.status = 'connected'
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND r.record_date BETWEEN $3::date AND $4::date
+    GROUP BY r.record_date
+    ORDER BY r.record_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchTikTokDailyImpressions(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyImpressionsRow[]> {
+  const result = await db.query<DailyImpressionsRow>(
+    `
+    SELECT r.record_date as date,
+      SUM(COALESCE((r.payload->'metrics'->>'impressions')::numeric, 0)) as impressions
+    FROM tiktok_ads_records r
+    JOIN tiktok_ads_oauth_connections conn ON conn.id = r.connection_id
+    WHERE r.entity_type = 'insights' AND conn.organization_id = $1
+      AND conn.deleted_at IS NULL AND conn.status = 'connected'
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND r.record_date BETWEEN $3::date AND $4::date
+    GROUP BY r.record_date
+    ORDER BY r.record_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchSnapchatDailyImpressions(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<DailyImpressionsRow[]> {
+  const result = await db.query<DailyImpressionsRow>(
+    `
+    SELECT r.record_date as date, SUM(COALESCE((r.payload->>'impressions')::numeric, 0)) as impressions
+    FROM snapchat_records r
+    JOIN snapchat_oauth_connections conn ON conn.id = r.connection_id
+    WHERE r.entity_type = 'stats' AND r.payload->>'level' = 'campaign'
+      AND conn.organization_id = $1
+      AND conn.deleted_at IS NULL AND conn.status = 'connected'
+      AND ($2::uuid IS NULL OR conn.workspace_id = $2::uuid)
+      AND r.record_date BETWEEN $3::date AND $4::date
+    GROUP BY r.record_date
+    ORDER BY r.record_date
+    `,
+    [actor.organizationId, actor.workspaceId ?? null, range.startDateSql, range.endDateSql]
+  )
+  return result.rows
+}
+
+async function fetchAllDailyImpressions(
+  db: PostgresDatabase,
+  actor: AuthenticatedActor,
+  range: DateRange
+): Promise<Record<ChannelName, Map<string, number>>> {
+  const [google, meta, tiktok, snapchat] = await Promise.all([
+    fetchGoogleDailyImpressions(db, actor, range),
+    fetchMetaDailyImpressions(db, actor, range),
+    fetchTikTokDailyImpressions(db, actor, range),
+    fetchSnapchatDailyImpressions(db, actor, range),
+  ])
+
+  const toMap = (rows: DailyImpressionsRow[]) => {
+    const map = new Map<string, number>()
+    for (const row of rows) {
+      map.set(toDateOnlyString(row.date), Number(row.impressions) || 0)
+    }
+    return map
+  }
+
+  return {
+    "Google Ads": toMap(google),
+    "Meta Ads": toMap(meta),
+    "TikTok Ads": toMap(tiktok),
+    Snapchat: toMap(snapchat),
+  }
+}
+
 function buildDateList(range: DateRange): string[] {
   const dates: string[] = []
   const cursor = new Date(`${range.startDateSql}T00:00:00.000Z`)
@@ -664,7 +930,11 @@ export class ChannelsAggregationService {
   ): Promise<{ items: ChannelsTrendPoint[] }> {
     const { current } = resolveDateRange(query)
     const currency = await fetchOrganizationCurrency(this.db, actor.organizationId)
-    const dailySpend = await fetchAllDailySpend(this.db, actor, current, currency)
+    const [dailySpend, dailyClicks, dailyImpressions] = await Promise.all([
+      fetchAllDailySpend(this.db, actor, current, currency),
+      fetchAllDailyClicks(this.db, actor, current),
+      fetchAllDailyImpressions(this.db, actor, current),
+    ])
     const dateList = buildDateList(current)
 
     // Daily buckets read fine up to ~2 weeks; beyond that the trend chart groups into weekly
@@ -680,7 +950,29 @@ export class ChannelsAggregationService {
         },
         {} as Record<ChannelName, number>
       )
-      buckets.push({ bucketStart: bucketDates[0], spendByChannel })
+      const clicksByChannel = CHANNEL_NAMES.reduce(
+        (acc, name) => {
+          acc[name] = bucketDates.reduce((sum, date) => sum + (dailyClicks[name].get(date) ?? 0), 0)
+          return acc
+        },
+        {} as Record<ChannelName, number>
+      )
+      const impressionsByChannel = CHANNEL_NAMES.reduce(
+        (acc, name) => {
+          acc[name] = bucketDates.reduce(
+            (sum, date) => sum + (dailyImpressions[name].get(date) ?? 0),
+            0
+          )
+          return acc
+        },
+        {} as Record<ChannelName, number>
+      )
+      buckets.push({
+        bucketStart: bucketDates[0],
+        spendByChannel,
+        clicksByChannel,
+        impressionsByChannel,
+      })
     }
 
     return { items: buckets }

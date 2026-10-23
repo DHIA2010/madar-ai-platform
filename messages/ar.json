@@ -418,6 +418,85 @@
       "trend": "لا توجد بيانات كافية لهذه الفترة.",
       "channel": "لا توجد بيانات بعد.",
       "campaigns": "لا توجد حملات لهذه الفترة."
+    },
+    "homeTabs": {
+      "stores": "المتاجر الإلكترونية",
+      "campaigns": "الحملات الإعلانية",
+      "pos": "نقاط البيع",
+      "storesComingSoonTitle": "قريباً",
+      "storesComingSoonSubtitle": "نظرة عامة على أداء متاجرك الإلكترونية قيد الإنشاء."
+    },
+    "posSummary": {
+      "kpis": {
+        "netSales": "صافي المبيعات",
+        "totalSales": "إجمالي المبيعات",
+        "invoiceCount": "عدد الفواتير",
+        "avgInvoiceValue": "متوسط قيمة الفاتورة",
+        "customerCount": "العملاء",
+        "returns": "المرتجعات"
+      },
+      "paymentMethodsTitle": "طرق الدفع",
+      "trendTitle": "المبيعات عبر الزمن",
+      "topProductsTitle": "أفضل المنتجات مبيعاً",
+      "branchesTitle": "المبيعات حسب الفرع",
+      "viewAll": "عرض الكل",
+      "tooltipSales": "المبيعات",
+      "noData": "لا توجد بيانات لهذه الفترة."
+    },
+    "campaignsSummary": {
+      "kpis": {
+        "cost": "التكلفة",
+        "clicks": "النقرات",
+        "impressions": "مرات الظهور",
+        "ctr": "معدل النقرة",
+        "cpc": "متوسط تكلفة النقرة",
+        "multipleSelected": "تم اختيار {count}"
+      },
+      "trendTitle": "الاتجاه اليومي",
+      "platformsTitle": "حسب المنصة",
+      "objectivesTitle": "أداء الحملات حسب الهدف الإعلاني",
+      "platformTrendTitle": "الاتجاه حسب المنصة",
+      "objectives": {
+        "Awareness": "الوعي بالعلامة التجارية",
+        "Traffic": "الزيارات",
+        "Leads": "جذب العملاء المحتملين",
+        "Conversions": "التحويلات",
+        "Sales": "المبيعات",
+        "Other": "أخرى"
+      },
+      "noData": "لا توجد بيانات لهذه الفترة."
+    },
+    "storesSummary": {
+      "kpis": {
+        "orderCount": "عدد الطلبات",
+        "totalSales": "إجمالي المبيعات",
+        "avgOrderValue": "متوسط قيمة الطلب"
+      },
+      "trendTitle": "الاتجاه",
+      "trendTabs": {
+        "sales": "المبيعات",
+        "orders": "الطلبات"
+      },
+      "byStoreTitle": "المبيعات حسب المتجر",
+      "topProductsTitle": "أفضل المنتجات مبيعاً",
+      "storesTableTitle": "قائمة متاجرك",
+      "table": {
+        "store": "المتجر",
+        "status": "الحالة",
+        "orders": "عدد الطلبات",
+        "sales": "إجمالي المبيعات",
+        "viewReports": "عرض التقارير"
+      },
+      "status": {
+        "connected": "متصل",
+        "pending": "قيد الإعداد",
+        "paused": "متوقف مؤقتاً",
+        "disconnected": "غير متصل",
+        "error": "خطأ"
+      },
+      "ordersUnit": "طلب",
+      "noData": "لا توجد بيانات لهذه الفترة.",
+      "noStores": "لا توجد متاجر متصلة بعد."
     }
   },
   "dateRangeFilter": {

@@ -4,6 +4,7 @@ import { TaxRatesService } from "../tax/tax-rates-service"
 import { type ReadyReportRange, ReadyReportsRepository } from "./ready-reports-repository"
 import type {
   NetIncomeReportDto,
+  PosSummaryDto,
   PurchaseInvoicesDto,
   SalesByBranchDto,
   SalesByCustomerDto,
@@ -346,6 +347,73 @@ export class ReadyReportsService {
         ...branch,
         contributionPercent: totalSales > 0 ? (branch.totalSales / totalSales) * 100 : 0,
       })),
+    }
+  }
+
+  async posSummary(range: ReadyReportRange): Promise<PosSummaryDto> {
+    const previous = previousRange(range.from, range.to)
+    const previousRangeInput: ReadyReportRange = { ...range, from: previous.from, to: previous.to }
+
+    const [
+      totals,
+      returns,
+      customerCount,
+      previousTotals,
+      previousReturns,
+      previousCustomerCount,
+      paymentBreakdown,
+      trend,
+      products,
+      branchDto,
+    ] = await Promise.all([
+      this.repository.posSummaryTotals(range),
+      this.repository.posSummaryReturns(range),
+      this.repository.posSummaryCustomerCount(range),
+      this.repository.posSummaryTotals(previousRangeInput),
+      this.repository.posSummaryReturns(previousRangeInput),
+      this.repository.posSummaryCustomerCount(previousRangeInput),
+      this.repository.posSummaryPaymentBreakdown(range),
+      this.repository.posSummaryDailyTrend(range),
+      this.repository.productAggregates(range),
+      this.salesByBranch(range),
+    ])
+
+    const netSales = totals.totalSales - returns
+    const previousNetSales = previousTotals.totalSales - previousReturns
+    const avgInvoiceValue = totals.invoiceCount > 0 ? totals.totalSales / totals.invoiceCount : 0
+    const previousAvgInvoiceValue =
+      previousTotals.invoiceCount > 0 ? previousTotals.totalSales / previousTotals.invoiceCount : 0
+
+    const paymentTotal = paymentBreakdown.reduce((sum, row) => sum + row.amount, 0)
+
+    return {
+      kpis: {
+        netSales: { value: netSales, changePercent: changePercent(netSales, previousNetSales) },
+        totalSales: {
+          value: totals.totalSales,
+          changePercent: changePercent(totals.totalSales, previousTotals.totalSales),
+        },
+        invoiceCount: {
+          value: totals.invoiceCount,
+          changePercent: changePercent(totals.invoiceCount, previousTotals.invoiceCount),
+        },
+        avgInvoiceValue: {
+          value: avgInvoiceValue,
+          changePercent: changePercent(avgInvoiceValue, previousAvgInvoiceValue),
+        },
+        customerCount: {
+          value: customerCount,
+          changePercent: changePercent(customerCount, previousCustomerCount),
+        },
+        returns: { value: returns, changePercent: changePercent(returns, previousReturns) },
+      },
+      paymentBreakdown: paymentBreakdown.map((row) => ({
+        ...row,
+        percentage: paymentTotal > 0 ? (row.amount / paymentTotal) * 100 : 0,
+      })),
+      trend,
+      topProducts: products.slice(0, TOP_N),
+      branches: branchDto.branches,
     }
   }
 }

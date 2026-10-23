@@ -150,6 +150,16 @@ export interface CreateOrderInput {
   items: CreateOrderItemInput[]
 }
 
+export interface StoreSalesRecord {
+  connectionId: string
+  platform: OrderPlatform
+  totalSales: number
+  totalSalesChangePct: number | null
+  orderCount: number
+  orderCountChangePct: number | null
+  averageOrderValue: number
+}
+
 export interface MadarOrderRecord {
   id: string
   orderNumber: string
@@ -182,6 +192,20 @@ export const orderListService = {
     }
     const suffix = query.toString() ? `?${query.toString()}` : ""
     return client.get<OrdersListResponse>(`${ORDERS_ENDPOINT}${suffix}`)
+  },
+
+  // Per real store connection (not merged by platform) -- Madar orders are never included, they
+  // have no store connection to attribute to.
+  async getSalesByStore(params?: {
+    startDate?: string
+    endDate?: string
+  }): Promise<{ items: StoreSalesRecord[] }> {
+    const query = new URLSearchParams()
+    if (params?.startDate) query.set("startDate", params.startDate)
+    if (params?.endDate) query.set("endDate", params.endDate)
+    const suffix = query.toString() ? `?${query.toString()}` : ""
+    const endpoint = [ORDERS_ENDPOINT, "by-store"].join(String.fromCharCode(47))
+    return client.get<{ items: StoreSalesRecord[] }>(`${endpoint}${suffix}`)
   },
 
   // Live, on-demand fetch of the order's real per-item price/SKU/tax/discount from the

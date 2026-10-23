@@ -1196,4 +1196,115 @@ export class ReadyReportsRepository {
       }))
       .sort((left, right) => right.totalSales - left.totalSales)
   }
+
+  // ---- POS summary (home dashboard) ----------------------------------------------------------
+
+  async posSummaryTotals(
+    range: ReadyReportRange
+  ): Promise<{ invoiceCount: number; totalSales: number }> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    where.addOptional("workspace_id = ?", workspaceId)
+    const result = await this.db.query<{ invoice_count: string; total_sales: string }>(
+      `SELECT count(*) AS invoice_count, coalesce(sum(total_amount),0) AS total_sales
+       FROM pos_invoices WHERE ${where.where} AND status != 'cancelled'`,
+      where.values
+    )
+    const row = result.rows[0]
+    return { invoiceCount: Number(row?.invoice_count ?? 0), totalSales: toNumber(row?.total_sales) }
+  }
+
+  // Same query shape as netIncomeTotals' own returns figure -- kept standalone here rather than
+  // reusing netIncome() itself, since that also pulls in cogs/expenses and requires expenses:view,
+  // neither of which the POS summary tab needs.
+  async posSummaryReturns(range: ReadyReportRange): Promise<number> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    where.addOptional("workspace_id = ?", workspaceId)
+    const result = await this.db.query<{ returns: string }>(
+      `SELECT coalesce(sum(total_amount),0) AS returns FROM pos_invoice_returns WHERE ${where.where}`,
+      where.values
+    )
+    return toNumber(result.rows[0]?.returns)
+  }
+
+  async posSummaryCustomerCount(range: ReadyReportRange): Promise<number> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.created_at >= ?", from],
+      ["p.created_at < ?", to],
+    ])
+    where.addOptional("p.workspace_id = ?", workspaceId)
+    const result = await this.db.query<{ customer_count: string }>(
+      `SELECT count(DISTINCT c.id) AS customer_count
+       FROM pos_invoices p
+       JOIN customers c ON c.id = p.customer_id
+       WHERE ${where.where} AND p.status != 'cancelled'`,
+      where.values
+    )
+    return Number(result.rows[0]?.customer_count ?? 0)
+  }
+
+  // Reads pos_invoice_payments directly (not pos_invoices.payment_method_code, which collapses a
+  // split-tender sale into the literal string "split") -- the real per-method amounts always live
+  // on the payment rows themselves, same reasoning invoices-service.ts's list() already documents.
+  async posSummaryPaymentBreakdown(
+    range: ReadyReportRange
+  ): Promise<Array<{ paymentMethodCode: string; amount: number }>> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["p.organization_id = ?", organizationId],
+      ["p.created_at >= ?", from],
+      ["p.created_at < ?", to],
+    ])
+    where.addOptional("p.workspace_id = ?", workspaceId)
+    const result = await this.db.query<{ payment_method_code: string; amount: string }>(
+      `SELECT pay.payment_method_code, coalesce(sum(pay.amount),0) AS amount
+       FROM pos_invoice_payments pay
+       JOIN pos_invoices p ON p.id = pay.invoice_id
+       WHERE ${where.where} AND p.status != 'cancelled'
+       GROUP BY pay.payment_method_code
+       ORDER BY amount DESC`,
+      where.values
+    )
+    return result.rows.map((row) => ({
+      paymentMethodCode: row.payment_method_code,
+      amount: toNumber(row.amount),
+    }))
+  }
+
+  // Always day-bucketed (unlike netIncomePeriods, which also supports week/month) -- the home
+  // dashboard's sales-over-time chart is daily regardless of how wide the selected range is.
+  async posSummaryDailyTrend(
+    range: ReadyReportRange
+  ): Promise<Array<{ date: string; totalSales: number }>> {
+    const { organizationId, workspaceId, from, to } = range
+    const where = new WhereBuilder([
+      ["organization_id = ?", organizationId],
+      ["created_at >= ?", from],
+      ["created_at < ?", to],
+    ])
+    where.addOptional("workspace_id = ?", workspaceId)
+    const result = await this.db.query<{ created_at: string; total_amount: string }>(
+      `SELECT created_at, total_amount FROM pos_invoices WHERE ${where.where} AND status != 'cancelled'`,
+      where.values
+    )
+    const buckets = new Map<string, number>()
+    for (const row of result.rows) {
+      const bucket = bucketKey(row.created_at, "day")
+      buckets.set(bucket, (buckets.get(bucket) ?? 0) + toNumber(row.total_amount))
+    }
+    return [...buckets.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, totalSales]) => ({ date, totalSales }))
+  }
 }

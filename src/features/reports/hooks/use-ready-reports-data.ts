@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl"
 import { readyReportsService } from "../services"
 import type {
   NetIncomeReportDto,
+  PosSummaryDto,
   PurchaseInvoicesDto,
   ReadyReportFilters,
   SalesByBranchDto,
@@ -186,6 +187,32 @@ export function useSalesMovementReport(filters: ReadyReportFilters) {
     setError(null)
     try {
       setData(await readyReportsService.salesMovement(filters))
+    } catch {
+      setError(t("genericLoadFailed"))
+    } finally {
+      setIsLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.from, filters.to, filters.workspaceId])
+
+  useEffect(() => {
+    void refetch()
+  }, [refetch])
+
+  return { data, isLoading, error, refetch }
+}
+
+export function usePosSummaryReport(filters: ReadyReportFilters) {
+  const t = useTranslations("reports.common.errors")
+  const [data, setData] = useState<PosSummaryDto | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      setData(await readyReportsService.posSummary(filters))
     } catch {
       setError(t("genericLoadFailed"))
     } finally {

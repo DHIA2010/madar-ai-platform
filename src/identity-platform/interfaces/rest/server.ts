@@ -2292,6 +2292,10 @@ export function createIdentityApiServer(
           if (method === "GET" && url.pathname === "/v1/reports/ready/sales-by-branch") {
             return send(200, await readyReportsService.salesByBranch(range))
           }
+
+          if (method === "GET" && url.pathname === "/v1/reports/ready/pos-summary") {
+            return send(200, await readyReportsService.posSummary(range))
+          }
         }
       }
 
@@ -5206,6 +5210,20 @@ export function createIdentityApiServer(
         return send(200, statement)
       }
 
+      if (method === "GET" && url.pathname === "/v1/orders/by-store") {
+        if (!ordersAggregationService) {
+          return send(503, {
+            code: "ORDERS_UNAVAILABLE",
+            message: "Order aggregation is unavailable in memory mode.",
+          })
+        }
+        const result = await ordersAggregationService.getSalesByConnection(actor, {
+          startDate: url.searchParams.get("startDate") ?? undefined,
+          endDate: url.searchParams.get("endDate") ?? undefined,
+        })
+        return send(200, { items: result })
+      }
+
       if (url.pathname === "/v1/orders") {
         if (method === "GET") {
           if (!ordersAggregationService) {
@@ -5457,6 +5475,24 @@ export function createIdentityApiServer(
         }
         return send(200, {
           items: await campaignsPerformanceAggregationService.getPlatformBreakdown(
+            actor,
+            parsePerformanceQuery(url)
+          ),
+        })
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/objectives") {
+        if (!campaignsPerformanceAggregationService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, {
+          items: await campaignsPerformanceAggregationService.getObjectiveBreakdown(
             actor,
             parsePerformanceQuery(url)
           ),

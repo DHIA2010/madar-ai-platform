@@ -77,6 +77,8 @@ export interface ChannelsSummary {
 export interface ChannelsTrendPoint {
   bucketStart: string
   spendByChannel: Record<ChannelName, number>
+  clicksByChannel: Record<ChannelName, number>
+  impressionsByChannel: Record<ChannelName, number>
 }
 
 export interface ChannelAlert {

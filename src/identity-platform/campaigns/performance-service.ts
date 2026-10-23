@@ -83,6 +83,8 @@ export interface CampaignPerformanceSummary {
   clicksChangePct: number | null
   ctr: number
   ctrChangePct: number | null
+  cpc: number
+  cpcChangePct: number | null
   spend: number
   spendChangePct: number | null
   revenue: number
@@ -1588,6 +1590,8 @@ export class CampaignsPerformanceAggregationService {
       previousTotals.impressions > 0
         ? (previousTotals.clicks / previousTotals.impressions) * 100
         : 0
+    const cpc = currentTotals.clicks > 0 ? currentTotals.spend / currentTotals.clicks : 0
+    const previousCpc = previousTotals.clicks > 0 ? previousTotals.spend / previousTotals.clicks : 0
 
     return {
       impressions: currentTotals.impressions,
@@ -1596,6 +1600,8 @@ export class CampaignsPerformanceAggregationService {
       clicksChangePct: computeChangePct(currentTotals.clicks, previousTotals.clicks),
       ctr,
       ctrChangePct: computeChangePct(ctr, previousCtr),
+      cpc,
+      cpcChangePct: computeChangePct(cpc, previousCpc),
       spend: currentTotals.spend,
       spendChangePct: computeChangePct(currentTotals.spend, previousTotals.spend),
       revenue: currentTotals.revenue,
@@ -1614,6 +1620,57 @@ export class CampaignsPerformanceAggregationService {
         previousTotals.activeCampaigns
       ),
     }
+  }
+
+  // The real (coarser) objective vocabulary this codebase actually buckets campaigns into --
+  // see bucketCampaignObjective's own comment on why Google rows always land in "Other" (no
+  // objective field synced for Google at all) and why this is 6 loose substring buckets, not a
+  // precise per-platform objective taxonomy.
+  // Returns every objective bucket's raw totals for all 5 campaign-tab KPIs (not just spend) so
+  // the frontend's objective-breakdown panel can let the user switch which KPI drives the
+  // percentage bars without a refetch -- percentage is computed client-side against whichever
+  // KPI's own total is the denominator.
+  async getObjectiveBreakdown(
+    actor: AuthenticatedActor,
+    query: CampaignPerformanceQuery
+  ): Promise<
+    Array<{
+      objective: ReturnType<typeof bucketCampaignObjective>
+      spend: number
+      impressions: number
+      clicks: number
+      ctr: number
+      cpc: number
+    }>
+  > {
+    const { current } = resolveDateRange(query)
+    const rows = (await this.fetchAllCampaignRows(actor, current)).filter((row) =>
+      matchesFilters(row, query)
+    )
+
+    const buckets = new Map<ReturnType<typeof bucketCampaignObjective>, CampaignPerformanceRow[]>()
+    for (const row of rows) {
+      const key = bucketCampaignObjective(row.objective)
+      const list = buckets.get(key) ?? []
+      list.push(row)
+      buckets.set(key, list)
+    }
+
+    return [...buckets.entries()]
+      .map(([objective, bucketRows]) => {
+        const totals = sumRows(bucketRows)
+        const ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0
+        const cpc = totals.clicks > 0 ? totals.spend / totals.clicks : 0
+        return {
+          objective,
+          spend: totals.spend,
+          impressions: totals.impressions,
+          clicks: totals.clicks,
+          ctr,
+          cpc,
+        }
+      })
+      .sort((left, right) => right.spend - left.spend)
   }
 
   async getPlatformBreakdown(

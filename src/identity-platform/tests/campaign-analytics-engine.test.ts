@@ -51,6 +51,8 @@ function summary(overrides: Partial<CampaignPerformanceSummary> = {}): CampaignP
     clicksChangePct: null,
     ctr: 2,
     ctrChangePct: null,
+    cpc: 5,
+    cpcChangePct: null,
     spend: 10_000,
     spendChangePct: null,
     revenue: 40_000,

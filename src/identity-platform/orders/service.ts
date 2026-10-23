@@ -394,6 +394,21 @@ export interface OrdersQuery {
   endDate?: string
 }
 
+// Per-connection (not per-platform) sales/orders -- unlike channels-service.ts's
+// StorePlatformRow, which deliberately sums every connected store of the same platform into one
+// row, this keeps each real store connection distinct, so a home-dashboard "sales by store" donut
+// can show e.g. two separate Salla stores as two slices, not one merged "Salla" slice. Madar
+// orders are never included here -- they have no store connection to attribute to.
+export interface StoreSalesRow {
+  connectionId: string
+  platform: OrderPlatform
+  totalSales: number
+  totalSalesChangePct: number | null
+  orderCount: number
+  orderCountChangePct: number | null
+  averageOrderValue: number
+}
+
 export interface OrdersListResult {
   items: OrderSummaryView[]
   summary: OrdersSummaryStats
@@ -522,6 +537,103 @@ export class OrdersAggregationService {
     const summary = this.buildSummary(items, previousRows, confidence)
 
     return { items, summary }
+  }
+
+  async getSalesByConnection(
+    actor: AuthenticatedActor,
+    query: OrdersQuery
+  ): Promise<StoreSalesRow[]> {
+    const endDate = query.endDate ? new Date(query.endDate) : new Date()
+    const startDate = query.startDate
+      ? new Date(query.startDate)
+      : new Date(endDate.getTime() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    const periodMs = endDate.getTime() - startDate.getTime()
+    const previousStart = new Date(startDate.getTime() - periodMs)
+    const previousEnd = new Date(startDate.getTime() - 1)
+
+    const [current, previous] = await Promise.all([
+      this.fetchConnectionOrderRows(actor, startDate, endDate),
+      this.fetchConnectionOrderRows(actor, previousStart, previousEnd),
+    ])
+
+    const bucket = (rows: Array<OrderSummaryView & { connectionId: string }>) => {
+      const map = new Map<
+        string,
+        { platform: OrderPlatform; totalSales: number; orderCount: number }
+      >()
+      for (const row of rows) {
+        const existing = map.get(row.connectionId) ?? {
+          platform: row.platform,
+          totalSales: 0,
+          orderCount: 0,
+        }
+        existing.totalSales += row.amount
+        existing.orderCount += 1
+        map.set(row.connectionId, existing)
+      }
+      return map
+    }
+
+    const currentMap = bucket(current)
+    const previousMap = bucket(previous)
+
+    return [...currentMap.entries()].map(([connectionId, figures]) => {
+      const previousFigures = previousMap.get(connectionId)
+      return {
+        connectionId,
+        platform: figures.platform,
+        totalSales: figures.totalSales,
+        totalSalesChangePct: computeChangePct(figures.totalSales, previousFigures?.totalSales ?? 0),
+        orderCount: figures.orderCount,
+        orderCountChangePct: computeChangePct(figures.orderCount, previousFigures?.orderCount ?? 0),
+        averageOrderValue: figures.orderCount > 0 ? figures.totalSales / figures.orderCount : 0,
+      }
+    })
+  }
+
+  // Same provider loop as fetchOrderRows, just with connection_id also selected and carried
+  // through onto the result -- a separate method rather than extending fetchOrderRows/
+  // OrderSummaryView itself, to keep the existing (well-exercised) orders list/summary path
+  // completely untouched.
+  private async fetchConnectionOrderRows(
+    actor: AuthenticatedActor,
+    start: Date,
+    end: Date
+  ): Promise<Array<OrderSummaryView & { connectionId: string }>> {
+    const providerPromises = (Object.keys(PROVIDER_CONFIG) as ProviderKey[]).map(
+      async (provider) => {
+        const config = PROVIDER_CONFIG[provider]
+        const result = await this.db.query<OrderRecordRow & { connection_id: string }>({
+          name: `orders-by-connection-${provider}`,
+          text: `
+          SELECT o.entity_id, o.payload, o.updated_at, o.connection_id
+          FROM ${config.recordsTable} o
+          JOIN ${config.connectionsTable} c ON c.id = o.connection_id
+          WHERE o.entity_type = 'orders'
+            AND c.organization_id = $1
+            AND c.deleted_at IS NULL
+            AND c.status = 'connected'
+            AND ($2::uuid IS NULL OR c.workspace_id = $2::uuid)
+            AND o.record_date >= $3::date
+            AND o.record_date <= $4::date
+          LIMIT $5
+        `,
+          values: [
+            actor.organizationId,
+            actor.workspaceId ?? null,
+            start.toISOString().slice(0, 10),
+            end.toISOString().slice(0, 10),
+            MAX_ORDERS_PER_PROVIDER,
+          ],
+        })
+        return result.rows.map((row) => ({
+          ...config.normalize(row),
+          connectionId: row.connection_id,
+        }))
+      }
+    )
+    const results = await Promise.all(providerPromises)
+    return results.flat()
   }
 
   private async fetchOrderRows(

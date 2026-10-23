@@ -1,5 +1,6 @@
 import type {
   NetIncomeReportDto,
+  PosSummaryDto,
   PurchaseInvoicesDto,
   ReadyReportFilters,
   SalesByBranchDto,
@@ -79,5 +80,10 @@ export const readyReportsService = {
   async salesByBranch(filters: ReadyReportFilters): Promise<SalesByBranchDto> {
     const query = buildQuery(filters)
     return client.get<SalesByBranchDto>(`${ENDPOINT}/sales-by-branch?${query}`)
+  },
+
+  async posSummary(filters: ReadyReportFilters): Promise<PosSummaryDto> {
+    const query = buildQuery(filters)
+    return client.get<PosSummaryDto>(`${ENDPOINT}/pos-summary?${query}`)
   },
 }

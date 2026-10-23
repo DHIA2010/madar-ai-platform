@@ -98,6 +98,8 @@ export interface CampaignPerformanceSummary {
   clicksChangePct: number | null
   ctr: number
   ctrChangePct: number | null
+  cpc: number
+  cpcChangePct: number | null
   spend: number
   spendChangePct: number | null
   revenue: number
@@ -112,6 +114,23 @@ export interface CampaignPerformanceSummary {
   conversionRateChangePct: number | null
   activeCampaigns: number
   activeCampaignsChangePct: number | null
+}
+
+export type CampaignObjectiveBucket =
+  | "Awareness"
+  | "Traffic"
+  | "Leads"
+  | "Conversions"
+  | "Sales"
+  | "Other"
+
+export interface CampaignObjectiveRow {
+  objective: CampaignObjectiveBucket
+  spend: number
+  impressions: number
+  clicks: number
+  ctr: number
+  cpc: number
 }
 
 export interface CampaignPerformancePage {
@@ -166,6 +185,14 @@ export const campaignPerformanceService = {
   ): Promise<{ items: CampaignPerformancePlatformRow[] }> {
     return client.get<{ items: CampaignPerformancePlatformRow[] }>(
       `${PERFORMANCE_ENDPOINT}/platforms${buildQuery(params)}`
+    )
+  },
+
+  async getObjectiveBreakdown(
+    params?: CampaignPerformanceQueryParams
+  ): Promise<{ items: CampaignObjectiveRow[] }> {
+    return client.get<{ items: CampaignObjectiveRow[] }>(
+      `${PERFORMANCE_ENDPOINT}/objectives${buildQuery(params)}`
     )
   },
 
