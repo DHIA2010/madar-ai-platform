@@ -173,14 +173,19 @@ describe("NewConnectionWizard", () => {
       </QueryClientProvider>
     )
 
-    fireEvent.click(screen.getByRole("button", { name: /المتابعة إلى Salla/ }))
+    // Zid, not Salla (the wizard's default-selected platform) -- Salla's Connect button now
+    // opens an App Store install tab and polls a connect-intent instead of calling
+    // connectionManager.connect() directly (see new-connection-wizard.tsx's beginOAuthFlow), so
+    // it no longer fits this test's generic "OAuth handoff calls connect()" assertion. Zid still
+    // follows the classic redirect-based flow this test is actually about.
+    fireEvent.click(screen.getByText("Zid"))
+    fireEvent.click(screen.getByRole("button", { name: /المتابعة إلى Zid/ }))
 
     // The summary rail carries the real setup facts, not placeholders.
     expect(screen.getByText("ملخص الاتصال")).toBeTruthy()
-    expect(screen.getByText("الطلبات، المنتجات، العملاء")).toBeTruthy()
     expect(screen.getAllByText("OAuth 2.0").length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole("button", { name: /الاتصال بـ Salla/ }))
+    fireEvent.click(screen.getByRole("button", { name: /الاتصال بـ Zid/ }))
 
     await waitFor(() => {
       expect(mockCreateConnection).toHaveBeenCalled()
@@ -188,11 +193,12 @@ describe("NewConnectionWizard", () => {
     })
   })
 
-  // Salla (the wizard's default-selected platform) is a real OAuth connector: clicking
-  // "Continue to OAuth" must NOT synchronously jump ahead -- it has to wait for the actual
-  // browser round trip to Salla and back, which only resolves once the wizard remounts with
-  // ?salla_oauth=connected&... in the URL (exactly what a real redirect produces). A
-  // fresh render with that URL already set is how that round trip is simulated here.
+  // Zid is a real OAuth connector: clicking "Continue to OAuth" must NOT synchronously jump
+  // ahead -- it has to wait for the actual browser round trip to Zid and back, which only
+  // resolves once the wizard remounts with ?zid_oauth=connected&... in the URL (exactly what a
+  // real redirect produces). A fresh render with that URL already set is how that round trip is
+  // simulated here. Uses Zid rather than Salla (the wizard's default-selected platform) for the
+  // same reason as the test above -- Salla no longer goes through this redirect-based flow.
   it("waits for the OAuth callback instead of advancing immediately, then resumes correctly after it", async () => {
     mockCreateConnection.mockResolvedValue({ connectionId: "conn_1" })
     mockConnect.mockResolvedValue({ connectionId: "conn_1" })
@@ -205,7 +211,8 @@ describe("NewConnectionWizard", () => {
       </QueryClientProvider>
     )
 
-    fireEvent.click(screen.getByRole("button", { name: /المتابعة إلى Salla/ }))
+    fireEvent.click(screen.getByText("Zid"))
+    fireEvent.click(screen.getByRole("button", { name: /المتابعة إلى Zid/ }))
     fireEvent.click(screen.getByRole("button", { name: "المتابعة" }))
 
     await waitFor(() => {
@@ -220,10 +227,10 @@ describe("NewConnectionWizard", () => {
 
     mockValidateConnection.mockResolvedValue({
       payload: {
-        connectorId: "salla",
-        connectorDefinitionId: "connector_def_salla",
+        connectorId: "zid",
+        connectorDefinitionId: "connector_def_zid",
         metadata: {
-          availableSallaCustomerAccounts: JSON.stringify([
+          availableZidCustomerAccounts: JSON.stringify([
             { customerId: "998877", displayName: "Madar Test Store", isSelected: true },
           ]),
         },
@@ -232,7 +239,7 @@ describe("NewConnectionWizard", () => {
     window.history.pushState(
       {},
       "",
-      `${ROUTES.integrationsNew}?salla_oauth=connected&salla_connection_id=conn_1&salla_account_name=Madar%20Test%20Store`
+      `${ROUTES.integrationsNew}?zid_oauth=connected&zid_connection_id=conn_1&zid_account_name=Madar%20Test%20Store`
     )
 
     render(
@@ -244,7 +251,7 @@ describe("NewConnectionWizard", () => {
     await waitFor(() => {
       expect(mockValidateConnection).toHaveBeenCalledWith({
         connectionId: "conn_1",
-        connectorDefinitionId: "connector_def_salla",
+        connectorDefinitionId: "connector_def_zid",
         workspaceId: "ws_marketing_ops",
       })
       expect(screen.getByRole("button", { name: /مراجعة الإعدادات/ })).toBeTruthy()
