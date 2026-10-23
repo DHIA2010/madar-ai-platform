@@ -278,6 +278,23 @@
       "goToIntegrations": "الذهاب إلى التكاملات",
       "errorDescription": "تعذّر ربط هذا المتجر. قد يكون الرابط منتهي الصلاحية — حاول التفعيل من Zid مرة أخرى."
     },
+    "sallaClaim": {
+      "loading": "جارٍ التحميل…",
+      "notFoundHeading": "الرابط غير موجود",
+      "notFoundDescription": "رابط التثبيت هذا غير صالح أو منتهي الصلاحية. حاول تثبيت مدار من متجر تطبيقات سلة مرة أخرى.",
+      "connectHeading": "ربط متجر سلة",
+      "connectDescription": "أنت على وشك ربط متجر {storeName} بمدار.",
+      "alreadyClaimedHeading": "تم الربط بالفعل",
+      "alreadyClaimedDescription": "تم ربط هذا المتجر بمدار بالفعل.",
+      "loginFirstDescription": "سجّل الدخول إلى حساب مدار الخاص بك أولاً، ثم عُد إلى هذا الرابط لإتمام ربط متجرك.",
+      "loginCta": "تسجيل الدخول",
+      "confirmCta": "تأكيد الربط",
+      "confirming": "جارٍ الربط…",
+      "successHeading": "تم ربط المتجر",
+      "successDescription": "تم الآن ربط متجر {storeName} بمدار.",
+      "goToIntegrations": "الذهاب إلى التكاملات",
+      "errorDescription": "تعذّر ربط هذا المتجر. قد يكون الرابط منتهي الصلاحية — حاول التثبيت من سلة مرة أخرى."
+    },
     "zidAutoLogin": {
       "loading": "جارٍ تسجيل الدخول…",
       "errorHeading": "تعذّر تسجيل الدخول",
@@ -7560,6 +7577,16 @@
         "authorizing": "جارٍ التفويض...",
         "fetchingAccounts": "جارٍ جلب الحسابات...",
         "almostDone": "على وشك الانتهاء..."
+      },
+      "sallaAppStoreInstall": {
+        "waitingTitle": "في انتظار التثبيت على سلة...",
+        "waitingDescription": "أكمل تثبيت التطبيق في التبويب الجديد. سيتم تحديث هذه الصفحة تلقائيًا بمجرد الانتهاء.",
+        "candidateFoundTitle": "وجدنا متجرك",
+        "candidateFoundDescription": "قام متجر {storeName} بتثبيت التطبيق للتو. أكّد لإتمام ربطه بمساحة العمل هذه.",
+        "confirmButton": "تأكيد والاتصال",
+        "claimingLabel": "جارٍ ربط {storeName}...",
+        "timeoutTitle": "لا تزال تنتظر؟",
+        "timeoutDescription": "إذا كنت قد أنهيت التثبيت على سلة، فقد يحتاج الأمر إلى بعض الوقت الإضافي فقط. يمكنك أيضًا العودة لاحقًا — سيظهر الاتصال تلقائيًا بمجرد تأكيد سلة له."
       },
       "accountFallback": {
         "label": "الحساب الرئيسي",

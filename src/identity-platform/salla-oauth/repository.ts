@@ -817,4 +817,228 @@ export class SallaOAuthRepository
       payload: (row.payload as Record<string, unknown>) ?? {},
     }))
   }
+
+  // Used only by the marketplace-install claim flow -- the admin-initiated connect flow always
+  // requires a pre-existing project (resolveProject throws PROJECT_NOT_FOUND on none), but a
+  // merchant claiming an App Store install cold (no connect-intent, no prior MADAR usage of
+  // Salla) shouldn't be blocked on creating one manually. Mirrors Zid's own
+  // resolveOrCreateDefaultProject exactly -- falls back to inserting a minimal row (everything
+  // but id/organization_id/workspace_id/owner_user_id/name has a table default).
+  async resolveOrCreateDefaultProject(
+    organizationId: string,
+    workspaceId: string | null,
+    actorUserId: string
+  ) {
+    const existing = await this.db.query<{ id: string; workspace_id: string | null }>({
+      name: "salla-oauth-resolve-or-create-project-select",
+      text: `
+          SELECT p.id, p.workspace_id
+          FROM projects p
+          WHERE p.organization_id = $1
+            AND p.deleted_at IS NULL
+            AND p.status = 'active'
+            AND ($2::uuid IS NULL OR p.workspace_id = $2::uuid)
+          ORDER BY p.created_at DESC
+          LIMIT 1
+        `,
+      values: [organizationId, workspaceId],
+    })
+
+    const row = existing.rows[0]
+    if (row) {
+      return { projectId: String(row.id), workspaceId: (row.workspace_id as string | null) ?? null }
+    }
+
+    const projectId = randomUUID()
+    await this.db.query({
+      name: "salla-oauth-resolve-or-create-project-insert",
+      text: `
+        INSERT INTO projects (id, organization_id, workspace_id, owner_user_id, name)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      values: [projectId, organizationId, workspaceId, actorUserId, "Salla Store"],
+    })
+
+    return { projectId, workspaceId }
+  }
+
+  async saveMarketplaceInstall(input: {
+    id: string
+    claimTokenHash: string
+    sallaStoreExternalId: string
+    sallaStoreName: string | null
+    sallaStoreDomain: string | null
+    sallaStoreCurrency: string | null
+    encryptedAccessToken: string
+    encryptedRefreshToken: string
+    scopes: string[]
+    tokenExpiresAt: string | null
+    rawWebhookPayload: unknown
+    expiresAt: string
+  }) {
+    await this.db.query({
+      name: "salla-marketplace-install-insert",
+      text: `
+        INSERT INTO salla_marketplace_installs (
+          id, claim_token_hash, status, salla_store_external_id, salla_store_name,
+          salla_store_domain, salla_store_currency, encrypted_access_token,
+          encrypted_refresh_token, scopes, token_expires_at, raw_webhook_payload, expires_at
+        ) VALUES ($1,$2,'unclaimed',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `,
+      values: [
+        input.id,
+        input.claimTokenHash,
+        input.sallaStoreExternalId,
+        input.sallaStoreName,
+        input.sallaStoreDomain,
+        input.sallaStoreCurrency,
+        input.encryptedAccessToken,
+        input.encryptedRefreshToken,
+        JSON.stringify(input.scopes),
+        input.tokenExpiresAt,
+        JSON.stringify(input.rawWebhookPayload),
+        input.expiresAt,
+      ],
+    })
+  }
+
+  async findPendingInstallByTokenHash(tokenHash: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-marketplace-install-find",
+      text: "SELECT * FROM salla_marketplace_installs WHERE claim_token_hash = $1 LIMIT 1",
+      values: [tokenHash],
+    })
+    return result.rows[0] ?? null
+  }
+
+  async findPendingInstallById(installId: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-marketplace-install-find-by-id",
+      text: "SELECT * FROM salla_marketplace_installs WHERE id = $1 LIMIT 1",
+      values: [installId],
+    })
+    return result.rows[0] ?? null
+  }
+
+  // Scoped to "created after this connect-intent started, still unclaimed, not expired" --
+  // the narrowest window that could plausibly be the install this specific org/user just
+  // triggered. getConnectIntentStatus only ever acts on this when the result is a single row;
+  // more than one is treated as ambiguous and never guessed at.
+  async findUnclaimedInstallsCreatedAfter(sinceIso: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-marketplace-install-find-unclaimed-since",
+      text: `
+        SELECT *
+        FROM salla_marketplace_installs
+        WHERE status = 'unclaimed'
+          AND created_at >= $1::timestamptz
+          AND expires_at > now()
+        ORDER BY created_at ASC
+      `,
+      values: [sinceIso],
+    })
+    return result.rows
+  }
+
+  // One atomic UPDATE -- replaces the install's claim_token_hash with a freshly generated one
+  // (the original, generated inside handleAppStoreInstall, was never persisted in plaintext
+  // anywhere), only while still unclaimed, so a lost race against a concurrent claim is simply
+  // reflected in the returned row's status rather than silently overwriting a token the real
+  // claim flow is mid-use with.
+  async issueClaimTokenForInstall(installId: string, newClaimTokenHash: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-marketplace-install-issue-claim-token",
+      text: `
+        UPDATE salla_marketplace_installs
+        SET claim_token_hash = $2, updated_at = now()
+        WHERE id = $1 AND status = 'unclaimed'
+        RETURNING *
+      `,
+      values: [installId, newClaimTokenHash],
+    })
+    if (!result.rows[0]) {
+      throw new Error("SALLA_MARKETPLACE_INSTALL_ALREADY_CLAIMED")
+    }
+    return result.rows[0]
+  }
+
+  // Same single-use CAS pattern as Zid's claimInstallRow -- one atomic UPDATE rather than a
+  // separate consume-then-update, so a lost race against a concurrent claim is a clean no-op
+  // the caller must check (false), not a silent double-process.
+  async claimInstallRow(input: {
+    installId: string
+    claimedByUserId: string
+    claimedOrganizationId: string
+    claimedWorkspaceId: string | null
+    claimedProjectId: string
+    claimedConnectionId: string
+    now: string
+  }) {
+    const result = await this.db.query({
+      name: "salla-marketplace-install-claim",
+      text: `
+        UPDATE salla_marketplace_installs
+        SET status = 'claimed',
+            claimed_at = $2,
+            claimed_by_user_id = $3,
+            claimed_organization_id = $4,
+            claimed_workspace_id = $5,
+            claimed_project_id = $6,
+            claimed_connection_id = $7,
+            updated_at = $2
+        WHERE id = $1
+          AND status = 'unclaimed'
+          AND expires_at > $2::timestamptz
+      `,
+      values: [
+        input.installId,
+        input.now,
+        input.claimedByUserId,
+        input.claimedOrganizationId,
+        input.claimedWorkspaceId,
+        input.claimedProjectId,
+        input.claimedConnectionId,
+      ],
+    })
+
+    return result.rowCount > 0
+  }
+
+  async saveConnectIntent(input: {
+    id: string
+    organizationId: string
+    workspaceId: string | null
+    userId: string
+    expiresAt: string
+  }) {
+    await this.db.query({
+      name: "salla-connect-intent-insert",
+      text: `
+        INSERT INTO salla_connect_intents (id, organization_id, workspace_id, user_id, expires_at)
+        VALUES ($1,$2,$3,$4,$5)
+      `,
+      values: [input.id, input.organizationId, input.workspaceId, input.userId, input.expiresAt],
+    })
+  }
+
+  async findConnectIntentById(intentId: string) {
+    const result = await this.db.query<Record<string, unknown>>({
+      name: "salla-connect-intent-find",
+      text: "SELECT * FROM salla_connect_intents WHERE id = $1 LIMIT 1",
+      values: [intentId],
+    })
+    return result.rows[0] ?? null
+  }
+
+  async markConnectIntentResolved(intentId: string, installId: string, claimToken: string) {
+    await this.db.query({
+      name: "salla-connect-intent-resolve",
+      text: `
+        UPDATE salla_connect_intents
+        SET resolved_install_id = $2, resolved_claim_token = $3
+        WHERE id = $1
+      `,
+      values: [intentId, installId, claimToken],
+    })
+  }
 }

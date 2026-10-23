@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto"
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto"
 
 import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 
@@ -26,6 +26,12 @@ interface SallaOAuthServiceConfig {
   tokenUrl: string
   apiBaseUrl: string
   scopes: string[]
+  // The Partners Portal "app-id" used to build the App Store install URL
+  // (appStoreInstallBaseUrl/{appId}) -- distinct from clientId, which is the OAuth client
+  // credential. Required only for startAuthorization; everything else (token exchange, refresh,
+  // webhooks) is unaffected if it's unset.
+  appId: string
+  appStoreInstallBaseUrl: string
 }
 
 interface SallaTokenResponse {
@@ -52,6 +58,18 @@ const DEFAULT_SCOPES = ["offline_access"]
 const SALLA_AUTHORIZATION_URL = "https://accounts.salla.sa/oauth2/auth"
 const SALLA_TOKEN_URL = "https://accounts.salla.sa/oauth2/token"
 const SALLA_API_BASE_URL = "https://api.salla.dev/admin/v2"
+// Confirmed against Salla's official authorization docs (docs.salla.dev): the App Store
+// "Install" entry point, s.salla.sa/apps/install/{app-id} -- takes no query parameters, unlike
+// the direct accounts.salla.sa authorize URL above.
+const SALLA_APP_STORE_INSTALL_BASE_URL = "https://s.salla.sa/apps/install"
+// 7 days, matching the equivalent Zid marketplace-install claim token's TTL
+// (zid-oauth/service.ts's createClaimToken usage) -- a pending install holds live, real API
+// access to a merchant's store, so this is a materially higher-stakes secret than a 10-minute
+// OAuth state, but still needs a hard expiry rather than living forever unclaimed.
+const MARKETPLACE_INSTALL_CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000
+// 10 minutes -- matches the OAuth state TTL above; a connect-intent only needs to outlive the
+// time it takes a merchant to click through Salla's own install confirmation screen.
+const CONNECT_INTENT_TTL_MS = 10 * 60 * 1000
 
 function buildDefaultConfig(): SallaOAuthServiceConfig {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
@@ -77,6 +95,9 @@ function buildDefaultConfig(): SallaOAuthServiceConfig {
     tokenUrl: process.env.SALLA_TOKEN_URL ?? SALLA_TOKEN_URL,
     apiBaseUrl: process.env.SALLA_API_BASE_URL ?? SALLA_API_BASE_URL,
     scopes: configuredScopes.length > 0 ? configuredScopes : DEFAULT_SCOPES,
+    appId: process.env.SALLA_APP_ID ?? "",
+    appStoreInstallBaseUrl:
+      process.env.SALLA_APP_STORE_INSTALL_BASE_URL ?? SALLA_APP_STORE_INSTALL_BASE_URL,
   }
 }
 
@@ -233,6 +254,20 @@ function createStateToken() {
   return `sl_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
 }
 
+// Distinct prefix from createStateToken() so claim tokens are visually distinguishable from
+// OAuth state values in logs -- otherwise same shape/entropy. Mirrors Zid's createClaimToken.
+function createClaimToken() {
+  return `sla_${randomBytes(16).toString("hex")}_${randomUUID().replace(/-/g, "")}`
+}
+
+// Hashed at rest, unlike salla_oauth_states -- this token is a bearer credential for up to 7
+// days for a row that already holds live encrypted Salla access/refresh tokens (real API access
+// to a merchant's store), a materially higher-stakes secret than a 10-minute OAuth state. Same
+// normalization style as password-reset tokens / Zid's hashClaimToken.
+function hashClaimToken(token: string) {
+  return createHash("sha256").update(token).digest("hex")
+}
+
 function ensureConfigured(config: SallaOAuthServiceConfig) {
   if (
     !config.clientId ||
@@ -375,6 +410,9 @@ export class SallaOAuthService {
   ): Promise<SallaOAuthStartResult> {
     assertActorCanManageIntegrations(actor)
     const config = await this.loadResolvedConfig()
+    if (!config.appId) {
+      throw new Error("SALLA_OAUTH_APP_ID_MISSING")
+    }
 
     const resolvedProject = await this.repository.resolveProject({
       organizationId: actor.organizationId,
@@ -425,12 +463,16 @@ export class SallaOAuthService {
       expiresAt,
     })
 
-    const authorizationUrl = new URL(config.authorizationUrl)
-    authorizationUrl.searchParams.set("client_id", config.clientId)
-    authorizationUrl.searchParams.set("redirect_uri", config.redirectUri)
-    authorizationUrl.searchParams.set("response_type", "code")
-    authorizationUrl.searchParams.set("scope", config.scopes.join(" "))
-    authorizationUrl.searchParams.set("state", state)
+    // App Store install URL, not a direct OAuth authorize URL -- Salla requires Easy Mode (no
+    // browser redirect back with a code) for any app published on its App Store, and the install
+    // URL itself takes no query parameters (confirmed against docs.salla.dev), so `state` below
+    // is recorded for audit/lifecycle parity only and is never appended here or round-tripped.
+    // The merchant's install instead completes via the app.store.authorize webhook, handled by
+    // handleAppStoreInstall below, and surfaced back to this org via a connect-intent
+    // (createConnectIntent/getConnectIntentStatus).
+    const authorizationUrl = new URL(
+      `${config.appStoreInstallBaseUrl.replace(/\/$/, "")}/${config.appId}`
+    )
 
     const startedAt = now.toISOString()
     await this.recordLifecycle(
@@ -578,6 +620,335 @@ export class SallaOAuthService {
       workspaceId,
       organizationId,
       accountName: primaryAccount.displayName ?? "Salla Store",
+      accountEmail: null,
+      connectedAt: now,
+      status: "connected",
+    }
+  }
+
+  // App Store-initiated install: Salla's Easy Mode (mandatory for App Store-published apps)
+  // delivers the exchanged token via this webhook, never a browser redirect with a code, so
+  // there is no organization to attach a real connection to yet -- stored unclaimed, the same
+  // way Zid's completeMarketplaceInstall handles its own marketplace-initiated case. The exact
+  // payload shape is Salla's one unverified assumption here (no live Partners Portal app exists
+  // yet to confirm against), so every raw delivery is kept in raw_webhook_payload regardless of
+  // whether parsing below succeeds, and a couple of plausible field paths are tried defensively
+  // rather than assuming one shape and failing silently on delivery day.
+  async handleAppStoreInstall(payload: {
+    event: string
+    merchant: number | string
+    data: Record<string, unknown>
+  }): Promise<void> {
+    const config = await this.loadResolvedConfig()
+    const data = payload.data ?? {}
+
+    const accessToken =
+      (data.access_token as string | undefined) ??
+      (data.accessToken as string | undefined) ??
+      undefined
+    if (!accessToken || accessToken.trim().length === 0) {
+      console.error("salla.app_store_authorize_missing_token", { merchant: payload.merchant })
+      return
+    }
+
+    const refreshToken =
+      (data.refresh_token as string | undefined) ??
+      (data.refreshToken as string | undefined) ??
+      undefined
+    const expiresIn =
+      (data.expires as number | undefined) ?? (data.expires_in as number | undefined) ?? undefined
+    const scopeRaw = (data.scope as string | undefined) ?? undefined
+
+    let store: { id: string | number; name?: string; domain?: string; currency?: string }
+    try {
+      store = await fetchStoreInfo(config, accessToken)
+    } catch (error) {
+      console.error("salla.app_store_authorize_store_info_failed", {
+        merchant: payload.merchant,
+        error,
+      })
+      return
+    }
+
+    const installId = randomUUID()
+    const claimToken = createClaimToken()
+    const expiresAt = new Date(Date.now() + MARKETPLACE_INSTALL_CLAIM_TTL_MS).toISOString()
+
+    await this.repository.saveMarketplaceInstall({
+      id: installId,
+      claimTokenHash: hashClaimToken(claimToken),
+      sallaStoreExternalId: String(store.id ?? payload.merchant),
+      sallaStoreName: store.name ?? null,
+      sallaStoreDomain: store.domain ?? null,
+      sallaStoreCurrency: store.currency ?? null,
+      encryptedAccessToken: encryptSecret(accessToken, config.tokenEncryptionKey),
+      encryptedRefreshToken: refreshToken
+        ? encryptSecret(refreshToken, config.tokenEncryptionKey)
+        : encryptSecret(accessToken, config.tokenEncryptionKey),
+      scopes: parseScopes(scopeRaw).length > 0 ? parseScopes(scopeRaw) : config.scopes,
+      tokenExpiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
+      rawWebhookPayload: payload,
+      expiresAt,
+    })
+
+    console.log("salla.app_store_authorize_pending_install_created", {
+      installId,
+      storeId: store.id,
+    })
+  }
+
+  // Created the moment an already-logged-in merchant clicks Connect, just before the frontend
+  // opens the App Store install URL in a new tab -- see getConnectIntentStatus for how this is
+  // later used to safely surface a just-created pending install back to this same org/user only,
+  // never a cross-tenant list (Salla's install URL has no query-param passthrough to correlate
+  // any other way).
+  async createConnectIntent(
+    actor: AuthenticatedActor
+  ): Promise<{ intentId: string; expiresAt: string }> {
+    assertActorCanManageIntegrations(actor)
+
+    const intentId = randomUUID()
+    const expiresAt = new Date(Date.now() + CONNECT_INTENT_TTL_MS).toISOString()
+    await this.repository.saveConnectIntent({
+      id: intentId,
+      organizationId: actor.organizationId,
+      workspaceId: actor.workspaceId ?? null,
+      userId: actor.userId,
+      expiresAt,
+    })
+
+    return { intentId, expiresAt }
+  }
+
+  // Polled by the frontend's "waiting for installation" screen. Only ever reveals a candidate to
+  // the org/user that owns this specific intent, time-boxed to the intent's TTL -- if more than
+  // one unclaimed install appeared in that window (a rare concurrent-install collision across
+  // different merchants), this deliberately does NOT guess which one is "theirs"; it just keeps
+  // waiting, leaving the claim page as the safe fallback.
+  async getConnectIntentStatus(
+    actor: AuthenticatedActor,
+    intentId: string
+  ): Promise<
+    | { waiting: true }
+    | {
+        waiting: false
+        candidate: { claimToken: string; storeName: string; storeDomain: string | null }
+      }
+  > {
+    const intent = await this.repository.findConnectIntentById(intentId)
+    if (
+      !intent ||
+      String(intent.organization_id) !== actor.organizationId ||
+      String(intent.user_id) !== actor.userId
+    ) {
+      throw new Error("SALLA_CONNECT_INTENT_NOT_FOUND")
+    }
+
+    const expiresAt = new Date(String(intent.expires_at)).getTime()
+    if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+      return { waiting: true }
+    }
+
+    // Once a candidate is found, stick with it on subsequent polls rather than re-deriving --
+    // keeps the surfaced candidate (and its claim token, cached on the intent row) stable even
+    // if an unrelated install from another org coincidentally appears in the same window later.
+    const resolvedInstallId = intent.resolved_install_id as string | null
+    const resolvedClaimToken = intent.resolved_claim_token as string | null
+    if (resolvedInstallId && resolvedClaimToken) {
+      const row = await this.repository.findPendingInstallById(resolvedInstallId)
+      if (row && String(row.status) === "unclaimed") {
+        return {
+          waiting: false,
+          candidate: {
+            claimToken: resolvedClaimToken,
+            storeName: (row.salla_store_name as string | null) ?? "Salla Store",
+            storeDomain: (row.salla_store_domain as string | null) ?? null,
+          },
+        }
+      }
+      return { waiting: true }
+    }
+
+    const candidates = await this.repository.findUnclaimedInstallsCreatedAfter(
+      new Date(intent.created_at as string | number | Date).toISOString()
+    )
+    if (candidates.length !== 1) {
+      return { waiting: true }
+    }
+
+    // Issues a fresh claim token for the install, replacing its claim_token_hash -- the webhook
+    // handler's original token was never persisted in plaintext anywhere, so this is the first
+    // (and only) plaintext token this install will ever have.
+    const claimToken = createClaimToken()
+    const row = await this.repository.issueClaimTokenForInstall(
+      String(candidates[0].id),
+      hashClaimToken(claimToken)
+    )
+    await this.repository.markConnectIntentResolved(intentId, String(row.id), claimToken)
+
+    return {
+      waiting: false,
+      candidate: {
+        claimToken,
+        storeName: (row.salla_store_name as string | null) ?? "Salla Store",
+        storeDomain: (row.salla_store_domain as string | null) ?? null,
+      },
+    }
+  }
+
+  // Public-safe read (no secrets) -- used by the claim page before the claim POST, to show
+  // "connect store {name}" ahead of/alongside the login/register step. Mirrors Zid's
+  // getPendingInstallSummary exactly.
+  async getPendingInstallSummary(claimToken: string) {
+    const row = await this.repository.findPendingInstallByTokenHash(hashClaimToken(claimToken))
+    if (!row) {
+      throw new Error("SALLA_MARKETPLACE_INSTALL_NOT_FOUND")
+    }
+
+    const status = String(row.status)
+    if (status === "unclaimed") {
+      const expiresAt = new Date(String(row.expires_at)).getTime()
+      if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+        throw new Error("SALLA_MARKETPLACE_INSTALL_EXPIRED")
+      }
+    }
+
+    return {
+      storeName: (row.salla_store_name as string | null) ?? "Salla Store",
+      currency: (row.salla_store_currency as string | null) ?? null,
+      status,
+    }
+  }
+
+  // Claims an unclaimed marketplace install into the now-authenticated actor's organization --
+  // reuses the already-exchanged tokens from handleAppStoreInstall, no new token exchange.
+  // Mirrors Zid's claimInstall exactly, including falling back to a freshly-created default
+  // project (resolveOrCreateDefaultProject) for a merchant with no pre-existing project, since
+  // this claim page is reachable both via the connect-intent flow (where a project already
+  // exists) and cold, directly, by a merchant who installed via Salla's App Store independently.
+  async claimMarketplaceInstall(
+    actor: AuthenticatedActor,
+    claimToken: string
+  ): Promise<SallaOAuthCallbackResult> {
+    assertActorCanManageIntegrations(actor)
+    const config = await this.loadResolvedConfig()
+
+    const row = await this.repository.findPendingInstallByTokenHash(hashClaimToken(claimToken))
+    if (!row) {
+      throw new Error("SALLA_MARKETPLACE_INSTALL_NOT_FOUND")
+    }
+    if (String(row.status) !== "unclaimed") {
+      throw new Error("SALLA_MARKETPLACE_INSTALL_ALREADY_CLAIMED")
+    }
+    const expiresAt = new Date(String(row.expires_at)).getTime()
+    if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+      throw new Error("SALLA_MARKETPLACE_INSTALL_EXPIRED")
+    }
+
+    const resolvedProject = await this.repository.resolveOrCreateDefaultProject(
+      actor.organizationId,
+      actor.workspaceId ?? null,
+      actor.userId
+    )
+
+    const existingConnection = await this.repository.findConnectionByProject(
+      actor.organizationId,
+      resolvedProject.projectId
+    )
+    const connectionId = existingConnection?.id ?? randomUUID()
+    const now = new Date().toISOString()
+    const storeName = (row.salla_store_name as string | null) ?? "Salla Store"
+    const storeExternalId = String(row.salla_store_external_id)
+    const scopesRaw = row.scopes
+    const scopes = Array.isArray(scopesRaw) ? (scopesRaw as string[]) : []
+    const discoveredAccounts = [
+      {
+        customerId: storeExternalId,
+        displayName: storeName,
+        currencyCode: (row.salla_store_currency as string | null) ?? null,
+        timeZone: null,
+        organizationId: null,
+        organizationName: null,
+        status: "active" as const,
+      },
+    ]
+
+    await this.repository.withTransaction(async () => {
+      // Connection row must exist before the install row's claimed_connection_id FK can point
+      // to it -- if the CAS below fails (lost a race to a concurrent claim), the whole
+      // transaction rolls back, including this upsert, so creating it first is still safe.
+      await this.repository.upsertConnection({
+        id: connectionId,
+        organizationId: actor.organizationId,
+        workspaceId: resolvedProject.workspaceId,
+        projectId: resolvedProject.projectId,
+        dataSourceId: null,
+        providerAccountId: storeExternalId,
+        providerAccountName: storeName,
+        providerAccountEmail: null,
+        encryptedRefreshToken: row.encrypted_refresh_token as string,
+        encryptedAccessToken: row.encrypted_access_token as string,
+        scopes,
+        tokenExpiresAt: row.token_expires_at
+          ? new Date(row.token_expires_at as string | number | Date).toISOString()
+          : null,
+        status: "connected",
+        connectionReference: storeName,
+        lastConnectedAt: now,
+        lastDisconnectedAt: null,
+        actorUserId: actor.userId,
+        nowIso: now,
+      })
+
+      await this.repository.replaceAccessibleCustomerAccounts({
+        connectionId,
+        actorUserId: actor.userId,
+        selectedCustomerId: storeExternalId,
+        accounts: discoveredAccounts,
+      })
+
+      // Single-use CAS -- if this returns false, another request already claimed (or the token
+      // expired) between our earlier read and here, so the whole transaction (including the
+      // connection upsert above) must roll back rather than silently double-processing.
+      const claimed = await this.repository.claimInstallRow({
+        installId: String(row.id),
+        claimedByUserId: actor.userId,
+        claimedOrganizationId: actor.organizationId,
+        claimedWorkspaceId: resolvedProject.workspaceId,
+        claimedProjectId: resolvedProject.projectId,
+        claimedConnectionId: connectionId,
+        now,
+      })
+      if (!claimed) {
+        throw new Error("SALLA_MARKETPLACE_INSTALL_ALREADY_CLAIMED")
+      }
+
+      await this.recordLifecycle(
+        {
+          eventType: "salla.oauth.authorization.completed",
+          aggregateId: connectionId,
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          workspaceId: resolvedProject.workspaceId,
+          projectId: resolvedProject.projectId,
+          occurredAt: now,
+          payload: {
+            accountId: storeExternalId,
+            accountName: storeName,
+            tokenEndpoint: config.tokenUrl,
+            source: "app_store_install",
+          },
+        },
+        "integration.salla_oauth.connected"
+      )
+    })
+
+    return {
+      connectionId,
+      projectId: resolvedProject.projectId,
+      workspaceId: resolvedProject.workspaceId,
+      organizationId: actor.organizationId,
+      accountName: storeName,
       accountEmail: null,
       connectedAt: now,
       status: "connected",

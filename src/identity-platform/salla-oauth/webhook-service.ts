@@ -104,6 +104,15 @@ export class SallaWebhookService {
       entityId: (payload.data as { id?: unknown })?.id,
     })
 
+    // App Store install (Easy Mode) -- delivers the exchanged access/refresh token directly,
+    // unlike every other event here, which only signals "go re-fetch entity X." Handled entirely
+    // by SallaOAuthService since it owns token encryption/storage; nothing here needs an existing
+    // connection (there isn't one yet -- see handleAppStoreInstall's own comment).
+    if (payload.event === "app.store.authorize") {
+      await this.oauthService.handleAppStoreInstall(payload)
+      return
+    }
+
     const entityType = SALLA_EVENT_TO_ENTITY_TYPE[payload.event]
     // Unhandled event type -- ack-but-no-op at the route level, same as Moyasar's non-payment_paid
     // event types. Not every event Salla can send is one this sync models.

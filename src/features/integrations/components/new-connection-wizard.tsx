@@ -63,6 +63,8 @@ import {
   CONNECTOR_CATALOG,
   getDefaultTimezone,
   loadStoredConnectionReferences,
+  type SallaConnectIntentStatus,
+  sallaMarketplaceInstallService,
   storeConnectionReferences,
 } from "../services"
 import { ConnectorLogo } from "./connector-logo"
@@ -86,6 +88,11 @@ type NewConnectionWizardTranslator = ReturnType<
 type SyncPreset = "recommended" | "all" | "custom"
 type SetupMode = "oauth" | "manual"
 type SyncPhase = "idle" | "running" | "done" | "failed"
+
+// How long the Salla App Store install wait screen polls before giving up -- matches the
+// connect-intent's own 10-min server-side TTL with slack to spare (see
+// salla-marketplace-install.service.ts / SallaOAuthService.createConnectIntent).
+const SALLA_WAIT_TIMEOUT_MS = 5 * 60 * 1000
 
 // What a finished run actually reports back. There is no mid-flight progress anywhere in
 // the integration contract -- runSync resolves once, at the end -- so the screen shows a
@@ -921,6 +928,22 @@ export function NewConnectionWizard() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [discoveredProviderAccounts, setDiscoveredProviderAccounts] = useState<AccountOption[]>([])
   const [shopDomain, setShopDomain] = useState("")
+  // Salla's App Store install flow has no browser redirect back with a code (Easy Mode, see
+  // salla-marketplace-install.service.ts) -- the install happens in a new tab while this state
+  // drives a dedicated "waiting for installation" view in place of the generic authorizing
+  // spinner. null means "not a Salla App Store install flow" (every other connector, and Salla's
+  // own manual-credential setup mode, are unaffected).
+  const [sallaWait, setSallaWait] = useState<
+    | null
+    | { status: "waiting"; intentId: string; startedAt: number }
+    | {
+        status: "found"
+        intentId: string
+        candidate: { claimToken: string; storeName: string; storeDomain: string | null }
+      }
+    | { status: "claiming"; intentId: string; storeName: string }
+    | { status: "timeout" }
+  >(null)
 
   const workspaceId = currentWorkspace?.id ?? null
   const workspaceLabel = currentWorkspace?.name ?? "Madar Workspace"
@@ -1182,6 +1205,7 @@ export function NewConnectionWizard() {
   const resetError = useCallback(() => {
     setErrorState(null)
     setRetryTarget(null)
+    setSallaWait(null)
   }, [])
 
   const initializeImportSelection = useCallback(
@@ -1317,9 +1341,28 @@ export function NewConnectionWizard() {
       }
 
       setDraftConnectionId(connectionId)
-      setFlowStatus("authorizing")
       appendConnectorAccount(selectedConnector.connectorDefinitionId, selectedAccount.label)
 
+      // Salla App Store install: no browser redirect back with a code, so the generic
+      // connectionManager.connect()/authorizeConnector() (which navigates the current tab away
+      // and blocks forever) doesn't apply. Open the install page in a new tab, keep this tab on
+      // the wizard, and poll a connect-intent for the resulting webhook-created install instead.
+      if (selectedConnector.connectorId === "salla" && setupMode === "oauth") {
+        const installUrl = created.metadata.oauthAuthorizationUrl
+        if (!installUrl) {
+          throw new Error("Salla App Store install URL missing after connection creation")
+        }
+
+        const intent = await sallaMarketplaceInstallService.createConnectIntent()
+        if (typeof window !== "undefined") {
+          window.open(installUrl, "_blank", "noopener,noreferrer")
+        }
+        setSallaWait({ status: "waiting", intentId: intent.intentId, startedAt: Date.now() })
+        setFlowStatus("idle")
+        return
+      }
+
+      setFlowStatus("authorizing")
       await connectionManager.connect({
         connectionId,
       })
@@ -1354,6 +1397,65 @@ export function NewConnectionWizard() {
     workspaceId,
     workspaceLabel,
   ])
+
+  // Only re-run the polling effect when a *new* wait begins -- re-running it on every sallaWait
+  // update (e.g. once it flips to "found") would restart the interval instead of letting the
+  // status check inside it stop cleanly.
+  const activeSallaWaitIntentId = sallaWait?.status === "waiting" ? sallaWait.intentId : null
+  // 3s polling, up to 5 minutes -- matches the plan's connect-intent TTL (10 min server-side,
+  // generous slack beyond the UI's own 5-min give-up). Stops entirely once a candidate is found
+  // (status moves to "found"/"claiming") or the merchant navigates elsewhere.
+  useEffect(() => {
+    if (!activeSallaWaitIntentId || sallaWait?.status !== "waiting") {
+      return
+    }
+    const { intentId, startedAt } = sallaWait
+
+    const poll = async () => {
+      if (Date.now() - startedAt > SALLA_WAIT_TIMEOUT_MS) {
+        setSallaWait({ status: "timeout" })
+        return
+      }
+      try {
+        const result: SallaConnectIntentStatus =
+          await sallaMarketplaceInstallService.getConnectIntentStatus(intentId)
+        if (!result.waiting) {
+          setSallaWait({ status: "found", intentId, candidate: result.candidate })
+        }
+      } catch {
+        // A transient network hiccup shouldn't end the wait -- just try again next tick.
+      }
+    }
+
+    const timer = setInterval(poll, 3000)
+    void poll()
+    return () => clearInterval(timer)
+    // Deliberately keyed only on activeSallaWaitIntentId (see comment above), not the full
+    // sallaWait object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSallaWaitIntentId])
+
+  const confirmSallaCandidate = useCallback(async () => {
+    if (!sallaWait || sallaWait.status !== "found") {
+      return
+    }
+    const { intentId, candidate } = sallaWait
+    setSallaWait({ status: "claiming", intentId, storeName: candidate.storeName })
+    try {
+      await sallaMarketplaceInstallService.claimPendingInstall(candidate.claimToken)
+      setSallaWait(null)
+      setStepIndex(2)
+      setFlowStatus("idle")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const kind = inferErrorKind(message)
+      setErrorState(errorMeta(kind, t))
+      setRetryTarget("connect")
+      // Clears the wait box entirely -- the generic errorState card (set above) already covers
+      // this, and rendering nothing here would otherwise leave an empty blue box on screen.
+      setSallaWait(null)
+    }
+  }, [sallaWait, t])
 
   const finalizeConnection = useCallback(async () => {
     if (!selectedConnector || !draftConnectionId) {
@@ -1983,7 +2085,56 @@ export function NewConnectionWizard() {
           ),
         })}
 
-        {flowStatus !== "idle" ? (
+        {sallaWait ? (
+          <div className="rounded-[12px] border border-[#c9dcff] bg-[#eef4ff] px-4 py-4">
+            {sallaWait.status === "waiting" || sallaWait.status === "claiming" ? (
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-4 shrink-0 animate-spin text-[#2878ff]" />
+                <div>
+                  <p className="text-[12.5px] font-semibold text-[#2878ff]">
+                    {sallaWait.status === "claiming"
+                      ? t("sallaAppStoreInstall.claimingLabel", { storeName: sallaWait.storeName })
+                      : t("sallaAppStoreInstall.waitingTitle")}
+                  </p>
+                  {sallaWait.status === "waiting" ? (
+                    <p className="mt-1 text-[11.5px] text-[#2878ff]/80">
+                      {t("sallaAppStoreInstall.waitingDescription")}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {sallaWait.status === "found" ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[12.5px] font-semibold text-[#2878ff]">
+                    {t("sallaAppStoreInstall.candidateFoundTitle")}
+                  </p>
+                  <p className="mt-1 text-[11.5px] text-[#2878ff]/80">
+                    {t("sallaAppStoreInstall.candidateFoundDescription", {
+                      storeName: sallaWait.candidate.storeName,
+                    })}
+                  </p>
+                </div>
+                <AppButton type="button" onClick={() => void confirmSallaCandidate()}>
+                  {t("sallaAppStoreInstall.confirmButton")}
+                </AppButton>
+              </div>
+            ) : null}
+
+            {sallaWait.status === "timeout" ? (
+              <div>
+                <p className="text-[12.5px] font-semibold text-[#2878ff]">
+                  {t("sallaAppStoreInstall.timeoutTitle")}
+                </p>
+                <p className="mt-1 text-[11.5px] text-[#2878ff]/80">
+                  {t("sallaAppStoreInstall.timeoutDescription")}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : flowStatus !== "idle" ? (
           <div className="flex items-center gap-3 rounded-[12px] border border-[#c9dcff] bg-[#eef4ff] px-4 py-3">
             <Loader2 className="size-4 shrink-0 animate-spin text-[#2878ff]" />
             <p className="text-[12.5px] font-semibold text-[#2878ff]">

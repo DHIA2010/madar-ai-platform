@@ -155,6 +155,12 @@ interface RuntimeProviderProfile {
   metadata: {
     availableAccountsKey: string
   }
+  // Salla only: the Connect button sends the merchant to Salla's own App Store install page
+  // (Easy Mode, mandatory for App Store-published apps) instead of a direct OAuth consent
+  // screen -- there is no browser redirect back with a code, so the generic authorizeConnector's
+  // "navigate away and block forever" behavior doesn't apply here. See
+  // new-connection-wizard.tsx's beginOAuthFlow for the dedicated branch this flag selects.
+  isAppStoreInstall?: boolean
 }
 
 const STORAGE_KEY = "integration-runtime-state:v1"
@@ -257,6 +263,7 @@ const SALLA_PROVIDER_PROFILE: RuntimeProviderProfile = {
   connectorId: "salla",
   connectorDefinitionId: "connector_def_salla",
   displayName: "Salla",
+  isAppStoreInstall: true,
   oauth: {
     startPath: "/v1/integrations/salla/oauth/start",
     activeConnectionPath: "/v1/integrations/salla/connection",

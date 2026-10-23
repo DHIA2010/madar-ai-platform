@@ -877,15 +877,26 @@ export function createIdentityApiServer(
     container.infrastructure.database && productCatalogService && sallaProductLinksService
       ? new SallaProductPromotionService(productCatalogService, sallaProductLinksService)
       : null
+  // Standalone instance for the marketplace-install routes below (connect-intents/
+  // pending-installs/claim) -- same reasoning as zidOAuthMarketplaceService above: these are
+  // Salla-only, not part of the generic IntegrationProvider interface, and also the instance
+  // sallaWebhookService's app.store.authorize handling delegates into.
+  const sallaOAuthMarketplaceService = container.infrastructure.database
+    ? new SallaOAuthService(
+        sallaOAuthRepositoryForTracking ??
+          new SallaOAuthRepository(container.infrastructure.database)
+      )
+    : null
   const sallaWebhookService = container.infrastructure.database
     ? new SallaWebhookService(
         sallaOAuthRepositoryForTracking ??
           new SallaOAuthRepository(container.infrastructure.database),
         new SallaSyncRepository(container.infrastructure.database),
-        new SallaOAuthService(
-          sallaOAuthRepositoryForTracking ??
-            new SallaOAuthRepository(container.infrastructure.database)
-        ),
+        sallaOAuthMarketplaceService ??
+          new SallaOAuthService(
+            sallaOAuthRepositoryForTracking ??
+              new SallaOAuthRepository(container.infrastructure.database)
+          ),
         undefined,
         sallaProductPromotionService
       )
@@ -1244,6 +1255,45 @@ export function createIdentityApiServer(
         } catch {
           return send(404, {
             code: "ZID_MARKETPLACE_INSTALL_NOT_FOUND",
+            message: "Install not found or expired.",
+          })
+        }
+      }
+
+      // Unauthenticated, same reasoning as the Zid install-summary route above -- the claim page
+      // needs to show "connect store {name}" before the merchant has necessarily logged into
+      // MADAR yet.
+      const sallaInstallSummaryMatch = url.pathname.match(
+        /^\/v1\/integrations\/salla\/pending-installs\/([^/]+)$/
+      )
+      if (method === "GET" && sallaInstallSummaryMatch) {
+        if (!sallaOAuthMarketplaceService) {
+          return send(503, {
+            code: "SALLA_MARKETPLACE_INSTALL_UNAVAILABLE",
+            message: "Salla marketplace install is unavailable in memory mode.",
+          })
+        }
+
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `salla_install_lookup:${context.ipAddress}`,
+          30,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, {
+            code: "SALLA_MARKETPLACE_INSTALL_RATE_LIMITED",
+            message: "Too many requests.",
+          })
+        }
+
+        try {
+          const summary = await sallaOAuthMarketplaceService.getPendingInstallSummary(
+            decodeURIComponent(sallaInstallSummaryMatch[1])
+          )
+          return send(200, summary)
+        } catch {
+          return send(404, {
+            code: "SALLA_MARKETPLACE_INSTALL_NOT_FOUND",
             message: "Install not found or expired.",
           })
         }
@@ -1734,6 +1784,63 @@ export function createIdentityApiServer(
           ...claimResult,
           redirectUrl: zidOAuthMarketplaceService.buildSuccessRedirect(claimResult),
         })
+      }
+
+      // Created the moment a logged-in merchant clicks Connect for Salla, just before the
+      // frontend opens the App Store install URL in a new tab -- see
+      // SallaOAuthService.createConnectIntent's own comment for why this exists at all (Salla's
+      // install URL has no query-param passthrough to correlate any other way).
+      if (method === "POST" && url.pathname === "/v1/integrations/salla/connect-intents") {
+        if (!sallaOAuthMarketplaceService) {
+          return send(503, {
+            code: "SALLA_MARKETPLACE_INSTALL_UNAVAILABLE",
+            message: "Salla marketplace install is unavailable in memory mode.",
+          })
+        }
+        return send(200, await sallaOAuthMarketplaceService.createConnectIntent(actor))
+      }
+
+      const sallaConnectIntentStatusMatch = url.pathname.match(
+        /^\/v1\/integrations\/salla\/connect-intents\/([^/]+)\/status$/
+      )
+      if (method === "GET" && sallaConnectIntentStatusMatch) {
+        if (!sallaOAuthMarketplaceService) {
+          return send(503, {
+            code: "SALLA_MARKETPLACE_INSTALL_UNAVAILABLE",
+            message: "Salla marketplace install is unavailable in memory mode.",
+          })
+        }
+        try {
+          return send(
+            200,
+            await sallaOAuthMarketplaceService.getConnectIntentStatus(
+              actor,
+              decodeURIComponent(sallaConnectIntentStatusMatch[1])
+            )
+          )
+        } catch {
+          return send(404, {
+            code: "SALLA_CONNECT_INTENT_NOT_FOUND",
+            message: "Connect intent not found or expired.",
+          })
+        }
+      }
+
+      const sallaInstallClaimMatch = url.pathname.match(
+        /^\/v1\/integrations\/salla\/pending-installs\/([^/]+)\/claim$/
+      )
+      if (method === "POST" && sallaInstallClaimMatch) {
+        if (!sallaOAuthMarketplaceService) {
+          return send(503, {
+            code: "SALLA_MARKETPLACE_INSTALL_UNAVAILABLE",
+            message: "Salla marketplace install is unavailable in memory mode.",
+          })
+        }
+        const claimResult = await sallaOAuthMarketplaceService.claimMarketplaceInstall(
+          actor,
+          decodeURIComponent(sallaInstallClaimMatch[1])
+        )
+        return send(200, claimResult)
       }
 
       if (method === "GET" && url.pathname === "/v1/auth/session") {

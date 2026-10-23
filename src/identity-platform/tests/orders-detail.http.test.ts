@@ -114,6 +114,7 @@ beforeEach(async () => {
   process.env.SALLA_CLIENT_SECRET = "salla-client-secret"
   process.env.SALLA_REDIRECT_URI = "http://localhost:4000/v1/integrations/salla/oauth/callback"
   process.env.SALLA_SUCCESS_REDIRECT_URI = "http://localhost:3000/integrations/new"
+  process.env.SALLA_APP_ID = "test-salla-app-id"
 
   const mem = newDb({ autoCreateForeignKeyIndices: true })
   const adapter = mem.adapters.createPg()

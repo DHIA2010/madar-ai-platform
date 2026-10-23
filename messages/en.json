@@ -278,6 +278,23 @@
       "goToIntegrations": "Go to Integrations",
       "errorDescription": "We couldn't connect this store. The link may have expired — try activating from Zid again."
     },
+    "sallaClaim": {
+      "loading": "Loading…",
+      "notFoundHeading": "Link not found",
+      "notFoundDescription": "This install link is invalid or has expired. Try installing MADAR from Salla's App Store again.",
+      "connectHeading": "Connect your Salla store",
+      "connectDescription": "You're about to connect {storeName} to MADAR.",
+      "alreadyClaimedHeading": "Already connected",
+      "alreadyClaimedDescription": "This store has already been connected to MADAR.",
+      "loginFirstDescription": "Sign in to your MADAR account first, then come back to this link to finish connecting your store.",
+      "loginCta": "Sign in",
+      "confirmCta": "Confirm connection",
+      "confirming": "Connecting…",
+      "successHeading": "Store connected",
+      "successDescription": "{storeName} is now connected to MADAR.",
+      "goToIntegrations": "Go to Integrations",
+      "errorDescription": "We couldn't connect this store. The link may have expired — try installing from Salla again."
+    },
     "zidAutoLogin": {
       "loading": "Signing you in…",
       "errorHeading": "Couldn't sign you in",
@@ -7564,6 +7581,16 @@
         "authorizing": "Authorizing...",
         "fetchingAccounts": "Fetching accounts...",
         "almostDone": "Almost done..."
+      },
+      "sallaAppStoreInstall": {
+        "waitingTitle": "Waiting for installation on Salla...",
+        "waitingDescription": "Finish installing the app in the new tab. This page will update automatically once it's done.",
+        "candidateFoundTitle": "We found your store",
+        "candidateFoundDescription": "{storeName} just installed the app. Confirm to finish connecting it to this workspace.",
+        "confirmButton": "Confirm & Connect",
+        "claimingLabel": "Connecting {storeName}...",
+        "timeoutTitle": "Still waiting?",
+        "timeoutDescription": "If you've finished on Salla, this may just need a bit more time. You can also check back here later — your connection will appear automatically once Salla confirms it."
       },
       "accountFallback": {
         "label": "Primary Account",
