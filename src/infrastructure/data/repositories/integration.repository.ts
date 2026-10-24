@@ -164,6 +164,11 @@ interface RuntimeProviderProfile {
 }
 
 const STORAGE_KEY = "integration-runtime-state:v1"
+// How long a "draft" connection (created, but never resolved to connected/error) is kept around
+// before pruneUnrecoveredConnections treats it as abandoned rather than still in-flight. A real
+// OAuth round trip resolves in seconds; an hour is generous slack for a slow network without
+// letting a closed-tab/denied-permission attempt linger in local storage forever.
+const DRAFT_CONNECTION_TTL_MS = 60 * 60 * 1000
 
 const GOOGLE_ADS_PROVIDER_PROFILE: RuntimeProviderProfile = {
   providerId: "google-ads",
@@ -620,6 +625,7 @@ export class RestIntegrationRepository implements IntegrationRepository {
 
   private pruneUnrecoveredConnections(validConnectionIds: string[]) {
     const valid = new Set(validConnectionIds)
+    const now = Date.now()
     for (const [connectionId, connection] of Object.entries(this.state.connections)) {
       if (!resolveProviderProfileByDefinition(connection.connectorDefinitionId)) {
         continue
@@ -629,8 +635,19 @@ export class RestIntegrationRepository implements IntegrationRepository {
         continue
       }
 
+      // A connection stays "draft" only for the few seconds between createConnection() and the
+      // OAuth provider redirecting back -- kept unpruned here so an in-flight connect attempt
+      // never gets wiped out from under it. One abandoned mid-flow (closed tab, denied
+      // permission, network drop) has no other event that ever clears it, so without a TTL this
+      // branch kept every abandoned draft forever: each one is still cached locally (see
+      // getConnectionOrThrow, which never round-trips to the server) and getIntegrationStatus
+      // keeps probing it on every bootstrap, 404ing endlessly.
       if (connection.status === "draft") {
-        continue
+        const createdAtMs = Date.parse(connection.createdAt)
+        const isStale = Number.isNaN(createdAtMs) || now - createdAtMs > DRAFT_CONNECTION_TTL_MS
+        if (!isStale) {
+          continue
+        }
       }
 
       this.removeConnectionArtifacts(connectionId)
@@ -1550,7 +1567,15 @@ export class RestIntegrationRepository implements IntegrationRepository {
       const latestJob = this.state.jobs[input.connectionId]
       const latestRun = (this.state.runs[input.connectionId] ?? [])[0]
       const recentEvents = await this.fetchTimelineEvents(input.connectionId).catch(() => [])
-      const retryStatus = await this.fetchRetryStatus(input.connectionId).catch(() => null)
+      // retry-status is a Google Ads-only endpoint (fetchRetryStatus always calls
+      // GOOGLE_ADS_PROVIDER_PROFILE.endpoints.retryStatus regardless of the connection's real
+      // provider) -- calling it for every connection meant every non-Google-Ads connection
+      // (Salla, Meta, Snapchat, Shopify, ...) hit it unconditionally and always 404'd, logged
+      // and silently swallowed by the .catch(() => null) below, every single status check.
+      const retryStatus =
+        connection.connectorId === GOOGLE_ADS_PROVIDER_PROFILE.connectorId
+          ? await this.fetchRetryStatus(input.connectionId).catch(() => null)
+          : null
       const enrichedConnection = retryStatus
         ? {
             ...connection,

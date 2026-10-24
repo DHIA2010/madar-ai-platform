@@ -134,6 +134,15 @@ export function useConnectionsCenter() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const bootstrapRequestIdRef = useRef(0)
+  // Tracks records.length for the trace-log calls below without making it a dependency of
+  // buildRecord/bootstrap -- it's informational only, but having it in those useCallback deps
+  // meant every bootstrap() run (which calls setRecords) recreated both callbacks, which
+  // recreated the effect that calls bootstrap(), re-triggering the whole fetch (including every
+  // connection's getIntegrationStatus/fetchRetryStatus call) in a self-re-entrant loop.
+  const recordsCountRef = useRef(0)
+  useEffect(() => {
+    recordsCountRef.current = records.length
+  }, [records.length])
 
   const clearOAuthCallbackParams = useCallback((connectionId: string) => {
     if (typeof window === "undefined") {
@@ -174,7 +183,7 @@ export function useConnectionsCenter() {
           typeof connection.metadata.customerId === "string"
             ? connection.metadata.customerId
             : null,
-        connectionCount: records.length,
+        connectionCount: recordsCountRef.current,
       })
 
       const [syncHistory, connectorHealth] = await Promise.all([
@@ -274,7 +283,7 @@ export function useConnectionsCenter() {
         healthLabel: connectorHealth.payload.status,
       }
     },
-    [connectionManager, integrationApplicationService, records.length, t]
+    [connectionManager, integrationApplicationService, t]
   )
 
   const bootstrap = useCallback(async () => {
@@ -284,7 +293,7 @@ export function useConnectionsCenter() {
 
     traceFrontendExecution({
       step: "bootstrapConnections()",
-      connectionCount: records.length,
+      connectionCount: recordsCountRef.current,
       details: `requestId=${requestId}`,
     })
 
@@ -484,13 +493,7 @@ export function useConnectionsCenter() {
         setIsLoading(false)
       }
     }
-  }, [
-    buildRecord,
-    connectionManager,
-    currentWorkspaceId,
-    integrationApplicationService,
-    records.length,
-  ])
+  }, [buildRecord, connectionManager, currentWorkspaceId, integrationApplicationService])
 
   useEffect(() => {
     void bootstrap()
