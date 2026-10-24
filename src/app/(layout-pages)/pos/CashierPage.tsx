@@ -77,6 +77,12 @@ import {
   posHeldOrdersService,
   type HeldOrder,
 } from "@/features/pos/services/pos-held-orders.service"
+import {
+  posSavedNotesService,
+  type NoteLine,
+  type SavedNote,
+} from "@/features/pos/services/pos-saved-notes.service"
+import { FormattedNoteEditor } from "@/features/pos/components/FormattedNoteEditor"
 import { CashMovementDialog } from "@/app/(layout-pages)/shifts/CashMovementDialog"
 import { ShiftCloseDialog } from "@/app/(layout-pages)/shifts/ShiftCloseDialog"
 import {
@@ -130,7 +136,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 
 const HEADING = "text-[#0d1b3e]"
 // A darker secondary gray than the app's usual #8098b4 -- that shade read as too faint for this
@@ -210,6 +215,10 @@ const PAYMENT_KIND_ICON: Record<PaymentKind, typeof Wallet> = {
 // actually promises (a shared, cross-device "last payment method" isn't a real concept the
 // backend tracks anywhere).
 const LAST_PAYMENT_METHOD_STORAGE_KEY = "pos-last-payment-method"
+// Never a real saved note's id (those are uuids) -- the Note dialog's "Load a saved note" picker's
+// own explicit "Without a note" choice, so a cashier can deliberately clear a default note that
+// auto-filled for this one sale, not just leave the picker on a stale previous selection.
+const NO_NOTE_PICKER_VALUE = "__none__"
 
 function timeFormatter(locale: Locale) {
   return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
@@ -1643,7 +1652,7 @@ export default function CashierPage() {
       discountAmount: totalDiscount,
       taxAmount: tax,
       totalAmount: total,
-      notes: orderNotes.trim() || null,
+      ...notePayload(),
       createdAt: now,
       items: cart.map((line, index) => {
         const lineNet = Math.max(0, line.unitPrice * line.quantity - resolveLineDiscount(line))
@@ -1695,7 +1704,7 @@ export default function CashierPage() {
         // physical change handed back, not extra revenue, so it never reaches the invoice.
         payments,
         discountAmount: discount,
-        notes: orderNotes.trim() || null,
+        ...notePayload(),
         items: cart.map((line) => ({
           productId: line.productId,
           variantId: line.variantId,
@@ -1734,7 +1743,7 @@ export default function CashierPage() {
       setDiscountType("percent")
       setDiscountIncludesTax(true)
       setPaymentAmounts({})
-      setOrderNotes("")
+      resetOrderNotes()
       setIsCheckoutOpen(false)
       loadTodaySummary()
 
@@ -1797,10 +1806,55 @@ export default function CashierPage() {
   }
 
   // --- Order note --------------------------------------------------------------------------------
+  // A per-line formatted note (see FormattedNoteEditor.tsx), sourced from a reusable saved-notes
+  // library managed in Settings -> ملاحظات البيع (NotesSettings.tsx). Exactly one saved note can
+  // be marked default, which auto-fills every brand-new sale -- see applyDefaultNoteOnce below --
+  // while staying fully editable/overridable for that one sale.
 
-  const [orderNotes, setOrderNotes] = useState("")
+  const [orderNotesLines, setOrderNotesLines] = useState<NoteLine[]>([])
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false)
-  const [noteDraft, setNoteDraft] = useState("")
+  const [noteDraftLines, setNoteDraftLines] = useState<NoteLine[]>([])
+  const [notePickerValue, setNotePickerValue] = useState("")
+  const [savedNotes, setSavedNotes] = useState<SavedNote[]>([])
+  const appliedDefaultNoteRef = useRef(false)
+
+  useEffect(() => {
+    void posSavedNotesService
+      .list()
+      .then(setSavedNotes)
+      .catch(() => setSavedNotes([]))
+  }, [])
+
+  // Only ever auto-applies once, the first time the default note becomes known for a session that
+  // hasn't typed/resumed a note yet -- a held-order resume (see resumeHeldOrder below) always sets
+  // its own notesLines right after, which must not then be clobbered by this effect re-running.
+  useEffect(() => {
+    if (appliedDefaultNoteRef.current || orderNotesLines.length > 0) return
+    const defaultNote = savedNotes.find((note) => note.isDefault)
+    if (!defaultNote) return
+    appliedDefaultNoteRef.current = true
+    setOrderNotesLines(defaultNote.lines)
+  }, [savedNotes, orderNotesLines])
+
+  // What a fresh sale's note resets to after checkout/hold -- the default note again, if any,
+  // keeping it "always on" for the next sale too.
+  const resetOrderNotes = () => {
+    const defaultNote = savedNotes.find((note) => note.isDefault)
+    setOrderNotesLines(defaultNote ? defaultNote.lines : [])
+  }
+
+  const hasNoteContent = orderNotesLines.some((line) => line.text.trim().length > 0)
+  const notePayload = (): { notes: string | null; notesLines: NoteLine[] | null } => {
+    if (!hasNoteContent) return { notes: null, notesLines: null }
+    return {
+      notes:
+        orderNotesLines
+          .map((line) => line.text)
+          .join("\n")
+          .trim() || null,
+      notesLines: orderNotesLines,
+    }
+  }
 
   // --- Customer picker -----------------------------------------------------------------------
   // Prefills the free-text customerName/customerPhone snapshot from a real customer record --
@@ -2015,7 +2069,7 @@ export default function CashierPage() {
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
         discountAmount: discount,
-        notes: orderNotes.trim() || null,
+        ...notePayload(),
         items: cart.map((line) => ({
           productId: line.productId,
           variantId: line.variantId,
@@ -2034,7 +2088,7 @@ export default function CashierPage() {
       setDiscountValue("")
       setDiscountType("percent")
       setDiscountIncludesTax(true)
-      setOrderNotes("")
+      resetOrderNotes()
       loadHeldOrders()
     } catch {
       toast.error(t("toasts.orderHoldFailed"))
@@ -2081,7 +2135,11 @@ export default function CashierPage() {
       setDiscountType("fixed")
       setDiscountValue(held.discountAmount ? String(held.discountAmount) : "")
       setDiscountIncludesTax(false)
-      setOrderNotes(held.notes ?? "")
+      // Resuming always sets its own notesLines, overriding whatever the default-note effect
+      // above might otherwise have applied -- an empty array here (no note saved on the held
+      // cart) is a deliberate, real state, not "not yet decided."
+      appliedDefaultNoteRef.current = true
+      setOrderNotesLines(held.notesLines ?? [])
       setHeldOrders((current) => current.filter((order) => order.id !== id))
       setIsHeldOrdersOpen(false)
       toast.success(t("toasts.orderResumed"))
@@ -2874,14 +2932,15 @@ export default function CashierPage() {
             <button
               type="button"
               onClick={() => {
-                setNoteDraft(orderNotes)
+                setNoteDraftLines(orderNotesLines)
+                setNotePickerValue("")
                 setIsNoteDialogOpen(true)
               }}
               className="flex flex-col items-center gap-1.5 rounded-[10px] p-1.5 hover:bg-[#f7faff]"
             >
               <span className="relative flex size-10 items-center justify-center rounded-[10px] bg-[#fffbeb] text-[#d97706]">
                 <StickyNote className="size-[18px]" />
-                {orderNotes ? (
+                {hasNoteContent ? (
                   <span className="absolute -top-1 -end-1 size-2 rounded-full bg-[#d97706]" />
                 ) : null}
               </span>
@@ -3723,7 +3782,7 @@ export default function CashierPage() {
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
         <DialogContent
           className={cn(
-            "sm:max-w-[22rem]",
+            "sm:max-w-[26rem]",
             locale === "ar" ? "[direction:rtl]" : "[direction:ltr]"
           )}
         >
@@ -3735,18 +3794,40 @@ export default function CashierPage() {
               {t("noteDialog.description")}
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            value={noteDraft}
-            onChange={(event) => setNoteDraft(event.target.value)}
-            rows={4}
-            placeholder={t("noteDialog.placeholder")}
-            className="resize-none text-[13px]"
-          />
+
+          {savedNotes.length > 0 ? (
+            <div>
+              <Label className={cn("mb-1.5 block text-[12px] font-semibold", HEADING)}>
+                {t("noteDialog.pickerLabel")}
+              </Label>
+              <AppSearchableSelect
+                value={notePickerValue}
+                options={[
+                  { value: NO_NOTE_PICKER_VALUE, label: t("noteDialog.blankOption") },
+                  ...savedNotes.map((note) => ({ value: note.id, label: note.title })),
+                ]}
+                onChange={(next) => {
+                  setNotePickerValue(next)
+                  if (next === NO_NOTE_PICKER_VALUE) {
+                    setNoteDraftLines([])
+                    return
+                  }
+                  const picked = savedNotes.find((note) => note.id === next)
+                  setNoteDraftLines(picked ? picked.lines : [])
+                }}
+                placeholder={t("noteDialog.pickerPlaceholder")}
+                ariaLabel={t("noteDialog.pickerLabel")}
+              />
+            </div>
+          ) : null}
+
+          <FormattedNoteEditor value={noteDraftLines} onChange={setNoteDraftLines} />
+
           <DialogFooter className="gap-2">
             <Button
               className="h-11 gap-2 rounded-[10px] bg-[#2563eb] px-6 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
               onClick={() => {
-                setOrderNotes(noteDraft.trim())
+                setOrderNotesLines(noteDraftLines)
                 setIsNoteDialogOpen(false)
               }}
             >

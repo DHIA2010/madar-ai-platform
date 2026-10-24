@@ -2828,7 +2828,9 @@
       "noteDialog": {
         "title": "ملاحظة على الطلب",
         "description": "تُحفظ مع الفاتورة عند إتمام الدفع.",
-        "placeholder": "مثال: بدون سكر، تغليف هدية..."
+        "pickerLabel": "تحميل ملاحظة محفوظة",
+        "pickerPlaceholder": "اختر ملاحظة محفوظة...",
+        "blankOption": "بدون ملاحظة"
       },
       "customerDialog": {
         "title": "اختيار عميل",
@@ -2917,6 +2919,20 @@
         "heldOrderDeleted": "تم حذف الطلب المعلق.",
         "heldOrderDeleteFailed": "تعذر حذف الطلب."
       }
+    },
+    "noteEditor": {
+      "lineAlignLeftAria": "محاذاة لليسار",
+      "lineAlignCenterAria": "محاذاة للوسط",
+      "lineAlignRightAria": "محاذاة لليمين",
+      "lineBoldAria": "عريض",
+      "lineRemoveAria": "حذف السطر",
+      "linePlaceholder": "نص السطر...",
+      "fontSizeAria": "حجم الخط",
+      "colorAria": "لون النص",
+      "pxUnit": "بكسل",
+      "addLine": "إضافة سطر",
+      "maxLinesReached": "يمكن أن تحتوي الملاحظة على {max} سطور كحد أقصى.",
+      "previewLabel": "معاينة"
     },
     "creditNoteReceipt": {
       "title": "إشعار دائن",
@@ -4094,6 +4110,10 @@
         "applyDiscounts": {
           "title": "تطبيق الخصومات",
           "description": "السماح بتطبيق الخصومات على المبيعات"
+        },
+        "manageSavedNotes": {
+          "title": "ملاحظات البيع",
+          "description": "إدارة مكتبة الملاحظات الجاهزة التي يمكن للكاشير اختيارها عند الدفع"
         }
       },
       "print": {
@@ -4383,6 +4403,71 @@
       "validation": {
         "nameRequired": "أدخل اسم الضريبة.",
         "rateInvalid": "أدخل نسبة ضريبة بين 0 و 100."
+      }
+    },
+    "notes": {
+      "title": "ملاحظات البيع",
+      "subtitle": "إدارة مكتبة ملاحظات جاهزة ومنسّقة لشاشة الكاشير",
+      "addNote": "إضافة ملاحظة",
+      "loading": "جارٍ تحميل الملاحظات المحفوظة...",
+      "loadError": {
+        "forbidden": "لا تملك صلاحية عرض الملاحظات المحفوظة.",
+        "generic": "تعذر تحميل الملاحظات المحفوظة."
+      },
+      "retry": "إعادة المحاولة",
+      "empty": "لا توجد ملاحظات محفوظة بعد. أضف واحدة لاستخدامها عند الدفع.",
+      "withoutNote": {
+        "title": "بدون ملاحظة",
+        "hint": "لن تُضاف أي ملاحظة إلى البيع ما لم يختر الكاشير واحدة.",
+        "pinAction": "تثبيت كافتراضي"
+      },
+      "table": {
+        "columns": {
+          "title": "العنوان",
+          "preview": "معاينة",
+          "lines": "الأسطر",
+          "status": "الحالة",
+          "updated": "آخر تحديث",
+          "actions": "الإجراءات"
+        },
+        "defaultBadge": "افتراضية",
+        "editAria": "تعديل",
+        "deleteAria": "حذف",
+        "linesCountSuffix": "{count} سطر"
+      },
+      "dialog": {
+        "addTitle": "إضافة ملاحظة",
+        "editTitle": "تعديل الملاحظة",
+        "save": "حفظ",
+        "saveChanges": "حفظ التغييرات",
+        "titleLabel": "عنوان الملاحظة *",
+        "titlePlaceholder": "مثال: شكر افتراضي",
+        "linesLabel": "محتوى الملاحظة *",
+        "setDefault": "اجعلها الملاحظة الافتراضية (مفعّلة دائماً للمبيعات الجديدة)",
+        "saving": "جارٍ الحفظ...",
+        "cancel": "إلغاء"
+      },
+      "deleteDialog": {
+        "title": "حذف هذه الملاحظة؟",
+        "description": "سيتم حذف <b>{name}</b> من الملاحظات المحفوظة.",
+        "confirm": "حذف",
+        "cancel": "إلغاء"
+      },
+      "toasts": {
+        "added": "تمت إضافة الملاحظة.",
+        "addFailed": "تعذر إضافة الملاحظة.",
+        "saved": "تم حفظ الملاحظة.",
+        "saveFailed": "تعذر حفظ الملاحظة.",
+        "deleted": "تم حذف الملاحظة.",
+        "deleteFailedDefault": "تعذر حذف الملاحظة. اجعل ملاحظة أخرى هي الافتراضية أولاً.",
+        "deleteFailedGeneric": "تعذر حذف الملاحظة.",
+        "defaultCleared": "تم إلغاء الملاحظة الافتراضية. ستبدأ المبيعات الجديدة بدون ملاحظة.",
+        "forbiddenManage": "لا تملك صلاحية إدارة الملاحظات المحفوظة.",
+        "forbiddenDescription": "تواصل مع مالك الحساب لمنحك صلاحية pos:manage."
+      },
+      "validation": {
+        "titleRequired": "أدخل عنوان الملاحظة.",
+        "linesRequired": "أدخل سطراً واحداً على الأقل من النص."
       }
     },
     "payments": {

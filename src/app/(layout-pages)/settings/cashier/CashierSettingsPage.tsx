@@ -1,10 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CreditCard, Monitor, Printer, ScanBarcode, ShoppingCart, WifiOff } from "lucide-react"
+import Link from "next/link"
+import {
+  ChevronRight,
+  CreditCard,
+  Monitor,
+  Printer,
+  ScanBarcode,
+  ShoppingCart,
+  StickyNote,
+  WifiOff,
+} from "lucide-react"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
+import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 
 import { AppInput, AppSearchableSelect, AppSwitch } from "@/components/app"
@@ -189,6 +200,27 @@ export function CashierSettingsPage() {
               onChange={(checked) => patch({ applyDiscounts: checked })}
             />
           </div>
+
+          {/* A full management screen (list + add/edit + per-line formatting), not a toggle, so
+              it drills into its own page (/settings/notes) rather than living inline here --
+              placed right where an admin configuring sale-time behavior is already looking. */}
+          <Link
+            href={ROUTES.settingsNotes}
+            className="mt-3 flex items-center justify-between gap-3 rounded-[10px] border border-[#e1e7f0] bg-[#f7f9fd] px-3.5 py-3 transition-colors hover:bg-[#eef4ff]"
+          >
+            <span className="flex items-start gap-2.5">
+              <StickyNote className="mt-0.5 size-4 shrink-0 text-[#5b6b85]" />
+              <span>
+                <span className={cn("block text-[13px] font-semibold", HEADING)}>
+                  {t("sale.manageSavedNotes.title")}
+                </span>
+                <span className={cn("mt-0.5 block text-[11px]", MUTED)}>
+                  {t("sale.manageSavedNotes.description")}
+                </span>
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-[#b6c2d4] rtl:rotate-180" />
+          </Link>
         </div>
 
         {/* Print settings */}

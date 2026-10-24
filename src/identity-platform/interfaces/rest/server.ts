@@ -42,6 +42,7 @@ import { PosHeldOrdersService } from "../../pos/held-orders-service"
 import { PosInvoicesService, type InvoiceStatus } from "../../pos/invoices-service"
 import { PosSalesAnalyticsEngine } from "../../pos/sales-analytics-engine"
 import { PosPaymentMethodsService } from "../../pos/payment-methods-service"
+import { PosSavedNotesService } from "../../pos/saved-notes-service"
 import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
@@ -155,6 +156,8 @@ import {
   createCustomerSchema,
   updateCustomerSchema,
   holdOrderSchema,
+  createSavedNoteSchema,
+  updateSavedNoteSchema,
   invoiceStatusSchema,
   createInvoiceReturnSchema,
   createZatcaDeviceSchema,
@@ -749,6 +752,9 @@ export function createIdentityApiServer(
       : null
   const posHeldOrdersService = container.infrastructure.database
     ? new PosHeldOrdersService(container.infrastructure.database)
+    : null
+  const posSavedNotesService = container.infrastructure.database
+    ? new PosSavedNotesService(container.infrastructure.database)
     : null
   const productCatalogService =
     container.infrastructure.database && taxRatesService
@@ -3784,6 +3790,68 @@ export function createIdentityApiServer(
         })
       }
 
+      // A small reusable library of formatted sale notes -- see saved-notes-service.ts. Gated the
+      // same as payment methods above (pos:view to read/pick, pos:manage to maintain the library).
+      if (url.pathname === "/v1/pos/saved-notes") {
+        if (!posSavedNotesService) {
+          return send(503, {
+            code: "POS_SAVED_NOTES_UNAVAILABLE",
+            message: "Saved notes are unavailable in memory mode.",
+          })
+        }
+
+        if (method === "GET") {
+          if (!actor.modulePermissions.includes("pos:view")) throw ERRORS.forbidden()
+          return send(200, { items: await posSavedNotesService.list(actor.organizationId) })
+        }
+
+        if (method === "POST") {
+          if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+          const payload = createSavedNoteSchema.parse(await readJsonBody(request))
+          return send(201, await posSavedNotesService.create(actor.organizationId, payload))
+        }
+      }
+
+      // Checked before the /v1/pos/saved-notes/:id PATCH/DELETE block below, same defensive
+      // ordering as other "named action, not an :id" routes in this file -- "clear-default" must
+      // never be read as a saved note id.
+      if (method === "POST" && url.pathname === "/v1/pos/saved-notes/clear-default") {
+        if (!posSavedNotesService) {
+          return send(503, {
+            code: "POS_SAVED_NOTES_UNAVAILABLE",
+            message: "Saved notes are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        await posSavedNotesService.clearDefault(actor.organizationId)
+        return send(200, { ok: true })
+      }
+
+      const savedNoteItemMatch = url.pathname.match(/^\/v1\/pos\/saved-notes\/([^/]+)$/)
+      if (savedNoteItemMatch) {
+        if (!posSavedNotesService) {
+          return send(503, {
+            code: "POS_SAVED_NOTES_UNAVAILABLE",
+            message: "Saved notes are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("pos:manage")) throw ERRORS.forbidden()
+
+        if (method === "PATCH") {
+          const payload = updateSavedNoteSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await posSavedNotesService.update(actor.organizationId, savedNoteItemMatch[1], payload)
+          )
+        }
+
+        if (method === "DELETE") {
+          await posSavedNotesService.delete(actor.organizationId, savedNoteItemMatch[1])
+          return send(200, { ok: true })
+        }
+      }
+
       if (url.pathname === "/v1/pos/devices") {
         if (!posDevicesService) {
           return send(503, {
@@ -4082,6 +4150,7 @@ export function createIdentityApiServer(
               payments: payload.payments,
               discountAmount: payload.discountAmount,
               notes: payload.notes,
+              notesLines: payload.notesLines,
               items: payload.items,
               idempotencyKey: payload.idempotencyKey,
             })
@@ -4272,6 +4341,7 @@ export function createIdentityApiServer(
               customerPhone: payload.customerPhone,
               discountAmount: payload.discountAmount,
               notes: payload.notes,
+              notesLines: payload.notesLines,
               items: payload.items,
             })
           )

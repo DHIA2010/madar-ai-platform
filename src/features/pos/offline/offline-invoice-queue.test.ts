@@ -43,6 +43,7 @@ function fakeInvoice(): Invoice {
     taxAmount: 1.5,
     totalAmount: 11.5,
     notes: null,
+    notesLines: null,
     createdAt: new Date().toISOString(),
     items: [],
     qrCode: null,

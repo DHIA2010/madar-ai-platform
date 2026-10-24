@@ -11,6 +11,12 @@
 // Sections with no destination yet are shown disabled with a reason rather than hidden: the
 // information architecture is the point of this rail, and a link that silently goes nowhere is
 // worse than one that says it is not built.
+//
+// Sale notes (/settings/notes) is deliberately NOT listed here -- it's a sub-resource of cashier
+// configuration (a reusable note library, same shape as Tax Rates/Payment Methods), reached via
+// its own "Manage sale notes" link inside CashierSettingsPage.tsx's "Sale settings" section
+// instead, the same "drill in from where you're already looking" pattern most settings UIs use for
+// a secondary resource rather than growing this rail into a nested tree for just one entry.
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"

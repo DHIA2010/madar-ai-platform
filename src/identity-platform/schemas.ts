@@ -904,6 +904,31 @@ export const createInvoicePaymentSchema = z.object({
   amount: z.number().positive(),
 })
 
+// One line of a formatted POS sale note -- see pos/saved-notes-service.ts. `notes` (plain text)
+// stays the flattened mirror of these same lines; this is the structured source of rendering.
+export const noteLineSchema = z.object({
+  text: z.string().max(100),
+  bold: z.boolean(),
+  align: z.enum(["left", "center", "right"]),
+  // Free px size / hex color, both cashier-chosen per line -- see saved-notes-service.ts's own
+  // NOTE_LINE_MIN_FONT_SIZE/MAX_FONT_SIZE constants, kept in sync with this range by hand since
+  // zod schemas and service-layer constants live in separate files in this codebase.
+  fontSize: z.number().int().min(8).max(32),
+  color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
+})
+
+export const createSavedNoteSchema = z.object({
+  title: z.string().min(1).max(120),
+  lines: z.array(noteLineSchema).min(1).max(10),
+  isDefault: z.boolean().default(false),
+})
+
+export const updateSavedNoteSchema = z.object({
+  title: z.string().min(1).max(120).optional(),
+  lines: z.array(noteLineSchema).min(1).max(10).optional(),
+  isDefault: z.boolean().optional(),
+})
+
 export const createInvoiceSchema = z.object({
   // Null customer name is a deliberate value, not a missing field -- it is how "عميل نقدي"
   // (walk-in, no customer) is recorded.
@@ -915,6 +940,7 @@ export const createInvoiceSchema = z.object({
   payments: z.array(createInvoicePaymentSchema).min(1),
   discountAmount: z.number().min(0).default(0),
   notes: z.string().max(500).nullable().optional().default(null),
+  notesLines: z.array(noteLineSchema).max(10).nullable().optional().default(null),
   items: z.array(createInvoiceItemSchema).min(1),
   // The POS offline queue's client-generated uuid for this sale attempt -- see
   // PosInvoicesService.create()'s idempotency check. null/omitted for every ordinary online sale.
@@ -998,6 +1024,7 @@ export const holdOrderSchema = z.object({
   customerPhone: z.string().max(30).nullable().optional().default(null),
   discountAmount: z.number().min(0).default(0),
   notes: z.string().max(500).nullable().optional().default(null),
+  notesLines: z.array(noteLineSchema).max(10).nullable().optional().default(null),
   items: z.array(createInvoiceItemSchema).min(1),
 })
 

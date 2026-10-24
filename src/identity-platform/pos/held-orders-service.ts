@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import { IdentityError } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { parseNoteLines, type NoteLine } from "./saved-notes-service"
 
 const HELD_ORDER_ERRORS = {
   notFound: () =>
@@ -32,6 +33,9 @@ export interface HoldOrderInput {
   customerPhone: string | null
   discountAmount: number
   notes: string | null
+  // Same snapshot shape as CreateInvoiceInput.notesLines -- resuming a held order restores the
+  // formatted note, not just its flattened plain-text mirror.
+  notesLines: NoteLine[] | null
   items: HeldOrderItem[]
 }
 
@@ -43,6 +47,7 @@ export interface HeldOrderView {
   customerPhone: string | null
   discountAmount: number
   notes: string | null
+  notesLines: NoteLine[] | null
   items: HeldOrderItem[]
   createdAt: string
 }
@@ -55,6 +60,7 @@ interface HeldOrderRow {
   customer_phone: string | null
   discount_amount: string | number
   notes: string | null
+  notes_lines: unknown
   items: unknown
   created_at: Date | string
   [key: string]: unknown
@@ -62,6 +68,13 @@ interface HeldOrderRow {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+}
+
+// null column (no note at all) stays null; a real value is parsed and defaulted by
+// saved-notes-service.ts's shared parseNoteLines() -- same reader every notes_lines column uses.
+function toNotesLines(value: unknown): NoteLine[] | null {
+  if (value === null || value === undefined) return null
+  return parseNoteLines(value)
 }
 
 function mapRow(row: HeldOrderRow): HeldOrderView {
@@ -73,6 +86,7 @@ function mapRow(row: HeldOrderRow): HeldOrderView {
     customerPhone: row.customer_phone,
     discountAmount: Number(row.discount_amount),
     notes: row.notes,
+    notesLines: toNotesLines(row.notes_lines),
     items: row.items as HeldOrderItem[],
     createdAt: toIso(row.created_at),
   }
@@ -80,7 +94,7 @@ function mapRow(row: HeldOrderRow): HeldOrderView {
 
 const HELD_ORDER_SELECT = `
   SELECT id, workspace_id, cashier_user_id, customer_name, customer_phone, discount_amount,
-         notes, items, created_at
+         notes, notes_lines, items, created_at
     FROM pos_held_orders
 `
 
@@ -110,8 +124,8 @@ export class PosHeldOrdersService {
     await this.database.query(
       `INSERT INTO pos_held_orders
          (id, organization_id, workspace_id, cashier_user_id, customer_name, customer_phone,
-          discount_amount, notes, items)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+          discount_amount, notes, notes_lines, items)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
       [
         id,
         input.organizationId,
@@ -121,6 +135,7 @@ export class PosHeldOrdersService {
         input.customerPhone,
         input.discountAmount,
         input.notes,
+        input.notesLines ? JSON.stringify(input.notesLines) : null,
         JSON.stringify(input.items),
       ]
     )

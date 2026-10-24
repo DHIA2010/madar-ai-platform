@@ -2828,7 +2828,9 @@
       "noteDialog": {
         "title": "Note on the order",
         "description": "Saved with the invoice once payment is completed.",
-        "placeholder": "e.g. no sugar, gift wrap..."
+        "pickerLabel": "Load a saved note",
+        "pickerPlaceholder": "Choose a saved note...",
+        "blankOption": "Without a note"
       },
       "customerDialog": {
         "title": "Choose a customer",
@@ -2917,6 +2919,20 @@
         "heldOrderDeleted": "Held order deleted.",
         "heldOrderDeleteFailed": "Couldn't delete the order."
       }
+    },
+    "noteEditor": {
+      "lineAlignLeftAria": "Align left",
+      "lineAlignCenterAria": "Align center",
+      "lineAlignRightAria": "Align right",
+      "lineBoldAria": "Bold",
+      "lineRemoveAria": "Remove line",
+      "linePlaceholder": "Line text...",
+      "fontSizeAria": "Font size",
+      "colorAria": "Text color",
+      "pxUnit": "px",
+      "addLine": "Add line",
+      "maxLinesReached": "A note can have at most {max} lines.",
+      "previewLabel": "Preview"
     },
     "creditNoteReceipt": {
       "title": "Credit note",
@@ -4094,6 +4110,10 @@
         "applyDiscounts": {
           "title": "Apply discounts",
           "description": "Allow discounts to be applied to sales"
+        },
+        "manageSavedNotes": {
+          "title": "Sale notes",
+          "description": "Manage the reusable library of formatted notes the cashier can pick at checkout"
         }
       },
       "print": {
@@ -4383,6 +4403,71 @@
       "validation": {
         "nameRequired": "Enter the tax name.",
         "rateInvalid": "Enter a tax rate between 0 and 100."
+      }
+    },
+    "notes": {
+      "title": "Sale notes",
+      "subtitle": "Manage a reusable library of formatted notes for the cashier screen",
+      "addNote": "Add note",
+      "loading": "Loading saved notes...",
+      "loadError": {
+        "forbidden": "You don't have permission to view saved notes.",
+        "generic": "Couldn't load saved notes."
+      },
+      "retry": "Retry",
+      "empty": "No saved notes yet. Add one to reuse it at checkout.",
+      "withoutNote": {
+        "title": "Without a note",
+        "hint": "No note is added to a sale unless the cashier picks one.",
+        "pinAction": "Pin as default"
+      },
+      "table": {
+        "columns": {
+          "title": "Title",
+          "preview": "Preview",
+          "lines": "Lines",
+          "status": "Status",
+          "updated": "Last updated",
+          "actions": "Actions"
+        },
+        "defaultBadge": "Default",
+        "editAria": "Edit",
+        "deleteAria": "Delete",
+        "linesCountSuffix": "{count} line(s)"
+      },
+      "dialog": {
+        "addTitle": "Add note",
+        "editTitle": "Edit note",
+        "save": "Save",
+        "saveChanges": "Save changes",
+        "titleLabel": "Note title *",
+        "titlePlaceholder": "e.g. Standard thank-you",
+        "linesLabel": "Note content *",
+        "setDefault": "Make this the default note (always on for new sales)",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      },
+      "deleteDialog": {
+        "title": "Delete this note?",
+        "description": "<b>{name}</b> will be removed from the saved notes.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "toasts": {
+        "added": "Note added.",
+        "addFailed": "Couldn't add the note.",
+        "saved": "Note saved.",
+        "saveFailed": "Couldn't save the note.",
+        "deleted": "Note deleted.",
+        "deleteFailedDefault": "Couldn't delete the note. Make another note the default first.",
+        "deleteFailedGeneric": "Couldn't delete the note.",
+        "defaultCleared": "Default note cleared. New sales will start without a note.",
+        "forbiddenManage": "You don't have permission to manage saved notes.",
+        "forbiddenDescription": "Contact the account owner to grant you the pos:manage permission."
+      },
+      "validation": {
+        "titleRequired": "Enter the note title.",
+        "linesRequired": "Enter at least one line of text."
       }
     },
     "payments": {

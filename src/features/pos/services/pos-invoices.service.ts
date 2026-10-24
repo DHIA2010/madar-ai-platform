@@ -1,3 +1,5 @@
+import type { NoteLine } from "./pos-saved-notes.service"
+
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
 
@@ -83,6 +85,10 @@ export interface Invoice {
   taxAmount: number
   totalAmount: number
   notes: string | null
+  // A snapshot of whichever formatted lines were on the sale at checkout (see
+  // pos-saved-notes.service.ts) -- `notes` above stays the flattened plain-text mirror of these
+  // same lines. null for an invoice created before this feature existed, or with no note at all.
+  notesLines: NoteLine[] | null
   createdAt: string
   items: InvoiceItem[]
   // ZATCA Phase 1 (Generation Phase) fields -- a snapshot of the seller's tax profile as it stood
@@ -214,6 +220,7 @@ export interface CreateInvoiceInput {
   payments: InvoicePayment[]
   discountAmount: number
   notes: string | null
+  notesLines?: NoteLine[] | null
   items: CreateInvoiceItemInput[]
   // The offline queue's client-generated uuid for this sale attempt -- see
   // features/pos/offline/use-offline-aware-checkout.ts. Omitted/null for an ordinary online sale.

@@ -11,6 +11,7 @@ import QRCode from "qrcode"
 
 import type { Locale } from "@/i18n/locales"
 import type { Invoice } from "@/features/pos/services/pos-invoices.service"
+import { NoteLines } from "@/features/pos/components/NoteLines"
 
 function amountFormatter(locale: Locale) {
   return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-latn" : "en-US", {
@@ -241,11 +242,11 @@ export function ThermalInvoiceReceipt({
 
       {/* The cashier's own note on this order (added via the cart's "ملاحظة" button) -- printed
           only when one was actually typed, same as every other optional field on this receipt. */}
-      {invoice.notes && (
-        <div className="mt-1 text-center text-[10px] leading-[1.5] text-[#5b6b85]">
-          {invoice.notes}
-        </div>
-      )}
+      <NoteLines
+        lines={invoice.notesLines}
+        plainText={invoice.notes}
+        className="mt-1 text-[10px] leading-[1.5] text-[#5b6b85]"
+      />
     </div>
   )
 }

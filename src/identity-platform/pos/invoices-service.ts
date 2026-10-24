@@ -18,6 +18,7 @@ import { DEFAULT_POS_SETTINGS, type PosSettingsService } from "./pos-settings-se
 import { submitZatcaReporting } from "../zatca/zatca-api-client"
 import type { ZatcaUblAddress } from "../zatca/zatca-ubl-invoice"
 import type { PosPaymentMethodsService } from "./payment-methods-service"
+import { parseNoteLines, type NoteLine } from "./saved-notes-service"
 import { appendZatcaStampTag, generateZatcaQrCode } from "./zatca-qr-code"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -189,6 +190,10 @@ export interface CreateInvoiceInput {
   payments: InvoicePaymentInput[]
   discountAmount: number
   notes: string | null
+  // A snapshot of whichever formatted lines were on the sale at checkout (see
+  // saved-notes-service.ts) -- `notes` above stays the flattened plain-text mirror of these same
+  // lines, written together. null for a sale with no note at all.
+  notesLines: NoteLine[] | null
   items: InvoiceItemInput[]
   // The POS offline queue's client-generated uuid for this sale attempt, reused unchanged across
   // every retry -- lets create() recognize "this exact sale already went through" instead of
@@ -233,6 +238,7 @@ export interface InvoiceView {
   taxAmount: number
   totalAmount: number
   notes: string | null
+  notesLines: NoteLine[] | null
   createdAt: string
   items: InvoiceItemView[]
   // ZATCA Phase 1 fields -- see zatca-qr-code.ts and migration 067. qrCode is generated on every
@@ -349,6 +355,7 @@ interface InvoiceRow {
   tax_amount: string | number
   total_amount: string | number
   notes: string | null
+  notes_lines: unknown
   created_at: Date | string
   qr_code: string | null
   seller_name: string | null
@@ -386,6 +393,13 @@ interface InvoicePaymentRow {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+}
+
+// null column (no note at all) stays null; a real value is parsed and defaulted by
+// saved-notes-service.ts's shared parseNoteLines() -- same reader every notes_lines column uses.
+function toNotesLines(value: unknown): NoteLine[] | null {
+  if (value === null || value === undefined) return null
+  return parseNoteLines(value)
 }
 
 function mapItem(row: InvoiceItemRow): InvoiceItemView {
@@ -432,6 +446,7 @@ function mapInvoice(
     taxAmount: Number(row.tax_amount),
     totalAmount: Number(row.total_amount),
     notes: row.notes,
+    notesLines: toNotesLines(row.notes_lines),
     createdAt: toIso(row.created_at),
     items,
     qrCode: row.qr_code,
@@ -537,8 +552,8 @@ function mapReturn(
 const INVOICE_SELECT = `
   SELECT id, workspace_id, invoice_number, status, customer_name, customer_phone, customer_id,
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
-         total_amount, notes, created_at, qr_code, seller_name, seller_vat_number, seller_address,
-         customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at
+         total_amount, notes, notes_lines, created_at, qr_code, seller_name, seller_vat_number,
+         seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at
     FROM pos_invoices
 `
 
@@ -1121,12 +1136,12 @@ export class PosInvoicesService {
           `INSERT INTO pos_invoices
            (id, organization_id, workspace_id, invoice_number, status, customer_name,
             customer_phone, customer_id, cashier_user_id, payment_method_code, subtotal_amount,
-            discount_amount, tax_amount, total_amount, notes, created_at, qr_code, seller_name,
-            seller_vat_number, seller_address, customer_vat_number, zatca_device_id, icv,
-            previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml, zatca_uuid,
-            idempotency_key)
-         VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+            discount_amount, tax_amount, total_amount, notes, notes_lines, created_at, qr_code,
+            seller_name, seller_vat_number, seller_address, customer_vat_number, zatca_device_id,
+            icv, previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml,
+            zatca_uuid, idempotency_key)
+         VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb,
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
           [
             id,
             input.organizationId,
@@ -1142,6 +1157,7 @@ export class PosInvoicesService {
             taxAmount,
             totalAmount,
             input.notes,
+            input.notesLines ? JSON.stringify(input.notesLines) : null,
             issuedAt,
             qrCode,
             seller.name || null,

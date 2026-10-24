@@ -78,6 +78,7 @@ export const ROUTES = {
   settingsTaxes: "/settings/taxes",
   settingsZatca: "/settings/zatca",
   settingsCashier: "/settings/cashier",
+  settingsNotes: "/settings/notes",
   madarAdmin: "/madar-admin",
   madarAdminRequests: "/madar-admin/requests",
   madarAdminCustomers: "/madar-admin/customers",

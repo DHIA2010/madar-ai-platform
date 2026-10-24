@@ -1,3 +1,5 @@
+import type { NoteLine } from "./pos-saved-notes.service"
+
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
 
@@ -45,6 +47,9 @@ export interface HeldOrder {
   customerPhone: string | null
   discountAmount: number
   notes: string | null
+  // Same snapshot shape as Invoice.notesLines (pos-invoices.service.ts) -- resuming a held order
+  // restores the formatted note, not just its flattened plain-text mirror.
+  notesLines: NoteLine[] | null
   items: HeldOrderItem[]
   createdAt: string
 }
@@ -55,6 +60,7 @@ export interface HoldOrderInput {
   customerPhone: string | null
   discountAmount: number
   notes: string | null
+  notesLines?: NoteLine[] | null
   items: HeldOrderItem[]
 }
 
