@@ -71,9 +71,18 @@ const MARKETPLACE_INSTALL_CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000
 // time it takes a merchant to click through Salla's own install confirmation screen.
 const CONNECT_INTENT_TTL_MS = 10 * 60 * 1000
 
-function buildDefaultConfig(): SallaOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- this.config is captured once in the constructor and never
+// refreshed, so a container whose env vars weren't fully populated at that exact startup moment
+// would stay frozen on a stale value for its entire lifetime regardless of what the task
+// definition says afterwards. Confirmed live as a real bug for google-oauth's identical pattern;
+// fixed the same way here defensively.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  return process.env.SALLA_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`
+}
 
+function buildDefaultConfig(): SallaOAuthServiceConfig {
   const configuredScopes = (process.env.SALLA_OAUTH_SCOPES ?? "")
     .split(",")
     .map((entry) => entry.trim())
@@ -85,8 +94,7 @@ function buildDefaultConfig(): SallaOAuthServiceConfig {
     redirectUri:
       process.env.SALLA_REDIRECT_URI ??
       "http://localhost:4000/v1/integrations/salla/oauth/callback",
-    successRedirectUri:
-      process.env.SALLA_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_SALLA_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -1262,7 +1270,7 @@ export class SallaOAuthService {
   }
 
   buildSuccessRedirect(result: SallaOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("salla_oauth", "connected")
     redirectUrl.searchParams.set("salla_connection_id", result.connectionId)
     redirectUrl.searchParams.set("salla_project_id", result.projectId)
@@ -1273,7 +1281,7 @@ export class SallaOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("salla_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()

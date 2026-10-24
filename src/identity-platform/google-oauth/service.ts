@@ -44,8 +44,23 @@ const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 const REQUIRED_GOOGLE_SCOPES = ["https://www.googleapis.com/auth/adwords"]
 const PRODUCTION_APP_URL = "https://www.madar.my"
 
-function buildDefaultConfig(): GoogleOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- GoogleOAuthService's `this.config` is captured once in the
+// constructor and never refreshed, which meant a container whose env vars weren't fully
+// populated at that exact startup moment stayed frozen on the PRODUCTION_APP_URL fallback for
+// its entire lifetime, regardless of what the task definition said afterwards (confirmed live:
+// stage was redirecting to https://www.madar.my long after NEXT_PUBLIC_APP_URL was correctly set
+// to https://app.madar.my). Salla's equivalent config already rebuilds fresh per-request for the
+// same reason; this mirrors that.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? PRODUCTION_APP_URL
+  return (
+    process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI ??
+    `${appUrl.replace(/\/$/, "")}/integrations/new`
+  )
+}
+
+function buildDefaultConfig(): GoogleOAuthServiceConfig {
   const defaultScopes = [
     "https://www.googleapis.com/auth/adwords",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -59,9 +74,7 @@ function buildDefaultConfig(): GoogleOAuthServiceConfig {
     .filter(Boolean)
 
   return {
-    successRedirectUri:
-      process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_SUCCESS_REDIRECT_URI ??
-      `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -1117,7 +1130,7 @@ export class GoogleOAuthService {
   }
 
   buildSuccessRedirect(result: GoogleOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("google_oauth", "connected")
     redirectUrl.searchParams.set("google_connection_id", result.connectionId)
     redirectUrl.searchParams.set("google_project_id", result.projectId)
@@ -1131,7 +1144,7 @@ export class GoogleOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("google_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()

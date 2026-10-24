@@ -57,18 +57,28 @@ const TIKTOK_ADS_AUTHORIZATION_URL = "https://business-api.tiktok.com/portal/aut
 const TIKTOK_ADS_TOKEN_URL = "https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/"
 const TIKTOK_ADS_API_BASE_URL = "https://business-api.tiktok.com/open_api/v1.3"
 
-function buildDefaultConfig(): TikTokAdsOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- this.config is captured once in the constructor and never
+// refreshed, so a container whose env vars weren't fully populated at that exact startup moment
+// would stay frozen on a stale value for its entire lifetime regardless of what the task
+// definition says afterwards. Confirmed live as a real bug for google-oauth's identical pattern;
+// fixed the same way here defensively.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  return (
+    process.env.TIKTOK_ADS_OAUTH_SUCCESS_REDIRECT_URI ??
+    `${appUrl.replace(/\/$/, "")}/integrations/new`
+  )
+}
 
+function buildDefaultConfig(): TikTokAdsOAuthServiceConfig {
   return {
     clientId: process.env.TIKTOK_ADS_CLIENT_ID ?? "",
     clientSecret: process.env.TIKTOK_ADS_CLIENT_SECRET ?? "",
     redirectUri:
       process.env.TIKTOK_ADS_REDIRECT_URI ??
       "http://localhost:4000/v1/integrations/tiktok-ads/oauth/callback",
-    successRedirectUri:
-      process.env.TIKTOK_ADS_OAUTH_SUCCESS_REDIRECT_URI ??
-      `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_TIKTOK_ADS_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -821,7 +831,7 @@ export class TikTokAdsOAuthService {
   }
 
   buildSuccessRedirect(result: TikTokAdsOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("tiktok_ads_oauth", "connected")
     redirectUrl.searchParams.set("tiktok_ads_connection_id", result.connectionId)
     redirectUrl.searchParams.set("tiktok_ads_project_id", result.projectId)
@@ -832,7 +842,7 @@ export class TikTokAdsOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("tiktok_ads_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()

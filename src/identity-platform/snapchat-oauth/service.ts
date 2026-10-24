@@ -55,9 +55,20 @@ const SNAPCHAT_AUTHORIZATION_URL = "https://accounts.snapchat.com/login/oauth2/a
 const SNAPCHAT_TOKEN_URL = "https://accounts.snapchat.com/login/oauth2/access_token"
 const SNAPCHAT_API_BASE_URL = "https://adsapi.snapchat.com/v1"
 
-function buildDefaultConfig(): SnapchatOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- this.config is captured once in the constructor and never
+// refreshed, so a container whose env vars weren't fully populated at that exact startup moment
+// would stay frozen on a stale value for its entire lifetime regardless of what the task
+// definition says afterwards. Confirmed live as a real bug for google-oauth's identical pattern;
+// fixed the same way here defensively.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  return (
+    process.env.SNAPCHAT_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`
+  )
+}
 
+function buildDefaultConfig(): SnapchatOAuthServiceConfig {
   const configuredScopes = (process.env.SNAPCHAT_OAUTH_SCOPES ?? "")
     .split(",")
     .map((entry) => entry.trim())
@@ -69,8 +80,7 @@ function buildDefaultConfig(): SnapchatOAuthServiceConfig {
     redirectUri:
       process.env.SNAPCHAT_REDIRECT_URI ??
       "http://localhost:4000/v1/integrations/snapchat-ads/oauth/callback",
-    successRedirectUri:
-      process.env.SNAPCHAT_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_SNAPCHAT_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -987,7 +997,7 @@ export class SnapchatOAuthService {
   }
 
   buildSuccessRedirect(result: SnapchatOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("snapchat_oauth", "connected")
     redirectUrl.searchParams.set("snapchat_connection_id", result.connectionId)
     redirectUrl.searchParams.set("snapchat_project_id", result.projectId)
@@ -998,7 +1008,7 @@ export class SnapchatOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("snapchat_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()

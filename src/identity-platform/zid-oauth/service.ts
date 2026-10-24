@@ -96,9 +96,19 @@ const ZID_AUTHORIZATION_URL = "https://oauth.zid.sa/oauth/authorize"
 const ZID_TOKEN_URL = "https://oauth.zid.sa/oauth/token"
 const ZID_API_BASE_URL = "https://api.zid.sa/v1"
 
-function buildDefaultConfig(): ZidOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- this.config is captured once in the constructor and never
+// refreshed, so a container whose env vars weren't fully populated at that exact startup moment
+// would stay frozen on a stale value for its entire lifetime regardless of what the task
+// definition says afterwards. Confirmed live as a real bug for google-oauth's identical pattern;
+// fixed the same way here defensively. buildInstallClaimRedirect/buildAutoLoginRedirect already
+// read process.env fresh each call, so they're unaffected.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  return process.env.ZID_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`
+}
 
+function buildDefaultConfig(): ZidOAuthServiceConfig {
   const configuredScopes = (process.env.ZID_OAUTH_SCOPES ?? "")
     .split(",")
     .map((entry) => entry.trim())
@@ -109,8 +119,7 @@ function buildDefaultConfig(): ZidOAuthServiceConfig {
     clientSecret: process.env.ZID_CLIENT_SECRET ?? "",
     redirectUri:
       process.env.ZID_REDIRECT_URI ?? "http://localhost:4000/v1/integrations/zid/oauth/callback",
-    successRedirectUri:
-      process.env.ZID_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_ZID_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -1574,7 +1583,7 @@ export class ZidOAuthService {
   }
 
   buildSuccessRedirect(result: ZidOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("zid_oauth", "connected")
     redirectUrl.searchParams.set("zid_connection_id", result.connectionId)
     redirectUrl.searchParams.set("zid_project_id", result.projectId)
@@ -1585,7 +1594,7 @@ export class ZidOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("zid_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()

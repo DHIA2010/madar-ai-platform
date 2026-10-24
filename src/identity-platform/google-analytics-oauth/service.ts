@@ -74,9 +74,21 @@ const GA4_ADMIN_API_BASE_URL = "https://analyticsadmin.googleapis.com/v1beta"
 // tokens -- a 5 minute renewal buffer is enough headroom without refreshing on every call.
 const TOKEN_RENEWAL_WINDOW_MS = 5 * 60 * 1000
 
-function buildDefaultConfig(): GoogleAnalyticsOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- this.config is captured once in the constructor and never
+// refreshed, so a container whose env vars weren't fully populated at that exact startup moment
+// would stay frozen on the localhost fallback (or an earlier NEXT_PUBLIC_APP_URL value) for its
+// entire lifetime regardless of what the task definition says afterwards. Confirmed live as a
+// real bug for google-oauth's identical pattern; fixed the same way here defensively.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  return (
+    process.env.GOOGLE_ANALYTICS_SUCCESS_REDIRECT_URI ??
+    `${appUrl.replace(/\/$/, "")}/integrations/new`
+  )
+}
 
+function buildDefaultConfig(): GoogleAnalyticsOAuthServiceConfig {
   const configuredScopes = (process.env.GOOGLE_ANALYTICS_OAUTH_SCOPES ?? "")
     .split(",")
     .map((entry) => entry.trim())
@@ -88,9 +100,7 @@ function buildDefaultConfig(): GoogleAnalyticsOAuthServiceConfig {
     redirectUri:
       process.env.GOOGLE_ANALYTICS_REDIRECT_URI ??
       "http://localhost:4000/v1/integrations/google-analytics/oauth/callback",
-    successRedirectUri:
-      process.env.GOOGLE_ANALYTICS_SUCCESS_REDIRECT_URI ??
-      `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_GOOGLE_ANALYTICS_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -970,7 +980,7 @@ export class GoogleAnalyticsOAuthService {
   }
 
   buildSuccessRedirect(result: GoogleAnalyticsOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("google_analytics_oauth", "connected")
     redirectUrl.searchParams.set("google_analytics_connection_id", result.connectionId)
     redirectUrl.searchParams.set("google_analytics_project_id", result.projectId)
@@ -981,7 +991,7 @@ export class GoogleAnalyticsOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("google_analytics_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()

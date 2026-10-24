@@ -54,9 +54,18 @@ const DEFAULT_SCOPES = ["read_products", "read_orders", "read_customers"]
 const DEFAULT_API_VERSION = "2024-10"
 const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/
 
-function buildDefaultConfig(): ShopifyOAuthServiceConfig {
+// Read fresh on every redirect build (see buildSuccessRedirect/buildErrorRedirect below), not
+// cached on the service instance -- this.config is captured once in the constructor and never
+// refreshed, so a container whose env vars weren't fully populated at that exact startup moment
+// would stay frozen on a stale value for its entire lifetime regardless of what the task
+// definition says afterwards. Confirmed live as a real bug for google-oauth's identical pattern;
+// fixed the same way here defensively.
+function resolveSuccessRedirectUri(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
+  return process.env.SHOPIFY_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`
+}
 
+function buildDefaultConfig(): ShopifyOAuthServiceConfig {
   const configuredScopes = (process.env.SHOPIFY_OAUTH_SCOPES ?? "")
     .split(",")
     .map((entry) => entry.trim())
@@ -68,8 +77,7 @@ function buildDefaultConfig(): ShopifyOAuthServiceConfig {
     redirectUri:
       process.env.SHOPIFY_REDIRECT_URI ??
       "http://localhost:4000/v1/integrations/shopify/oauth/callback",
-    successRedirectUri:
-      process.env.SHOPIFY_SUCCESS_REDIRECT_URI ?? `${appUrl.replace(/\/$/, "")}/integrations/new`,
+    successRedirectUri: resolveSuccessRedirectUri(),
     tokenEncryptionKey:
       process.env.IDENTITY_PLATFORM_SHOPIFY_OAUTH_TOKEN_ENCRYPTION_KEY ??
       process.env.IDENTITY_PLATFORM_TOKEN_HASH_SECRET ??
@@ -891,7 +899,7 @@ export class ShopifyOAuthService {
   }
 
   buildSuccessRedirect(result: ShopifyOAuthCallbackResult) {
-    const redirectUrl = toOnboardingRedirectUrl(this.config.successRedirectUri)
+    const redirectUrl = toOnboardingRedirectUrl(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("shopify_oauth", "connected")
     redirectUrl.searchParams.set("shopify_connection_id", result.connectionId)
     redirectUrl.searchParams.set("shopify_project_id", result.projectId)
@@ -902,7 +910,7 @@ export class ShopifyOAuthService {
   }
 
   buildErrorRedirect(reason: string) {
-    const redirectUrl = new URL(this.config.successRedirectUri)
+    const redirectUrl = new URL(resolveSuccessRedirectUri())
     redirectUrl.searchParams.set("shopify_oauth", "error")
     redirectUrl.searchParams.set("reason", reason)
     return redirectUrl.toString()
