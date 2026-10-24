@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ROUTES } from "@/constants/routes"
@@ -651,11 +651,15 @@ describe("NewConnectionWizard", () => {
       </QueryClientProvider>
     )
 
-    await waitFor(() => {
-      expect(screen.getByText("Third Store")).toBeTruthy()
-    })
+    // More than one account discovered -- the picker now opens itself as a modal (the old
+    // easy-to-miss inline-only pill row was never noticed by most merchants in practice).
+    const accountDialog = await screen.findByRole("dialog")
+    fireEvent.click(within(accountDialog).getByText("Third Store"))
+    fireEvent.click(within(accountDialog).getByRole("button", { name: "استخدام هذا الحساب" }))
 
-    fireEvent.click(screen.getByText("Third Store"))
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull()
+    })
 
     fireEvent.click(screen.getByRole("button", { name: /مراجعة الإعدادات/ }))
 

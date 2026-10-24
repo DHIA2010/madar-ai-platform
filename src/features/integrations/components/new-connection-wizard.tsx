@@ -52,7 +52,15 @@ import { cn } from "@/lib/utils"
 import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 
-import { AppButton, AppCard, AppContainer, AppInput, AppPage, AppSection } from "@/components/app"
+import {
+  AppButton,
+  AppCard,
+  AppContainer,
+  AppDialog,
+  AppInput,
+  AppPage,
+  AppSection,
+} from "@/components/app"
 
 import { APPLICATION_SETTINGS_KEY } from "@/features/applications"
 import { useWorkspace, WorkspaceSelector } from "@/features/workspace"
@@ -927,6 +935,12 @@ export function NewConnectionWizard() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [discoveredProviderAccounts, setDiscoveredProviderAccounts] = useState<AccountOption[]>([])
+  // Picking an account used to be an easy-to-miss inline pill row at the bottom of the Import
+  // step -- most merchants never noticed it and just clicked through on whichever account
+  // happened to be auto-selected first. A modal that opens itself the moment more than one
+  // account is discovered makes the choice impossible to miss, without blocking anyone who
+  // genuinely has only one account (the modal never opens for that case at all).
+  const [accountPickerOpen, setAccountPickerOpen] = useState(false)
   const [shopDomain, setShopDomain] = useState("")
   // Salla's App Store install flow has no browser redirect back with a code (Easy Mode, see
   // salla-marketplace-install.service.ts) -- the install happens in a new tab while this state
@@ -1152,6 +1166,12 @@ export function NewConnectionWizard() {
               ? validated.payload.metadata.customerId
               : accounts[0].id
           setSelectedAccountId(selectedCustomerId)
+          // A real choice exists (more than one account) -- surface it immediately via the
+          // modal rather than leaving it as an easy-to-miss inline section further down the
+          // page. Exactly one account means there's nothing to choose, so it stays silent.
+          if (accounts.length > 1) {
+            setAccountPickerOpen(true)
+          }
         }
 
         setStepIndex(2)
@@ -2395,9 +2415,18 @@ export function NewConnectionWizard() {
 
         {discoveredProviderAccounts.length > 1 ? (
           <div className="space-y-3 border-t border-[#eef2f8] pt-5">
-            <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
-              {t("importStep.whichAccountTitle")}
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className={cn("text-[14px] font-extrabold", PAGE_TEXT)}>
+                {t("importStep.whichAccountTitle")}
+              </h3>
+              <button
+                type="button"
+                className="text-[12px] font-semibold text-[#2878ff] hover:underline"
+                onClick={() => setAccountPickerOpen(true)}
+              >
+                {t("importStep.reopenAccountPicker")}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {discoveredProviderAccounts.map((account) => {
                 const selected = selectedAccountId === account.id
@@ -2422,6 +2451,55 @@ export function NewConnectionWizard() {
             </div>
           </div>
         ) : null}
+
+        {/* Opens itself the moment multiple accounts are discovered (see the OAuth-callback
+            effect above) -- the inline picker above still lets the choice be changed afterwards,
+            but most merchants never noticed it was there at all, hence the modal as the first
+            touch. Never shown for a connector with exactly one account (nothing to choose). */}
+        <AppDialog
+          open={accountPickerOpen}
+          onOpenChange={setAccountPickerOpen}
+          contentClassName="max-w-[28rem]"
+          title={
+            <span className="flex items-center gap-2">
+              <Users className="size-4 shrink-0 text-[#2878ff]" />
+              {t("importStep.accountPickerDialog.title")}
+            </span>
+          }
+          description={t("importStep.accountPickerDialog.description", {
+            platform: selectedConnector?.displayName ?? "",
+          })}
+          footer={
+            <AppButton
+              className="h-10 rounded-full bg-[#2878ff] px-5 text-[13px] font-semibold text-white hover:bg-[#1f63d6]"
+              onClick={() => setAccountPickerOpen(false)}
+            >
+              {t("importStep.accountPickerDialog.confirmCta")}
+            </AppButton>
+          }
+        >
+          <div className="flex flex-col gap-2">
+            {discoveredProviderAccounts.map((account) => {
+              const selected = selectedAccountId === account.id
+              return (
+                <button
+                  key={account.id}
+                  type="button"
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-[12px] border px-4 py-3 text-start text-[13px] font-semibold transition-colors",
+                    selected
+                      ? "border-[#2878ff] bg-[#eef4ff] text-[#2878ff]"
+                      : "border-[#e1e7f0] bg-white text-[#0b1738] hover:border-[#c4d5f0]"
+                  )}
+                  onClick={() => setSelectedAccountId(account.id)}
+                >
+                  {account.label}
+                  {selected ? <Check className="size-4 shrink-0" /> : null}
+                </button>
+              )
+            })}
+          </div>
+        </AppDialog>
 
         <div className="grid gap-3.5 border-t border-[#eef2f8] pt-5 md:grid-cols-3">
           {[

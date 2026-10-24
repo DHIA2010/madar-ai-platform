@@ -7653,6 +7653,12 @@
         "presetCustom": "Custom",
         "historicalDataNote": "Available historical data from your {platform} account will be imported",
         "whichAccountTitle": "Which account would you like to connect to Madar?",
+        "reopenAccountPicker": "Change account",
+        "accountPickerDialog": {
+          "title": "Choose an account",
+          "description": "We found more than one account on {platform}. Pick the one you want to connect to Madar — you can change this later.",
+          "confirmCta": "Use this account"
+        },
         "tiles": {
           "syncFrequency": "Sync Frequency",
           "estimatedDuration": "Estimated Duration",

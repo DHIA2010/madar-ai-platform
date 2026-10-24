@@ -7649,6 +7649,12 @@
         "presetCustom": "مخصص",
         "historicalDataNote": "سيتم استيراد البيانات التاريخية المتاحة من حسابك في {platform}",
         "whichAccountTitle": "بأي حساب تريد ربط مدار؟",
+        "reopenAccountPicker": "تغيير الحساب",
+        "accountPickerDialog": {
+          "title": "اختر حسابًا",
+          "description": "وجدنا أكثر من حساب في {platform}. اختر الحساب الذي تريد ربطه بمدار — يمكنك تغييره لاحقًا.",
+          "confirmCta": "استخدام هذا الحساب"
+        },
         "tiles": {
           "syncFrequency": "تكرار المزامنة",
           "estimatedDuration": "المدة المتوقعة",
