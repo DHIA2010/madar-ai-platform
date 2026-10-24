@@ -2294,7 +2294,14 @@
       "columnQuantity": "Quantity",
       "columnTotal": "Total",
       "noDetailsForOrder": "No product details available for this order.",
-      "pricesUnavailable": "Pricing details aren't available for this order."
+      "pricesUnavailable": "Pricing details aren't available for this order.",
+      "orderSource": {
+        "title": "Order source",
+        "medium": "Medium",
+        "campaign": "Campaign",
+        "source": "Source",
+        "device": "Device"
+      }
     },
     "newOrder": "New order",
     "pushStatus": {
@@ -6427,9 +6434,22 @@
     "moduleNav": {
       "dashboard": "Campaign Dashboard",
       "list": "Campaign List",
+      "journey": "Spend & Sales",
       "create": "Create Campaign",
       "creativeLibrary": "Creative Library",
       "templates": "Templates"
+    },
+    "journeyScreen": {
+      "title": "Spend & Sales Journey",
+      "subtitle": "Ad spend from your connected platforms, joined with real orders Zid/Salla/Shopify matched to each campaign.",
+      "kpis": {
+        "orders": "Orders"
+      },
+      "emptyTitle": "No campaign activity yet",
+      "emptyDescription": "Connect an ad platform and a store to see spend and sales matched per campaign here.",
+      "notImportedHint": "Not yet imported -- sales can't be matched to this campaign until it is.",
+      "unmatchedHint": "{count} campaign(s) have spend but haven't been matched to any sales yet.",
+      "loadError": "Couldn't load the spend & sales journey. Please try again."
     },
     "spendDonut": {
       "total": "Total",

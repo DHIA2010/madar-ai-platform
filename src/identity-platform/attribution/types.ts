@@ -7,6 +7,7 @@ export type MatchMethod =
   | "session_id"
   | "customer_ref"
   | "utm_match"
+  | "campaign_name_match"
   | "unattributed"
 
 export type AttributionStatus = "ATTRIBUTED" | "UNATTRIBUTED"

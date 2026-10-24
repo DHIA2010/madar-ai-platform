@@ -1,4 +1,6 @@
 import type { CampaignLinkRepository } from "../campaign-links/repository"
+import { CAMPAIGN_PLATFORMS } from "../campaigns/types"
+import type { CampaignService } from "../campaigns/service"
 import { hashCustomerEmail } from "../tracking/customer-ref"
 
 import type { AttributionRepository } from "./repository"
@@ -21,7 +23,12 @@ const UNATTRIBUTED: MatchResult = {
 export class OrderAttributionService {
   constructor(
     private readonly repository: AttributionRepository,
-    private readonly campaignLinkRepository: CampaignLinkRepository
+    private readonly campaignLinkRepository: CampaignLinkRepository,
+    // Optional: lets matchOrders() keep the shared `campaigns` table fresh for the
+    // campaign_name_match step (see below) now that the Link Builder's own "Import" button is no
+    // longer the only thing that populates it. Null is accepted (e.g. in tests that don't care
+    // about that step) and simply skips the re-import.
+    private readonly campaignService?: CampaignService
   ) {}
 
   // Never throws -- an attribution failure must never surface as an order-ingestion failure.
@@ -32,6 +39,23 @@ export class OrderAttributionService {
     workspaceId: string | null,
     input: { provider?: OrderProvider } = {}
   ): Promise<MatchOrdersResult> {
+    if (this.campaignService) {
+      // Best-effort: fetchPlatformCampaigns() only reads already-synced local tables (no
+      // external API calls), so this is cheap. Per-platform failures are swallowed and logged --
+      // a broken campaign re-import must never block order matching.
+      await Promise.all(
+        CAMPAIGN_PLATFORMS.map((platform) =>
+          this.campaignService!.importFromPlatform(organizationId, { platform }).catch((error) => {
+            console.error("order_attribution.campaign_sync_failed", {
+              organizationId,
+              platform,
+              error,
+            })
+          })
+        )
+      )
+    }
+
     const candidates = await this.repository.fetchCandidateOrders(
       organizationId,
       workspaceId,
@@ -152,6 +176,25 @@ export class OrderAttributionService {
           attributionId: null,
           campaignId: byUtm.campaignId,
           campaignLinkId: byUtm.campaignLinkId,
+        }
+      }
+    }
+
+    // 5b. No campaign-link match, but utm_campaign is present -- try matching directly against
+    // an imported ad-platform campaign's name. This is the case for a merchant who tagged their
+    // own ads with UTMs and never used Madar's Link Builder at all.
+    if (signals.utmCampaign) {
+      const byCampaignName = await this.repository.findImportedCampaignByUtmCampaign(
+        organizationId,
+        signals.utmCampaign,
+        signals.utmSource
+      )
+      if (byCampaignName) {
+        return {
+          matchMethod: "campaign_name_match",
+          attributionId: null,
+          campaignId: byCampaignName.campaignId,
+          campaignLinkId: null,
         }
       }
     }

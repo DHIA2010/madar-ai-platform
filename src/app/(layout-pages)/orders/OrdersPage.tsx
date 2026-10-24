@@ -29,15 +29,19 @@ import {
   Eye,
   Globe,
   Loader2,
+  Megaphone,
   MoreHorizontal,
   Package,
   Plus,
+  Radio,
   Receipt,
   RotateCw,
   Search,
   ShoppingBag,
   ShoppingCart,
+  Smartphone,
   Store,
+  Target,
   TrendingDown,
   TrendingUp,
   User,
@@ -355,6 +359,65 @@ function SummaryStat({
   )
 }
 
+// Mirrors the "مصدر الطلب" (order source) panel Zid's own merchant dashboard shows per order --
+// read from OrderSummaryView.marketingSource (see orders/service.ts's normalizeZidOrder), which
+// only ever exists for Zid orders today. Only rendered when at least one field is present.
+function OrderSourcePanel({
+  marketingSource,
+}: {
+  marketingSource: NonNullable<OrderRecord["marketingSource"]>
+}) {
+  const t = useTranslations("orders")
+  const rows: Array<{ key: string; icon: LucideIcon; label: string; value: string | null }> = [
+    {
+      key: "medium",
+      icon: Megaphone,
+      label: t("dialog.orderSource.medium"),
+      value: marketingSource.medium,
+    },
+    {
+      key: "campaign",
+      icon: Target,
+      label: t("dialog.orderSource.campaign"),
+      value: marketingSource.campaign,
+    },
+    {
+      key: "source",
+      icon: Radio,
+      label: t("dialog.orderSource.source"),
+      value: marketingSource.source,
+    },
+    {
+      key: "device",
+      icon: Smartphone,
+      label: t("dialog.orderSource.device"),
+      value: marketingSource.device,
+    },
+  ].filter((row) => row.value)
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="rounded-[10px] border border-[#e8edf3] bg-[#f7f9fc] p-3">
+      <p className={cn("mb-2 text-[11.5px] font-bold", HEADING)}>{t("dialog.orderSource.title")}</p>
+      <div className="grid grid-cols-2 gap-2">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            className="flex items-center gap-2 rounded-[8px] bg-white px-2.5 py-2 text-[12px]"
+          >
+            <row.icon className="size-3.5 shrink-0 text-[#2878ff]" />
+            <div className="min-w-0">
+              <p className={cn("text-[10.5px]", MUTED)}>{row.label}</p>
+              <p className={cn("truncate font-semibold", HEADING)}>{row.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function OrderProductsDialog({
   order,
   onClose,
@@ -413,6 +476,10 @@ function OrderProductsDialog({
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pe-1">
+          {order?.marketingSource ? (
+            <OrderSourcePanel marketingSource={order.marketingSource} />
+          ) : null}
+
           {isLoadingDetail ? (
             <div className={cn("flex items-center justify-center gap-2 py-10 text-[13px]", MUTED)}>
               <Loader2 className="size-4 animate-spin" />

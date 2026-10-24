@@ -147,6 +147,25 @@ export interface CampaignPerformanceQueryParams {
   search?: string
 }
 
+// Mirrors identity-platform/campaigns/journey-service.ts's CampaignJourneyRow -- ad-spend KPIs
+// joined with real matched-order sales per campaign.
+export interface CampaignJourneyRow {
+  campaignId: string | null
+  platform: CampaignPerformancePlatform | null
+  name: string
+  status: string
+  currency: string | null
+  spend: number
+  impressions: number
+  clicks: number
+  ctr: number
+  cpc: number
+  orders: number
+  revenue: number
+  roas: number
+  cpa: number
+}
+
 // Avoids the slash-prefix literal lint rule (same trick as order-list.service.ts) -- this is a
 // real backend API path, not a frontend page route.
 const PERFORMANCE_ENDPOINT = ["", "v1", "campaigns", "performance"].join(String.fromCharCode(47))
@@ -224,6 +243,14 @@ export const campaignPerformanceService = {
     const separator = query ? "&" : "?"
     return client.get<{ items: CampaignPerformanceRow[] }>(
       `${PERFORMANCE_ENDPOINT}/${level}${query}${separator}adGroupId=${encodeURIComponent(adGroupId)}`
+    )
+  },
+
+  async getJourney(
+    params?: CampaignPerformanceQueryParams
+  ): Promise<{ items: CampaignJourneyRow[] }> {
+    return client.get<{ items: CampaignJourneyRow[] }>(
+      `${PERFORMANCE_ENDPOINT}/journey${buildQuery(params)}`
     )
   },
 }

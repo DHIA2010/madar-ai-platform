@@ -58,6 +58,13 @@ export interface OrderRecord {
   createdAt: string
   // Only ever set for platform === "Madar" -- see MadarOrdersService/SallaOrderPushService.
   sallaPushStatus?: SallaPushStatus
+  // Only ever set for platform === "Zid" today -- see orders/service.ts's normalizeZidOrder.
+  marketingSource?: {
+    medium: string | null
+    campaign: string | null
+    source: string | null
+    device: string | null
+  }
 }
 
 export interface OrdersSummary {

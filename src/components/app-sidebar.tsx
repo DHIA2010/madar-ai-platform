@@ -34,7 +34,6 @@ import {
   Gauge,
   Grid2x2,
   LayoutGrid,
-  Link2,
   SendIcon,
   Settings2,
   Tv,
@@ -116,13 +115,10 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       permission: "campaigns:view",
       applications: ["advertising"],
     },
-    {
-      title: t("linkBuilder"),
-      url: ROUTES.campaignLinks,
-      icon: <Link2 className="text-teal-500" />,
-      permission: "campaigns:view",
-      applications: ["advertising"],
-    },
+    // "Link Builder" (ROUTES.campaignLinks) intentionally hidden from the nav: Zid/Salla orders
+    // now carry their own marketing-source attribution, so manually building UTM links in Madar
+    // is no longer the primary flow. The page, its API routes, and existing campaign_links rows
+    // all stay fully live -- only this discoverable entry point is removed.
     {
       title: t("stores"),
       url: "/stores",

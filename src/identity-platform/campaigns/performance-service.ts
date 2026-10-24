@@ -1511,6 +1511,18 @@ export class CampaignsPerformanceAggregationService {
     return [...google, ...meta, ...tiktok, ...snapchat]
   }
 
+  // Unpaginated sibling of listCampaigns, for callers (e.g. CampaignJourneyService) that need
+  // every campaign-level row in range to join against, not a page of them.
+  async listAllCampaignRows(
+    actor: AuthenticatedActor,
+    query: CampaignPerformanceQuery
+  ): Promise<CampaignPerformanceRow[]> {
+    const { current } = resolveDateRange(query)
+    return (await this.fetchAllCampaignRows(actor, current)).filter((row) =>
+      matchesFilters(row, query)
+    )
+  }
+
   // Backs the "all time" period: the real earliest/latest activity date actually present across
   // every connected platform, never a fabricated or assumed range (audit requirement -- "never
   // assume the database contains data since the business was created"). Reuses

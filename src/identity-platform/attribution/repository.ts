@@ -76,9 +76,29 @@ function extractShopifySignals(payload: Record<string, unknown>): OrderSignals {
   }
 }
 
-// No confirmed UTM/landing-page field on Salla or Zid order payloads (see the plan's flagged
-// assumptions) -- customer email is the only signal attempted here, defensively, since neither
-// provider's raw schema is fully documented in this codebase.
+// Zid's order object has a documented `marketing_source` field (schema MarketingChannelSource_Order
+// in docs.zid.sa, "Marketing source details captured for the order") with utm_source/utm_medium/
+// utm_campaign among others. Field *names* are doc-confirmed; population on a live order has not
+// been verified in this codebase yet, so this degrades to the customer-ref-only generic signals
+// if the field is absent rather than throwing.
+function extractZidSignals(payload: Record<string, unknown>): OrderSignals {
+  const marketingSource = payload.marketing_source as Record<string, unknown> | undefined
+  const customer = payload.customer as { email?: string } | undefined
+  return {
+    explicitAttributionId: null,
+    campaignLinkDisplayId: null,
+    sessionId: null,
+    customerEmail: customer?.email ?? null,
+    utmSource: (marketingSource?.utm_source as string | undefined) ?? null,
+    utmMedium: (marketingSource?.utm_medium as string | undefined) ?? null,
+    utmCampaign: (marketingSource?.utm_campaign as string | undefined) ?? null,
+  }
+}
+
+// No confirmed UTM/landing-page field on Salla order payloads (see the plan's flagged
+// assumptions -- docs.salla.dev's webhook examples only show source_details.value as always
+// null) -- customer email is the only signal attempted here, defensively, until a live Salla
+// order is inspected.
 function extractGenericSignals(payload: Record<string, unknown>): OrderSignals {
   const customer = payload.customer as { email?: string } | undefined
   return {
@@ -90,6 +110,24 @@ function extractGenericSignals(payload: Record<string, unknown>): OrderSignals {
     utmMedium: null,
     utmCampaign: null,
   }
+}
+
+// Free-text utm_source values merchants commonly use, mapped onto our platform enum -- used only
+// as a tie-breaker in findImportedCampaignByUtmCampaign, never a hard filter. Returns null (no
+// preference) for anything unrecognized rather than guessing.
+function mapUtmSourceToPlatform(utmSource: string | null): string | null {
+  if (!utmSource) return null
+  const normalized = normalizeUtmValue(utmSource)
+  if (normalized.includes("tiktok")) return "tiktok_ads"
+  if (normalized.includes("snapchat") || normalized.includes("snap")) return "snapchat_ads"
+  if (
+    normalized.includes("facebook") ||
+    normalized.includes("meta") ||
+    normalized.includes("instagram")
+  )
+    return "meta_ads"
+  if (normalized.includes("google") || normalized.includes("adwords")) return "google_ads"
+  return null
 }
 
 const PROVIDER_TABLES: Record<OrderProvider, { records: string; connections: string }> = {
@@ -190,7 +228,11 @@ export class AttributionRepository {
   ): CandidateOrder {
     const payload = row.payload ?? {}
     const signals =
-      provider === "shopify" ? extractShopifySignals(payload) : extractGenericSignals(payload)
+      provider === "shopify"
+        ? extractShopifySignals(payload)
+        : provider === "zid"
+          ? extractZidSignals(payload)
+          : extractGenericSignals(payload)
 
     if (provider === "salla") {
       const total = payload.total as { amount?: number; currency?: string } | undefined
@@ -303,6 +345,58 @@ export class AttributionRepository {
     )
     const row = result.rows[0]
     return row ? { campaignId: row.campaign_id, campaignLinkId: row.id } : null
+  }
+
+  // Matches an order's utm_campaign directly against an imported ad-platform campaign's name --
+  // for merchants who tagged their own ads with UTMs and never built a link via Madar's Link
+  // Builder, so there's no campaign_links row to match against (findCampaignLinkByUtm above).
+  // utm_source is a soft tie-breaker only (free-text "tiktok" doesn't always map cleanly onto our
+  // "tiktok_ads" platform enum) -- never a hard filter, since a loose name match beats no match.
+  async findImportedCampaignByUtmCampaign(
+    organizationId: string,
+    utmCampaign: string,
+    utmSource: string | null
+  ): Promise<{ campaignId: string } | null> {
+    const result = await this.database.query<{ id: string }>(
+      `SELECT id FROM campaigns
+       WHERE organization_id = $1 AND deleted_at IS NULL AND source = 'imported'
+         AND normalized_name = $2
+       ORDER BY (platform = $3) DESC, created_at DESC
+       LIMIT 1`,
+      [organizationId, normalizeUtmValue(utmCampaign), mapUtmSourceToPlatform(utmSource)]
+    )
+    const row = result.rows[0]
+    return row ? { campaignId: row.id } : null
+  }
+
+  // Sales side of the campaigns "journey" view (CampaignJourneyService): real matched-order
+  // counts and revenue per shared campaigns.id, for joining against each campaign's ad-spend
+  // KPIs. order_attributions has no workspace_id column (see migration 035), so this is
+  // organization-scoped only, same as the rest of this repository's attribution reads.
+  async aggregateAttributedOrdersByCampaign(
+    organizationId: string,
+    range: { startDateSql: string; endDateSql: string }
+  ): Promise<Map<string, { orders: number; revenue: number }>> {
+    const result = await this.database.query<{
+      campaign_id: string
+      orders: string | number
+      revenue: string | number | null
+    }>(
+      `SELECT campaign_id, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS revenue
+       FROM order_attributions
+       WHERE organization_id = $1 AND attribution_status = 'ATTRIBUTED' AND campaign_id IS NOT NULL
+         AND order_created_at::date >= $2::date AND order_created_at::date <= $3::date
+       GROUP BY campaign_id`,
+      [organizationId, range.startDateSql, range.endDateSql]
+    )
+    const map = new Map<string, { orders: number; revenue: number }>()
+    for (const row of result.rows) {
+      map.set(row.campaign_id, {
+        orders: Number(row.orders) || 0,
+        revenue: Number(row.revenue) || 0,
+      })
+    }
+    return map
   }
 
   async upsertOrderAttribution(input: {

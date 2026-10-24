@@ -147,6 +147,73 @@ async function seedShopifyOrder(
   )
 }
 
+async function seedZidConnection(
+  organizationId: string,
+  workspaceId: string | null,
+  userId: string
+) {
+  const projectId = randomUUID()
+  await database.query(
+    `insert into projects (id, organization_id, workspace_id, owner_user_id, name, status)
+     values ($1, $2, $3, $4, 'Project', 'active')`,
+    [projectId, organizationId, workspaceId, userId]
+  )
+
+  const connectionId = randomUUID()
+  await database.query(
+    `insert into zid_oauth_connections (
+       id, organization_id, workspace_id, project_id, status, created_by_user_id, updated_by_user_id
+     ) values ($1, $2, $3, $4, 'connected', $5, $5)`,
+    [connectionId, organizationId, workspaceId, projectId, userId]
+  )
+  return connectionId
+}
+
+async function seedZidOrder(
+  connectionId: string,
+  entityId: string,
+  payload: Record<string, unknown>
+) {
+  await database.query(
+    `insert into zid_records (id, connection_id, customer_id, entity_type, entity_id, payload, record_date)
+     values ($1, $2, 'test-zid-store', 'orders', $3, $4, current_date)`,
+    [randomUUID(), connectionId, entityId, JSON.stringify(payload)]
+  )
+}
+
+async function seedTikTokCampaign(
+  organizationId: string,
+  workspaceId: string | null,
+  userId: string,
+  campaignId: string,
+  campaignName: string
+) {
+  const projectId = randomUUID()
+  await database.query(
+    `insert into projects (id, organization_id, workspace_id, owner_user_id, name, status)
+     values ($1, $2, $3, $4, 'Project', 'active')`,
+    [projectId, organizationId, workspaceId, userId]
+  )
+
+  const connectionId = randomUUID()
+  await database.query(
+    `insert into tiktok_ads_oauth_connections (
+       id, organization_id, workspace_id, project_id, status, created_by_user_id, updated_by_user_id
+     ) values ($1, $2, $3, $4, 'connected', $5, $5)`,
+    [connectionId, organizationId, workspaceId, projectId, userId]
+  )
+  await database.query(
+    `insert into tiktok_ads_records (id, connection_id, customer_id, entity_type, entity_id, payload, record_date)
+     values ($1, $2, 'test-advertiser', 'campaigns', $3, $4, current_date)`,
+    [
+      randomUUID(),
+      connectionId,
+      campaignId,
+      JSON.stringify({ campaign_name: campaignName, operation_status: "ENABLE" }),
+    ]
+  )
+}
+
 describe("order attribution", () => {
   it("matches an order via UTM extracted from Shopify's landing_site", async () => {
     const { accessToken, organizationId, workspaceId, userId } = await registerAndProvisionOrg(
@@ -278,5 +345,160 @@ describe("order attribution", () => {
       `SELECT id FROM order_attributions WHERE external_order_id = 'order-3'`
     )
     expect(stored.rows).toHaveLength(1)
+  })
+
+  it("matches a Zid order's marketing_source against an existing campaign link (utm_match)", async () => {
+    const { accessToken, organizationId, workspaceId, userId } = await registerAndProvisionOrg(
+      "owner@attribution-zid-utm.madar",
+      "Attribution Zid UTM Org"
+    )
+
+    const campaignResponse = await fetch(`${baseUrl}/v1/campaigns`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: "Zid Attribution Campaign" }),
+    })
+    const campaign = (await campaignResponse.json()) as { id: string }
+
+    const linkResponse = await fetch(`${baseUrl}/v1/campaign-links`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        campaignId: campaign.id,
+        name: "Zid Attribution Link",
+        trackingType: "FULL_URL",
+        destinationBaseUrl: "https://shop.example.com/product",
+        utmSource: "tiktok",
+        utmMedium: "paid",
+        utmCampaign: "Tiktok_Conv_Sep19",
+      }),
+    })
+    const link = (await linkResponse.json()) as { id: string; campaignId: string }
+
+    const connectionId = await seedZidConnection(organizationId, workspaceId, userId)
+    await seedZidOrder(connectionId, "zid-order-1", {
+      code: "Z-1001",
+      order_total: "199.00",
+      currency_code: "SAR",
+      created_at: new Date().toISOString(),
+      marketing_source: {
+        utm_source: "tiktok",
+        utm_medium: "paid",
+        utm_campaign: "Tiktok_Conv_Sep19",
+        device_type: "mobile",
+      },
+    })
+
+    const matchResponse = await fetch(`${baseUrl}/v1/campaigns/attribution/match-orders`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ provider: "zid" }),
+    })
+    const matchResult = (await matchResponse.json()) as { attributed: number; unattributed: number }
+    expect(matchResult.attributed).toBe(1)
+    expect(matchResult.unattributed).toBe(0)
+
+    const stored = await database.query(
+      `SELECT match_method, campaign_id, campaign_link_id FROM order_attributions
+       WHERE provider = 'zid' AND external_order_id = 'zid-order-1'`
+    )
+    const row = stored.rows[0] as {
+      match_method: string
+      campaign_id: string
+      campaign_link_id: string
+    }
+    expect(row.match_method).toBe("utm_match")
+    expect(row.campaign_id).toBe(link.campaignId)
+    expect(row.campaign_link_id).toBe(link.id)
+  })
+
+  it("matches a Zid order's utm_campaign directly against an imported ad campaign's name, with no campaign link, auto-reimporting campaigns first (campaign_name_match)", async () => {
+    const { accessToken, organizationId, workspaceId, userId } = await registerAndProvisionOrg(
+      "owner@attribution-zid-name.madar",
+      "Attribution Zid Name Org"
+    )
+
+    // No /v1/campaigns/sync call here on purpose -- matchOrders() itself must re-import
+    // campaigns from all 4 platforms before matching (see OrderAttributionService.matchOrders).
+    await seedTikTokCampaign(
+      organizationId,
+      workspaceId,
+      userId,
+      "tt-campaign-1",
+      "Tiktok_Conv_Sep19"
+    )
+
+    const connectionId = await seedZidConnection(organizationId, workspaceId, userId)
+    await seedZidOrder(connectionId, "zid-order-2", {
+      code: "Z-1002",
+      order_total: "99.00",
+      currency_code: "SAR",
+      created_at: new Date().toISOString(),
+      marketing_source: {
+        utm_source: "tiktok",
+        utm_medium: "paid",
+        utm_campaign: "Tiktok_Conv_Sep19",
+      },
+    })
+
+    const matchResponse = await fetch(`${baseUrl}/v1/campaigns/attribution/match-orders`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ provider: "zid" }),
+    })
+    const matchResult = (await matchResponse.json()) as { attributed: number; unattributed: number }
+    expect(matchResult.attributed).toBe(1)
+    expect(matchResult.unattributed).toBe(0)
+
+    const imported = await database.query(
+      `SELECT id FROM campaigns WHERE organization_id = $1 AND source = 'imported' AND platform = 'tiktok_ads'`,
+      [organizationId]
+    )
+    expect(imported.rows).toHaveLength(1)
+    const importedCampaign = imported.rows[0] as { id: string }
+
+    const stored = await database.query(
+      `SELECT match_method, campaign_id, campaign_link_id FROM order_attributions
+       WHERE provider = 'zid' AND external_order_id = 'zid-order-2'`
+    )
+    const row = stored.rows[0] as {
+      match_method: string
+      campaign_id: string
+      campaign_link_id: string | null
+    }
+    expect(row.match_method).toBe("campaign_name_match")
+    expect(row.campaign_id).toBe(importedCampaign.id)
+    expect(row.campaign_link_id).toBeNull()
+  })
+
+  it("lands a Zid order with no marketing_source as UNATTRIBUTED rather than guessing", async () => {
+    const { accessToken, organizationId, workspaceId, userId } = await registerAndProvisionOrg(
+      "owner@attribution-zid-none.madar",
+      "Attribution Zid None Org"
+    )
+
+    const connectionId = await seedZidConnection(organizationId, workspaceId, userId)
+    await seedZidOrder(connectionId, "zid-order-3", {
+      code: "Z-1003",
+      order_total: "40.00",
+      currency_code: "SAR",
+      created_at: new Date().toISOString(),
+    })
+
+    const matchResponse = await fetch(`${baseUrl}/v1/campaigns/attribution/match-orders`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ provider: "zid" }),
+    })
+    const matchResult = (await matchResponse.json()) as { attributed: number; unattributed: number }
+    expect(matchResult.attributed).toBe(0)
+    expect(matchResult.unattributed).toBe(1)
+
+    const stored = await database.query(
+      `SELECT match_method, attribution_status FROM order_attributions WHERE external_order_id = 'zid-order-3'`
+    )
+    const row = stored.rows[0] as { match_method: string; attribution_status: string }
+    expect(row.match_method).toBe("unattributed")
+    expect(row.attribution_status).toBe("UNATTRIBUTED")
   })
 })

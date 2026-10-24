@@ -96,6 +96,7 @@ import {
   type CampaignPerformancePlatform,
   type CampaignPerformanceQuery,
 } from "../../campaigns/performance-service"
+import { CampaignJourneyService } from "../../campaigns/journey-service"
 import { ChannelsAggregationService } from "../../channels/channels-service"
 import { countConnectedPlatforms } from "../../organizations/connected-platforms"
 import { CampaignLinkRepository } from "../../campaign-links/repository"
@@ -916,12 +917,27 @@ export function createIdentityApiServer(
         zidProductPromotionService
       )
     : null
-  const orderAttributionService = container.infrastructure.database
-    ? new OrderAttributionService(
-        new AttributionRepository(container.infrastructure.database),
-        new CampaignLinkRepository(container.infrastructure.database)
-      )
+  // Shared between OrderAttributionService and CampaignJourneyService below -- both read
+  // order_attributions, one writing matches, the other aggregating them per campaign.
+  const attributionRepository = container.infrastructure.database
+    ? new AttributionRepository(container.infrastructure.database)
     : null
+  const orderAttributionService =
+    container.infrastructure.database && attributionRepository
+      ? new OrderAttributionService(
+          attributionRepository,
+          new CampaignLinkRepository(container.infrastructure.database),
+          campaignService ?? undefined
+        )
+      : null
+  const campaignJourneyService =
+    campaignsPerformanceAggregationService && campaignRepositoryForLinks && attributionRepository
+      ? new CampaignJourneyService(
+          campaignsPerformanceAggregationService,
+          campaignRepositoryForLinks,
+          attributionRepository
+        )
+      : null
   const aggregationService = container.infrastructure.database
     ? new AggregationService(new AggregationRepository(container.infrastructure.database))
     : null
@@ -5626,6 +5642,21 @@ export function createIdentityApiServer(
             pageSize: Number.isFinite(pageSize) ? pageSize : 20,
           })
         )
+      }
+
+      if (method === "GET" && url.pathname === "/v1/campaigns/performance/journey") {
+        if (!campaignJourneyService) {
+          return send(503, {
+            code: "CAMPAIGNS_PERFORMANCE_UNAVAILABLE",
+            message: "Campaign performance is unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("campaigns:view")) {
+          throw ERRORS.forbidden()
+        }
+        return send(200, {
+          items: await campaignJourneyService.getJourney(actor, parsePerformanceQuery(url)),
+        })
       }
 
       if (method === "GET" && url.pathname === "/v1/campaigns/performance/ad-groups") {

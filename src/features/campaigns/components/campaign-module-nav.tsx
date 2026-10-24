@@ -10,6 +10,7 @@ import { ROUTES } from "@/constants/routes"
 const CAMPAIGN_NAV_ITEMS = [
   { href: ROUTES.campaigns, labelKey: "dashboard" },
   { href: `${ROUTES.campaigns}/list`, labelKey: "list" },
+  { href: `${ROUTES.campaigns}/journey`, labelKey: "journey" },
   { href: ROUTES.campaignsCreate, labelKey: "create" },
   { href: `${ROUTES.campaigns}/creative-library`, labelKey: "creativeLibrary" },
   { href: `${ROUTES.campaigns}/templates`, labelKey: "templates" },

@@ -89,6 +89,17 @@ export interface OrderSummaryView {
   // merchant's connected Salla store yet (see MadarOrdersService/SallaOrderPushService).
   // undefined for every synced provider, which never has a push concept of its own.
   sallaPushStatus?: "not_applicable" | "pending" | "pushed" | "failed"
+  // Only ever set for platform === "Zid" today -- read from the order's own marketing_source
+  // field (docs.zid.sa's MarketingChannelSource_Order schema; see normalizeZidOrder below).
+  // Salla doesn't have a confirmed equivalent field yet (see attribution/repository.ts's
+  // extractGenericSignals comment), so this stays undefined for every other provider rather than
+  // guessing. undefined (not an all-null object) when the order simply has no marketing_source.
+  marketingSource?: {
+    medium: string | null
+    campaign: string | null
+    source: string | null
+    device: string | null
+  }
 }
 
 export interface OrdersSummaryStats {
@@ -275,12 +286,30 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
     currency_code?: string
     order_status?: { name?: string; code?: string }
     created_at?: string
+    // MarketingChannelSource_Order ("Marketing source details captured for the order"),
+    // docs.zid.sa -- field names are doc-confirmed, population on a live order is not yet
+    // verified (see attribution/repository.ts's extractZidSignals for the same caveat).
+    marketing_source?: {
+      utm_medium?: string
+      utm_campaign?: string
+      utm_source?: string
+      device_type?: string
+    }
   }
 
   const statusText = payload.order_status?.name ?? payload.order_status?.code ?? ""
   const paymentStatus: PaymentStatus = statusText.toLowerCase().includes("refund")
     ? "Refunded"
     : "Paid"
+
+  const marketingSource = payload.marketing_source
+  const hasMarketingSource = Boolean(
+    marketingSource &&
+    (marketingSource.utm_medium ||
+      marketingSource.utm_campaign ||
+      marketingSource.utm_source ||
+      marketingSource.device_type)
+  )
 
   return {
     id: `zid:${row.entity_id}`,
@@ -294,6 +323,14 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
     currency: payload.currency_code ?? "SAR",
     orderStatus: bucketOrderStatus(statusText),
     statusLabel: statusText || bucketOrderStatus(statusText),
+    marketingSource: hasMarketingSource
+      ? {
+          medium: marketingSource?.utm_medium ?? null,
+          campaign: marketingSource?.utm_campaign ?? null,
+          source: marketingSource?.utm_source ?? null,
+          device: marketingSource?.device_type ?? null,
+        }
+      : undefined,
     paymentStatus,
     createdAt: payload.created_at ? toIsoDate(payload.created_at) : toIsoDate(row.updated_at),
   }
