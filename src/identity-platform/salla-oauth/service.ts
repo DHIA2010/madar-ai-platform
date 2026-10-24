@@ -394,11 +394,15 @@ export class SallaOAuthService {
     // from AWS Secrets Manager -- this lets local/dev environments redirect back to
     // themselves instead of the production callback baked into the shared secret.
     const explicitRedirectUri = process.env.SALLA_REDIRECT_URI?.trim()
+    // Same env-first/AWS-Secrets-Manager-fallback precedence as redirectUri above -- the app-id
+    // can live in either place (see salla-credentials.ts), an explicit SALLA_APP_ID still wins.
+    const explicitAppId = process.env.SALLA_APP_ID?.trim()
     const resolved = {
       ...this.config,
       clientId: credentials.clientId,
       clientSecret: credentials.clientSecret,
       redirectUri: explicitRedirectUri || credentials.redirectUri || this.config.redirectUri,
+      appId: explicitAppId || credentials.appId || this.config.appId,
     }
     ensureConfigured(resolved)
     return resolved

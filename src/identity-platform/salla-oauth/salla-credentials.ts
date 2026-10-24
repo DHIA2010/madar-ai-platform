@@ -11,6 +11,9 @@ export interface SallaOAuthCredentials {
   // Portal's Webhook URL is pointed at it, so OAuth connect/token-refresh must keep working
   // without one. The webhook route itself (server.ts) 503s if this is null.
   webhookSecret?: string | null
+  // Optional -- only startAuthorization's App Store install URL needs this (see service.ts);
+  // every other OAuth flow (refresh, webhook, disconnect) works without it.
+  appId?: string
 }
 
 export interface SallaOAuthCredentialsProvider {
@@ -25,6 +28,7 @@ function readEnvSallaCredentials(): SallaOAuthCredentials | null {
   const clientSecret = process.env.SALLA_CLIENT_SECRET?.trim() ?? ""
   const redirectUri = process.env.SALLA_REDIRECT_URI?.trim() ?? ""
   const webhookSecret = process.env.SALLA_WEBHOOK_SECRET?.trim() ?? ""
+  const appId = process.env.SALLA_APP_ID?.trim() ?? ""
 
   if (!clientId || !clientSecret) {
     return null
@@ -35,6 +39,7 @@ function readEnvSallaCredentials(): SallaOAuthCredentials | null {
     clientSecret,
     redirectUri: redirectUri || undefined,
     webhookSecret: webhookSecret || null,
+    appId: appId || undefined,
   }
 }
 
@@ -111,11 +116,13 @@ export class AwsSecretsSallaOAuthCredentialsProvider implements SallaOAuthCreden
     // redirect_url) rather than the clientId/clientSecret convention the other
     // connectors' secrets use -- read both shapes so it works regardless.
     const webhookSecret = String(parsed.webhook_secret ?? parsed.webhookSecret ?? "").trim()
+    const appId = String(parsed.app_id ?? parsed.appId ?? "").trim()
     return validateCredentials({
       clientId: String(parsed.client_id ?? parsed.clientId ?? "").trim(),
       clientSecret: String(parsed.client_secret ?? parsed.clientSecret ?? "").trim(),
       redirectUri: String(parsed.redirect_url ?? parsed.redirectUrl ?? "").trim() || undefined,
       webhookSecret: webhookSecret || null,
+      appId: appId || undefined,
     })
   }
 }

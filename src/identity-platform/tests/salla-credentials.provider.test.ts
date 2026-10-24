@@ -11,6 +11,7 @@ import {
 const ENV_CLIENT_ID = "SALLA_CLIENT_ID"
 const ENV_CLIENT_SECRET = "SALLA_CLIENT_SECRET"
 const ENV_REDIRECT_URI = "SALLA_REDIRECT_URI"
+const ENV_APP_ID = "SALLA_APP_ID"
 
 const ENV_CREDENTIALS: SallaOAuthCredentials = {
   clientId: "env-salla-client-id",
@@ -28,6 +29,7 @@ const ORIGINAL_ENV = {
   clientId: process.env[ENV_CLIENT_ID],
   clientSecret: process.env[ENV_CLIENT_SECRET],
   redirectUri: process.env[ENV_REDIRECT_URI],
+  appId: process.env[ENV_APP_ID],
 }
 
 function setEnvCredentials(value: Partial<SallaOAuthCredentials>) {
@@ -47,6 +49,12 @@ function setEnvCredentials(value: Partial<SallaOAuthCredentials>) {
     delete process.env[ENV_REDIRECT_URI]
   } else {
     process.env[ENV_REDIRECT_URI] = value.redirectUri
+  }
+
+  if (value.appId === undefined) {
+    delete process.env[ENV_APP_ID]
+  } else {
+    process.env[ENV_APP_ID] = value.appId
   }
 }
 
@@ -109,5 +117,22 @@ describe("environment-first salla oauth credentials provider", () => {
 
     expect(resolved).toEqual(FALLBACK_CREDENTIALS)
     expect(fallbackLoad).toHaveBeenCalledTimes(1)
+  })
+
+  // appId can come from either source (env or the AWS secret's app_id/appId field) -- this
+  // confirms the env path carries it through the same way it already does for redirectUri.
+  it("carries SALLA_APP_ID through when set alongside environment credentials", async () => {
+    setEnvCredentials({ ...ENV_CREDENTIALS, appId: "104369990" })
+
+    const fallbackLoad = vi
+      .fn<SallaOAuthCredentialsProvider["load"]>()
+      .mockResolvedValue(FALLBACK_CREDENTIALS)
+    const fallback: SallaOAuthCredentialsProvider = { load: fallbackLoad }
+
+    const provider = new EnvironmentFirstSallaOAuthCredentialsProvider(fallback)
+    const resolved = await provider.load()
+
+    expect(resolved).toEqual({ ...ENV_CREDENTIALS, webhookSecret: null, appId: "104369990" })
+    expect(fallbackLoad).not.toHaveBeenCalled()
   })
 })
