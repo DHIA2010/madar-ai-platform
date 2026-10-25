@@ -226,6 +226,10 @@ export interface InvoiceView {
   id: string
   workspaceId: string
   invoiceNumber: string
+  // A separate, optional per-sale number (Settings -> إعدادات الإيصال), off by default -- see
+  // migration 111 and PosInvoicesService.create()'s own order-number counter. Snapshotted once at
+  // sale time, null on every invoice created before this feature existed or with it turned off.
+  orderNumber: number | null
   status: InvoiceStatus
   customerName: string | null
   customerPhone: string | null
@@ -344,6 +348,7 @@ interface InvoiceRow {
   id: string
   workspace_id: string
   invoice_number: string
+  order_number: number | null
   status: string
   customer_name: string | null
   customer_phone: string | null
@@ -434,6 +439,8 @@ function mapInvoice(
     id: row.id,
     workspaceId: row.workspace_id,
     invoiceNumber: row.invoice_number,
+    orderNumber:
+      row.order_number === null || row.order_number === undefined ? null : Number(row.order_number),
     status: row.status as InvoiceStatus,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
@@ -550,7 +557,7 @@ function mapReturn(
 }
 
 const INVOICE_SELECT = `
-  SELECT id, workspace_id, invoice_number, status, customer_name, customer_phone, customer_id,
+  SELECT id, workspace_id, invoice_number, order_number, status, customer_name, customer_phone, customer_id,
          cashier_user_id, payment_method_code, subtotal_amount, discount_amount, tax_amount,
          total_amount, notes, notes_lines, created_at, qr_code, seller_name, seller_vat_number,
          seller_address, customer_vat_number, zatca_signed_xml, zatca_status, zatca_reported_at
@@ -1063,6 +1070,55 @@ export class PosInvoicesService {
         )
         invoiceNumber = `INV-${String(counterResult.rows[0].next_number).padStart(6, "0")}`
 
+        // A separate, optional per-sale number (Settings -> إعدادات الإيصال -> رقم الطلب) --
+        // distinct from invoiceNumber above, off by default; null (the counter table untouched)
+        // when it's off. The "is this a new day" / "did we hit the max" decision is made here in
+        // JS rather than in SQL -- a single UPSERT with a CASE expression comparing a stored DATE
+        // column against CURRENT_DATE works on real Postgres, but pg-mem (this codebase's test
+        // harness) doesn't truncate DATE values to midnight, so that comparison is never reliably
+        // true/false there; computing it in JS instead sidesteps that gap in both places. The
+        // FOR UPDATE row lock (held until this transaction commits) is what keeps this correct
+        // under real concurrent sales on the same workspace, same as the invoice-number counter's
+        // own row-locked UPSERT achieves in one statement -- a rolled-back sale still never burns
+        // a number here, since both statements below are inside this same transaction.
+        let orderNumber: number | null = null
+        if (settings.showOrderNumber) {
+          const counterRow = (
+            await this.database.query<{ next_number: number; last_reset_date: Date | string }>(
+              `SELECT next_number, last_reset_date FROM pos_order_number_counters
+              WHERE workspace_id = $1 FOR UPDATE`,
+              [input.workspaceId]
+            )
+          ).rows[0]
+
+          const today = issuedAt.toISOString().slice(0, 10)
+          if (!counterRow) {
+            orderNumber = 1
+          } else {
+            const lastResetDay = new Date(counterRow.last_reset_date).toISOString().slice(0, 10)
+            if (settings.orderNumberResetMode === "daily" && lastResetDay !== today) {
+              orderNumber = 1
+            } else if (
+              settings.orderNumberResetMode === "max_value" &&
+              settings.orderNumberMaxValue !== null &&
+              counterRow.next_number >= settings.orderNumberMaxValue
+            ) {
+              orderNumber = 1
+            } else {
+              orderNumber = counterRow.next_number + 1
+            }
+          }
+
+          await this.database.query(
+            `INSERT INTO pos_order_number_counters (workspace_id, next_number, last_reset_date)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (workspace_id) DO UPDATE SET
+             next_number = excluded.next_number,
+             last_reset_date = excluded.last_reset_date`,
+            [input.workspaceId, orderNumber, today]
+          )
+        }
+
         // Always generate the Phase 1 QR -- a merchant who hasn't finished their tax profile in
         // Settings yet still gets one on every sale, just with an empty VAT-number tag rather than
         // a fabricated value, instead of no QR at all until they do (see loadSellerSnapshot above).
@@ -1139,9 +1195,9 @@ export class PosInvoicesService {
             discount_amount, tax_amount, total_amount, notes, notes_lines, created_at, qr_code,
             seller_name, seller_vat_number, seller_address, customer_vat_number, zatca_device_id,
             icv, previous_invoice_hash, invoice_hash, cryptographic_stamp, zatca_signed_xml,
-            zatca_uuid, idempotency_key)
+            zatca_uuid, idempotency_key, order_number)
          VALUES ($1, $2, $3, $4, 'completed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb,
-                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
           [
             id,
             input.organizationId,
@@ -1172,6 +1228,7 @@ export class PosInvoicesService {
             zatcaSignedXml,
             zatcaUuid,
             input.idempotencyKey,
+            orderNumber,
           ]
         )
 

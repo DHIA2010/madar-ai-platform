@@ -899,6 +899,12 @@ describe("point-of-sale invoices", () => {
     enableBarcodeScanner: true,
     playScanSound: false,
     offlineModeEnabled: false,
+    showReceiptTitle: false,
+    receiptTitleLines: null,
+    receiptDescriptionLines: null,
+    showOrderNumber: false,
+    orderNumberResetMode: "daily" as const,
+    orderNumberMaxValue: null,
   }
 
   async function savePosSettings(token: string, overrides: Record<string, unknown>) {
@@ -1020,6 +1026,154 @@ describe("point-of-sale invoices", () => {
     ).json()) as Record<string, unknown>
     expect(refetched.confirmSale).toBe(true)
     expect(refetched.copiesCount).toBe(3)
+  })
+
+  it("persists the receipt-content settings (title/description and order-number toggle)", async () => {
+    const { token } = await signIn(
+      "invoice-receipt-settings@example.com",
+      "Invoice Receipt Settings"
+    )
+
+    const defaults = (await (
+      await fetch(`${baseUrl}/v1/pos/settings`, { headers: authHeaders(token) })
+    ).json()) as Record<string, unknown>
+    expect(defaults.showReceiptTitle).toBe(false)
+    expect(defaults.receiptTitleLines).toBe(null)
+    expect(defaults.showOrderNumber).toBe(false)
+    expect(defaults.orderNumberResetMode).toBe("daily")
+
+    const titleLines = [
+      {
+        text: "بالغوا بالدفاع عن وطنكم",
+        bold: true,
+        align: "center",
+        fontSize: 14,
+        color: "#0d1b3e",
+      },
+    ]
+    const descriptionLines = [
+      { text: "شكراً لزيارتكم", bold: false, align: "center", fontSize: 11, color: "#5b6b85" },
+    ]
+    const saveResponse = await savePosSettings(token, {
+      showReceiptTitle: true,
+      receiptTitleLines: titleLines,
+      receiptDescriptionLines: descriptionLines,
+      showOrderNumber: true,
+      orderNumberResetMode: "max_value",
+      orderNumberMaxValue: 99,
+    })
+    expect(saveResponse.status).toBe(200)
+    const saved = (await saveResponse.json()) as Record<string, unknown>
+    expect(saved.receiptTitleLines).toEqual(titleLines)
+    expect(saved.receiptDescriptionLines).toEqual(descriptionLines)
+    expect(saved.orderNumberResetMode).toBe("max_value")
+    expect(saved.orderNumberMaxValue).toBe(99)
+  })
+
+  it("rejects saving order-number settings with 'max_value' reset mode and no max value", async () => {
+    const { token } = await signIn(
+      "invoice-order-number-validation@example.com",
+      "Invoice Order Number Validation"
+    )
+
+    const response = await savePosSettings(token, {
+      showOrderNumber: true,
+      orderNumberResetMode: "max_value",
+      orderNumberMaxValue: null,
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it("leaves order_number null on every invoice while showOrderNumber is off (the default)", async () => {
+    const { token } = await signIn(
+      "invoice-order-number-off@example.com",
+      "Invoice Order Number Off"
+    )
+
+    const product = await createProduct(token, {
+      name: "قلم",
+      sku: "ORDER-NUM-OFF-1",
+      stockQuantity: 10,
+      sellPrice: 5,
+    })
+    const invoice = await createInvoice(token, {
+      customerName: null,
+      payments: [{ paymentMethodCode: "cash", amount: 5 * 1.15 }],
+      discountAmount: 0,
+      items: [{ productId: product.id, productName: "قلم", unitPrice: 5, quantity: 1 }],
+    })
+    expect(invoice.status).toBe(201)
+    expect(invoice.body.orderNumber).toBe(null)
+  })
+
+  it("assigns a sequential order_number once showOrderNumber is on, and resets it once the day changes", async () => {
+    const { token, actor } = await signIn(
+      "invoice-order-number-daily@example.com",
+      "Invoice Order Number Daily"
+    )
+
+    await savePosSettings(token, { showOrderNumber: true, orderNumberResetMode: "daily" })
+
+    const product = await createProduct(token, {
+      name: "دفتر",
+      sku: "ORDER-NUM-DAILY-1",
+      stockQuantity: 10,
+      sellPrice: 5,
+    })
+    const makeSale = () =>
+      createInvoice(token, {
+        customerName: null,
+        payments: [{ paymentMethodCode: "cash", amount: 5 * 1.15 }],
+        discountAmount: 0,
+        items: [{ productId: product.id, productName: "دفتر", unitPrice: 5, quantity: 1 }],
+      })
+
+    const first = await makeSale()
+    expect(first.body.orderNumber).toBe(1)
+    const second = await makeSale()
+    expect(second.body.orderNumber).toBe(2)
+
+    // Simulate the day having rolled over since the last sale -- the very next sale must restart
+    // the counter at 1 instead of continuing from 2.
+    await database.query(
+      `UPDATE pos_order_number_counters SET last_reset_date = current_date - interval '1 day'
+        WHERE workspace_id = $1`,
+      [actor.workspaceId]
+    )
+    const third = await makeSale()
+    expect(third.body.orderNumber).toBe(1)
+  })
+
+  it("wraps the order_number back to 1 once it exceeds the configured max value", async () => {
+    const { token } = await signIn(
+      "invoice-order-number-max@example.com",
+      "Invoice Order Number Max"
+    )
+
+    await savePosSettings(token, {
+      showOrderNumber: true,
+      orderNumberResetMode: "max_value",
+      orderNumberMaxValue: 2,
+    })
+
+    const product = await createProduct(token, {
+      name: "كشك",
+      sku: "ORDER-NUM-MAX-1",
+      stockQuantity: 10,
+      sellPrice: 5,
+    })
+    const makeSale = () =>
+      createInvoice(token, {
+        customerName: null,
+        payments: [{ paymentMethodCode: "cash", amount: 5 * 1.15 }],
+        discountAmount: 0,
+        items: [{ productId: product.id, productName: "كشك", unitPrice: 5, quantity: 1 }],
+      })
+
+    expect((await makeSale()).body.orderNumber).toBe(1)
+    expect((await makeSale()).body.orderNumber).toBe(2)
+    // 2 is the configured max -- the third sale must wrap back to 1 rather than becoming 3.
+    expect((await makeSale()).body.orderNumber).toBe(1)
   })
 
   it("decrements a bundle's own components (by their recipe, unit-converted) on sale, and restores them on return", async () => {

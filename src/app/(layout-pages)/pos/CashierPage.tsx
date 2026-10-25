@@ -1641,6 +1641,10 @@ export default function CashierPage() {
       id: localId,
       workspaceId: currentWorkspace?.id ?? "",
       invoiceNumber: `OFFLINE-${localId.slice(0, 8).toUpperCase()}`,
+      // The real order number (if this org has it on) is only assigned by the server-side
+      // counter once this sale actually syncs -- never fabricated here, same reasoning as
+      // invoiceNumber's own "OFFLINE-" placeholder above never claiming to be the real number.
+      orderNumber: null,
       status: "completed",
       customerName: customerName.trim() || null,
       customerPhone: customerPhone.trim() || null,
@@ -4278,6 +4282,12 @@ export default function CashierPage() {
               paymentMethodNames={paymentMethodNameByCode}
               qrDataUrl={successQrDataUrl}
               sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+              receiptTitleLines={
+                posSettings.showReceiptTitle ? posSettings.receiptTitleLines : null
+              }
+              receiptDescriptionLines={
+                posSettings.showReceiptTitle ? posSettings.receiptDescriptionLines : null
+              }
             />
           </div>,
           document.body

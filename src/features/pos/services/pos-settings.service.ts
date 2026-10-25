@@ -1,3 +1,5 @@
+import type { NoteLine } from "./pos-saved-notes.service"
+
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
 
@@ -51,6 +53,18 @@ export interface PosSettings {
   // Lets the cashier keep selling with no internet -- see features/pos/offline/. Off by default.
   offlineModeEnabled: boolean
 
+  // Receipt content -- a per-line FORMATTED title/description banner printed above the seller
+  // name (same NoteLine[] shape/editor/renderer as a saved sale note -- see
+  // FormattedNoteEditor.tsx), read live at print time, never frozen on an invoice, and a per-sale
+  // order number distinct from the invoice number. orderNumberMaxValue only matters when
+  // orderNumberResetMode is "max_value".
+  showReceiptTitle: boolean
+  receiptTitleLines: NoteLine[] | null
+  receiptDescriptionLines: NoteLine[] | null
+  showOrderNumber: boolean
+  orderNumberResetMode: "daily" | "max_value"
+  orderNumberMaxValue: number | null
+
   updatedAt: string
 }
 
@@ -84,6 +98,12 @@ export const DEFAULT_POS_SETTINGS: PosSettings = {
   enableBarcodeScanner: true,
   playScanSound: false,
   offlineModeEnabled: false,
+  showReceiptTitle: false,
+  receiptTitleLines: null,
+  receiptDescriptionLines: null,
+  showOrderNumber: false,
+  orderNumberResetMode: "daily",
+  orderNumberMaxValue: null,
   updatedAt: new Date(0).toISOString(),
 }
 

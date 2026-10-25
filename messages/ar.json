@@ -2963,6 +2963,7 @@
       "sellerNameFallback": "المنشأة",
       "simplifiedTaxInvoice": "فاتورة ضريبية مبسطة",
       "invoiceNumber": "رقم الفاتورة: {number}",
+      "orderNumber": "رقم الطلب: {number}",
       "storeAddress": "عنوان المتجر",
       "invoiceTime": "وقت الفاتورة",
       "vatNumber": "الرقم الضريبي",
@@ -4137,6 +4138,23 @@
           "success": "تم إرسال أمر الاختبار إلى الجهاز بنجاح.",
           "failed": "فشل الاتصال بالجهاز."
         }
+      },
+      "receipt": {
+        "sectionTitle": "محتوى الإيصال",
+        "showTitle": {
+          "title": "إظهار عنوان على الإيصال",
+          "description": "أضف عنوانًا ووصفًا مخصصين يظهران أعلى الإيصال المطبوع."
+        },
+        "titleLabel": "العنوان",
+        "descriptionLabel": "الوصف",
+        "showOrderNumber": {
+          "title": "إظهار رقم الطلب",
+          "description": "رقم منفصل عن رقم الفاتورة يُطبع على كل إيصال."
+        },
+        "orderNumberResetLabel": "إعادة تعيين الرقم",
+        "resetDaily": "يوميًا",
+        "resetMaxValue": "عند الوصول لرقم معين",
+        "orderNumberMaxValueLabel": "أقصى رقم قبل إعادة التعيين"
       },
       "payment": {
         "sectionTitle": "إعدادات الدفع",

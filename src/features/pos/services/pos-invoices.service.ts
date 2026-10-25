@@ -65,6 +65,9 @@ export interface Invoice {
   id: string
   workspaceId: string
   invoiceNumber: string
+  // A separate, optional per-sale number (Settings -> إعدادات الإيصال), off by default -- null on
+  // every invoice created before this feature existed or with it turned off.
+  orderNumber: number | null
   status: InvoiceStatus
   // Null is "عميل نقدي" (a walk-in, no customer recorded) -- a snapshot typed at sale time, not
   // a link to the synced-customer aggregation (which has no stable row of its own and would be

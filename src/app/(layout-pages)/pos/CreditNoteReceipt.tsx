@@ -131,7 +131,7 @@ export function CreditNoteReceipt({
           real print rendering engines. */}
       <div
         className="grid gap-x-1 pb-1.5 text-[9px] text-[#5b6b85]"
-        style={{ gridTemplateColumns: "30% 12% 18% 19% 21%" }}
+        style={{ gridTemplateColumns: "27% 15% 18% 19% 21%" }}
       >
         <span className="px-1 text-start font-bold leading-[1.35]">{t("columns.name")}</span>
         <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.quantity")}</span>
@@ -143,7 +143,7 @@ export function CreditNoteReceipt({
         <div
           key={index}
           className="grid items-start gap-x-1 py-1 text-[9px]"
-          style={{ gridTemplateColumns: "30% 12% 18% 19% 21%" }}
+          style={{ gridTemplateColumns: "27% 15% 18% 19% 21%" }}
         >
           {/* Wraps onto as many lines as the full name needs rather than an ellipsis -- the
               row's own items-start keeps the other columns flush with the row's top regardless

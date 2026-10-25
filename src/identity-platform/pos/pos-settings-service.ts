@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { parseNoteLines, type NoteLine } from "./saved-notes-service"
 
 export interface PosSettingsView {
   allowBelowCostSale: boolean
@@ -35,6 +36,19 @@ export interface PosSettingsView {
   // starts mirroring POS data into IndexedDB, which no store should get without opting in.
   offlineModeEnabled: boolean
 
+  // Receipt content -- a per-line FORMATTED title/description banner printed above the seller
+  // name (the exact same NoteLine[] shape/editor/renderer as a saved sale note -- see
+  // FormattedNoteEditor.tsx/NoteLines.tsx), read live at print time, never snapshotted onto an
+  // invoice (see migration 111's own comment), and a per-sale order number distinct from
+  // invoice_number. orderNumberMaxValue only matters when orderNumberResetMode is "max_value" --
+  // null while resetMode is "daily".
+  showReceiptTitle: boolean
+  receiptTitleLines: NoteLine[] | null
+  receiptDescriptionLines: NoteLine[] | null
+  showOrderNumber: boolean
+  orderNumberResetMode: "daily" | "max_value"
+  orderNumberMaxValue: number | null
+
   updatedAt: string
 }
 
@@ -62,6 +76,12 @@ export interface PosSettingsUpdateInput {
   enableBarcodeScanner: boolean
   playScanSound: boolean
   offlineModeEnabled: boolean
+  showReceiptTitle: boolean
+  receiptTitleLines: NoteLine[] | null
+  receiptDescriptionLines: NoteLine[] | null
+  showOrderNumber: boolean
+  orderNumberResetMode: "daily" | "max_value"
+  orderNumberMaxValue: number | null
 }
 
 // Every default here matches the platform's actual, already-shipped unconditional behavior --
@@ -91,6 +111,20 @@ export const DEFAULT_POS_SETTINGS: Omit<PosSettingsView, "updatedAt"> = {
   enableBarcodeScanner: true,
   playScanSound: false,
   offlineModeEnabled: false,
+  showReceiptTitle: false,
+  receiptTitleLines: null,
+  receiptDescriptionLines: null,
+  showOrderNumber: false,
+  orderNumberResetMode: "daily",
+  orderNumberMaxValue: null,
+}
+
+// Same null-vs-empty-array handling as invoices-service.ts's own toNotesLines -- a jsonb column
+// that's genuinely never been saved stays null (no title/description content at all), as opposed
+// to an explicitly saved empty array.
+function toLines(value: unknown): NoteLine[] | null {
+  if (value === null || value === undefined) return null
+  return parseNoteLines(value)
 }
 
 function mapRow(row: Record<string, unknown>): PosSettingsView {
@@ -118,6 +152,15 @@ function mapRow(row: Record<string, unknown>): PosSettingsView {
     enableBarcodeScanner: Boolean(row.enable_barcode_scanner),
     playScanSound: Boolean(row.play_scan_sound),
     offlineModeEnabled: Boolean(row.offline_mode_enabled),
+    showReceiptTitle: Boolean(row.show_receipt_title),
+    receiptTitleLines: toLines(row.receipt_title_lines),
+    receiptDescriptionLines: toLines(row.receipt_description_lines),
+    showOrderNumber: Boolean(row.show_order_number),
+    orderNumberResetMode: row.order_number_reset_mode as "daily" | "max_value",
+    orderNumberMaxValue:
+      row.order_number_max_value === null || row.order_number_max_value === undefined
+        ? null
+        : Number(row.order_number_max_value),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   }
 }
@@ -160,9 +203,11 @@ export class PosSettingsService {
         show_quick_payment_screen, allow_split_payment, remember_last_payment_method, require_payment_method_selection,
         show_product_images, use_compact_mode, show_category_panel, show_grid_view, show_list_view,
         enable_barcode_scanner, play_scan_sound, offline_mode_enabled,
+        show_receipt_title, receipt_title_lines, receipt_description_lines,
+        show_order_number, order_number_reset_mode, order_number_max_value,
         created_by_user_id, updated_by_user_id, created_at, updated_at
       ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$27,now(),now()
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,$29::jsonb,$30,$31,$32,$33,$33,now(),now()
       )
       on conflict (organization_id, coalesce(workspace_id, '00000000-0000-0000-0000-000000000000'))
       do update set
@@ -189,6 +234,12 @@ export class PosSettingsService {
         enable_barcode_scanner = excluded.enable_barcode_scanner,
         play_scan_sound = excluded.play_scan_sound,
         offline_mode_enabled = excluded.offline_mode_enabled,
+        show_receipt_title = excluded.show_receipt_title,
+        receipt_title_lines = excluded.receipt_title_lines,
+        receipt_description_lines = excluded.receipt_description_lines,
+        show_order_number = excluded.show_order_number,
+        order_number_reset_mode = excluded.order_number_reset_mode,
+        order_number_max_value = excluded.order_number_max_value,
         updated_by_user_id = excluded.updated_by_user_id,
         updated_at = now()
       returning *
@@ -220,6 +271,12 @@ export class PosSettingsService {
         input.enableBarcodeScanner,
         input.playScanSound,
         input.offlineModeEnabled,
+        input.showReceiptTitle,
+        input.receiptTitleLines ? JSON.stringify(input.receiptTitleLines) : null,
+        input.receiptDescriptionLines ? JSON.stringify(input.receiptDescriptionLines) : null,
+        input.showOrderNumber,
+        input.orderNumberResetMode,
+        input.orderNumberMaxValue,
         actorUserId,
       ]
     )

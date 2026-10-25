@@ -2963,6 +2963,7 @@
       "sellerNameFallback": "The business",
       "simplifiedTaxInvoice": "Simplified tax invoice",
       "invoiceNumber": "Invoice number: {number}",
+      "orderNumber": "Order number: {number}",
       "storeAddress": "Store address",
       "invoiceTime": "Invoice time",
       "vatNumber": "VAT number",
@@ -4137,6 +4138,23 @@
           "success": "Test command sent to the device successfully.",
           "failed": "Couldn't connect to the device."
         }
+      },
+      "receipt": {
+        "sectionTitle": "Receipt content",
+        "showTitle": {
+          "title": "Show a title on the receipt",
+          "description": "Add a custom title and description printed above the receipt."
+        },
+        "titleLabel": "Title",
+        "descriptionLabel": "Description",
+        "showOrderNumber": {
+          "title": "Show an order number",
+          "description": "A number separate from the invoice number, printed on every receipt."
+        },
+        "orderNumberResetLabel": "Reset the number",
+        "resetDaily": "Daily",
+        "resetMaxValue": "After reaching a number",
+        "orderNumberMaxValueLabel": "Max number before it resets"
       },
       "payment": {
         "sectionTitle": "Payment settings",

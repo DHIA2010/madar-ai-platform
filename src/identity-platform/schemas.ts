@@ -368,31 +368,72 @@ export const integrationEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 })
 
-export const posSettingsUpdateSchema = z.object({
-  allowBelowCostSale: z.boolean(),
-  allowOutOfStockSale: z.boolean(),
-  confirmSale: z.boolean(),
-  autoOpenCashDrawer: z.boolean(),
-  allowManualPriceEdit: z.boolean(),
-  applyDiscounts: z.boolean(),
-  defaultPrinterDeviceId: z.string().uuid().nullable(),
-  paperWidth: z.enum(["58mm", "80mm"]),
-  autoPrintInvoice: z.boolean(),
-  printKitchenCopy: z.boolean(),
-  copiesCount: z.number().int().min(1).max(5),
-  showQuickPaymentScreen: z.boolean(),
-  allowSplitPayment: z.boolean(),
-  rememberLastPaymentMethod: z.boolean(),
-  requirePaymentMethodSelection: z.boolean(),
-  showProductImages: z.boolean(),
-  useCompactMode: z.boolean(),
-  showCategoryPanel: z.boolean(),
-  showGridView: z.boolean(),
-  showListView: z.boolean(),
-  enableBarcodeScanner: z.boolean(),
-  playScanSound: z.boolean(),
-  offlineModeEnabled: z.boolean(),
+// One line of a formatted POS sale note -- see pos/saved-notes-service.ts. `notes` (plain text)
+// stays the flattened mirror of these same lines; this is the structured source of rendering.
+// Defined here (above posSettingsUpdateSchema, which also uses it for the receipt title/
+// description banner -- see migration 111) rather than down by createSavedNoteSchema, since a
+// `const` referenced before its own module-level initializer throws, not just a hoisting quirk.
+export const noteLineSchema = z.object({
+  text: z.string().max(100),
+  bold: z.boolean(),
+  align: z.enum(["left", "center", "right"]),
+  // Free px size / hex color, both cashier-chosen per line -- see saved-notes-service.ts's own
+  // NOTE_LINE_MIN_FONT_SIZE/MAX_FONT_SIZE constants, kept in sync with this range by hand since
+  // zod schemas and service-layer constants live in separate files in this codebase.
+  fontSize: z.number().int().min(8).max(32),
+  color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
 })
+
+export const posSettingsUpdateSchema = z
+  .object({
+    allowBelowCostSale: z.boolean(),
+    allowOutOfStockSale: z.boolean(),
+    confirmSale: z.boolean(),
+    autoOpenCashDrawer: z.boolean(),
+    allowManualPriceEdit: z.boolean(),
+    applyDiscounts: z.boolean(),
+    defaultPrinterDeviceId: z.string().uuid().nullable(),
+    paperWidth: z.enum(["58mm", "80mm"]),
+    autoPrintInvoice: z.boolean(),
+    printKitchenCopy: z.boolean(),
+    copiesCount: z.number().int().min(1).max(5),
+    showQuickPaymentScreen: z.boolean(),
+    allowSplitPayment: z.boolean(),
+    rememberLastPaymentMethod: z.boolean(),
+    requirePaymentMethodSelection: z.boolean(),
+    showProductImages: z.boolean(),
+    useCompactMode: z.boolean(),
+    showCategoryPanel: z.boolean(),
+    showGridView: z.boolean(),
+    showListView: z.boolean(),
+    enableBarcodeScanner: z.boolean(),
+    playScanSound: z.boolean(),
+    offlineModeEnabled: z.boolean(),
+    // Receipt content -- see migration 111. receiptTitleLines/receiptDescriptionLines are the
+    // same per-line FORMATTED shape (and noteLineSchema) a saved sale note uses, not a plain
+    // string -- the merchant edits them with the same FormattedNoteEditor.tsx. orderNumberMaxValue
+    // is only meaningful (and required) when orderNumberResetMode is "max_value" -- enforced below
+    // rather than at the DB level, same as every other cross-field rule in this codebase's schemas.
+    showReceiptTitle: z.boolean(),
+    receiptTitleLines: z.array(noteLineSchema).max(10).nullable(),
+    receiptDescriptionLines: z.array(noteLineSchema).max(10).nullable(),
+    showOrderNumber: z.boolean(),
+    orderNumberResetMode: z.enum(["daily", "max_value"]),
+    orderNumberMaxValue: z.number().int().min(1).max(999999).nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.showOrderNumber &&
+      value.orderNumberResetMode === "max_value" &&
+      value.orderNumberMaxValue === null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["orderNumberMaxValue"],
+        message: "orderNumberMaxValue is required when orderNumberResetMode is 'max_value'.",
+      })
+    }
+  })
 
 const TIME_LOCAL_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -902,19 +943,6 @@ export const createInvoiceItemSchema = z.object({
 export const createInvoicePaymentSchema = z.object({
   paymentMethodCode: z.string().min(1).max(60),
   amount: z.number().positive(),
-})
-
-// One line of a formatted POS sale note -- see pos/saved-notes-service.ts. `notes` (plain text)
-// stays the flattened mirror of these same lines; this is the structured source of rendering.
-export const noteLineSchema = z.object({
-  text: z.string().max(100),
-  bold: z.boolean(),
-  align: z.enum(["left", "center", "right"]),
-  // Free px size / hex color, both cashier-chosen per line -- see saved-notes-service.ts's own
-  // NOTE_LINE_MIN_FONT_SIZE/MAX_FONT_SIZE constants, kept in sync with this range by hand since
-  // zod schemas and service-layer constants live in separate files in this codebase.
-  fontSize: z.number().int().min(8).max(32),
-  color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
 })
 
 export const createSavedNoteSchema = z.object({

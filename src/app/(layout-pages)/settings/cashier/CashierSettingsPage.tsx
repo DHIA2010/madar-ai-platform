@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   ChevronRight,
   CreditCard,
+  FileText,
   Monitor,
   Printer,
   ScanBarcode,
@@ -20,6 +21,8 @@ import { cn } from "@/lib/utils"
 
 import { AppInput, AppSearchableSelect, AppSwitch } from "@/components/app"
 import { Button } from "@/components/ui/button"
+
+import { FormattedNoteEditor } from "@/features/pos/components/FormattedNoteEditor"
 
 import {
   posDevicesService,
@@ -314,6 +317,101 @@ export function CashierSettingsPage() {
           </div>
         </div>
 
+        {/* Receipt content */}
+        <div className={cn(PANEL, "px-5 py-4")}>
+          <SectionHeader icon={<FileText className="size-4" />} title={t("receipt.sectionTitle")} />
+          <div className="space-y-3.5">
+            <ToggleRow
+              title={t("receipt.showTitle.title")}
+              description={t("receipt.showTitle.description")}
+              checked={settings.showReceiptTitle}
+              onChange={(checked) => patch({ showReceiptTitle: checked })}
+            />
+            {settings.showReceiptTitle && (
+              <div className="space-y-3.5 rounded-[10px] bg-[#f7f9fd] p-3">
+                <div>
+                  <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                    {t("receipt.titleLabel")}
+                  </div>
+                  <FormattedNoteEditor
+                    value={settings.receiptTitleLines ?? []}
+                    onChange={(lines) => patch({ receiptTitleLines: lines })}
+                  />
+                </div>
+                <div>
+                  <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                    {t("receipt.descriptionLabel")}
+                  </div>
+                  <FormattedNoteEditor
+                    value={settings.receiptDescriptionLines ?? []}
+                    onChange={(lines) => patch({ receiptDescriptionLines: lines })}
+                  />
+                </div>
+              </div>
+            )}
+
+            <ToggleRow
+              title={t("receipt.showOrderNumber.title")}
+              description={t("receipt.showOrderNumber.description")}
+              checked={settings.showOrderNumber}
+              onChange={(checked) => patch({ showOrderNumber: checked })}
+            />
+            {settings.showOrderNumber && (
+              <div className="space-y-2.5 rounded-[10px] bg-[#f7f9fd] p-3">
+                <div>
+                  <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                    {t("receipt.orderNumberResetLabel")}
+                  </div>
+                  <div className="flex gap-2">
+                    {(["daily", "max_value"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() =>
+                          patch({
+                            orderNumberResetMode: mode,
+                            orderNumberMaxValue:
+                              mode === "daily" ? null : settings.orderNumberMaxValue,
+                          })
+                        }
+                        className={cn(
+                          "flex-1 rounded-[10px] border px-3 py-2 text-[12.5px] font-semibold transition-colors",
+                          settings.orderNumberResetMode === mode
+                            ? "border-[#2878ff] bg-[#2878ff]/10 text-[#2878ff]"
+                            : "border-[#e1e7f0] bg-white text-[#5b6b85] hover:bg-[#f7f9fd]"
+                        )}
+                      >
+                        {mode === "daily" ? t("receipt.resetDaily") : t("receipt.resetMaxValue")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {settings.orderNumberResetMode === "max_value" && (
+                  <div>
+                    <div className={cn("mb-1.5 text-[12px] font-semibold", MUTED)}>
+                      {t("receipt.orderNumberMaxValueLabel")}
+                    </div>
+                    <AppInput
+                      type="number"
+                      min={1}
+                      max={999999}
+                      value={settings.orderNumberMaxValue ?? ""}
+                      onChange={(event) =>
+                        patch({
+                          orderNumberMaxValue: event.target.value
+                            ? Number(event.target.value)
+                            : null,
+                        })
+                      }
+                      className="h-10 w-full rounded-[10px] border-[#e1e7f0] bg-white text-[12.5px]"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Payment settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
           <SectionHeader
@@ -347,9 +445,7 @@ export function CashierSettingsPage() {
             />
           </div>
         </div>
-      </div>
 
-      <div className="grid gap-3.5 lg:grid-cols-3">
         {/* Interface settings */}
         <div className={cn(PANEL, "px-5 py-4")}>
           <SectionHeader

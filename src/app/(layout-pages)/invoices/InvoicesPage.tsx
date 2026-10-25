@@ -58,6 +58,11 @@ import {
   type InvoiceSummary,
 } from "@/features/pos/services/pos-invoices.service"
 import { posPaymentMethodsService } from "@/features/pos/services/pos-payment-methods.service"
+import {
+  posSettingsService,
+  DEFAULT_POS_SETTINGS,
+  type PosSettings,
+} from "@/features/pos/services/pos-settings.service"
 import { taxRatesService } from "@/features/pos/services/tax-rates.service"
 import {
   productListService,
@@ -200,6 +205,23 @@ export default function InvoicesPage() {
   const [summary, setSummary] = useState<InvoiceSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Settings -> إعدادات الإيصال -- read live here too (not just on the Cashier screen) so a
+  // reprint of an older invoice from this page shows today's title/description, same as
+  // ThermalInvoiceReceipt's own sellerLogoUrl prop already does.
+  const [posSettings, setPosSettings] = useState<PosSettings>(DEFAULT_POS_SETTINGS)
+  useEffect(() => {
+    let cancelled = false
+    posSettingsService
+      .get()
+      .then((settings) => {
+        if (!cancelled) setPosSettings(settings)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [workspaceFilter, setWorkspaceFilter] = useState<string>("all")
@@ -925,6 +947,12 @@ export default function InvoicesPage() {
                 invoice={selectedInvoice}
                 paymentMethodNames={paymentMethodNameByCode}
                 sellerLogoUrl={currentOrganization?.logoUrl ?? null}
+                receiptTitleLines={
+                  posSettings.showReceiptTitle ? posSettings.receiptTitleLines : null
+                }
+                receiptDescriptionLines={
+                  posSettings.showReceiptTitle ? posSettings.receiptDescriptionLines : null
+                }
               />
             ) : null}
           </div>,

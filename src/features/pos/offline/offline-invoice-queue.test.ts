@@ -31,6 +31,7 @@ function fakeInvoice(): Invoice {
     id: "invoice-1",
     workspaceId: WORKSPACE_ID,
     invoiceNumber: "INV-000001",
+    orderNumber: null,
     status: "completed",
     customerName: null,
     customerPhone: null,
