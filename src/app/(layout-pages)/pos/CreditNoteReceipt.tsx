@@ -107,59 +107,85 @@ export function CreditNoteReceipt({
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
-      {creditNote.sellerAddress && (
-        <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">{t("storeAddress")}</span>
-          <span>{creditNote.sellerAddress}</span>
+      {/* Same bordered-box treatment as ThermalInvoiceReceipt.tsx's info block -- see that
+          component's own comment for why these are borders on the existing flex rows rather than
+          a switch to <table>. */}
+      <div className="overflow-hidden rounded-md border border-[#c7d2e0]">
+        {creditNote.sellerAddress && (
+          <div className="flex justify-between border-b border-[#c7d2e0] px-2 py-1 text-[11px] last:border-b-0">
+            <span className="text-[#5b6b85]">{t("storeAddress")}</span>
+            <span>{creditNote.sellerAddress}</span>
+          </div>
+        )}
+        <div className="flex justify-between border-b border-[#c7d2e0] px-2 py-1 text-[11px] last:border-b-0">
+          <span className="text-[#5b6b85]">{t("invoiceTime")}</span>
+          <span>{DATE_TIME_FORMAT.format(new Date(creditNote.createdAt))}</span>
         </div>
-      )}
-      <div className="flex justify-between text-[11px]">
-        <span className="text-[#5b6b85]">{t("invoiceTime")}</span>
-        <span>{DATE_TIME_FORMAT.format(new Date(creditNote.createdAt))}</span>
+        {creditNote.sellerVatNumber && (
+          <div className="flex justify-between border-b border-[#c7d2e0] px-2 py-1 text-[11px] last:border-b-0">
+            <span className="text-[#5b6b85]">{t("vatNumber")}</span>
+            <span>{creditNote.sellerVatNumber}</span>
+          </div>
+        )}
       </div>
-      {creditNote.sellerVatNumber && (
-        <div className="flex justify-between text-[11px]">
-          <span className="text-[#5b6b85]">{t("vatNumber")}</span>
-          <span>{creditNote.sellerVatNumber}</span>
-        </div>
-      )}
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
       {/* Same grid-based (not <table>) layout as ThermalInvoiceReceipt.tsx, for the same reason:
           an actual <table>'s vertical-align: top proved unreliable once a name wrapped, across
-          real print rendering engines. */}
-      <div
-        className="grid gap-x-1 pb-1.5 text-[9px] text-[#5b6b85]"
-        style={{ gridTemplateColumns: "27% 15% 18% 19% 21%" }}
-      >
-        <span className="px-1 text-start font-bold leading-[1.35]">{t("columns.name")}</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.quantity")}</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.price")}</span>
-        <span className="px-1 text-center font-bold leading-[1.35]">{t("columns.vat")}</span>
-        <span className="px-1 text-end font-bold leading-[1.35]">{t("columns.totalWithTax")}</span>
-      </div>
-      {creditNote.items.map((item, index) => (
+          real print rendering engines. Same bordered-box treatment too -- border-e on every cell
+          but the last for the vertical dividers, border-b on every row but the last for the
+          horizontal ones. No gap-x (the 5 columns already sum to 100%; a gap on top of that
+          overflows past this box's own overflow-hidden, clipping the last column), and no
+          items-start on the data rows (plain grid stretch is what keeps border-e reaching each
+          row's full height instead of stopping wherever a short cell's one line of text ends --
+          see ThermalInvoiceReceipt.tsx's own comment on both of these). */}
+      <div className="overflow-hidden rounded-md border border-[#c7d2e0]">
         <div
-          key={index}
-          className="grid items-start gap-x-1 py-1 text-[9px]"
+          className="grid border-b border-[#c7d2e0] bg-[#f7f9fc] text-[9px] text-[#5b6b85]"
           style={{ gridTemplateColumns: "27% 15% 18% 19% 21%" }}
         >
-          {/* Wraps onto as many lines as the full name needs rather than an ellipsis -- the
-              row's own items-start keeps the other columns flush with the row's top regardless
-              of how many lines this takes. text-right (not text-start) so a wrapped line stays
-              pinned to the right edge, not centered. */}
-          <span className="px-1 text-right break-words">{item.productName}</span>
-          <span className="px-1 text-center">{item.quantity}</span>
-          <span className="px-1 text-center">
-            {AMOUNT_FORMAT.format(item.quantity > 0 ? item.netAmount / item.quantity : 0)}
+          <span className="border-e border-[#c7d2e0] px-1 py-1 text-start font-bold leading-[1.35]">
+            {t("columns.name")}
           </span>
-          <span className="px-1 text-center">{AMOUNT_FORMAT.format(item.taxAmount)}</span>
-          <span className="px-1 text-end">
-            {AMOUNT_FORMAT.format(item.netAmount + item.taxAmount)}
+          <span className="border-e border-[#c7d2e0] px-1 py-1 text-center font-bold leading-[1.35]">
+            {t("columns.quantity")}
+          </span>
+          <span className="border-e border-[#c7d2e0] px-1 py-1 text-center font-bold leading-[1.35]">
+            {t("columns.price")}
+          </span>
+          <span className="border-e border-[#c7d2e0] px-1 py-1 text-center font-bold leading-[1.35]">
+            {t("columns.vat")}
+          </span>
+          <span className="px-1 py-1 text-end font-bold leading-[1.35]">
+            {t("columns.totalWithTax")}
           </span>
         </div>
-      ))}
+        {creditNote.items.map((item, index) => (
+          <div
+            key={index}
+            className="grid border-b border-[#c7d2e0] text-[9px] last:border-b-0"
+            style={{ gridTemplateColumns: "27% 15% 18% 19% 21%" }}
+          >
+            {/* Wraps onto as many lines as the full name needs rather than an ellipsis.
+                text-right (not text-start) so a wrapped line stays pinned to the right edge, not
+                centered. */}
+            <span className="border-e border-[#c7d2e0] px-1 py-1 text-right break-words">
+              {item.productName}
+            </span>
+            <span className="border-e border-[#c7d2e0] px-1 py-1 text-center">{item.quantity}</span>
+            <span className="border-e border-[#c7d2e0] px-1 py-1 text-center">
+              {AMOUNT_FORMAT.format(item.quantity > 0 ? item.netAmount / item.quantity : 0)}
+            </span>
+            <span className="border-e border-[#c7d2e0] px-1 py-1 text-center">
+              {AMOUNT_FORMAT.format(item.taxAmount)}
+            </span>
+            <span className="px-1 py-1 text-end">
+              {AMOUNT_FORMAT.format(item.netAmount + item.taxAmount)}
+            </span>
+          </div>
+        ))}
+      </div>
 
       <div className="my-2 border-t border-dashed border-[#c7d2e0]" />
 
