@@ -98,6 +98,7 @@ export function ActivationRequestDialog({
     url.searchParams.set("application", target.category)
     url.searchParams.set("planTier", selectedTier)
     url.searchParams.set("name", target.name)
+    reset()
     onOpenChange(false)
     router.push(`${url.pathname}${url.search}`)
   }
@@ -106,6 +107,7 @@ export function ActivationRequestDialog({
     setSelectedTier("growth")
     setPaymentMethod("card")
     setFile(null)
+    setComparisonOpen(false)
   }
 
   async function handleSubmit() {
@@ -204,7 +206,10 @@ export function ActivationRequestDialog({
               variant="outline"
               className="h-12 flex-1 rounded-[10px] text-[14px] font-semibold"
               disabled={submitting || startingTrial}
-              onClick={() => onOpenChange(false)}
+              onClick={() => {
+                reset()
+                onOpenChange(false)
+              }}
             >
               {t("cancel")}
             </AppButton>

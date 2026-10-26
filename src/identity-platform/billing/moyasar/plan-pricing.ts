@@ -8,7 +8,10 @@ import type { MoyasarSelfServePlanTier } from "./types"
 // absent -- its price is "تواصل معنا" (contact us), not a fixed self-serve checkout amount, so it
 // stays on the manual subscription_activation_requests review path.
 export const MOYASAR_PLAN_TIER_AMOUNT_HALALAS: Record<MoyasarSelfServePlanTier, number> = {
-  starter: 9900,
+  // TEMPORARY: dropped to 1 SAR (100 halalas) to test the live Moyasar production checkout
+  // end-to-end -- must match plan-tiers.ts's starter.monthlyPrice or the dialog label and the
+  // actual charge diverge. Revert to 9900 once that test is confirmed working.
+  starter: 100,
   growth: 29900,
   pro: 49900,
 }

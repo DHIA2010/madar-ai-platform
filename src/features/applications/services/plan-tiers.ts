@@ -43,8 +43,10 @@ export const PLAN_TIER_META: Record<SubscriptionPlanTier, PlanTierMeta> = {
   starter: {
     tier: "starter",
     name: "Starter",
-    priceLabel: "SAR 99",
-    monthlyPrice: 99,
+    // TEMPORARY: dropped to 1 SAR to test the live Moyasar production checkout end-to-end.
+    // Revert to "SAR 99" / 99 once that test is confirmed working.
+    priceLabel: "SAR 1",
+    monthlyPrice: 1,
     billingSuffix: "شهرياً",
   },
 }

@@ -179,6 +179,7 @@ export function ApplicationsMarketplace() {
       />
 
       <ActivationRequestDialog
+        key={pendingRequest?.applicationId ?? "none"}
         target={pendingRequest}
         onOpenChange={(open) => {
           if (!open) setPendingRequest(null)
