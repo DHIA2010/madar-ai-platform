@@ -58,7 +58,13 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 // they're not core-platform-always-on either -- a brand-new organization with nothing activated
 // sees ONLY "التطبيقات" in the sidebar (the page that lets it activate its first application);
 // these six reappear together the moment any single application goes active.
-const ANY_APPLICATION: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
+const ANY_APPLICATION: ApplicationCategoryId[] = [
+  "advertising",
+  "ecommerce",
+  "pos",
+  "madarApps",
+  "procurement",
+]
 
 // The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
@@ -135,15 +141,18 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       permission: "products:view",
       applications: ["ecommerce", "pos"],
     },
-    // Same shared ecommerce/pos audience as Products. Sub-items aren't separately gated (NavItem
-    // only checks permission/applications at this top level), which is fine here since both live
-    // under the same real suppliers:view permission (see system-roles.ts).
+    // Gated on the dedicated "procurement" app (Supply & Purchase), not ecommerce/pos -- these
+    // used to ride free on either of those, but now require their own subscription (see
+    // procurement/guards.ts's requireApplicationEnabled for the real backend enforcement).
+    // Sub-items aren't separately gated (NavItem only checks permission/applications at this top
+    // level), which is fine here since both live under the same real suppliers:view permission
+    // (see system-roles.ts).
     {
       title: t("suppliers"),
       url: ROUTES.suppliers,
       icon: <Truck className="text-emerald-500" />,
       permission: "suppliers:view",
-      applications: ["ecommerce", "pos"],
+      applications: ["procurement"],
       items: [
         { title: t("suppliersList"), url: ROUTES.suppliers, icon: <List /> },
         {
@@ -160,7 +169,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       url: ROUTES.purchases,
       icon: <PackageSearch className="text-orange-500" />,
       permission: "purchases:view",
-      applications: ["ecommerce", "pos"],
+      applications: ["procurement"],
       items: [
         { title: t("purchasesList"), url: ROUTES.purchases, icon: <List /> },
         { title: t("purchasesReturns"), url: ROUTES.purchasesReturns, icon: <RotateCcw /> },

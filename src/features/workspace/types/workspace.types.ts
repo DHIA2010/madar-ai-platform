@@ -62,6 +62,7 @@ export interface OrganizationSettings {
   ecommerceEnabled?: boolean
   posEnabled?: boolean
   madarAppsEnabled?: boolean
+  procurementEnabled?: boolean
   // Set on approval of a subscription activation request -- the account-wide tier chosen at
   // request time.
   currentPlanTier?: "starter" | "growth" | "pro" | "enterprise"
@@ -76,6 +77,8 @@ export interface OrganizationSettings {
   posTrialUsed?: boolean
   madarAppsTrialEndsAt?: string
   madarAppsTrialUsed?: boolean
+  procurementTrialEndsAt?: string
+  procurementTrialUsed?: boolean
 }
 
 export interface Organization {

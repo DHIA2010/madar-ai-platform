@@ -25,6 +25,7 @@ const APPLICATION_SETTINGS_KEY: Record<CreateCheckoutIntentInput["application"],
   ecommerce: "ecommerceEnabled",
   pos: "posEnabled",
   madarApps: "madarAppsEnabled",
+  procurement: "procurementEnabled",
 }
 
 export class MoyasarBillingService {

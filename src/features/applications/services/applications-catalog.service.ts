@@ -8,6 +8,7 @@ import {
   ListChecks,
   Radio,
   ShoppingBag,
+  Truck,
   Wallet,
 } from "lucide-react"
 
@@ -32,6 +33,7 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   ecommerce: "ecommerceEnabled",
   pos: "posEnabled",
   madarApps: "madarAppsEnabled",
+  procurement: "procurementEnabled",
 }
 
 // Free 7-day trial bookkeeping -- see command-handlers.ts's startApplicationTrial (backend) for
@@ -45,6 +47,7 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   ecommerce: "ecommerceTrialEndsAt",
   pos: "posTrialEndsAt",
   madarApps: "madarAppsTrialEndsAt",
+  procurement: "procurementTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -53,6 +56,7 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     ecommerce: "ecommerceTrialUsed",
     pos: "posTrialUsed",
     madarApps: "madarAppsTrialUsed",
+    procurement: "procurementTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -93,6 +97,7 @@ export function trialDaysRemaining(
 interface ApplicationCatalogItem {
   id: string
   category: ApplicationCategoryId
+  tabCategory?: ApplicationCategoryId
   icon: LucideIcon
   accent: ApplicationAccentTheme
   pricingModel: ApplicationPricingModel
@@ -146,6 +151,26 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPriceLabel: true,
     featuresDisplay: "checklist",
     featureCount: 5,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Billed/enforced independently (own procurementEnabled flag, own real backend paywall -- see
+  // procurement/guards.ts) but shown grouped under the "تطبيقات مدار" tab for discoverability,
+  // unlike the 5 madarApps cards above/below which share one real flag. tabCategory is what makes
+  // this possible without merging its actual subscription into theirs.
+  {
+    id: "procurement",
+    category: "procurement",
+    tabCategory: "madarApps",
+    icon: Truck,
+    accent: {
+      iconWrapperClassName: "bg-[#e9fbf3] text-[#0f9d6a]",
+      primaryButtonClassName: "bg-[#0f9d6a] text-white hover:bg-[#0c8559]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 4,
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
@@ -240,6 +265,7 @@ export function buildApplicationCatalog(t: ApplicationsCatalogTranslator): Appli
   return APPLICATION_CATALOG_DATA.map((item) => ({
     id: item.id,
     category: item.category,
+    tabCategory: item.tabCategory,
     name: t(`catalog.${item.id}.name`),
     shortDescription: t(`catalog.${item.id}.shortDescription`),
     detailDescription: t(`catalog.${item.id}.detailDescription`),

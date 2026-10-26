@@ -1,6 +1,11 @@
 import type { LucideIcon } from "lucide-react"
 
-export type ApplicationCategoryId = "advertising" | "ecommerce" | "pos" | "madarApps"
+export type ApplicationCategoryId =
+  | "advertising"
+  | "ecommerce"
+  | "pos"
+  | "madarApps"
+  | "procurement"
 
 export type ApplicationPricingModel = "free" | "paid"
 
@@ -29,7 +34,15 @@ export interface ApplicationAccentTheme {
 
 export interface ApplicationDefinition {
   id: string
+  // The REAL category -- drives billing (which settings flag/checkout "application" value this
+  // card's own subscription uses), trial eligibility, and backend enforcement. Never changes for
+  // display purposes; see tabCategory for that.
   category: ApplicationCategoryId
+  // Which marketplace tab this card is FILED UNDER, when that differs from its real `category`
+  // (e.g. "procurement" is billed/enforced independently but is shown grouped under the
+  // "تطبيقات مدار" tab for discoverability). Defaults to `category` when absent -- most cards
+  // don't need this.
+  tabCategory?: ApplicationCategoryId
   name: string
   shortDescription: string
   detailDescription: string

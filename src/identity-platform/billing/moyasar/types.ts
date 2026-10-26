@@ -1,4 +1,4 @@
-export type MoyasarApplication = "advertising" | "ecommerce" | "pos" | "madarApps"
+export type MoyasarApplication = "advertising" | "ecommerce" | "pos" | "madarApps" | "procurement"
 export type MoyasarSelfServePlanTier = "starter" | "growth" | "pro"
 export type MoyasarPaymentStatus = "initiated" | "paid" | "failed"
 

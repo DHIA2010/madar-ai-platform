@@ -970,6 +970,22 @@ describe("ready reports", () => {
 
   it("computes the purchase invoices report, grouping line items per purchase", async () => {
     const { token, actor } = await signIn("owner-purchase-invoices@example.com", "PI Org")
+    // This specific ready-report is gated on the procurement app subscription (unlike vat-return
+    // above, which only surfaces a purchases total as one ingredient among several) -- see
+    // procurement/guards.ts. pg-mem's jsonb `||` operator mishandles a cast parameter, so
+    // select-merge-write instead (same pattern procurement.http.test.ts's own mergeOrgSettings
+    // uses).
+    const existingSettings = await database.query<{ settings: Record<string, unknown> }>(
+      "select settings from organizations where id = $1",
+      [actor.organizationId]
+    )
+    await database.query("update organizations set settings = $2::jsonb where id = $1", [
+      actor.organizationId,
+      JSON.stringify({
+        ...(existingSettings.rows[0]?.settings ?? {}),
+        procurementEnabled: true,
+      }),
+    ])
     const workspaceId = actor.workspaceId as string
     const productId = await seedProduct(actor.organizationId, "Widget", 0)
 

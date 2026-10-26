@@ -672,6 +672,7 @@
       "advertising": "Ad Campaigns",
       "ecommerce": "Online Stores",
       "pos": "Point of Sale",
+      "procurement": "Supply & Purchase",
       "madarApps": "Madar Apps"
     },
     "card": {
@@ -764,6 +765,19 @@
           "Manage customers and loyalty",
           "Manage branches and employees",
           "Compliant with ZATCA requirements"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "procurement": {
+        "name": "Supply & Purchase",
+        "shortDescription": "Unified management for suppliers, purchase orders, returns, and vouchers.",
+        "detailDescription": "Manages suppliers, purchase orders, purchase returns, and supplier receipt/payment vouchers, with automatic document numbering and direct ties to purchase reports.",
+        "priceLabel": "Starting from SAR 99 / month",
+        "features": [
+          "Manage suppliers and their details",
+          "Create and track purchase orders",
+          "Manage purchase returns",
+          "Supplier receipt and payment vouchers"
         ],
         "primaryCta": "Subscribe now"
       },
@@ -6377,6 +6391,7 @@
       "advertising": "Ad Campaigns",
       "ecommerce": "Online Stores",
       "pos": "Point of Sale",
+      "procurement": "Supply & Purchase",
       "madarApps": "Madar Apps"
     },
     "metricLabels": {
@@ -6434,6 +6449,9 @@
         "pos": {
           "totalSales": "What are my total completed sales this month?",
           "returnedInvoices": "How many invoices were returned?"
+        },
+        "procurement": {
+          "supplierSummary": "Give me a summary of suppliers and purchase orders"
         },
         "ecommerce": {
           "avgOrderValue": "What is the average order value this week?",

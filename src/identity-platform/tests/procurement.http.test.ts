@@ -92,7 +92,26 @@ async function signIn(email: string, orgName: string) {
     )
   }
 
+  // This file's own purpose is testing procurement CRUD behavior, not the subscription gate
+  // itself -- every signed-in org here is pre-subscribed to Supply & Purchase. The gate itself is
+  // covered by its own dedicated test below (an org that deliberately skips/undoes this step).
+  await mergeOrgSettings(actor.organizationId, { procurementEnabled: true })
+
   return { token: login.session.accessToken, actor }
+}
+
+// pg-mem's jsonb `||` concatenation operator doesn't handle a cast parameter correctly -- read,
+// merge in JS, and overwrite instead (same pattern ai-chat.test.ts's own setOrgSettingValue uses).
+async function mergeOrgSettings(organizationId: string, patch: Record<string, unknown>) {
+  const existing = await database.query<{ settings: Record<string, unknown> }>(
+    "select settings from organizations where id = $1",
+    [organizationId]
+  )
+  const merged = { ...(existing.rows[0]?.settings ?? {}), ...patch }
+  await database.query("update organizations set settings = $2::jsonb where id = $1", [
+    organizationId,
+    JSON.stringify(merged),
+  ])
 }
 
 function authHeaders(token: string) {
@@ -459,5 +478,51 @@ describe("procurement: access control", () => {
   it("refuses an unauthenticated read", async () => {
     expect((await fetch(`${baseUrl}/v1/suppliers`)).status).toBe(401)
     expect((await fetch(`${baseUrl}/v1/purchases`)).status).toBe(401)
+  })
+})
+
+describe("procurement: application-activation gate", () => {
+  it("returns 403 for every route when the organization has not subscribed to Supply & Purchase", async () => {
+    const { token, actor } = await signIn("no-subscription@example.com", "No Subscription Org")
+    // Undo the procurementEnabled:true that signIn() sets by default for every other test in this
+    // file -- this test specifically wants an org that role-permission-wise could use these
+    // routes (owner, so suppliers:view/purchases:view are both granted) but hasn't subscribed.
+    await mergeOrgSettings(actor.organizationId, { procurementEnabled: false })
+
+    expect((await createSupplier(token)).status).toBe(403)
+    expect((await fetch(`${baseUrl}/v1/suppliers`, { headers: authHeaders(token) })).status).toBe(
+      403
+    )
+    // A well-formed body (valid shape, fake-but-correctly-formatted ids) so Zod validation passes
+    // and the request actually reaches the subscription gate, rather than failing validation
+    // first for an unrelated reason.
+    expect(
+      (
+        await createPurchase(token, {
+          supplierId: randomUUID(),
+          items: [{ productId: randomUUID(), netUnitCost: 10, qty: 1, discount: 0, taxPercent: 0 }],
+        })
+      ).status
+    ).toBe(403)
+    expect((await fetch(`${baseUrl}/v1/purchases`, { headers: authHeaders(token) })).status).toBe(
+      403
+    )
+    expect(
+      (await fetch(`${baseUrl}/v1/purchase-returns`, { headers: authHeaders(token) })).status
+    ).toBe(403)
+    expect(
+      (await fetch(`${baseUrl}/v1/supplier-vouchers`, { headers: authHeaders(token) })).status
+    ).toBe(403)
+  })
+
+  it("returns 403 once an active trial lapses, even though procurementEnabled is still true", async () => {
+    const { token, actor } = await signIn("lapsed-trial@example.com", "Lapsed Trial Org")
+    await mergeOrgSettings(actor.organizationId, {
+      procurementTrialEndsAt: new Date(Date.now() - 1000).toISOString(),
+    })
+
+    expect((await fetch(`${baseUrl}/v1/suppliers`, { headers: authHeaders(token) })).status).toBe(
+      403
+    )
   })
 })

@@ -12,6 +12,7 @@ const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, string> = {
   ecommerce: "ecommerceEnabled",
   pos: "posEnabled",
   madarApps: "madarAppsEnabled",
+  procurement: "procurementEnabled",
 }
 
 // A free trial (command-handlers.ts's startApplicationTrial) sets the *Enabled flag true and

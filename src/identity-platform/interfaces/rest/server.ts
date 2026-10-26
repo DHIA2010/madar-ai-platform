@@ -55,6 +55,7 @@ import { SallaProductLinksService } from "../../products/salla-product-links-ser
 import { SallaProductPromotionService } from "../../products/salla-product-promotion-service"
 import { SallaStockPushService } from "../../products/salla-stock-push-service"
 import { ZidProductStockPushService } from "../../products/zid-product-stock-push-service"
+import { requireProcurementEnabled } from "../../procurement/guards"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { PurchasesService } from "../../procurement/purchases-service"
 import { ReturnsService } from "../../procurement/returns-service"
@@ -2411,6 +2412,13 @@ export function createIdentityApiServer(
 
           if (method === "GET" && url.pathname === "/v1/reports/ready/purchase-invoices") {
             if (!actor.modulePermissions.includes("purchases:view")) throw ERRORS.forbidden()
+            // This report is specifically purchases data (unlike vat-return/net-income above,
+            // which only surface a purchases total as one ingredient among several) -- gated on
+            // the same procurement subscription as the rest of Supply & Purchase.
+            await requireProcurementEnabled(
+              container.infrastructure.database!,
+              actor.organizationId
+            )
             return send(200, await readyReportsService.purchaseInvoices(range))
           }
 

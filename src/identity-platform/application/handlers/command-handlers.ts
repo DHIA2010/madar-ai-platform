@@ -1292,6 +1292,7 @@ export class IdentityCommandHandlers {
     ecommerce: "ecommerceEnabled",
     pos: "posEnabled",
     madarApps: "madarAppsEnabled",
+    procurement: "procurementEnabled",
   }
 
   async requestApplicationActivation(

@@ -30,7 +30,21 @@ export interface ApplicationCategoryTab {
   count: number
 }
 
-const CATEGORY_ORDER: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
+// Drives trial-availability lookups -- needs every REAL category, including "procurement" (it
+// has its own trial/enablement even though its card is filed under the "madarApps" tab, see
+// TAB_ORDER below for that distinction).
+const CATEGORY_ORDER: ApplicationCategoryId[] = [
+  "advertising",
+  "ecommerce",
+  "pos",
+  "madarApps",
+  "procurement",
+]
+
+// Drives the marketplace's own category tabs/pills -- "procurement" is deliberately absent here:
+// its card is filed under the "madarApps" tab (via ApplicationDefinition.tabCategory) rather than
+// getting a dedicated tab of its own, even though it's billed/enforced independently.
+const TAB_ORDER: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
 
 // Activating a paid application now submits a SubscriptionActivationRequestDto (tier + receipt)
 // instead of flipping organizations.settings directly -- only a Madar staff approval in the
@@ -112,11 +126,12 @@ export function useApplicationsCatalog() {
       label: t("categories.all"),
       count: searchMatchedApplications.length,
     }
-    const rest = CATEGORY_ORDER.map((category) => ({
+    const rest = TAB_ORDER.map((category) => ({
       id: category,
       label: t(`categories.${category}`),
-      count: searchMatchedApplications.filter((application) => application.category === category)
-        .length,
+      count: searchMatchedApplications.filter(
+        (application) => (application.tabCategory ?? application.category) === category
+      ).length,
     }))
     return [all, ...rest]
   }, [searchMatchedApplications, t])
@@ -126,7 +141,7 @@ export function useApplicationsCatalog() {
       return searchMatchedApplications
     }
     return searchMatchedApplications.filter(
-      (application) => application.category === activeCategory
+      (application) => (application.tabCategory ?? application.category) === activeCategory
     )
   }, [activeCategory, searchMatchedApplications])
 
@@ -190,7 +205,7 @@ export function useApplicationsCatalog() {
     }
   }
 
-  // مدار الكامل still activates all 4 instantly -- it's a distinct "buy everything" fast path
+  // مدار الكامل still activates all 5 instantly -- it's a distinct "buy everything" fast path
   // that doesn't carry its own plan-tier concept the way an individual application's request
   // does. Aligning it with the same request/approval flow is a follow-up, not part of this pass.
   async function activateAllApplications() {
@@ -203,6 +218,7 @@ export function useApplicationsCatalog() {
           ecommerceEnabled: true,
           posEnabled: true,
           madarAppsEnabled: true,
+          procurementEnabled: true,
         },
       })
     } finally {

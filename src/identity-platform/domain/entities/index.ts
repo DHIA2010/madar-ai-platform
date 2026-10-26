@@ -879,7 +879,12 @@ export class InvitationEntity {
   }
 }
 
-export type SubscriptionApplication = "advertising" | "ecommerce" | "pos" | "madarApps"
+export type SubscriptionApplication =
+  | "advertising"
+  | "ecommerce"
+  | "pos"
+  | "madarApps"
+  | "procurement"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
 
 export interface SubscriptionActivationRequestState {

@@ -3,7 +3,12 @@ import type { StructuredAnalyticsResponse } from "./response-types"
 // Redeclared locally rather than imported from the frontend's
 // applications-catalog.service.ts -- same reasoning as command-handlers.ts's own
 // APPLICATION_SETTINGS_KEY copy: backend modules must not import frontend feature code.
-export type ApplicationCategoryId = "advertising" | "ecommerce" | "pos" | "madarApps"
+export type ApplicationCategoryId =
+  | "advertising"
+  | "ecommerce"
+  | "pos"
+  | "madarApps"
+  | "procurement"
 
 export type ChatMessageRole = "user" | "assistant" | "system_notice"
 

@@ -9,7 +9,13 @@ import { useWorkspace } from "@/features/workspace"
 import { aiChatService } from "../services"
 import type { ChatMessageDto, ChatSessionDto, ChatStreamingMessageDto } from "../types"
 
-const CATEGORY_ORDER: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
+const CATEGORY_ORDER: ApplicationCategoryId[] = [
+  "advertising",
+  "ecommerce",
+  "pos",
+  "madarApps",
+  "procurement",
+]
 
 function toStreamingMessage(message: ChatMessageDto): ChatStreamingMessageDto {
   return { ...message, status: "completed" }

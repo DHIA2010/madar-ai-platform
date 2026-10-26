@@ -46,6 +46,7 @@ const SETTINGS_TEXT_KEYS = [
   "ecommerceTrialEndsAt",
   "posTrialEndsAt",
   "madarAppsTrialEndsAt",
+  "procurementTrialEndsAt",
 ] as const
 
 // Booleans get their own list rather than folding into SETTINGS_TEXT_KEYS above (a `typeof ===
@@ -71,12 +72,14 @@ const APPLICATION_BOOLEAN_KEYS = [
   "ecommerceEnabled",
   "posEnabled",
   "madarAppsEnabled",
+  "procurementEnabled",
   // Trial-used flags share the same "default false, not undefined" reasoning -- a trial being
   // available is a real boolean the activation dialog has to check, not a possibly-missing one.
   "advertisingTrialUsed",
   "ecommerceTrialUsed",
   "posTrialUsed",
   "madarAppsTrialUsed",
+  "procurementTrialUsed",
 ] as const
 
 function toOrganizationSettingsDto(
