@@ -885,6 +885,7 @@ export type SubscriptionApplication =
   | "pos"
   | "madarApps"
   | "procurement"
+  | "expenses"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
 
 export interface SubscriptionActivationRequestState {

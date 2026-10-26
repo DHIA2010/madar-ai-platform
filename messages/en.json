@@ -796,6 +796,7 @@
         "name": "Expenses",
         "shortDescription": "Track and categorize your business expenses easily in one place.",
         "detailDescription": "Record your operating expenses and categorize them by category or branch, and continuously track your business's cash flow with ready-made expense reports to help you make better financial decisions.",
+        "priceLabel": "Starting from SAR 99 / month",
         "features": [
           "Record and categorize expenses",
           "Link expenses to branches and categories",
@@ -6392,6 +6393,7 @@
       "ecommerce": "Online Stores",
       "pos": "Point of Sale",
       "procurement": "Supply & Purchase",
+      "expenses": "Expenses",
       "madarApps": "Madar Apps"
     },
     "metricLabels": {
@@ -6452,6 +6454,9 @@
         },
         "procurement": {
           "supplierSummary": "Give me a summary of suppliers and purchase orders"
+        },
+        "expenses": {
+          "topCategories": "What are the top expense categories this month?"
         },
         "ecommerce": {
           "avgOrderValue": "What is the average order value this week?",

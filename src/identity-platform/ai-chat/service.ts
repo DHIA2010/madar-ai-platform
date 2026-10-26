@@ -41,6 +41,7 @@ const CATEGORY_LABEL: Record<ApplicationCategoryId, string> = {
   pos: "نقطة البيع",
   madarApps: "تطبيقات مدار (التقارير)",
   procurement: "الموردون والمشتريات",
+  expenses: "المصروفات",
 }
 
 // The model is never told "today" otherwise -- without this, a relative date like "هذا الشهر"

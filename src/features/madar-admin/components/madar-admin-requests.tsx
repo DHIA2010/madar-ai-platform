@@ -42,6 +42,7 @@ const APPLICATION_LABEL: Record<SubscriptionApplication, string> = {
   pos: "نقطة البيع",
   madarApps: "تطبيقات مدار",
   procurement: "الموردون والمشتريات",
+  expenses: "المصروفات",
 }
 
 const STATUS_META: Record<SubscriptionRequestStatus, { label: string; className: string }> = {

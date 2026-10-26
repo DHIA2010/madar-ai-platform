@@ -15,6 +15,7 @@ const CATEGORY_ORDER: ApplicationCategoryId[] = [
   "pos",
   "madarApps",
   "procurement",
+  "expenses",
 ]
 
 function toStreamingMessage(message: ChatMessageDto): ChatStreamingMessageDto {

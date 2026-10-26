@@ -6,6 +6,7 @@ export type ApplicationCategoryId =
   | "pos"
   | "madarApps"
   | "procurement"
+  | "expenses"
 
 export type ApplicationPricingModel = "free" | "paid"
 

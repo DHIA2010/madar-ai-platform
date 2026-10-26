@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 export const createCheckoutIntentSchema = z.object({
-  application: z.enum(["advertising", "ecommerce", "pos", "madarApps", "procurement"]),
+  application: z.enum(["advertising", "ecommerce", "pos", "madarApps", "procurement", "expenses"]),
   planTier: z.enum(["starter", "growth", "pro"]),
 })
 

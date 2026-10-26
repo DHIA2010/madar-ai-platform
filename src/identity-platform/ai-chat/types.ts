@@ -9,6 +9,7 @@ export type ApplicationCategoryId =
   | "pos"
   | "madarApps"
   | "procurement"
+  | "expenses"
 
 export type ChatMessageRole = "user" | "assistant" | "system_notice"
 

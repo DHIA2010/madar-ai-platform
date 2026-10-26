@@ -3,7 +3,13 @@
 // reach into each other's internals, and reports/ is the lower-level data layer, so it must not
 // depend on ai-chat/ at all. Defined here (not in catalog.ts, which imports from this file) to
 // avoid a circular import between the two.
-export type CatalogApplication = "advertising" | "ecommerce" | "pos" | "madarApps" | "procurement"
+export type CatalogApplication =
+  | "advertising"
+  | "ecommerce"
+  | "pos"
+  | "madarApps"
+  | "procurement"
+  | "expenses"
 
 export type ReportAggregation = "sum" | "avg" | "count" | "min" | "max"
 export type ReportTimeGrouping = "day" | "week" | "month" | "quarter" | "year" | "none"

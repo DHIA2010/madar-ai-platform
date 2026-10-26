@@ -34,6 +34,7 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   pos: "posEnabled",
   madarApps: "madarAppsEnabled",
   procurement: "procurementEnabled",
+  expenses: "expensesEnabled",
 }
 
 // Free 7-day trial bookkeeping -- see command-handlers.ts's startApplicationTrial (backend) for
@@ -48,6 +49,7 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   pos: "posTrialEndsAt",
   madarApps: "madarAppsTrialEndsAt",
   procurement: "procurementTrialEndsAt",
+  expenses: "expensesTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -57,6 +59,7 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     pos: "posTrialUsed",
     madarApps: "madarAppsTrialUsed",
     procurement: "procurementTrialUsed",
+    expenses: "expensesTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -194,16 +197,25 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
+  // Billed/enforced independently (own expensesEnabled flag, own real backend paywall -- see
+  // expenses/guards.ts) but shown grouped under the "تطبيقات مدار" tab for discoverability, same
+  // tabCategory mechanism procurement/"Supply & Purchase" uses -- not a shared-flag card like the
+  // other 4 madarApps siblings.
   {
     id: "madar-apps-expenses",
-    category: "madarApps",
+    category: "expenses",
+    tabCategory: "madarApps",
     icon: Wallet,
+    // Its own distinct accent (not the shared gray/navy the still-decorative madarApps siblings
+    // use) -- same red/rose tone already used for Expenses in the sidebar nav
+    // (app-sidebar.tsx's <Wallet className="text-red-500" />) and the AI assistant's category
+    // icon, now that this card is independently billed like procurement.
     accent: {
-      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
-      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
+      iconWrapperClassName: "bg-[#fef2f2] text-[#dc2626]",
+      primaryButtonClassName: "bg-[#dc2626] text-white hover:bg-[#b91c1c]",
     },
     pricingModel: "paid",
-    hasPriceLabel: false,
+    hasPriceLabel: true,
     featuresDisplay: "checklist",
     featureCount: 3,
     hasPrimaryCta: true,

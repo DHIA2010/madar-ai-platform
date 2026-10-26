@@ -5,6 +5,7 @@
 // permission gating.
 
 import type { AddressInfo } from "node:net"
+import { randomUUID } from "node:crypto"
 
 import { newDb } from "pg-mem"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -91,7 +92,27 @@ async function signIn(email: string, orgName: string) {
     )
   }
 
+  // This file's own purpose is testing expenses CRUD behavior, not the subscription gate itself
+  // -- every signed-in org here is pre-subscribed to Expenses. The gate itself is covered by its
+  // own dedicated test below (an org that deliberately undoes this step).
+  await mergeOrgSettings(actor.organizationId, { expensesEnabled: true })
+
   return { token: login.session.accessToken, actor }
+}
+
+// pg-mem's jsonb `||` concatenation operator doesn't handle a cast parameter correctly -- read,
+// merge in JS, and overwrite instead (same pattern procurement.http.test.ts's own
+// mergeOrgSettings uses).
+async function mergeOrgSettings(organizationId: string, patch: Record<string, unknown>) {
+  const existing = await database.query<{ settings: Record<string, unknown> }>(
+    "select settings from organizations where id = $1",
+    [organizationId]
+  )
+  const merged = { ...(existing.rows[0]?.settings ?? {}), ...patch }
+  await database.query("update organizations set settings = $2::jsonb where id = $1", [
+    organizationId,
+    JSON.stringify(merged),
+  ])
 }
 
 function authHeaders(token: string) {
@@ -275,4 +296,33 @@ describe("expenses", () => {
   // shape already used by every other procurement route (suppliers/purchases), which has no
   // dedicated permission test either -- covered by code review + the live-stack verification in
   // the plan's own verification section instead.
+})
+
+describe("expenses: application-activation gate", () => {
+  it("returns 403 for every route when the organization has not subscribed to Expenses", async () => {
+    const { token, actor } = await signIn("no-subscription@example.com", "No Subscription Org")
+    // Undo the expensesEnabled:true that signIn() sets by default for every other test in this
+    // file -- this test specifically wants an org that role-permission-wise could use these
+    // routes (owner, so expenses:view/expenses:manage are both granted) but hasn't subscribed.
+    await mergeOrgSettings(actor.organizationId, { expensesEnabled: false })
+
+    expect((await listCategories(token)).status).toBe(403)
+    expect((await createCategory(token, "اشتراكات برمجية")).status).toBe(403)
+    // A well-formed body (valid shape, fake-but-correctly-formatted categoryId) so Zod validation
+    // passes and the request actually reaches the subscription gate, rather than failing
+    // validation first for an unrelated reason.
+    expect(
+      (await createExpense(token, actor.workspaceId as string, { categoryId: randomUUID() })).status
+    ).toBe(403)
+    expect((await listExpenses(token)).status).toBe(403)
+  })
+
+  it("returns 403 once an active trial lapses, even though expensesEnabled is still true", async () => {
+    const { token, actor } = await signIn("lapsed-trial@example.com", "Lapsed Trial Org")
+    await mergeOrgSettings(actor.organizationId, {
+      expensesTrialEndsAt: new Date(Date.now() - 1000).toISOString(),
+    })
+
+    expect((await listExpenses(token)).status).toBe(403)
+  })
 })

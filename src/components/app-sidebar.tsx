@@ -64,6 +64,7 @@ const ANY_APPLICATION: ApplicationCategoryId[] = [
   "pos",
   "madarApps",
   "procurement",
+  "expenses",
 ]
 
 // The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
@@ -175,15 +176,17 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
         { title: t("purchasesReturns"), url: ROUTES.purchasesReturns, icon: <RotateCcw /> },
       ],
     },
-    // Same sub-items convention as Suppliers/Purchases above. "Add Expense" is reached from
-    // each list page's own button, not the nav -- this first pass only ships Overview + the
-    // expenses list (see src/features/expenses).
+    // Gated on the dedicated "expenses" app, not ecommerce/pos -- used to ride free on either of
+    // those, but now requires its own subscription (see expenses/guards.ts's
+    // requireExpensesEnabled for the real backend enforcement), same move procurement got. "Add
+    // Expense" is reached from each list page's own button, not the nav -- this first pass only
+    // ships Overview + the expenses list (see src/features/expenses).
     {
       title: t("expenses"),
       url: ROUTES.expenses,
       icon: <Wallet className="text-red-500" />,
       permission: "expenses:view",
-      applications: ["ecommerce", "pos"],
+      applications: ["expenses"],
       items: [
         { title: t("expensesOverview"), url: ROUTES.expenses, icon: <Gauge /> },
         { title: t("expensesList"), url: ROUTES.expensesList, icon: <List /> },

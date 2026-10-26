@@ -22,6 +22,7 @@ import {
   Target,
   TrendingUp,
   Truck,
+  Wallet,
   type LucideIcon,
 } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
@@ -601,6 +602,7 @@ const CATEGORY_ICON: Record<ApplicationCategoryId, { icon: LucideIcon; tint: str
   pos: { icon: CreditCard, tint: "bg-emerald-50 text-emerald-600" },
   madarApps: { icon: LayoutGrid, tint: "bg-amber-50 text-amber-600" },
   procurement: { icon: Truck, tint: "bg-teal-50 text-teal-700" },
+  expenses: { icon: Wallet, tint: "bg-rose-50 text-rose-600" },
 }
 
 const SUGGESTED_QUESTION_CONFIG: Record<
@@ -622,6 +624,7 @@ const SUGGESTED_QUESTION_CONFIG: Record<
   ],
   madarApps: [{ key: "kpiSummary", icon: FileText }],
   procurement: [{ key: "supplierSummary", icon: Truck }],
+  expenses: [{ key: "topCategories", icon: Wallet }],
 }
 
 function RecommendationCard({ item }: { item: Recommendation }) {
