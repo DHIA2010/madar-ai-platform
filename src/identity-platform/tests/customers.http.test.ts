@@ -348,6 +348,49 @@ describe("GET /v1/customers: real customer aggregation with order stats", () => 
     expect(body.items[0]).toMatchObject({ status: "new", segment: "New", totalOrders: 0 })
   })
 
+  it("reads a Zid customer's phone from either `mobile` (sync) or `telephone` (webhook)", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "customers-zid-phone@madar.test",
+      "Customers Zid Phone Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000001640"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Customers Zid Phone",
+    })
+    const connectionId = randomUUID()
+    await database.query(
+      `insert into zid_oauth_connections (
+         id, organization_id, workspace_id, project_id, status,
+         created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1, $2, $3, $4, 'connected', $5, $5, now(), now())`,
+      [connectionId, actor.organizationId, workspaceId, randomUUID(), actor.userId]
+    )
+    const insertZidCustomer = (entityId: string, payload: Record<string, unknown>) =>
+      database.query(
+        `insert into zid_records (
+           id, connection_id, customer_id, entity_type, entity_id, record_date, payload, created_at, updated_at
+         ) values ($1, $2, 'store-1', 'customers', $3, now()::date, $4::jsonb, now(), now())`,
+        [randomUUID(), connectionId, entityId, JSON.stringify(payload)]
+      )
+    // The two real shapes, both confirmed on stage: the customers list a sync pulls, and a
+    // customer.create/update webhook body.
+    await insertZidCustomer("1", { id: 1, name: "Synced", email: "a@x.sa", mobile: "966500000001" })
+    await insertZidCustomer("2", {
+      id: 2,
+      name: "Webhook",
+      email: "b@x.sa",
+      telephone: "966500000002",
+    })
+
+    const response = await fetch(`${baseUrl}/v1/customers`, { headers: authHeaders(login) })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { items: Array<{ name: string; phone: string | null }> }
+    const phones = Object.fromEntries(body.items.map((item) => [item.name, item.phone]))
+    expect(phones).toEqual({ Synced: "966500000001", Webhook: "966500000002" })
+  })
+
   it("returns 404 for an unknown customer id", async () => {
     const { login } = await registerAndProvisionOrg("customers-404@madar.test", "Customers 404 Org")
     const response = await fetch(`${baseUrl}/v1/customers/salla:does-not-exist`, {

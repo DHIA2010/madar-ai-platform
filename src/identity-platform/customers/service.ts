@@ -243,6 +243,9 @@ function normalizeZidCustomer(row: CustomerRecordRow): CustomerSummary {
     name?: string
     email?: string
     mobile?: string
+    // A customer.* webhook body carries the phone as `telephone` (confirmed on stage), while the
+    // customers list a sync pulls calls it `mobile` -- a webhook-written row has only the former.
+    telephone?: string
     created_at?: string
   }
 
@@ -255,7 +258,7 @@ function normalizeZidCustomer(row: CustomerRecordRow): CustomerSummary {
     id: `zid:${row.entity_id}`,
     name: payload.name || "Unnamed customer",
     email: payload.email ?? "",
-    phone: payload.mobile ?? null,
+    phone: payload.mobile || payload.telephone || null,
     platform: "Zid",
     createdAt,
     totalOrders,
