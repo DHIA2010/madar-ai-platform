@@ -95,6 +95,16 @@ import {
 import { resolveMembershipModulePermissions } from "../../domain/domain-services/module-permission-service"
 import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 import { issueSessionForMember } from "../session-issuer"
+import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../../billing/moyasar/plan-pricing"
+import { activatePaid, startTrial } from "../../subscriptions/lifecycle"
+
+// Approving/rejecting a request someone already reviewed (two staff at once, or a double click)
+// is a 409, not the 500 the entity's own plain Error used to surface as.
+const subscriptionRequestAlreadyReviewed = () =>
+  ERRORS.conflict(
+    "SUBSCRIPTION_REQUEST_ALREADY_REVIEWED",
+    "This subscription request has already been reviewed."
+  )
 
 export interface IdentityCommandHandlerDependencies {
   config: IdentityPlatformConfig
@@ -1368,6 +1378,7 @@ export class IdentityCommandHandlers {
       throw ERRORS.notFound("SubscriptionActivationRequest")
     }
     const request = SubscriptionActivationRequestEntity.rehydrate(requestState)
+    if (request.status !== "pending") throw subscriptionRequestAlreadyReviewed()
     const now = this.now
     request.approve(actor.userId, now)
     await this.deps.repositories.subscriptionActivationRequests.save(request.toState())
@@ -1394,6 +1405,31 @@ export class IdentityCommandHandlers {
       now
     )
     await this.deps.repositories.organizations.save(organization.toState())
+
+    // A bank-transfer approval buys one monthly period of the requested tier (the only billing
+    // period requests carry today), at the tier's listed price when it has one.
+    const subscriptions = this.deps.repositories.organizationSubscriptions
+    await subscriptions.save(
+      activatePaid(
+        await subscriptions.findByOrganizationAndApplication(
+          request.organizationId,
+          request.application
+        ),
+        {
+          id: this.deps.uuid.generate(),
+          organizationId: request.organizationId,
+          application: request.application,
+          planTier: request.planTier,
+          interval: "monthly",
+          priceHalalas:
+            request.planTier === "enterprise"
+              ? null
+              : (MOYASAR_PLAN_TIER_AMOUNT_HALALAS[request.planTier] ?? null),
+          source: "bank_transfer",
+          now,
+        }
+      )
+    )
 
     await this.audit(
       "subscription_request.approved",
@@ -1431,6 +1467,7 @@ export class IdentityCommandHandlers {
       throw ERRORS.notFound("SubscriptionActivationRequest")
     }
     const request = SubscriptionActivationRequestEntity.rehydrate(requestState)
+    if (request.status !== "pending") throw subscriptionRequestAlreadyReviewed()
     request.reject(actor.userId, command.reason, this.now)
     await this.deps.repositories.subscriptionActivationRequests.save(request.toState())
 
@@ -1501,6 +1538,20 @@ export class IdentityCommandHandlers {
       now
     )
     await this.deps.repositories.organizations.save(organization.toState())
+
+    const subscriptions = this.deps.repositories.organizationSubscriptions
+    await subscriptions.save(
+      startTrial(
+        await subscriptions.findByOrganizationAndApplication(organizationId, command.application),
+        {
+          id: this.deps.uuid.generate(),
+          organizationId,
+          application: command.application,
+          trialEndsAt,
+          now,
+        }
+      )
+    )
 
     await this.audit(
       "application_trial.started",

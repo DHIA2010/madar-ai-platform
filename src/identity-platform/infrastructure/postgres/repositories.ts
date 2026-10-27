@@ -34,6 +34,7 @@ import type {
   WorkspaceState,
 } from "../../domain/entities"
 import { PostgresDatabase } from "./database"
+import { PostgresOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 function mapUser(row: Record<string, unknown>): UserState {
   const toIsoString = (value: unknown): string | null => {
@@ -1327,6 +1328,7 @@ export function createPostgresRepositories(input: {
     passwordResets: new PostgresPasswordResetRepository(input.db),
     invitations: new PostgresInvitationRepository(input.db, input.tokenService),
     subscriptionActivationRequests: new PostgresSubscriptionActivationRequestRepository(input.db),
+    organizationSubscriptions: new PostgresOrganizationSubscriptionRepository(input.db),
     auditLogs: new PostgresAuditLogRepository(input.db),
     teams: new PostgresTeamRepository(input.db),
     customRoles: new PostgresCustomRoleRepository(input.db),

@@ -17,6 +17,8 @@ import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
 import { parseJsonPreservingBigInts } from "../../salla-oauth/parse-json-preserving-big-ints"
+import { PlatformAdminService } from "../../platform-admin/service"
+import { handlePlatformAdminRoute } from "./platform-admin-routes"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
 import { SallaOAuthService } from "../../salla-oauth/service"
 import { resolveSallaWebhookCredentials } from "../../salla-oauth/salla-credentials"
@@ -646,6 +648,9 @@ export function createIdentityApiServer(
         container.infrastructure.database,
         new MoyasarBillingRepository(container.infrastructure.database)
       )
+    : null
+  const platformAdminService = container.infrastructure.database
+    ? new PlatformAdminService(container.infrastructure.database)
     : null
   const posDevicesService = container.infrastructure.database
     ? new PosDevicesService(container.infrastructure.database)
@@ -1792,6 +1797,16 @@ export function createIdentityApiServer(
       }
 
       const actor = await container.commands.resolveActorFromAccessToken(token)
+
+      const handledByPlatformAdmin = await handlePlatformAdminRoute({
+        method,
+        url,
+        actor,
+        service: platformAdminService,
+        send,
+        readJsonBody: () => readJsonBody(request),
+      })
+      if (handledByPlatformAdmin) return
 
       const zidInstallClaimMatch = url.pathname.match(
         /^\/v1\/integrations\/zid\/install\/([^/]+)\/claim$/

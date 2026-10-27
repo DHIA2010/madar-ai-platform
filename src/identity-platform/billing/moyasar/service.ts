@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto"
+
 import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { ERRORS } from "../../application/errors/IdentityError"
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { writeAuditLog } from "../../infrastructure/postgres/audit-log-writer"
+import { activatePaid } from "../../subscriptions/lifecycle"
+import { PostgresOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 import { MoyasarApiClient } from "./client"
 import { resolveMoyasarCredentials } from "./credentials"
@@ -150,6 +154,28 @@ export class MoyasarBillingService {
           // resolveApplicationStatus.
           [`${payment.application}TrialEndsAt`]: "",
         })
+
+        // One monthly period per checkout (the only period checkout sells today), at the amount
+        // actually charged.
+        const subscriptions = new PostgresOrganizationSubscriptionRepository(this.db)
+        await subscriptions.save(
+          activatePaid(
+            await subscriptions.findByOrganizationAndApplication(
+              payment.organizationId,
+              payment.application
+            ),
+            {
+              id: randomUUID(),
+              organizationId: payment.organizationId,
+              application: payment.application,
+              planTier: payment.planTier,
+              interval: "monthly",
+              priceHalalas: payment.amount,
+              source: "payment",
+              now: new Date().toISOString(),
+            }
+          )
+        )
 
         await writeAuditLog(this.db, {
           action: "billing.moyasar_payment_confirmed",

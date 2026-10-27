@@ -13,6 +13,7 @@ import type {
   UserState,
   WorkspaceState,
 } from "../entities"
+import type { OrganizationSubscriptionRepository } from "../../subscriptions/types"
 
 export interface UserRepository {
   findById(id: string): Promise<UserState | null>
@@ -168,6 +169,7 @@ export interface IdentityRepositories {
   passwordResets: PasswordResetRepository
   invitations: InvitationRepository
   subscriptionActivationRequests: SubscriptionActivationRequestRepository
+  organizationSubscriptions: OrganizationSubscriptionRepository
   auditLogs: AuditLogRepository
   teams: TeamRepository
   customRoles: CustomRoleRepository

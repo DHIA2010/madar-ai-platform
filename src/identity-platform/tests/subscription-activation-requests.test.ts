@@ -100,6 +100,19 @@ describe("subscription activation requests", () => {
     )
     expect(approved.status).toBe("approved")
 
+    // A second review of the same request (another staff member, a double click) is a clean 409.
+    await expect(
+      container.commands.approveSubscriptionActivationRequest(staff.actor, request.id, context)
+    ).rejects.toMatchObject({ code: "SUBSCRIPTION_REQUEST_ALREADY_REVIEWED", status: 409 })
+    await expect(
+      container.commands.rejectSubscriptionActivationRequest(
+        staff.actor,
+        request.id,
+        { reason: "too late" },
+        context
+      )
+    ).rejects.toMatchObject({ code: "SUBSCRIPTION_REQUEST_ALREADY_REVIEWED", status: 409 })
+
     const organization = await container.queries.getOrganization(customer.actor, organizationId)
     expect(organization.settings.ecommerceEnabled).toBe(true)
     expect(organization.settings.currentPlanTier).toBe("growth")

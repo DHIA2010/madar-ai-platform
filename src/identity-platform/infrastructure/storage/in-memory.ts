@@ -34,6 +34,7 @@ import type {
   UserState,
   WorkspaceState,
 } from "../../domain/entities"
+import { InMemoryOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 export interface InMemoryIdentityDataStore {
   users: Map<string, UserState>
@@ -506,6 +507,7 @@ export function createInMemoryRepositories(
     passwordResets: new InMemoryPasswordResetRepository(store),
     invitations: new InMemoryInvitationRepository(store),
     subscriptionActivationRequests: new InMemorySubscriptionActivationRequestRepository(store),
+    organizationSubscriptions: new InMemoryOrganizationSubscriptionRepository(),
     auditLogs: new InMemoryAuditLogRepository(store),
     teams: new InMemoryTeamRepository(store),
     customRoles: new InMemoryCustomRoleRepository(store),
