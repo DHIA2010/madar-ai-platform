@@ -10,7 +10,7 @@ import { ROUTES } from "@/constants/routes"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { NavMain } from "@/components/nav-main"
 import { SettingsHelpCard } from "@/components/settings-help-card"
-import { APPLICATION_SETTINGS_KEY, type ApplicationCategoryId } from "@/features/applications"
+import { getActiveApplications, type ApplicationCategoryId } from "@/features/applications"
 import { usePermissions } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 import {
@@ -75,12 +75,11 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const { can } = usePermissions()
   const { currentOrganization } = useWorkspace()
 
-  // Which of the 4 applications (see src/features/applications) this organization has activated
-  // -- a brand-new org has none active, so only "التطبيقات" (the one item with no `applications`
-  // gate at all) shows until something is activated from /marketplace.
-  const activeApplications = (
-    Object.keys(APPLICATION_SETTINGS_KEY) as ApplicationCategoryId[]
-  ).filter((app) => Boolean(currentOrganization?.settings?.[APPLICATION_SETTINGS_KEY[app]]))
+  // Which applications (see src/features/applications) this organization has activated -- a
+  // brand-new org has none active, so only "التطبيقات" (the one item with no `applications` gate
+  // at all) shows until something is activated from /marketplace. Shared with HomeTabs.tsx's own
+  // tab-filtering rather than each re-deriving this independently.
+  const activeApplications = getActiveApplications(currentOrganization?.settings)
 
   const navMain = [
     {
@@ -89,7 +88,9 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       icon: <House className="text-blue-500" />,
       isActive: true,
       permission: "dashboard:view",
-      applications: ANY_APPLICATION,
+      // Home's tabs (HomeTabs.tsx) are all pos/advertising/ecommerce analytics -- an org with only
+      // procurement/expenses/ai/etc. would just be redirected to the marketplace from there.
+      applications: ["pos", "advertising", "ecommerce"],
     },
     // No permission key and no `applications` gate: unlike every other item here, this is the ONE
     // item that must always be reachable, since it's the page a brand-new organization (with
@@ -239,14 +240,20 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       url: "/ai",
       icon: <Gauge className="text-violet-600" />,
       permission: "ai:view",
-      applications: ANY_APPLICATION,
+      // Its own independent subscription now (see ai-chat/app-guard.ts), not unlocked by any
+      // other active app the way it used to ride on ANY_APPLICATION -- a user with only POS or
+      // only Supply & Purchase active must separately subscribe to AI to see this at all.
+      applications: ["ai"],
     },
     {
       title: t("integrations"),
       url: "/integrations",
       icon: <LayoutGrid className="text-blue-500" />,
       permission: "connections:view",
-      applications: ANY_APPLICATION,
+      // Only the apps that actually connect to external platforms (ecommerce stores, ad
+      // platforms) -- not pos/procurement/expenses/madarApps/ai. The page itself further filters
+      // its connectors down to whichever of these two is active.
+      applications: ["ecommerce", "advertising"],
     },
     {
       title: t("administration"),

@@ -35,7 +35,12 @@ vi.mock("../hooks", () => ({
 }))
 
 vi.mock("@/features/workspace", () => ({
-  useWorkspace: () => ({ availableWorkspaces: [], currentWorkspace: null }),
+  // Both connector-bearing applications active, so every category's connections are listed.
+  useWorkspace: () => ({
+    availableWorkspaces: [],
+    currentWorkspace: null,
+    currentOrganization: { settings: { advertisingEnabled: true, ecommerceEnabled: true } },
+  }),
 }))
 
 vi.mock("@/features/authentication", () => ({

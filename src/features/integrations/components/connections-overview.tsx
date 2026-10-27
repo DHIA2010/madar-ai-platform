@@ -31,6 +31,7 @@ import {
   RelativeTime,
 } from "@/components/app"
 
+import { type ApplicationCategoryId, getActiveApplications } from "@/features/applications"
 import { Can } from "@/features/authentication"
 import { useWorkspace } from "@/features/workspace"
 
@@ -59,6 +60,16 @@ const CATEGORY_PLATFORM_MAP: Record<string, string[]> = {
   Ecommerce: ["Salla", "Zid", "Shopify", "WooCommerce"],
   CRM: ["HubSpot", "Salesforce", "Pipedrive"],
   Analytics: ["Google Analytics 4", "PostHog", "Mixpanel"],
+}
+
+// Which activated application each category belongs to -- a category (and its connections) only
+// shows once its application is active. Analytics (store traffic, e.g. GA4 feeding Live Visitors)
+// rides with ecommerce; CRM has no application and no real connectors, so it never shows.
+const CATEGORY_APPLICATION: Record<string, ApplicationCategoryId | null> = {
+  "Marketing Platforms": "advertising",
+  Ecommerce: "ecommerce",
+  CRM: null,
+  Analytics: "ecommerce",
 }
 
 // Display label only -- the keys above (used for the AppSelect value, CATEGORY_PLATFORM_MAP
@@ -127,12 +138,14 @@ function connectionStatusMeta(status: string, t: IntegrationsTranslator) {
   }
 }
 
-function getCategoryPlatformOptions(category: string, platforms: string[]) {
-  if (category === "All") {
-    return platforms
-  }
-
-  const allowedPlatforms = CATEGORY_PLATFORM_MAP[category] ?? []
+function getCategoryPlatformOptions(
+  category: string,
+  platforms: string[],
+  visibleCategories: string[]
+) {
+  const allowedPlatforms = (category === "All" ? visibleCategories : [category]).flatMap(
+    (key) => CATEGORY_PLATFORM_MAP[key] ?? []
+  )
   return platforms.filter((platform) => allowedPlatforms.includes(platform))
 }
 
@@ -172,7 +185,7 @@ export function ConnectionsOverview() {
   const locale = useLocale() as Locale
   const dir = localeDirection(locale)
   const router = useRouter()
-  const { availableWorkspaces, currentWorkspace } = useWorkspace()
+  const { availableWorkspaces, currentWorkspace, currentOrganization } = useWorkspace()
   const isCurrentWorkspaceArchived = currentWorkspace?.status === "archived"
   const {
     isLoading,
@@ -231,15 +244,26 @@ export function ConnectionsOverview() {
     "disconnected",
     "error",
   ]
-  const categoryOptions = CATEGORY_OPTIONS
+  // Joined into a string so the memos below don't re-run on every render --
+  // getActiveApplications returns a fresh array each call.
+  const activeApplicationsKey = getActiveApplications(currentOrganization?.settings).join(",")
+  const visibleCategories = useMemo(() => {
+    const active = activeApplicationsKey.split(",")
+    return CATEGORY_OPTIONS.filter((option) => {
+      if (option === "All") return false
+      const application = CATEGORY_APPLICATION[option]
+      return application !== null && application !== undefined && active.includes(application)
+    })
+  }, [activeApplicationsKey])
+  const categoryOptions = ["All", ...visibleCategories]
+  // A category hidden because its application was deactivated falls back to "All".
+  const effectiveCategory = categoryOptions.includes(activeCategory) ? activeCategory : "All"
   const categoryFilteredRecords = useMemo(() => {
-    if (activeCategory === "All") {
-      return filteredRecords
-    }
-
-    const allowedPlatforms = CATEGORY_PLATFORM_MAP[activeCategory] ?? []
+    const allowedPlatforms = (
+      effectiveCategory === "All" ? visibleCategories : [effectiveCategory]
+    ).flatMap((key) => CATEGORY_PLATFORM_MAP[key] ?? [])
     return filteredRecords.filter((record) => allowedPlatforms.includes(record.platformName))
-  }, [activeCategory, filteredRecords])
+  }, [effectiveCategory, visibleCategories, filteredRecords])
 
   const emptyState = getEmptyState(
     categoryFilteredRecords.length,
@@ -565,10 +589,14 @@ export function ConnectionsOverview() {
 
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <AppSelect
-              value={activeCategory}
+              value={effectiveCategory}
               onValueChange={(value) => {
                 setActiveCategory(value)
-                const nextPlatforms = getCategoryPlatformOptions(value, availableFilters.platforms)
+                const nextPlatforms = getCategoryPlatformOptions(
+                  value,
+                  availableFilters.platforms,
+                  visibleCategories
+                )
                 if (filters.platform !== "all" && !nextPlatforms.includes(filters.platform)) {
                   updateFilters({ platform: "all" })
                 }

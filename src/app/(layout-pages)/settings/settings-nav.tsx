@@ -23,6 +23,8 @@ import Link from "next/link"
 import { useTranslations } from "next-intl"
 
 import { ROUTES } from "@/constants/routes"
+import { getActiveApplications, type ApplicationCategoryId } from "@/features/applications"
+import { useWorkspace } from "@/features/workspace"
 import { cn } from "@/lib/utils"
 
 interface SettingsSection {
@@ -30,16 +32,18 @@ interface SettingsSection {
   href?: string
   // Whether this section has no destination yet. When true, it's shown disabled with a reason.
   pending?: boolean
+  // Same gate as the main sidebar's items: shown only when one of these applications is active.
+  applications?: ApplicationCategoryId[]
 }
 
 const SECTIONS: SettingsSection[] = [
   { key: "general", href: ROUTES.settings },
-  { key: "devices", href: ROUTES.settingsDevices },
-  { key: "cashier", href: ROUTES.settingsCashier },
+  { key: "devices", href: ROUTES.settingsDevices, applications: ["pos"] },
+  { key: "cashier", href: ROUTES.settingsCashier, applications: ["pos"] },
   { key: "workspaces", href: ROUTES.settingsWorkspaces },
   { key: "payments", href: ROUTES.settingsPayments },
   { key: "tax", href: ROUTES.settingsTaxes },
-  { key: "zatca", href: ROUTES.settingsZatca },
+  { key: "zatca", href: ROUTES.settingsZatca, applications: ["pos"] },
   { key: "backup", pending: true },
 ]
 
@@ -51,11 +55,18 @@ const ROW_BASE = "relative block w-full rounded-[11px] px-3.5 py-[11px] text-rig
 export function SettingsNav() {
   const t = useTranslations("settings.nav")
   const pathname = usePathname()
+  const { currentOrganization } = useWorkspace()
+  const activeApplications = getActiveApplications(currentOrganization?.settings)
+  const sections = SECTIONS.filter(
+    (section) =>
+      !section.applications || section.applications.some((app) => activeApplications.includes(app))
+  )
 
   // Longest match wins, so /settings/devices does not also light up /settings. The same rule the
   // sidebar uses for its own nested sections.
   const activeHref =
-    SECTIONS.map((section) => section.href)
+    sections
+      .map((section) => section.href)
       .filter((href): href is string => Boolean(href))
       .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
       .sort((left, right) => right.length - left.length)[0] ?? null
@@ -65,7 +76,7 @@ export function SettingsNav() {
       <h2 className="mb-2.5 px-2 text-[13px] font-bold text-[#8098b4]">{t("heading")}</h2>
 
       <ul className="flex flex-col gap-1">
-        {SECTIONS.map((section) => {
+        {sections.map((section) => {
           const active = Boolean(section.href) && section.href === activeHref
           const label = t(`sections.${section.key}`)
 

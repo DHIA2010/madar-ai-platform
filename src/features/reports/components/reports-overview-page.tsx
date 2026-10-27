@@ -41,7 +41,9 @@ import {
   AppSelectValue,
 } from "@/components/app"
 
+import { type ApplicationCategoryId, getActiveApplications } from "@/features/applications"
 import { Can } from "@/features/authentication"
+import { useWorkspace } from "@/features/workspace"
 
 import { type CustomReport, reportService } from "../services"
 
@@ -149,12 +151,32 @@ function categoryLabel(category: string, t: KpiTranslator): string {
   return t("categories.other")
 }
 
+// The seeded system ("is_system") ready reports are KPI-engine reports, each built on one
+// REPORT_CATALOG data source -- this mirrors that catalog's own `application` per category
+// (src/identity-platform/reports/catalog.ts), so each shows only once its data's app is active.
+const SYSTEM_REPORT_CATEGORY_APPLICATIONS: Record<string, ApplicationCategoryId[]> = {
+  sales: ["pos"],
+  products: ["pos"],
+  inventory: ["pos"],
+  customers: ["pos"],
+  financial: ["pos"],
+  marketing: ["advertising"],
+}
+
 // 9 bespoke, hand-built dashboards (not backed by the KPI/custom-report system -- see
 // src/identity-platform/reports/ready-reports-*.ts) merged into the "ready" tab's list so they
 // appear in the one place the user asked for. The rest of the CustomReport shape below is never
 // read for these rows: showOwner is false on the ready tab, and the view button short-circuits
 // via viewHref before anything else would need them.
-function getBespokeReadyReports(t: OverviewTranslator): CustomReport[] {
+//
+// `applications` is the set of apps whose data the report reads (per ready-reports-repository.ts)
+// -- the report shows when any one of them is active. Every sales/customer/product/branch report
+// reads pos_invoices only; net income is POS sales minus expenses; the VAT return combines POS
+// sales, purchases, and expenses.
+function getBespokeReadyReports(
+  t: OverviewTranslator,
+  activeApplications: ApplicationCategoryId[]
+): CustomReport[] {
   return (
     [
       {
@@ -162,77 +184,94 @@ function getBespokeReadyReports(t: OverviewTranslator): CustomReport[] {
         key: "readyNetIncome",
         category: "financial",
         viewHref: ROUTES.reportsReadyNetIncome,
+        applications: ["pos"],
       },
       {
         id: "ready-sales-by-user-payment-method",
         key: "readySalesByUserPaymentMethod",
         category: "sales",
         viewHref: ROUTES.reportsReadySalesByUserPaymentMethod,
+        applications: ["pos"],
       },
       {
         id: "ready-sales-by-customer",
         key: "readySalesByCustomer",
         category: "customers",
         viewHref: ROUTES.reportsReadySalesByCustomer,
+        applications: ["pos"],
       },
       {
         id: "ready-sales-by-product",
         key: "readySalesByProduct",
         category: "products",
         viewHref: ROUTES.reportsReadySalesByProduct,
+        applications: ["pos"],
       },
       {
         id: "ready-sales-by-invoice-source",
         key: "readySalesByInvoiceSource",
         category: "sales",
         viewHref: ROUTES.reportsReadySalesByInvoiceSource,
+        applications: ["pos"],
       },
       {
         id: "ready-vat-return",
         key: "readyVatReturn",
         category: "vat",
         viewHref: ROUTES.reportsReadyVatReturn,
+        applications: ["pos", "procurement", "expenses"],
       },
       {
         id: "ready-purchase-invoices",
         key: "readyPurchaseInvoices",
         category: "suppliers_purchases",
         viewHref: ROUTES.reportsReadyPurchaseInvoices,
+        applications: ["procurement"],
       },
       {
         id: "ready-sales-movement",
         key: "readySalesMovement",
         category: "sales",
         viewHref: ROUTES.reportsReadySalesMovement,
+        applications: ["pos"],
       },
       {
         id: "ready-sales-by-branch",
         key: "readySalesByBranch",
         category: "sales",
         viewHref: ROUTES.reportsReadySalesByBranch,
+        applications: ["pos"],
       },
-    ] as const
-  ).map(({ id, key, category, viewHref }) => ({
-    id,
-    name: t(`bespokeReports.${key}.name` as "bespokeReports.readyNetIncome.name"),
-    description: t(
-      `bespokeReports.${key}.description` as "bespokeReports.readyNetIncome.description"
-    ),
-    category,
-    viewHref,
-    organizationId: "",
-    workspaceId: null,
-    defaultFilters: {},
-    displayOptions: {},
-    sharing: "organization",
-    isSystem: true,
-    status: "active",
-    createdByUserId: "",
-    createdByName: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    widgets: [],
-  }))
+    ] satisfies Array<{
+      id: string
+      key: string
+      category: string
+      viewHref: string
+      applications: ApplicationCategoryId[]
+    }>
+  )
+    .filter(({ applications }) => applications.some((app) => activeApplications.includes(app)))
+    .map(({ id, key, category, viewHref }) => ({
+      id,
+      name: t(`bespokeReports.${key}.name` as "bespokeReports.readyNetIncome.name"),
+      description: t(
+        `bespokeReports.${key}.description` as "bespokeReports.readyNetIncome.description"
+      ),
+      category,
+      viewHref,
+      organizationId: "",
+      workspaceId: null,
+      defaultFilters: {},
+      displayOptions: {},
+      sharing: "organization",
+      isSystem: true,
+      status: "active",
+      createdByUserId: "",
+      createdByName: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      widgets: [],
+    }))
 }
 
 function formatDate(iso: string, locale: Locale) {
@@ -687,12 +726,37 @@ export function ReportsOverviewPage() {
   const t = useTranslations("reports.overview")
   const locale = useLocale() as Locale
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<"ready" | "custom">("ready")
+  const { currentOrganization } = useWorkspace()
+  // Custom report building is its own subscription now, independent of Ready Reports (which
+  // stay free/unpaywalled for every org) -- see reports/custom-reports-guard.ts. An org that
+  // hasn't activated it never sees the tab at all, same treatment dashboard/analytics's
+  // HomeTabs.tsx gives its own app-scoped tabs.
+  // getActiveApplications (not the raw flag) so a lapsed trial counts as inactive here too.
+  const activeApplications = getActiveApplications(currentOrganization?.settings)
+  const customReportsEnabled = activeApplications.includes("customReports")
+  const [selectedTab, setSelectedTab] = useState<"ready" | "custom">("ready")
+  const activeTab = selectedTab === "custom" && !customReportsEnabled ? "ready" : selectedTab
   const [readyMade, setReadyMade] = useState<CustomReport[]>([])
   const [custom, setCustom] = useState<CustomReport[]>([])
   const [loadingReady, setLoadingReady] = useState(true)
-  const [loadingCustom, setLoadingCustom] = useState(true)
-  const bespokeReadyReports = useMemo(() => getBespokeReadyReports(t), [t])
+  // Starts false (not true) when the org hasn't activated custom reports -- there's nothing to
+  // fetch in that case, so there's no loading state to ever clear via a setState-in-effect.
+  const [loadingCustom, setLoadingCustom] = useState(customReportsEnabled)
+  // Keyed on the joined string, not the array -- getActiveApplications returns a fresh array every
+  // render.
+  const activeApplicationsKey = activeApplications.join(",")
+  const bespokeReadyReports = useMemo(
+    () => getBespokeReadyReports(t, activeApplicationsKey.split(",") as ApplicationCategoryId[]),
+    [t, activeApplicationsKey]
+  )
+  const visibleSystemReports = useMemo(() => {
+    const active = activeApplicationsKey.split(",")
+    return readyMade.filter((report) =>
+      (SYSTEM_REPORT_CATEGORY_APPLICATIONS[report.category] ?? []).some((app) =>
+        active.includes(app)
+      )
+    )
+  }, [readyMade, activeApplicationsKey])
 
   const loadCustom = () => {
     setLoadingCustom(true)
@@ -707,11 +771,12 @@ export function ReportsOverviewPage() {
       .list(true)
       .then(setReadyMade)
       .finally(() => setLoadingReady(false))
+    if (!customReportsEnabled) return
     reportService
       .list(false)
       .then(setCustom)
       .finally(() => setLoadingCustom(false))
-  }, [])
+  }, [customReportsEnabled])
 
   const handleDelete = async (report: CustomReport) => {
     try {
@@ -760,7 +825,7 @@ export function ReportsOverviewPage() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => setActiveTab("ready")}
+          onClick={() => setSelectedTab("ready")}
           className={cn(
             "inline-flex cursor-pointer items-center gap-2 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold transition-colors",
             activeTab === "ready"
@@ -771,24 +836,26 @@ export function ReportsOverviewPage() {
           <FileBarChart2 className="size-4" />
           {t("tabs.ready")}
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("custom")}
-          className={cn(
-            "inline-flex cursor-pointer items-center gap-2 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold transition-colors",
-            activeTab === "custom"
-              ? "bg-[#2878ff] text-white shadow-[0_4px_12px_rgba(40,120,255,0.28)]"
-              : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
-          )}
-        >
-          <BarChart3 className="size-4" />
-          {t("tabs.custom")}
-        </button>
+        {customReportsEnabled ? (
+          <button
+            type="button"
+            onClick={() => setSelectedTab("custom")}
+            className={cn(
+              "inline-flex cursor-pointer items-center gap-2 rounded-[10px] px-4 py-2.5 text-[13px] font-semibold transition-colors",
+              activeTab === "custom"
+                ? "bg-[#2878ff] text-white shadow-[0_4px_12px_rgba(40,120,255,0.28)]"
+                : "border border-[#e1e7f0] bg-white text-[#5b6b85] hover:border-[#c4d5f0] hover:text-[#0b1738]"
+            )}
+          >
+            <BarChart3 className="size-4" />
+            {t("tabs.custom")}
+          </button>
+        ) : null}
       </div>
 
       {activeTab === "ready" ? (
         <ReportsTab
-          reports={[...bespokeReadyReports, ...readyMade]}
+          reports={[...bespokeReadyReports, ...visibleSystemReports]}
           loading={loadingReady}
           showOwner={false}
           title={t("readyTab.title")}

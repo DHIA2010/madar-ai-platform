@@ -249,7 +249,16 @@ export const upsertZidProductLinkSchema = z.object({
 // Bank-transfer receipts are frequently scanned PDFs, not just images -- unlike every other
 // upload schema above (logo/avatar/product image), which is image-only.
 export const requestApplicationActivationSchema = z.object({
-  application: z.enum(["advertising", "ecommerce", "pos", "madarApps", "procurement", "expenses"]),
+  application: z.enum([
+    "advertising",
+    "ecommerce",
+    "pos",
+    "madarApps",
+    "procurement",
+    "expenses",
+    "ai",
+    "customReports",
+  ]),
   planTier: z.enum(["starter", "growth", "pro", "enterprise"]),
   attachmentContentType: z.enum(["image/png", "image/jpeg", "image/webp", "application/pdf"]),
   attachmentDataBase64: z.string().min(1),
@@ -1138,7 +1147,16 @@ export const submitZatcaComplianceOtpSchema = z.object({
 // Free 7-day trial -- instant self-service activation (no payment receipt, no staff review),
 // one-time per organization+application. See command-handlers.ts's startApplicationTrial.
 export const startApplicationTrialSchema = z.object({
-  application: z.enum(["advertising", "ecommerce", "pos", "madarApps", "procurement", "expenses"]),
+  application: z.enum([
+    "advertising",
+    "ecommerce",
+    "pos",
+    "madarApps",
+    "procurement",
+    "expenses",
+    "ai",
+    "customReports",
+  ]),
 })
 
 // AI chat -- a session is scoped to exactly one activated application category (see

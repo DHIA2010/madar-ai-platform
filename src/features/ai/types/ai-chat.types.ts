@@ -1,5 +1,13 @@
 import type { ApplicationCategoryId } from "@/features/applications"
 
+// Which categories an AI chat session can actually be scoped to -- deliberately narrower than the
+// full ApplicationCategoryId (marketplace/billing) union: "ai" and "customReports" are their own
+// separate subscriptions gating whether the AI feature/the custom-report builder are usable at
+// all, not data domains a conversation can be scoped to asking about. Mirrors the backend's own
+// ai-chat/types.ts ApplicationCategoryId exactly (also intentionally narrower, for the same
+// reason -- see its own comment).
+export type AiChatScopeCategory = Exclude<ApplicationCategoryId, "ai" | "customReports">
+
 export type ChatMessageRole = "user" | "assistant" | "system_notice"
 
 export interface ChatToolCallTrace {
@@ -176,7 +184,7 @@ export interface ChatSessionDto {
   organizationId: string
   workspaceId: string | null
   userId: string
-  applicationCategory: ApplicationCategoryId
+  applicationCategory: AiChatScopeCategory
   title: string | null
   status: "active" | "archived"
   createdAt: string

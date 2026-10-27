@@ -40,6 +40,8 @@ const CATEGORY_ORDER: ApplicationCategoryId[] = [
   "madarApps",
   "procurement",
   "expenses",
+  "ai",
+  "customReports",
 ]
 
 // Drives the marketplace's own category tabs/pills -- "procurement" is deliberately absent here:
@@ -206,7 +208,7 @@ export function useApplicationsCatalog() {
     }
   }
 
-  // مدار الكامل still activates all 6 instantly -- it's a distinct "buy everything" fast path
+  // مدار الكامل still activates all 8 instantly -- it's a distinct "buy everything" fast path
   // that doesn't carry its own plan-tier concept the way an individual application's request
   // does. Aligning it with the same request/approval flow is a follow-up, not part of this pass.
   async function activateAllApplications() {
@@ -221,6 +223,8 @@ export function useApplicationsCatalog() {
           madarAppsEnabled: true,
           procurementEnabled: true,
           expensesEnabled: true,
+          aiEnabled: true,
+          customReportsEnabled: true,
         },
       })
     } finally {

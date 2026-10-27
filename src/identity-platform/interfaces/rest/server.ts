@@ -56,6 +56,7 @@ import { SallaProductPromotionService } from "../../products/salla-product-promo
 import { SallaStockPushService } from "../../products/salla-stock-push-service"
 import { ZidProductStockPushService } from "../../products/zid-product-stock-push-service"
 import { requireProcurementEnabled } from "../../procurement/guards"
+import { requireCustomReportsEnabled } from "../../reports/custom-reports-guard"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { PurchasesService } from "../../procurement/purchases-service"
 import { ReturnsService } from "../../procurement/returns-service"
@@ -2294,12 +2295,22 @@ export function createIdentityApiServer(
 
         if (method === "GET" && url.pathname === "/v1/reports/custom") {
           if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          // Custom report building is its own subscription, independent of ready-made reports
+          // (which stay free/unpaywalled) -- see reports/custom-reports-guard.ts.
+          await requireCustomReportsEnabled(
+            container.infrastructure.database!,
+            actor.organizationId
+          )
           const isSystem = url.searchParams.get("isSystem") === "true"
           return send(200, await reportsService.listCustomReports(actor, isSystem))
         }
 
         if (method === "POST" && url.pathname === "/v1/reports/custom") {
           if (!actor.modulePermissions.includes("reports:manage")) throw ERRORS.forbidden()
+          await requireCustomReportsEnabled(
+            container.infrastructure.database!,
+            actor.organizationId
+          )
           const payload = (await readJsonBody(request)) as Parameters<
             ReportsService["createCustomReport"]
           >[1]
@@ -2309,6 +2320,10 @@ export function createIdentityApiServer(
         const reportDataMatch = url.pathname.match(/^\/v1\/reports\/custom\/([^/]+)\/data$/)
         if (method === "GET" && reportDataMatch) {
           if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          await requireCustomReportsEnabled(
+            container.infrastructure.database!,
+            actor.organizationId
+          )
           const from = url.searchParams.get("from") ?? undefined
           const to = url.searchParams.get("to") ?? undefined
           const filtersParam = url.searchParams.get("filters")
@@ -2336,6 +2351,10 @@ export function createIdentityApiServer(
         const reportMatch = url.pathname.match(/^\/v1\/reports\/custom\/([^/]+)$/)
         if (reportMatch) {
           if (!actor.modulePermissions.includes("reports:view")) throw ERRORS.forbidden()
+          await requireCustomReportsEnabled(
+            container.infrastructure.database!,
+            actor.organizationId
+          )
           const reportId = decodeURIComponent(reportMatch[1])
           if (method === "GET") {
             return send(200, await reportsService.getCustomReport(actor, reportId))

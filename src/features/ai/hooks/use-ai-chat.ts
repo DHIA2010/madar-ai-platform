@@ -3,13 +3,18 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslations } from "next-intl"
 
-import { APPLICATION_SETTINGS_KEY, type ApplicationCategoryId } from "@/features/applications"
+import { APPLICATION_SETTINGS_KEY } from "@/features/applications"
 import { useWorkspace } from "@/features/workspace"
 
 import { aiChatService } from "../services"
-import type { ChatMessageDto, ChatSessionDto, ChatStreamingMessageDto } from "../types"
+import type {
+  AiChatScopeCategory,
+  ChatMessageDto,
+  ChatSessionDto,
+  ChatStreamingMessageDto,
+} from "../types"
 
-const CATEGORY_ORDER: ApplicationCategoryId[] = [
+const CATEGORY_ORDER: AiChatScopeCategory[] = [
   "advertising",
   "ecommerce",
   "pos",
@@ -51,7 +56,7 @@ export function useAiChat() {
   const [streamingSessionIds, setStreamingSessionIds] = useState<ReadonlySet<string>>(new Set())
   const activeRequestsRef = useRef<Map<string, AbortController>>(new Map())
 
-  const availableCategories = useMemo<ApplicationCategoryId[]>(() => {
+  const availableCategories = useMemo<AiChatScopeCategory[]>(() => {
     const settings = currentOrganization?.settings
     if (!settings) return []
     return CATEGORY_ORDER.filter((category) => settings[APPLICATION_SETTINGS_KEY[category]])
@@ -73,7 +78,7 @@ export function useAiChat() {
     setMessages(items.map(toStreamingMessage))
   }, [])
 
-  const createSession = useCallback(async (applicationCategory: ApplicationCategoryId) => {
+  const createSession = useCallback(async (applicationCategory: AiChatScopeCategory) => {
     const session = await aiChatService.createSession(applicationCategory)
     setSessions((previous) => [session, ...previous])
     setActiveSessionId(session.id)
@@ -103,7 +108,7 @@ export function useAiChat() {
   // need to separately await createSession() then re-read state before sending (React state
   // updates aren't visible synchronously within the same call).
   const sendMessage = useCallback(
-    async (content: string, categoryIfNoSession?: ApplicationCategoryId) => {
+    async (content: string, categoryIfNoSession?: AiChatScopeCategory) => {
       const trimmed = content.trim()
       if (!trimmed) return
 

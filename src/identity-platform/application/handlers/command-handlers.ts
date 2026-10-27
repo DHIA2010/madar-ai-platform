@@ -1294,6 +1294,8 @@ export class IdentityCommandHandlers {
     madarApps: "madarAppsEnabled",
     procurement: "procurementEnabled",
     expenses: "expensesEnabled",
+    ai: "aiEnabled",
+    customReports: "customReportsEnabled",
   }
 
   async requestApplicationActivation(

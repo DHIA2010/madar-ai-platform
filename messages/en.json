@@ -782,6 +782,30 @@
         ],
         "primaryCta": "Subscribe now"
       },
+      "ai": {
+        "name": "AI Assistant",
+        "shortDescription": "A smart assistant that analyzes your data and answers questions instantly.",
+        "detailDescription": "Ask about your sales, campaigns, expenses, and other data in plain language, and get instant answers, analysis, and charts without building a report by hand.",
+        "priceLabel": "Starting from SAR 99 / month",
+        "features": [
+          "Instant answers in plain language",
+          "Automatic analysis and charts",
+          "Works across all your active apps"
+        ],
+        "primaryCta": "Subscribe now"
+      },
+      "custom-reports": {
+        "name": "Custom Reports",
+        "shortDescription": "Build your own reports with exactly the fields and filters you need.",
+        "detailDescription": "A flexible report builder lets you pick the fields, filters, and groupings you need, and save the report to reuse anytime -- on top of the ready-made reports already available to everyone.",
+        "priceLabel": "Starting from SAR 99 / month",
+        "features": [
+          "Flexible report builder with fields and filters",
+          "Save reports to reuse them",
+          "Export and share reports"
+        ],
+        "primaryCta": "Subscribe now"
+      },
       "madar-apps-reports": {
         "name": "Reports",
         "shortDescription": "Ready-made reports and comprehensive analytics for your business performance in one place.",

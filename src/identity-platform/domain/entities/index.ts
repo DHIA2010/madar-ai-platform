@@ -886,6 +886,8 @@ export type SubscriptionApplication =
   | "madarApps"
   | "procurement"
   | "expenses"
+  | "ai"
+  | "customReports"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
 
 export interface SubscriptionActivationRequestState {

@@ -208,7 +208,15 @@ export interface ResendInvitationCommand {
 }
 
 export interface RequestApplicationActivationCommand {
-  application: "advertising" | "ecommerce" | "pos" | "madarApps" | "procurement" | "expenses"
+  application:
+    | "advertising"
+    | "ecommerce"
+    | "pos"
+    | "madarApps"
+    | "procurement"
+    | "expenses"
+    | "ai"
+    | "customReports"
   planTier: "starter" | "growth" | "pro" | "enterprise"
   // Already uploaded by the REST route before this command runs (same convention as
   // UpdateOrganizationCommand.logoUrl / voucher attachments) -- the command layer never handles
@@ -222,7 +230,15 @@ export interface RejectSubscriptionActivationRequestCommand {
 }
 
 export interface StartApplicationTrialCommand {
-  application: "advertising" | "ecommerce" | "pos" | "madarApps" | "procurement" | "expenses"
+  application:
+    | "advertising"
+    | "ecommerce"
+    | "pos"
+    | "madarApps"
+    | "procurement"
+    | "expenses"
+    | "ai"
+    | "customReports"
 }
 
 export interface RemoveMemberCommand {

@@ -5,6 +5,8 @@ export type MoyasarApplication =
   | "madarApps"
   | "procurement"
   | "expenses"
+  | "ai"
+  | "customReports"
 export type MoyasarSelfServePlanTier = "starter" | "growth" | "pro"
 export type MoyasarPaymentStatus = "initiated" | "paid" | "failed"
 

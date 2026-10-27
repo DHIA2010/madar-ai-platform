@@ -27,6 +27,8 @@ const APPLICATION_SETTINGS_KEY: Record<CreateCheckoutIntentInput["application"],
   madarApps: "madarAppsEnabled",
   procurement: "procurementEnabled",
   expenses: "expensesEnabled",
+  ai: "aiEnabled",
+  customReports: "customReportsEnabled",
 }
 
 export class MoyasarBillingService {

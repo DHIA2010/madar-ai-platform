@@ -10,6 +10,8 @@ export type CatalogApplication =
   | "madarApps"
   | "procurement"
   | "expenses"
+  | "ai"
+  | "customReports"
 
 export type ReportAggregation = "sum" | "avg" | "count" | "min" | "max"
 export type ReportTimeGrouping = "day" | "week" | "month" | "quarter" | "year" | "none"

@@ -42,8 +42,8 @@ import {
   AppSelectValue,
 } from "@/components/app"
 import { PlatformBadge } from "@/components/platform-badge"
-import type { ApplicationCategoryId } from "@/features/applications"
 import { useAiChat } from "@/features/ai"
+import type { AiChatScopeCategory } from "@/features/ai"
 import type {
   ChatChartSpec,
   ChatConfidenceLevel,
@@ -596,7 +596,7 @@ const RECOMMENDATION_TABS: Array<{ key: "all" | RecommendationCategory; icon?: L
   { key: "alert", icon: AlertTriangle },
 ]
 
-const CATEGORY_ICON: Record<ApplicationCategoryId, { icon: LucideIcon; tint: string }> = {
+const CATEGORY_ICON: Record<AiChatScopeCategory, { icon: LucideIcon; tint: string }> = {
   advertising: { icon: Megaphone, tint: "bg-[#eef4ff] text-[#2878ff]" },
   ecommerce: { icon: ShoppingBag, tint: "bg-violet-50 text-violet-600" },
   pos: { icon: CreditCard, tint: "bg-emerald-50 text-emerald-600" },
@@ -606,7 +606,7 @@ const CATEGORY_ICON: Record<ApplicationCategoryId, { icon: LucideIcon; tint: str
 }
 
 const SUGGESTED_QUESTION_CONFIG: Record<
-  ApplicationCategoryId,
+  AiChatScopeCategory,
   Array<{ key: string; icon: LucideIcon }>
 > = {
   advertising: [
@@ -689,7 +689,7 @@ export default function AIAssistantDashboard() {
   const { messages, availableCategories, isSending, activeSessionId, sendMessage, cancelMessage } =
     useAiChat()
 
-  const [selectedCategory, setSelectedCategory] = useState<ApplicationCategoryId | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<AiChatScopeCategory | null>(null)
   const activeCategory = selectedCategory ?? availableCategories[0] ?? null
   const activeCategoryLabel = activeCategory
     ? t(`categories.${activeCategory}` as "categories.advertising")
@@ -806,7 +806,7 @@ export default function AIAssistantDashboard() {
                   <AppSearchableSelect
                     value={activeCategory ?? ""}
                     options={categoryOptions}
-                    onChange={(value) => setSelectedCategory(value as ApplicationCategoryId)}
+                    onChange={(value) => setSelectedCategory(value as AiChatScopeCategory)}
                     placeholder={t("chat.scopeSelect.placeholder")}
                     searchPlaceholder={t("chat.scopeSelect.searchPlaceholder")}
                     emptyLabel={t("chat.scopeSelect.emptyLabel")}

@@ -203,6 +203,12 @@ beforeEach(async () => {
     [WORKSPACE_A, ORG_A]
   )
 
+  // This file's own purpose is testing AI chat behavior, not the AI-app subscription gate itself
+  // -- both orgs are pre-subscribed to AI. The gate itself is covered by its own dedicated tests
+  // below (an org that deliberately disables it).
+  await setOrgSettingValue(ORG_A, "aiEnabled", true)
+  await setOrgSettingValue(ORG_B, "aiEnabled", true)
+
   const posPaymentMethodsService = new PosPaymentMethodsService(database)
   const taxRatesService = new TaxRatesService(database)
   const posInvoicesService = new PosInvoicesService(
@@ -352,6 +358,29 @@ describe("ai-chat: per-application scoping", () => {
     const session = await service.createSession(actor(), "pos")
 
     await setApplicationEnabled(ORG_A, "posEnabled", false)
+    const reply = await service.sendMessage(actor(), session.id, "ما هي المبيعات اليوم؟")
+
+    expect(reply.role).toBe("system_notice")
+    expect(mockRunChatTurn).not.toHaveBeenCalled()
+  })
+
+  it("rejects creating a session when the AI app itself is disabled, even though the data category is activated", async () => {
+    await setOrgSettingValue(ORG_A, "aiEnabled", false)
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await expect(service.createSession(actor(), "pos")).rejects.toThrow(IdentityError)
+  })
+
+  it("treats a lapsed AI trial as inactive even though aiEnabled is still true in storage", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    await setOrgSettingValue(ORG_A, "aiTrialEndsAt", new Date(Date.now() - 3_600_000).toISOString())
+    await expect(service.createSession(actor(), "pos")).rejects.toThrow(IdentityError)
+  })
+
+  it("re-checks the AI app's own subscription on every send, not just the data category's", async () => {
+    await setApplicationEnabled(ORG_A, "posEnabled", true)
+    const session = await service.createSession(actor(), "pos")
+
+    await setOrgSettingValue(ORG_A, "aiEnabled", false)
     const reply = await service.sendMessage(actor(), session.id, "ما هي المبيعات اليوم؟")
 
     expect(reply.role).toBe("system_notice")

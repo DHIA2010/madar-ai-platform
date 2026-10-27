@@ -14,6 +14,7 @@ import { AppError } from "@/lib/errors/app-error"
 import { localeDirection, type Locale } from "@/i18n/locales"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/features/workspace"
+import { getActiveApplications } from "@/features/applications"
 import {
   taxRatesService,
   type CreateTaxRateInput,
@@ -100,6 +101,7 @@ export default function TaxesSettings() {
   const t = useTranslations("settings.taxes")
   const locale = useLocale() as Locale
   const { currentOrganization, updateOrganization } = useWorkspace()
+  const posActive = getActiveApplications(currentOrganization?.settings).includes("pos")
 
   const [rates, setRates] = useState<TaxRate[]>([])
   const [loading, setLoading] = useState(true)
@@ -526,54 +528,59 @@ export default function TaxesSettings() {
         </section>
 
         <div className="flex flex-col gap-5">
-          <section className={cn(PANEL, "p-4")}>
-            <h2 className={cn("mb-3 text-[14px] font-extrabold", HEADING)}>
-              {t("invoiceSettings.sectionTitle")}
-            </h2>
-            <div className="flex flex-col divide-y divide-[#f0f3f8]">
-              <ToggleRow
-                title={t("invoiceSettings.autoApply.title")}
-                description={t("invoiceSettings.autoApply.description")}
-                checked={autoApply}
-                onChange={(next) => {
-                  const previous = autoApply
-                  setAutoApply(next)
-                  void saveInvoiceSetting("taxAutoApplyToProducts", next, () =>
-                    setAutoApply(previous)
-                  )
-                }}
-              />
-              {/* No "show tax on invoice" toggle -- a real tax invoice is legally required to
+          {/* Both settings here govern how POS product prices and sales invoices carry tax --
+              meaningless to an org without POS, unlike the tax rates themselves, which purchases
+              and expenses use too. */}
+          {posActive ? (
+            <section className={cn(PANEL, "p-4")}>
+              <h2 className={cn("mb-3 text-[14px] font-extrabold", HEADING)}>
+                {t("invoiceSettings.sectionTitle")}
+              </h2>
+              <div className="flex flex-col divide-y divide-[#f0f3f8]">
+                <ToggleRow
+                  title={t("invoiceSettings.autoApply.title")}
+                  description={t("invoiceSettings.autoApply.description")}
+                  checked={autoApply}
+                  onChange={(next) => {
+                    const previous = autoApply
+                    setAutoApply(next)
+                    void saveInvoiceSetting("taxAutoApplyToProducts", next, () =>
+                      setAutoApply(previous)
+                    )
+                  }}
+                />
+                {/* No "show tax on invoice" toggle -- a real tax invoice is legally required to
                   show its VAT breakdown, so this can never be a merchant preference. */}
-              <PriceConventionRow
-                title={t("invoiceSettings.priceConvention.title")}
-                description={t("invoiceSettings.priceConvention.description")}
-                options={PRICE_CONVENTION_OPTIONS.map((value) => ({
-                  value,
-                  label: t(`invoiceSettings.priceConvention.options.${value}`),
-                }))}
-                mode={
-                  taxPriceEntryMode === "manual"
-                    ? "manual"
-                    : pricesIncludeTax
-                      ? "inclusive"
-                      : "exclusive"
-                }
-                busy={applyingConvention !== null}
-                onSelect={(next) => {
-                  if (next === "manual") {
-                    void applyConventionManual()
-                    return
+                <PriceConventionRow
+                  title={t("invoiceSettings.priceConvention.title")}
+                  description={t("invoiceSettings.priceConvention.description")}
+                  options={PRICE_CONVENTION_OPTIONS.map((value) => ({
+                    value,
+                    label: t(`invoiceSettings.priceConvention.options.${value}`),
+                  }))}
+                  mode={
+                    taxPriceEntryMode === "manual"
+                      ? "manual"
+                      : pricesIncludeTax
+                        ? "inclusive"
+                        : "exclusive"
                   }
-                  setPendingConvention(next === "inclusive")
-                }}
-              />
-            </div>
-            <div className="mt-3 flex items-start gap-2 rounded-[12px] bg-[#eef4ff] p-3">
-              <Info className="mt-0.5 size-4 shrink-0 text-[#2878ff]" />
-              <p className="text-[11.5px] leading-6 text-[#2878ff]">{t("infoBanner")}</p>
-            </div>
-          </section>
+                  busy={applyingConvention !== null}
+                  onSelect={(next) => {
+                    if (next === "manual") {
+                      void applyConventionManual()
+                      return
+                    }
+                    setPendingConvention(next === "inclusive")
+                  }}
+                />
+              </div>
+              <div className="mt-3 flex items-start gap-2 rounded-[12px] bg-[#eef4ff] p-3">
+                <Info className="mt-0.5 size-4 shrink-0 text-[#2878ff]" />
+                <p className="text-[11.5px] leading-6 text-[#2878ff]">{t("infoBanner")}</p>
+              </div>
+            </section>
+          ) : null}
 
           {byType.length > 0 ? (
             <section className={cn(PANEL, "p-4")}>

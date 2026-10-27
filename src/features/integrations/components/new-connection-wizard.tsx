@@ -62,7 +62,7 @@ import {
   AppSection,
 } from "@/components/app"
 
-import { APPLICATION_SETTINGS_KEY } from "@/features/applications"
+import { getActiveApplications } from "@/features/applications"
 import { useWorkspace, WorkspaceSelector } from "@/features/workspace"
 
 import { useConnectionsCenter } from "../hooks"
@@ -974,19 +974,21 @@ export function NewConnectionWizard() {
     ? PLATFORM_DETAILS[selectedConnector.displayName]
     : undefined
 
-  // "Ecommerce"/"Marketing" only show once the matching application is active; "All"/"Analytics"
-  // have no 1:1 application mapping (no `pos` category exists here today) and stay always
-  // available. Mirrors the sidebar's own application-gating in app-sidebar.tsx.
+  // Each category only shows once its application is active: "Marketing" (ad platforms) with
+  // advertising, "Ecommerce" and "Analytics" (store traffic, e.g. GA4 feeding Live Visitors) with
+  // ecommerce. "All" always shows, but only ever lists the visible categories' connectors.
+  // Mirrors connections-overview.tsx's own CATEGORY_APPLICATION and the sidebar's gating.
+  const activeApplicationsKey = getActiveApplications(currentOrganization?.settings).join(",")
   const visibleCategories = useMemo(() => {
-    const settings = currentOrganization?.settings
-    const advertisingActive = Boolean(settings?.[APPLICATION_SETTINGS_KEY.advertising])
-    const ecommerceActive = Boolean(settings?.[APPLICATION_SETTINGS_KEY.ecommerce])
+    const active = activeApplicationsKey.split(",")
+    const advertisingActive = active.includes("advertising")
+    const ecommerceActive = active.includes("ecommerce")
     return PLATFORM_CATEGORIES.filter((category) => {
-      if (category === "Ecommerce") return ecommerceActive
+      if (category === "Ecommerce" || category === "Analytics") return ecommerceActive
       if (category === "Marketing") return advertisingActive
       return true
     })
-  }, [currentOrganization?.settings])
+  }, [activeApplicationsKey])
 
   // If the active application backing the currently-selected category gets deactivated while the
   // wizard is open, fall back to "All" rather than leaving the pill row on a hidden category.

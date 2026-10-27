@@ -119,7 +119,7 @@ const WORKSPACE_A = randomUUID()
 
 async function setApplicationEnabled(
   organizationId: string,
-  key: "advertisingEnabled" | "posEnabled" | "madarAppsEnabled" | "ecommerceEnabled",
+  key: "advertisingEnabled" | "posEnabled" | "madarAppsEnabled" | "ecommerceEnabled" | "aiEnabled",
   value: boolean
 ) {
   const existing = await database.query<{ settings: Record<string, unknown> }>(
@@ -277,6 +277,10 @@ beforeEach(async () => {
   )
   await setApplicationEnabled(ORG_A, "posEnabled", true)
   await setApplicationEnabled(ORG_A, "advertisingEnabled", true)
+  // This file benchmarks AI chat answer quality, not the AI-app subscription gate -- ORG_A is
+  // pre-subscribed to AI so every createSession/sendMessage call below exercises the real
+  // scoring logic instead of tripping the gate added in ai-chat/app-guard.ts.
+  await setApplicationEnabled(ORG_A, "aiEnabled", true)
 })
 
 describe("golden questions -- simple", () => {

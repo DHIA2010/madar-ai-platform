@@ -2,8 +2,10 @@ import type { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
 import {
   BarChart3,
+  Bot,
   Calculator,
   CreditCard,
+  FileBarChart,
   FileText,
   ListChecks,
   Radio,
@@ -35,6 +37,19 @@ export const APPLICATION_SETTINGS_KEY: Record<ApplicationCategoryId, keyof Organ
   madarApps: "madarAppsEnabled",
   procurement: "procurementEnabled",
   expenses: "expensesEnabled",
+  ai: "aiEnabled",
+  customReports: "customReportsEnabled",
+}
+
+// Which application categories this organization currently has activated -- the single shared
+// computation app-sidebar.tsx's own nav-filtering and HomeTabs.tsx's own tab-filtering both read,
+// rather than each re-deriving this from APPLICATION_SETTINGS_KEY + settings on their own.
+export function getActiveApplications(
+  settings: OrganizationSettings | undefined
+): ApplicationCategoryId[] {
+  return (Object.keys(APPLICATION_SETTINGS_KEY) as ApplicationCategoryId[]).filter((app) =>
+    Boolean(settings?.[APPLICATION_SETTINGS_KEY[app]])
+  )
 }
 
 // Free 7-day trial bookkeeping -- see command-handlers.ts's startApplicationTrial (backend) for
@@ -50,6 +65,8 @@ export const APPLICATION_TRIAL_ENDS_AT_KEY: Record<
   madarApps: "madarAppsTrialEndsAt",
   procurement: "procurementTrialEndsAt",
   expenses: "expensesTrialEndsAt",
+  ai: "aiTrialEndsAt",
+  customReports: "customReportsTrialEndsAt",
 }
 
 export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof OrganizationSettings> =
@@ -60,6 +77,8 @@ export const APPLICATION_TRIAL_USED_KEY: Record<ApplicationCategoryId, keyof Org
     madarApps: "madarAppsTrialUsed",
     procurement: "procurementTrialUsed",
     expenses: "expensesTrialUsed",
+    ai: "aiTrialUsed",
+    customReports: "customReportsTrialUsed",
   }
 
 // Whether the org can still start a trial for this category -- never used before, and not
@@ -174,6 +193,46 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPriceLabel: true,
     featuresDisplay: "checklist",
     featureCount: 4,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Same independent-billing-under-the-madarApps-tab pattern as procurement above. AI used to
+  // ride free the moment ANY other app was active (app-sidebar.tsx's old ANY_APPLICATION gate on
+  // the /ai nav item); now it's its own subscription, checked via ai-chat/app-guard.ts alongside
+  // (not instead of) whichever other category a chat session is scoped to.
+  {
+    id: "ai",
+    category: "ai",
+    tabCategory: "madarApps",
+    icon: Bot,
+    accent: {
+      iconWrapperClassName: "bg-[#f3eeff] text-[#7c4dff]",
+      primaryButtonClassName: "bg-[#7c4dff] text-white hover:bg-[#6a3ce0]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 3,
+    hasPrimaryCta: true,
+    subscriptionStatus: "not_subscribed",
+  },
+  // Distinct from both the decorative "madar-apps-reports" card below (a 5-card bundle sharing
+  // madarAppsEnabled, no real backend tie-in) and from "Ready Reports" (reports-overview-page.tsx's
+  // "ready" tab, which stays free/unpaywalled) -- this gates specifically the custom report
+  // builder (its "custom" tab), see reports/custom-reports-guard.ts.
+  {
+    id: "custom-reports",
+    category: "customReports",
+    tabCategory: "madarApps",
+    icon: FileBarChart,
+    accent: {
+      iconWrapperClassName: "bg-[#eef9ff] text-[#0ea5e9]",
+      primaryButtonClassName: "bg-[#0ea5e9] text-white hover:bg-[#0c8fcc]",
+    },
+    pricingModel: "paid",
+    hasPriceLabel: true,
+    featuresDisplay: "checklist",
+    featureCount: 3,
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },

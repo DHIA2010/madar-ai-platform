@@ -4,6 +4,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
 import { getOrganizationTimezone } from "../shared/date-range-resolver"
 
+import { isAiAppEnabled, requireAiAppEnabled } from "./app-guard"
 import type { AiChatLlmClientLike, ChatStreamEvent } from "./llm-client"
 import { isApplicationEnabled, requireApplicationEnabled } from "./guards"
 import { AiChatRepository } from "./repository"
@@ -215,6 +216,9 @@ export class AiChatService {
     applicationCategory: ApplicationCategoryId
   ): Promise<ChatSessionDto> {
     assertActorCanUseAiChat(actor)
+    // The AI feature itself is its own subscription now, checked alongside (not instead of)
+    // whichever other category this session is scoped to -- see app-guard.ts.
+    await requireAiAppEnabled(this.db, actor.organizationId)
     await requireApplicationEnabled(this.db, actor.organizationId, applicationCategory)
     return this.repository.createSession({
       organizationId: actor.organizationId,
@@ -260,17 +264,24 @@ export class AiChatService {
 
     // Re-checked on every send, not just at session creation -- an org can deactivate an
     // application mid-conversation, and a stale session must not keep answering silently.
-    const stillEnabled = await isApplicationEnabled(
+    // Re-checked on every send, not just at session creation -- an org can deactivate AI itself
+    // (or the category this session is scoped to) mid-conversation, and a stale session must not
+    // keep answering silently. AI itself is checked first since that's the more specific/likely
+    // cause once it exists as its own subscription.
+    const aiStillEnabled = await isAiAppEnabled(this.db, actor.organizationId)
+    const categoryStillEnabled = await isApplicationEnabled(
       this.db,
       actor.organizationId,
       session.applicationCategory
     )
-    if (!stillEnabled) {
+    if (!aiStillEnabled || !categoryStillEnabled) {
       await this.repository.appendMessage({ sessionId, role: "user", content })
       return this.repository.appendMessage({
         sessionId,
         role: "system_notice",
-        content: `تطبيق "${CATEGORY_LABEL[session.applicationCategory]}" غير مفعّل حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة.`,
+        content: !aiStillEnabled
+          ? "ميزة الذكاء الاصطناعي غير مفعّلة حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة."
+          : `تطبيق "${CATEGORY_LABEL[session.applicationCategory]}" غير مفعّل حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة.`,
       })
     }
 
@@ -348,17 +359,24 @@ export class AiChatService {
     assertActorCanUseAiChat(actor)
     const session = await this.loadOwnedSession(actor, sessionId)
 
-    const stillEnabled = await isApplicationEnabled(
+    // Re-checked on every send, not just at session creation -- an org can deactivate AI itself
+    // (or the category this session is scoped to) mid-conversation, and a stale session must not
+    // keep answering silently. AI itself is checked first since that's the more specific/likely
+    // cause once it exists as its own subscription.
+    const aiStillEnabled = await isAiAppEnabled(this.db, actor.organizationId)
+    const categoryStillEnabled = await isApplicationEnabled(
       this.db,
       actor.organizationId,
       session.applicationCategory
     )
-    if (!stillEnabled) {
+    if (!aiStillEnabled || !categoryStillEnabled) {
       await this.repository.appendMessage({ sessionId, role: "user", content })
       return this.repository.appendMessage({
         sessionId,
         role: "system_notice",
-        content: `تطبيق "${CATEGORY_LABEL[session.applicationCategory]}" غير مفعّل حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة.`,
+        content: !aiStillEnabled
+          ? "ميزة الذكاء الاصطناعي غير مفعّلة حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة."
+          : `تطبيق "${CATEGORY_LABEL[session.applicationCategory]}" غير مفعّل حاليًا لمؤسستك، لذلك لا يمكن متابعة هذه المحادثة.`,
       })
     }
 
