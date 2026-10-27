@@ -16,6 +16,7 @@ import { SnapchatOAuthRepository } from "../../snapchat-oauth/repository"
 import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-deletion-service"
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
+import { parseJsonPreservingBigInts } from "../../salla-oauth/parse-json-preserving-big-ints"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
 import { SallaOAuthService } from "../../salla-oauth/service"
 import { resolveSallaWebhookCredentials } from "../../salla-oauth/salla-credentials"
@@ -1170,7 +1171,9 @@ export function createIdentityApiServer(
 
         let payload: SallaWebhookPayload
         try {
-          payload = JSON.parse(rawBody.toString("utf8")) as SallaWebhookPayload
+          // Not plain JSON.parse: some Salla ids exceed Number.MAX_SAFE_INTEGER and would be
+          // rounded to an id that 404s on re-fetch (see parse-json-preserving-big-ints.ts).
+          payload = parseJsonPreservingBigInts(rawBody.toString("utf8")) as SallaWebhookPayload
         } catch {
           return send(400, { code: "SALLA_WEBHOOK_INVALID_BODY", message: "Invalid JSON body." })
         }

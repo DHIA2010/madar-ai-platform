@@ -40,6 +40,8 @@ const SALLA_EVENT_TO_ENTITY_TYPE: Record<string, "products" | "orders" | "custom
   "order.products.updated": "orders",
   "order.payment.updated": "orders",
   "order.total.price.updated": "orders",
+  "order.coupon.updated": "orders",
+  "order.shipping.address.updated": "orders",
 
   "product.created": "products",
   "product.updated": "products",
