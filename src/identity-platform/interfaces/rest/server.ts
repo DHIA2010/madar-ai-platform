@@ -1223,7 +1223,11 @@ export function createIdentityApiServer(
           ? request.headers["webhook-event"][0]
           : (request.headers["webhook-event"] ?? "")
 
-        await zidWebhookService.handleWebhookEvent({ event, payload })
+        await zidWebhookService.handleWebhookEvent({
+          event,
+          payload,
+          storeIdHint: url.searchParams.get("store_id"),
+        })
         return send(200, { received: true })
       }
 

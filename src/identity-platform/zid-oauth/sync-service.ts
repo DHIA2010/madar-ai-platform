@@ -227,6 +227,12 @@ export class ZidSyncService {
     const connection = await this.findOwnedConnectedConnection(actor, input.connectionId)
     await this.requireAccessibleStore(connection.id, input.customerId)
 
+    // Best-effort, never blocks the sync: upgrades a connection registered before
+    // order.*/customer.* webhooks existed (a no-op once done).
+    this.oauthService.ensureWebhooksRegistered(connection.id).catch((error: unknown) => {
+      console.error("zid.webhook_registration_failed", error)
+    })
+
     const syncRun = await this.syncRepository.createOrLoadSyncRun({
       connectionId: connection.id,
       organizationId: connection.organizationId,

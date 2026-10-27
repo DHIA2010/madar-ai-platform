@@ -16,7 +16,14 @@ const DEFAULT_ZID_API_BASE_URL = "https://api.zid.sa/v1"
 export interface ZidWebhookEnvelope {
   event: string
   payload: Record<string, unknown>
+  // The `store_id` query param registerZidWebhooks puts on the target URL -- the only way to
+  // resolve a customer.* delivery, whose body has no store_id (an order.*/product.* body does).
+  storeIdHint?: string | null
 }
+
+// Order events whose delivery means the store's stock may have moved: Zid deducts stock when an
+// order is created and returns it when one is cancelled, but has no stock webhook of its own.
+const STOCK_MOVING_ORDER_EVENTS = new Set(["order.create", "order.status.update"])
 
 // Confirmed real event catalog, https://docs.zid.sa/webhooks. product.delete is deliberately
 // unmapped, same reasoning as Salla's order.deleted/product.deleted (upsertRecords only ever
@@ -42,6 +49,10 @@ const ZID_EVENT_TO_ENTITY_TYPE: Record<string, ZidWebhookEntityType> = {
   "customer.merchant.update": "customers",
 }
 
+type WebhookTarget = NonNullable<
+  Awaited<ReturnType<ZidOAuthRepository["findWebhookTargetByStoreId"]>>
+>
+
 function recordDateFor(data: Record<string, unknown>): string {
   return toRecordDate([
     data.updated_at as string | undefined,
@@ -65,7 +76,7 @@ export class ZidWebhookService {
   }
 
   async handleWebhookEvent(envelope: ZidWebhookEnvelope): Promise<void> {
-    const { event, payload } = envelope
+    const { event, payload, storeIdHint } = envelope
     // A product.stock.* delivery's own `id` is the stock entry's id, not the product's -- the
     // product itself is `product_id`. Every other mapped event's body is the product resource
     // itself, so `id` at the top level already is the product's id.
@@ -84,13 +95,20 @@ export class ZidWebhookService {
     // A stock event carries no store_id at all (confirmed live) -- the product it belongs to was
     // already synced earlier via its own product.create/update delivery, so its connection is
     // resolved from that existing record instead of from this payload.
+    const storeId = String(payload.store_id ?? storeIdHint ?? "")
     const target = isStockEvent
       ? await this.oauthRepository.findWebhookTargetByZidProductId(entityId)
-      : await this.oauthRepository.findWebhookTargetByStoreId(String(payload.store_id ?? ""))
+      : await this.oauthRepository.findWebhookTargetByStoreId(storeId)
     if (!target) {
-      console.log("zid.webhook_target_unknown", { event, entityId })
+      console.log("zid.webhook_target_unknown", { event, entityId, storeId })
       return
     }
+
+    // Best-effort: upgrades connections registered before order.*/customer.* existed (a no-op
+    // once done) -- see ZidOAuthService.ensureWebhooksRegistered.
+    this.oauthService.ensureWebhooksRegistered(target.connectionId).catch((error: unknown) => {
+      console.error("zid.webhook_registration_failed", error)
+    })
 
     if (entityType !== "products") {
       // Orders/customers sit on Zid's Merchant API (different auth headers than products, and
@@ -104,9 +122,35 @@ export class ZidWebhookService {
         records: [{ entityType, entityId, recordDate: recordDateFor(payload), payload }],
       })
       console.log("zid.webhook_synced", { event, entityType, entityId })
+
+      if (STOCK_MOVING_ORDER_EVENTS.has(event)) {
+        await this.refreshOrderProducts(target, payload)
+      }
       return
     }
 
+    await this.syncProduct(target, entityId, event)
+  }
+
+  // Re-fetches every product on an order so the stock Zid just deducted (or returned, on a
+  // cancellation) reaches zid_records and the linked native product. A line item's `id` is the
+  // Zid product id (confirmed against real synced orders); a variant's parent is `parent_id`.
+  private async refreshOrderProducts(target: WebhookTarget, order: Record<string, unknown>) {
+    const lines = Array.isArray(order.products) ? (order.products as Record<string, unknown>[]) : []
+    const productIds = new Set<string>()
+    for (const line of lines) {
+      const productId = line.parent_id ?? line.id
+      if (productId) productIds.add(String(productId))
+    }
+    for (const productId of productIds) {
+      await this.syncProduct(target, productId, "order.stock_refresh").catch((error: unknown) => {
+        console.error("zid.order_product_refresh_failed", { productId, error })
+      })
+    }
+  }
+
+  private async syncProduct(target: WebhookTarget, entityId: string, event: string) {
+    const entityType = "products"
     // Confirmed live (same sandbox store used for every other Zid finding this session):
     // GET /products/{id}/ returns the exact same full shape as the list endpoint's items, so
     // webhook ingestion re-fetches the canonical record rather than trusting whatever shape the

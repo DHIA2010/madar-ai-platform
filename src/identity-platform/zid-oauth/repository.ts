@@ -674,6 +674,15 @@ export class ZidOAuthRepository
     })
   }
 
+  async hasEvent(connectionId: string, eventType: string): Promise<boolean> {
+    const result = await this.db.query<{ found: number }>({
+      name: "zid-oauth-event-exists",
+      text: `SELECT 1 AS found FROM zid_oauth_events WHERE connection_id = $1 AND event_type = $2 LIMIT 1`,
+      values: [connectionId, eventType],
+    })
+    return result.rows.length > 0
+  }
+
   async appendAuditLog(input: {
     actorUserId: string
     organizationId: string

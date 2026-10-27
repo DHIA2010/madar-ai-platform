@@ -381,25 +381,48 @@ async function exchangeAuthorizationCode(input: {
 // (POST /managers/webhooks, confirmed real shape: docs.zid.sa/create-a-webhook) -- unlike Salla's
 // single Partner-Portal URL field, this can (and should) be fully automated here, right after a
 // connection finishes, with no manual merchant/partner-dashboard step. Only the events
-// webhook-service.ts actually maps are registered (product.create/update/publish) -- registering
-// an event our own webhook route would just no-op for costs a real API call for nothing.
-// Best-effort: called from completeAuthorization inside a .catch(), a registration failure must
-// never fail the connection itself.
-const ZID_WEBHOOK_EVENTS = ["product.create", "product.update", "product.publish"] as const
+// webhook-service.ts actually maps are registered -- registering an event our own webhook route
+// would just no-op for costs a real API call for nothing. (Zid has no product.stock.* events:
+// stock moved by an order is picked up by re-fetching that order's products instead -- see
+// webhook-service.ts.) Best-effort: a registration failure must never fail the connection itself.
+const ZID_WEBHOOK_EVENTS = [
+  "product.create",
+  "product.update",
+  "product.publish",
+  "order.create",
+  "order.status.update",
+  "order.payment_status.update",
+  "customer.create",
+  "customer.update",
+  "customer.merchant.update",
+] as const
 
+// Bumped whenever ZID_WEBHOOK_EVENTS changes, so every existing connection re-registers exactly
+// once (see ZidOAuthService.ensureWebhooksRegistered) instead of only connections made afterwards.
+// v1 (unrecorded) was product.create/update/publish only.
+const ZID_WEBHOOKS_REGISTERED_EVENT = "zid.webhooks.registered.v2"
+
+// Returns whether every event registered successfully.
 async function registerZidWebhooks(input: {
   config: ZidOAuthServiceConfig
   accessToken: string
   authorizationHeader: string
-}): Promise<void> {
-  const targetUrl =
+  storeId: string
+}): Promise<boolean> {
+  const baseTargetUrl =
     process.env.ZID_WEBHOOK_TARGET_URL ?? "http://localhost:4000/v1/integrations/zid/webhook"
+  // The store id rides along in the target URL: a customer.* delivery's body carries no store_id
+  // at all (confirmed against real synced customer records), so without it the webhook route
+  // could never tell which connection the delivery belongs to.
+  const targetUrl = new URL(baseTargetUrl)
+  targetUrl.searchParams.set("store_id", input.storeId)
   const credentials = await resolveZidWebhookCredentials()
   if (!credentials) {
     console.error("zid.webhook_registration_skipped_not_configured")
-    return
+    return false
   }
 
+  let allSucceeded = true
   for (const event of ZID_WEBHOOK_EVENTS) {
     try {
       const response = await fetch(
@@ -414,7 +437,7 @@ async function registerZidWebhooks(input: {
           },
           body: JSON.stringify({
             event,
-            target_url: targetUrl,
+            target_url: targetUrl.toString(),
             original_id: "madar-platform",
             username: credentials.username,
             password: credentials.password,
@@ -422,6 +445,7 @@ async function registerZidWebhooks(input: {
         }
       )
       if (!response.ok) {
+        allSucceeded = false
         const bodyText = await response.text().catch(() => "")
         console.error("zid.webhook_registration_failed", {
           event,
@@ -430,9 +454,11 @@ async function registerZidWebhooks(input: {
         })
       }
     } catch (error) {
+      allSucceeded = false
       console.error("zid.webhook_registration_failed", { event, error })
     }
   }
+  return allSucceeded
 }
 
 async function refreshAccessToken(input: {
@@ -799,9 +825,17 @@ export class ZidOAuthService {
       config,
       accessToken: token.access_token,
       authorizationHeader: buildAuthorizationHeader(token),
-    }).catch((error: unknown) => {
-      console.error("zid.webhook_registration_failed", error)
+      storeId: primaryAccount.customerId,
     })
+      .then((allSucceeded) =>
+        this.repository.saveEvent(connectionId, ZID_WEBHOOKS_REGISTERED_EVENT, {
+          events: ZID_WEBHOOK_EVENTS,
+          allSucceeded,
+        })
+      )
+      .catch((error: unknown) => {
+        console.error("zid.webhook_registration_failed", error)
+      })
 
     return {
       connectionId,
@@ -1282,6 +1316,40 @@ export class ZidOAuthService {
           isSelected: acc.isSelected,
         })),
       },
+    }
+  }
+
+  // Brings a connection's webhook subscriptions up to the current ZID_WEBHOOK_EVENTS, once:
+  // connections made before order.*/customer.* were added only ever got product.* events, and
+  // Zid only registers on connect. Called best-effort from every sync and every incoming webhook,
+  // so existing stores pick the new events up without reconnecting. Recorded after one attempt
+  // whatever its outcome (failures are logged per event): retrying on every trigger would
+  // re-register the events that DID succeed each time, multiplying Zid's deliveries.
+  private readonly webhookRegistrationsInFlight = new Set<string>()
+
+  async ensureWebhooksRegistered(connectionId: string): Promise<void> {
+    if (this.webhookRegistrationsInFlight.has(connectionId)) return
+    this.webhookRegistrationsInFlight.add(connectionId)
+    try {
+      if (await this.repository.hasEvent(connectionId, ZID_WEBHOOKS_REGISTERED_EVENT)) return
+      const storeId = await this.repository.findSelectedStoreAccountId(connectionId)
+      if (!storeId) return
+
+      const config = await this.loadResolvedConfig()
+      const { accessToken, authorizationHeader } = await this.resolveAccessToken(connectionId)
+      const allSucceeded = await registerZidWebhooks({
+        config,
+        accessToken,
+        authorizationHeader,
+        storeId,
+      })
+      await this.repository.saveEvent(connectionId, ZID_WEBHOOKS_REGISTERED_EVENT, {
+        events: ZID_WEBHOOK_EVENTS,
+        allSucceeded,
+      })
+      console.log("zid.webhooks_registered", { connectionId, storeId, allSucceeded })
+    } finally {
+      this.webhookRegistrationsInFlight.delete(connectionId)
     }
   }
 

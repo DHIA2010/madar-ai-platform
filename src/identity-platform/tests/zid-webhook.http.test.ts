@@ -316,6 +316,124 @@ describe("POST /v1/integrations/zid/webhook", () => {
     expect(rows.rows[0]).toEqual({ entity_type: "customers", entity_id: "800222" })
   })
 
+  it("resolves a customer.* delivery (no store_id in its body) via the target URL's store_id param", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    vi.spyOn(ZidOAuthService.prototype, "ensureWebhooksRegistered").mockResolvedValue()
+
+    // The real customer shape (confirmed against synced records): no store_id anywhere.
+    const response = await authedPost(
+      `/v1/integrations/zid/webhook?store_id=${STORE_ID}`,
+      "customer.update",
+      { id: 19220444, name: "Zid Customer", mobile: "966500000010" }
+    )
+    expect(response.status).toBe(200)
+
+    const rows = await database.query<{ entity_id: string; payload: { mobile?: string } }>(
+      `select entity_id, payload from zid_records where connection_id = $1 and entity_type = 'customers'`,
+      [connectionId]
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0].entity_id).toBe("19220444")
+    expect(rows.rows[0].payload.mobile).toBe("966500000010")
+  })
+
+  it("re-fetches every product on an order.create so the stock Zid deducted reaches Madar", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    vi.spyOn(ZidOAuthService.prototype, "ensureWebhooksRegistered").mockResolvedValue()
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "test-access-token",
+      authorizationHeader: "Bearer test-access-token",
+    })
+    const refetched: string[] = []
+    const nativeFetch = globalThis.fetch
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      const productId = url.match(/\/products\/([^/]+)\//)?.[1] ?? ""
+      refetched.push(productId)
+      return new Response(
+        JSON.stringify({ id: productId, quantity: 9, updated_at: "2026-01-01T00:00:00Z" }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    })
+
+    const response = await authedPost("/v1/integrations/zid/webhook", "order.create", {
+      id: 501077501,
+      store_id: Number(STORE_ID),
+      updated_at: "2026-01-01T00:00:00Z",
+      // A simple product (id) and a variant (parent_id is the product) -- the shapes real synced
+      // orders carry.
+      products: [
+        { id: "prod-simple", parent_id: null, quantity: 1 },
+        { id: "variant-1", parent_id: "prod-parent", quantity: 2 },
+      ],
+    })
+    expect(response.status).toBe(200)
+    expect(refetched.sort()).toEqual(["prod-parent", "prod-simple"])
+
+    const rows = await database.query<{ entity_type: string; entity_id: string }>(
+      `select entity_type, entity_id from zid_records where connection_id = $1 order by entity_type, entity_id`,
+      [connectionId]
+    )
+    expect(rows.rows).toEqual([
+      { entity_type: "orders", entity_id: "501077501" },
+      { entity_type: "products", entity_id: "prod-parent" },
+      { entity_type: "products", entity_id: "prod-simple" },
+    ])
+  })
+
+  it("upgrades a connection's webhook subscriptions once, store-scoped, on its next delivery", async () => {
+    const org = await seedOrganization()
+    const { connectionId, customerId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    vi.spyOn(ZidOAuthService.prototype, "resolveAccessToken").mockResolvedValue({
+      accessToken: "test-access-token",
+      authorizationHeader: "Bearer test-access-token",
+    })
+    const registrations: Array<{ event: string; target_url: string }> = []
+    const nativeFetch = globalThis.fetch
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (url.startsWith(baseUrl)) return nativeFetch(rawInput, init)
+      if (url.endsWith("/managers/webhooks")) {
+        registrations.push(JSON.parse(String(init?.body)))
+        return new Response("{}", { status: 201 })
+      }
+      return new Response("{}", { status: 404 })
+    })
+
+    const waitForRegistration = async () => {
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const found = await database.query(
+          `select 1 from zid_oauth_events where connection_id = $1 and event_type = 'zid.webhooks.registered.v2'`,
+          [connectionId]
+        )
+        if (found.rows.length > 0) return
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+      throw new Error("webhook registration was never recorded")
+    }
+
+    const body = { id: 19220444, name: "Zid Customer" }
+    await authedPost(`/v1/integrations/zid/webhook?store_id=${STORE_ID}`, "customer.update", body)
+    await waitForRegistration()
+
+    const events = registrations.map((registration) => registration.event)
+    expect(events).toEqual(expect.arrayContaining(["order.create", "customer.update"]))
+    // Every registration targets the selected store (zid_stores.account_id, the id Zid puts in
+    // an order/product body's own store_id).
+    for (const registration of registrations) {
+      expect(new URL(registration.target_url).searchParams.get("store_id")).toBe(customerId)
+    }
+
+    // A second delivery doesn't register again.
+    const countAfterFirst = registrations.length
+    await authedPost(`/v1/integrations/zid/webhook?store_id=${STORE_ID}`, "customer.update", body)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(registrations).toHaveLength(countAfterFirst)
+  })
+
   it("is idempotent against a duplicated/replayed delivery", async () => {
     const org = await seedOrganization()
     const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
