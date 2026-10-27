@@ -80,7 +80,7 @@ function mapOrganization(row: Record<string, unknown>): OrganizationState {
     logoUrl: (row.logo_url as string | null) ?? null,
     timezone: (row.timezone as string | null) ?? "UTC",
     locale: (row.locale as string | null) ?? "en",
-    currency: (row.currency as string | null) ?? "USD",
+    currency: (row.currency as string | null) ?? "SAR",
     subscriptionReference: (row.subscription_reference as string | null) ?? null,
     settings: (row.settings as Record<string, string | boolean | number>) ?? {},
     createdAt: toIsoString(row.created_at) ?? "",

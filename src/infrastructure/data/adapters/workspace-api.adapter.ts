@@ -174,7 +174,7 @@ function toWorkspaceDto(raw: RawWorkspace): WorkspaceDto {
     settings: {
       locale: typeof settings.locale === "string" ? settings.locale : "en-US",
       timezone: typeof settings.timezone === "string" ? settings.timezone : "UTC",
-      currency: typeof settings.currency === "string" ? settings.currency : "USD",
+      currency: typeof settings.currency === "string" ? settings.currency : "SAR",
       dateFormat: typeof settings.dateFormat === "string" ? settings.dateFormat : "dd/MM/yyyy",
     },
     status: raw.status,

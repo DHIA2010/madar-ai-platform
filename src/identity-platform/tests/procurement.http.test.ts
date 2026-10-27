@@ -441,9 +441,9 @@ describe("procurement: supplier vouchers", () => {
     expect(linked.body).toMatchObject({
       reference: "PV-0001",
       purchaseCode: purchase.body.code,
-      // Snapshotted from the organization's currency at creation time (default 'USD' -- see
-      // migration 002) -- never re-derived from the linked purchase or supplier later.
-      currency: "USD",
+      // Snapshotted from the organization's currency at creation time (default 'SAR' -- see
+      // migration 115) -- never re-derived from the linked purchase or supplier later.
+      currency: "SAR",
     })
 
     const unlinked = await createVoucher(token, {

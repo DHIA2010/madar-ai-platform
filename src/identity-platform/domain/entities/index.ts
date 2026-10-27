@@ -210,7 +210,7 @@ export class OrganizationEntity {
       logoUrl: input.logoUrl ?? null,
       timezone: input.timezone ?? "UTC",
       locale: input.locale ?? "en",
-      currency: input.currency ?? "USD",
+      currency: input.currency ?? "SAR",
       subscriptionReference: input.subscriptionReference ?? null,
       settings: input.settings ?? {},
       createdAt: input.now,
