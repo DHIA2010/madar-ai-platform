@@ -2,6 +2,7 @@ export const ROUTES = {
   home: "/",
   dashboard: "/dashboard/analytics",
   workspaceSelect: "/workspace/select",
+  welcome: "/welcome",
   channels: "/channels",
   campaigns: "/campaigns",
   campaignsCreate: "/campaigns/new",

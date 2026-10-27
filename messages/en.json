@@ -206,9 +206,10 @@
         "empty": "—"
       },
       "success": {
-        "heading": "Your account has been created!",
-        "description": "Welcome to MADAR — you can now sign in and start managing your campaigns.",
-        "goToLogin": "Go to sign in"
+        "greeting": "Welcome, {name} 👋",
+        "descriptionLine1": "Your account has been created and everything's ready now.",
+        "descriptionLine2": "Start your journey with Madar and discover your tools in one place.",
+        "continueButton": "Go to Madar"
       },
       "showcase": {
         "eyebrow": "An integrated platform for store growth",

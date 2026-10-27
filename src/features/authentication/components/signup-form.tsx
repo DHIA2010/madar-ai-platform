@@ -274,7 +274,24 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
       // as ?zidInstall above), so this page owns sending the visitor back to whatever protected
       // page ProtectedRoute originally bounced them from.
       router.push(nextPath)
+      return
     }
+
+    if (isInvitationMode) {
+      // Joining an existing organization via a team invite isn't "your account has been
+      // created, welcome to Madar" the way a fresh signup is -- GuestRoute's own default
+      // redirect only backs off for ?zidInstall/?next, not this case, so send them to the
+      // dashboard explicitly rather than relying on it.
+      router.push(ROUTES.dashboard)
+      return
+    }
+
+    // Plain signup (new organization, no Zid install, no bounced-from-a-protected-page
+    // redirect): GuestRoute skips its own default redirect for the register page specifically
+    // (see guest-route.tsx's isRegisterPage), so this page owns sending a freshly-registered --
+    // and, per register()'s own chain, already-authenticated -- user to the Welcome screen
+    // instead of straight to the dashboard.
+    router.push(ROUTES.welcome)
   })
 
   return (
