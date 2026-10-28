@@ -1,4 +1,4 @@
-import type { EmailGateway } from "../../application/ports"
+import type { EmailGateway, RenewalReminderEmail } from "../../application/ports"
 
 export class InMemoryEmailGateway implements EmailGateway {
   readonly sent: Array<Record<string, string>> = []
@@ -27,5 +27,9 @@ export class InMemoryEmailGateway implements EmailGateway {
     storeName: string
   }) {
     this.sent.push({ kind: "zid_welcome", ...input })
+  }
+
+  async sendRenewalReminderEmail(input: RenewalReminderEmail) {
+    this.sent.push({ ...input, reminderKind: input.kind, kind: "renewal_reminder" })
   }
 }

@@ -61,6 +61,18 @@ export interface EmailGateway {
     loginUrl: string
     storeName: string
   }): Promise<void>
+  // A trial or paid period is about to end (billing maintenance, a few days ahead).
+  sendRenewalReminderEmail(input: RenewalReminderEmail): Promise<void>
+}
+
+export interface RenewalReminderEmail {
+  email: string
+  organizationName: string
+  // Already in Arabic, e.g. "نقطة البيع".
+  applicationLabel: string
+  kind: "trial" | "paid"
+  endsAt: string
+  renewUrl: string
 }
 
 export interface Logger {

@@ -139,7 +139,8 @@
       "invitationError": "تم تسجيل الدخول، لكن تعذّر قبول الدعوة. ربما انتهت صلاحيتها أو تم استخدامها بالفعل.",
       "zidInstallBanner": "سجّل الدخول لإتمام ربط متجر Zid بمدار.",
       "zidInstallClaimed": "تم ربط متجر Zid بنجاح!",
-      "zidInstallClaimError": "تم تسجيل الدخول، لكن تعذّر ربط متجر Zid. قد يكون الرابط منتهي الصلاحية — حاول التفعيل من Zid مرة أخرى."
+      "zidInstallClaimError": "تم تسجيل الدخول، لكن تعذّر ربط متجر Zid. قد يكون الرابط منتهي الصلاحية — حاول التفعيل من Zid مرة أخرى.",
+      "maintenanceMode": "مدار تحت الصيانة حالياً. يرجى المحاولة بعد قليل."
     },
     "register": {
       "heading": "إنشاء حساب جديد",
@@ -260,7 +261,9 @@
       "invitationAccountExists": "لديك حساب بالفعل بهذا البريد الإلكتروني. سجّل الدخول بدلاً من ذلك لقبول الدعوة.",
       "zidInstallBanner": "أنشئ حسابك أدناه لإتمام ربط متجر Zid بمدار.",
       "zidInstallClaimed": "تم ربط متجر Zid بنجاح!",
-      "zidInstallClaimError": "تم إنشاء الحساب، لكن تعذّر ربط متجر Zid. قد يكون الرابط منتهي الصلاحية — حاول التفعيل من Zid مرة أخرى."
+      "zidInstallClaimError": "تم إنشاء الحساب، لكن تعذّر ربط متجر Zid. قد يكون الرابط منتهي الصلاحية — حاول التفعيل من Zid مرة أخرى.",
+      "signupsClosed": "التسجيل الجديد متوقف مؤقتاً. يرجى المحاولة لاحقاً أو التواصل مع فريق مدار.",
+      "maintenanceMode": "مدار تحت الصيانة حالياً. يرجى المحاولة بعد قليل."
     },
     "zidClaim": {
       "loading": "جارٍ التحميل…",
@@ -701,9 +704,14 @@
     "requestDialog": {
       "title": "طلب تفعيل {name}",
       "description": "اختر الباقة المناسبة، وادفع ببطاقتك فورًا أو أرفق إيصال تحويل بنكي -- التفعيل عبر البطاقة فوري، وعبر التحويل البنكي بعد مراجعة الطلب.",
-      "trialBannerTitle": "جرّب مجانًا لمدة 7 أيام",
+      "trialBannerTitle": "جرّب مجانًا لمدة {days, plural, =1 {يوم واحد} =2 {يومين} few {# أيام} many {# يومًا} other {# يوم}}",
       "trialBannerSubtitle": "بدون دفع، وبدون انتظار موافقة.",
       "startTrial": "ابدأ التجربة",
+      "freeTitle": "هذا التطبيق مجاني",
+      "freeLimitedSubtitle": "فعّله الآن بدون دفع لمدة {days, plural, =1 {يوم واحد} =2 {يومين} few {# أيام} many {# يومًا} other {# يوم}}، ثم يتوقف تلقائياً.",
+      "activateFree": "تفعيل مجاناً",
+      "toastFreeActivated": "تم تفعيل {name} مجاناً.",
+      "toastFreeError": "تعذر تفعيل التطبيق. حاول مرة أخرى.",
       "planLabel": "الباقة",
       "comparePlans": "مقارنة الباقات",
       "payNow": "ادفع الآن",
@@ -718,8 +726,19 @@
       "toastFileTooLarge": "يجب ألا يتجاوز حجم الملف 5 ميجابايت.",
       "toastRequestSubmitted": "تم إرسال طلب تفعيل {name} للمراجعة.",
       "toastRequestError": "تعذر إرسال طلب التفعيل. حاول مرة أخرى.",
-      "toastTrialActivated": "تم تفعيل تجربة {name} المجانية لمدة 7 أيام.",
-      "toastTrialError": "تعذر بدء التجربة المجانية. حاول مرة أخرى."
+      "toastTrialActivated": "تم تفعيل تجربة {name} المجانية لمدة {days, plural, =1 {يوم واحد} =2 {يومين} few {# أيام} many {# يومًا} other {# يوم}}.",
+      "toastTrialError": "تعذر بدء التجربة المجانية. حاول مرة أخرى.",
+      "billingMonthly": "شهري",
+      "billingYearly": "سنوي",
+      "perMonth": "/ شهر",
+      "perYear": "/ سنة",
+      "yearlySaving": "وفّر {percent}%",
+      "priceLabel": "السعر",
+      "noPriceForPeriod": "غير متاح",
+      "contactTitle": "تواصل معنا للاشتراك",
+      "contactDescription": "هذا الاشتراك متاح بسعر مخصص. تواصل مع فريق مدار عبر {email} وسنساعدك في التفعيل.",
+      "noPackages": "لا توجد باقات متاحة لهذا التطبيق حاليًا.",
+      "loadingPackages": "جارٍ تحميل الباقات..."
     },
     "planComparison": {
       "title": "مقارنة الباقات",
@@ -954,6 +973,14 @@
           }
         }
       }
+    },
+    "pricing": {
+      "startingFrom": "يبدأ من {price} ر.س {period}",
+      "fixed": "{price} ر.س {period}",
+      "contactUs": "تواصل معنا",
+      "freeFor": "مجاني لمدة {days, plural, =1 {يوم واحد} =2 {يومين} few {# أيام} many {# يومًا} other {# يوم}}",
+      "perMonth": "/ شهر",
+      "perYear": "/ سنة"
     }
   },
   "purchases": {
@@ -5571,7 +5598,22 @@
           "title": "رابط غير صالح",
           "description": "تعذر العثور على بيانات الباقة المطلوبة. ارجع إلى المتجر وحاول مرة أخرى."
         },
-        "planLabel": "باقة {tier}"
+        "planLabel": "باقة {tier}",
+        "couponLabel": "كوبون خصم",
+        "couponPlaceholder": "أدخل الكود",
+        "couponApply": "تطبيق",
+        "couponRemove": "إزالة",
+        "couponApplied": "تم تطبيق الكوبون {code}",
+        "couponDiscount": "الخصم",
+        "couponTotal": "الإجمالي بعد الخصم",
+        "couponErrors": {
+          "COUPON_NOT_FOUND": "كود الكوبون غير صحيح.",
+          "COUPON_DISABLED": "هذا الكوبون غير مفعل.",
+          "COUPON_EXPIRED": "انتهت صلاحية هذا الكوبون.",
+          "COUPON_EXHAUSTED": "وصل هذا الكوبون إلى حد الاستخدام.",
+          "COUPON_NOT_APPLICABLE": "هذا الكوبون لا ينطبق على هذا الاشتراك.",
+          "generic": "تعذر التحقق من الكوبون."
+        }
       },
       "paymentPanel": {
         "startFailedFallback": "تعذر بدء عملية الدفع.",

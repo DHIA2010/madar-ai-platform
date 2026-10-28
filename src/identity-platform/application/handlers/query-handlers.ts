@@ -79,6 +79,8 @@ export class IdentityQueryHandlers {
       emailVerifiedAt: user.emailVerifiedAt,
       modulePermissions: actor.modulePermissions,
       isPlatformAdmin: actor.isPlatformAdmin ?? false,
+      platformRole: actor.platformRole ?? null,
+      platformPermissions: actor.platformPermissions ?? [],
     }
   }
 

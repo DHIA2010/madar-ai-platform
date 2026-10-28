@@ -256,3 +256,31 @@ describe("platform admin: customers and subscriptions", () => {
     ).toBe(400)
   })
 })
+
+describe("platform admin: overview", () => {
+  it("summarizes customers, subscriptions, and revenue, and records today's snapshot", async () => {
+    const shop = await signIn("overview@shop.test", "Overview Shop")
+    const staff = await signIn(STAFF_EMAIL, "Madar HQ")
+    await post(staff.token, `/customers/${shop.actor.organizationId}/subscriptions`, {
+      application: "pos",
+      interval: "monthly",
+      priceHalalas: 29900,
+    })
+
+    const overview = await get<{
+      kpis: Record<string, { value: number; deltaPct: number | null }>
+      trend: unknown[]
+      subscriptionsByApplication: Array<{ application: string; count: number }>
+      recentCustomers: Array<{ name: string }>
+    }>(staff.token, "/overview")
+    expect(overview.status).toBe(200)
+    expect(overview.body.kpis.customers).toEqual({ value: 2, deltaPct: null })
+    expect(overview.body.kpis.activeSubscriptions.value).toBe(1)
+    expect(overview.body.kpis.mrrHalalas.value).toBe(29900)
+    expect(overview.body.trend).toHaveLength(8)
+    expect(overview.body.subscriptionsByApplication).toEqual([{ application: "pos", count: 1 }])
+
+    const snapshots = await database.query("select * from platform_daily_metrics")
+    expect(snapshots.rows).toHaveLength(1)
+  })
+})

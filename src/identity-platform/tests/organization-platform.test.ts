@@ -359,7 +359,7 @@ describe("organization platform", () => {
   // is. This confirms the merge behavior new frontend code depends on (flipping one application
   // flag doesn't clobber an unrelated settings key set earlier) and that the existing
   // settings:edit gate really does block a member with no permissions from flipping it.
-  it("persists application-activation flags through updateOrganization's settings, merged with existing keys and gated on settings:edit", async () => {
+  it("merges settings through updateOrganization, gated on settings:edit, but never lets a customer turn a paid application on", async () => {
     const container = createContainer()
     const owner = await registerAndLogin(container, "app-activation-owner@madar.test")
     const organization = await container.commands.createOrganization(
@@ -410,15 +410,29 @@ describe("organization platform", () => {
       { settings: { storeName: "متجر الاختبار" } },
       context
     )
+    // Activation, trial dates, and the plan are billing's to set -- even the owner can't self-grant
+    // a paid application (or stretch a trial) with a settings update.
+    const attempts: Array<Record<string, string | boolean>> = [
+      { ecommerceEnabled: true },
+      { posTrialEndsAt: "2099-01-01T00:00:00.000Z" },
+      { aiTrialUsed: false },
+      { currentPlanTier: "pro" },
+    ]
+    for (const settings of attempts) {
+      await expect(
+        container.commands.updateOrganization(owner.actor, organization.id, { settings }, context)
+      ).rejects.toMatchObject({ code: "BILLING_CONTROLLED_SETTING", status: 403 })
+    }
+
+    // Switching an application off (and clearing its trial marker) is still self-service.
     const updated = await container.commands.updateOrganization(
       owner.actor,
       organization.id,
-      { settings: { ecommerceEnabled: true, posEnabled: true } },
+      { settings: { ecommerceEnabled: false, ecommerceTrialEndsAt: "" } },
       context
     )
 
-    expect(updated.settings.ecommerceEnabled).toBe(true)
-    expect(updated.settings.posEnabled).toBe(true)
+    expect(updated.settings.ecommerceEnabled).toBe(false)
     expect(updated.settings.storeName).toBe("متجر الاختبار")
   })
 })

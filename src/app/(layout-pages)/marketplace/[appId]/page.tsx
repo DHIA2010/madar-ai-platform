@@ -18,8 +18,8 @@ export default function Page() {
     trialAvailableByCategory,
     submitActivationRequest,
     deactivateApplication,
-    activateAllApplications,
     startTrial,
+    activateFreeApplication,
   } = useApplicationsCatalog()
   const entry = getApplicationById(params.appId, catalog, bundle)
 
@@ -38,14 +38,11 @@ export default function Page() {
         isMadarCompleteBundle(entry) ? false : trialAvailableByCategory[entry.category]
       }
       onConfirmActivation={async (target) => {
-        if (target.id === "madar-complete") {
-          await activateAllApplications()
-          return
-        }
         await deactivateApplication(target.id)
       }}
       onSubmitActivationRequest={submitActivationRequest}
       onStartTrial={startTrial}
+      onActivateFree={activateFreeApplication}
     />
   )
 }

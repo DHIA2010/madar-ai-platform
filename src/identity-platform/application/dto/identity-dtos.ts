@@ -1,3 +1,4 @@
+import type { PlatformPermission, PlatformRole } from "../../platform-admin/staff-roles"
 type Role = "owner" | "admin" | "manager" | "analyst" | "viewer"
 
 export interface RequestContext {
@@ -21,6 +22,9 @@ export interface AuthenticatedActor {
   // without it don't all need updating -- absent is treated the same as false everywhere it's
   // checked.
   isPlatformAdmin?: boolean
+  // Madar staff only: their fixed role and what it allows in Madar Admin.
+  platformRole?: PlatformRole | null
+  platformPermissions?: PlatformPermission[]
 }
 
 export interface TokenPair {

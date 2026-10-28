@@ -91,7 +91,14 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
     try {
       await login(values)
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : t("genericError"))
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : ""
+      setFormError(
+        code === "PLATFORM_MAINTENANCE"
+          ? t("maintenanceMode")
+          : error instanceof Error
+            ? error.message
+            : t("genericError")
+      )
       return
     }
 

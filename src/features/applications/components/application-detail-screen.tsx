@@ -36,6 +36,7 @@ export function ApplicationDetailScreen({
   onConfirmActivation,
   onSubmitActivationRequest,
   onStartTrial,
+  onActivateFree,
 }: {
   entry: ApplicationCatalogEntry
   trialAvailable: boolean
@@ -44,6 +45,7 @@ export function ApplicationDetailScreen({
   // A single paid application's activation -- now a tier + receipt request, not an instant confirm.
   onSubmitActivationRequest: (input: ActivationRequestInput) => Promise<void>
   onStartTrial: (applicationId: string) => Promise<void>
+  onActivateFree: (applicationId: string) => Promise<void>
 }) {
   const t = useTranslations("applications")
   const locale = useLocale()
@@ -99,7 +101,7 @@ export function ApplicationDetailScreen({
                   </span>
                 )}
               </div>
-              {!isBundle && entry.priceLabel ? (
+              {entry.priceLabel ? (
                 <p className={cn("mt-1 text-[13px] font-bold", PAGE_TEXT)}>{entry.priceLabel}</p>
               ) : null}
             </div>
@@ -110,13 +112,13 @@ export function ApplicationDetailScreen({
               <AppButton
                 className="h-11 rounded-[10px] bg-[#c2900c] text-[13px] font-semibold text-white hover:bg-[#a97b0a]"
                 onClick={() =>
-                  setPendingActivation({
-                    id: entry.id,
+                  setPendingRequest({
+                    applicationId: entry.id,
+                    category: "madarComplete",
                     name: entry.name,
-                    confirmLabel: entry.primaryCtaLabel,
                     icon: Crown,
                     iconWrapperClassName: "bg-[#fff3d6] text-[#c2900c]",
-                    confirmButtonClassName: "bg-[#c2900c] text-white hover:bg-[#a97b0a]",
+                    trialAvailable: false,
                   })
                 }
               >
@@ -203,6 +205,7 @@ export function ApplicationDetailScreen({
         }}
         onSubmit={onSubmitActivationRequest}
         onStartTrial={onStartTrial}
+        onActivateFree={onActivateFree}
       />
     </div>
   )

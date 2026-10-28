@@ -247,6 +247,10 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
         setFormError(t("invitationAccountExists"))
         return
       }
+      if (code === "SIGNUPS_CLOSED" || code === "PLATFORM_MAINTENANCE") {
+        setFormError(t(code === "SIGNUPS_CLOSED" ? "signupsClosed" : "maintenanceMode"))
+        return
+      }
       setFormError(error instanceof Error ? error.message : t("genericError"))
       return
     }

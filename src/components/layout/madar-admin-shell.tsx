@@ -12,12 +12,12 @@ import { NotificationDropdown } from "@/components/notification-dropdown"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 
-const TODAY_LABEL = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+const TODAY_FORMAT = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
   weekday: "long",
   day: "numeric",
   month: "long",
   year: "numeric",
-}).format(new Date(2026, 7, 15))
+})
 
 // Structurally identical to admin-layout.tsx (SidebarProvider/SidebarInset/header), minus
 // WorkspaceSelector (no workspace concept in a cross-tenant console) and GlobalSearch (its ⌘K
@@ -72,7 +72,12 @@ export function MadarAdminShell({ children }: { children: React.ReactNode }) {
             />
           </div>
 
-          <div className="me-auto hidden text-sm text-muted-foreground md:block">{TODAY_LABEL}</div>
+          <div
+            className="me-auto hidden text-sm text-muted-foreground md:block"
+            suppressHydrationWarning
+          >
+            {TODAY_FORMAT.format(new Date())}
+          </div>
 
           <div className="flex items-center gap-2">
             <ThemeToggle />

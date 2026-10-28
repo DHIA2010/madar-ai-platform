@@ -20,6 +20,9 @@ export interface User {
   permissions: string[]
   modulePermissions: string[]
   isPlatformAdmin: boolean
+  // Madar staff only: their fixed role and the Madar Admin capabilities it grants.
+  platformRole?: string | null
+  platformPermissions?: string[]
 }
 
 export interface UpdateProfileRequest {

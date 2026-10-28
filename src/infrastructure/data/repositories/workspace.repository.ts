@@ -4,6 +4,7 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  PurchasableApplication,
   SubscriptionActivationRequestDto,
   SubscriptionRequestStatus,
   WorkspaceDto,
@@ -233,7 +234,8 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
     organizationId: string,
     payload: {
       application: SubscriptionActivationRequestDto["application"]
-      planTier: SubscriptionActivationRequestDto["planTier"]
+      packageId: string
+      interval: "monthly" | "yearly"
       attachmentContentType: string
       attachmentDataBase64: string
     }
@@ -267,7 +269,7 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
 
   async startApplicationTrial(
     organizationId: string,
-    application: SubscriptionActivationRequestDto["application"]
+    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
   ): Promise<OrganizationDto> {
     try {
       if (this.resolveBackend() === "mock") {
@@ -278,6 +280,26 @@ export class DataWorkspaceRepository implements WorkspaceRepository {
       }
 
       const dto = await this.adapter.startApplicationTrial(organizationId, application)
+      this.cache.clear()
+      return dto
+    } catch (error) {
+      throw mapRepositoryError(error)
+    }
+  }
+
+  async activateFreeApplication(
+    organizationId: string,
+    application: PurchasableApplication
+  ): Promise<OrganizationDto> {
+    try {
+      if (this.resolveBackend() === "mock") {
+        const mockGateway = await this.getMockGateway()
+        const dto = await mockGateway.activateFreeApplication(organizationId, application)
+        this.cache.clear()
+        return dto
+      }
+
+      const dto = await this.adapter.activateFreeApplication(organizationId, application)
       this.cache.clear()
       return dto
     } catch (error) {

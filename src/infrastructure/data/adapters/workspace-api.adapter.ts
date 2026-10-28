@@ -2,6 +2,7 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  PurchasableApplication,
   SubscriptionActivationRequestDto,
   SubscriptionRequestStatus,
   WorkspaceDto,
@@ -297,7 +298,8 @@ export class WorkspaceApiAdapter {
     organizationId: string,
     payload: {
       application: SubscriptionActivationRequestDto["application"]
-      planTier: SubscriptionActivationRequestDto["planTier"]
+      packageId: string
+      interval: "monthly" | "yearly"
       attachmentContentType: string
       attachmentDataBase64: string
     }
@@ -322,13 +324,25 @@ export class WorkspaceApiAdapter {
   // request methods use.
   startApplicationTrial(
     organizationId: string,
-    application: SubscriptionActivationRequestDto["application"]
+    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
   ): Promise<OrganizationDto> {
     return this.client
       .post<
         { application: typeof application },
         RawOrganization
       >(`/v1/organizations/${organizationId}/application-trials`, { application })
+      .then(toOrganizationDto)
+  }
+
+  activateFreeApplication(
+    organizationId: string,
+    application: PurchasableApplication
+  ): Promise<OrganizationDto> {
+    return this.client
+      .post<
+        { application: PurchasableApplication },
+        RawOrganization
+      >(`/v1/organizations/${organizationId}/free-activations`, { application })
       .then(toOrganizationDto)
   }
 

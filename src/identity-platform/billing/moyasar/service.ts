@@ -4,12 +4,15 @@ import type { AuthenticatedActor } from "../../application/dto/identity-dtos"
 import { ERRORS } from "../../application/errors/IdentityError"
 import type { PostgresDatabase } from "../../infrastructure/postgres/database"
 import { writeAuditLog } from "../../infrastructure/postgres/audit-log-writer"
+import type { CouponService } from "../../coupons/service"
+import type { PricingService } from "../../pricing/service"
+import { activationSettingsPatch } from "../../subscriptions/activation"
 import { activatePaid } from "../../subscriptions/lifecycle"
 import { PostgresOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 import { MoyasarApiClient } from "./client"
 import { resolveMoyasarCredentials } from "./credentials"
-import { MOYASAR_CURRENCY, MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "./plan-pricing"
+import { MOYASAR_CURRENCY } from "./plan-pricing"
 import { MoyasarBillingRepository } from "./repository"
 import type {
   ConfirmCheckoutInput,
@@ -19,26 +22,12 @@ import type {
   MoyasarWebhookPayload,
 } from "./types"
 
-// A fourth copy of this map (frontend: applications-catalog.service.ts, backend:
-// command-handlers.ts's private APPLICATION_SETTINGS_KEY, ai-chat/guards.ts's own copy) --
-// consistent with the existing duplication precedent: billing/moyasar/ must not reach into
-// IdentityCommandHandlers' private members, and command-handlers.ts must not import feature
-// modules.
-const APPLICATION_SETTINGS_KEY: Record<CreateCheckoutIntentInput["application"], string> = {
-  advertising: "advertisingEnabled",
-  ecommerce: "ecommerceEnabled",
-  pos: "posEnabled",
-  madarApps: "madarAppsEnabled",
-  procurement: "procurementEnabled",
-  expenses: "expensesEnabled",
-  ai: "aiEnabled",
-  customReports: "customReportsEnabled",
-}
-
 export class MoyasarBillingService {
   constructor(
     private readonly db: PostgresDatabase,
-    private readonly repository: MoyasarBillingRepository
+    private readonly repository: MoyasarBillingRepository,
+    private readonly pricing: PricingService,
+    private readonly coupons: CouponService
   ) {}
 
   // Credentials are resolved lazily per call rather than once at server startup -- createServer's
@@ -57,21 +46,38 @@ export class MoyasarBillingService {
     actor: AuthenticatedActor,
     input: CreateCheckoutIntentInput
   ): Promise<CreateCheckoutIntentResult> {
-    const amount = MOYASAR_PLAN_TIER_AMOUNT_HALALAS[input.planTier]
-    if (amount === undefined) {
-      // Only reachable for an 'enterprise' tier bypassing the zod enum, or a future tier added to
-      // the type without a price here -- enterprise is "تواصل معنا" and never has a self-serve
-      // checkout amount, see plan-pricing.ts.
-      throw ERRORS.validation({ planTier: "This plan is not available for self-serve checkout." })
-    }
+    // The amount comes from the package's current price in Madar Admin -- never from the client.
+    // A "contact us" application, an inactive package, or a period with no price is refused here.
+    const purchase = await this.pricing.resolvePurchase(input)
+    // A coupon is re-checked here (not just trusted from the customer's earlier quote) and only
+    // counted as used once the payment actually succeeds.
+    const quote = input.couponCode
+      ? await this.coupons.quote({
+          code: input.couponCode,
+          application: input.application,
+          packageId: purchase.package.id,
+          interval: purchase.interval,
+          amountHalalas: purchase.amountHalalas,
+        })
+      : null
 
     const credentials = await this.requireCredentials()
     const payment = await this.repository.createCheckout({
       organizationId: actor.organizationId,
       requestedByUserId: actor.userId,
       application: input.application,
-      planTier: input.planTier,
-      amount,
+      planTier:
+        purchase.package.legacyPlanTier === "enterprise" ? null : purchase.package.legacyPlanTier,
+      packageId: purchase.package.id,
+      billingInterval: purchase.interval,
+      coupon: quote
+        ? {
+            id: quote.couponId,
+            originalAmount: quote.originalAmountHalalas,
+            discountHalalas: quote.discountHalalas,
+          }
+        : null,
+      amount: quote ? quote.finalAmountHalalas : purchase.amountHalalas,
       currency: MOYASAR_CURRENCY,
     })
 
@@ -145,18 +151,16 @@ export class MoyasarBillingService {
       })
 
       if (isGenuinelyPaid) {
-        await this.repository.applySettingsPatch(payment.organizationId, {
-          [APPLICATION_SETTINGS_KEY[payment.application]]: true,
-          currentPlanTier: payment.planTier,
-          // Clears any earlier free-trial expiry marker, same reasoning as
-          // approveSubscriptionActivationRequest in command-handlers.ts -- a real paid charge must
-          // never be mistaken for a lapsed trial by ai-chat/guards.ts or the frontend's
-          // resolveApplicationStatus.
-          [`${payment.application}TrialEndsAt`]: "",
-        })
+        await this.repository.applySettingsPatch(
+          payment.organizationId,
+          activationSettingsPatch(payment.application, payment.planTier)
+        )
 
-        // One monthly period per checkout (the only period checkout sells today), at the amount
-        // actually charged.
+        // One period (the one bought at checkout) at the amount actually charged. The package's
+        // name is read now; a package deleted since checkout just leaves the name empty.
+        const pkg = payment.packageId
+          ? await this.pricing.getPackage(payment.packageId).catch(() => null)
+          : null
         const subscriptions = new PostgresOrganizationSubscriptionRepository(this.db)
         await subscriptions.save(
           activatePaid(
@@ -169,13 +173,23 @@ export class MoyasarBillingService {
               organizationId: payment.organizationId,
               application: payment.application,
               planTier: payment.planTier,
-              interval: "monthly",
+              package: payment.packageId ? { id: payment.packageId, name: pkg?.name ?? "" } : null,
+              interval: payment.billingInterval,
               priceHalalas: payment.amount,
               source: "payment",
               now: new Date().toISOString(),
             }
           )
         )
+
+        if (payment.couponId) {
+          await this.coupons.redeem({
+            couponId: payment.couponId,
+            organizationId: payment.organizationId,
+            paymentId: payment.id,
+            discountHalalas: payment.discountHalalas ?? 0,
+          })
+        }
 
         await writeAuditLog(this.db, {
           action: "billing.moyasar_payment_confirmed",
@@ -187,6 +201,9 @@ export class MoyasarBillingService {
           metadata: {
             application: payment.application,
             planTier: payment.planTier,
+            packageId: payment.packageId,
+            interval: payment.billingInterval,
+            couponId: payment.couponId,
             moyasarPaymentId: moyasarPayment.id,
           },
         })

@@ -13,16 +13,19 @@ import {
   isTrialAvailable,
   resolveApplicationStatus,
 } from "../services"
+import {
+  type ApplicationPricing,
+  formatRiyals,
+  purchasablePackages,
+} from "../services/pricing.service"
 import type {
   ApplicationCategoryId,
   ApplicationDefinition,
   ApplicationSubscriptionStatus,
 } from "../types"
+import { usePricingCatalog } from "./use-pricing"
 
-import type {
-  SubscriptionActivationRequestDto,
-  SubscriptionPlanTier,
-} from "@/application/contracts"
+import type { BillingInterval, SubscriptionActivationRequestDto } from "@/application/contracts"
 
 export interface ApplicationCategoryTab {
   id: ApplicationCategoryId | "all"
@@ -49,6 +52,29 @@ const CATEGORY_ORDER: ApplicationCategoryId[] = [
 // getting a dedicated tab of its own, even though it's billed/enforced independently.
 const TAB_ORDER: ApplicationCategoryId[] = ["advertising", "ecommerce", "pos", "madarApps"]
 
+type Translator = ReturnType<typeof useTranslations<"applications">>
+
+// The marketplace card's price line, from Madar Admin pricing: the cheapest monthly price
+// ("from"), else the cheapest yearly one, a fixed app's single price, or "contact us".
+function priceLabelFor(pricing: ApplicationPricing | undefined, t: Translator): string | undefined {
+  if (!pricing) return undefined
+  if (pricing.mode === "free") return t("pricing.freeFor", { days: pricing.freeDays ?? 0 })
+  if (pricing.mode === "contact") return t("pricing.contactUs")
+  const packages = purchasablePackages(pricing)
+  if (packages.length === 0) return t("pricing.contactUs")
+  const cheapest = (prices: Array<number | null>) =>
+    prices.filter((price): price is number => price !== null).sort((a, b) => a - b)[0]
+  const monthly = cheapest(packages.map((pkg) => pkg.monthlyPriceHalalas))
+  const yearly = cheapest(packages.map((pkg) => pkg.yearlyPriceHalalas))
+  const price = monthly ?? yearly
+  if (price === undefined) return t("pricing.contactUs")
+  const period = monthly !== undefined ? t("pricing.perMonth") : t("pricing.perYear")
+  return t(pricing.mode === "fixed" ? "pricing.fixed" : "pricing.startingFrom", {
+    price: formatRiyals(price),
+    period,
+  })
+}
+
 // Activating a paid application now submits a SubscriptionActivationRequestDto (tier + receipt)
 // instead of flipping organizations.settings directly -- only a Madar staff approval in the
 // internal admin console does that (see submitActivationRequest below). Deactivation stays
@@ -60,6 +86,7 @@ export function useApplicationsCatalog() {
     requestApplicationActivation,
     listMyOrganizationSubscriptionRequests,
     startApplicationTrial,
+    activateFreeApplication: activateFreeApplicationFor,
   } = useWorkspace()
   const t = useTranslations("applications")
   const [searchQuery, setSearchQuery] = useState("")
@@ -67,8 +94,37 @@ export function useApplicationsCatalog() {
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [pendingRequests, setPendingRequests] = useState<SubscriptionActivationRequestDto[]>([])
 
-  const catalog = useMemo(() => buildApplicationCatalog(t), [t])
-  const bundle = useMemo(() => buildMadarCompleteBundle(t), [t])
+  const pricing = usePricingCatalog()
+  const pricingByApplication = useMemo(
+    () => new Map((pricing ?? []).map((entry) => [entry.application, entry])),
+    [pricing]
+  )
+  // Paid cards show Madar Admin's live price (until it loads, the catalog's own label).
+  const catalog = useMemo(
+    () =>
+      buildApplicationCatalog(t).map((application) =>
+        application.priceLabel === undefined
+          ? application
+          : {
+              ...application,
+              priceLabel:
+                priceLabelFor(pricingByApplication.get(application.category), t) ??
+                application.priceLabel,
+              pricingModel:
+                pricingByApplication.get(application.category)?.mode === "free"
+                  ? "free"
+                  : application.pricingModel,
+            }
+      ),
+    [t, pricingByApplication]
+  )
+  const bundle = useMemo(
+    () => ({
+      ...buildMadarCompleteBundle(t),
+      priceLabel: priceLabelFor(pricingByApplication.get("madarComplete"), t),
+    }),
+    [t, pricingByApplication]
+  )
 
   const organizationId = currentOrganization?.id ?? null
 
@@ -83,7 +139,14 @@ export function useApplicationsCatalog() {
   }, [refetchPendingRequests])
 
   const pendingApplications = useMemo(
-    () => new Set(pendingRequests.map((request) => request.application)),
+    () =>
+      new Set(
+        pendingRequests
+          .map((request) => request.application)
+          .filter(
+            (application): application is ApplicationCategoryId => application !== "madarComplete"
+          )
+      ),
     [pendingRequests]
   )
 
@@ -102,17 +165,26 @@ export function useApplicationsCatalog() {
     return Object.fromEntries(
       CATEGORY_ORDER.map((category) => [
         category,
-        isTrialAvailable(category, settings, pendingApplications),
+        // A free app needs no trial.
+        pricingByApplication.get(category)?.mode !== "free" &&
+          isTrialAvailable(category, settings, pendingApplications),
       ])
     ) as Record<ApplicationCategoryId, boolean>
-  }, [currentOrganization?.settings, pendingApplications])
+  }, [currentOrganization?.settings, pendingApplications, pricingByApplication])
 
   const searchMatchedApplications = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    const withCurrentStatus = catalog.map((application) => ({
-      ...application,
-      subscriptionStatus: statusById[application.id] ?? application.subscriptionStatus,
-    }))
+    const withCurrentStatus = catalog
+      .map((application) => ({
+        ...application,
+        subscriptionStatus: statusById[application.id] ?? application.subscriptionStatus,
+      }))
+      // Apps Madar Admin hid stay listed only for customers who already have (or requested) them.
+      .filter(
+        (application) =>
+          pricingByApplication.get(application.category)?.visible !== false ||
+          application.subscriptionStatus !== "not_subscribed"
+      )
     if (query.length === 0) {
       return withCurrentStatus
     }
@@ -121,7 +193,7 @@ export function useApplicationsCatalog() {
         application.name.toLowerCase().includes(query) ||
         application.shortDescription.toLowerCase().includes(query)
     )
-  }, [catalog, searchQuery, statusById])
+  }, [catalog, searchQuery, statusById, pricingByApplication])
 
   const categoryTabs = useMemo<ApplicationCategoryTab[]>(() => {
     const all: ApplicationCategoryTab = {
@@ -184,49 +256,49 @@ export function useApplicationsCatalog() {
     }
   }
 
-  async function submitActivationRequest(input: {
-    applicationId: string
-    planTier: SubscriptionPlanTier
-    attachmentContentType: string
-    attachmentDataBase64: string
-  }) {
+  // An application (or the bundle) Madar Admin sells as free -- on right away, no payment.
+  async function activateFreeApplication(id: string) {
     if (!currentOrganization) return
-    const application = catalog.find((entry) => entry.id === input.applicationId)
+    const application =
+      id === bundle.id
+        ? ("madarComplete" as const)
+        : catalog.find((entry) => entry.id === id)?.category
     if (!application) return
 
-    setActivatingId(input.applicationId)
+    setActivatingId(id)
     try {
-      await requestApplicationActivation(currentOrganization.id, {
-        application: application.category,
-        planTier: input.planTier,
-        attachmentContentType: input.attachmentContentType,
-        attachmentDataBase64: input.attachmentDataBase64,
-      })
-      await refetchPendingRequests()
+      await activateFreeApplicationFor(currentOrganization.id, application)
     } finally {
       setActivatingId(null)
     }
   }
 
-  // مدار الكامل still activates all 8 instantly -- it's a distinct "buy everything" fast path
-  // that doesn't carry its own plan-tier concept the way an individual application's request
-  // does. Aligning it with the same request/approval flow is a follow-up, not part of this pass.
-  async function activateAllApplications() {
+  // A bank-transfer request for one application or the bundle: the chosen package and billing
+  // period plus the receipt. Priced server-side; a Madar staff approval activates it.
+  async function submitActivationRequest(input: {
+    applicationId: string
+    packageId: string
+    interval: BillingInterval
+    attachmentContentType: string
+    attachmentDataBase64: string
+  }) {
     if (!currentOrganization) return
-    setActivatingId(bundle.id)
+    const application =
+      input.applicationId === bundle.id
+        ? ("madarComplete" as const)
+        : catalog.find((entry) => entry.id === input.applicationId)?.category
+    if (!application) return
+
+    setActivatingId(input.applicationId)
     try {
-      await updateOrganization(currentOrganization.id, {
-        settings: {
-          advertisingEnabled: true,
-          ecommerceEnabled: true,
-          posEnabled: true,
-          madarAppsEnabled: true,
-          procurementEnabled: true,
-          expensesEnabled: true,
-          aiEnabled: true,
-          customReportsEnabled: true,
-        },
+      await requestApplicationActivation(currentOrganization.id, {
+        application,
+        packageId: input.packageId,
+        interval: input.interval,
+        attachmentContentType: input.attachmentContentType,
+        attachmentDataBase64: input.attachmentDataBase64,
       })
+      await refetchPendingRequests()
     } finally {
       setActivatingId(null)
     }
@@ -246,10 +318,12 @@ export function useApplicationsCatalog() {
     statusById,
     trialAvailableByCategory,
     bundle,
+    bundleVisible: pricingByApplication.get("madarComplete")?.visible !== false,
     deactivateApplication,
     submitActivationRequest,
     startTrial,
-    activateAllApplications,
+    activateFreeApplication,
+    pricingByApplication,
     activatingId,
   }
 }

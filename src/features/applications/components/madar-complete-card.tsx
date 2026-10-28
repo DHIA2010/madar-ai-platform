@@ -30,6 +30,9 @@ export function MadarCompleteCard({
             </span>
           </div>
           <p className="mt-1 text-[12px] text-[#6b7b96]">{bundle.description}</p>
+          {bundle.priceLabel ? (
+            <p className="mt-1.5 text-[13px] font-extrabold text-[#0b1738]">{bundle.priceLabel}</p>
+          ) : null}
           <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
             {bundle.benefits.map((benefit) => (
               <li key={benefit} className="flex items-center gap-1.5 text-[11.5px] text-[#334155]">

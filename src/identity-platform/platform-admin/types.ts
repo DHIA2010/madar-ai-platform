@@ -1,6 +1,6 @@
 import type {
   BillingInterval,
-  SubscriptionApplication,
+  PurchasableApplication,
   SubscriptionPlanTier,
   SubscriptionSource,
   SubscriptionStatus,
@@ -27,9 +27,11 @@ export type CustomerStatus = SubscriptionStatus | "none"
 export interface PlatformAdminSubscriptionView {
   id: string
   organizationId: string
-  application: SubscriptionApplication
+  application: PurchasableApplication
   status: SubscriptionStatus
   planTier: SubscriptionPlanTier | null
+  packageId: string | null
+  packageName: string | null
   billingInterval: BillingInterval | null
   priceHalalas: number | null
   currency: string
@@ -57,7 +59,7 @@ export interface PlatformAdminCustomer {
 export interface PlatformAdminCustomerFilters {
   search?: string
   status?: CustomerStatus
-  application?: SubscriptionApplication
+  application?: PurchasableApplication
   planTier?: SubscriptionPlanTier
   platform?: StorePlatform
 }
@@ -96,7 +98,7 @@ export interface PlatformAdminSubscriptionRow extends PlatformAdminSubscriptionV
 export interface PlatformAdminSubscriptionFilters {
   search?: string
   status?: SubscriptionStatus
-  application?: SubscriptionApplication
+  application?: PurchasableApplication
   planTier?: SubscriptionPlanTier
 }
 
@@ -107,4 +109,79 @@ export interface PlatformAdminSubscriptionSummary {
   overdue: number
   expired: number
   cancelled: number
+}
+
+export interface PlatformAdminPayment {
+  id: string
+  method: "card" | "bank_transfer"
+  organizationId: string
+  organizationName: string
+  application: PurchasableApplication
+  packageName: string | null
+  billingInterval: BillingInterval | null
+  amountHalalas: number
+  originalAmountHalalas: number | null
+  discountHalalas: number | null
+  couponCode: string | null
+  status: "initiated" | "paid" | "failed"
+  // "mada", "visa", ... for a card payment.
+  cardBrand: string | null
+  // Moyasar's payment id for a card, or the receipt attachment for a bank transfer.
+  reference: string | null
+  receiptId: string | null
+  createdAt: string
+}
+
+export interface PlatformAdminPaymentFilters {
+  search?: string
+  status?: PlatformAdminPayment["status"]
+  method?: PlatformAdminPayment["method"]
+  application?: PurchasableApplication
+  // YYYY-MM-DD, Riyadh time, inclusive.
+  from?: string
+  to?: string
+}
+
+export interface PlatformAdminPaymentSummary {
+  collectedHalalas: number
+  collectedThisMonthHalalas: number
+  paidCount: number
+  failedCount: number
+  discountsHalalas: number
+}
+
+export interface PlatformAdminOverview {
+  kpis: {
+    customers: { value: number; deltaPct: number | null }
+    stores: { value: number; deltaPct: number | null }
+    activeSubscriptions: { value: number; deltaPct: number | null }
+    mrrHalalas: { value: number; deltaPct: number | null }
+    liveVisitors: { value: number; deltaPct: number | null }
+  }
+  // YYYY-MM, oldest first.
+  trend: Array<{ month: string; revenueHalalas: number; newSubscriptions: number }>
+  subscriptionsByApplication: Array<{ application: string; count: number }>
+  subscriptionStatus: Array<{ status: SubscriptionStatus; count: number }>
+  storesByPlatform: Array<{ platform: string; count: number }>
+  today: {
+    events: number
+    purchases: number
+    newCustomers: number
+    paymentsToday: number
+    integrationErrors: number
+  }
+  recentCustomers: Array<{
+    id: string
+    name: string
+    createdAt: string
+    status: CustomerStatus
+    platforms: StorePlatform[]
+  }>
+  recentActivity: Array<{
+    action: string
+    organizationName: string | null
+    actorName: string | null
+    metadata: Record<string, unknown>
+    createdAt: string
+  }>
 }

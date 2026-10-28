@@ -2,6 +2,7 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  PurchasableApplication,
   SubscriptionActivationRequestDto,
   SubscriptionRequestStatus,
   WorkspaceContextViewModel,
@@ -84,7 +85,8 @@ export class WorkspaceApplicationService {
     organizationId: string,
     payload: {
       application: SubscriptionActivationRequestDto["application"]
-      planTier: SubscriptionActivationRequestDto["planTier"]
+      packageId: string
+      interval: "monthly" | "yearly"
       attachmentContentType: string
       attachmentDataBase64: string
     }
@@ -100,9 +102,16 @@ export class WorkspaceApplicationService {
 
   startApplicationTrial(
     organizationId: string,
-    application: SubscriptionActivationRequestDto["application"]
+    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
   ): Promise<OrganizationDto> {
     return this.gateway.startApplicationTrial(organizationId, application)
+  }
+
+  activateFreeApplication(
+    organizationId: string,
+    application: PurchasableApplication
+  ): Promise<OrganizationDto> {
+    return this.gateway.activateFreeApplication(organizationId, application)
   }
 
   listAllSubscriptionActivationRequests(

@@ -30,12 +30,13 @@ export function ApplicationsMarketplace() {
     categoryTabs,
     visibleApplications,
     bundle,
+    bundleVisible,
     submitActivationRequest,
     deactivateApplication,
-    activateAllApplications,
     activatingId,
     trialAvailableByCategory,
     startTrial,
+    activateFreeApplication,
   } = useApplicationsCatalog()
 
   const [pendingActivation, setPendingActivation] = useState<ActivationTarget | null>(null)
@@ -64,14 +65,15 @@ export function ApplicationsMarketplace() {
     })
   }
 
+  // The bundle is bought like any application -- its own packages, card or bank transfer.
   function requestBundleActivation() {
-    setPendingActivation({
-      id: bundle.id,
+    setPendingRequest({
+      applicationId: bundle.id,
+      category: "madarComplete",
       name: bundle.name,
-      confirmLabel: bundle.primaryCtaLabel,
       icon: Crown,
       iconWrapperClassName: "bg-[#fff3d6] text-[#c2900c]",
-      confirmButtonClassName: "bg-[#c2900c] text-white hover:bg-[#a97b0a]",
+      trialAvailable: false,
     })
   }
 
@@ -160,9 +162,11 @@ export function ApplicationsMarketplace() {
       </div>
 
       {/* مدار الكامل */}
-      <div className="shrink-0">
-        <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
-      </div>
+      {bundleVisible ? (
+        <div className="shrink-0">
+          <MadarCompleteCard bundle={bundle} onSubscribe={requestBundleActivation} />
+        </div>
+      ) : null}
 
       <ActivationConfirmDialog
         target={pendingActivation}
@@ -170,10 +174,6 @@ export function ApplicationsMarketplace() {
           if (!open) setPendingActivation(null)
         }}
         onConfirm={async (target) => {
-          if (target.id === bundle.id) {
-            await activateAllApplications()
-            return
-          }
           await deactivateApplication(target.id)
         }}
       />
@@ -186,6 +186,7 @@ export function ApplicationsMarketplace() {
         }}
         onSubmit={submitActivationRequest}
         onStartTrial={startTrial}
+        onActivateFree={activateFreeApplication}
       />
     </div>
   )

@@ -42,6 +42,7 @@ import type {
   SendMemberPasswordResetCommand,
   SetMemberModuleAccessCommand,
   StartApplicationTrialCommand,
+  ActivateFreeApplicationCommand,
   SuspendMemberCommand,
   SwitchWorkspaceCommand,
   TransferOwnershipCommand,
@@ -95,8 +96,19 @@ import {
 import { resolveMembershipModulePermissions } from "../../domain/domain-services/module-permission-service"
 import { SYSTEM_ROLE_DEFINITIONS } from "../../domain/domain-services/system-roles"
 import { issueSessionForMember } from "../session-issuer"
+import { permissionsForRole, type PlatformRole } from "../../platform-admin/staff-roles"
 import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../../billing/moyasar/plan-pricing"
-import { activatePaid, startTrial } from "../../subscriptions/lifecycle"
+import { activationSettingsPatch } from "../../subscriptions/activation"
+import {
+  activateFree,
+  activatePaid,
+  cancelSubscription,
+  startTrial,
+} from "../../subscriptions/lifecycle"
+import {
+  applicationsBeingDisabled,
+  findBillingSettingsViolations,
+} from "../../subscriptions/billing-controlled-settings"
 
 // Approving/rejecting a request someone already reviewed (two staff at once, or a double click)
 // is a 409, not the 500 the entity's own plain Error used to surface as.
@@ -242,6 +254,12 @@ export class IdentityCommandHandlers {
 
     if (command.invitationToken) {
       return this.registerViaInvitation(command, command.invitationToken, context)
+    }
+
+    // Only new customers are turned away -- joining an existing organization by invitation
+    // still works while sign-ups are closed.
+    if (!(await this.deps.repositories.platformSettings.get()).newSignupsEnabled) {
+      throw ERRORS.signupsClosed()
     }
 
     if (!command.organizationName) {
@@ -579,6 +597,8 @@ export class IdentityCommandHandlers {
       )
       throw ERRORS.invalidCredentials()
     }
+
+    await this.rejectDuringMaintenance(user.toState().email, user.id)
 
     user.recordSuccessfulLogin(this.now)
     await this.deps.repositories.users.save(user.toState())
@@ -1262,6 +1282,16 @@ export class IdentityCommandHandlers {
     // assignMemberCustomRole never touches role_code). This is the real, matrix-driven check the
     // Roles screen's "الإعدادات العامة" permission is actually supposed to enforce.
     await this.requireModuleAccess(actor, organizationId, "settings:edit")
+    const violations = findBillingSettingsViolations(command.settings)
+    if (violations.length > 0) {
+      throw new IdentityError(
+        "BILLING_CONTROLLED_SETTING",
+        403,
+        "security",
+        "Applications are activated by subscribing, not by changing settings.",
+        { keys: violations.map((violation) => violation.key) }
+      )
+    }
     const organizationState = await this.deps.repositories.organizations.findById(organizationId)
     if (!organizationState) {
       throw ERRORS.notFound("Organization")
@@ -1269,6 +1299,22 @@ export class IdentityCommandHandlers {
     const organization = OrganizationEntity.rehydrate(organizationState)
     organization.update(command, this.now)
     await this.deps.repositories.organizations.save(organization.toState())
+
+    // A customer switching an app off ends its subscription too, so Madar Admin never shows an
+    // app as active that the customer can't use.
+    const subscriptions = this.deps.repositories.organizationSubscriptions
+    for (const application of applicationsBeingDisabled(command.settings)) {
+      const existing = await subscriptions.findByOrganizationAndApplication(
+        organizationId,
+        application
+      )
+      if (existing && existing.status !== "cancelled") {
+        await subscriptions.save(
+          cancelSubscription(existing, { cancelledByUserId: actor.userId, now: this.now })
+        )
+      }
+    }
+
     await this.audit(
       "organization.updated",
       context,
@@ -1295,7 +1341,7 @@ export class IdentityCommandHandlers {
   // but kept as its own backend-local constant since command-handlers.ts must not import
   // frontend feature code.
   private static readonly APPLICATION_SETTINGS_KEY: Record<
-    RequestApplicationActivationCommand["application"],
+    StartApplicationTrialCommand["application"],
     string
   > = {
     advertising: "advertisingEnabled",
@@ -1342,6 +1388,10 @@ export class IdentityCommandHandlers {
       requestedByUserId: actor.userId,
       application: command.application,
       planTier: command.planTier,
+      packageId: command.package.id,
+      packageName: command.package.name,
+      billingInterval: command.billingInterval,
+      priceHalalas: command.priceHalalas,
       attachmentUrl: command.attachmentUrl,
       attachmentContentType: command.attachmentContentType,
       status: "pending",
@@ -1360,7 +1410,12 @@ export class IdentityCommandHandlers {
       null,
       "subscription_activation_request",
       request.id,
-      { application: command.application, planTier: command.planTier }
+      {
+        application: command.application,
+        packageId: command.package.id,
+        interval: command.billingInterval,
+        priceHalalas: command.priceHalalas,
+      }
     )
     return request.toState()
   }
@@ -1390,24 +1445,27 @@ export class IdentityCommandHandlers {
       throw ERRORS.notFound("Organization")
     }
     const organization = OrganizationEntity.rehydrate(organizationState)
+    // Switches the covered applications on (every one, for the bundle) and clears any stale
+    // *TrialEndsAt so the paid approval is never mistaken for a lapsed trial.
     organization.update(
       {
-        settings: {
-          [IdentityCommandHandlers.APPLICATION_SETTINGS_KEY[request.application]]: true,
-          currentPlanTier: request.planTier,
-          // Clears any earlier free-trial expiry marker (empty string, not omitted -- settings
-          // merges are additive, so leaving this out would NOT remove a stale *TrialEndsAt from a
-          // prior trial) so a real paid approval is never mistaken for a lapsed trial by
-          // ai-chat/guards.ts's isApplicationEnabled or the frontend's resolveApplicationStatus.
-          [`${request.application}TrialEndsAt`]: "",
-        },
+        settings: activationSettingsPatch(request.application, request.planTier) as Record<
+          string,
+          string | boolean
+        >,
       },
       now
     )
     await this.deps.repositories.organizations.save(organization.toState())
 
-    // A bank-transfer approval buys one monthly period of the requested tier (the only billing
-    // period requests carry today), at the tier's listed price when it has one.
+    // Grants exactly what the customer chose and paid for: the package, period, and price
+    // snapshotted on the request. A request made before per-app packages carries only a tier --
+    // one monthly period at that tier's old price.
+    const purchased = request.toState()
+    const legacyPrice =
+      request.planTier && request.planTier !== "enterprise"
+        ? (MOYASAR_PLAN_TIER_AMOUNT_HALALAS[request.planTier] ?? null)
+        : null
     const subscriptions = this.deps.repositories.organizationSubscriptions
     await subscriptions.save(
       activatePaid(
@@ -1420,11 +1478,11 @@ export class IdentityCommandHandlers {
           organizationId: request.organizationId,
           application: request.application,
           planTier: request.planTier,
-          interval: "monthly",
-          priceHalalas:
-            request.planTier === "enterprise"
-              ? null
-              : (MOYASAR_PLAN_TIER_AMOUNT_HALALAS[request.planTier] ?? null),
+          package: purchased.packageId
+            ? { id: purchased.packageId, name: purchased.packageName ?? "" }
+            : null,
+          interval: purchased.billingInterval ?? "monthly",
+          priceHalalas: purchased.packageId ? purchased.priceHalalas : legacyPrice,
           source: "bank_transfer",
           now,
         }
@@ -1492,8 +1550,8 @@ export class IdentityCommandHandlers {
   // window (*TrialEnabled stays true in storage past the 7 days; ai-chat/guards.ts and the
   // frontend's resolveApplicationStatus are what actually treat it as inactive once
   // *TrialEndsAt has passed) -- no scheduled job flips it back off, matching this codebase's
-  // existing preference for lazy, read-time checks over new scheduled-job infrastructure.
-  private static readonly TRIAL_DURATION_DAYS = 7
+  // existing preference for lazy, read-time checks over new scheduled-job infrastructure. The
+  // length is Madar Admin's platform-wide trialDays setting, the same for every application.
 
   async startApplicationTrial(
     actor: AuthenticatedActor,
@@ -1522,8 +1580,9 @@ export class IdentityCommandHandlers {
     }
 
     const now = this.now
+    const { trialDays } = await this.deps.repositories.platformSettings.get()
     const trialEndsAt = new Date(
-      new Date(now).getTime() + IdentityCommandHandlers.TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
+      new Date(now).getTime() + trialDays * 24 * 60 * 60 * 1000
     ).toISOString()
 
     const organization = OrganizationEntity.rehydrate(organizationState)
@@ -1562,6 +1621,89 @@ export class IdentityCommandHandlers {
       "organization",
       organization.id,
       { application: command.application, trialEndsAt }
+    )
+    await this.publishEvents(context, [
+      this.createEvent({
+        eventType: "OrganizationUpdated",
+        aggregateType: "organization",
+        aggregateId: organization.id,
+        context,
+        payload: { organizationId: organization.id },
+      }),
+    ])
+    return organization.toState()
+  }
+
+  // An application Madar Admin sells as free: the customer switches it on without paying for the
+  // set number of days (at most a year); billing maintenance switches it off when they're up. The
+  // free period can only be claimed once per application.
+  async activateFreeApplication(
+    actor: AuthenticatedActor,
+    organizationId: string,
+    command: ActivateFreeApplicationCommand,
+    context: RequestContext
+  ) {
+    await this.requireModuleAccess(actor, organizationId, "settings:edit")
+
+    const organizationState = await this.deps.repositories.organizations.findById(organizationId)
+    if (!organizationState) {
+      throw ERRORS.notFound("Organization")
+    }
+    const subscriptions = this.deps.repositories.organizationSubscriptions
+    const existing = await subscriptions.findByOrganizationAndApplication(
+      organizationId,
+      command.application
+    )
+    const now = this.now
+    if (existing && ["active", "trial"].includes(existing.status)) {
+      const stillRunning =
+        existing.status === "trial"
+          ? !existing.trialEndsAt || existing.trialEndsAt > now
+          : !existing.currentPeriodEnd || existing.currentPeriodEnd > now
+      if (stillRunning) {
+        throw ERRORS.validation({ application: "This application is already active." })
+      }
+    }
+    if (existing?.source === "free") {
+      throw ERRORS.validation({
+        application: "The free period has already been used for this application.",
+      })
+    }
+
+    const endsAt = new Date(
+      new Date(now).getTime() + command.freeDays * 24 * 60 * 60 * 1000
+    ).toISOString()
+
+    const organization = OrganizationEntity.rehydrate(organizationState)
+    organization.update(
+      {
+        settings: activationSettingsPatch(command.application, null) as Record<
+          string,
+          string | boolean
+        >,
+      },
+      now
+    )
+    await this.deps.repositories.organizations.save(organization.toState())
+    await subscriptions.save(
+      activateFree(existing, {
+        id: this.deps.uuid.generate(),
+        organizationId,
+        application: command.application,
+        endsAt,
+        now,
+      })
+    )
+
+    await this.audit(
+      "application_free.activated",
+      context,
+      actor.userId,
+      organization.id,
+      null,
+      "organization",
+      organization.id,
+      { application: command.application, endsAt }
     )
     await this.publishEvents(context, [
       this.createEvent({
@@ -3214,6 +3356,7 @@ export class IdentityCommandHandlers {
     if (!userState || userState.deletedAt) {
       throw ERRORS.tokenInvalid()
     }
+    await this.rejectDuringMaintenance(userState.email, userState.id)
 
     let organizationId = session.organizationId
     let workspaceId = session.workspaceId
@@ -3247,9 +3390,9 @@ export class IdentityCommandHandlers {
       this.deps.repositories.customRoles
     )
 
-    const isPlatformAdmin = this.deps.config.platformAdminEmails.includes(
-      userState.email.toLowerCase()
-    )
+    // Madar staff: the PLATFORM_ADMIN_EMAILS allowlist (permanent Super Admins) or an active
+    // platform_staff row with one of the fixed roles.
+    const platformRole = await this.resolvePlatformRole(payload.sub, userState.email)
 
     return {
       userId: payload.sub,
@@ -3258,7 +3401,24 @@ export class IdentityCommandHandlers {
       workspaceId,
       roles,
       modulePermissions,
-      isPlatformAdmin,
+      isPlatformAdmin: platformRole !== null,
+      platformRole,
+      platformPermissions: permissionsForRole(platformRole),
+    }
+  }
+
+  // Maintenance mode keeps everyone but Madar staff out -- at sign-in and on every request of an
+  // already signed-in session.
+  private async resolvePlatformRole(userId: string, email: string): Promise<PlatformRole | null> {
+    if (this.deps.config.platformAdminEmails.includes(email.toLowerCase())) return "super_admin"
+    const staff = await this.deps.repositories.platformStaff.findByUserId(userId)
+    return staff?.status === "active" ? staff.role : null
+  }
+
+  private async rejectDuringMaintenance(email: string, userId: string) {
+    if (await this.resolvePlatformRole(userId, email)) return
+    if ((await this.deps.repositories.platformSettings.get()).maintenanceMode) {
+      throw ERRORS.maintenanceMode()
     }
   }
 

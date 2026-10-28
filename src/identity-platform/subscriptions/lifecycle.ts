@@ -1,7 +1,7 @@
 import type {
   BillingInterval,
   OrganizationSubscriptionState,
-  SubscriptionApplication,
+  PurchasableApplication,
   SubscriptionPlanTier,
   SubscriptionSource,
   SubscriptionStatus,
@@ -26,6 +26,8 @@ export function effectiveSubscriptionStatus(
 ): SubscriptionStatus {
   const now = new Date(nowIso).getTime()
   if (subscription.status === "cancelled") return "cancelled"
+  // Lapsed past its grace period and switched off by billing maintenance.
+  if (subscription.status === "expired") return "expired"
   if (subscription.status === "trial") {
     return subscription.trialEndsAt && new Date(subscription.trialEndsAt).getTime() <= now
       ? "expired"
@@ -39,7 +41,7 @@ export function effectiveSubscriptionStatus(
 interface Identity {
   id: string
   organizationId: string
-  application: SubscriptionApplication
+  application: PurchasableApplication
 }
 
 export function startTrial(
@@ -52,6 +54,8 @@ export function startTrial(
     application: input.application,
     status: "trial",
     planTier: null,
+    packageId: null,
+    packageName: null,
     billingInterval: null,
     priceHalalas: null,
     currency: "SAR",
@@ -73,6 +77,8 @@ export function activatePaid(
   existing: OrganizationSubscriptionState | null,
   input: Identity & {
     planTier: SubscriptionPlanTier | null
+    // Omitted = keep whatever package the subscription already has (a manual renewal).
+    package?: { id: string; name: string } | null
     interval: BillingInterval
     priceHalalas: number | null
     source: SubscriptionSource
@@ -90,12 +96,44 @@ export function activatePaid(
     application: input.application,
     status: "active",
     planTier: input.planTier ?? existing?.planTier ?? null,
+    packageId:
+      input.package === undefined ? (existing?.packageId ?? null) : (input.package?.id ?? null),
+    packageName:
+      input.package === undefined ? (existing?.packageName ?? null) : (input.package?.name ?? null),
     billingInterval: input.interval,
     priceHalalas: input.priceHalalas,
     currency: "SAR",
     source: input.source,
     startedAt: stillRunning ? existing.startedAt : input.now,
     currentPeriodEnd: addBillingInterval(periodStart, input.interval),
+    trialEndsAt: null,
+    cancelledAt: null,
+    cancelledByUserId: null,
+    createdAt: existing?.createdAt ?? input.now,
+    updatedAt: input.now,
+  }
+}
+
+// A free application: active right away, with no price, until endsAt -- when billing maintenance
+// switches it off with no grace period.
+export function activateFree(
+  existing: OrganizationSubscriptionState | null,
+  input: Identity & { endsAt: string; now: string }
+): OrganizationSubscriptionState {
+  return {
+    id: existing?.id ?? input.id,
+    organizationId: input.organizationId,
+    application: input.application,
+    status: "active",
+    planTier: null,
+    packageId: null,
+    packageName: null,
+    billingInterval: null,
+    priceHalalas: 0,
+    currency: "SAR",
+    source: "free",
+    startedAt: input.now,
+    currentPeriodEnd: input.endsAt,
     trialEndsAt: null,
     cancelledAt: null,
     cancelledByUserId: null,

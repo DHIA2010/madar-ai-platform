@@ -277,7 +277,7 @@ export function MadarAdminSubscriptions() {
                   {paymentMethodLabel(row.paymentMethod)}
                 </AppTableCell>
                 <AppTableCell>
-                  <AppDropdownMenu>
+                  <AppDropdownMenu modal={false}>
                     <AppDropdownMenuTrigger asChild>
                       <AppButton variant="ghost" size="icon-sm" aria-label="إجراءات">
                         <MoreHorizontal className="size-4" />

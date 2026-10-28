@@ -34,6 +34,8 @@ import type {
   UserState,
   WorkspaceState,
 } from "../../domain/entities"
+import { InMemoryPlatformStaffRepository } from "../../platform-admin/staff-repository"
+import { InMemoryPlatformSettingsRepository } from "../../platform-settings/repository"
 import { InMemoryOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 export interface InMemoryIdentityDataStore {
@@ -508,6 +510,8 @@ export function createInMemoryRepositories(
     invitations: new InMemoryInvitationRepository(store),
     subscriptionActivationRequests: new InMemorySubscriptionActivationRequestRepository(store),
     organizationSubscriptions: new InMemoryOrganizationSubscriptionRepository(),
+    platformSettings: new InMemoryPlatformSettingsRepository(),
+    platformStaff: new InMemoryPlatformStaffRepository(),
     auditLogs: new InMemoryAuditLogRepository(store),
     teams: new InMemoryTeamRepository(store),
     customRoles: new InMemoryCustomRoleRepository(store),

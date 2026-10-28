@@ -34,6 +34,8 @@ import type {
   WorkspaceState,
 } from "../../domain/entities"
 import { PostgresDatabase } from "./database"
+import { PostgresPlatformStaffRepository } from "../../platform-admin/staff-repository"
+import { PostgresPlatformSettingsRepository } from "../../platform-settings/repository"
 import { PostgresOrganizationSubscriptionRepository } from "../../subscriptions/repository"
 
 function mapUser(row: Record<string, unknown>): UserState {
@@ -217,7 +219,15 @@ function mapSubscriptionActivationRequest(
     organizationName: String(row.organization_name),
     requestedByUserId: String(row.requested_by_user_id),
     application: row.application as SubscriptionActivationRequestState["application"],
-    planTier: row.plan_tier as SubscriptionActivationRequestState["planTier"],
+    planTier: (row.plan_tier as SubscriptionActivationRequestState["planTier"]) ?? null,
+    packageId: (row.package_id as string | null) ?? null,
+    packageName: (row.package_name as string | null) ?? null,
+    billingInterval:
+      (row.billing_interval as SubscriptionActivationRequestState["billingInterval"]) ?? null,
+    priceHalalas:
+      row.price_halalas === null || row.price_halalas === undefined
+        ? null
+        : Number(row.price_halalas),
     attachmentUrl: String(row.attachment_url),
     attachmentContentType: String(row.attachment_content_type),
     status: (row.status as SubscriptionActivationRequestState["status"]) ?? "pending",
@@ -293,9 +303,10 @@ class PostgresSubscriptionActivationRequestRepository implements SubscriptionAct
         INSERT INTO subscription_activation_requests (
           id, organization_id, organization_name, requested_by_user_id, application, plan_tier,
           attachment_url, attachment_content_type, status,
-          reviewed_by_user_id, reviewed_at, rejection_reason, created_at, updated_at
+          reviewed_by_user_id, reviewed_at, rejection_reason, created_at, updated_at,
+          package_id, package_name, billing_interval, price_halalas
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         ON CONFLICT (id) DO UPDATE SET
           status = EXCLUDED.status,
           reviewed_by_user_id = EXCLUDED.reviewed_by_user_id,
@@ -318,6 +329,10 @@ class PostgresSubscriptionActivationRequestRepository implements SubscriptionAct
         entry.rejectionReason,
         entry.createdAt,
         entry.updatedAt,
+        entry.packageId,
+        entry.packageName,
+        entry.billingInterval,
+        entry.priceHalalas,
       ],
     })
   }
@@ -1329,6 +1344,8 @@ export function createPostgresRepositories(input: {
     invitations: new PostgresInvitationRepository(input.db, input.tokenService),
     subscriptionActivationRequests: new PostgresSubscriptionActivationRequestRepository(input.db),
     organizationSubscriptions: new PostgresOrganizationSubscriptionRepository(input.db),
+    platformSettings: new PostgresPlatformSettingsRepository(input.db),
+    platformStaff: new PostgresPlatformStaffRepository(input.db),
     auditLogs: new PostgresAuditLogRepository(input.db),
     teams: new PostgresTeamRepository(input.db),
     customRoles: new PostgresCustomRoleRepository(input.db),

@@ -13,6 +13,8 @@ import type {
   UserState,
   WorkspaceState,
 } from "../entities"
+import type { PlatformStaffRepository } from "../../platform-admin/staff-roles"
+import type { PlatformSettingsRepository } from "../../platform-settings/types"
 import type { OrganizationSubscriptionRepository } from "../../subscriptions/types"
 
 export interface UserRepository {
@@ -170,6 +172,8 @@ export interface IdentityRepositories {
   invitations: InvitationRepository
   subscriptionActivationRequests: SubscriptionActivationRequestRepository
   organizationSubscriptions: OrganizationSubscriptionRepository
+  platformSettings: PlatformSettingsRepository
+  platformStaff: PlatformStaffRepository
   auditLogs: AuditLogRepository
   teams: TeamRepository
   customRoles: CustomRoleRepository

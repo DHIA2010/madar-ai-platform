@@ -69,6 +69,8 @@ export interface MadarCompleteBundle {
   benefits: string[]
   primaryCtaLabel: string
   secondaryCtaLabel: string
+  // Madar Admin's live price for the bundle, once pricing has loaded.
+  priceLabel?: string
 }
 
 export type ApplicationCatalogEntry = ApplicationDefinition | MadarCompleteBundle

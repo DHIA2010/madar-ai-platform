@@ -1,3 +1,6 @@
+import type { PlatformStaffRepository } from "../platform-admin/staff-roles"
+import type { EmailGateway } from "../application/ports"
+import type { PlatformSettingsRepository } from "../platform-settings/types"
 import { randomUUID } from "node:crypto"
 
 import { loadIdentityPlatformConfig, type IdentityPlatformConfig } from "../configuration"
@@ -67,6 +70,13 @@ export interface IdentityPlatformContainer {
   config: IdentityPlatformConfig
   commands: IdentityCommandHandlers
   queries: IdentityQueryHandlers
+  // The same instance the command handlers read (trial length, maintenance mode, sign-up switch),
+  // so a change saved from Madar Admin takes effect immediately in this process.
+  platformSettings: PlatformSettingsRepository
+  // Shared with the command handlers' sign-in check, so a role change applies immediately.
+  platformStaff: PlatformStaffRepository
+  // For background work outside a request (billing maintenance's renewal reminders).
+  emailGateway: EmailGateway
   infrastructure: {
     database?: PostgresDatabase
     cache?: RedisCacheProvider
@@ -134,6 +144,9 @@ export function createIdentityPlatformContainer(
       config,
       commands,
       queries,
+      platformSettings: repositories.platformSettings,
+      platformStaff: repositories.platformStaff,
+      emailGateway: memoryEmailGateway,
       infrastructure: {
         configuration,
         metrics,
@@ -266,6 +279,9 @@ export function createIdentityPlatformContainer(
     config,
     commands,
     queries,
+    platformSettings: repositories.platformSettings,
+    platformStaff: repositories.platformStaff,
+    emailGateway,
     infrastructure: {
       database,
       cache,

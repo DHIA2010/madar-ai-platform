@@ -9,10 +9,8 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton } from "@/components/app"
 
-import type { ApplicationCategoryId } from "@/features/applications"
-
 import { useMoyasarCheckout } from "../hooks"
-import type { MoyasarSelfServePlanTier } from "../types"
+import type { MoyasarPurchase } from "../types"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
@@ -20,16 +18,15 @@ import { type Locale, localeDirection } from "@/i18n/locales"
 // not embedded in the activation dialog itself: Moyasar's widget injects DOM content in ways that
 // don't play well with a scroll-clipped, fixed-position modal (Apple Pay/3DS surfaces visually
 // escaped a modal card entirely when this was tried inline), so a full, unconstrained page is the
-// robust container. A tier change re-mounts this component (parent keys it by tier), so each tier
-// gets its own fresh checkout intent rather than this panel trying to mutate an in-flight one.
+// robust container. A different package/period re-mounts this component (the parent keys it by
+// purchase), so each gets its own fresh checkout intent rather than this panel trying to mutate
+// an in-flight one.
 export function MoyasarPaymentPanel({
-  application,
+  purchase,
   applicationName,
-  planTier,
 }: {
-  application: ApplicationCategoryId
+  purchase: MoyasarPurchase
   applicationName: string
-  planTier: MoyasarSelfServePlanTier
 }) {
   // Always rendered, regardless of stage -- retry (triggered from the error state) needs this
   // ref's node to already exist, so the mount point can never be behind a conditional that
@@ -39,28 +36,28 @@ export function MoyasarPaymentPanel({
   const locale = useLocale() as Locale
   const formRef = useRef<HTMLDivElement>(null)
   const { stage, errorMessage, start, reset } = useMoyasarCheckout()
-  const startedForTier = useRef<MoyasarSelfServePlanTier | null>(null)
+  const purchaseKey = `${purchase.application}:${purchase.packageId}:${purchase.interval}:${purchase.couponCode ?? ""}`
+  const startedFor = useRef<string | null>(null)
 
   const runStart = useCallback(() => {
     if (!formRef.current) return
     void start({
-      application,
-      planTier,
+      purchase,
       applicationName,
       returnPath: ROUTES.marketplaceBillingCallback,
       formElement: formRef.current,
       onFailure: (message) => toast.error(message),
     })
-  }, [application, applicationName, planTier, start])
+  }, [purchase, applicationName, start])
 
   useEffect(() => {
     // Guards against React 18 strict-mode's double-invoke in dev and against re-running when
-    // unrelated parent state changes -- this must fire exactly once per tier selection, since
-    // each run creates a brand new billing_moyasar_payments row on the backend.
-    if (startedForTier.current === planTier) return
-    startedForTier.current = planTier
+    // unrelated parent state changes -- this must fire exactly once per purchase, since each run
+    // creates a brand new billing_moyasar_payments row on the backend.
+    if (startedFor.current === purchaseKey) return
+    startedFor.current = purchaseKey
     runStart()
-  }, [planTier, runStart])
+  }, [purchaseKey, runStart])
 
   return (
     <div dir={localeDirection(locale)} className="space-y-3">
@@ -74,7 +71,7 @@ export function MoyasarPaymentPanel({
             className="h-10 rounded-[10px] text-[13px] font-semibold"
             onClick={() => {
               reset()
-              startedForTier.current = planTier
+              startedFor.current = purchaseKey
               runStart()
             }}
           >

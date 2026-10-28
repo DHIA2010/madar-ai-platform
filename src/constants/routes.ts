@@ -95,7 +95,6 @@ export const ROUTES = {
   madarAdminSystemHealth: "/madar-admin/system-health",
   madarAdminUsers: "/madar-admin/users",
   madarAdminRoles: "/madar-admin/roles",
-  madarAdminActivityLog: "/madar-admin/activity-log",
   madarAdminFeatureFlags: "/madar-admin/feature-flags",
   auth: {
     basic: {

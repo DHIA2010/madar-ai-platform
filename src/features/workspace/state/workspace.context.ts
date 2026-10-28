@@ -15,6 +15,7 @@ import type {
 } from "../types"
 
 import type {
+  PurchasableApplication,
   SubscriptionActivationRequestDto,
   SubscriptionRequestStatus,
 } from "@/application/contracts"
@@ -45,7 +46,8 @@ export interface WorkspaceContextValue {
     organizationId: string,
     payload: {
       application: SubscriptionActivationRequestDto["application"]
-      planTier: SubscriptionActivationRequestDto["planTier"]
+      packageId: string
+      interval: "monthly" | "yearly"
       attachmentContentType: string
       attachmentDataBase64: string
     }
@@ -55,7 +57,11 @@ export interface WorkspaceContextValue {
   ) => Promise<SubscriptionActivationRequestDto[]>
   startApplicationTrial: (
     organizationId: string,
-    application: SubscriptionActivationRequestDto["application"]
+    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
+  ) => Promise<Organization>
+  activateFreeApplication: (
+    organizationId: string,
+    application: PurchasableApplication
   ) => Promise<Organization>
   listAllSubscriptionActivationRequests: (
     status?: SubscriptionRequestStatus

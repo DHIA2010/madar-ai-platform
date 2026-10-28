@@ -260,7 +260,7 @@ export function MadarAdminCustomers() {
                   {formatRelative(customer.lastActivityAt)}
                 </AppTableCell>
                 <AppTableCell onClick={(event) => event.stopPropagation()}>
-                  <AppDropdownMenu>
+                  <AppDropdownMenu modal={false}>
                     <AppDropdownMenuTrigger asChild>
                       <AppButton variant="ghost" size="icon-sm" aria-label="إجراءات">
                         <MoreHorizontal className="size-4" />

@@ -71,6 +71,9 @@ describe("subscription activation requests", () => {
       {
         application: "ecommerce",
         planTier: "growth",
+        package: { id: "00000000-0000-4000-8000-000000000002", name: "Growth" },
+        billingInterval: "monthly",
+        priceHalalas: 29900,
         attachmentUrl: "https://storage.test/subscription-receipts/receipt.png",
         attachmentContentType: "image/png",
       },
@@ -132,6 +135,9 @@ describe("subscription activation requests", () => {
       {
         application: "advertising",
         planTier: "starter",
+        package: { id: "00000000-0000-4000-8000-000000000001", name: "Starter" },
+        billingInterval: "monthly",
+        priceHalalas: 29900,
         attachmentUrl: "https://storage.test/subscription-receipts/receipt-2.png",
         attachmentContentType: "application/pdf",
       },
@@ -146,6 +152,9 @@ describe("subscription activation requests", () => {
         {
           application: "advertising",
           planTier: "pro",
+          package: { id: "00000000-0000-4000-8000-000000000003", name: "Pro" },
+          billingInterval: "monthly",
+          priceHalalas: 29900,
           attachmentUrl: "https://storage.test/subscription-receipts/receipt-3.png",
           attachmentContentType: "image/jpeg",
         },
@@ -232,6 +241,9 @@ describe("free application trials", () => {
       {
         application: "advertising",
         planTier: "starter",
+        package: { id: "00000000-0000-4000-8000-000000000001", name: "Starter" },
+        billingInterval: "monthly",
+        priceHalalas: 29900,
         attachmentUrl: "https://storage.test/subscription-receipts/receipt-trial.png",
         attachmentContentType: "image/png",
       },
@@ -268,6 +280,9 @@ describe("free application trials", () => {
       {
         application: "madarApps",
         planTier: "pro",
+        package: { id: "00000000-0000-4000-8000-000000000003", name: "Pro" },
+        billingInterval: "monthly",
+        priceHalalas: 29900,
         attachmentUrl: "https://storage.test/subscription-receipts/receipt-trial-upgrade.png",
         attachmentContentType: "image/png",
       },

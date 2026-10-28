@@ -258,8 +258,11 @@ export const requestApplicationActivationSchema = z.object({
     "expenses",
     "ai",
     "customReports",
+    "madarComplete",
   ]),
-  planTier: z.enum(["starter", "growth", "pro", "enterprise"]),
+  // The package and period chosen -- priced server-side against current Madar Admin pricing.
+  packageId: z.string().uuid(),
+  interval: z.enum(["monthly", "yearly"]),
   attachmentContentType: z.enum(["image/png", "image/jpeg", "image/webp", "application/pdf"]),
   attachmentDataBase64: z.string().min(1),
 })
@@ -1142,6 +1145,21 @@ export const createZatcaDeviceSchema = z.object({
 // Step 2 -- the one call gated on a real Fatoora-portal OTP the taxpayer supplies themselves.
 export const submitZatcaComplianceOtpSchema = z.object({
   otp: z.string().min(1).max(20),
+})
+
+// Activating an application Madar Admin sells as free (see activateFreeApplication).
+export const activateFreeApplicationSchema = z.object({
+  application: z.enum([
+    "advertising",
+    "ecommerce",
+    "pos",
+    "madarApps",
+    "procurement",
+    "expenses",
+    "ai",
+    "customReports",
+    "madarComplete",
+  ]),
 })
 
 // Free 7-day trial -- instant self-service activation (no payment receipt, no staff review),

@@ -139,7 +139,8 @@
       "invitationError": "Signed in, but we couldn't accept the invitation. It may have expired or already been used.",
       "zidInstallBanner": "Sign in to finish connecting your Zid store to MADAR.",
       "zidInstallClaimed": "Your Zid store is now connected!",
-      "zidInstallClaimError": "Signed in, but we couldn't connect your Zid store. The link may have expired — try activating from Zid again."
+      "zidInstallClaimError": "Signed in, but we couldn't connect your Zid store. The link may have expired — try activating from Zid again.",
+      "maintenanceMode": "Madar is undergoing maintenance. Please try again shortly."
     },
     "register": {
       "heading": "Create a new account",
@@ -260,7 +261,9 @@
       "invitationAccountExists": "You already have an account with this email. Sign in instead to accept the invitation.",
       "zidInstallBanner": "Create your account below to finish connecting your Zid store to MADAR.",
       "zidInstallClaimed": "Your Zid store is now connected!",
-      "zidInstallClaimError": "Account created, but we couldn't connect your Zid store. The link may have expired — try activating from Zid again."
+      "zidInstallClaimError": "Account created, but we couldn't connect your Zid store. The link may have expired — try activating from Zid again.",
+      "signupsClosed": "New registrations are temporarily closed. Please try again later or contact the Madar team.",
+      "maintenanceMode": "Madar is undergoing maintenance. Please try again shortly."
     },
     "zidClaim": {
       "loading": "Loading…",
@@ -701,9 +704,14 @@
     "requestDialog": {
       "title": "Activation request for {name}",
       "description": "Choose the right plan, then pay instantly by card or attach a bank-transfer receipt -- card activation is instant, and bank-transfer activation happens after the request is reviewed.",
-      "trialBannerTitle": "Try free for 7 days",
+      "trialBannerTitle": "Try it free for {days, plural, =1 {# day} other {# days}}",
       "trialBannerSubtitle": "No payment, no waiting for approval.",
       "startTrial": "Start trial",
+      "freeTitle": "This app is free",
+      "freeLimitedSubtitle": "Activate it now without paying for {days, plural, =1 {# day} other {# days}}, then it switches off automatically.",
+      "activateFree": "Activate for free",
+      "toastFreeActivated": "{name} is now active for free.",
+      "toastFreeError": "Couldn't activate the app. Try again.",
       "planLabel": "Plan",
       "comparePlans": "Compare plans",
       "payNow": "Pay now",
@@ -718,8 +726,19 @@
       "toastFileTooLarge": "The file must not exceed 5 MB.",
       "toastRequestSubmitted": "The activation request for {name} was submitted for review.",
       "toastRequestError": "Couldn't submit the activation request. Try again.",
-      "toastTrialActivated": "{name}'s 7-day free trial has been activated.",
-      "toastTrialError": "Couldn't start the free trial. Try again."
+      "toastTrialActivated": "{name}'s {days, plural, =1 {#-day} other {#-day}} free trial is now active.",
+      "toastTrialError": "Couldn't start the free trial. Try again.",
+      "billingMonthly": "Monthly",
+      "billingYearly": "Yearly",
+      "perMonth": "/ month",
+      "perYear": "/ year",
+      "yearlySaving": "Save {percent}%",
+      "priceLabel": "Price",
+      "noPriceForPeriod": "Not available",
+      "contactTitle": "Contact us to subscribe",
+      "contactDescription": "This subscription has custom pricing. Contact the Madar team at {email} and we'll get you set up.",
+      "noPackages": "No packages are available for this application right now.",
+      "loadingPackages": "Loading packages..."
     },
     "planComparison": {
       "title": "Compare plans",
@@ -954,6 +973,14 @@
           }
         }
       }
+    },
+    "pricing": {
+      "startingFrom": "From SAR {price} {period}",
+      "fixed": "SAR {price} {period}",
+      "contactUs": "Contact us",
+      "freeFor": "Free for {days, plural, =1 {# day} other {# days}}",
+      "perMonth": "/ month",
+      "perYear": "/ year"
     }
   },
   "purchases": {
@@ -5575,7 +5602,22 @@
           "title": "Invalid link",
           "description": "Couldn't find the requested plan's details. Go back to the marketplace and try again."
         },
-        "planLabel": "{tier} plan"
+        "planLabel": "{tier} plan",
+        "couponLabel": "Discount coupon",
+        "couponPlaceholder": "Enter code",
+        "couponApply": "Apply",
+        "couponRemove": "Remove",
+        "couponApplied": "Coupon {code} applied",
+        "couponDiscount": "Discount",
+        "couponTotal": "Total after discount",
+        "couponErrors": {
+          "COUPON_NOT_FOUND": "This coupon code isn't valid.",
+          "COUPON_DISABLED": "This coupon isn't active.",
+          "COUPON_EXPIRED": "This coupon has expired.",
+          "COUPON_EXHAUSTED": "This coupon has reached its usage limit.",
+          "COUPON_NOT_APPLICABLE": "This coupon doesn't apply to this subscription.",
+          "generic": "Couldn't check this coupon."
+        }
       },
       "paymentPanel": {
         "startFailedFallback": "Couldn't start the payment.",

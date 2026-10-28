@@ -1,18 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { Percent, Ticket, TicketCheck, TicketX } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { MoreHorizontal, Percent, Ticket, TicketCheck, TicketX } from "lucide-react"
 import { toast } from "sonner"
 
 import {
   AppButton,
+  AppCard,
   AppDialog,
-  AppInput,
-  AppSelect,
-  AppSelectContent,
-  AppSelectItem,
-  AppSelectTrigger,
-  AppSelectValue,
+  AppDropdownMenu,
+  AppDropdownMenuContent,
+  AppDropdownMenuItem,
+  AppDropdownMenuTrigger,
   AppStatusBadge,
   AppTable,
   AppTableBody,
@@ -24,92 +23,136 @@ import {
   AppTableToolbar,
 } from "@/components/app"
 
-import { useMadarAdminCoupons } from "../hooks"
-import { getCouponsKpis, PLAN_META, PLAN_ORDER } from "../services"
-import type { CouponDiscountType, CouponStatus, PlanTier } from "../types"
+import { APPLICATION_LABEL, BILLING_INTERVAL_LABEL, formatDate, formatSar } from "../services"
+import { platformAdminService } from "../services"
+import type {
+  AdminApplicationPricing,
+  AdminCoupon,
+  AdminCouponInput,
+  AdminCouponStatus,
+} from "../types/platform-admin.types"
+import { CouponEditorDialog } from "./coupon-editor-dialog"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
 
-// Custom pastel colors rather than AppStatusBadge's own tone mapping -- "success" resolves to
-// bg-primary (blue), not green, which would read as "active" using the wrong color everywhere
-// else in this feature already uses green for. Same pattern as subscription-status-badge.tsx.
-const COUPON_STATUS_META: Record<CouponStatus, { label: string; className: string }> = {
+// Custom pastel colors rather than AppStatusBadge's own tone mapping -- same pattern as
+// subscription-status-badge.tsx.
+const STATUS_META: Record<AdminCouponStatus, { label: string; className: string }> = {
   active: { label: "فعال", className: "bg-emerald-50 text-emerald-600" },
-  expired: { label: "منتهي", className: "bg-rose-50 text-rose-600" },
   disabled: { label: "معطل", className: "bg-slate-100 text-slate-600" },
+  expired: { label: "منتهي", className: "bg-rose-50 text-rose-600" },
+  exhausted: { label: "استُنفد", className: "bg-amber-50 text-amber-600" },
 }
 
-function formatDiscount(type: CouponDiscountType, value: number) {
-  return type === "percentage" ? `${value}%` : `SAR ${value}`
+function toInput(coupon: AdminCoupon, isActive: boolean): AdminCouponInput {
+  return {
+    code: coupon.code,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+    applications: coupon.applications,
+    packageIds: coupon.packageIds,
+    billingIntervals: coupon.billingIntervals,
+    usageLimit: coupon.usageLimit,
+    expiresOn: coupon.expiresAt
+      ? new Date(new Date(coupon.expiresAt).getTime() + 3 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10)
+      : null,
+    isActive,
+  }
 }
 
+// Discount codes for Madar subscriptions, redeemed at card checkout. A use is counted only when
+// the payment succeeds.
 export function MadarAdminCoupons() {
-  const { coupons, createCoupon, toggleCouponStatus } = useMadarAdminCoupons()
-  const kpisRaw = getCouponsKpis()
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [code, setCode] = useState("")
-  const [discountType, setDiscountType] = useState<CouponDiscountType>("percentage")
-  const [value, setValue] = useState("10")
-  const [usageLimit, setUsageLimit] = useState("100")
-  const [expiresAt, setExpiresAt] = useState("")
-  const [applicablePlans, setApplicablePlans] = useState<PlanTier[]>(PLAN_ORDER)
+  const [coupons, setCoupons] = useState<AdminCoupon[] | null>(null)
+  const [pricing, setPricing] = useState<AdminApplicationPricing[]>([])
+  const [editing, setEditing] = useState<{ coupon: AdminCoupon | null } | null>(null)
+  const [deleting, setDeleting] = useState<AdminCoupon | null>(null)
+  const [busy, setBusy] = useState(false)
 
+  const load = useCallback(async () => {
+    try {
+      setCoupons(await platformAdminService.listCoupons())
+    } catch {
+      toast.error("تعذر تحميل الكوبونات.")
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+    platformAdminService
+      .getPricing()
+      .then(setPricing)
+      .catch(() => {})
+  }, [load])
+
+  const packageName = new Map(
+    pricing.flatMap((entry) => entry.packages.map((pkg) => [pkg.id, pkg.name] as const))
+  )
+
+  async function toggleActive(coupon: AdminCoupon) {
+    setBusy(true)
+    try {
+      await platformAdminService.updateCoupon(coupon.id, toInput(coupon, !coupon.isActive))
+      toast.success(coupon.isActive ? `تم تعطيل ${coupon.code}.` : `تم تفعيل ${coupon.code}.`)
+      await load()
+    } catch {
+      toast.error("تعذر تحديث الكوبون.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return
+    setBusy(true)
+    try {
+      await platformAdminService.deleteCoupon(deleting.id)
+      toast.success(`تم حذف ${deleting.code}.`)
+      setDeleting(null)
+      await load()
+    } catch (error) {
+      toast.error(
+        (error as { code?: string })?.code === "COUPON_IN_USE"
+          ? "تم استخدام هذا الكوبون -- عطّله بدلاً من حذفه."
+          : "تعذر حذف الكوبون."
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const list = coupons ?? []
   const kpis: MadarAdminKpi[] = [
     {
       label: "إجمالي الكوبونات",
-      value: String(kpisRaw.total),
+      value: String(list.length),
       deltaPct: null,
       icon: Ticket,
       tone: "blue",
     },
     {
       label: "كوبونات فعالة",
-      value: String(kpisRaw.active),
+      value: String(list.filter((coupon) => coupon.status === "active").length),
       deltaPct: null,
       icon: TicketCheck,
       tone: "green",
     },
     {
-      label: "كوبونات منتهية",
-      value: String(kpisRaw.expired),
+      label: "منتهية أو معطلة",
+      value: String(list.filter((coupon) => coupon.status !== "active").length),
       deltaPct: null,
       icon: TicketX,
       tone: "rose",
     },
     {
       label: "مرات الاستخدام",
-      value: new Intl.NumberFormat("en-US").format(kpisRaw.redemptions),
+      value: String(list.reduce((sum, coupon) => sum + coupon.usedCount, 0)),
       deltaPct: null,
       icon: Percent,
       tone: "violet",
     },
   ]
-
-  function resetForm() {
-    setCode("")
-    setDiscountType("percentage")
-    setValue("10")
-    setUsageLimit("100")
-    setExpiresAt("")
-    setApplicablePlans(PLAN_ORDER)
-  }
-
-  function handleCreate() {
-    if (!code.trim() || !expiresAt) {
-      toast.error("يرجى تعبئة كود الكوبون وتاريخ الانتهاء.")
-      return
-    }
-    createCoupon({
-      code: code.trim(),
-      discountType,
-      value: Number(value) || 0,
-      usageLimit: Number(usageLimit) || 0,
-      expiresAt,
-      applicablePlans,
-    })
-    toast.success(`تم إنشاء كوبون ${code.trim().toUpperCase()}.`)
-    resetForm()
-    setDialogOpen(false)
-  }
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
@@ -117,12 +160,12 @@ export function MadarAdminCoupons() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">الكوبونات</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            إدارة أكواد الخصم الترويجية لعملاء مدار.
+            أكواد خصم على اشتراكات مدار لتطبيق واحد أو عدة تطبيقات.
           </p>
         </div>
         <AppButton
           className="h-11 rounded-[10px] px-6 font-semibold"
-          onClick={() => setDialogOpen(true)}
+          onClick={() => setEditing({ coupon: null })}
         >
           إضافة كوبون
         </AppButton>
@@ -134,53 +177,99 @@ export function MadarAdminCoupons() {
         ))}
       </div>
 
-      <AppTableToolbar title="جميع الكوبونات" description={`${coupons.length} كوبون`} />
+      <AppTableToolbar title="جميع الكوبونات" description={`${list.length} كوبون`} />
 
-      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+      <AppCard
+        state={coupons === null ? "loading" : "idle"}
+        className="overflow-hidden rounded-2xl border-border/60 p-0 shadow-sm"
+      >
         <AppTable>
           <AppTableHeader>
             <AppTableRow>
               <AppTableHead>الكود</AppTableHead>
               <AppTableHead>الخصم</AppTableHead>
+              <AppTableHead>التطبيقات</AppTableHead>
+              <AppTableHead>المدة</AppTableHead>
               <AppTableHead>الاستخدام</AppTableHead>
-              <AppTableHead>الباقات المشمولة</AppTableHead>
               <AppTableHead>تاريخ الانتهاء</AppTableHead>
               <AppTableHead>الحالة</AppTableHead>
-              <AppTableHead className="w-28" />
+              <AppTableHead className="w-10" />
             </AppTableRow>
           </AppTableHeader>
           <AppTableBody>
-            {coupons.map((coupon) => {
-              const meta = COUPON_STATUS_META[coupon.status]
+            {list.map((coupon) => {
+              const status = STATUS_META[coupon.status]
+              const applicationsLabel =
+                coupon.applications.length === 0
+                  ? "جميع التطبيقات"
+                  : coupon.applications
+                      .map((application) => APPLICATION_LABEL[application])
+                      .join("، ")
+              const packagesLabel = coupon.packageIds
+                .map((id) => packageName.get(id))
+                .filter(Boolean)
+                .join("، ")
               return (
                 <AppTableRow key={coupon.id}>
-                  <AppTableCell className="font-mono font-semibold text-foreground">
+                  <AppTableCell className="font-mono font-semibold text-foreground" dir="ltr">
                     {coupon.code}
                   </AppTableCell>
-                  <AppTableCell>{formatDiscount(coupon.discountType, coupon.value)}</AppTableCell>
-                  <AppTableCell className="text-muted-foreground">
-                    {coupon.usedCount} / {coupon.usageLimit}
+                  <AppTableCell className="font-medium">
+                    {coupon.discountType === "percentage"
+                      ? `${coupon.discountValue}%`
+                      : formatSar(coupon.discountValue)}
+                  </AppTableCell>
+                  <AppTableCell className="max-w-[260px]">
+                    <p className="text-foreground">{applicationsLabel}</p>
+                    {packagesLabel ? (
+                      <p className="text-xs text-muted-foreground">الباقات: {packagesLabel}</p>
+                    ) : null}
                   </AppTableCell>
                   <AppTableCell className="text-muted-foreground">
-                    {coupon.applicablePlans.map((tier) => PLAN_META[tier].name).join("، ")}
+                    {coupon.billingIntervals
+                      .map((interval) => BILLING_INTERVAL_LABEL[interval])
+                      .join(" و")}
                   </AppTableCell>
-                  <AppTableCell className="text-muted-foreground">{coupon.expiresAt}</AppTableCell>
+                  <AppTableCell className="text-muted-foreground">
+                    {coupon.usedCount} / {coupon.usageLimit ?? "∞"}
+                  </AppTableCell>
+                  <AppTableCell className="text-muted-foreground">
+                    {coupon.expiresAt ? formatDate(coupon.expiresAt) : "بدون انتهاء"}
+                  </AppTableCell>
                   <AppTableCell>
                     <AppStatusBadge
                       status="neutral"
-                      label={meta.label}
-                      className={meta.className}
+                      label={status.label}
+                      className={status.className}
                     />
                   </AppTableCell>
                   <AppTableCell>
-                    <AppButton
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleCouponStatus(coupon.id)}
-                      disabled={coupon.status === "expired"}
-                    >
-                      {coupon.status === "disabled" ? "تفعيل" : "تعطيل"}
-                    </AppButton>
+                    <AppDropdownMenu modal={false}>
+                      <AppDropdownMenuTrigger asChild>
+                        <AppButton
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="إجراءات"
+                          disabled={busy}
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </AppButton>
+                      </AppDropdownMenuTrigger>
+                      <AppDropdownMenuContent align="end">
+                        <AppDropdownMenuItem onSelect={() => setEditing({ coupon })}>
+                          تعديل
+                        </AppDropdownMenuItem>
+                        <AppDropdownMenuItem onSelect={() => void toggleActive(coupon)}>
+                          {coupon.isActive ? "تعطيل" : "تفعيل"}
+                        </AppDropdownMenuItem>
+                        <AppDropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => setDeleting(coupon)}
+                        >
+                          حذف
+                        </AppDropdownMenuItem>
+                      </AppDropdownMenuContent>
+                    </AppDropdownMenu>
                   </AppTableCell>
                 </AppTableRow>
               )
@@ -188,130 +277,62 @@ export function MadarAdminCoupons() {
           </AppTableBody>
         </AppTable>
 
-        {coupons.length === 0 ? (
-          <AppTableEmpty title="لا توجد كوبونات" description="أضف كوبونك الأول للبدء." />
+        {coupons !== null && list.length === 0 ? (
+          <AppTableEmpty title="لا توجد كوبونات" description="أضف أول كوبون خصم لعملاء مدار." />
         ) : null}
-      </div>
+      </AppCard>
+
+      {editing ? (
+        <CouponEditorDialog
+          key={editing.coupon?.id ?? "new"}
+          initial={editing.coupon}
+          pricing={pricing}
+          onClose={() => setEditing(null)}
+          onSave={async (input) => {
+            if (editing.coupon) {
+              await platformAdminService.updateCoupon(editing.coupon.id, input)
+              toast.success(`تم حفظ ${input.code}.`)
+            } else {
+              await platformAdminService.createCoupon(input)
+              toast.success(`تم إنشاء كوبون ${input.code}.`)
+            }
+            await load()
+          }}
+        />
+      ) : null}
 
       <AppDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        title={<span dir="rtl">إضافة كوبون جديد</span>}
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
+        }}
+        title={<span dir="rtl">حذف كوبون {deleting?.code}</span>}
         description={
-          <span dir="rtl">أنشئ كود خصم جديد يمكن لعملاء مدار استخدامه عند الاشتراك.</span>
+          <span dir="rtl">
+            سيتم حذف الكوبون نهائياً. الكوبون المستخدم لا يمكن حذفه -- عطّله بدلاً من ذلك.
+          </span>
         }
-        contentClassName="[direction:rtl] max-w-[32rem] gap-5 p-6"
+        contentClassName="[direction:rtl] max-w-[28rem] p-6"
         footer={
           <div className="flex w-full gap-2">
             <AppButton
               variant="outline"
-              className="h-12 flex-1 rounded-[10px] text-[14px] font-semibold"
-              onClick={() => setDialogOpen(false)}
+              className="h-12 flex-1 rounded-[10px] font-semibold"
+              onClick={() => setDeleting(null)}
             >
-              إلغاء
+              تراجع
             </AppButton>
             <AppButton
-              className="h-12 flex-1 rounded-[10px] text-[14px] font-bold shadow-sm"
-              onClick={handleCreate}
+              variant="destructive"
+              className="h-12 flex-1 rounded-[10px] font-bold"
+              loading={busy}
+              onClick={confirmDelete}
             >
-              إنشاء الكوبون
+              تأكيد الحذف
             </AppButton>
           </div>
         }
-      >
-        <div dir="rtl" className="space-y-5">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">كود الكوبون</label>
-            <AppInput
-              value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              placeholder="WELCOME20"
-              className="h-11 rounded-[10px] font-mono"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3.5">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">نوع الخصم</label>
-              <AppSelect
-                value={discountType}
-                onValueChange={(v) => setDiscountType(v as CouponDiscountType)}
-              >
-                <AppSelectTrigger className="h-11 w-full rounded-[10px]">
-                  <AppSelectValue />
-                </AppSelectTrigger>
-                <AppSelectContent>
-                  <AppSelectItem value="percentage">نسبة مئوية (%)</AppSelectItem>
-                  <AppSelectItem value="fixed">مبلغ ثابت (SAR)</AppSelectItem>
-                </AppSelectContent>
-              </AppSelect>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">القيمة</label>
-              <AppInput
-                type="number"
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                className="h-11 rounded-[10px]"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3.5">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                حد الاستخدام
-              </label>
-              <AppInput
-                type="number"
-                value={usageLimit}
-                onChange={(event) => setUsageLimit(event.target.value)}
-                className="h-11 rounded-[10px]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                تاريخ الانتهاء
-              </label>
-              <AppInput
-                type="date"
-                value={expiresAt}
-                onChange={(event) => setExpiresAt(event.target.value)}
-                className="h-11 rounded-[10px]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              الباقات المشمولة
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {PLAN_ORDER.map((tier) => {
-                const selected = applicablePlans.includes(tier)
-                return (
-                  <button
-                    key={tier}
-                    type="button"
-                    onClick={() =>
-                      setApplicablePlans((current) =>
-                        selected ? current.filter((t) => t !== tier) : [...current, tier]
-                      )
-                    }
-                    className={
-                      selected
-                        ? "rounded-full bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground transition-colors"
-                        : "rounded-full border border-border px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
-                    }
-                  >
-                    {PLAN_META[tier].name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </AppDialog>
+      />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import type { ApplicationCategoryId } from "@/features/applications"
+import type { BillingInterval, PurchasableApplication } from "@/application/contracts"
 
 export type MoyasarSelfServePlanTier = "starter" | "growth" | "pro"
 
@@ -16,6 +16,16 @@ export type MoyasarPaymentStatus = "initiated" | "paid" | "failed"
 export interface MoyasarPaymentRecord {
   id: string
   status: MoyasarPaymentStatus
-  application: ApplicationCategoryId
-  planTier: MoyasarSelfServePlanTier
+  application: PurchasableApplication
+  planTier: MoyasarSelfServePlanTier | null
+  packageId: string | null
+  billingInterval: BillingInterval
+}
+
+// What's being bought at checkout -- the amount is priced server-side from this.
+export interface MoyasarPurchase {
+  application: PurchasableApplication
+  packageId: string
+  interval: BillingInterval
+  couponCode?: string | null
 }

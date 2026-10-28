@@ -1,3 +1,4 @@
+import type { PurchasableApplication } from "../../subscriptions/types"
 import type { Role } from "../../types"
 
 export interface RegisterUserCommand {
@@ -217,7 +218,13 @@ export interface RequestApplicationActivationCommand {
     | "expenses"
     | "ai"
     | "customReports"
-  planTier: "starter" | "growth" | "pro" | "enterprise"
+    | "madarComplete"
+  // Resolved and priced by the REST route against current pricing (PricingService) before this
+  // command runs -- the command layer has no pricing access of its own.
+  planTier: "starter" | "growth" | "pro" | "enterprise" | null
+  package: { id: string; name: string }
+  billingInterval: "monthly" | "yearly"
+  priceHalalas: number
   // Already uploaded by the REST route before this command runs (same convention as
   // UpdateOrganizationCommand.logoUrl / voucher attachments) -- the command layer never handles
   // raw base64.
@@ -227,6 +234,12 @@ export interface RequestApplicationActivationCommand {
 
 export interface RejectSubscriptionActivationRequestCommand {
   reason: string
+}
+
+// The route checks the application is sold as free and passes its current freeDays setting.
+export interface ActivateFreeApplicationCommand {
+  application: PurchasableApplication
+  freeDays: number
 }
 
 export interface StartApplicationTrialCommand {

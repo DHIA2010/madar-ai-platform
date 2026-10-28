@@ -584,3 +584,25 @@
     opacity: 0.55;
   }
 }
+
+/* Madar Admin receipt printing (features/madar-admin/components/receipt-dialog.tsx): while body
+   has .printing-receipt, only the receipt is printed -- the console, dialog chrome, and overlay
+   are hidden, and the receipt fills the page. */
+@media print {
+  body.printing-receipt * {
+    visibility: hidden;
+  }
+  body.printing-receipt .madar-receipt,
+  body.printing-receipt .madar-receipt * {
+    visibility: visible;
+  }
+  body.printing-receipt .madar-receipt {
+    position: fixed;
+    inset: 0;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    --tw-ring-shadow: 0 0 #0000;
+  }
+}

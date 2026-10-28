@@ -89,6 +89,8 @@ interface IdentitySessionResponse {
     emailVerifiedAt?: string | null
     modulePermissions?: string[]
     isPlatformAdmin?: boolean
+    platformRole?: string | null
+    platformPermissions?: string[]
   }
   roles?: string[]
 }
@@ -101,6 +103,8 @@ interface IdentityProfileResponse {
   emailVerifiedAt?: string | null
   modulePermissions?: string[]
   isPlatformAdmin?: boolean
+  platformRole?: string | null
+  platformPermissions?: string[]
 }
 
 function mapRoles(roles: string[] | undefined) {
@@ -128,6 +132,8 @@ function mapProfileResponse(response: IdentityProfileResponse): AuthUserDto {
     permissions: [],
     modulePermissions: response.modulePermissions ?? [],
     isPlatformAdmin: response.isPlatformAdmin ?? false,
+    platformRole: response.platformRole ?? null,
+    platformPermissions: response.platformPermissions ?? [],
   }
 }
 
@@ -228,6 +234,8 @@ export class AuthenticationApiAdapter {
             // backend, so this DOES carry the real platformAdminEmails-resolved flag -- the
             // primary hydration path (called on every app load), unlike login()/register() above.
             isPlatformAdmin: response.user.isPlatformAdmin ?? false,
+            platformRole: response.user.platformRole ?? null,
+            platformPermissions: response.user.platformPermissions ?? [],
           }
         : null,
     }

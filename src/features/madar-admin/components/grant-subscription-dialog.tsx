@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import {
@@ -14,17 +14,21 @@ import {
   AppSelectValue,
 } from "@/components/app"
 
-import { APPLICATION_LABEL, PLAN_META, PLAN_ORDER, platformAdminService } from "../services"
-import type { PlanTier } from "../types"
-import type { BillingInterval } from "../types/platform-admin.types"
+import { APPLICATION_LABEL, platformAdminService } from "../services"
+import type { AdminApplicationPricing, BillingInterval } from "../types/platform-admin.types"
 
-import type { SubscriptionApplication } from "@/application/contracts"
+import type { PurchasableApplication } from "@/application/contracts"
 
-const NO_PLAN = "none"
+const NO_PACKAGE = "none"
 const FIELD_LABEL = "mb-1.5 block text-sm font-medium text-foreground"
 
-// Turns an application on for one customer from Madar Admin -- a deal agreed outside checkout, or
-// a goodwill extension. Leaving the price empty makes it complimentary (no revenue counted).
+function riyalsInput(halalas: number | null): string {
+  return halalas === null ? "" : String(halalas / 100)
+}
+
+// Turns an application (or the Madar Complete bundle) on for one customer from Madar Admin -- a
+// deal agreed outside checkout, or a goodwill extension. Choosing a package prefills its price for
+// the chosen period; clearing the price makes the subscription complimentary.
 export function GrantSubscriptionDialog({
   customer,
   onClose,
@@ -34,11 +38,34 @@ export function GrantSubscriptionDialog({
   onClose: () => void
   onGranted: () => void
 }) {
-  const [application, setApplication] = useState<SubscriptionApplication>("advertising")
-  const [planTier, setPlanTier] = useState<PlanTier | typeof NO_PLAN>("growth")
+  const [pricing, setPricing] = useState<AdminApplicationPricing[] | null>(null)
+  const [application, setApplication] = useState<PurchasableApplication>("advertising")
+  const [packageId, setPackageId] = useState<string>(NO_PACKAGE)
   const [interval, setBillingInterval] = useState<BillingInterval>("monthly")
   const [price, setPrice] = useState("")
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!customer || pricing) return
+    platformAdminService
+      .getPricing()
+      .then(setPricing)
+      .catch(() => toast.error("تعذر تحميل الباقات."))
+  }, [customer, pricing])
+
+  const packages = useMemo(
+    () => pricing?.find((entry) => entry.application === application)?.packages ?? [],
+    [pricing, application]
+  )
+
+  function prefillPrice(nextPackageId: string, nextInterval: BillingInterval) {
+    const pkg = packages.find((entry) => entry.id === nextPackageId)
+    setPrice(
+      riyalsInput(
+        pkg ? (nextInterval === "yearly" ? pkg.yearlyPriceHalalas : pkg.monthlyPriceHalalas) : null
+      )
+    )
+  }
 
   async function handleGrant() {
     if (!customer) return
@@ -51,12 +78,13 @@ export function GrantSubscriptionDialog({
     try {
       await platformAdminService.grantSubscription(customer.id, {
         application,
-        planTier: planTier === NO_PLAN ? null : planTier,
+        packageId: packageId === NO_PACKAGE ? null : packageId,
         interval,
         priceHalalas: priceRiyals === null ? null : Math.round(priceRiyals * 100),
       })
       toast.success(`تم تفعيل ${APPLICATION_LABEL[application]} لـ ${customer.name}.`)
       setPrice("")
+      setPackageId(NO_PACKAGE)
       onGranted()
       onClose()
     } catch {
@@ -103,13 +131,17 @@ export function GrantSubscriptionDialog({
           <label className={FIELD_LABEL}>التطبيق</label>
           <AppSelect
             value={application}
-            onValueChange={(value) => setApplication(value as SubscriptionApplication)}
+            onValueChange={(value) => {
+              setApplication(value as PurchasableApplication)
+              setPackageId(NO_PACKAGE)
+              setPrice("")
+            }}
           >
             <AppSelectTrigger className="h-11 w-full rounded-[10px]">
               <AppSelectValue />
             </AppSelectTrigger>
             <AppSelectContent>
-              {(Object.keys(APPLICATION_LABEL) as SubscriptionApplication[]).map((key) => (
+              {(Object.keys(APPLICATION_LABEL) as PurchasableApplication[]).map((key) => (
                 <AppSelectItem key={key} value={key}>
                   {APPLICATION_LABEL[key]}
                 </AppSelectItem>
@@ -122,19 +154,23 @@ export function GrantSubscriptionDialog({
           <div>
             <label className={FIELD_LABEL}>الباقة</label>
             <AppSelect
-              value={planTier}
-              onValueChange={(value) => setPlanTier(value as PlanTier | typeof NO_PLAN)}
+              value={packageId}
+              onValueChange={(value) => {
+                setPackageId(value)
+                prefillPrice(value, interval)
+              }}
             >
               <AppSelectTrigger className="h-11 w-full rounded-[10px]">
                 <AppSelectValue />
               </AppSelectTrigger>
               <AppSelectContent>
-                {PLAN_ORDER.map((tier) => (
-                  <AppSelectItem key={tier} value={tier}>
-                    {PLAN_META[tier].name}
+                <AppSelectItem value={NO_PACKAGE}>بدون باقة</AppSelectItem>
+                {packages.map((pkg) => (
+                  <AppSelectItem key={pkg.id} value={pkg.id}>
+                    {pkg.name}
+                    {pkg.isActive ? "" : " (معطلة)"}
                   </AppSelectItem>
                 ))}
-                <AppSelectItem value={NO_PLAN}>بدون باقة</AppSelectItem>
               </AppSelectContent>
             </AppSelect>
           </div>
@@ -142,7 +178,10 @@ export function GrantSubscriptionDialog({
             <label className={FIELD_LABEL}>مدة الاشتراك</label>
             <AppSelect
               value={interval}
-              onValueChange={(value) => setBillingInterval(value as BillingInterval)}
+              onValueChange={(value) => {
+                setBillingInterval(value as BillingInterval)
+                if (packageId !== NO_PACKAGE) prefillPrice(packageId, value as BillingInterval)
+              }}
             >
               <AppSelectTrigger className="h-11 w-full rounded-[10px]">
                 <AppSelectValue />

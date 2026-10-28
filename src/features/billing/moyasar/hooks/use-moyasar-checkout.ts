@@ -3,16 +3,13 @@
 import { useCallback, useState } from "react"
 import { useTranslations } from "next-intl"
 
-import type { ApplicationCategoryId } from "@/features/applications"
-
 import { loadMoyasarWidget, moyasarBillingService } from "../services"
-import type { MoyasarSelfServePlanTier } from "../types"
+import type { MoyasarPurchase } from "../types"
 
 export type MoyasarCheckoutStage = "idle" | "creating" | "ready" | "error"
 
 export interface StartMoyasarCheckoutInput {
-  application: ApplicationCategoryId
-  planTier: MoyasarSelfServePlanTier
+  purchase: MoyasarPurchase
   applicationName: string
   // Where the browser lands (a real top-level navigation, not a route change -- Moyasar's own
   // redirect, not Next's router) once the customer finishes on Moyasar's side, success or not.
@@ -40,10 +37,7 @@ export function useMoyasarCheckout() {
       setErrorMessage(null)
       try {
         const [intent] = await Promise.all([
-          moyasarBillingService.createCheckout({
-            application: input.application,
-            planTier: input.planTier,
-          }),
+          moyasarBillingService.createCheckout(input.purchase),
           loadMoyasarWidget(),
         ])
 

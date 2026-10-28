@@ -9,13 +9,34 @@ import type { AuthenticatedActor } from "../application/dto/identity-dtos"
 import { IdentityError } from "../application/errors/IdentityError"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
-import { MOYASAR_PLAN_TIER_AMOUNT_HALALAS } from "../billing/moyasar/plan-pricing"
 import { MoyasarBillingRepository } from "../billing/moyasar/repository"
 import { MoyasarBillingService } from "../billing/moyasar/service"
 import type { MoyasarWebhookPayload } from "../billing/moyasar/types"
+import { CouponService } from "../coupons/service"
+import { PricingService } from "../pricing/service"
+import type { PurchasableApplication } from "../subscriptions/types"
 
 let database: PostgresDatabase
 let service: MoyasarBillingService
+let pricing: PricingService
+
+// The seeded package that corresponds to an old account-wide tier, bought monthly -- what every
+// checkout in this file used to express as `planTier`.
+async function tierPackage(
+  application: PurchasableApplication,
+  tier: "starter" | "growth" | "pro"
+) {
+  const catalog = await pricing.getCatalog({ includeInactive: false })
+  const pkg = catalog
+    .find((entry) => entry.application === application)!
+    .packages.find((entry) => entry.legacyPlanTier === tier)!
+  return { packageId: pkg.id, interval: "monthly" as const, price: pkg.monthlyPriceHalalas! }
+}
+
+async function checkout(application: PurchasableApplication, tier: "starter" | "growth" | "pro") {
+  const { packageId, interval } = await tierPackage(application, tier)
+  return service.createCheckoutIntent(actor(), { application, packageId, interval })
+}
 
 const ORG_A = randomUUID()
 const ORG_B = randomUUID()
@@ -97,7 +118,13 @@ beforeEach(async () => {
 
   vi.stubGlobal("fetch", vi.fn())
 
-  service = new MoyasarBillingService(database, new MoyasarBillingRepository(database))
+  pricing = new PricingService(database)
+  service = new MoyasarBillingService(
+    database,
+    new MoyasarBillingRepository(database),
+    pricing,
+    new CouponService(database)
+  )
 })
 
 afterEach(() => {
@@ -108,13 +135,10 @@ afterEach(() => {
 })
 
 describe("createCheckoutIntent", () => {
-  it("prices each self-serve tier from the shared plan-pricing table and returns the publishable key", async () => {
-    for (const planTier of ["starter", "growth", "pro"] as const) {
-      const result = await service.createCheckoutIntent(actor(), {
-        application: "advertising",
-        planTier,
-      })
-      expect(result.amount).toBe(MOYASAR_PLAN_TIER_AMOUNT_HALALAS[planTier])
+  it("prices each package from its current Madar Admin price and returns the publishable key", async () => {
+    for (const tier of ["starter", "growth", "pro"] as const) {
+      const result = await checkout("advertising", tier)
+      expect(result.amount).toBe((await tierPackage("advertising", tier)).price)
       expect(result.currency).toBe("SAR")
       expect(result.publishableKey).toBe("pk_test_fixture")
       expect(result.checkoutId).toBeTruthy()
@@ -123,18 +147,13 @@ describe("createCheckoutIntent", () => {
 
   it("fails fast with a clear service-unavailable error when Moyasar isn't configured", async () => {
     delete process.env.MOYASAR_PUBLISHABLE_KEY
-    await expect(
-      service.createCheckoutIntent(actor(), { application: "pos", planTier: "starter" })
-    ).rejects.toThrow(IdentityError)
+    await expect(checkout("pos", "starter")).rejects.toThrow(IdentityError)
   })
 })
 
 describe("confirmCheckout", () => {
   it("flips the application on, sets the plan tier, and clears any trial marker on a genuinely matching paid payment", async () => {
-    const intent = await service.createCheckoutIntent(actor(), {
-      application: "pos",
-      planTier: "growth",
-    })
+    const intent = await checkout("pos", "growth")
     await setOrgSettingValue(ORG_A, "posTrialEndsAt", new Date(Date.now() + 99999).toISOString())
 
     mockFetchPaymentOnce({
@@ -158,10 +177,7 @@ describe("confirmCheckout", () => {
   })
 
   it("marks the payment failed and leaves settings untouched when the Moyasar amount doesn't match what was charged for", async () => {
-    const intent = await service.createCheckoutIntent(actor(), {
-      application: "ecommerce",
-      planTier: "pro",
-    })
+    const intent = await checkout("ecommerce", "pro")
     mockFetchPaymentOnce({
       id: "pay_tampered",
       status: "paid",
@@ -180,10 +196,7 @@ describe("confirmCheckout", () => {
   })
 
   it("is idempotent -- confirming an already-paid checkout a second time is a no-op, not a double-apply", async () => {
-    const intent = await service.createCheckoutIntent(actor(), {
-      application: "advertising",
-      planTier: "starter",
-    })
+    const intent = await checkout("advertising", "starter")
     mockFetchPaymentOnce({
       id: "pay_once",
       status: "paid",
@@ -206,10 +219,7 @@ describe("confirmCheckout", () => {
   })
 
   it("rejects a checkout that belongs to a different organization", async () => {
-    const intent = await service.createCheckoutIntent(actor(), {
-      application: "pos",
-      planTier: "starter",
-    })
+    const intent = await checkout("pos", "starter")
 
     await expect(
       service.confirmCheckout(actor({ organizationId: ORG_B }), {
@@ -242,10 +252,7 @@ describe("handleWebhookEvent", () => {
   }
 
   it("flips settings straight from the webhook payload, with no outbound Moyasar API call", async () => {
-    const intent = await service.createCheckoutIntent(actor(), {
-      application: "madarApps",
-      planTier: "pro",
-    })
+    const intent = await checkout("madarApps", "pro")
 
     await service.handleWebhookEvent(
       webhookPayload({
@@ -271,10 +278,7 @@ describe("handleWebhookEvent", () => {
   })
 
   it("does not re-apply once a checkout is already paid", async () => {
-    const intent = await service.createCheckoutIntent(actor(), {
-      application: "pos",
-      planTier: "starter",
-    })
+    const intent = await checkout("pos", "starter")
     const payload = webhookPayload({
       checkoutId: intent.checkoutId,
       status: "paid",
@@ -286,5 +290,87 @@ describe("handleWebhookEvent", () => {
     await service.handleWebhookEvent(payload)
 
     expect(await countAuditLogs(intent.checkoutId)).toBe(1)
+  })
+})
+
+describe("coupons at checkout", () => {
+  async function createCoupon(overrides: Partial<Parameters<CouponService["create"]>[0]> = {}) {
+    return new CouponService(database).create(
+      {
+        code: "SAVE20",
+        discountType: "percentage",
+        discountValue: 20,
+        applications: [],
+        packageIds: [],
+        billingIntervals: ["monthly", "yearly"],
+        usageLimit: null,
+        expiresOn: null,
+        isActive: true,
+        ...overrides,
+      },
+      USER_A
+    )
+  }
+
+  async function pay(intent: { checkoutId: string; amount: number; currency: string }) {
+    await service.handleWebhookEvent({
+      id: "evt_coupon",
+      type: "payment_paid",
+      secret_token: "whsec_fixture",
+      data: {
+        id: `pay_${intent.checkoutId}`,
+        status: "paid",
+        amount: intent.amount,
+        currency: intent.currency,
+        metadata: { checkout_id: intent.checkoutId },
+      },
+    })
+  }
+
+  it("charges the discounted price and counts the use only once the payment succeeds", async () => {
+    await createCoupon()
+    const { packageId, interval, price } = await tierPackage("pos", "growth")
+
+    const intent = await service.createCheckoutIntent(actor(), {
+      application: "pos",
+      packageId,
+      interval,
+      couponCode: "save20",
+    })
+    expect(intent.amount).toBe(price - Math.round(price * 0.2))
+
+    const coupons = new CouponService(database)
+    expect((await coupons.list())[0].usedCount).toBe(0)
+    await pay(intent)
+    await pay(intent)
+    expect((await coupons.list())[0].usedCount).toBe(1)
+  })
+
+  it("refuses an exhausted coupon, and never discounts below 1 SAR", async () => {
+    await createCoupon({
+      code: "ONCE",
+      usageLimit: 1,
+      discountType: "fixed",
+      discountValue: 1_000_000,
+    })
+    const { packageId, interval } = await tierPackage("pos", "starter")
+
+    const first = await service.createCheckoutIntent(actor(), {
+      application: "pos",
+      packageId,
+      interval,
+      couponCode: "ONCE",
+    })
+    expect(first.amount).toBe(100)
+    await pay(first)
+
+    await expect(
+      service.createCheckoutIntent(actor(), {
+        application: "pos",
+        packageId,
+        interval,
+        couponCode: "ONCE",
+      })
+    ).rejects.toMatchObject({ code: "COUPON_EXHAUSTED" })
   })
 })

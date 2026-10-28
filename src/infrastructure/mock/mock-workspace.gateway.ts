@@ -2,6 +2,7 @@ import type {
   ConnectedPlatformsCountDto,
   OrganizationDto,
   OrganizationSettingsDto,
+  PurchasableApplication,
   SubscriptionActivationRequestDto,
   SubscriptionRequestStatus,
   WorkspaceDto,
@@ -172,7 +173,8 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     organizationId: string,
     payload: {
       application: SubscriptionActivationRequestDto["application"]
-      planTier: SubscriptionActivationRequestDto["planTier"]
+      packageId: string
+      interval: "monthly" | "yearly"
       attachmentContentType: string
       attachmentDataBase64: string
     }
@@ -189,7 +191,11 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       organizationName: organization.name,
       requestedByUserId: "mock-user",
       application: payload.application,
-      planTier: payload.planTier,
+      planTier: null,
+      packageId: payload.packageId,
+      packageName: null,
+      billingInterval: payload.interval,
+      priceHalalas: null,
       attachmentUrl: `data:${payload.attachmentContentType};base64,${payload.attachmentDataBase64}`,
       attachmentContentType: payload.attachmentContentType,
       status: "pending",
@@ -209,7 +215,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   // this method, so the mock has to actually remember it happened.
   async startApplicationTrial(
     organizationId: string,
-    application: SubscriptionActivationRequestDto["application"]
+    application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
   ): Promise<OrganizationDto> {
     await waitForMock()
     const organization = mockOrganizations.find((entry) => entry.id === organizationId)
@@ -228,6 +234,21 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       [`${application}Enabled`]: true,
       [`${application}TrialEndsAt`]: trialEndsAt,
       [`${application}TrialUsed`]: true,
+    })
+    return organization
+  }
+
+  async activateFreeApplication(
+    organizationId: string,
+    application: PurchasableApplication
+  ): Promise<OrganizationDto> {
+    await waitForMock()
+    const organization = mockOrganizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      throw new Error("Organization not found")
+    }
+    Object.assign(organization.settings as Record<string, unknown>, {
+      [`${application}Enabled`]: true,
     })
     return organization
   }

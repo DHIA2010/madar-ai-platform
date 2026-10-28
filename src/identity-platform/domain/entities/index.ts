@@ -889,6 +889,8 @@ export type SubscriptionApplication =
   | "ai"
   | "customReports"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
+// What a bank-transfer request can be for: one application, or the Madar Complete bundle.
+export type RequestableApplication = SubscriptionApplication | "madarComplete"
 
 export interface SubscriptionActivationRequestState {
   id: string
@@ -897,8 +899,16 @@ export interface SubscriptionActivationRequestState {
   // organization without a second, genuinely cross-tenant "get any org" query per row.
   organizationName: string
   requestedByUserId: string
-  application: SubscriptionApplication
-  planTier: SubscriptionPlanTier
+  application: RequestableApplication
+  // The account-wide tier the package maps to, if any.
+  planTier: SubscriptionPlanTier | null
+  // The package, billing period, and price the customer chose, snapshotted at submission so the
+  // approval grants exactly that even if pricing changes meanwhile. Null only on requests made
+  // before per-app packages existed.
+  packageId: string | null
+  packageName: string | null
+  billingInterval: "monthly" | "yearly" | null
+  priceHalalas: number | null
   attachmentUrl: string
   attachmentContentType: string
   status: "pending" | "approved" | "rejected"

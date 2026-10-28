@@ -326,6 +326,8 @@ export type {
   OrganizationSettingsDto,
   SubscriptionActivationRequestDto,
   SubscriptionApplication,
+  PurchasableApplication,
+  BillingInterval,
   SubscriptionPlanTier,
   SubscriptionRequestStatus,
   WorkspaceContextViewModel,

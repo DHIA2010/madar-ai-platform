@@ -1,4 +1,4 @@
-import type { EmailGateway } from "../../application/ports"
+import type { EmailGateway, RenewalReminderEmail } from "../../application/ports"
 import type { IdentityPlatformConfig } from "../../configuration"
 
 const BRAND_COLOR = "#7C3AED"
@@ -58,6 +58,23 @@ function renderLayout(input: {
     </table>
   </body>
 </html>`
+}
+
+function renewalReminderCopy(input: RenewalReminderEmail) {
+  const endsOn = new Date(input.endsAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  const subject =
+    input.kind === "trial"
+      ? `تنتهي تجربتك المجانية لـ ${input.applicationLabel} قريباً`
+      : `اقترب موعد تجديد اشتراك ${input.applicationLabel}`
+  const line =
+    input.kind === "trial"
+      ? `تنتهي التجربة المجانية لـ ${input.applicationLabel} في ${input.organizationName} بتاريخ ${endsOn}. اشترك الآن للاستمرار دون انقطاع.`
+      : `ينتهي اشتراك ${input.applicationLabel} في ${input.organizationName} بتاريخ ${endsOn}. جدّد الآن للاستمرار دون انقطاع.`
+  return { subject, line }
 }
 
 export class ResendEmailGateway implements EmailGateway {
@@ -174,6 +191,22 @@ export class ResendEmailGateway implements EmailGateway {
           You can change this password anytime from Settings once you're signed in.`,
         ctaLabel: "Sign in to MADAR",
         ctaUrl: input.loginUrl,
+      }),
+    })
+  }
+
+  async sendRenewalReminderEmail(input: RenewalReminderEmail) {
+    const { subject, line } = renewalReminderCopy(input)
+    await this.send({
+      to: input.email,
+      subject,
+      text: `${line}\n${input.renewUrl}`,
+      html: renderLayout({
+        preheader: subject,
+        heading: subject,
+        bodyHtml: `<div dir="rtl" style="text-align:right;">${escapeHtml(line)}</div>`,
+        ctaLabel: input.kind === "trial" ? "اشترك الآن" : "جدّد الاشتراك",
+        ctaUrl: input.renewUrl,
       }),
     })
   }

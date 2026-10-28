@@ -1,10 +1,4 @@
-import type { ApplicationCategoryId } from "@/features/applications"
-
-import type {
-  MoyasarCheckoutIntent,
-  MoyasarPaymentRecord,
-  MoyasarSelfServePlanTier,
-} from "../types"
+import type { MoyasarCheckoutIntent, MoyasarPaymentRecord, MoyasarPurchase } from "../types"
 
 import { createHttpDataClient } from "@/infrastructure/data/api/http-data-client"
 import { createSessionManager } from "@/infrastructure/identity"
@@ -43,10 +37,7 @@ const client = createHttpDataClient({
 })
 
 export const moyasarBillingService = {
-  async createCheckout(input: {
-    application: ApplicationCategoryId
-    planTier: MoyasarSelfServePlanTier
-  }): Promise<MoyasarCheckoutIntent> {
+  async createCheckout(input: MoyasarPurchase): Promise<MoyasarCheckoutIntent> {
     return client.post<typeof input, MoyasarCheckoutIntent>(CHECKOUT_ENDPOINT, input)
   },
 

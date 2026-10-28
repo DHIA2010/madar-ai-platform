@@ -25,27 +25,15 @@ import {
   AppTextarea,
 } from "@/components/app"
 
-import { PLAN_TIER_META } from "@/features/applications"
 import { useWorkspace } from "@/features/workspace"
 
+import { APPLICATION_LABEL, formatSar, packageLabel } from "../services"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
 
 import type {
   SubscriptionActivationRequestDto,
-  SubscriptionApplication,
   SubscriptionRequestStatus,
 } from "@/application/contracts"
-
-const APPLICATION_LABEL: Record<SubscriptionApplication, string> = {
-  advertising: "الحملات الإعلانية",
-  ecommerce: "المتاجر الإلكترونية",
-  pos: "نقطة البيع",
-  madarApps: "تطبيقات مدار",
-  procurement: "الموردون والمشتريات",
-  expenses: "المصروفات",
-  ai: "الذكاء الاصطناعي",
-  customReports: "التقارير المخصصة",
-}
 
 const STATUS_META: Record<SubscriptionRequestStatus, { label: string; className: string }> = {
   pending: { label: "قيد المراجعة", className: "bg-amber-50 text-amber-600" },
@@ -222,7 +210,14 @@ export function MadarAdminRequests() {
                     {request.organizationName}
                   </AppTableCell>
                   <AppTableCell>{APPLICATION_LABEL[request.application]}</AppTableCell>
-                  <AppTableCell>{PLAN_TIER_META[request.planTier].name}</AppTableCell>
+                  <AppTableCell>
+                    <p>{packageLabel(request)}</p>
+                    {request.priceHalalas !== null ? (
+                      <p className="text-xs text-muted-foreground">
+                        {formatSar(request.priceHalalas)}
+                      </p>
+                    ) : null}
+                  </AppTableCell>
                   <AppTableCell>
                     <a
                       href={request.attachmentUrl}

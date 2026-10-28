@@ -17,7 +17,15 @@ import { MetaOAuthConnectionDeletionService } from "../../meta-oauth/connection-
 import { MetaOAuthRepository } from "../../meta-oauth/repository"
 import { SallaOAuthConnectionDeletionService } from "../../salla-oauth/connection-deletion-service"
 import { parseJsonPreservingBigInts } from "../../salla-oauth/parse-json-preserving-big-ints"
+import { requirePlatformPermission } from "../../platform-admin/guard"
+import { PlatformGovernanceService } from "../../platform-admin/governance-service"
+import { PlatformOperationsService } from "../../platform-admin/operations-service"
 import { PlatformAdminService } from "../../platform-admin/service"
+import { PricingService } from "../../pricing/service"
+import { CouponService } from "../../coupons/service"
+import { ReceiptService } from "../../billing/receipts"
+import { runBillingMaintenance } from "../../subscriptions/maintenance"
+import { toPublicPlatformSettings } from "../../platform-settings/types"
 import { handlePlatformAdminRoute } from "./platform-admin-routes"
 import { SallaOAuthRepository } from "../../salla-oauth/repository"
 import { SallaOAuthService } from "../../salla-oauth/service"
@@ -82,7 +90,11 @@ import { MoyasarBillingService } from "../../billing/moyasar/service"
 import { MoyasarBillingRepository } from "../../billing/moyasar/repository"
 import { resolveMoyasarCredentials } from "../../billing/moyasar/credentials"
 import { verifyMoyasarWebhookSecret } from "../../billing/moyasar/webhook-verification"
-import { confirmCheckoutSchema, createCheckoutIntentSchema } from "../../billing/moyasar/schemas"
+import {
+  confirmCheckoutSchema,
+  couponQuoteSchema,
+  createCheckoutIntentSchema,
+} from "../../billing/moyasar/schemas"
 import type { MoyasarWebhookPayload } from "../../billing/moyasar/types"
 import { CampaignAnalyticsEngine } from "../../campaigns/analytics-engine"
 import { CustomersAggregationService } from "../../customers/service"
@@ -216,6 +228,7 @@ import {
   createChatSessionSchema,
   sendChatMessageSchema,
   startApplicationTrialSchema,
+  activateFreeApplicationSchema,
   createSupplierSchema,
   bulkUpdateSupplierStatusSchema,
   uploadSupplierImageSchema,
@@ -643,14 +656,52 @@ export function createIdentityApiServer(
   const productsAggregationService = container.infrastructure.database
     ? new ProductsAggregationService(container.infrastructure.database)
     : null
-  const moyasarBillingService = container.infrastructure.database
-    ? new MoyasarBillingService(
+  const pricingService = container.infrastructure.database
+    ? new PricingService(container.infrastructure.database)
+    : null
+  const couponService = container.infrastructure.database
+    ? new CouponService(container.infrastructure.database)
+    : null
+  const moyasarBillingService =
+    container.infrastructure.database && pricingService && couponService
+      ? new MoyasarBillingService(
+          container.infrastructure.database,
+          new MoyasarBillingRepository(container.infrastructure.database),
+          pricingService,
+          couponService
+        )
+      : null
+  const platformAdminService =
+    container.infrastructure.database && pricingService && couponService
+      ? new PlatformAdminService(
+          container.infrastructure.database,
+          pricingService,
+          container.platformSettings,
+          couponService,
+          new ReceiptService(container.infrastructure.database),
+          () =>
+            runBillingMaintenance({
+              db: container.infrastructure.database!,
+              settings: container.platformSettings,
+              emailGateway: container.emailGateway,
+              appUrl: container.config.appUrl,
+            })
+        )
+      : null
+  const platformOperationsService = container.infrastructure.database
+    ? new PlatformOperationsService(
         container.infrastructure.database,
-        new MoyasarBillingRepository(container.infrastructure.database)
+        container.infrastructure.cache
+          ? () => container.infrastructure.cache!.healthCheck().then((result) => result.ok)
+          : null
       )
     : null
-  const platformAdminService = container.infrastructure.database
-    ? new PlatformAdminService(container.infrastructure.database)
+  const platformGovernanceService = container.infrastructure.database
+    ? new PlatformGovernanceService(
+        container.infrastructure.database,
+        container.platformStaff,
+        container.config.platformAdminEmails
+      )
     : null
   const posDevicesService = container.infrastructure.database
     ? new PosDevicesService(container.infrastructure.database)
@@ -1791,6 +1842,13 @@ export function createIdentityApiServer(
         return send(200, { ok: true }, PUBLIC_CAPTURE_CORS_HEADERS)
       }
 
+      // Public: what the sign-in / sign-up pages and every customer dashboard need before (or
+      // regardless of) authentication -- the announcement banner, maintenance and sign-up state.
+      if (method === "GET" && url.pathname === "/v1/platform/public-settings") {
+        const settings = await container.platformSettings.get()
+        return send(200, { ...toPublicPlatformSettings(settings), trialDays: settings.trialDays })
+      }
+
       const token = getBearerToken(request)
       if (!token) {
         return send(401, { code: "AUTH_TOKEN_MISSING", message: "Authentication required." })
@@ -1803,10 +1861,52 @@ export function createIdentityApiServer(
         url,
         actor,
         service: platformAdminService,
+        operations: platformOperationsService,
+        governance: platformGovernanceService,
         send,
         readJsonBody: () => readJsonBody(request),
       })
       if (handledByPlatformAdmin) return
+
+      // The feature flags Madar Admin has switched on for this customer (override, else the global
+      // switch narrowed by its rollout percentage).
+      if (method === "GET" && url.pathname === "/v1/feature-flags") {
+        return send(
+          200,
+          platformGovernanceService
+            ? await platformGovernanceService.evaluateFlags(actor.organizationId)
+            : {}
+        )
+      }
+
+      // The marketplace's prices: every application's mode and its active packages. Any signed-in
+      // customer may read it -- it's the same information the marketplace shows.
+      if (method === "GET" && url.pathname === "/v1/pricing") {
+        if (!pricingService) {
+          return send(503, { code: "PRICING_UNAVAILABLE", message: "Pricing is unavailable." })
+        }
+        return send(200, await pricingService.getCatalog({ includeInactive: false }))
+      }
+
+      // Lets the checkout page show a coupon's effect before paying. The same check runs again
+      // when the checkout itself is created, so this is only ever a preview.
+      if (method === "POST" && url.pathname === "/v1/billing/coupons/quote") {
+        if (!pricingService || !couponService) {
+          return send(503, { code: "PRICING_UNAVAILABLE", message: "Pricing is unavailable." })
+        }
+        const body = couponQuoteSchema.parse(await readJsonBody(request))
+        const purchase = await pricingService.resolvePurchase(body)
+        return send(
+          200,
+          await couponService.quote({
+            code: body.code,
+            application: body.application,
+            packageId: purchase.package.id,
+            interval: purchase.interval,
+            amountHalalas: purchase.amountHalalas,
+          })
+        )
+      }
 
       const zidInstallClaimMatch = url.pathname.match(
         /^\/v1\/integrations\/zid\/install\/([^/]+)\/claim$/
@@ -3393,6 +3493,7 @@ export function createIdentityApiServer(
         /^\/v1\/subscription-requests\/([^/]+)\/(approve|reject)$/
       )
       if (subscriptionRequestActionMatch && method === "POST") {
+        requirePlatformPermission(actor, "requests:manage")
         const requestId = subscriptionRequestActionMatch[1]
         const action = subscriptionRequestActionMatch[2]
         if (action === "approve") {
@@ -3433,6 +3534,18 @@ export function createIdentityApiServer(
         }
         const organizationId = organizationSubscriptionRequestsMatch[1]
         const payload = requestApplicationActivationSchema.parse(await readJsonBody(request))
+        if (!pricingService) {
+          return send(503, {
+            code: "PRICING_UNAVAILABLE",
+            message: "Pricing is unavailable in memory mode.",
+          })
+        }
+        // Priced now, against current pricing; the request keeps this snapshot for approval.
+        const purchase = await pricingService.resolvePurchase({
+          application: payload.application,
+          packageId: payload.packageId,
+          interval: payload.interval,
+        })
         const buffer = Buffer.from(payload.attachmentDataBase64, "base64")
         const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
         if (buffer.length === 0 || buffer.length > MAX_ATTACHMENT_BYTES) {
@@ -3459,7 +3572,10 @@ export function createIdentityApiServer(
             organizationId,
             {
               application: payload.application,
-              planTier: payload.planTier,
+              planTier: purchase.package.legacyPlanTier,
+              package: { id: purchase.package.id, name: purchase.package.name },
+              billingInterval: purchase.interval,
+              priceHalalas: purchase.amountHalalas,
               attachmentUrl,
               attachmentContentType: payload.attachmentContentType,
             },
@@ -3514,11 +3630,45 @@ export function createIdentityApiServer(
         )
       }
 
+      const freeActivationMatch = url.pathname.match(
+        /^\/v1\/organizations\/([^/]+)\/free-activations$/
+      )
+      if (freeActivationMatch && method === "POST") {
+        const { application } = activateFreeApplicationSchema.parse(await readJsonBody(request))
+        const pricing = pricingService
+          ? (await pricingService.getCatalog({ includeInactive: false })).find(
+              (entry) => entry.application === application
+            )
+          : undefined
+        if (!pricing || !pricing.visible || pricing.mode !== "free" || !pricing.freeDays) {
+          throw ERRORS.conflict("APPLICATION_NOT_FREE", "This application isn't free right now.")
+        }
+        return send(
+          201,
+          await container.commands.activateFreeApplication(
+            actor,
+            freeActivationMatch[1],
+            { application, freeDays: pricing.freeDays },
+            context
+          )
+        )
+      }
+
       const applicationTrialMatch = url.pathname.match(
         /^\/v1\/organizations\/([^/]+)\/application-trials$/
       )
       if (applicationTrialMatch && method === "POST") {
         const payload = startApplicationTrialSchema.parse(await readJsonBody(request))
+        if (
+          pricingService &&
+          payload.application !== "madarApps" &&
+          !(await pricingService.isVisible(payload.application))
+        ) {
+          throw ERRORS.conflict(
+            "APPLICATION_UNAVAILABLE",
+            "This application isn't available right now."
+          )
+        }
         return send(
           201,
           await container.commands.startApplicationTrial(

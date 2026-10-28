@@ -45,6 +45,8 @@ export async function reconcileSubscriptionsFromSettings(db: PostgresDatabase): 
           !isTrial && typeof tier === "string" && PLAN_TIERS.has(tier)
             ? (tier as SubscriptionPlanTier)
             : null,
+        packageId: null,
+        packageName: null,
         billingInterval: null,
         priceHalalas: null,
         currency: "SAR",

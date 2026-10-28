@@ -93,7 +93,10 @@ export type SubscriptionApplication =
   | "expenses"
   | "ai"
   | "customReports"
+// Everything purchasable: each application, plus the "Madar Complete" bundle.
+export type PurchasableApplication = SubscriptionApplication | "madarComplete"
 export type SubscriptionPlanTier = "starter" | "growth" | "pro" | "enterprise"
+export type BillingInterval = "monthly" | "yearly"
 export type SubscriptionRequestStatus = "pending" | "approved" | "rejected"
 
 export interface SubscriptionActivationRequestDto {
@@ -101,8 +104,13 @@ export interface SubscriptionActivationRequestDto {
   organizationId: string
   organizationName: string
   requestedByUserId: string
-  application: SubscriptionApplication
-  planTier: SubscriptionPlanTier
+  application: PurchasableApplication
+  planTier: SubscriptionPlanTier | null
+  // The package, period, and price chosen -- null only on requests from before per-app packages.
+  packageId: string | null
+  packageName: string | null
+  billingInterval: BillingInterval | null
+  priceHalalas: number | null
   attachmentUrl: string
   attachmentContentType: string
   status: SubscriptionRequestStatus
@@ -192,8 +200,9 @@ export interface WorkspaceRepository {
   requestApplicationActivation(
     organizationId: string,
     payload: {
-      application: SubscriptionApplication
-      planTier: SubscriptionPlanTier
+      application: PurchasableApplication
+      packageId: string
+      interval: BillingInterval
       attachmentContentType: string
       attachmentDataBase64: string
     }
@@ -207,6 +216,11 @@ export interface WorkspaceRepository {
   startApplicationTrial(
     organizationId: string,
     application: SubscriptionApplication
+  ): Promise<OrganizationDto>
+  // An application Madar Admin sells as free -- switched on without paying.
+  activateFreeApplication(
+    organizationId: string,
+    application: PurchasableApplication
   ): Promise<OrganizationDto>
   // Cross-tenant, platform-admin only -- backs the Madar Admin review console. Reuses this same
   // authenticated repository/adapter rather than standing up a second DI subsystem for 3 methods.

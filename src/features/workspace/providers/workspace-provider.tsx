@@ -21,6 +21,7 @@ import type {
 import { useApplicationServices } from "@/application"
 import type {
   OrganizationSettingsDto,
+  PurchasableApplication,
   SubscriptionActivationRequestDto,
   SubscriptionRequestStatus,
 } from "@/application/contracts"
@@ -392,7 +393,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       organizationId: string,
       payload: {
         application: SubscriptionActivationRequestDto["application"]
-        planTier: SubscriptionActivationRequestDto["planTier"]
+        packageId: string
+        interval: "monthly" | "yearly"
         attachmentContentType: string
         attachmentDataBase64: string
       }
@@ -412,9 +414,30 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const startApplicationTrial = useCallback(
     async (
       organizationId: string,
-      application: SubscriptionActivationRequestDto["application"]
+      application: Exclude<SubscriptionActivationRequestDto["application"], "madarComplete">
     ) => {
       const organization = await workspaceApplicationService.startApplicationTrial(
+        organizationId,
+        application
+      )
+      setAvailableOrganizations(mergeById(availableOrganizations, [organization]))
+      if (currentOrganization?.id === organizationId) {
+        setCurrentOrganization(organization)
+      }
+      return organization
+    },
+    [
+      availableOrganizations,
+      currentOrganization?.id,
+      setAvailableOrganizations,
+      setCurrentOrganization,
+      workspaceApplicationService,
+    ]
+  )
+
+  const activateFreeApplication = useCallback(
+    async (organizationId: string, application: PurchasableApplication) => {
+      const organization = await workspaceApplicationService.activateFreeApplication(
         organizationId,
         application
       )
@@ -517,6 +540,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       requestApplicationActivation,
       listMyOrganizationSubscriptionRequests,
       startApplicationTrial,
+      activateFreeApplication,
       listAllSubscriptionActivationRequests,
       approveSubscriptionActivationRequest,
       rejectSubscriptionActivationRequest,
@@ -540,6 +564,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       requestApplicationActivation,
       listMyOrganizationSubscriptionRequests,
       startApplicationTrial,
+      activateFreeApplication,
       listAllSubscriptionActivationRequests,
       approveSubscriptionActivationRequest,
       rejectSubscriptionActivationRequest,

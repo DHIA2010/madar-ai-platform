@@ -1,12 +1,6 @@
-export type MoyasarApplication =
-  | "advertising"
-  | "ecommerce"
-  | "pos"
-  | "madarApps"
-  | "procurement"
-  | "expenses"
-  | "ai"
-  | "customReports"
+import type { BillingInterval, PurchasableApplication } from "../../subscriptions/types"
+
+export type MoyasarApplication = PurchasableApplication
 export type MoyasarSelfServePlanTier = "starter" | "growth" | "pro"
 export type MoyasarPaymentStatus = "initiated" | "paid" | "failed"
 
@@ -15,7 +9,14 @@ export interface MoyasarPaymentRecord {
   organizationId: string
   requestedByUserId: string
   application: MoyasarApplication
-  planTier: MoyasarSelfServePlanTier
+  // The account-wide tier the package maps to, if any (null for packages created in Madar Admin).
+  planTier: MoyasarSelfServePlanTier | null
+  packageId: string | null
+  billingInterval: BillingInterval
+  // The coupon used, and the price before it (null when no coupon was used).
+  couponId: string | null
+  originalAmount: number | null
+  discountHalalas: number | null
   amount: number
   currency: string
   moyasarPaymentId: string | null
@@ -24,9 +25,12 @@ export interface MoyasarPaymentRecord {
   updatedAt: string
 }
 
+// The amount is never taken from the client -- it's resolved from the package's current price.
 export interface CreateCheckoutIntentInput {
   application: MoyasarApplication
-  planTier: MoyasarSelfServePlanTier
+  packageId: string
+  interval: BillingInterval
+  couponCode?: string | null
 }
 
 export interface CreateCheckoutIntentResult {

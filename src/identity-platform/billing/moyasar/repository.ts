@@ -15,7 +15,18 @@ function mapPayment(row: Record<string, unknown>): MoyasarPaymentRecord {
     organizationId: String(row.organization_id),
     requestedByUserId: String(row.requested_by_user_id),
     application: row.application as MoyasarApplication,
-    planTier: row.plan_tier as MoyasarSelfServePlanTier,
+    planTier: (row.plan_tier as MoyasarSelfServePlanTier | null) ?? null,
+    packageId: (row.package_id as string | null) ?? null,
+    billingInterval: (row.billing_interval as MoyasarPaymentRecord["billingInterval"]) ?? "monthly",
+    couponId: (row.coupon_id as string | null) ?? null,
+    originalAmount:
+      row.original_amount === null || row.original_amount === undefined
+        ? null
+        : Number(row.original_amount),
+    discountHalalas:
+      row.discount_halalas === null || row.discount_halalas === undefined
+        ? null
+        : Number(row.discount_halalas),
     amount: Number(row.amount),
     currency: String(row.currency),
     moyasarPaymentId: (row.moyasar_payment_id as string | null) ?? null,
@@ -32,15 +43,19 @@ export class MoyasarBillingRepository {
     organizationId: string
     requestedByUserId: string
     application: MoyasarApplication
-    planTier: MoyasarSelfServePlanTier
+    planTier: MoyasarSelfServePlanTier | null
+    packageId: string
+    billingInterval: MoyasarPaymentRecord["billingInterval"]
+    coupon: { id: string; originalAmount: number; discountHalalas: number } | null
     amount: number
     currency: string
   }): Promise<MoyasarPaymentRecord> {
     const id = randomUUID()
     const result = await this.db.query(
       `INSERT INTO billing_moyasar_payments (
-         id, organization_id, requested_by_user_id, application, plan_tier, amount, currency
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         id, organization_id, requested_by_user_id, application, plan_tier, amount, currency,
+         package_id, billing_interval, coupon_id, original_amount, discount_halalas
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         id,
@@ -50,6 +65,11 @@ export class MoyasarBillingRepository {
         input.planTier,
         input.amount,
         input.currency,
+        input.packageId,
+        input.billingInterval,
+        input.coupon?.id ?? null,
+        input.coupon?.originalAmount ?? null,
+        input.coupon?.discountHalalas ?? null,
       ]
     )
     return mapPayment(result.rows[0])

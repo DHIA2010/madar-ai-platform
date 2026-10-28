@@ -46,6 +46,16 @@ export const ERRORS = {
   // The request is well-formed but the resource is no longer in a state that allows it (e.g.
   // approving an already-reviewed request).
   conflict: (code: string, message: string) => new IdentityError(code, 409, "business", message),
+  // Madar Admin's maintenance switch -- everyone but Madar staff is kept out until it's off.
+  maintenanceMode: () =>
+    new IdentityError(
+      "PLATFORM_MAINTENANCE",
+      503,
+      "infrastructure",
+      "Madar is undergoing maintenance. Please try again shortly."
+    ),
+  signupsClosed: () =>
+    new IdentityError("SIGNUPS_CLOSED", 403, "business", "New registrations are currently closed."),
   serviceUnavailable: (message: string) =>
     new IdentityError("SERVICE_UNAVAILABLE", 503, "infrastructure", message),
 }

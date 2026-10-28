@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { CalendarClock, ShoppingBag, TrendingUp, Users, Wallet } from "lucide-react"
 import { Cell, Label, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts"
+import { toast } from "sonner"
 
 import { ROUTES } from "@/constants/routes"
 
@@ -16,81 +18,128 @@ import {
 } from "@/components/app"
 
 import {
-  getOverviewKpis,
-  getPlanDistribution,
-  getPlatformBreakdown,
-  getRecentActivity,
-  getRecentCustomers,
-  getRevenueTrend,
-  getSubscriptionStatusBreakdown,
-  getTodayStats,
+  ACTIVITY_LABEL,
+  APPLICATION_LABEL,
+  formatDate,
+  formatRelative,
+  formatSar,
+  platformAdminService,
+  STORE_PLATFORM_KEY,
 } from "../services"
+import type { AdminOverview } from "../types/platform-admin.types"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
 import { PlatformChip } from "./platform-chip"
 import { SubscriptionStatusBadge } from "./subscription-status-badge"
+
+const trendChartConfig: ChartConfig = {
+  الإيرادات: { label: "الإيرادات (SAR)", color: "#2878ff" },
+  "اشتراكات جديدة": { label: "اشتراكات جديدة", color: "#7c4dff" },
+}
+
+const APP_COLORS = [
+  "#2878ff",
+  "#7c4dff",
+  "#16a34a",
+  "#f97316",
+  "#e11d48",
+  "#0d9488",
+  "#ca8a04",
+  "#64748b",
+]
+
+const STATUS_META: Record<string, { label: string; barClassName: string }> = {
+  active: { label: "نشط", barClassName: "bg-emerald-500" },
+  trial: { label: "تجربة مجانية", barClassName: "bg-blue-500" },
+  overdue: { label: "متأخر في الدفع", barClassName: "bg-amber-500" },
+  expired: { label: "منتهي", barClassName: "bg-slate-400" },
+  cancelled: { label: "ملغي", barClassName: "bg-rose-500" },
+}
+
+const MONTH_LABEL = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "short" })
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value)
 }
 
+function share(value: number, total: number) {
+  return total === 0 ? 0 : Math.round((value / total) * 100)
+}
+
+// The Madar Admin home: headline numbers (with month-over-month change once a month of history
+// exists), revenue and new subscriptions over 8 months, how subscriptions split by app and status,
+// connected platforms, today's activity, and the latest customers and events.
 export function MadarAdminOverview() {
-  const kpisRaw = getOverviewKpis()
-  const trend = getRevenueTrend()
-  const planDistribution = getPlanDistribution()
-  const statusBreakdown = getSubscriptionStatusBreakdown()
-  const platformBreakdown = getPlatformBreakdown()
-  const todayStats = getTodayStats()
-  const recentCustomers = getRecentCustomers(3)
-  const recentActivity = getRecentActivity()
+  const [data, setData] = useState<AdminOverview | null>(null)
 
-  const kpis: MadarAdminKpi[] = [
-    {
-      label: "إجمالي العملاء",
-      value: formatNumber(kpisRaw.totalCustomers.value),
-      deltaPct: kpisRaw.totalCustomers.deltaPct,
-      icon: Users,
-      tone: "blue",
-    },
-    {
-      label: "إجمالي المتاجر",
-      value: formatNumber(kpisRaw.totalStores.value),
-      deltaPct: kpisRaw.totalStores.deltaPct,
-      icon: ShoppingBag,
-      tone: "violet",
-    },
-    {
-      label: "الاشتراكات النشطة",
-      value: formatNumber(kpisRaw.activeSubscriptions.value),
-      deltaPct: kpisRaw.activeSubscriptions.deltaPct,
-      icon: CalendarClock,
-      tone: "green",
-    },
-    {
-      label: "الإيرادات الشهرية (MRR)",
-      value: `SAR ${formatNumber(kpisRaw.mrr.value)}`,
-      deltaPct: kpisRaw.mrr.deltaPct,
-      icon: Wallet,
-      tone: "indigo",
-    },
-    {
-      label: "الزوار النشطون الآن",
-      value: formatNumber(kpisRaw.liveVisitors.value),
-      deltaPct: kpisRaw.liveVisitors.deltaPct,
-      icon: TrendingUp,
-      tone: "orange",
-    },
-  ]
+  useEffect(() => {
+    platformAdminService
+      .getOverview()
+      .then(setData)
+      .catch(() => toast.error("تعذر تحميل لوحة المتابعة."))
+  }, [])
 
-  const trendChartConfig = {
-    الإيرادات: { label: "الإيرادات (SAR)", color: "#2878ff" },
-    الاشتراكات: { label: "الاشتراكات", color: "#7c4dff" },
-  } satisfies ChartConfig
+  const kpis: MadarAdminKpi[] = data
+    ? [
+        {
+          label: "إجمالي العملاء",
+          value: formatNumber(data.kpis.customers.value),
+          deltaPct: data.kpis.customers.deltaPct,
+          icon: Users,
+          tone: "blue",
+        },
+        {
+          label: "إجمالي المتاجر",
+          value: formatNumber(data.kpis.stores.value),
+          deltaPct: data.kpis.stores.deltaPct,
+          icon: ShoppingBag,
+          tone: "violet",
+        },
+        {
+          label: "الاشتراكات النشطة",
+          value: formatNumber(data.kpis.activeSubscriptions.value),
+          deltaPct: data.kpis.activeSubscriptions.deltaPct,
+          icon: CalendarClock,
+          tone: "green",
+        },
+        {
+          label: "الإيرادات الشهرية (MRR)",
+          value: formatSar(data.kpis.mrrHalalas.value),
+          deltaPct: data.kpis.mrrHalalas.deltaPct,
+          icon: Wallet,
+          tone: "indigo",
+        },
+        {
+          label: "الزوار النشطون الآن",
+          value: formatNumber(data.kpis.liveVisitors.value),
+          deltaPct: null,
+          icon: TrendingUp,
+          tone: "orange",
+        },
+      ]
+    : []
 
-  const planChartConfig = Object.fromEntries(
-    planDistribution.map((entry) => [entry.label, { label: entry.label, color: entry.color }])
-  ) satisfies ChartConfig
-
-  const totalPlanCustomers = planDistribution.reduce((sum, entry) => sum + entry.value, 0)
+  const trend = (data?.trend ?? []).map((point) => ({
+    month: MONTH_LABEL.format(new Date(`${point.month}-01T12:00:00Z`)),
+    الإيرادات: Math.round(point.revenueHalalas / 100),
+    "اشتراكات جديدة": point.newSubscriptions,
+  }))
+  const apps = (data?.subscriptionsByApplication ?? []).map((entry, index) => ({
+    ...entry,
+    label: APPLICATION_LABEL[entry.application] ?? entry.application,
+    color: APP_COLORS[index % APP_COLORS.length],
+  }))
+  const appsTotal = apps.reduce((sum, entry) => sum + entry.count, 0)
+  const statusTotal = (data?.subscriptionStatus ?? []).reduce((sum, entry) => sum + entry.count, 0)
+  const storesTotal = (data?.storesByPlatform ?? []).reduce((sum, entry) => sum + entry.count, 0)
+  const todayStats = data
+    ? [
+        { label: "الأحداث المستقبلة", value: formatNumber(data.today.events) },
+        { label: "المشتريات (Purchases)", value: formatNumber(data.today.purchases) },
+        { label: "العملاء الجدد", value: formatNumber(data.today.newCustomers) },
+        { label: "مدفوعات ناجحة", value: formatNumber(data.today.paymentsToday) },
+        { label: "الأخطاء في التكاملات", value: formatNumber(data.today.integrationErrors) },
+      ]
+    : []
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
@@ -102,15 +151,22 @@ export function MadarAdminOverview() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {kpis.map((kpi) => (
-          <MadarAdminKpiCard key={kpi.label} kpi={kpi} />
-        ))}
+        {data === null
+          ? Array.from({ length: 5 }, (_, index) => (
+              <AppCard
+                key={index}
+                state="loading"
+                className="h-[150px] rounded-2xl border-border/60"
+              />
+            ))
+          : kpis.map((kpi) => <MadarAdminKpiCard key={kpi.label} kpi={kpi} />)}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[7fr_3fr]">
+      <div className="grid gap-4 lg:grid-cols-3">
         <AppCard
-          title="نمو الإيرادات والاشتراكات"
-          className="rounded-2xl border-border/60 shadow-sm"
+          title="الإيرادات والاشتراكات الجديدة"
+          state={data === null ? "loading" : "idle"}
+          className="rounded-2xl border-border/60 shadow-sm lg:col-span-2"
         >
           <ChartContainer config={trendChartConfig} className="h-72 w-full" dir="ltr">
             <LineChart data={trend} margin={{ left: 4, right: 4 }}>
@@ -127,7 +183,7 @@ export function MadarAdminOverview() {
                 axisLine={false}
                 tickMargin={8}
                 fontSize={11}
-                width={50}
+                width={56}
               />
               <YAxis
                 yAxisId="subs"
@@ -136,7 +192,8 @@ export function MadarAdminOverview() {
                 axisLine={false}
                 tickMargin={8}
                 fontSize={11}
-                width={40}
+                width={36}
+                allowDecimals={false}
               />
               <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
               <Line
@@ -149,7 +206,7 @@ export function MadarAdminOverview() {
               />
               <Line
                 yAxisId="subs"
-                dataKey="الاشتراكات"
+                dataKey="اشتراكات جديدة"
                 type="monotone"
                 stroke="#7c4dff"
                 strokeWidth={2}
@@ -160,96 +217,112 @@ export function MadarAdminOverview() {
         </AppCard>
 
         <AppCard
-          title="توزيع العملاء حسب الباقة"
+          title="الاشتراكات النشطة حسب التطبيق"
+          state={data === null ? "loading" : "idle"}
           className="rounded-2xl border-border/60 shadow-sm"
         >
-          <div className="flex flex-col items-center gap-4">
-            <ChartContainer
-              config={planChartConfig}
-              className="mx-auto aspect-square h-44 w-full"
-              dir="ltr"
-            >
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                <Pie
-                  data={planDistribution}
-                  dataKey="value"
-                  nameKey="label"
-                  innerRadius={52}
-                  outerRadius={76}
-                  strokeWidth={3}
-                >
-                  {planDistribution.map((entry) => (
-                    <Cell key={entry.tier} fill={entry.color} />
-                  ))}
-                  <Label
-                    content={({ viewBox }) => {
-                      if (!viewBox || !("cx" in viewBox)) return null
-                      return (
-                        <text
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                        >
-                          <tspan
+          {appsTotal === 0 ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              لا توجد اشتراكات نشطة.
+            </p>
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <ChartContainer config={{}} className="mx-auto aspect-square h-44 w-full" dir="ltr">
+                <PieChart>
+                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                  <Pie
+                    data={apps}
+                    dataKey="count"
+                    nameKey="label"
+                    innerRadius={52}
+                    outerRadius={76}
+                    strokeWidth={3}
+                  >
+                    {apps.map((entry) => (
+                      <Cell key={entry.application} fill={entry.color} />
+                    ))}
+                    <Label
+                      content={({ viewBox }) => {
+                        if (!viewBox || !("cx" in viewBox)) return null
+                        return (
+                          <text
                             x={viewBox.cx}
-                            y={(viewBox.cy ?? 0) - 8}
-                            className="fill-foreground text-xl font-bold"
+                            y={viewBox.cy}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
                           >
-                            {formatNumber(totalPlanCustomers)}
-                          </tspan>
-                          <tspan
-                            x={viewBox.cx}
-                            y={(viewBox.cy ?? 0) + 14}
-                            className="fill-muted-foreground text-xs"
-                          >
-                            اشتراك
-                          </tspan>
-                        </text>
-                      )
-                    }}
-                  />
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-            <div className="w-full space-y-2">
-              {planDistribution.map((entry) => (
-                <div key={entry.tier} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{ backgroundColor: entry.color }}
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy ?? 0) - 8}
+                              className="fill-foreground text-xl font-bold"
+                            >
+                              {formatNumber(appsTotal)}
+                            </tspan>
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy ?? 0) + 14}
+                              className="fill-muted-foreground text-xs"
+                            >
+                              اشتراك
+                            </tspan>
+                          </text>
+                        )
+                      }}
                     />
-                    <span className="text-foreground">{entry.label}</span>
+                  </Pie>
+                </PieChart>
+              </ChartContainer>
+              <div className="w-full space-y-2">
+                {apps.map((entry) => (
+                  <div
+                    key={entry.application}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="text-foreground">{entry.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {share(entry.count, appsTotal)}%
+                      </span>
+                      <span>{formatNumber(entry.count)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <span className="font-medium text-foreground">{entry.share}%</span>
-                    <span>{formatNumber(entry.value)}</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </AppCard>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <AppCard title="حالة الاشتراكات" className="rounded-2xl border-border/60 shadow-sm">
+        <AppCard
+          title="حالة الاشتراكات"
+          state={data === null ? "loading" : "idle"}
+          className="rounded-2xl border-border/60 shadow-sm"
+        >
           <div className="space-y-3.5">
-            {statusBreakdown.map((entry) => (
+            {(data?.subscriptionStatus ?? []).map((entry) => (
               <div key={entry.status}>
                 <div className="mb-1.5 flex items-center justify-between text-sm">
-                  <span className="text-foreground">{entry.label}</span>
+                  <span className="text-foreground">
+                    {STATUS_META[entry.status]?.label ?? entry.status}
+                  </span>
                   <span className="font-medium text-foreground">
-                    {formatNumber(entry.value)}{" "}
-                    <span className="text-muted-foreground">({entry.share}%)</span>
+                    {formatNumber(entry.count)}{" "}
+                    <span className="text-muted-foreground">
+                      ({share(entry.count, statusTotal)}%)
+                    </span>
                   </span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className={`h-full rounded-full ${entry.barClassName}`}
-                    style={{ width: `${entry.share}%` }}
+                    className={`h-full rounded-full ${STATUS_META[entry.status]?.barClassName ?? "bg-slate-400"}`}
+                    style={{ width: `${share(entry.count, statusTotal)}%` }}
                   />
                 </div>
               </div>
@@ -257,46 +330,48 @@ export function MadarAdminOverview() {
           </div>
         </AppCard>
 
-        <AppCard title="أهم المنصات" className="rounded-2xl border-border/60 shadow-sm">
-          <div className="space-y-3.5">
-            {platformBreakdown.map((entry) => (
-              <div key={entry.platform}>
-                <div className="mb-1.5 flex items-center justify-between text-sm">
-                  <PlatformChip platform={entry.platform} />
-                  <span className="font-medium text-foreground">
-                    {formatNumber(entry.value)}{" "}
-                    <span className="text-muted-foreground">({entry.share}%)</span>
-                  </span>
+        <AppCard
+          title="المتاجر حسب المنصة"
+          state={data === null ? "loading" : "idle"}
+          className="rounded-2xl border-border/60 shadow-sm"
+        >
+          {storesTotal === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">لا توجد متاجر مربوطة.</p>
+          ) : (
+            <div className="space-y-3.5">
+              {(data?.storesByPlatform ?? []).map((entry) => (
+                <div key={entry.platform}>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <PlatformChip platform={STORE_PLATFORM_KEY[entry.platform]} />
+                    <span className="font-medium text-foreground">
+                      {formatNumber(entry.count)}{" "}
+                      <span className="text-muted-foreground">
+                        ({share(entry.count, storesTotal)}%)
+                      </span>
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-blue-500"
+                      style={{ width: `${share(entry.count, storesTotal)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-blue-500"
-                    style={{ width: `${entry.share}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </AppCard>
 
-        <AppCard title="إحصائيات اليوم" className="rounded-2xl border-border/60 shadow-sm">
+        <AppCard
+          title="إحصائيات اليوم"
+          state={data === null ? "loading" : "idle"}
+          className="rounded-2xl border-border/60 shadow-sm"
+        >
           <div className="space-y-3">
             {todayStats.map((stat) => (
               <div key={stat.label} className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{stat.label}</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-foreground">{stat.value}</span>
-                  <span
-                    className={
-                      stat.deltaPct >= 0
-                        ? "text-xs font-medium text-emerald-600"
-                        : "text-xs font-medium text-rose-600"
-                    }
-                  >
-                    {stat.deltaPct > 0 ? "+" : ""}
-                    {stat.deltaPct}%
-                  </span>
-                </div>
+                <span className="font-semibold text-foreground">{stat.value}</span>
               </div>
             ))}
           </div>
@@ -306,6 +381,7 @@ export function MadarAdminOverview() {
       <div className="grid gap-4 lg:grid-cols-2">
         <AppCard
           title="أحدث العملاء"
+          state={data === null ? "loading" : "idle"}
           className="rounded-2xl border-border/60 shadow-sm"
           actions={
             <Link href={ROUTES.madarAdminCustomers}>
@@ -316,11 +392,13 @@ export function MadarAdminOverview() {
           }
         >
           <div className="space-y-3">
-            {recentCustomers.map((customer) => (
+            {(data?.recentCustomers ?? []).map((customer) => (
               <div key={customer.id} className="flex items-center justify-between text-sm">
                 <div>
-                  <p className="font-medium text-foreground">{customer.storeName}</p>
-                  <p className="text-xs text-muted-foreground">{customer.subscriptionDate}</p>
+                  <p className="font-medium text-foreground">{customer.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    سجّل {formatDate(customer.createdAt)}
+                  </p>
                 </div>
                 <SubscriptionStatusBadge status={customer.status} />
               </div>
@@ -330,24 +408,33 @@ export function MadarAdminOverview() {
 
         <AppCard
           title="أحدث الأنشطة"
+          state={data === null ? "loading" : "idle"}
           className="rounded-2xl border-border/60 shadow-sm"
-          actions={
-            <AppButton variant="ghost" size="sm">
-              عرض الكل
-            </AppButton>
-          }
         >
-          <div className="space-y-3">
-            {recentActivity.map((item, index) => (
-              <div key={index} className="flex items-center justify-between text-sm">
-                <div>
-                  <p className="font-medium text-foreground">{item.activity}</p>
-                  <p className="text-xs text-muted-foreground">{item.details}</p>
+          {(data?.recentActivity ?? []).length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">لا يوجد نشاط بعد.</p>
+          ) : (
+            <div className="space-y-3">
+              {data?.recentActivity.map((item, index) => (
+                <div
+                  key={`${item.createdAt}-${index}`}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      {ACTIVITY_LABEL[item.action] ?? item.action}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[item.organizationName, item.actorName].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatRelative(item.createdAt)}
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground">{item.time}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </AppCard>
       </div>
     </div>

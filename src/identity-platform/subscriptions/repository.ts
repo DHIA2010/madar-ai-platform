@@ -2,7 +2,7 @@ import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type {
   OrganizationSubscriptionRepository,
   OrganizationSubscriptionState,
-  SubscriptionApplication,
+  PurchasableApplication,
 } from "./types"
 
 function toIso(value: unknown): string | null {
@@ -19,6 +19,8 @@ export function mapOrganizationSubscription(
     application: row.application as OrganizationSubscriptionState["application"],
     status: row.status as OrganizationSubscriptionState["status"],
     planTier: (row.plan_tier as OrganizationSubscriptionState["planTier"]) ?? null,
+    packageId: (row.package_id as string | null) ?? null,
+    packageName: (row.package_name as string | null) ?? null,
     billingInterval:
       (row.billing_interval as OrganizationSubscriptionState["billingInterval"]) ?? null,
     priceHalalas:
@@ -45,7 +47,7 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
 
   async findByOrganizationAndApplication(
     organizationId: string,
-    application: SubscriptionApplication
+    application: PurchasableApplication
   ) {
     const result = await this.db.query<Record<string, unknown>>({
       name: "organization-subscriptions-find",
@@ -71,9 +73,9 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
         INSERT INTO organization_subscriptions (
           id, organization_id, application, status, plan_tier, billing_interval, price_halalas,
           currency, source, started_at, current_period_end, trial_ends_at, cancelled_at,
-          cancelled_by_user_id, created_at, updated_at
+          cancelled_by_user_id, created_at, updated_at, package_id, package_name
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         ON CONFLICT (organization_id, application) DO UPDATE SET
           status = EXCLUDED.status,
           plan_tier = EXCLUDED.plan_tier,
@@ -86,7 +88,9 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
           trial_ends_at = EXCLUDED.trial_ends_at,
           cancelled_at = EXCLUDED.cancelled_at,
           cancelled_by_user_id = EXCLUDED.cancelled_by_user_id,
-          updated_at = EXCLUDED.updated_at
+          updated_at = EXCLUDED.updated_at,
+          package_id = EXCLUDED.package_id,
+          package_name = EXCLUDED.package_name
       `,
       values: [
         entry.id,
@@ -105,6 +109,8 @@ export class PostgresOrganizationSubscriptionRepository implements OrganizationS
         entry.cancelledByUserId,
         entry.createdAt,
         entry.updatedAt,
+        entry.packageId,
+        entry.packageName,
       ],
     })
   }
@@ -119,7 +125,7 @@ export class InMemoryOrganizationSubscriptionRepository implements OrganizationS
 
   async findByOrganizationAndApplication(
     organizationId: string,
-    application: SubscriptionApplication
+    application: PurchasableApplication
   ) {
     const row = this.rows.get(this.key(organizationId, application))
     return row ? { ...row } : null
