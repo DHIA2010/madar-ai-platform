@@ -34,7 +34,11 @@ declare global {
 
 let loadPromise: Promise<void> | null = null
 
-function loadStylesheetOnce() {
+// Moyasar's stylesheet (built with an older Tailwind) resets --tw-translate-x/y and other
+// --tw-* variables on every element, unlayered -- so it beats this app's layered utilities and,
+// left loaded after checkout, un-centered every dialog (e.g. the subscribe dialog reopened after
+// visiting checkout). It's only ever present while the payment form is on screen.
+export function loadMoyasarStylesheet() {
   if (document.querySelector(`link[href="${MOYASAR_STYLESHEET_URL}"]`)) {
     return
   }
@@ -44,12 +48,17 @@ function loadStylesheetOnce() {
   document.head.appendChild(link)
 }
 
+export function removeMoyasarStylesheet() {
+  document.querySelector(`link[href="${MOYASAR_STYLESHEET_URL}"]`)?.remove()
+}
+
 // Idempotent and safe to call from multiple mounts (e.g. the activation dialog re-opening) --
 // resolves immediately once the script has already loaded once this session.
 export function loadMoyasarWidget(): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Moyasar widget can only load in the browser."))
   }
+  loadMoyasarStylesheet()
   if (window.Moyasar) {
     return Promise.resolve()
   }
@@ -57,7 +66,6 @@ export function loadMoyasarWidget(): Promise<void> {
     return loadPromise
   }
 
-  loadStylesheetOnce()
   loadPromise = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(
       `script[src="${MOYASAR_SCRIPT_URL}"]`

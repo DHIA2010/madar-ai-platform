@@ -10,6 +10,7 @@ import { ROUTES } from "@/constants/routes"
 import { AppButton } from "@/components/app"
 
 import { useMoyasarCheckout } from "../hooks"
+import { loadMoyasarStylesheet, removeMoyasarStylesheet } from "../services"
 import type { MoyasarPurchase } from "../types"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -49,6 +50,12 @@ export function MoyasarPaymentPanel({
       onFailure: (message) => toast.error(message),
     })
   }, [purchase, applicationName, start])
+
+  // Moyasar's stylesheet lives only as long as this panel -- see removeMoyasarStylesheet.
+  useEffect(() => {
+    loadMoyasarStylesheet()
+    return removeMoyasarStylesheet
+  }, [])
 
   useEffect(() => {
     // Guards against React 18 strict-mode's double-invoke in dev and against re-running when
