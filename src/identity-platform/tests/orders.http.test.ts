@@ -194,8 +194,9 @@ describe("GET /v1/orders: real order aggregation", () => {
       payload: {
         reference_id: 400124,
         customer: { full_name: "Omar Ali" },
-        source: "web",
-        total: { amount: 120, currency: "SAR" },
+        source: "merchant-dashboard",
+        // The GET /orders/{id} shape a webhook re-fetch stores: the total under amounts.total.
+        amounts: { total: { amount: 120, currency: "SAR" } },
         status: { name: "Under review", slug: "under_review" },
         items: [{ name: "حذاء", quantity: 1 }],
         is_pending_payment: true,
@@ -264,7 +265,7 @@ describe("GET /v1/orders: real order aggregation", () => {
     expect(completed).toMatchObject({
       id: "salla:1155952133",
       customerName: "Sara Ahmed",
-      channel: "devportal",
+      channel: "salla",
       platform: "Salla",
       productCount: 2,
       amount: 349,
@@ -277,6 +278,8 @@ describe("GET /v1/orders: real order aggregation", () => {
     // this is the whole point of the fix.
     const processing = body.items.find((o) => o.orderNumber === "400124")
     expect(processing).toMatchObject({
+      channel: "salla",
+      amount: 120,
       orderStatus: "Processing",
       statusLabel: "Under review",
       paymentStatus: "Pending",
@@ -309,6 +312,73 @@ describe("GET /v1/orders: real order aggregation", () => {
     // "medium" in ai-chat/response-formatter.ts). 2 current / 1 previous order over a ~31-day
     // window is below the "medium" sample-size band (needs >=5 orders), so this must be "low".
     expect(body.summary.confidence).toBe("low")
+  })
+
+  it("shows a Zid order's products from its own products[]", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "orders-zid@madar.test",
+      "Orders Zid Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000002602"
+    await provisionWorkspace({
+      organizationId: actor.organizationId,
+      workspaceId,
+      label: "Orders Zid",
+    })
+    const connectionId = randomUUID()
+    await database.query(
+      `insert into zid_oauth_connections (
+         id, organization_id, workspace_id, project_id, status, created_by_user_id, updated_by_user_id
+       ) values ($1, $2, $3, $4, 'connected', $5, $5)`,
+      [connectionId, actor.organizationId, workspaceId, randomUUID(), actor.userId]
+    )
+    const today = new Date().toISOString().slice(0, 10)
+    await database.query(
+      `insert into zid_records (id, connection_id, customer_id, entity_type, entity_id, payload, record_date)
+       values ($1, $2, 'zid-store', 'orders', '91001', $3::jsonb, $4::date)`,
+      [
+        randomUUID(),
+        connectionId,
+        JSON.stringify({
+          code: "Z-91001",
+          customer: { name: "Mona" },
+          order_total: "1000.00",
+          order_status: { name: "Delivered", code: "delivered" },
+          created_at: `${today} 10:00:00`,
+          products: [
+            {
+              name: "سونى A7",
+              quantity: 2,
+              images: [
+                {
+                  origin: "https://media.zid.test/a7.jpg",
+                  thumbs: { small: "https://media.zid.test/a7-s.jpg" },
+                },
+              ],
+            },
+          ],
+        }),
+        today,
+      ]
+    )
+
+    const response = await fetch(`${baseUrl}/v1/orders`, { headers: authHeaders(login) })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      items: Array<{
+        orderNumber: string
+        channel: string
+        productCount: number
+        amount: number
+        items: unknown[]
+      }>
+    }
+    expect(body.items.find((order) => order.orderNumber === "Z-91001")).toMatchObject({
+      channel: "zid",
+      productCount: 2,
+      amount: 1000,
+      items: [{ name: "سونى A7", quantity: 2, thumbnail: "https://media.zid.test/a7-s.jpg" }],
+    })
   })
 
   it("reports insufficient confidence when no orders exist in either period", async () => {

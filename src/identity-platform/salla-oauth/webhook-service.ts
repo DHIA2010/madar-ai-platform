@@ -172,6 +172,13 @@ export class SallaWebhookService {
 
     const body = (await response.json()) as { data?: Record<string, unknown> }
     if (!body.data) return
+    // GET /orders/{id} has no items (the GET /orders list the poll sync uses does), so an order a
+    // webhook re-fetched showed no products -- add them in the list's own {name, quantity,
+    // thumbnail} shape. A failed items fetch keeps the order without them rather than dropping it.
+    if (entityType === "orders" && !Array.isArray(body.data.items)) {
+      const items = await this.fetchOrderItems(entityId, accessToken)
+      if (items) body.data = { ...body.data, items }
+    }
 
     // salla_records' own (connection_id, entity_type, entity_id) unique constraint is what makes
     // this safe against a replayed/duplicate delivery -- no separate dedup table needed, same as
@@ -203,6 +210,40 @@ export class SallaWebhookService {
         .catch((error: unknown) => {
           console.error("salla.product_promotion_failed", { entityId, error })
         })
+    }
+  }
+
+  // GET /orders/items?order_id= -- null when the request fails, so the caller keeps the order.
+  private async fetchOrderItems(
+    orderId: string,
+    accessToken: string
+  ): Promise<Array<{ name: string; quantity: number; thumbnail: string | null }> | null> {
+    try {
+      const response = await fetch(
+        `${this.apiBaseUrl.replace(/\/$/, "")}/orders/items?order_id=${encodeURIComponent(orderId)}`,
+        { headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" } }
+      )
+      if (!response.ok) {
+        console.error("salla.webhook_order_items_failed", { orderId, status: response.status })
+        return null
+      }
+      const body = (await response.json()) as {
+        data?: Array<{
+          name?: string
+          quantity?: number | string
+          product_thumbnail?: string | null
+          thumbnail?: string | null
+          images?: Array<{ image?: string }>
+        }>
+      }
+      return (body.data ?? []).map((item) => ({
+        name: item.name ?? "",
+        quantity: Number(item.quantity) || 0,
+        thumbnail: item.product_thumbnail ?? item.thumbnail ?? item.images?.[0]?.image ?? null,
+      }))
+    } catch (error) {
+      console.error("salla.webhook_order_items_failed", { orderId, error })
+      return null
     }
   }
 }

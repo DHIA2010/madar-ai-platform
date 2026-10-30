@@ -61,9 +61,8 @@ export type PaymentStatus = "Paid" | "Refunded" | "Pending"
 export interface OrderItemView {
   name: string
   quantity: number
-  // Only Salla's real order payload carries a per-item image (verified against live data);
-  // Shopify/Zid's line-item shapes have no equivalent field confirmed, so this stays undefined
-  // for them rather than guessing a field name.
+  // Salla's items and Zid's products both carry an image (verified against live data);
+  // Shopify's line-item shape has no equivalent field confirmed, so it stays undefined there.
   thumbnail?: string
 }
 
@@ -162,16 +161,19 @@ interface OrderRecordRow {
   [key: string]: unknown
 }
 
-// Confirmed against a real synced Salla order payload (stage: salla_records, entity_type
-// 'orders'): total/paid_amount/refund_amount are all {amount,currency} objects, source is
-// Salla's own order channel (e.g. "devportal", not marketing attribution -- there's no
-// UTM/campaign field anywhere on the order), items[] have name+quantity but no price.
+// Confirmed against real synced Salla order payloads (stage: salla_records, entity_type
+// 'orders'), which come in two shapes: the GET /orders list shape (poll sync) has total and
+// items[] (name+quantity, no price); the GET /orders/{id} shape (webhook re-fetch) has the total
+// under amounts.total and no items -- the webhook adds them from GET /orders/items. The channel is
+// always "salla": the order's own `source` is where inside Salla it was placed
+// ("merchant-dashboard", "web", ...), not which platform it came from.
 function normalizeSallaOrder(row: OrderRecordRow): OrderSummaryView {
   const payload = row.payload as {
     reference_id?: number | string
     customer?: { full_name?: string; first_name?: string; last_name?: string }
     source?: string
     total?: { amount?: number; currency?: string }
+    amounts?: { total?: { amount?: number; currency?: string } }
     status?: { name?: string; slug?: string }
     is_pending_payment?: boolean
     payment_actions?: { refund_action?: { has_refund_amount?: boolean } }
@@ -199,12 +201,12 @@ function normalizeSallaOrder(row: OrderRecordRow): OrderSummaryView {
       payload.customer?.full_name ||
       [payload.customer?.first_name, payload.customer?.last_name].filter(Boolean).join(" ") ||
       "Unknown customer",
-    channel: payload.source || "unknown",
+    channel: "salla",
     platform: "Salla",
     items,
     productCount: items.reduce((sum, item) => sum + item.quantity, 0),
-    amount: Number(payload.total?.amount) || 0,
-    currency: payload.total?.currency ?? "SAR",
+    amount: Number(payload.total?.amount ?? payload.amounts?.total?.amount) || 0,
+    currency: payload.total?.currency ?? payload.amounts?.total?.currency ?? "SAR",
     orderStatus: bucketOrderStatus(statusText),
     statusLabel: statusText || bucketOrderStatus(statusText),
     paymentStatus,
@@ -286,6 +288,11 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
     currency_code?: string
     order_status?: { name?: string; code?: string }
     created_at?: string
+    products?: Array<{
+      name?: string
+      quantity?: number | string
+      images?: Array<{ thumbs?: { small?: string }; origin?: string }>
+    }>
     // MarketingChannelSource_Order ("Marketing source details captured for the order"),
     // docs.zid.sa -- field names are doc-confirmed, population on a live order is not yet
     // verified (see attribution/repository.ts's extractZidSignals for the same caveat).
@@ -297,6 +304,11 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
     }
   }
 
+  const items = (payload.products ?? []).map((product) => ({
+    name: product.name ?? "",
+    quantity: Number(product.quantity) || 0,
+    thumbnail: product.images?.[0]?.thumbs?.small || product.images?.[0]?.origin || undefined,
+  }))
   const statusText = payload.order_status?.name ?? payload.order_status?.code ?? ""
   const paymentStatus: PaymentStatus = statusText.toLowerCase().includes("refund")
     ? "Refunded"
@@ -317,8 +329,8 @@ function normalizeZidOrder(row: OrderRecordRow): OrderSummaryView {
     customerName: payload.customer?.name || "Unknown customer",
     channel: "zid",
     platform: "Zid",
-    items: [],
-    productCount: 0,
+    items,
+    productCount: items.reduce((sum, item) => sum + item.quantity, 0),
     amount: Number(payload.order_total) || 0,
     currency: payload.currency_code ?? "SAR",
     orderStatus: bucketOrderStatus(statusText),

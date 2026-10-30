@@ -183,6 +183,47 @@ describe("POST /v1/integrations/salla/webhook", () => {
     expect(rows.rows[0]).toEqual({ entity_type: "orders", entity_id: "555123" })
   })
 
+  it("adds an order's items from GET /orders/items, since GET /orders/{id} has none", async () => {
+    const org = await seedOrganization()
+    const { connectionId } = await seedConnectedStore({ ...org, storeId: STORE_ID })
+    mockAccessToken("test-access-token")
+    const nativeFetch = globalThis.fetch
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (rawInput, init) => {
+      const url = typeof rawInput === "string" ? rawInput : rawInput.toString()
+      if (!url.startsWith(SALLA_API_BASE_URL)) return nativeFetch(rawInput, init)
+      const path = url.slice(SALLA_API_BASE_URL.length)
+      const data =
+        path === "/orders/items?order_id=777001"
+          ? [{ name: "سونى A7", quantity: 2, product_thumbnail: "https://cdn.test/a7.jpg" }]
+          : path === "/orders/777001"
+            ? {
+                id: 777001,
+                source: "merchant-dashboard",
+                amounts: { total: { amount: 150, currency: "SAR" } },
+                updated_at: { date: "2026-10-29 14:28:38.000000" },
+              }
+            : null
+      return data
+        ? new Response(JSON.stringify({ data }), { status: 200 })
+        : new Response("{}", { status: 404 })
+    })
+
+    const response = await signedPost("/v1/integrations/salla/webhook", {
+      event: "order.created",
+      merchant: STORE_ID,
+      data: { id: 777001 },
+    })
+    expect(response.status).toBe(200)
+
+    const rows = await database.query<{ payload: Record<string, unknown> }>(
+      `select payload from salla_records where connection_id = $1 and entity_id = '777001'`,
+      [connectionId]
+    )
+    expect(rows.rows[0].payload.items).toEqual([
+      { name: "سونى A7", quantity: 2, thumbnail: "https://cdn.test/a7.jpg" },
+    ])
+  })
+
   it("rejects a request with an invalid signature", async () => {
     const org = await seedOrganization()
     await seedConnectedStore({ ...org, storeId: STORE_ID })
