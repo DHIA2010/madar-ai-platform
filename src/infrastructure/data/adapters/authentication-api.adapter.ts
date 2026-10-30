@@ -69,6 +69,9 @@ interface IdentityLoginResponse {
     avatarUrl?: string | null
     status?: string
     modulePermissions?: string[]
+    isPlatformAdmin?: boolean
+    platformRole?: string | null
+    platformPermissions?: string[]
   }
   session: {
     accessToken: string
@@ -172,11 +175,11 @@ export class AuthenticationApiAdapter {
         roles: mapRoles(["owner"]),
         permissions: mapPermissions(["owner"]),
         modulePermissions: response.user.modulePermissions ?? [],
-        // login() goes through issueSessionForMember, not getProfile -- it doesn't resolve the
-        // platformAdminEmails allowlist. Fine in practice: the very next session check (currentUser
-        // / getSession, which DOES go through getProfile) picks up the real value before anyone
-        // could reach a platform-admin-gated page anyway.
-        isPlatformAdmin: false,
+        // The login response carries the staff role too -- the app navigates straight on after
+        // signing in (no reload), so without it Madar staff were sent back to the dashboard.
+        isPlatformAdmin: response.user.isPlatformAdmin ?? false,
+        platformRole: response.user.platformRole ?? null,
+        platformPermissions: response.user.platformPermissions ?? [],
       },
       session: mapSession(response.session),
     }

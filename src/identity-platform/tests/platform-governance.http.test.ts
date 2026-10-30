@@ -94,6 +94,26 @@ async function signIn(email: string, orgName: string) {
 }
 
 describe("staff and roles", () => {
+  it("returns the staff role in the login response itself", async () => {
+    await signIn(OWNER_EMAIL, "Madar HQ")
+    await signIn("shop@shop.test", "Shop")
+    const login = (email: string) =>
+      call<{ user: { isPlatformAdmin: boolean; platformRole: string | null } }>(
+        "POST",
+        "/v1/auth/login",
+        null,
+        { email, password: PASSWORD }
+      )
+    expect((await login(OWNER_EMAIL)).body.user).toMatchObject({
+      isPlatformAdmin: true,
+      platformRole: "super_admin",
+    })
+    expect((await login("shop@shop.test")).body.user).toMatchObject({
+      isPlatformAdmin: false,
+      platformRole: null,
+    })
+  })
+
   it("gives an added staff member exactly their role's access, and removes it when disabled", async () => {
     const owner = await signIn(OWNER_EMAIL, "Madar HQ")
     const finance = await signIn("finance@madar.test", "Finance Person Org")

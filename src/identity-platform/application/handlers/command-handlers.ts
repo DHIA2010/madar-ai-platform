@@ -651,7 +651,18 @@ export class IdentityCommandHandlers {
       result.session.sessionId
     )
 
-    return result
+    // Madar staff land on Madar Admin straight after signing in -- the console's guard reads this
+    // from the login response, before any later profile fetch.
+    const platformRole = await this.resolvePlatformRole(user.id, user.email)
+    return {
+      ...result,
+      user: {
+        ...result.user,
+        isPlatformAdmin: platformRole !== null,
+        platformRole,
+        platformPermissions: permissionsForRole(platformRole),
+      },
+    }
   }
 
   async refresh(command: RefreshSessionCommand, context: RequestContext) {
