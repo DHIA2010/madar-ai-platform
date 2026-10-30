@@ -102,20 +102,27 @@ export function useApplicationsCatalog() {
   // Paid cards show Madar Admin's live price (until it loads, the catalog's own label).
   const catalog = useMemo(
     () =>
-      buildApplicationCatalog(t).map((application) =>
-        application.priceLabel === undefined
-          ? application
-          : {
-              ...application,
-              priceLabel:
-                priceLabelFor(pricingByApplication.get(application.category), t) ??
-                application.priceLabel,
-              pricingModel:
-                pricingByApplication.get(application.category)?.mode === "free"
-                  ? "free"
-                  : application.pricingModel,
-            }
-      ),
+      buildApplicationCatalog(t).map((application) => {
+        // An app Madar Admin sells as free is "activate now"; a paid one is "subscribe now".
+        const pricingModel =
+          pricingByApplication.get(application.category)?.mode === "free"
+            ? "free"
+            : application.pricingModel
+        return {
+          ...application,
+          pricingModel,
+          primaryCta: {
+            label: application.primaryCta.label
+              ? t(pricingModel === "free" ? "card.activateNow" : "card.subscribeNow")
+              : null,
+          },
+          priceLabel:
+            application.priceLabel === undefined
+              ? undefined
+              : (priceLabelFor(pricingByApplication.get(application.category), t) ??
+                application.priceLabel),
+        }
+      }),
     [t, pricingByApplication]
   )
   const bundle = useMemo(

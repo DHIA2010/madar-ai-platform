@@ -266,7 +266,11 @@ export function buildApplicationCatalog(t: ApplicationsCatalogTranslator): Appli
     priceLabel: item.hasPriceLabel ? t(`catalog.${item.id}.priceLabel`) : undefined,
     featuresDisplay: item.featuresDisplay,
     features: (t.raw(`catalog.${item.id}.features`) as string[]).map((label) => ({ label })),
-    primaryCta: { label: item.hasPrimaryCta ? t(`catalog.${item.id}.primaryCta`) : null },
+    primaryCta: {
+      label: item.hasPrimaryCta
+        ? t(item.pricingModel === "free" ? "card.activateNow" : "card.subscribeNow")
+        : null,
+    },
     subscriptionStatus: item.subscriptionStatus,
   }))
 }
