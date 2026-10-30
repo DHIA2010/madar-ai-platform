@@ -402,6 +402,24 @@ export class SallaIntegrationProvider {
         firstItemKeys: body.data?.items?.[0] ? Object.keys(body.data.items[0]) : null,
       })
     )
-    return mapSallaOrderDetail(body.data ?? {})
+    const data = body.data ?? {}
+    // Real GET /orders/{id} responses carry no items (despite the documented schema) -- they come
+    // from GET /orders/items, in the same per-item shape.
+    if (!Array.isArray(data.items)) {
+      const itemsResponse = await fetch(
+        `${this.apiBaseUrl.replace(/\/$/, "")}/orders/items?order_id=${encodeURIComponent(input.orderId)}`,
+        { headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" } }
+      )
+      if (itemsResponse.ok) {
+        const itemsBody = (await itemsResponse.json()) as { data?: SallaOrderDetailApiItem[] }
+        data.items = itemsBody.data ?? []
+      } else {
+        console.error("salla.order_detail_items_failed", {
+          orderId: input.orderId,
+          status: itemsResponse.status,
+        })
+      }
+    }
+    return mapSallaOrderDetail(data)
   }
 }

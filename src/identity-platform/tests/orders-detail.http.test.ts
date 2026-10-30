@@ -92,11 +92,22 @@ function mockSallaFetch(input: { baseUrl: string; accessToken: string; refreshTo
       })
     }
 
-    if (url.includes("/orders/5001")) {
-      return new Response(JSON.stringify(SALLA_ORDER_DETAIL_RESPONSE), {
+    // Like the real API: GET /orders/{id} carries no items -- they come from GET /orders/items.
+    if (url.includes("/orders/items?order_id=5001")) {
+      return new Response(JSON.stringify({ data: SALLA_ORDER_DETAIL_RESPONSE.data.items }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })
+    }
+
+    if (url.includes("/orders/5001")) {
+      return new Response(
+        JSON.stringify({ data: { ...SALLA_ORDER_DETAIL_RESPONSE.data, items: undefined } }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
     }
 
     if (url.includes("/orders/does-not-exist")) {
