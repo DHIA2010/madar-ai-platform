@@ -200,22 +200,30 @@ export class ShopifySyncService {
       const { apiBaseUrl } = buildShopUrls(shopDomain, this.apiVersion)
       const accessToken = await this.oauthService.resolveAccessToken(connection.id)
 
+      // Components the merchant turned off are skipped entirely; their existing records stay.
+      const components = await this.syncRepository.findSyncComponents(connection.id)
       const [products, orders, customers] = await Promise.all([
-        fetchAllPagesByLinkHeader<ShopifyProductApiRow>({
-          initialUrl: `${apiBaseUrl}/products.json?limit=${PAGE_SIZE}`,
-          accessToken,
-          resourceKey: "products",
-        }),
-        fetchAllPagesByLinkHeader<ShopifyOrderApiRow>({
-          initialUrl: `${apiBaseUrl}/orders.json?limit=${PAGE_SIZE}&status=any`,
-          accessToken,
-          resourceKey: "orders",
-        }),
-        fetchAllPagesByLinkHeader<ShopifyCustomerApiRow>({
-          initialUrl: `${apiBaseUrl}/customers.json?limit=${PAGE_SIZE}`,
-          accessToken,
-          resourceKey: "customers",
-        }),
+        components.products
+          ? fetchAllPagesByLinkHeader<ShopifyProductApiRow>({
+              initialUrl: `${apiBaseUrl}/products.json?limit=${PAGE_SIZE}`,
+              accessToken,
+              resourceKey: "products",
+            })
+          : Promise.resolve([]),
+        components.orders
+          ? fetchAllPagesByLinkHeader<ShopifyOrderApiRow>({
+              initialUrl: `${apiBaseUrl}/orders.json?limit=${PAGE_SIZE}&status=any`,
+              accessToken,
+              resourceKey: "orders",
+            })
+          : Promise.resolve([]),
+        components.customers
+          ? fetchAllPagesByLinkHeader<ShopifyCustomerApiRow>({
+              initialUrl: `${apiBaseUrl}/customers.json?limit=${PAGE_SIZE}`,
+              accessToken,
+              resourceKey: "customers",
+            })
+          : Promise.resolve([]),
       ])
 
       const records: ShopifySyncRecordInput[] = [

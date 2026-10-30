@@ -74,6 +74,7 @@ import {
   type SallaConnectIntentStatus,
   sallaMarketplaceInstallService,
   storeConnectionReferences,
+  syncComponentsService,
 } from "../services"
 import { ConnectorLogo } from "./connector-logo"
 
@@ -1506,6 +1507,23 @@ export function NewConnectionWizard() {
         })
       }
 
+      // E-commerce stores: the components picked in the Import step are what keeps syncing
+      // (editable later on the connection's page). Leaving all three off keeps the default -- all on.
+      if (syncComponentsService.isSupported(selectedConnector.connectorId)) {
+        const components = {
+          products: selectedObjects.includes("Products"),
+          orders: selectedObjects.includes("Orders"),
+          customers: selectedObjects.includes("Customers"),
+        }
+        // Best-effort: a failure leaves everything syncing, still editable on the connection's
+        // page -- it must never stop the store from connecting.
+        if (components.products || components.orders || components.customers) {
+          await syncComponentsService
+            .save(selectedConnector.connectorId, draftConnectionId, components)
+            .catch((error: unknown) => console.warn("Couldn't save sync components", error))
+        }
+      }
+
       await connectionManager.scheduleSync({
         connectionId: draftConnectionId,
         cron: "*/30 * * * *",
@@ -1533,6 +1551,7 @@ export function NewConnectionWizard() {
     resetError,
     selectedAccountId,
     selectedConnector,
+    selectedObjects,
     t,
   ])
 

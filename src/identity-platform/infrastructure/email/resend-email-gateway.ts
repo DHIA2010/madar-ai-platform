@@ -1,4 +1,5 @@
-import type { EmailGateway, RenewalReminderEmail } from "../../application/ports"
+import type { EmailGateway, RenewalReminderEmail, StoreWelcomeEmail } from "../../application/ports"
+import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
 
 const BRAND_COLOR = "#7C3AED"
@@ -190,6 +191,32 @@ export class ResendEmailGateway implements EmailGateway {
           Temporary password: <strong>${escapeHtml(input.password)}</strong><br><br>
           You can change this password anytime from Settings once you're signed in.`,
         ctaLabel: "Sign in to MADAR",
+        ctaUrl: input.loginUrl,
+      }),
+    })
+  }
+
+  async sendStoreWelcomeEmail(input: StoreWelcomeEmail) {
+    const store = escapeHtml(input.storeName)
+    const platform = escapeHtml(input.platformName)
+    const credentials = input.password
+      ? `البريد الإلكتروني: <strong dir="ltr">${escapeHtml(input.email)}</strong><br>
+          كلمة المرور: <strong dir="ltr">${escapeHtml(input.password)}</strong><br>
+          رابط مدار: <a href="${escapeHtml(input.loginUrl)}" dir="ltr">${escapeHtml(input.loginUrl)}</a><br><br>
+          يمكنك تغيير كلمة المرور في أي وقت من الإعدادات بعد تسجيل الدخول.`
+      : `تمت إضافة المتجر إلى حسابك الحالي في مدار (<strong dir="ltr">${escapeHtml(input.email)}</strong>) -- سجّل الدخول بكلمة المرور التي تستخدمها عادةً.`
+    await this.send({
+      to: input.email,
+      subject: storeWelcomeSubject(input),
+      text: storeWelcomeText(input),
+      html: renderLayout({
+        preheader: storeWelcomeSubject(input),
+        heading: "أهلاً بك في مدار",
+        bodyHtml: `<div dir="rtl" style="text-align:right;">
+          تم ربط متجرك <strong>${store}</strong> على ${platform} بمدار وتفعيل تطبيق المتاجر الإلكترونية، وستبدأ مزامنة المنتجات والطلبات والعملاء تلقائياً.<br><br>
+          ${credentials}
+        </div>`,
+        ctaLabel: "الدخول إلى مدار",
         ctaUrl: input.loginUrl,
       }),
     })

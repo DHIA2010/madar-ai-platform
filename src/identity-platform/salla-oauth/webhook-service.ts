@@ -3,6 +3,7 @@ import type { SallaProductApiPayload } from "../products/salla-product-mapper"
 import { toRecordDate } from "./record-date"
 import type { SallaOAuthRepository } from "./repository"
 import type { SallaOAuthService } from "./service"
+import type { SallaMarketplaceAutoProvisionService } from "./auto-provision-service"
 import type { SallaSyncRepository } from "./sync-repository"
 
 const DEFAULT_SALLA_API_BASE_URL = "https://api.salla.dev/admin/v2"
@@ -88,7 +89,9 @@ export class SallaWebhookService {
     config?: { apiBaseUrl?: string },
     // Optional -- when null, handleWebhookEvent() behaves exactly as it always has: salla_records
     // gets written, no native product is ever created/updated from it.
-    private readonly promotionService: SallaProductPromotionService | null = null
+    private readonly promotionService: SallaProductPromotionService | null = null,
+    // Optional -- when null, an App Store install just stays pending until claimed from Madar.
+    private readonly autoProvisionService: SallaMarketplaceAutoProvisionService | null = null
   ) {
     this.apiBaseUrl =
       config?.apiBaseUrl ?? process.env.SALLA_API_BASE_URL ?? DEFAULT_SALLA_API_BASE_URL
@@ -110,8 +113,13 @@ export class SallaWebhookService {
     // unlike every other event here, which only signals "go re-fetch entity X." Handled entirely
     // by SallaOAuthService since it owns token encryption/storage; nothing here needs an existing
     // connection (there isn't one yet -- see handleAppStoreInstall's own comment).
+    // With auto-provisioning on, the install then becomes a Madar account (or links to the
+    // merchant's existing one) -- see SallaMarketplaceAutoProvisionService.
     if (payload.event === "app.store.authorize") {
-      await this.oauthService.handleAppStoreInstall(payload)
+      const install = await this.oauthService.handleAppStoreInstall(payload)
+      if (install && this.autoProvisionService) {
+        await this.autoProvisionService.provision(install)
+      }
       return
     }
 
@@ -134,6 +142,17 @@ export class SallaWebhookService {
 
     const entityId = String((payload.data as { id?: unknown })?.id ?? "")
     if (!entityId) return
+
+    // A component the merchant turned off isn't updated -- see integrations/sync-components.ts.
+    const components = await this.syncRepository.findSyncComponents(target.connectionId)
+    if (!components[entityType]) {
+      console.log("salla.webhook_component_disabled", {
+        event: payload.event,
+        entityType,
+        entityId,
+      })
+      return
+    }
 
     // Confirmed live against the real Salla sandbox: a webhook event's own payload.data is not
     // just partial (missing fields a poll-sync's full fetch would have) -- fields it DOES include

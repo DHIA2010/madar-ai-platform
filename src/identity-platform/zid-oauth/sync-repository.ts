@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 import type { IntegrationRecordView, IntegrationSyncRunView } from "../integrations/provider-models"
+import { loadSyncComponents, type SyncComponentSettings } from "../integrations/sync-components"
 
 // Real stores can have thousands of products/orders/customers in one sync -- one INSERT per
 // row meant one network round-trip per row, which is what made a large sync time out in
@@ -60,6 +61,12 @@ export interface ZidSyncRecordInput {
 
 export class ZidSyncRepository {
   constructor(private readonly db: PostgresDatabase) {}
+
+  // Which components this connection still syncs (products/orders/customers) -- see
+  // integrations/sync-components.ts.
+  findSyncComponents(connectionId: string): Promise<SyncComponentSettings> {
+    return loadSyncComponents(this.db, "zid", connectionId)
+  }
 
   async withTransaction<T>(work: () => Promise<T>) {
     return this.db.withTransaction(work)

@@ -1324,3 +1324,10 @@ export const createExpenseSchema = z.object({
   referenceNumber: z.string().max(200).default(""),
   notes: z.string().max(2000).default(""),
 })
+
+// An e-commerce connection's sync components -- at least one must stay on.
+export const syncComponentsSchema = z
+  .object({ products: z.boolean(), orders: z.boolean(), customers: z.boolean() })
+  .refine((value) => value.products || value.orders || value.customers, {
+    message: "Keep at least one component syncing.",
+  })

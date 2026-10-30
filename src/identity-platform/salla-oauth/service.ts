@@ -45,6 +45,7 @@ interface SallaTokenResponse {
 interface SallaStoreInfo {
   id: string | number
   name?: string
+  email?: string
   domain?: string
   currency?: string
   timezone?: string
@@ -383,6 +384,33 @@ async function fetchStoreInfo(config: SallaOAuthServiceConfig, accessToken: stri
   return store
 }
 
+// The merchant behind an access token (accounts.salla.sa/oauth2/user/info) -- who an App Store
+// install's Madar account is created for. Null when it can't be read; the caller falls back to
+// the store's own email, then to the claim link.
+async function fetchMerchantUserInfo(
+  config: SallaOAuthServiceConfig,
+  accessToken: string
+): Promise<{ name: string | null; email: string | null } | null> {
+  try {
+    const response = await fetch(`${new URL(config.tokenUrl).origin}/oauth2/user/info`, {
+      headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as { data?: { name?: string; email?: string } }
+    return { name: body.data?.name ?? null, email: body.data?.email ?? null }
+  } catch {
+    return null
+  }
+}
+
+// What handleAppStoreInstall saved, for SallaMarketplaceAutoProvisionService to finish.
+export interface SallaAppStoreInstall {
+  claimToken: string
+  storeName: string
+  merchantEmail: string | null
+  merchantName: string | null
+}
+
 export class SallaOAuthService {
   private readonly config: SallaOAuthServiceConfig
   private readonly credentialsProvider: SallaOAuthCredentialsProvider
@@ -650,7 +678,7 @@ export class SallaOAuthService {
     event: string
     merchant: number | string
     data: Record<string, unknown>
-  }): Promise<void> {
+  }): Promise<SallaAppStoreInstall | null> {
     const config = await this.loadResolvedConfig()
     const data = payload.data ?? {}
 
@@ -660,7 +688,7 @@ export class SallaOAuthService {
       undefined
     if (!accessToken || accessToken.trim().length === 0) {
       console.error("salla.app_store_authorize_missing_token", { merchant: payload.merchant })
-      return
+      return null
     }
 
     const refreshToken =
@@ -671,7 +699,7 @@ export class SallaOAuthService {
       (data.expires as number | undefined) ?? (data.expires_in as number | undefined) ?? undefined
     const scopeRaw = (data.scope as string | undefined) ?? undefined
 
-    let store: { id: string | number; name?: string; domain?: string; currency?: string }
+    let store: SallaStoreInfo
     try {
       store = await fetchStoreInfo(config, accessToken)
     } catch (error) {
@@ -679,7 +707,7 @@ export class SallaOAuthService {
         merchant: payload.merchant,
         error,
       })
-      return
+      return null
     }
 
     const installId = randomUUID()
@@ -707,6 +735,14 @@ export class SallaOAuthService {
       installId,
       storeId: store.id,
     })
+
+    const merchant = await fetchMerchantUserInfo(config, accessToken)
+    return {
+      claimToken,
+      storeName: store.name ?? "Salla Store",
+      merchantEmail: merchant?.email ?? store.email ?? null,
+      merchantName: merchant?.name ?? null,
+    }
   }
 
   // Created the moment an already-logged-in merchant clicks Connect, just before the frontend

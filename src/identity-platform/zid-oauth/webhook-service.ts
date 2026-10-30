@@ -110,6 +110,14 @@ export class ZidWebhookService {
       console.error("zid.webhook_registration_failed", error)
     })
 
+    // A component the merchant turned off isn't updated (an order's stock refresh is a products
+    // update, so it's skipped too when products are off).
+    const components = await this.syncRepository.findSyncComponents(target.connectionId)
+    if (!components[entityType]) {
+      console.log("zid.webhook_component_disabled", { event, entityType, entityId })
+      return
+    }
+
     if (entityType !== "products") {
       // Orders/customers sit on Zid's Merchant API (different auth headers than products, and
       // no confirmed single-record GET endpoint) -- there is nothing to re-fetch against even if
@@ -123,7 +131,7 @@ export class ZidWebhookService {
       })
       console.log("zid.webhook_synced", { event, entityType, entityId })
 
-      if (STOCK_MOVING_ORDER_EVENTS.has(event)) {
+      if (STOCK_MOVING_ORDER_EVENTS.has(event) && components.products) {
         await this.refreshOrderProducts(target, payload)
       }
       return

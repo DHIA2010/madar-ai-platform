@@ -63,6 +63,17 @@ export interface EmailGateway {
   }): Promise<void>
   // A trial or paid period is about to end (billing maintenance, a few days ahead).
   sendRenewalReminderEmail(input: RenewalReminderEmail): Promise<void>
+  // A store installed Madar from its platform's app store (Salla): a new account's sign-in
+  // details, or -- password null -- that the store was linked to the merchant's existing account.
+  sendStoreWelcomeEmail(input: StoreWelcomeEmail): Promise<void>
+}
+
+export interface StoreWelcomeEmail {
+  email: string
+  platformName: string
+  storeName: string
+  loginUrl: string
+  password: string | null
 }
 
 export interface RenewalReminderEmail {

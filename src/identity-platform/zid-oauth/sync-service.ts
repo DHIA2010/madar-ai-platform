@@ -259,32 +259,40 @@ export class ZidSyncService {
         connection.id
       )
 
+      // Components the merchant turned off are skipped entirely; their existing records stay.
+      const components = await this.syncRepository.findSyncComponents(connection.id)
       const [products, orders, customers] = await Promise.all([
-        fetchAllProducts({
-          apiBaseUrl: this.apiBaseUrl,
-          storeId: input.customerId,
-          accessToken,
-        }),
-        fetchAllMerchantListPages<ZidOrderApiRow>({
-          apiBaseUrl: this.apiBaseUrl,
-          path: "/managers/store/orders",
-          listKey: "orders",
-          pageSize: ORDERS_PAGE_SIZE,
-          accessToken,
-          authorizationHeader,
-          // Zid's orders list defaults to payload_type=simple, which omits each order's
-          // `products` line items entirely (docs.zid.sa/list-of-orders) -- default is required
-          // for the Orders page's per-order product count/detail to have any data to read.
-          extraParams: { payload_type: "default" },
-        }),
-        fetchAllMerchantListPages<ZidCustomerApiRow>({
-          apiBaseUrl: this.apiBaseUrl,
-          path: "/managers/store/customers",
-          listKey: "customers",
-          pageSize: CUSTOMERS_PAGE_SIZE,
-          accessToken,
-          authorizationHeader,
-        }),
+        components.products
+          ? fetchAllProducts({
+              apiBaseUrl: this.apiBaseUrl,
+              storeId: input.customerId,
+              accessToken,
+            })
+          : Promise.resolve([]),
+        components.orders
+          ? fetchAllMerchantListPages<ZidOrderApiRow>({
+              apiBaseUrl: this.apiBaseUrl,
+              path: "/managers/store/orders",
+              listKey: "orders",
+              pageSize: ORDERS_PAGE_SIZE,
+              accessToken,
+              authorizationHeader,
+              // Zid's orders list defaults to payload_type=simple, which omits each order's
+              // `products` line items entirely (docs.zid.sa/list-of-orders) -- default is required
+              // for the Orders page's per-order product count/detail to have any data to read.
+              extraParams: { payload_type: "default" },
+            })
+          : Promise.resolve([]),
+        components.customers
+          ? fetchAllMerchantListPages<ZidCustomerApiRow>({
+              apiBaseUrl: this.apiBaseUrl,
+              path: "/managers/store/customers",
+              listKey: "customers",
+              pageSize: CUSTOMERS_PAGE_SIZE,
+              accessToken,
+              authorizationHeader,
+            })
+          : Promise.resolve([]),
       ])
 
       const records: ZidSyncRecordInput[] = [

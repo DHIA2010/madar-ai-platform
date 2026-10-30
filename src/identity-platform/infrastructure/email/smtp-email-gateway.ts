@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer"
 
-import type { EmailGateway, RenewalReminderEmail } from "../../application/ports"
+import type { EmailGateway, RenewalReminderEmail, StoreWelcomeEmail } from "../../application/ports"
+import { storeWelcomeSubject, storeWelcomeText } from "./store-welcome-copy"
 import type { IdentityPlatformConfig } from "../../configuration"
 
 export class SmtpEmailGateway implements EmailGateway {
@@ -62,6 +63,15 @@ export class SmtpEmailGateway implements EmailGateway {
       to: input.email,
       subject: `Your MADAR account for ${input.storeName} is ready`,
       text: `Email: ${input.email}\nTemporary password: ${input.password}\nSign in: ${input.loginUrl}\nYou can change this password anytime from Settings.`,
+    })
+  }
+
+  async sendStoreWelcomeEmail(input: StoreWelcomeEmail) {
+    await this.transport.sendMail({
+      from: this.config.emailFrom,
+      to: input.email,
+      subject: storeWelcomeSubject(input),
+      text: storeWelcomeText(input),
     })
   }
 

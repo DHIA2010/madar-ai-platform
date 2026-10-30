@@ -361,6 +361,84 @@ describe("salla data sync: real products/orders/customers pipeline", () => {
     )
   })
 
+  it("skips the sync components a merchant turned off, and keeps at least one on", async () => {
+    const { login, actor } = await registerAndProvisionOrg(
+      "salla-sync-components@madar.test",
+      "Salla Sync Components Org"
+    )
+    const workspaceId = actor.workspaceId ?? "00000000-0000-4000-8000-000000000820"
+    await provisionWorkspaceProject({
+      organizationId: actor.organizationId,
+      ownerUserId: actor.userId,
+      workspaceId,
+      projectId: "00000000-0000-4000-8000-000000000821",
+      label: "Salla Sync Components",
+    })
+    const fetchMock = mockSallaResponses({
+      baseUrl,
+      accessToken: "salla-access-components",
+      refreshToken: "salla-refresh-components",
+      store: { id: "778899", name: "Components Store" },
+      data: {
+        products: [{ id: 1001, updated_at: "2026-01-01T00:00:00Z" }],
+        productsPageSize: 15,
+        orders: [{ id: 5001, updated_at: "2026-01-02T00:00:00Z" }],
+        customers: [{ id: 9001, updated_at: "2026-01-03T00:00:00Z" }],
+      },
+    })
+    const started = await connectSalla({ login, workspaceId })
+    const componentsUrl = `${baseUrl}/v1/integrations/salla/connections/${started.connectionId}/sync-components`
+    const headers = syncHeaders(login, workspaceId)
+
+    const defaults = await fetch(componentsUrl, { headers })
+    expect(await defaults.json()).toEqual({ products: true, orders: true, customers: true })
+
+    const allOff = await fetch(componentsUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ products: false, orders: false, customers: false }),
+    })
+    expect(allOff.status).toBe(400)
+    const saved = await fetch(componentsUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ products: true, orders: true, customers: false }),
+    })
+    expect(await saved.json()).toEqual({ products: true, orders: true, customers: false })
+
+    // Another organization can't read or change this connection's settings.
+    const other = await registerAndProvisionOrg("salla-sync-other@madar.test", "Other Org")
+    const otherWorkspace = other.actor.workspaceId ?? "00000000-0000-4000-8000-000000000822"
+    expect(
+      (await fetch(componentsUrl, { headers: syncHeaders(other.login, otherWorkspace) })).status
+    ).toBe(404)
+
+    const syncResponse = await fetch(`${baseUrl}/v1/integrations/salla/sync`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        connectionId: started.connectionId,
+        customerId: "778899",
+        startDate: "2026-01-01",
+        endDate: "2026-01-08",
+        idempotencyKey: "sync-components-1",
+        mode: "incremental",
+        trigger: "manual",
+      }),
+    })
+    const result = (await syncResponse.json()) as { metrics: Record<string, number> }
+    expect(result.metrics).toMatchObject({ products: 1, orders: 1, customers: 0 })
+    const fetchedUrls = fetchMock.mock.calls.map(([input]) =>
+      typeof input === "string" ? input : input.toString()
+    )
+    expect(fetchedUrls.some((url) => url.includes("/customers"))).toBe(false)
+    const rows = await database.query<{ entity_type: string }>(
+      `select entity_type from salla_records where connection_id = $1`,
+      [started.connectionId]
+    )
+    expect(rows.rows.map((row) => row.entity_type).sort()).toEqual(["orders", "products"])
+  })
+
   it("is idempotent: re-running sync with the same idempotencyKey does not re-fetch from Salla", async () => {
     const { login, actor } = await registerAndProvisionOrg(
       "salla-sync-idempotent@madar.test",

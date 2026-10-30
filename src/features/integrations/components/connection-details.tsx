@@ -20,13 +20,16 @@ import {
   type ConnectionActionDefinition,
   connectionActionPolicy,
   localizeConnectionActionTranslated,
+  syncComponentsService,
 } from "../services"
 import { ConnectionActionsMenu } from "./connection-actions-menu"
 import { ConnectorLogo } from "./connector-logo"
+import { SyncComponentsPanel } from "./sync-components-panel"
 
 import type { SyncJobStatus } from "@/application/contracts"
 import { cairo } from "@/components/design/fonts"
 import { type Locale, localeDirection } from "@/i18n/locales"
+import { resolveBackendProviderId } from "@/infrastructure/data/repositories/integration.repository"
 
 type IntegrationsTranslator = ReturnType<typeof useTranslations<"integrations">>
 
@@ -194,6 +197,7 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
     )
   }
 
+  const backendProviderId = resolveBackendProviderId(record.connectorDefinitionId)
   const latestJob = record.integrationStatus.latestJob
   const latestRun = record.integrationStatus.latestRun
   const workspaceStatus = availableWorkspaces.find(
@@ -414,6 +418,10 @@ export function ConnectionDetails({ connectionId }: { connectionId: string }) {
               </div>
             </div>
           </div>
+
+          {syncComponentsService.isSupported(backendProviderId) ? (
+            <SyncComponentsPanel providerId={backendProviderId!} connectionId={connectionId} />
+          ) : null}
 
           <div className={cn(PANEL, "px-5 py-4")}>
             <h2 className={cn("mb-3 text-[15px] font-bold", HEADING)}>

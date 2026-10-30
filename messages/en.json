@@ -7952,6 +7952,30 @@
         },
         "setupDurationValue": "~30 seconds"
       }
+    },
+    "syncComponents": {
+      "title": "Sync components",
+      "description": "Choose which data syncs from the store.",
+      "components": {
+        "products": {
+          "label": "Products",
+          "hint": "Products, prices and stock"
+        },
+        "orders": {
+          "label": "Orders",
+          "hint": "New orders and status updates"
+        },
+        "customers": {
+          "label": "Customers",
+          "hint": "Customer details and updates"
+        }
+      },
+      "atLeastOne": "Keep at least one component on.",
+      "keepsExisting": "Data already synced stays as it is.",
+      "save": "Save",
+      "saved": "Sync components saved.",
+      "saveFailed": "Couldn't save sync components.",
+      "loadFailed": "Couldn't load sync components."
     }
   },
   "invoices": {

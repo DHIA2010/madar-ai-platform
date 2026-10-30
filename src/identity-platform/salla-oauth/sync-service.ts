@@ -194,22 +194,30 @@ export class SallaSyncService {
     try {
       const accessToken = await this.oauthService.resolveAccessToken(connection.id)
 
+      // Components the merchant turned off are skipped entirely; their existing records stay.
+      const components = await this.syncRepository.findSyncComponents(connection.id)
       const [products, orders, customers] = await Promise.all([
-        fetchAllPages<SallaProductApiRow>({
-          apiBaseUrl: this.apiBaseUrl,
-          path: "/products",
-          accessToken,
-        }),
-        fetchAllPages<SallaOrderApiRow>({
-          apiBaseUrl: this.apiBaseUrl,
-          path: "/orders",
-          accessToken,
-        }),
-        fetchAllPages<SallaCustomerApiRow>({
-          apiBaseUrl: this.apiBaseUrl,
-          path: "/customers",
-          accessToken,
-        }),
+        components.products
+          ? fetchAllPages<SallaProductApiRow>({
+              apiBaseUrl: this.apiBaseUrl,
+              path: "/products",
+              accessToken,
+            })
+          : Promise.resolve([]),
+        components.orders
+          ? fetchAllPages<SallaOrderApiRow>({
+              apiBaseUrl: this.apiBaseUrl,
+              path: "/orders",
+              accessToken,
+            })
+          : Promise.resolve([]),
+        components.customers
+          ? fetchAllPages<SallaCustomerApiRow>({
+              apiBaseUrl: this.apiBaseUrl,
+              path: "/customers",
+              accessToken,
+            })
+          : Promise.resolve([]),
       ])
 
       const records: SallaSyncRecordInput[] = [

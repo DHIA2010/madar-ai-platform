@@ -33,12 +33,19 @@ import { resolveSallaWebhookCredentials } from "../../salla-oauth/salla-credenti
 import { SallaSyncRepository } from "../../salla-oauth/sync-repository"
 import { verifySallaWebhookSignature } from "../../salla-oauth/webhook-verification"
 import { SallaWebhookService, type SallaWebhookPayload } from "../../salla-oauth/webhook-service"
+import { SallaMarketplaceAutoProvisionService } from "../../salla-oauth/auto-provision-service"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
 import { GoogleAnalyticsOAuthRepository } from "../../google-analytics-oauth/repository"
 import { ZidOAuthConnectionDeletionService } from "../../zid-oauth/connection-deletion-service"
 import { ZidMarketplaceAutoProvisionService } from "../../zid-oauth/auto-provision-service"
+import {
+  connectionBelongsToOrganization,
+  type EcommerceSyncProvider,
+  loadSyncComponents,
+  saveSyncComponents,
+} from "../../integrations/sync-components"
 import { ZidOAuthRepository } from "../../zid-oauth/repository"
 import { ZidOAuthService } from "../../zid-oauth/service"
 import { ZidOrderPushService } from "../../orders/zid-order-push-service"
@@ -228,6 +235,7 @@ import {
   createChatSessionSchema,
   sendChatMessageSchema,
   startApplicationTrialSchema,
+  syncComponentsSchema,
   activateFreeApplicationSchema,
   createSupplierSchema,
   bulkUpdateSupplierStatusSchema,
@@ -953,6 +961,38 @@ export function createIdentityApiServer(
           new SallaOAuthRepository(container.infrastructure.database)
       )
     : null
+  // A Salla App Store install becomes a Madar account (or links to the merchant's existing one)
+  // with the store connected and syncing -- reuses the same account repositories, password hasher
+  // and email gateway Zid's auto-provisioning gets from the container.
+  const sallaAutoProvisionService =
+    container.infrastructure.database &&
+    container.zidAutoProvisionDeps &&
+    sallaOAuthMarketplaceService
+      ? new SallaMarketplaceAutoProvisionService(sallaOAuthMarketplaceService, {
+          ...container.zidAutoProvisionDeps,
+          loginUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/auth/basic/login`,
+          scheduleSync: async (input) => {
+            await new ConnectionSyncScheduleRepository(container.infrastructure.database!).upsert({
+              organizationId: input.organizationId,
+              workspaceId: input.workspaceId,
+              providerId: "salla",
+              connectionId: input.connectionId,
+              enabled: true,
+              frequencyMinutes: 30,
+              customCron: null,
+              activeDays: [0, 1, 2, 3, 4, 5, 6],
+              startTimeLocal: "00:00",
+              timezone: "Asia/Riyadh",
+              retryOnConnectionFailure: true,
+              retryMaxAttempts: 3,
+              notifyOnFailure: true,
+              // Due now: the scheduler's next tick runs the first sync.
+              nextRunAt: new Date().toISOString(),
+              actorUserId: input.userId,
+            })
+          },
+        })
+      : null
   const sallaWebhookService = container.infrastructure.database
     ? new SallaWebhookService(
         sallaOAuthRepositoryForTracking ??
@@ -964,7 +1004,8 @@ export function createIdentityApiServer(
               new SallaOAuthRepository(container.infrastructure.database)
           ),
         undefined,
-        sallaProductPromotionService
+        sallaProductPromotionService,
+        sallaAutoProvisionService
       )
     : null
   const zidProductPromotionService =
@@ -2020,6 +2061,47 @@ export function createIdentityApiServer(
             context
           )
         )
+      }
+
+      // Which components (products/orders/customers) an e-commerce connection keeps syncing --
+      // see integrations/sync-components.ts.
+      const syncComponentsMatch = url.pathname.match(
+        /^\/v1\/integrations\/(salla|zid|shopify)\/connections\/([^/]+)\/sync-components$/
+      )
+      if (syncComponentsMatch && (method === "GET" || method === "PUT")) {
+        const database = container.infrastructure.database
+        if (!database) {
+          return send(503, {
+            code: "SYNC_COMPONENTS_UNAVAILABLE",
+            message: "Sync settings are unavailable in memory mode.",
+          })
+        }
+        const provider = syncComponentsMatch[1] as EcommerceSyncProvider
+        const connectionId = syncComponentsMatch[2]
+        if (
+          !z.string().uuid().safeParse(connectionId).success ||
+          !(await connectionBelongsToOrganization(
+            database,
+            provider,
+            connectionId,
+            actor.organizationId
+          ))
+        ) {
+          throw ERRORS.notFound("Connection")
+        }
+        if (method === "PUT") {
+          if (!actor.modulePermissions.includes("connections:manage")) {
+            throw ERRORS.forbidden()
+          }
+          const settings = syncComponentsSchema.parse(await readJsonBody(request))
+          await saveSyncComponents(database, {
+            provider,
+            connectionId,
+            settings,
+            userId: actor.userId,
+          })
+        }
+        return send(200, await loadSyncComponents(database, provider, connectionId))
       }
 
       if (method === "GET" && url.pathname === "/v1/integrations/meta-ads/diagnostics") {

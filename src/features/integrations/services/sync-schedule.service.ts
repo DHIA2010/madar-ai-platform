@@ -100,3 +100,46 @@ export const syncScheduleService = {
     )
   },
 }
+
+// Which data an e-commerce connection (Salla, Zid, Shopify) keeps syncing -- the backend skips
+// whatever is off in its syncs and webhooks, and keeps what was already synced.
+export interface SyncComponentSettings {
+  products: boolean
+  orders: boolean
+  customers: boolean
+}
+
+export const ECOMMERCE_SYNC_PROVIDERS = ["salla", "zid", "shopify"] as const
+
+function syncComponentsEndpoint(providerId: string, connectionId: string) {
+  return [
+    "",
+    "v1",
+    "integrations",
+    providerId,
+    "connections",
+    connectionId,
+    "sync-components",
+  ].join(String.fromCharCode(47))
+}
+
+export const syncComponentsService = {
+  isSupported(providerId: string | null): boolean {
+    return (ECOMMERCE_SYNC_PROVIDERS as readonly string[]).includes(providerId ?? "")
+  },
+
+  async get(providerId: string, connectionId: string): Promise<SyncComponentSettings> {
+    return client.get<SyncComponentSettings>(syncComponentsEndpoint(providerId, connectionId))
+  },
+
+  async save(
+    providerId: string,
+    connectionId: string,
+    settings: SyncComponentSettings
+  ): Promise<SyncComponentSettings> {
+    return client.put<SyncComponentSettings, SyncComponentSettings>(
+      syncComponentsEndpoint(providerId, connectionId),
+      settings
+    )
+  },
+}

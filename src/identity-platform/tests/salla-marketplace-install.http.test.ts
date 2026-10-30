@@ -29,6 +29,10 @@ function mockStoreInfo(store: { id: string; name?: string; domain?: string; curr
         headers: { "content-type": "application/json" },
       })
     }
+    // No merchant details: the install stays pending, to be claimed from Madar.
+    if (url.includes("/oauth2/user/info")) {
+      return new Response("{}", { status: 401 })
+    }
     if (url.startsWith(SALLA_API_BASE_URL)) {
       return new Response("{}", { status: 404 })
     }
