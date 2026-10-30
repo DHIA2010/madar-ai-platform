@@ -344,10 +344,10 @@ export function ActivationRequestDialog({
               {offersYearly && offersMonthly ? (
                 <div className="grid grid-cols-2 gap-2 rounded-[12px] bg-[#f1f4f9] p-1">
                   {(["monthly", "yearly"] as const).map((option) => {
-                    const bestSaving = Math.max(
-                      0,
-                      ...packages.map((pkg) => yearlySavingPercent(pkg) ?? 0)
-                    )
+                    // The saving of the package being chosen, not the best across all of them.
+                    const selectedSaving = selectedPackage
+                      ? (yearlySavingPercent(selectedPackage) ?? 0)
+                      : 0
                     return (
                       <button
                         key={option}
@@ -361,9 +361,9 @@ export function ActivationRequestDialog({
                         )}
                       >
                         {option === "monthly" ? t("billingMonthly") : t("billingYearly")}
-                        {option === "yearly" && bestSaving > 0 ? (
+                        {option === "yearly" && selectedSaving > 0 ? (
                           <span className="rounded-full bg-[#dcfce7] px-2 py-0.5 text-[10.5px] font-bold text-[#15803d]">
-                            {t("yearlySaving", { percent: bestSaving })}
+                            {t("yearlySaving", { percent: selectedSaving })}
                           </span>
                         ) : null}
                       </button>
