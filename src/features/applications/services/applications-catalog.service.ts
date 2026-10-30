@@ -1,18 +1,6 @@
 import type { useTranslations } from "next-intl"
 import type { LucideIcon } from "lucide-react"
-import {
-  BarChart3,
-  Bot,
-  Calculator,
-  CreditCard,
-  FileBarChart,
-  FileText,
-  ListChecks,
-  Radio,
-  ShoppingBag,
-  Truck,
-  Wallet,
-} from "lucide-react"
+import { Bot, CreditCard, FileBarChart, Radio, ShoppingBag, Truck, Wallet } from "lucide-react"
 
 import type { OrganizationSettings } from "@/features/workspace"
 
@@ -216,10 +204,9 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
-  // Distinct from both the decorative "madar-apps-reports" card below (a 5-card bundle sharing
-  // madarAppsEnabled, no real backend tie-in) and from "Ready Reports" (reports-overview-page.tsx's
-  // "ready" tab, which stays free/unpaywalled) -- this gates specifically the custom report
-  // builder (its "custom" tab), see reports/custom-reports-guard.ts.
+  // Distinct from "Ready Reports" (reports-overview-page.tsx's "ready" tab, which stays
+  // free/unpaywalled) -- this gates specifically the custom report builder (its "custom" tab),
+  // see reports/custom-reports-guard.ts.
   {
     id: "custom-reports",
     category: "customReports",
@@ -236,37 +223,15 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     hasPrimaryCta: true,
     subscriptionStatus: "not_subscribed",
   },
-  // تطبيقات مدار -- previously one card showing these 5 as a mini icon-grid; now each is its
-  // own full card with the same activate/learn-more buttons as any other application. They
-  // share the single "madarApps" category/settings flag (APPLICATION_SETTINGS_KEY below) on
-  // purpose: there is no per-item backend subscription unit, so activating any one of the 5
-  // submits/approves the shared "madarApps" request and all 5 flip together.
-  {
-    id: "madar-apps-reports",
-    category: "madarApps",
-    icon: BarChart3,
-    accent: {
-      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
-      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
-    },
-    pricingModel: "paid",
-    hasPriceLabel: false,
-    featuresDisplay: "checklist",
-    featureCount: 3,
-    hasPrimaryCta: true,
-    subscriptionStatus: "not_subscribed",
-  },
   // Billed/enforced independently (own expensesEnabled flag, own real backend paywall -- see
   // expenses/guards.ts) but shown grouped under the "تطبيقات مدار" tab for discoverability, same
-  // tabCategory mechanism procurement/"Supply & Purchase" uses -- not a shared-flag card like the
-  // other 4 madarApps siblings.
+  // tabCategory mechanism procurement/"Supply & Purchase" uses.
   {
     id: "madar-apps-expenses",
     category: "expenses",
     tabCategory: "madarApps",
     icon: Wallet,
-    // Its own distinct accent (not the shared gray/navy the still-decorative madarApps siblings
-    // use) -- same red/rose tone already used for Expenses in the sidebar nav
+    // Its own distinct accent -- same red/rose tone already used for Expenses in the sidebar nav
     // (app-sidebar.tsx's <Wallet className="text-red-500" />) and the AI assistant's category
     // icon, now that this card is independently billed like procurement.
     accent: {
@@ -275,51 +240,6 @@ export const APPLICATION_CATALOG_DATA: ApplicationCatalogItem[] = [
     },
     pricingModel: "paid",
     hasPriceLabel: true,
-    featuresDisplay: "checklist",
-    featureCount: 3,
-    hasPrimaryCta: true,
-    subscriptionStatus: "not_subscribed",
-  },
-  {
-    id: "madar-apps-tasks",
-    category: "madarApps",
-    icon: ListChecks,
-    accent: {
-      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
-      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
-    },
-    pricingModel: "paid",
-    hasPriceLabel: false,
-    featuresDisplay: "checklist",
-    featureCount: 3,
-    hasPrimaryCta: true,
-    subscriptionStatus: "not_subscribed",
-  },
-  {
-    id: "madar-apps-accounting",
-    category: "madarApps",
-    icon: Calculator,
-    accent: {
-      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
-      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
-    },
-    pricingModel: "paid",
-    hasPriceLabel: false,
-    featuresDisplay: "checklist",
-    featureCount: 3,
-    hasPrimaryCta: true,
-    subscriptionStatus: "not_subscribed",
-  },
-  {
-    id: "madar-apps-documents",
-    category: "madarApps",
-    icon: FileText,
-    accent: {
-      iconWrapperClassName: "bg-[#eef2f8] text-[#5b6b85]",
-      primaryButtonClassName: "bg-[#0b1738] text-white hover:bg-[#0b1738]/90",
-    },
-    pricingModel: "paid",
-    hasPriceLabel: false,
     featuresDisplay: "checklist",
     featureCount: 3,
     hasPrimaryCta: true,

@@ -825,17 +825,6 @@
         ],
         "primaryCta": "Subscribe now"
       },
-      "madar-apps-reports": {
-        "name": "Reports",
-        "shortDescription": "Ready-made reports and comprehensive analytics for your business performance in one place.",
-        "detailDescription": "Track your business performance through ready-made and custom reports that bring together your data from every active Madar app -- sales, campaigns, store, and POS -- with export and recurring scheduling.",
-        "features": [
-          "Ready-made reports for every active app",
-          "Export reports in multiple formats",
-          "Automatic recurring report scheduling"
-        ],
-        "primaryCta": "Subscribe now"
-      },
       "madar-apps-expenses": {
         "name": "Expenses",
         "shortDescription": "Track and categorize your business expenses easily in one place.",
@@ -845,39 +834,6 @@
           "Record and categorize expenses",
           "Link expenses to branches and categories",
           "Recurring expense reports"
-        ],
-        "primaryCta": "Subscribe now"
-      },
-      "madar-apps-tasks": {
-        "name": "Tasks",
-        "shortDescription": "Organize your team's tasks and track their completion as it happens.",
-        "detailDescription": "Create tasks for your team, set priorities and deadlines, and track the completion status of every task from a single board that brings together everything your team needs to focus on.",
-        "features": [
-          "Create tasks and assign them to the team",
-          "Set priorities and deadlines",
-          "Track completion status in real time"
-        ],
-        "primaryCta": "Subscribe now"
-      },
-      "madar-apps-accounting": {
-        "name": "Accounting",
-        "shortDescription": "Manage your finances and invoices in one place.",
-        "detailDescription": "Track accounting entries, invoices, suppliers, and customers, and issue your periodic financial reports -- profit and loss, and the balance sheet -- in compliance with ZATCA's requirements.",
-        "features": [
-          "Issue invoices and accounting entries",
-          "Track suppliers and customers",
-          "Ready-made financial reports (profit and loss)"
-        ],
-        "primaryCta": "Subscribe now"
-      },
-      "madar-apps-documents": {
-        "name": "Documents",
-        "shortDescription": "Store and organize your business documents in one secure place.",
-        "detailDescription": "Upload your important business documents -- contracts, invoices, and licenses -- and organize them into folders, with the ability to access and share them securely at any time.",
-        "features": [
-          "Upload documents and organize them into folders",
-          "Share documents securely",
-          "Quick search across all documents"
         ],
         "primaryCta": "Subscribe now"
       }
