@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { ROUTES } from "@/constants/routes"
@@ -12,6 +12,14 @@ import { useAuth } from "../hooks"
 interface GuestRouteProps {
   children: React.ReactNode
   redirectTo?: string
+}
+
+// A same-site path (one leading slash -- not two, and no scheme), so ?next= is never an open
+// redirect.
+// Built from a char code: these are arbitrary paths, not route literals.
+const PATH_SEPARATOR = String.fromCharCode(47)
+function isInternalPath(path: string) {
+  return path.startsWith(PATH_SEPARATOR) && !path.startsWith(PATH_SEPARATOR + PATH_SEPARATOR)
 }
 
 export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRouteProps) {
@@ -40,11 +48,27 @@ export function GuestRoute({ children, redirectTo = ROUTES.dashboard }: GuestRou
     (url) => pathname === url || pathname.startsWith(`${url}/`)
   )
 
+  // Whether this visitor was signed out at some point on this page -- i.e. any sign-in happened
+  // through this page's own form, which then owns the navigation. Someone who arrives already
+  // signed in never submits the form, so nothing would ever move them on (a ?next= link opened
+  // in a signed-in browser waited on this loading screen forever).
+  const wasSignedOutHere = useRef(false)
   useEffect(() => {
-    if (authStatus === "authenticated" && !hasZidInstall && !hasNext && !isRegisterPage) {
+    if (authStatus === "unauthenticated") wasSignedOutHere.current = true
+  }, [authStatus])
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return
+    if (!wasSignedOutHere.current && !hasZidInstall) {
+      const next = searchParams.get("next")
+      // Internal paths only -- never an open redirect to another site.
+      router.replace(next && isInternalPath(next) ? next : redirectTo)
+      return
+    }
+    if (!hasZidInstall && !hasNext && !isRegisterPage) {
       router.replace(redirectTo)
     }
-  }, [authStatus, hasZidInstall, hasNext, isRegisterPage, redirectTo, router])
+  }, [authStatus, hasZidInstall, hasNext, isRegisterPage, redirectTo, router, searchParams])
 
   // "loading" also covers an in-flight login()/register() call from this same page, not just
   // the initial session check (AuthProvider already blocks rendering until that first check
