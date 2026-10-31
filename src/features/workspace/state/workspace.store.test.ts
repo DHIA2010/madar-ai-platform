@@ -80,4 +80,26 @@ describe("useWorkspaceStore", () => {
     expect(state.availableOrganizations).toEqual([mockOrganization])
     expect(state.availableWorkspaces).toEqual([mockWorkspace])
   })
+
+  it("forgets a previous account's selection when another user adopts the browser", () => {
+    useWorkspaceStore.setState({
+      ownerUserId: "previous-user",
+      currentOrganization: mockOrganization,
+      currentWorkspace: mockWorkspace,
+      customOrganizations: [mockOrganization],
+      customWorkspaces: [mockWorkspace],
+    })
+
+    useWorkspaceStore.getState().adoptUser("new-user")
+
+    const state = useWorkspaceStore.getState()
+    expect(state.ownerUserId).toBe("new-user")
+    expect(state.currentOrganization).toBeNull()
+    expect(state.currentWorkspace).toBeNull()
+    expect(state.customOrganizations).toEqual([])
+    expect(state.customWorkspaces).toEqual([])
+    expect(JSON.parse(localStorage.getItem("workspace-context")!).state.ownerUserId).toBe(
+      "new-user"
+    )
+  })
 })

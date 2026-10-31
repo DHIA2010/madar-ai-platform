@@ -60,7 +60,7 @@ function mergeById<T extends { id: string }>(base: T[], additions: T[]): T[] {
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { workspaceApplicationService } = useApplicationServices()
-  const { authStatus } = useAuth()
+  const { authStatus, currentUser } = useAuth()
   const [configurationError, setConfigurationError] = useState<string | null>(null)
 
   const currentOrganization = useWorkspaceStore((state) => state.currentOrganization)
@@ -78,10 +78,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const removeCustomOrganization = useWorkspaceStore((state) => state.removeCustomOrganization)
   const addCustomWorkspace = useWorkspaceStore((state) => state.addCustomWorkspace)
   const setWorkspaceStatus = useWorkspaceStore((state) => state.setWorkspaceStatus)
+  const ownerUserId = useWorkspaceStore((state) => state.ownerUserId)
+  const adoptUser = useWorkspaceStore((state) => state.adoptUser)
 
   useEffect(() => {
     if (authStatus !== "authenticated") {
       setWorkspaceStatus("idle")
+      return
+    }
+    // The saved selection belongs to whoever last used this browser -- a different account
+    // signing in (by any route) starts clean instead of opening that account's workspace. This
+    // effect then re-runs with the cleared state.
+    if (currentUser?.id && ownerUserId !== currentUser.id) {
+      adoptUser(currentUser.id)
       return
     }
 
@@ -144,10 +153,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       cancelled = true
     }
   }, [
+    adoptUser,
     currentOrganization?.id,
+    currentUser?.id,
     currentWorkspace?.id,
     customOrganizations,
     customWorkspaces,
+    ownerUserId,
     authStatus,
     setAvailableOrganizations,
     setAvailableWorkspaces,

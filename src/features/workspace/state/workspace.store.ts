@@ -14,6 +14,9 @@ interface WorkspaceStoreState {
   availableOrganizations: Organization[]
   customWorkspaces: Workspace[]
   customOrganizations: Organization[]
+  // The user the persisted selection belongs to -- another account signing in on this browser
+  // must never inherit it (see adoptUser).
+  ownerUserId: string | null
   workspaceStatus: WorkspaceStatus
   setCurrentWorkspace: (workspace: Workspace | null) => void
   setCurrentOrganization: (organization: Organization | null) => void
@@ -24,6 +27,9 @@ interface WorkspaceStoreState {
   removeCustomOrganization: (organizationId: string) => void
   setWorkspaceStatus: (status: WorkspaceStatus) => void
   clearSelection: () => void
+  // A different user signed in: forget the previous account's selection and its locally added
+  // organizations/workspaces, so that account's own context is resolved fresh.
+  adoptUser: (userId: string) => void
 }
 
 const initialState = {
@@ -33,6 +39,7 @@ const initialState = {
   availableOrganizations: [],
   customWorkspaces: [],
   customOrganizations: [],
+  ownerUserId: null as string | null,
   workspaceStatus: "idle" as WorkspaceStatus,
 }
 
@@ -90,6 +97,18 @@ export const useWorkspaceStore = create<WorkspaceStoreState>()(
       clearSelection: () => {
         set({ currentOrganization: null, currentWorkspace: null })
       },
+
+      adoptUser: (userId) => {
+        set({
+          ownerUserId: userId,
+          currentOrganization: null,
+          currentWorkspace: null,
+          availableOrganizations: [],
+          availableWorkspaces: [],
+          customOrganizations: [],
+          customWorkspaces: [],
+        })
+      },
     }),
     {
       name: "workspace-context",
@@ -99,6 +118,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>()(
         currentOrganization: state.currentOrganization,
         customWorkspaces: state.customWorkspaces,
         customOrganizations: state.customOrganizations,
+        ownerUserId: state.ownerUserId,
       }),
     }
   )
