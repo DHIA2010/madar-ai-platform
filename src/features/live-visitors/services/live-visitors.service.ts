@@ -52,6 +52,7 @@ export interface LiveSummary {
   pageViews: number
   addToCarts: number
   productsAddedToCart: number
+  checkoutsStarted: number
   orders: number
   cartValue: number
   orderValue: number

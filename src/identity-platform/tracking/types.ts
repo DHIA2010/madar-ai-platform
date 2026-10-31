@@ -91,4 +91,7 @@ export interface RecordClickInput {
   geo?: TrackingGeoContext | null
   trafficSource?: string | null
   referrerDomain?: string | null
+  // Reported by a platform's servers (e.g. Salla's checkout events, via Madar's Salla App
+  // Function) rather than a visitor's browser: no live-visitor presence or attribution touchpoint.
+  serverSide?: boolean
 }

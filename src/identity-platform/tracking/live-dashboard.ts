@@ -21,6 +21,9 @@ export interface LiveDashboardSummary {
   pageViews: number
   addToCarts: number
   productsAddedToCart: number
+  // Checkouts started in the window -- Salla's arrive server-side from Madar's Salla App
+  // Function (the storefront has no checkout event), other platforms' from the SDK.
+  checkoutsStarted: number
   orders: number
   cartValue: number
   orderValue: number
@@ -130,6 +133,7 @@ export function summarize(input: {
 
   let pageViews = 0
   let addToCarts = 0
+  let checkoutsStarted = 0
   let orders = 0
   let cartValue = 0
   let orderValue = 0
@@ -155,6 +159,9 @@ export function summarize(input: {
         }
         break
       }
+      case "CHECKOUT_STARTED":
+        checkoutsStarted += 1
+        break
       case "PURCHASE": {
         orders += 1
         const revenue =
@@ -173,6 +180,7 @@ export function summarize(input: {
     pageViews,
     addToCarts,
     productsAddedToCart: addedProductIds.size,
+    checkoutsStarted,
     orders,
     // Rounded to cents: these are sums of merchant-supplied floats, which drift
     // (0.1 + 0.2) and would otherwise surface as 1245.7500000000002 in the UI.

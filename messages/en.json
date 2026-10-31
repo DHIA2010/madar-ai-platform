@@ -5852,6 +5852,9 @@
         "label": "Products added to cart",
         "hint": "Distinct products"
       },
+      "checkoutsNow": {
+        "label": "Checkouts now"
+      },
       "cartValueNow": {
         "label": "Cart value now"
       },

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { randomUUID, timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { URL } from "node:url"
 import { z } from "zod"
@@ -35,6 +35,7 @@ import { verifySallaWebhookSignature } from "../../salla-oauth/webhook-verificat
 import { SallaWebhookService, type SallaWebhookPayload } from "../../salla-oauth/webhook-service"
 import { SallaMarketplaceAutoProvisionService } from "../../salla-oauth/auto-provision-service"
 import { LoginLinkService } from "../../login-links/service"
+import { mapSallaAppEvent, type SallaAppEventBody } from "../../tracking/salla-app-events"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
@@ -1732,6 +1733,70 @@ export function createIdentityApiServer(
           { siteKey: await trackingService.ensureSiteKey(organizationId) },
           PUBLIC_CAPTURE_CORS_HEADERS
         )
+      }
+
+      // Salla customer events (checkout started, order completed) forwarded by Madar's Salla App
+      // Function -- server to server, authenticated by a key shared with that function. Off until
+      // SALLA_APP_FUNCTION_KEY is set. See tracking/salla-app-events.ts.
+      if (method === "POST" && url.pathname === "/v1/tracking/salla/app-events") {
+        const expectedKey = process.env.SALLA_APP_FUNCTION_KEY
+        if (!trackingService || !sallaOAuthRepositoryForTracking || !expectedKey) {
+          return send(503, {
+            code: "SALLA_APP_EVENTS_UNAVAILABLE",
+            message: "Salla app events are not configured.",
+          })
+        }
+        const providedKey = request.headers["x-madar-key"]
+        if (
+          typeof providedKey !== "string" ||
+          providedKey.length !== expectedKey.length ||
+          !timingSafeEqual(Buffer.from(providedKey), Buffer.from(expectedKey))
+        ) {
+          return send(401, { code: "UNAUTHORIZED", message: "Invalid key." })
+        }
+
+        const mapped = mapSallaAppEvent((await readJsonBody(request)) as SallaAppEventBody)
+        if (!mapped) return send(202, { recorded: false, reason: "unsupported_event" })
+        const organizationId = await sallaOAuthRepositoryForTracking.findOrganizationIdByStoreId(
+          mapped.storeId
+        )
+        if (!organizationId) return send(202, { recorded: false, reason: "store_not_connected" })
+
+        try {
+          await trackingService.recordEvent({
+            organizationId,
+            campaignId: null,
+            campaignLinkId: null,
+            eventType: mapped.eventType,
+            eventId: mapped.eventId,
+            visitorId: mapped.sessionId,
+            sessionId: mapped.sessionId,
+            utmSource: null,
+            utmMedium: null,
+            utmCampaign: null,
+            utmContent: null,
+            utmTerm: null,
+            landingUrl: null,
+            referrerUrl: null,
+            deviceType: null,
+            clickId: null,
+            clickIdPlatform: null,
+            platformCampaignId: null,
+            platformAdgroupId: null,
+            platformKeyword: null,
+            platformCreativeId: null,
+            customerRef: null,
+            properties: mapped.properties,
+            serverSide: true,
+          })
+        } catch (error) {
+          // The same checkout/order delivered twice -- already recorded once.
+          if ((error as { code?: string })?.code === "23505") {
+            return send(200, { recorded: false, reason: "duplicate" })
+          }
+          throw error
+        }
+        return send(200, { recorded: true })
       }
 
       // Matched before the domain route below. The two are unambiguous (this one has an extra

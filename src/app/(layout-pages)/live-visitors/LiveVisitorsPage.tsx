@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Activity,
+  CreditCard,
   DollarSign,
   Eye,
   Globe,
@@ -240,6 +241,13 @@ export default function LiveVisitorsPage() {
           hint={t("kpis.productsAddedToCart.hint")}
           icon={<ShoppingBag className="size-5 text-[#0d9488]" />}
           iconClassName="bg-[#f0fdfa]"
+        />
+        <KpiCard
+          label={t("kpis.checkoutsNow.label")}
+          value={String(summary?.checkoutsStarted ?? 0)}
+          hint={windowLabel}
+          icon={<CreditCard className="size-5 text-[#db2777]" />}
+          iconClassName="bg-[#fdf2f8]"
         />
         <KpiCard
           wide

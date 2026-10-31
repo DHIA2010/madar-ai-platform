@@ -97,6 +97,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Runs in Salla's App Functions runtime, in the shape its portal editor requires.
+    "salla-app-functions/**",
   ]),
   eslintConfigPrettier,
 ])

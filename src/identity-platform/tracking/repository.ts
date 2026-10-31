@@ -303,6 +303,61 @@ export class TrackingRepository {
   // How many commerce platforms this organization has actually connected. Counted across the
   // three storefront connectors rather than inferred from tracking data, because a platform is
   // "active" once it is connected -- a store with no visitors right now is still connected.
+  // A product this organization's connected stores already synced, matched by the id (or SKU) a
+  // storefront event carried -- Salla's add-to-cart event, for one, carries nothing but the id.
+  // Salla stores price as {amount, currency}, Zid as a number with a possibly per-language name,
+  // Shopify as its first variant's price (same shapes products/service.ts normalizes).
+  async findSyncedProduct(
+    organizationId: string,
+    productId: string
+  ): Promise<{ name: string | null; price: number | null; currency: string | null } | null> {
+    const result = await this.database.query<{ provider: string; payload: unknown }>(
+      `SELECT 'salla' AS provider, r.payload FROM salla_records r
+         JOIN salla_oauth_connections c ON c.id = r.connection_id
+        WHERE c.organization_id = $1 AND r.entity_type = 'products' AND r.entity_id = $2
+       UNION ALL
+       SELECT 'zid' AS provider, r.payload FROM zid_records r
+         JOIN zid_oauth_connections c ON c.id = r.connection_id
+        WHERE c.organization_id = $1 AND r.entity_type = 'products'
+          AND (r.entity_id = $2 OR r.payload->>'sku' = $2)
+       UNION ALL
+       SELECT 'shopify' AS provider, r.payload FROM shopify_records r
+         JOIN shopify_oauth_connections c ON c.id = r.connection_id
+        WHERE c.organization_id = $1 AND r.entity_type = 'products' AND r.entity_id = $2
+       LIMIT 1`,
+      [organizationId, productId]
+    )
+    const row = result.rows[0]
+    if (!row) return null
+    const payload = normalizeProperties(row.payload as Record<string, unknown> | null) ?? {}
+    const number = (value: unknown) => {
+      const parsed = typeof value === "string" ? Number(value) : value
+      return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null
+    }
+    if (row.provider === "salla") {
+      const price = payload.price as { amount?: unknown; currency?: unknown } | undefined
+      return {
+        name: typeof payload.name === "string" ? payload.name : null,
+        price: number(price?.amount),
+        currency: typeof price?.currency === "string" ? price.currency : null,
+      }
+    }
+    if (row.provider === "zid") {
+      const name = payload.name as string | { ar?: string; en?: string } | undefined
+      return {
+        name: typeof name === "string" ? name : (name?.ar ?? name?.en ?? null),
+        price: number(payload.price),
+        currency: typeof payload.currency === "string" ? payload.currency : null,
+      }
+    }
+    const variants = payload.variants as Array<{ price?: unknown }> | undefined
+    return {
+      name: typeof payload.title === "string" ? payload.title : null,
+      price: number(variants?.[0]?.price),
+      currency: null,
+    }
+  }
+
   async countConnectedCommercePlatforms(organizationId: string): Promise<number> {
     const result = await this.database.query<{
       salla: string | number

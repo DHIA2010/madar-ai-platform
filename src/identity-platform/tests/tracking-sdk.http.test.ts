@@ -931,3 +931,125 @@ describe("GET /v1/tracking/sdk-v1.0.0.js: Salla cart events use the real, confir
     expect(body).not.toContain("window.salla.event.on(")
   })
 })
+
+describe("Salla storefront events with only a product id, and Salla app events", () => {
+  async function connectSallaStore(accessToken: string, organizationId: string) {
+    const actor = await container.commands.resolveActorFromAccessToken(accessToken)
+    const connectionId = randomUUID()
+    await database.query(
+      `insert into salla_oauth_connections (
+         id, organization_id, workspace_id, project_id, status, provider_account_id,
+         created_by_user_id, updated_by_user_id, created_at, updated_at
+       ) values ($1, $2, $3, $4, 'connected', '778899', $5, $5, now(), now())`,
+      [connectionId, organizationId, actor.workspaceId, randomUUID(), actor.userId]
+    )
+    return connectionId
+  }
+
+  it("fills a Salla add-to-cart's product name and price from the synced product", async () => {
+    const { accessToken, organizationId } = await registerAndProvisionOrg(
+      "owner@salla-enrich.madar",
+      "Salla Enrich Org"
+    )
+    const connectionId = await connectSallaStore(accessToken, organizationId)
+    await database.query(
+      `insert into salla_records (id, connection_id, customer_id, entity_type, entity_id, record_date, payload)
+       values ($1, $2, '778899', 'products', '1688771041', current_date, $3::jsonb)`,
+      [
+        randomUUID(),
+        connectionId,
+        JSON.stringify({ name: "فستان", price: { amount: 289, currency: "SAR" } }),
+      ]
+    )
+
+    const response = await fetch(`${baseUrl}/v1/tracking/capture`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        siteKey: await getSiteKey(accessToken),
+        visitorId: "visitor-salla",
+        sessionId: "session-salla",
+        event: "add_to_cart",
+        eventId: "evt-salla-1",
+        pageUrl: "https://demostore.salla.sa/cart",
+        // All Salla's storefront add-to-cart event provides.
+        properties: { product_id: "1688771041" },
+      }),
+    })
+    expect(response.status).toBe(200)
+
+    const events = await database.query<{ properties: Record<string, unknown> }>(
+      `SELECT properties FROM tracking_events WHERE organization_id = $1`,
+      [organizationId]
+    )
+    expect(events.rows[0].properties).toMatchObject({
+      product_id: "1688771041",
+      product_name: "فستان",
+      price: 289,
+      currency: "SAR",
+    })
+  })
+
+  it("records checkouts and orders forwarded by the Salla App Function, keyed, once each", async () => {
+    process.env.SALLA_APP_FUNCTION_KEY = "test-function-key"
+    try {
+      const { accessToken, organizationId } = await registerAndProvisionOrg(
+        "owner@salla-app-events.madar",
+        "Salla App Events Org"
+      )
+      await connectSallaStore(accessToken, organizationId)
+      const post = (body: Record<string, unknown>, key?: string) =>
+        fetch(`${baseUrl}/v1/tracking/salla/app-events`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...(key ? { "x-madar-key": key } : {}) },
+          body: JSON.stringify(body),
+        })
+      const checkout = {
+        event: "Checkout Started",
+        merchant: 778899,
+        created_at: "2026-11-01T10:00:00Z",
+        data: { checkout_id: "chk-1", total: 289, currency: "SAR" },
+      }
+
+      expect((await post(checkout)).status).toBe(401)
+      expect((await post(checkout, "wrong-key-value!!")).status).toBe(401)
+      expect(await (await post(checkout, "test-function-key")).json()).toEqual({ recorded: true })
+      // Salla retries a delivery: recorded once.
+      expect(await (await post(checkout, "test-function-key")).json()).toMatchObject({
+        recorded: false,
+        reason: "duplicate",
+      })
+      await post(
+        {
+          event: "Order Completed",
+          merchant: "778899",
+          data: { order_id: "ord-1", total: { amount: 289, currency: "SAR" }, currency: "SAR" },
+        },
+        "test-function-key"
+      )
+      // Events Madar doesn't use are acknowledged, not recorded.
+      expect(
+        await (
+          await post({ event: "Cart Viewed", merchant: 778899, data: {} }, "test-function-key")
+        ).json()
+      ).toMatchObject({ recorded: false, reason: "unsupported_event" })
+
+      const dashboard = await fetch(`${baseUrl}/v1/tracking/live-dashboard`, {
+        headers: authHeaders(accessToken),
+      })
+      const body = (await dashboard.json()) as {
+        summary: {
+          checkoutsStarted: number
+          orders: number
+          orderValue: number
+          liveVisitors: number
+        }
+      }
+      expect(body.summary).toMatchObject({ checkoutsStarted: 1, orders: 1, orderValue: 289 })
+      // Server-side events are not visitors.
+      expect(body.summary.liveVisitors).toBe(0)
+    } finally {
+      delete process.env.SALLA_APP_FUNCTION_KEY
+    }
+  })
+})

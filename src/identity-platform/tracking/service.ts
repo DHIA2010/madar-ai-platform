@@ -130,10 +130,13 @@ export class TrackingService {
   // dwarf every other event type in volume) -- it only refreshes tracking_live_visitors.
   // attributions only gets a new touchpoint row for CLICK/PAGE_VIEW, matching the table's
   // existing purpose (order-attribution matching), not every granular e-commerce event.
-  async recordEvent(input: RecordClickInput): Promise<void> {
+  async recordEvent(rawInput: RecordClickInput): Promise<void> {
+    const input = await this.withSyncedProductDetails(rawInput)
     if (input.eventType !== "HEARTBEAT") {
       await this.repository.insertClickEvent(input)
     }
+
+    if (input.serverSide) return
 
     if (input.eventType === "CLICK" || input.eventType === "PAGE_VIEW") {
       await this.repository.insertAttribution(input)
@@ -156,6 +159,35 @@ export class TrackingService {
       campaign: input.utmCampaign ?? null,
       currentActivity: input.eventType,
     })
+  }
+
+  // A product event that names only an id (Salla's storefront add-to-cart event carries nothing
+  // else) gets its name and price from the store's synced product, so the live dashboard shows the
+  // product and counts its value. Whatever the storefront did send is kept as is.
+  private async withSyncedProductDetails(input: RecordClickInput): Promise<RecordClickInput> {
+    if (!PRODUCT_CONTEXT_EVENT_TYPES.has(input.eventType)) return input
+    const productId = readStringProperty(input.properties, "product_id")
+    const hasName = Boolean(readStringProperty(input.properties, "product_name"))
+    const hasPrice = typeof input.properties?.price === "number"
+    if (!productId || (hasName && hasPrice)) return input
+    try {
+      const product = await this.repository.findSyncedProduct(input.organizationId, productId)
+      if (!product) return input
+      return {
+        ...input,
+        properties: {
+          ...input.properties,
+          ...(hasName || !product.name ? {} : { product_name: product.name }),
+          ...(hasPrice || product.price === null ? {} : { price: product.price }),
+          ...(input.properties?.currency || !product.currency
+            ? {}
+            : { currency: product.currency }),
+        },
+      }
+    } catch {
+      // Enrichment is a nicety -- the event itself must still be recorded.
+      return input
+    }
   }
 
   async resolveOrganizationBySiteKey(siteKey: string): Promise<string | null> {
