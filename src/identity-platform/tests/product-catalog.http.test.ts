@@ -1138,3 +1138,133 @@ describe("POST /v1/products/images", () => {
     expect(response.status).toBe(401)
   })
 })
+
+describe("Products -> Categories", () => {
+  async function api<T = Record<string, unknown>>(
+    token: string,
+    method: string,
+    path: string,
+    body?: unknown
+  ) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: authHeaders(token),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    return { status: response.status, body: (await response.json()) as T }
+  }
+  type Category = {
+    id: string | null
+    name: string
+    sources: string[]
+    status: string
+    productCount: number
+  }
+  const list = async (token: string) =>
+    (await api<{ items: Category[] }>(token, "GET", "/v1/product-categories")).body.items
+
+  it("lists the categories products carry, with their source, count and status", async () => {
+    const { token } = await signIn("owner@categories-list.test", "Categories List Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+    await createProduct(token, { ...SIMPLE_PRODUCT, name: "قميص كتان", sku: "SKU-101" })
+
+    expect(await list(token)).toEqual([
+      {
+        id: null,
+        name: "ملابس",
+        sources: ["madar"],
+        status: "active",
+        productCount: 2,
+        createdAt: null,
+      },
+    ])
+  })
+
+  it("adds a Madar category, refuses a duplicate name, and deletes it while unused", async () => {
+    const { token } = await signIn("owner@categories-add.test", "Categories Add Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+
+    const created = await api<Category>(token, "POST", "/v1/product-categories", {
+      name: "  حلويات  ",
+    })
+    expect(created).toMatchObject({
+      status: 201,
+      body: { name: "حلويات", sources: ["madar"], status: "active", productCount: 0 },
+    })
+    // Names are compared without case or surrounding spaces, and products' categories count too.
+    expect((await api(token, "POST", "/v1/product-categories", { name: "حلويات" })).status).toBe(
+      409
+    )
+    expect((await api(token, "POST", "/v1/product-categories", { name: "ملابس" })).status).toBe(409)
+
+    expect((await list(token)).map((category) => category.name)).toEqual(["حلويات", "ملابس"])
+    expect((await api(token, "DELETE", `/v1/product-categories/${created.body.id}`)).status).toBe(
+      200
+    )
+    expect((await list(token)).map((category) => category.name)).toEqual(["ملابس"])
+  })
+
+  it("switches a category off and on, and never deletes one products still use", async () => {
+    const { token } = await signIn("owner@categories-status.test", "Categories Status Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+
+    expect(
+      (
+        await api(token, "PATCH", "/v1/product-categories/status", {
+          name: "ملابس",
+          status: "inactive",
+        })
+      ).status
+    ).toBe(200)
+    const [inactive] = await list(token)
+    expect(inactive).toMatchObject({ name: "ملابس", status: "inactive", productCount: 1 })
+    expect(inactive.id).toEqual(expect.any(String))
+
+    expect((await api(token, "DELETE", `/v1/product-categories/${inactive.id}`)).status).toBe(409)
+
+    await api(token, "PATCH", "/v1/product-categories/status", { name: "ملابس", status: "active" })
+    expect((await list(token))[0].status).toBe("active")
+    expect(
+      (
+        await api(token, "PATCH", "/v1/product-categories/status", {
+          name: "غير موجود",
+          status: "inactive",
+        })
+      ).status
+    ).toBe(404)
+  })
+
+  // Category is optional: a product saved without one, or with the cashier's "unspecified"
+  // placeholder, counts as uncategorized.
+  it("counts products without a category, including the cashier's unspecified placeholder", async () => {
+    const { token } = await signIn("owner@categories-uncat.test", "Categories Uncategorized Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+    await createProduct(token, {
+      ...SIMPLE_PRODUCT,
+      name: "غير",
+      sku: "SKU-103",
+      category: "غير محدد",
+    })
+    const blank = await api(token, "POST", "/v1/products", {
+      ...SIMPLE_PRODUCT,
+      name: "بدون فئة",
+      sku: "SKU-104",
+      category: "",
+    })
+    expect(blank.status).toBe(201)
+
+    const response = await api<{ uncategorizedCount: number }>(
+      token,
+      "GET",
+      "/v1/product-categories"
+    )
+    expect(response.body.uncategorizedCount).toBe(2)
+  })
+
+  it("keeps each organization's categories to itself", async () => {
+    const owner = await signIn("owner@categories-a.test", "Categories A Org")
+    const other = await signIn("owner@categories-b.test", "Categories B Org")
+    await api(owner.token, "POST", "/v1/product-categories", { name: "خاص" })
+    expect(await list(other.token)).toEqual([])
+  })
+})

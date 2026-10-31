@@ -1331,3 +1331,13 @@ export const syncComponentsSchema = z
   .refine((value) => value.products || value.orders || value.customers, {
     message: "Keep at least one component syncing.",
   })
+
+// Products -> Categories (see products/categories-service.ts).
+export const createProductCategorySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+})
+
+export const productCategoryStatusSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  status: z.enum(["active", "inactive"]),
+})

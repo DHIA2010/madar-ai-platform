@@ -67,6 +67,7 @@ import { PosShiftsService } from "../../pos/shifts-service"
 import { ProductsAggregationService } from "../../products/service"
 import { ProductCatalogRepository } from "../../products/catalog-repository"
 import { ProductCatalogService, toNormalizedProduct } from "../../products/catalog-service"
+import { countUncategorized, ProductCategoriesService } from "../../products/categories-service"
 import { SallaProductCreatePushService } from "../../products/salla-product-create-push-service"
 import { ZidProductCreatePushService } from "../../products/zid-product-create-push-service"
 import { ZidProductLinksService } from "../../products/zid-product-links-service"
@@ -238,6 +239,8 @@ import {
   sendChatMessageSchema,
   startApplicationTrialSchema,
   syncComponentsSchema,
+  createProductCategorySchema,
+  productCategoryStatusSchema,
   activateFreeApplicationSchema,
   createSupplierSchema,
   bulkUpdateSupplierStatusSchema,
@@ -832,6 +835,41 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  const productCategoriesService = container.infrastructure.database
+    ? new ProductCategoriesService(container.infrastructure.database)
+    : null
+
+  // The one product list every surface shows: products authored here plus each connected store's
+  // synced products. A promoted/linked native row stays a real, editable, stock-tracked product
+  // (isNative: true, untouched) -- only its displayed `platform` changes, from "Madar" to wherever
+  // it actually came from, so it reads as what it is instead of looking indistinguishable from a
+  // product authored directly in Madar. Shared by GET /v1/products and the categories routes, so a
+  // category's product count and source always match the products list.
+  async function listMergedProducts(
+    actor: Parameters<ProductsAggregationService["listProducts"]>[0]
+  ) {
+    if (!productsAggregationService || !productCatalogService) return []
+    const [synced, native, sallaLinkedProductIds, zidLinkedProductIds] = await Promise.all([
+      productsAggregationService.listProducts(actor),
+      productCatalogService.list(actor.organizationId, actor.workspaceId),
+      productsAggregationService.fetchLinkedNativeProductIds(
+        "salla_product_links",
+        actor.organizationId
+      ),
+      productsAggregationService.fetchLinkedNativeProductIds(
+        "zid_product_links",
+        actor.organizationId
+      ),
+    ])
+    const nativeItems = native.map(toNormalizedProduct).map((item) => {
+      if (sallaLinkedProductIds.has(item.id)) return { ...item, platform: "Salla" as const }
+      if (zidLinkedProductIds.has(item.id)) return { ...item, platform: "Zid" as const }
+      return item
+    })
+    return [...nativeItems, ...synced].sort((left, right) =>
+      right.activityDate.localeCompare(left.activityDate)
+    )
+  }
   const customersAggregationService = container.infrastructure.database
     ? new CustomersAggregationService(container.infrastructure.database)
     : null
@@ -4809,32 +4847,7 @@ export function createIdentityApiServer(
           // Products authored here and products synced from a storefront are one list to the
           // user, so both sources are merged and re-sorted by activity rather than returned as
           // two separate feeds the client would have to stitch together.
-          const [synced, native, sallaLinkedProductIds, zidLinkedProductIds] = await Promise.all([
-            productsAggregationService.listProducts(actor),
-            productCatalogService.list(actor.organizationId, actor.workspaceId),
-            productsAggregationService.fetchLinkedNativeProductIds(
-              "salla_product_links",
-              actor.organizationId
-            ),
-            productsAggregationService.fetchLinkedNativeProductIds(
-              "zid_product_links",
-              actor.organizationId
-            ),
-          ])
-
-          // A promoted/linked native row stays a real, editable, stock-tracked product
-          // (isNative: true, untouched) -- only its displayed `platform` changes, from "Madar" to
-          // wherever it actually came from, so it reads as what it is instead of looking
-          // indistinguishable from a product authored directly in Madar.
-          const nativeItems = native.map(toNormalizedProduct).map((item) => {
-            if (sallaLinkedProductIds.has(item.id)) return { ...item, platform: "Salla" as const }
-            if (zidLinkedProductIds.has(item.id)) return { ...item, platform: "Zid" as const }
-            return item
-          })
-
-          const items = [...nativeItems, ...synced].sort((left, right) =>
-            right.activityDate.localeCompare(left.activityDate)
-          )
+          const items = await listMergedProducts(actor)
 
           return send(200, { items })
         }
@@ -4857,6 +4870,69 @@ export function createIdentityApiServer(
               product: payload,
             })
           )
+        }
+      }
+
+      // Products -> Categories: every category the workspace's products carry plus the ones created
+      // here, with each one's status (inactive ones are hidden from the cashier). See
+      // products/categories-service.ts.
+      if (
+        url.pathname === "/v1/product-categories" ||
+        url.pathname.startsWith("/v1/product-categories/")
+      ) {
+        if (!productCategoriesService) {
+          return send(503, {
+            code: "PRODUCT_CATEGORIES_UNAVAILABLE",
+            message: "Product categories are unavailable in memory mode.",
+          })
+        }
+        const scope = { organizationId: actor.organizationId, workspaceId: actor.workspaceId }
+        if (method === "GET" && url.pathname === "/v1/product-categories") {
+          if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+          const products = await listMergedProducts(actor)
+          return send(200, {
+            items: await productCategoriesService.list(
+              scope.organizationId,
+              scope.workspaceId,
+              products
+            ),
+            uncategorizedCount: countUncategorized(products),
+          })
+        }
+        if (method === "POST" && url.pathname === "/v1/product-categories") {
+          if (!actor.modulePermissions.includes("products:create")) throw ERRORS.forbidden()
+          const { name } = createProductCategorySchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await productCategoriesService.create({
+              ...scope,
+              name,
+              userId: actor.userId,
+              products: await listMergedProducts(actor),
+            })
+          )
+        }
+        if (method === "PATCH" && url.pathname === "/v1/product-categories/status") {
+          if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+          const { name, status } = productCategoryStatusSchema.parse(await readJsonBody(request))
+          await productCategoriesService.setStatus({
+            ...scope,
+            name,
+            status,
+            userId: actor.userId,
+            products: await listMergedProducts(actor),
+          })
+          return send(200, { ok: true })
+        }
+        const categoryIdMatch = url.pathname.match(/^\/v1\/product-categories\/([0-9a-f-]{36})$/)
+        if (method === "DELETE" && categoryIdMatch) {
+          if (!actor.modulePermissions.includes("products:delete")) throw ERRORS.forbidden()
+          await productCategoriesService.remove({
+            ...scope,
+            id: categoryIdMatch[1],
+            products: await listMergedProducts(actor),
+          })
+          return send(200, { ok: true })
         }
       }
 

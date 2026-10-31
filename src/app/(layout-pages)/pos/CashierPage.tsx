@@ -90,6 +90,7 @@ import {
   type PaymentKind,
 } from "@/features/pos/services/pos-payment-methods.service"
 import {
+  productCategoryService,
   productListService,
   type ProductDetail,
   type ProductRecord,
@@ -742,6 +743,41 @@ export default function CashierPage() {
   // --- Real products + categories -------------------------------------------------------------
 
   const [products, setProducts] = useState<ProductRecord[]>([])
+  // Categories switched off in Products -> Categories, lowercased -- they and their products stay
+  // out of the cashier. Cached like the products themselves, so it holds offline too.
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!currentWorkspace) return
+    void fetchWithOfflineFallback(
+      currentWorkspace.id,
+      "product-categories",
+      () => productCategoryService.list(),
+      !isOnline
+    )
+      .then((categories) =>
+        setHiddenCategories(
+          new Set(
+            categories
+              .filter((category) => category.status === "inactive")
+              .map((category) => category.name.trim().toLowerCase())
+          )
+        )
+      )
+      .catch(() => setHiddenCategories(new Set()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspace?.id, isOnline])
+  // A hidden category only leaves the browsing side of the screen (the categories panel and the
+  // default grid). Searching by name/SKU or scanning a barcode still reaches its products, so a
+  // cashier can always sell an item they know is there.
+  const browsableProducts = useMemo(
+    () =>
+      hiddenCategories.size === 0
+        ? products
+        : products.filter(
+            (product) => !hiddenCategories.has((product.category ?? "").trim().toLowerCase())
+          ),
+    [products, hiddenCategories]
+  )
   const [loadingProducts, setLoadingProducts] = useState(true)
   useEffect(() => {
     if (!currentWorkspace) return
@@ -803,9 +839,9 @@ export default function CashierPage() {
   // Built from whatever categories the real products actually carry -- not a fixed list, since
   // pos_invoices/products has no seeded taxonomy to match a fixed set against.
   const categories = useMemo(() => {
-    const set = new Set(products.map((product) => product.category).filter(Boolean))
+    const set = new Set(browsableProducts.map((product) => product.category).filter(Boolean))
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ar"))
-  }, [products])
+  }, [browsableProducts])
 
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [search, setSearch] = useState("")
@@ -870,12 +906,12 @@ export default function CashierPage() {
 
   const filteredProducts = useMemo(() => {
     const query = search.trim()
-    return products.filter((product) => {
+    return (query ? products : browsableProducts).filter((product) => {
       const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
       const matchesQuery = !query || product.name.includes(query) || product.sku.includes(query)
       return matchesCategory && matchesQuery && product.status === "Active"
     })
-  }, [products, selectedCategory, search])
+  }, [products, browsableProducts, selectedCategory, search])
 
   // The local product list only ever carries a variable product's PARENT sku -- each real
   // combination (product_variants.sku) has its own code the aggregated list never includes, so

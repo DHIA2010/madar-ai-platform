@@ -1030,7 +1030,6 @@ export default function AddProduct() {
 
   const errors = {
     name: name.trim() ? null : tForm("errors.fieldRequired", { label: type.nameLabel }),
-    category: category.trim() ? null : tForm("errors.categoryRequired"),
     workspaceId: productWorkspaceId ? null : tForm("errors.workspaceRequired"),
     sku: !showsSku || sku.trim() ? null : tForm("errors.fieldRequired", { label: type.skuLabel }),
     description:
@@ -1488,11 +1487,7 @@ export default function AddProduct() {
                   />
                 </Field>
 
-                <Field
-                  label={tForm("basicInfo.categoryLabel")}
-                  required
-                  error={showErrors ? errors.category : null}
-                >
+                <Field label={tForm("basicInfo.categoryLabel")}>
                   {/* Creatable: a category is just a name carried on the product, so a new one
                       is typed here and joins the list once a product using it is saved. The
                       control handles an empty catalogue on its own -- with nothing to pick

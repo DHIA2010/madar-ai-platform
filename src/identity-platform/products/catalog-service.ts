@@ -228,11 +228,8 @@ export class ProductCatalogService {
             productType,
             name,
             sku: row.sku?.trim() || null,
-            // Unlike every other optional column, create() requires a category unconditionally
-            // (validateProduct below) regardless of product type -- a blank cell defaults to
-            // "عام" (general) rather than skipping the whole row over what is, for a quick bulk
-            // import, a genuinely cosmetic field.
-            category: row.category?.trim() || "عام",
+            // Category is optional -- a blank cell leaves the product uncategorized.
+            category: row.category?.trim() || "",
             description: row.description?.trim() || "",
             status,
             currency: "SAR",
@@ -442,7 +439,6 @@ function validateProduct(product: CreateProductInput): Record<string, string> {
   const fields: Record<string, string> = {}
 
   if (!product.name) fields.name = "Name is required."
-  if (!product.category) fields.category = "Category is required."
 
   const carriesSku = !TYPES_WITHOUT_SKU.includes(product.productType)
   if (carriesSku && !product.sku) {

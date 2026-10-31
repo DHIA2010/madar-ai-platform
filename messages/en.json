@@ -69,7 +69,9 @@
       "ai": "AI",
       "integrations": "Integrations",
       "administration": "Administration",
-      "settings": "Settings"
+      "settings": "Settings",
+      "productsList": "Products list",
+      "productCategories": "Categories"
     }
   },
   "auth": {
@@ -2189,7 +2191,6 @@
       },
       "errors": {
         "fieldRequired": "{label} is required",
-        "categoryRequired": "Category is required",
         "workspaceRequired": "Workspace is required",
         "descriptionRequired": "Product description is required",
         "componentsRequired": "Add at least one component with the required quantity",
@@ -8311,6 +8312,79 @@
       "closeShiftButton": "Close shift",
       "alreadyClosedLabel": "This shift has been closed",
       "printButton": "Print shift report"
+    }
+  },
+  "productCategories": {
+    "heading": "Categories",
+    "subheading": "All your product categories from Madar and your connected stores. Switch a category off to hide it and its products from the cashier.",
+    "kpis": {
+      "total": "Total categories",
+      "active": "Active categories",
+      "hidden": "Hidden from cashier",
+      "products": "Categorized products",
+      "uncategorized": "Uncategorized products"
+    },
+    "searchPlaceholder": "Search by category name...",
+    "filters": {
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "source": "Source",
+      "allSources": "All sources"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "sources": {
+      "madar": "Madar",
+      "salla": "Salla",
+      "zid": "Zid",
+      "shopify": "Shopify"
+    },
+    "cashier": {
+      "shown": "Shown in cashier",
+      "hidden": "Hidden from cashier"
+    },
+    "add": "Add category",
+    "delete": "Delete",
+    "table": {
+      "category": "Category",
+      "source": "Source",
+      "products": "Products",
+      "status": "Status",
+      "cashier": "Cashier visibility",
+      "actions": "Actions"
+    },
+    "loading": "Loading categories...",
+    "empty": {
+      "title": "No categories yet",
+      "description": "Add a category, or your products' categories will appear here automatically.",
+      "noMatchTitle": "No matching categories",
+      "noMatchDescription": "Try a different search or filters."
+    },
+    "showingCount": "Showing {shown} of {total} categories",
+    "addDialog": {
+      "title": "Add a new category",
+      "description": "The category is added and is available to your products and in the cashier right away.",
+      "nameLabel": "Category name",
+      "namePlaceholder": "e.g. Cold drinks",
+      "hint": "It will be added with the Madar source.",
+      "submit": "Add"
+    },
+    "deleteDialog": {
+      "title": "Delete the category \"{name}\"?",
+      "description": "This category will be deleted from Madar. Only unused categories created in Madar can be deleted."
+    },
+    "toasts": {
+      "loadFailed": "Couldn't load categories.",
+      "shown": "\"{name}\" is now shown in the cashier.",
+      "hidden": "\"{name}\" and its products are now hidden from the cashier.",
+      "statusFailed": "Couldn't change the category's status.",
+      "added": "\"{name}\" was added.",
+      "exists": "A category with this name already exists.",
+      "addFailed": "Couldn't add the category.",
+      "deleted": "\"{name}\" was deleted.",
+      "deleteFailed": "Couldn't delete the category."
     }
   }
 }

@@ -43,6 +43,7 @@ import {
   Radio,
   Truck,
   List,
+  Tags,
   PackageSearch,
   RotateCcw,
   Wallet,
@@ -138,10 +139,14 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     // ecommerce-only merchant needs Invoices too -- neither belongs to exactly one application.
     {
       title: t("products"),
-      url: "/products",
+      url: ROUTES.products,
       icon: <Grid2x2 className="text-sky-500" />,
       permission: "products:view",
       applications: ["ecommerce", "pos"],
+      items: [
+        { title: t("productsList"), url: ROUTES.products, icon: <List /> },
+        { title: t("productCategories"), url: ROUTES.productCategories, icon: <Tags /> },
+      ],
     },
     // Gated on the dedicated "procurement" app (Supply & Purchase), not ecommerce/pos -- these
     // used to ride free on either of those, but now require their own subscription (see

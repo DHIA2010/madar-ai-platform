@@ -405,3 +405,52 @@ export const productListService = {
     >([PRODUCTS_ENDPOINT, "status"].join(PATH_SEPARATOR), { ids, status })
   },
 }
+
+// Products -> Categories. Built server-side from every category the workspace's products carry
+// plus the ones created in Madar; an inactive category -- and its products -- is hidden from the
+// cashier. Mirrors products/categories-service.ts on the backend.
+export type ProductCategorySource = "madar" | "salla" | "zid" | "shopify"
+export type ProductCategoryStatus = "active" | "inactive"
+
+export interface ProductCategory {
+  // Null for a category known only from its products (active until changed).
+  id: string | null
+  name: string
+  sources: ProductCategorySource[]
+  status: ProductCategoryStatus
+  productCount: number
+  createdAt: string | null
+}
+
+const CATEGORIES_ENDPOINT = ["", "v1", "product-categories"].join(PATH_SEPARATOR)
+
+export interface ProductCategoriesOverview {
+  items: ProductCategory[]
+  // Products with no category (or the cashier quick-add's "unspecified").
+  uncategorizedCount: number
+}
+
+export const productCategoryService = {
+  async list(): Promise<ProductCategory[]> {
+    return (await this.overview()).items
+  },
+
+  async overview(): Promise<ProductCategoriesOverview> {
+    return client.get<ProductCategoriesOverview>(CATEGORIES_ENDPOINT)
+  },
+
+  async create(name: string): Promise<ProductCategory> {
+    return client.post<{ name: string }, ProductCategory>(CATEGORIES_ENDPOINT, { name })
+  },
+
+  async setStatus(name: string, status: ProductCategoryStatus): Promise<void> {
+    await client.patch<{ name: string; status: ProductCategoryStatus }, unknown>(
+      [CATEGORIES_ENDPOINT, "status"].join(PATH_SEPARATOR),
+      { name, status }
+    )
+  },
+
+  async remove(id: string): Promise<void> {
+    await client.delete<unknown>([CATEGORIES_ENDPOINT, id].join(PATH_SEPARATOR))
+  },
+}

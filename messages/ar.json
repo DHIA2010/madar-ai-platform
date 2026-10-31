@@ -69,7 +69,9 @@
       "ai": "الذكاء الاصطناعي",
       "integrations": "التكاملات",
       "administration": "الإدارة",
-      "settings": "الإعدادات"
+      "settings": "الإعدادات",
+      "productsList": "قائمة المنتجات",
+      "productCategories": "التصنيفات"
     }
   },
   "auth": {
@@ -2189,7 +2191,6 @@
       },
       "errors": {
         "fieldRequired": "{label} مطلوب",
-        "categoryRequired": "الفئة مطلوبة",
         "workspaceRequired": "مساحة العمل مطلوبة",
         "descriptionRequired": "وصف المنتج مطلوب",
         "componentsRequired": "أضف مكوناً واحداً على الأقل مع الكمية المطلوبة",
@@ -8307,6 +8308,79 @@
       "closeShiftButton": "إغلاق الوردية",
       "alreadyClosedLabel": "تم إغلاق هذه الوردية",
       "printButton": "طباعة تقرير الوردية"
+    }
+  },
+  "productCategories": {
+    "heading": "التصنيفات",
+    "subheading": "كل تصنيفات منتجاتك من مدار ومن متاجرك المربوطة. أوقف أي تصنيف لإخفائه مع منتجاته من الكاشير.",
+    "kpis": {
+      "total": "إجمالي التصنيفات",
+      "active": "تصنيفات نشطة",
+      "hidden": "مخفية عن الكاشير",
+      "products": "منتجات مصنّفة",
+      "uncategorized": "منتجات بدون تصنيف"
+    },
+    "searchPlaceholder": "ابحث باسم التصنيف...",
+    "filters": {
+      "status": "الحالة",
+      "allStatuses": "كل الحالات",
+      "source": "المصدر",
+      "allSources": "كل المصادر"
+    },
+    "status": {
+      "active": "نشط",
+      "inactive": "غير نشط"
+    },
+    "sources": {
+      "madar": "مدار",
+      "salla": "سلة",
+      "zid": "زد",
+      "shopify": "شوبيفاي"
+    },
+    "cashier": {
+      "shown": "يظهر في الكاشير",
+      "hidden": "مخفي عن الكاشير"
+    },
+    "add": "إضافة تصنيف",
+    "delete": "حذف",
+    "table": {
+      "category": "التصنيف",
+      "source": "المصدر",
+      "products": "المنتجات",
+      "status": "الحالة",
+      "cashier": "الظهور في الكاشير",
+      "actions": "إجراءات"
+    },
+    "loading": "جارٍ تحميل التصنيفات...",
+    "empty": {
+      "title": "لا توجد تصنيفات بعد",
+      "description": "أضف تصنيفاً جديداً، أو ستظهر هنا تصنيفات منتجاتك تلقائياً.",
+      "noMatchTitle": "لا توجد نتائج مطابقة",
+      "noMatchDescription": "جرّب تعديل البحث أو الفلاتر."
+    },
+    "showingCount": "عرض {shown} من {total} تصنيف",
+    "addDialog": {
+      "title": "إضافة تصنيف جديد",
+      "description": "يُضاف التصنيف ويصبح متاحاً لمنتجاتك وفي الكاشير مباشرة.",
+      "nameLabel": "اسم التصنيف",
+      "namePlaceholder": "مثال: مشروبات باردة",
+      "hint": "سيُضاف بمصدر مدار.",
+      "submit": "إضافة"
+    },
+    "deleteDialog": {
+      "title": "حذف التصنيف \"{name}\"؟",
+      "description": "سيُحذف هذا التصنيف من مدار. يمكن حذف التصنيفات غير المستخدمة التي أُنشئت في مدار فقط."
+    },
+    "toasts": {
+      "loadFailed": "تعذر تحميل التصنيفات.",
+      "shown": "أصبح \"{name}\" ظاهراً في الكاشير.",
+      "hidden": "تم إخفاء \"{name}\" ومنتجاته من الكاشير.",
+      "statusFailed": "تعذر تغيير حالة التصنيف.",
+      "added": "تمت إضافة \"{name}\".",
+      "exists": "يوجد تصنيف بنفس الاسم.",
+      "addFailed": "تعذر إضافة التصنيف.",
+      "deleted": "تم حذف \"{name}\".",
+      "deleteFailed": "تعذر حذف التصنيف."
     }
   }
 }

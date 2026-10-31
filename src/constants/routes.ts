@@ -16,6 +16,7 @@ export const ROUTES = {
   marketplaceBillingCheckout: "/marketplace/billing/checkout",
   stores: "/stores",
   products: "/products",
+  productCategories: "/products/categories",
   productsAdd: "/eCommerce/add-product",
   orders: "/orders",
   ordersCreate: "/orders/new",
