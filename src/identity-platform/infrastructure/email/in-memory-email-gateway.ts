@@ -30,7 +30,12 @@ export class InMemoryEmailGateway implements EmailGateway {
   }
 
   async sendStoreWelcomeEmail(input: StoreWelcomeEmail) {
-    this.sent.push({ kind: "store_welcome", ...input, password: input.password ?? "" })
+    this.sent.push({
+      kind: "store_welcome",
+      ...input,
+      password: input.password ?? "",
+      signInUrl: input.signInUrl ?? "",
+    })
   }
 
   async sendRenewalReminderEmail(input: RenewalReminderEmail) {

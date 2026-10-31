@@ -41,6 +41,8 @@ beforeEach(() => {
       >),
       loginUrl: "https://app.madar.test/auth/basic/login",
       scheduleSync,
+      createLoginLink: async (input) =>
+        `https://app.madar.test/login-link/for-${input.userId}-${input.connectionId}`,
     }
   )
 })
@@ -75,6 +77,8 @@ describe("Salla App Store auto-provisioning", () => {
       email: "owner@store.test",
       storeName: "متجر النخبة",
       loginUrl: "https://app.madar.test/auth/basic/login",
+      // The button signs this account straight in, opening the store's connection.
+      signInUrl: `https://app.madar.test/login-link/for-${user!.id}-connection-1`,
     })
     // The emailed password actually signs in.
     expect(deps.hasher.verify(email.password, user!.passwordHash)).toBe(true)

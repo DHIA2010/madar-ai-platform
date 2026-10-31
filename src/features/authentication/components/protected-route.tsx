@@ -49,8 +49,10 @@ export function ProtectedRoute({
     if (
       authStatus === "authenticated" &&
       requireWorkspace &&
-      workspaceStatus !== "loading" &&
-      workspaceStatus !== "switching" &&
+      // Only once the workspace has finished resolving: the store starts "idle", and this effect
+      // runs before the provider's (it's a child), so a fresh page load with no saved workspace
+      // was bounced to the picker before its own workspace had a chance to load.
+      (workspaceStatus === "ready" || workspaceStatus === "error") &&
       !currentWorkspace
     ) {
       router.replace(ROUTES.workspaceSelect)

@@ -15,13 +15,14 @@ export function storeWelcomeText(input: StoreWelcomeEmail): string {
         `البريد الإلكتروني: ${input.email}`,
         `كلمة المرور: ${input.password}`,
         `رابط مدار: ${input.loginUrl}`,
+        ...(input.signInUrl ? [`الدخول بنقرة واحدة: ${input.signInUrl}`] : []),
         "يمكنك تغيير كلمة المرور في أي وقت من الإعدادات.",
         "",
         `Your MADAR account for ${input.storeName} is ready. Email: ${input.email} / Password: ${input.password}. Sign in: ${input.loginUrl}`,
       ].join("\n")
     : [
         intro,
-        `تمت إضافة المتجر إلى حسابك الحالي (${input.email}). سجّل الدخول من: ${input.loginUrl}`,
+        `تمت إضافة المتجر إلى حسابك الحالي (${input.email}). سجّل الدخول من: ${input.signInUrl ?? input.loginUrl}`,
         "",
         `${input.storeName} was connected to your existing MADAR account. Sign in: ${input.loginUrl}`,
       ].join("\n")

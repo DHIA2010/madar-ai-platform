@@ -291,6 +291,16 @@ export class MockAuthenticationGateway implements AuthenticationGateway {
     }
   }
 
+  async consumeLoginLink(token: string): Promise<ConsumeZidAutoLoginResponseDto> {
+    if (!token) {
+      throw new ValidationError({ code: "login_link_required", message: "Token is required." })
+    }
+    const user = createMockUser("merchant@salla-store.example")
+    const session = createSession(user, true)
+    this.sessionsByRefreshToken.set(session.refreshToken.token, { session, user })
+    return { user, session, redirectUrl: "/integrations" }
+  }
+
   async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
     const user = createMockUser("mock.user@madar.local")
     return { ...user, fullName: payload.fullName ?? user.fullName }

@@ -73,6 +73,8 @@ export interface StoreWelcomeEmail {
   platformName: string
   storeName: string
   loginUrl: string
+  // One-click sign-in into the store's account (the button); falls back to loginUrl.
+  signInUrl: string | null
   password: string | null
 }
 

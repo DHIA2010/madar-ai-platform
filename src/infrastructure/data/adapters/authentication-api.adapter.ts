@@ -312,6 +312,29 @@ export class AuthenticationApiAdapter {
     }
   }
 
+  async consumeLoginLink(token: string): Promise<ConsumeZidAutoLoginResponseDto> {
+    const response = await this.client.post<
+      Record<string, never>,
+      IdentityLoginResponse & { redirectUrl: string }
+    >(`/v1/auth/login-links/${encodeURIComponent(token)}/consume`, {})
+    return {
+      user: {
+        id: response.user.id,
+        email: response.user.email,
+        fullName: response.user.fullName,
+        avatarUrl: response.user.avatarUrl ?? null,
+        emailVerified: true,
+        roles: mapRoles(["owner"]),
+        permissions: mapPermissions(["owner"]),
+        modulePermissions: response.user.modulePermissions ?? [],
+        // Same issueSessionForMember caveat as login() above.
+        isPlatformAdmin: false,
+      },
+      session: mapSession(response.session),
+      redirectUrl: response.redirectUrl,
+    }
+  }
+
   async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
     const response = await this.client.patch<UpdateProfileRequestDto, IdentityProfileResponse>(
       "/v1/identity/profile",

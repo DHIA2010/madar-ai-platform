@@ -206,6 +206,19 @@ export class DataAuthenticationRepository implements AuthenticationRepository {
     }
   }
 
+  async consumeLoginLink(token: string): Promise<ConsumeZidAutoLoginResponseDto> {
+    try {
+      const backend = resolveAuthenticationBackend()
+      if (backend === "mock") {
+        return this.fallback.consumeLoginLink(token)
+      }
+
+      return await this.adapter.consumeLoginLink(token)
+    } catch (error) {
+      throw mapAuthenticationRepositoryError(error)
+    }
+  }
+
   async updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {
     try {
       const backend = resolveAuthenticationBackend()

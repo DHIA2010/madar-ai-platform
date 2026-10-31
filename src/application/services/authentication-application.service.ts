@@ -18,6 +18,7 @@ import type {
 } from "../contracts"
 import { GetCurrentUserQuery } from "../queries"
 import {
+  ConsumeLoginLinkUseCase,
   ConsumeZidAutoLoginUseCase,
   LoginUseCase,
   LogoutUseCase,
@@ -32,6 +33,7 @@ export class AuthenticationApplicationService {
   private readonly logoutUseCase: LogoutUseCase
   private readonly getCurrentUserQuery: GetCurrentUserQuery
   private readonly consumeZidAutoLoginUseCase: ConsumeZidAutoLoginUseCase
+  private readonly consumeLoginLinkUseCase: ConsumeLoginLinkUseCase
 
   constructor(
     private readonly gateway: AuthGateway,
@@ -43,6 +45,7 @@ export class AuthenticationApplicationService {
     this.logoutUseCase = new LogoutUseCase(gateway, sessionStorage)
     this.getCurrentUserQuery = new GetCurrentUserQuery(gateway)
     this.consumeZidAutoLoginUseCase = new ConsumeZidAutoLoginUseCase(gateway, sessionStorage)
+    this.consumeLoginLinkUseCase = new ConsumeLoginLinkUseCase(gateway, sessionStorage)
   }
 
   restoreSession(): Promise<AuthSessionViewModel | null> {
@@ -96,6 +99,10 @@ export class AuthenticationApplicationService {
 
   consumeZidAutoLogin(handoffToken: string) {
     return this.consumeZidAutoLoginUseCase.execute(handoffToken)
+  }
+
+  consumeLoginLink(token: string) {
+    return this.consumeLoginLinkUseCase.execute(token)
   }
 
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto> {

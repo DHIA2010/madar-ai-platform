@@ -217,7 +217,7 @@ export class ResendEmailGateway implements EmailGateway {
           ${credentials}
         </div>`,
         ctaLabel: "الدخول إلى مدار",
-        ctaUrl: input.loginUrl,
+        ctaUrl: input.signInUrl ?? input.loginUrl,
       }),
     })
   }

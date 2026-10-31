@@ -47,6 +47,13 @@ export interface SallaAutoProvisionDeps {
     userId: string
     connectionId: string
   }) => Promise<void>
+  // A one-click sign-in link into this account and organization, opening the store's
+  // connection -- the welcome e-mail's button. Optional: without it the button opens sign-in.
+  createLoginLink?: (input: {
+    userId: string
+    organizationId: string
+    connectionId: string
+  }) => Promise<string>
 }
 
 export type SallaAutoProvisionOutcome = "created" | "linked" | "claim_required"
@@ -100,7 +107,7 @@ export class SallaMarketplaceAutoProvisionService {
       return "claim_required"
     }
     await this.enableEcommerce(membership.organizationId)
-    await this.connect(install, {
+    const connection = await this.connect(install, {
       userId,
       sessionId: randomUUID(),
       organizationId: membership.organizationId,
@@ -108,7 +115,12 @@ export class SallaMarketplaceAutoProvisionService {
       roles: [membership.role],
       modulePermissions: [],
     })
-    await this.sendWelcome({ email, storeName: install.storeName, password: null })
+    await this.sendWelcome({
+      email,
+      storeName: install.storeName,
+      password: null,
+      signInUrl: await this.loginLink(userId, connection),
+    })
     return "linked"
   }
 
@@ -170,7 +182,7 @@ export class SallaMarketplaceAutoProvisionService {
     await this.deps.users.save(user.toState())
     await this.deps.memberships.save(membership.toState())
 
-    await this.connect(install, {
+    const connection = await this.connect(install, {
       userId,
       sessionId: randomUUID(),
       organizationId,
@@ -178,7 +190,12 @@ export class SallaMarketplaceAutoProvisionService {
       roles: ["owner" as Role],
       modulePermissions: [],
     })
-    await this.sendWelcome({ email, storeName: install.storeName, password })
+    await this.sendWelcome({
+      email,
+      storeName: install.storeName,
+      password,
+      signInUrl: await this.loginLink(userId, connection),
+    })
     return "created"
   }
 
@@ -204,9 +221,35 @@ export class SallaMarketplaceAutoProvisionService {
       .catch((error: unknown) => {
         console.error("salla.auto_provision_schedule_failed", { error })
       })
+    return connection
   }
 
-  private async sendWelcome(input: { email: string; storeName: string; password: string | null }) {
+  // Best-effort like the e-mail itself: without a link, the button just opens sign-in.
+  private async loginLink(
+    userId: string,
+    connection: { organizationId: string; connectionId: string }
+  ): Promise<string | null> {
+    if (!this.deps.createLoginLink) return null
+    try {
+      return await this.deps.createLoginLink({
+        userId,
+        organizationId: connection.organizationId,
+        connectionId: connection.connectionId,
+      })
+    } catch (error) {
+      console.error("salla.login_link_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return null
+    }
+  }
+
+  private async sendWelcome(input: {
+    email: string
+    storeName: string
+    password: string | null
+    signInUrl: string | null
+  }) {
     // Best-effort: the account and connection already exist; "forgot password" still works.
     await this.deps.emailGateway
       .sendStoreWelcomeEmail({
@@ -214,6 +257,7 @@ export class SallaMarketplaceAutoProvisionService {
         platformName: "سلة",
         storeName: input.storeName,
         loginUrl: this.deps.loginUrl,
+        signInUrl: input.signInUrl,
         password: input.password,
       })
       .catch((error: unknown) => {

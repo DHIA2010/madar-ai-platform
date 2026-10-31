@@ -372,6 +372,12 @@
           }
         ]
       }
+    },
+    "loginLink": {
+      "loading": "Signing you in…",
+      "errorHeading": "Couldn't sign you in",
+      "errorDescription": "This sign-in link has expired or is no longer valid. Sign in with the email and password from your welcome email.",
+      "goToLogin": "Go to sign in"
     }
   },
   "dashboard": {

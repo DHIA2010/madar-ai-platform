@@ -129,6 +129,8 @@ export interface AuthenticationRepository {
   claimZidMarketplaceInstall(claimToken: string): Promise<ClaimZidMarketplaceInstallResponseDto>
   getZidMarketplaceInstallSummary(claimToken: string): Promise<ZidMarketplaceInstallSummaryDto>
   consumeZidAutoLogin(handoffToken: string): Promise<ConsumeZidAutoLoginResponseDto>
+  // An e-mailed one-click sign-in link (e.g. a Salla App Store welcome) -- same response shape.
+  consumeLoginLink(token: string): Promise<ConsumeZidAutoLoginResponseDto>
   updateProfile(payload: UpdateProfileRequestDto): Promise<AuthUserDto>
   uploadAvatar(payload: UploadAvatarRequestDto): Promise<AuthUserDto>
   removeAvatar(): Promise<AuthUserDto>

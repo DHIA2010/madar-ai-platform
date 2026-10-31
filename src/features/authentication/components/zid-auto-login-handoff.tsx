@@ -13,6 +13,18 @@ import { AppCard } from "@/components/app"
 
 import { useApplicationServices } from "@/application"
 
+// The workspace store persists the last selected organization/workspace ("workspace-context") --
+// left in place, a browser that was signed in to another account restores *that* account's
+// workspace for this one, and every workspace-scoped request fails. The fresh page load then
+// picks this account's own workspace.
+function forgetPreviousWorkspace() {
+  try {
+    window.localStorage.removeItem("workspace-context")
+  } catch {
+    // Storage unavailable (private mode) -- nothing persisted to forget.
+  }
+}
+
 interface ZidAutoLoginHandoffProps {
   handoffToken: string
 }
@@ -35,6 +47,7 @@ export function ZidAutoLoginHandoff({ handoffToken }: ZidAutoLoginHandoffProps) 
     async function run() {
       try {
         const result = await authenticationApplicationService.consumeZidAutoLogin(handoffToken)
+        forgetPreviousWorkspace()
         window.location.href = result.redirectUrl
       } catch {
         setFailed(true)

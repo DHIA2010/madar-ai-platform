@@ -34,6 +34,7 @@ import { SallaSyncRepository } from "../../salla-oauth/sync-repository"
 import { verifySallaWebhookSignature } from "../../salla-oauth/webhook-verification"
 import { SallaWebhookService, type SallaWebhookPayload } from "../../salla-oauth/webhook-service"
 import { SallaMarketplaceAutoProvisionService } from "../../salla-oauth/auto-provision-service"
+import { LoginLinkService } from "../../login-links/service"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
 import { ShopifyOAuthRepository } from "../../shopify-oauth/repository"
 import { GoogleAnalyticsOAuthConnectionDeletionService } from "../../google-analytics-oauth/connection-deletion-service"
@@ -961,6 +962,20 @@ export function createIdentityApiServer(
           new SallaOAuthRepository(container.infrastructure.database)
       )
     : null
+  const appUrl = (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    "http://localhost:3000"
+  ).replace(/\/$/, "")
+  // One-click sign-in links for accounts set up on a merchant's behalf -- see LoginLinkService.
+  const loginLinkService =
+    container.infrastructure.database && container.zidAutoProvisionDeps
+      ? new LoginLinkService(
+          container.infrastructure.database,
+          container.zidAutoProvisionDeps,
+          appUrl
+        )
+      : null
   // A Salla App Store install becomes a Madar account (or links to the merchant's existing one)
   // with the store connected and syncing -- reuses the same account repositories, password hasher
   // and email gateway Zid's auto-provisioning gets from the container.
@@ -971,6 +986,14 @@ export function createIdentityApiServer(
       ? new SallaMarketplaceAutoProvisionService(sallaOAuthMarketplaceService, {
           ...container.zidAutoProvisionDeps,
           loginUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/auth/basic/login`,
+          createLoginLink: loginLinkService
+            ? (input) =>
+                loginLinkService.create({
+                  userId: input.userId,
+                  organizationId: input.organizationId,
+                  redirectPath: `/integrations/${input.connectionId}`,
+                })
+            : undefined,
           scheduleSync: async (input) => {
             await new ConnectionSyncScheduleRepository(container.infrastructure.database!).upsert({
               organizationId: input.organizationId,
@@ -1431,6 +1454,39 @@ export function createIdentityApiServer(
       // a merchant auto-provisioned during a Zid marketplace install (see
       // ZidMarketplaceAutoProvisionService). Single-use and short-lived, same threat model as the
       // claim token above.
+      // Public on purpose -- the token in an e-mailed sign-in link *is* the credential (see
+      // LoginLinkService). Signs in whichever account the link belongs to.
+      const loginLinkConsumeMatch = url.pathname.match(
+        /^\/v1\/auth\/login-links\/([^/]+)\/consume$/
+      )
+      if (method === "POST" && loginLinkConsumeMatch) {
+        if (!loginLinkService) {
+          return send(503, {
+            code: "LOGIN_LINK_UNAVAILABLE",
+            message: "Sign-in links are unavailable in memory mode.",
+          })
+        }
+        const decision = await container.infrastructure.rateLimiter?.check(
+          `login_link_consume:${context.ipAddress}`,
+          20,
+          60_000
+        )
+        if (decision && !decision.allowed) {
+          return send(429, { code: "LOGIN_LINK_RATE_LIMITED", message: "Too many requests." })
+        }
+        const outcome = await loginLinkService.consume(
+          decodeURIComponent(loginLinkConsumeMatch[1]),
+          { ipAddress: context.ipAddress, userAgent: context.userAgent }
+        )
+        if (outcome.status === "invalid") {
+          return send(404, {
+            code: "LOGIN_LINK_INVALID",
+            message: "This sign-in link has expired or is no longer valid.",
+          })
+        }
+        return send(200, { ...outcome.result, redirectUrl: outcome.redirectPath })
+      }
+
       const zidAutoLoginConsumeMatch = url.pathname.match(
         /^\/v1\/integrations\/zid\/auto-login\/([^/]+)\/consume$/
       )
