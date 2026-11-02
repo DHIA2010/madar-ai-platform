@@ -1,4 +1,5 @@
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { recordBranchMovement } from "../inventory/branch-stock"
 import {
   convertRequiredQuantityToStock,
   isProductUnit,
@@ -208,10 +209,14 @@ export async function assertStockAvailability(
 // (adds back). Deliberately allows stock_quantity/stock to go negative (see migration 079):
 // checkout must never be blocked by a stale/undercounted stock figure, so a negative number is
 // treated as purely informational rather than an error state.
+//
+// `branch` is where the stock moves: the cashier's branch for a sale or its return, the order's
+// branch for a Madar order (see inventory/branch-stock.ts).
 export async function applyStockConsumption(
   database: PostgresDatabase,
   consumption: StockConsumptionResult,
-  sign: 1 | -1
+  sign: 1 | -1,
+  branch?: { organizationId: string; workspaceId: string | null }
 ): Promise<void> {
   for (const [productId, amount] of consumption.products) {
     if (amount === 0) continue
@@ -220,6 +225,14 @@ export async function applyStockConsumption(
         WHERE id = $1 AND stock_quantity IS NOT NULL`,
       [productId, sign * amount]
     )
+    if (branch) {
+      await recordBranchMovement(database, {
+        organizationId: branch.organizationId,
+        productId,
+        workspaceId: branch.workspaceId,
+        delta: sign * amount,
+      })
+    }
   }
   for (const [variantId, amount] of consumption.variants) {
     if (amount === 0) continue
@@ -227,5 +240,20 @@ export async function applyStockConsumption(
       `UPDATE product_variants SET stock = stock + $2 WHERE id = $1 AND stock IS NOT NULL`,
       [variantId, sign * amount]
     )
+    if (branch) {
+      const variant = await database.query<{ product_id: string }>(
+        "SELECT product_id FROM product_variants WHERE id = $1",
+        [variantId]
+      )
+      if (variant.rows[0]) {
+        await recordBranchMovement(database, {
+          organizationId: branch.organizationId,
+          productId: variant.rows[0].product_id,
+          variantId,
+          workspaceId: branch.workspaceId,
+          delta: sign * amount,
+        })
+      }
+    }
   }
 }

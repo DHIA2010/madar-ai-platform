@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto"
 import { ERRORS } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
 
+import { recordBranchMovement } from "../inventory/branch-stock"
+
 import { nextProcurementCode } from "./code-counter"
 import type { PurchaseDto, PurchaseLineItemDto, SavePurchaseInput } from "./types"
 
@@ -165,7 +167,7 @@ export class PurchasesRepository {
         ]
       )
 
-      await this.insertLineItemsAndApplyStock(organizationId, id, input.items)
+      await this.insertLineItemsAndApplyStock(organizationId, id, input.items, input.warehouseId)
     })
 
     const created = await this.findById(organizationId, id)
@@ -265,7 +267,9 @@ export class PurchasesRepository {
   private async insertLineItemsAndApplyStock(
     organizationId: string,
     purchaseId: string,
-    items: SavePurchaseInput["items"]
+    items: SavePurchaseInput["items"],
+    // The branch receiving the goods (a purchase's "warehouse" is a workspace).
+    branchId: string
   ): Promise<void> {
     for (const [index, item] of items.entries()) {
       const product = await this.db.query<{ name: string; sku: string | null }>(
@@ -312,6 +316,12 @@ export class PurchasesRepository {
          WHERE id = $3 AND organization_id = $4 AND deleted_at IS NULL AND stock_quantity IS NOT NULL`,
         [item.qty, item.netUnitCost, item.productId, organizationId]
       )
+      await recordBranchMovement(this.db, {
+        organizationId,
+        productId: item.productId,
+        workspaceId: branchId,
+        delta: item.qty,
+      })
     }
   }
 }

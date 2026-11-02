@@ -71,7 +71,9 @@
       "administration": "الإدارة",
       "settings": "الإعدادات",
       "productsList": "قائمة المنتجات",
-      "productCategories": "التصنيفات"
+      "productCategories": "التصنيفات",
+      "inventory": "المخزون",
+      "stockTransfers": "تحويل المخزون"
     }
   },
   "auth": {
@@ -8503,6 +8505,93 @@
       "title": "حذف {count, plural, one {تصنيف واحد} two {تصنيفين} few {# تصنيفات} many {# تصنيفاً} other {# تصنيف}}؟",
       "description": "تُحذف من مدار، وتبقى منتجاتها بدون تصنيف.",
       "skipped": "سيتم تخطي {count, plural, one {تصنيف واحد} two {تصنيفين} few {# تصنيفات} many {# تصنيفاً} other {# تصنيف}} من متاجر مربوطة، لأنها تُدار من المتجر."
+    }
+  },
+  "inventory": {
+    "transfers": {
+      "heading": "تحويل المخزون",
+      "subheading": "كل تحويلات المخزون بين فروعك. يخرج المخزون من فرع ويدخل فرعاً آخر، ويبقى إجمالي المخزون كما هو.",
+      "kpis": {
+        "total": "إجمالي التحويلات",
+        "units": "الكميات المحوّلة",
+        "thisMonth": "تحويلات هذا الشهر",
+        "products": "منتجات تم تحويلها"
+      },
+      "searchPlaceholder": "ابحث برقم التحويل أو المنتج...",
+      "filters": {
+        "from": "من فرع",
+        "to": "إلى فرع",
+        "allFrom": "كل الفروع المحوّل منها",
+        "allTo": "كل الفروع المحوّل إليها"
+      },
+      "add": "تحويل جديد",
+      "view": "عرض",
+      "close": "إغلاق",
+      "notes": "ملاحظات",
+      "table": {
+        "reference": "رقم التحويل",
+        "from": "من فرع",
+        "to": "إلى فرع",
+        "date": "تاريخ التحويل",
+        "products": "المنتجات",
+        "quantity": "الكمية المحوّلة",
+        "createdBy": "بواسطة",
+        "actions": "إجراءات"
+      },
+      "loading": "جارٍ تحميل التحويلات...",
+      "empty": {
+        "title": "لا توجد تحويلات بعد",
+        "description": "أنشئ أول تحويل لنقل المخزون بين فروعك.",
+        "noMatchTitle": "لا توجد تحويلات مطابقة",
+        "noMatchDescription": "جرّب بحثاً أو فلاتر مختلفة."
+      },
+      "showingCount": "عرض {shown} من {total} تحويل",
+      "toasts": {
+        "loadFailed": "تعذر تحميل التحويلات."
+      }
+    },
+    "transferForm": {
+      "back": "العودة إلى تحويلات المخزون",
+      "heading": "تحويل مخزون جديد",
+      "subheading": "انقل منتجات من فرع إلى فرع آخر. لا يمكن تحويل كمية أكبر من المتوفر في الفرع المحوّل منه.",
+      "reference": "رقم التحويل",
+      "referenceHint": "يُنشأ تلقائياً عند الحفظ",
+      "from": "من فرع",
+      "fromPlaceholder": "اختر الفرع المحوّل منه",
+      "to": "إلى فرع",
+      "toPlaceholder": "اختر الفرع المحوّل إليه",
+      "date": "تاريخ التحويل",
+      "notes": "ملاحظات",
+      "notesPlaceholder": "اختياري — مثال: إعادة تعبئة أسبوعية",
+      "productsTitle": "المنتجات المحوّلة",
+      "searchPickFrom": "اختر الفرع المحوّل منه أولاً...",
+      "searchLoading": "جارٍ تحميل مخزون الفرع...",
+      "searchPlaceholder": "ابحث أو امسح الباركود / رمز المنتج (SKU)...",
+      "availableShort": "المتوفر: {count}",
+      "noMatch": "لا يوجد منتج مطابق يحتفظ بمخزون.",
+      "table": {
+        "product": "المنتج",
+        "current": "الكمية الحالية",
+        "transferable": "القابلة للتحويل",
+        "quantity": "الكمية المحوّلة",
+        "after": "المتبقي بعد التحويل"
+      },
+      "remove": "إزالة",
+      "emptyLines": "لم تتم إضافة منتجات بعد. ابحث عن منتج لإضافته.",
+      "summaryProducts": "{count, plural, one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجاً} other {# منتج}}",
+      "summaryUnits": "إجمالي الكمية: {count}",
+      "errors": {
+        "quantityRequired": "أدخل كمية أكبر من صفر.",
+        "quantityTooHigh": "الحد الأقصى {max}."
+      },
+      "submit": "تنفيذ التحويل",
+      "toasts": {
+        "created": "تم التحويل {reference}.",
+        "createFailed": "تعذر تنفيذ التحويل.",
+        "insufficient": "الكمية أكبر من المتوفر في الفرع.",
+        "productsFailed": "تعذر تحميل المنتجات.",
+        "stockFailed": "تعذر تحميل مخزون الفرع."
+      }
     }
   }
 }

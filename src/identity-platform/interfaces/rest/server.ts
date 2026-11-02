@@ -79,6 +79,7 @@ import { ZidProductStockPushService } from "../../products/zid-product-stock-pus
 import { requireProcurementEnabled } from "../../procurement/guards"
 import { requireCustomReportsEnabled } from "../../reports/custom-reports-guard"
 import { SuppliersService } from "../../procurement/suppliers-service"
+import { StockTransfersService } from "../../inventory/transfers-service"
 import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
 import { SupplierInvoicesService } from "../../procurement/supplier-invoices-service"
@@ -242,6 +243,7 @@ import {
   startApplicationTrialSchema,
   syncComponentsSchema,
   createProductCategorySchema,
+  createStockTransferSchema,
   productCategoryStatusSchema,
   renameProductCategorySchema,
   bulkProductCategoryStatusSchema,
@@ -855,6 +857,9 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  const stockTransfersService = container.infrastructure.database
+    ? new StockTransfersService(container.infrastructure.database)
+    : null
   const productCategoriesService = container.infrastructure.database
     ? new ProductCategoriesService(container.infrastructure.database)
     : null
@@ -4896,6 +4901,38 @@ export function createIdentityApiServer(
       // Products -> Categories: every category the workspace's products carry plus the ones created
       // here, with each one's status (inactive ones are hidden from the cashier). See
       // products/categories-service.ts.
+      // Inventory -> stock transfers between branches.
+      if (url.pathname.startsWith("/v1/inventory/")) {
+        if (!stockTransfersService) {
+          return send(503, {
+            code: "INVENTORY_UNAVAILABLE",
+            message: "Inventory is unavailable in memory mode.",
+          })
+        }
+        if (method === "GET" && url.pathname === "/v1/inventory/transfers") {
+          if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+          return send(200, { items: await stockTransfersService.list(actor.organizationId) })
+        }
+        if (method === "POST" && url.pathname === "/v1/inventory/transfers") {
+          if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+          const payload = createStockTransferSchema.parse(await readJsonBody(request))
+          return send(
+            201,
+            await stockTransfersService.create(actor.organizationId, actor.userId, payload)
+          )
+        }
+        if (method === "GET" && url.pathname === "/v1/inventory/branch-stock") {
+          if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+          const workspaceId = url.searchParams.get("workspaceId") ?? ""
+          if (!/^[0-9a-f-]{36}$/i.test(workspaceId)) {
+            throw ERRORS.validation({ workspaceId: "A branch is required." })
+          }
+          return send(200, {
+            items: await stockTransfersService.branchStock(actor.organizationId, workspaceId),
+          })
+        }
+      }
+
       if (
         url.pathname === "/v1/product-categories" ||
         url.pathname.startsWith("/v1/product-categories/")

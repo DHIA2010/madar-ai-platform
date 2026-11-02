@@ -552,7 +552,10 @@ export class MadarOrdersService {
         )
       }
 
-      await applyStockConsumption(this.database, stockConsumption, -1)
+      await applyStockConsumption(this.database, stockConsumption, -1, {
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+      })
     })
 
     // The local order is already committed at this point -- a push failure (or the entire

@@ -71,7 +71,9 @@
       "administration": "Administration",
       "settings": "Settings",
       "productsList": "Products list",
-      "productCategories": "Categories"
+      "productCategories": "Categories",
+      "inventory": "Inventory",
+      "stockTransfers": "Stock transfers"
     }
   },
   "auth": {
@@ -8507,6 +8509,93 @@
       "title": "Delete {count, plural, one {# category} other {# categories}}?",
       "description": "They're deleted from Madar; their products stay, without a category.",
       "skipped": "{count, plural, one {# category} other {# categories}} from connected stores will be skipped, since they're managed in the store."
+    }
+  },
+  "inventory": {
+    "transfers": {
+      "heading": "Stock transfers",
+      "subheading": "Every move of stock between your branches. Stock leaves one branch and enters another; the total stays the same.",
+      "kpis": {
+        "total": "Total transfers",
+        "units": "Units transferred",
+        "thisMonth": "Transfers this month",
+        "products": "Products transferred"
+      },
+      "searchPlaceholder": "Search by transfer # or product...",
+      "filters": {
+        "from": "From branch",
+        "to": "To branch",
+        "allFrom": "All source branches",
+        "allTo": "All destination branches"
+      },
+      "add": "New transfer",
+      "view": "View",
+      "close": "Close",
+      "notes": "Notes",
+      "table": {
+        "reference": "Transfer #",
+        "from": "From",
+        "to": "To",
+        "date": "Transfer date",
+        "products": "Products",
+        "quantity": "Quantity",
+        "createdBy": "By",
+        "actions": "Actions"
+      },
+      "loading": "Loading transfers...",
+      "empty": {
+        "title": "No transfers yet",
+        "description": "Create your first transfer to move stock between branches.",
+        "noMatchTitle": "No matching transfers",
+        "noMatchDescription": "Try a different search or filters."
+      },
+      "showingCount": "Showing {shown} of {total} transfers",
+      "toasts": {
+        "loadFailed": "Couldn't load transfers."
+      }
+    },
+    "transferForm": {
+      "back": "Back to stock transfers",
+      "heading": "New stock transfer",
+      "subheading": "Move products from one branch to another. You can't transfer more than the source branch has.",
+      "reference": "Transfer #",
+      "referenceHint": "Generated automatically when saved",
+      "from": "From branch",
+      "fromPlaceholder": "Choose the source branch",
+      "to": "To branch",
+      "toPlaceholder": "Choose the destination branch",
+      "date": "Transfer date",
+      "notes": "Notes",
+      "notesPlaceholder": "Optional — e.g. weekly restock",
+      "productsTitle": "Products to transfer",
+      "searchPickFrom": "Choose the source branch first...",
+      "searchLoading": "Loading the branch's stock...",
+      "searchPlaceholder": "Search or scan a barcode / SKU...",
+      "availableShort": "In stock: {count}",
+      "noMatch": "No matching product that keeps stock.",
+      "table": {
+        "product": "Product",
+        "current": "Current quantity",
+        "transferable": "Transferable",
+        "quantity": "Quantity to transfer",
+        "after": "Left after transfer"
+      },
+      "remove": "Remove",
+      "emptyLines": "No products added yet. Search for a product to add it.",
+      "summaryProducts": "{count, plural, one {# product} other {# products}}",
+      "summaryUnits": "Total quantity: {count}",
+      "errors": {
+        "quantityRequired": "Enter a quantity above zero.",
+        "quantityTooHigh": "At most {max}."
+      },
+      "submit": "Make transfer",
+      "toasts": {
+        "created": "Transfer {reference} done.",
+        "createFailed": "Couldn't make the transfer.",
+        "insufficient": "That's more than the branch has.",
+        "productsFailed": "Couldn't load products.",
+        "stockFailed": "Couldn't load the branch's stock."
+      }
     }
   }
 }

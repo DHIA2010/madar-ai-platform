@@ -47,6 +47,8 @@ import {
   PackageSearch,
   RotateCcw,
   Wallet,
+  Warehouse,
+  ArrowLeftRight,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -146,6 +148,21 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       items: [
         { title: t("productsList"), url: ROUTES.products, icon: <List /> },
         { title: t("productCategories"), url: ROUTES.productCategories, icon: <Tags /> },
+      ],
+    },
+    // Stock per branch: moving it between branches (more inventory pages will join this group).
+    {
+      title: t("inventory"),
+      url: ROUTES.inventoryTransfers,
+      icon: <Warehouse className="text-teal-500" />,
+      permission: "products:view",
+      applications: ["ecommerce", "pos", "procurement"],
+      items: [
+        {
+          title: t("stockTransfers"),
+          url: ROUTES.inventoryTransfers,
+          icon: <ArrowLeftRight />,
+        },
       ],
     },
     // Gated on the dedicated "procurement" app (Supply & Purchase), not ecommerce/pos -- these

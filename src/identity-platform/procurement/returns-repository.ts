@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import { ERRORS } from "../application/errors/IdentityError"
 import type { PostgresDatabase } from "../infrastructure/postgres/database"
+import { recordBranchMovement } from "../inventory/branch-stock"
 
 import { nextProcurementCode } from "./code-counter"
 import type {
@@ -223,6 +224,13 @@ export class ReturnsRepository {
            WHERE id = $2 AND organization_id = $3 AND deleted_at IS NULL AND stock_quantity IS NOT NULL`,
           [item.qty, item.productId, organizationId]
         )
+        // Out of the branch the return ships from.
+        await recordBranchMovement(this.db, {
+          organizationId,
+          productId: item.productId,
+          workspaceId: input.warehouseId,
+          delta: -item.qty,
+        })
       }
     })
 

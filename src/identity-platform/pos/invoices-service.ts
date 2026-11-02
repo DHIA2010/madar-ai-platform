@@ -1264,7 +1264,10 @@ export class PosInvoicesService {
           )
         }
 
-        await this.applyStockConsumption(stockConsumption, -1)
+        await this.applyStockConsumption(stockConsumption, -1, {
+          organizationId: input.organizationId,
+          workspaceId: input.workspaceId,
+        })
 
         // A deferred ("آجل") portion and a wallet-funded portion both draw down the SAME unified
         // account -- one combined ledger entry for the sale, not two. Only the wallet-funded
@@ -1757,7 +1760,10 @@ export class PosInvoicesService {
       // product has no product_id we own, and a null stock_quantity means this product's stock
       // isn't tracked at all (e.g. a service) -- both are already excluded by
       // computeStockConsumption/applyStockConsumption.
-      await this.applyStockConsumption(stockRestoration, 1)
+      await this.applyStockConsumption(stockRestoration, 1, {
+        organizationId,
+        workspaceId: invoiceRow.workspace_id,
+      })
 
       // Every line on the invoice fully back -> "returned"; some but not all ->
       // "partially_returned". Read back from the rows themselves (not just this call's own
@@ -1975,9 +1981,10 @@ export class PosInvoicesService {
 
   private async applyStockConsumption(
     consumption: StockConsumptionResult,
-    sign: 1 | -1
+    sign: 1 | -1,
+    branch: { organizationId: string; workspaceId: string | null }
   ): Promise<void> {
-    return applyStockConsumptionShared(this.database, consumption, sign)
+    return applyStockConsumptionShared(this.database, consumption, sign, branch)
   }
 
   // Seller identity as of right now, read straight from organizations.settings -- the same jsonb
