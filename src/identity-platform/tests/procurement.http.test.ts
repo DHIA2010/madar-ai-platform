@@ -647,3 +647,64 @@ describe("procurement: supplier invoices", () => {
     expect(await response.json()).toEqual({ saved: 0 })
   })
 })
+
+describe("private files", () => {
+  // In-memory stand-in for the S3 bucket.
+  function useFakeStorage(files: Record<string, string>) {
+    const base = "https://bucket.example.com"
+    ;(container.infrastructure as { objectStorage?: unknown }).objectStorage = {
+      uploadPublicObject: async ({ key }: { key: string }) => `${base}/${key}`,
+      keyFromUrl: (url: string) => (url.startsWith(`${base}/`) ? url.slice(base.length + 1) : null),
+      readObject: async (key: string) =>
+        key in files ? { body: Buffer.from(files[key]), contentType: "application/pdf" } : null,
+    }
+    return (key: string) => `${base}/${key}`
+  }
+
+  async function openFile(token: string, url: string) {
+    const response = await fetch(`${baseUrl}/v1/files/private?url=${encodeURIComponent(url)}`, {
+      headers: authHeaders(token),
+    })
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+  }
+
+  it("opens an organization's own supplier invoice and refuses anyone else's", async () => {
+    const own = await signIn("files-own@example.com", "Files Own")
+    const other = await signIn("files-other@example.com", "Files Other")
+    const ownKey = `purchase-invoices/${own.actor.organizationId}/a.pdf`
+    const otherKey = `purchase-invoices/${other.actor.organizationId}/b.pdf`
+    const urlFor = useFakeStorage({ [ownKey]: "own invoice", [otherKey]: "other invoice" })
+
+    const opened = await openFile(own.token, urlFor(ownKey))
+    expect(opened.status).toBe(200)
+    expect(Buffer.from(String(opened.body.dataBase64), "base64").toString()).toBe("own invoice")
+    expect(opened.body.contentType).toBe("application/pdf")
+
+    expect((await openFile(own.token, urlFor(otherKey))).status).toBe(403)
+  })
+
+  it("keeps another organization's payment receipt and unknown folders closed", async () => {
+    const own = await signIn("files-receipts@example.com", "Files Receipts")
+    const other = await signIn("files-receipts-other@example.com", "Files Receipts Other")
+    const ownReceipt = `subscription-receipts/${own.actor.organizationId}/r.pdf`
+    const urlFor = useFakeStorage({
+      [ownReceipt]: "receipt",
+      [`subscription-receipts/${other.actor.organizationId}/r.pdf`]: "x",
+      [`products/${own.actor.organizationId}/p.png`]: "x",
+    })
+
+    expect((await openFile(own.token, urlFor(ownReceipt))).status).toBe(200)
+    expect(
+      (
+        await openFile(
+          own.token,
+          urlFor(`subscription-receipts/${other.actor.organizationId}/r.pdf`)
+        )
+      ).status
+    ).toBe(403)
+    expect(
+      (await openFile(own.token, urlFor(`products/${own.actor.organizationId}/p.png`))).status
+    ).toBe(403)
+    expect((await openFile(own.token, "https://elsewhere.example.com/x.pdf")).status).toBe(404)
+  })
+})

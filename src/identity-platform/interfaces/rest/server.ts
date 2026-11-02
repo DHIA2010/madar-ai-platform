@@ -5566,6 +5566,43 @@ export function createIdentityApiServer(
         }
       }
 
+      // Supplier invoices, subscription payment receipts and customer voucher attachments are not
+      // public in the bucket (only images are) -- each is read through here, by someone it belongs
+      // to: the file's organization, or Madar staff for payment receipts they review.
+      if (method === "GET" && url.pathname === "/v1/files/private") {
+        const storage = container.infrastructure.objectStorage
+        if (!storage?.keyFromUrl || !storage.readObject) {
+          return send(503, { code: "FILES_UNAVAILABLE", message: "Files are not available." })
+        }
+        const key = storage.keyFromUrl(url.searchParams.get("url") ?? "")
+        if (!key) throw ERRORS.notFound("File")
+        const [folder, owner = ""] = key.split("/")
+        let allowed = false
+        if (folder === "purchase-invoices") {
+          allowed =
+            owner === actor.organizationId && actor.modulePermissions.includes("purchases:view")
+        } else if (folder === "subscription-receipts") {
+          allowed = owner === actor.organizationId || actor.isPlatformAdmin === true
+        } else if (folder === "voucher-attachments" && container.infrastructure.database) {
+          allowed =
+            actor.isPlatformAdmin === true ||
+            (/^[0-9a-f-]{36}$/i.test(owner) &&
+              (
+                await container.infrastructure.database.query(
+                  "SELECT id FROM customers WHERE id = $1 AND organization_id = $2",
+                  [owner, actor.organizationId]
+                )
+              ).rows.length > 0)
+        }
+        if (!allowed) throw ERRORS.forbidden()
+        const file = await storage.readObject(key)
+        if (!file) throw ERRORS.notFound("File")
+        return send(200, {
+          contentType: file.contentType,
+          dataBase64: file.body.toString("base64"),
+        })
+      }
+
       if (method === "POST" && url.pathname === "/v1/purchases/invoice-scan") {
         if (!supplierInvoicesService) {
           return send(503, {

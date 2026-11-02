@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import { CheckCircle2, Clock3, ExternalLink, FileText, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
+import { openPrivateFile } from "@/lib/open-private-file"
+
 import {
   AppButton,
   AppCard,
@@ -27,7 +29,7 @@ import {
 
 import { useWorkspace } from "@/features/workspace"
 
-import { APPLICATION_LABEL, formatSar, packageLabel } from "../services"
+import { APPLICATION_LABEL, formatSar, packageLabel, platformAdminService } from "../services"
 import { type MadarAdminKpi, MadarAdminKpiCard } from "./madar-admin-kpi-card"
 
 import type {
@@ -219,15 +221,18 @@ export function MadarAdminRequests() {
                     ) : null}
                   </AppTableCell>
                   <AppTableCell>
-                    <a
-                      href={request.attachmentUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openPrivateFile(() =>
+                          platformAdminService.fetchPrivateFile(request.attachmentUrl)
+                        ).catch(() => toast.error("تعذر فتح المرفق."))
+                      }
+                      className="inline-flex cursor-pointer items-center gap-1.5 text-primary hover:underline"
                     >
                       عرض المرفق
                       <ExternalLink className="size-3.5" />
-                    </a>
+                    </button>
                   </AppTableCell>
                   <AppTableCell className="text-muted-foreground">
                     {formatDate(request.createdAt)}

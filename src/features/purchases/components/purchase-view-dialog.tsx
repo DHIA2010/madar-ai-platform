@@ -3,13 +3,16 @@
 import { useLocale, useTranslations } from "next-intl"
 import { ExternalLink, FileText } from "lucide-react"
 import type { ReactNode } from "react"
+import { toast } from "sonner"
 
+import { openPrivateFile } from "@/lib/open-private-file"
 import { cn } from "@/lib/utils"
 
 import { AppButton, AppDialog } from "@/components/app"
 
 import { useSupplierVouchers } from "@/features/suppliers"
 
+import { purchaseService } from "../services"
 import {
   derivePurchasePaymentStatus,
   lineItemSubtotal,
@@ -140,16 +143,19 @@ export function PurchaseViewDialog({
                   <p className="text-[11px] font-semibold text-[#95a4bd]">
                     {t("invoiceAttachment")}
                   </p>
-                  <a
-                    href={purchase.invoiceAttachmentUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-0.5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#2878ff] hover:underline"
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPrivateFile(() =>
+                        purchaseService.fetchPrivateFile(purchase.invoiceAttachmentUrl!)
+                      ).catch(() => toast.error(t("openInvoiceFailed")))
+                    }
+                    className="mt-0.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#2878ff] hover:underline"
                   >
                     <FileText className="size-3.5" />
                     {t("openInvoice")}
                     <ExternalLink className="size-3" />
-                  </a>
+                  </button>
                 </div>
               ) : null}
             </div>

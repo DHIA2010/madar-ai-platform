@@ -106,6 +106,10 @@ export interface StorageProvider {
 
 export interface ObjectStorageGateway {
   uploadPublicObject(input: { key: string; body: Buffer; contentType: string }): Promise<string>
+  // For files the bucket does not make public (see PRIVATE_FILE_PREFIXES in server.ts): the key a
+  // stored file URL points to, and the file itself, read on the server for an authorized user.
+  keyFromUrl?(url: string): string | null
+  readObject?(key: string): Promise<{ body: Buffer; contentType: string } | null>
 }
 
 export interface CacheProvider {

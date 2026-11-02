@@ -57,6 +57,13 @@ function toQuery(params: Record<string, string | number | undefined>): string {
 }
 
 export const platformAdminService = {
+  // Payment receipts aren't public -- staff read them through the backend.
+  fetchPrivateFile(url: string): Promise<{ contentType: string; dataBase64: string }> {
+    return client.get<{ contentType: string; dataBase64: string }>(
+      `${["", "v1", "files", "private"].join(PATH_SEPARATOR)}?url=${encodeURIComponent(url)}`
+    )
+  },
+
   listCustomers(
     filters: AdminCustomerFilters,
     page: number,

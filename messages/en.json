@@ -1028,7 +1028,8 @@
         "pickSupplierFirst": "Choose the supplier first to upload their invoice.",
         "button": "Upload invoice",
         "attached": "Supplier invoice attached",
-        "remove": "Remove attached invoice"
+        "remove": "Remove attached invoice",
+        "openFailed": "Couldn't open the invoice."
       }
     },
     "lineItems": {
@@ -1085,7 +1086,8 @@
       "remaining": "Remaining",
       "notes": "Notes",
       "invoiceAttachment": "Supplier invoice",
-      "openInvoice": "Open invoice"
+      "openInvoice": "Open invoice",
+      "openInvoiceFailed": "Couldn't open the invoice."
     },
     "print": {
       "title": "Purchase Order",
@@ -1246,14 +1248,16 @@
         "qty": "Qty",
         "unitCost": "Unit cost (before VAT)",
         "product": "Product in Madar",
-        "include": "Add {name}"
+        "include": "Add {name}",
+        "selectAll": "Select all visible lines"
       },
       "matchBy": {
         "memory": "Remembered code for this supplier",
         "sku": "Matched by SKU",
         "name": "Suggested by name — check it",
         "manual": "Chosen manually",
-        "none": "No product found"
+        "none": "No product found",
+        "created": "New product (draft)"
       },
       "rememberNote": "Madar will remember this supplier's codes so their next invoices match automatically.",
       "apply": "{count, plural, =0 {Add to purchase order} one {Add # product} other {Add # products}}",
@@ -1265,7 +1269,19 @@
         "applied": "Added {count} invoice lines to the purchase order.",
         "unavailable": "Reading invoices isn't available right now. Try again later.",
         "forbidden": "You don't have permission to upload supplier invoices.",
-        "uploadFailed": "Couldn't upload the invoice. Check your connection and try again."
+        "uploadFailed": "Couldn't upload the invoice. Check your connection and try again.",
+        "productCreated": "Created \"{name}\".",
+        "productCreateFailed": "Couldn't create \"{name}\".",
+        "productsCreated": "Created {count} products.",
+        "someProductsFailed": "Created {created}; {failed} couldn't be created."
+      },
+      "createProduct": "Create product",
+      "createAll": "Create all unmatched products ({count})",
+      "draftNote": "{count, plural, one {# product was} other {# products were}} created as a draft with a selling price of 0 — set the price and activate it on the Products page to show it in the cashier.",
+      "createSelected": "Create selected products ({count})",
+      "filters": {
+        "all": "All ({count})",
+        "empty": "No lines in this view."
       }
     }
   },

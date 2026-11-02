@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl"
 import { ExternalLink, FileText, Plus, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 
+import { openPrivateFile } from "@/lib/open-private-file"
 import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 
@@ -82,6 +83,12 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
   const [taxLevel, setTaxLevel] = useState<CalculationLevel>(() => inferTaxLevel(values))
   const [submitting, setSubmitting] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
+
+  function openInvoice(url: string) {
+    openPrivateFile(() => purchaseService.fetchPrivateFile(url)).catch(() =>
+      toast.error(t("invoiceUpload.openFailed"))
+    )
+  }
   const selectedSupplier = suppliers.find((supplier) => supplier.id === values.supplierId)
 
   // Lines read from the supplier's invoice join the order; a product already on it gets the
@@ -224,15 +231,14 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
             {values.invoiceAttachmentUrl ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 py-1 ps-3 pe-1 text-[12px] font-semibold text-emerald-700">
                 <FileText className="size-3.5" />
-                <a
-                  href={values.invoiceAttachmentUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 hover:underline"
+                <button
+                  type="button"
+                  onClick={() => openInvoice(values.invoiceAttachmentUrl!)}
+                  className="inline-flex cursor-pointer items-center gap-1 hover:underline"
                 >
                   {t("invoiceUpload.attached")}
                   <ExternalLink className="size-3" />
-                </a>
+                </button>
                 <button
                   type="button"
                   aria-label={t("invoiceUpload.remove")}
@@ -358,6 +364,7 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
           onOpenChange={setInvoiceOpen}
           supplierId={values.supplierId}
           supplierName={selectedSupplier?.name ?? ""}
+          workspaceId={values.warehouseId || null}
           taxLevel={taxLevel}
           onApply={applyInvoice}
         />

@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 
 import type { ObjectStorageGateway } from "../../application/ports"
 import type { IdentityPlatformConfig } from "../../configuration"
@@ -47,5 +47,28 @@ export class S3ObjectStorageGateway implements ObjectStorageGateway {
       })
     )
     return `${this.publicBaseUrl}/${input.key}`
+  }
+
+  keyFromUrl(url: string): string | null {
+    const prefix = `${this.publicBaseUrl}/`
+    if (!url.startsWith(prefix)) return null
+    const key = decodeURIComponent(url.slice(prefix.length).split("?")[0])
+    return key && !key.includes("..") ? key : null
+  }
+
+  async readObject(key: string) {
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key })
+      )
+      if (!response.Body) return null
+      return {
+        body: Buffer.from(await response.Body.transformToByteArray()),
+        contentType: response.ContentType ?? "application/octet-stream",
+      }
+    } catch (error) {
+      if (error instanceof NoSuchKey) return null
+      throw error
+    }
   }
 }

@@ -166,6 +166,14 @@ export const purchaseService = {
     })
   },
 
+  // A supplier invoice isn't public -- it's read through the backend, which checks it belongs to
+  // this organization.
+  async fetchPrivateFile(url: string): Promise<{ contentType: string; dataBase64: string }> {
+    return client.get<{ contentType: string; dataBase64: string }>(
+      `${["", "v1", "files", "private"].join(PATH_SEPARATOR)}?url=${encodeURIComponent(url)}`
+    )
+  },
+
   // Remembers which of this supplier's invoice codes mean which product.
   async rememberSupplierCodes(
     supplierId: string,
