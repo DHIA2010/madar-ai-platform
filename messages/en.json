@@ -73,7 +73,8 @@
       "productsList": "Products list",
       "productCategories": "Categories",
       "inventory": "Inventory",
-      "stockTransfers": "Stock transfers"
+      "stockTransfers": "Stock transfers",
+      "stockCounts": "Stock take"
     }
   },
   "auth": {
@@ -8602,6 +8603,122 @@
         "stockFailed": "Couldn't load the branch's stock.",
         "unknownBranch": "One of the branches doesn't exist. Refresh the page and choose the branch again."
       }
+    },
+    "counts": {
+      "heading": "Stock take",
+      "subheading": "Count what's really in each branch and match it with Madar. Approving a count sets the branch's stock to the counted quantities.",
+      "kpis": {
+        "total": "Total stock takes",
+        "drafts": "In progress",
+        "completedThisMonth": "Approved this month",
+        "netValue": "Net difference value"
+      },
+      "searchPlaceholder": "Search by count # or notes...",
+      "filters": {
+        "branch": "Branch",
+        "allBranches": "All branches",
+        "status": "Status",
+        "allStatuses": "All statuses"
+      },
+      "status": {
+        "draft": "Draft",
+        "completed": "Approved"
+      },
+      "add": "New stock take",
+      "view": "View",
+      "continue": "Continue counting",
+      "table": {
+        "reference": "Count #",
+        "branch": "Branch",
+        "date": "Count date",
+        "status": "Status",
+        "counted": "Products counted",
+        "differences": "With differences",
+        "net": "Net difference",
+        "netValue": "Difference value",
+        "by": "By",
+        "actions": "Actions"
+      },
+      "loading": "Loading stock takes...",
+      "empty": {
+        "title": "No stock takes yet",
+        "description": "Start your first count to match a branch's stock with Madar.",
+        "noMatchTitle": "No matching stock takes",
+        "noMatchDescription": "Try a different search or filters."
+      },
+      "showingCount": "Showing {shown} of {total} stock takes",
+      "toasts": {
+        "loadFailed": "Couldn't load stock takes."
+      }
+    },
+    "countForm": {
+      "back": "Back to stock take",
+      "heading": "New stock take",
+      "headingExisting": "Stock take {reference}",
+      "subheading": "Enter the counted quantity for each product. Save as a draft to continue later, then approve to set the branch's stock.",
+      "completedNote": "Approved by {name} on {date}. The branch's stock was set to the counted quantities.",
+      "reference": "Count #",
+      "referenceHint": "Generated automatically when saved",
+      "branch": "Branch",
+      "branchPlaceholder": "Choose the branch to count",
+      "branchLocked": "The branch can't change once the count has started",
+      "date": "Count date",
+      "notes": "Notes",
+      "notesPlaceholder": "Optional — e.g. month-end count",
+      "productsTitle": "Products",
+      "pickBranch": "Choose a branch to see its products and start counting.",
+      "loadingStock": "Loading the branch's stock...",
+      "searchPlaceholder": "Scan a barcode or type a SKU and press Enter to count one...",
+      "filters": {
+        "all": "All",
+        "counted": "Counted",
+        "uncounted": "Not counted",
+        "differences": "With differences"
+      },
+      "table": {
+        "product": "Product",
+        "system": "Quantity in Madar",
+        "counted": "Counted quantity",
+        "difference": "Difference",
+        "differenceValue": "Difference value"
+      },
+      "countedPlaceholder": "Not counted",
+      "countedLabel": "Counted quantity for {name}",
+      "noProducts": "No products keep stock in this branch.",
+      "noMatch": "No matching products.",
+      "summary": {
+        "counted": "{counted} of {total} counted",
+        "differences": "{count} with differences",
+        "net": "Net difference:",
+        "netValue": "Difference value:"
+      },
+      "delete": "Delete draft",
+      "saveDraft": "Save as draft",
+      "approve": "Approve count",
+      "approveDialog": {
+        "title": "Approve this stock take?",
+        "description": "The stock of {counted} products in this branch will be set to the counted quantities ({differences} of them differ). Products not counted won't change.",
+        "warning": "Once approved, the count can't be edited or deleted."
+      },
+      "deleteDialog": {
+        "title": "Delete draft {reference}?",
+        "description": "The quantities counted in this draft will be deleted. No stock changes."
+      },
+      "toasts": {
+        "loadFailed": "Couldn't load the stock take.",
+        "stockFailed": "Couldn't load the branch's stock.",
+        "saveFailed": "Couldn't save the stock take.",
+        "saved": "Draft {reference} saved.",
+        "approved": "Stock take {reference} approved and stock updated.",
+        "approveFailed": "Couldn't approve the stock take.",
+        "deleted": "Draft {reference} deleted.",
+        "deleteFailed": "Couldn't delete the draft.",
+        "scanNoMatch": "No product with \"{query}\" in this branch.",
+        "scanManyMatches": "More than one product matches. Scan or type the full code."
+      },
+      "searchPlaceholderReadOnly": "Search by product name or SKU...",
+      "scanHint": "Each scan or Enter adds 1 to the counted quantity; you can also type a quantity directly.",
+      "lastScanned": "Last counted: {name} — counted: {count}"
     }
   }
 }

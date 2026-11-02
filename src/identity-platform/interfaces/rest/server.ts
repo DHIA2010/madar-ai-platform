@@ -79,6 +79,7 @@ import { ZidProductStockPushService } from "../../products/zid-product-stock-pus
 import { requireProcurementEnabled } from "../../procurement/guards"
 import { requireCustomReportsEnabled } from "../../reports/custom-reports-guard"
 import { SuppliersService } from "../../procurement/suppliers-service"
+import { StockCountsService } from "../../inventory/stock-counts-service"
 import { StockTransfersService } from "../../inventory/transfers-service"
 import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
@@ -243,7 +244,9 @@ import {
   startApplicationTrialSchema,
   syncComponentsSchema,
   createProductCategorySchema,
+  createStockCountSchema,
   createStockTransferSchema,
+  updateStockCountSchema,
   productCategoryStatusSchema,
   renameProductCategorySchema,
   bulkProductCategoryStatusSchema,
@@ -859,6 +862,9 @@ export function createIdentityApiServer(
       : null
   const stockTransfersService = container.infrastructure.database
     ? new StockTransfersService(container.infrastructure.database)
+    : null
+  const stockCountsService = container.infrastructure.database
+    ? new StockCountsService(container.infrastructure.database)
     : null
   const productCategoriesService = container.infrastructure.database
     ? new ProductCategoriesService(container.infrastructure.database)
@@ -4918,9 +4924,9 @@ export function createIdentityApiServer(
       // Products -> Categories: every category the workspace's products carry plus the ones created
       // here, with each one's status (inactive ones are hidden from the cashier). See
       // products/categories-service.ts.
-      // Inventory -> stock transfers between branches.
+      // Inventory -> stock transfers between branches, and stock takes.
       if (url.pathname.startsWith("/v1/inventory/")) {
-        if (!stockTransfersService) {
+        if (!stockTransfersService || !stockCountsService) {
           return send(503, {
             code: "INVENTORY_UNAVAILABLE",
             message: "Inventory is unavailable in memory mode.",
@@ -4937,6 +4943,48 @@ export function createIdentityApiServer(
             201,
             await stockTransfersService.create(actor.organizationId, actor.userId, payload)
           )
+        }
+        if (url.pathname === "/v1/inventory/stock-counts") {
+          if (method === "GET") {
+            if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+            return send(200, { items: await stockCountsService.list(actor.organizationId) })
+          }
+          if (method === "POST") {
+            if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+            const payload = createStockCountSchema.parse(await readJsonBody(request))
+            return send(
+              201,
+              await stockCountsService.create(actor.organizationId, actor.userId, payload)
+            )
+          }
+        }
+        const stockCountMatch = url.pathname.match(
+          /^\/v1\/inventory\/stock-counts\/([0-9a-f-]{36})(\/complete)?$/i
+        )
+        if (stockCountMatch) {
+          const [, countId, completing] = stockCountMatch
+          if (method === "GET" && !completing) {
+            if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+            return send(200, await stockCountsService.get(actor.organizationId, countId))
+          }
+          if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+          if (method === "PATCH" && !completing) {
+            const payload = updateStockCountSchema.parse(await readJsonBody(request))
+            return send(
+              200,
+              await stockCountsService.update(actor.organizationId, countId, payload)
+            )
+          }
+          if (method === "DELETE" && !completing) {
+            await stockCountsService.remove(actor.organizationId, countId)
+            return send(200, { ok: true })
+          }
+          if (method === "POST" && completing) {
+            return send(
+              200,
+              await stockCountsService.complete(actor.organizationId, actor.userId, countId)
+            )
+          }
         }
         if (method === "GET" && url.pathname === "/v1/inventory/branches") {
           if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()

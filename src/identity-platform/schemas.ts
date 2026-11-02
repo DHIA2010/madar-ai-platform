@@ -1374,6 +1374,24 @@ export const createStockTransferSchema = z.object({
     .max(200),
 })
 
+const stockCountItemsSchema = z
+  .array(
+    z.object({
+      productId: z.guid(),
+      countedQuantity: z.number().finite().min(0).max(100_000_000),
+    })
+  )
+  .max(5000)
+
+export const createStockCountSchema = z.object({
+  workspaceId: z.guid(),
+  countDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes: z.string().max(1000).default(""),
+  items: stockCountItemsSchema.default([]),
+})
+
+export const updateStockCountSchema = createStockCountSchema.omit({ workspaceId: true })
+
 export const createProductCategorySchema = z.object({
   name: z.string().trim().min(1).max(80),
 })

@@ -358,3 +358,143 @@ describe("inventory: stock per branch", () => {
     expect(await branchStock(token, home, productId)).toBe(9)
   })
 })
+
+// The fields these tests read from a stock count response.
+interface StockCountBody {
+  id: string
+  reference: string
+  status: string
+  countDate: string
+  notes: string
+  // Count lines for one count; the counts themselves on the list endpoint.
+  items: { productId: string; countedQuantity: number; difference: number; reference: string }[]
+  [key: string]: unknown
+}
+
+describe("inventory: stock take", () => {
+  async function api(token: string, method: string, path: string, body?: unknown) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: authHeaders(token),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    return { status: response.status, body: (await response.json()) as StockCountBody }
+  }
+
+  it("counts a branch, then sets its stock to what was counted on approval", async () => {
+    const { token, actor } = await signIn("count-main@example.com", "Count Main")
+    const home = actor.workspaceId!
+    const other = await addBranch(actor.organizationId, "Jeddah")
+    const short = await seedProduct(actor.organizationId, home, { stockQuantity: 10, costPrice: 5 })
+    const extra = await seedProduct(actor.organizationId, home, { stockQuantity: 4, costPrice: 2 })
+    const untouched = await seedProduct(actor.organizationId, home, { stockQuantity: 7 })
+    // Stock in another branch isn't part of this branch's count.
+    await transfer(token, {
+      fromWorkspaceId: home,
+      toWorkspaceId: other,
+      items: [{ productId: short, quantity: 2 }],
+    })
+
+    const created = await api(token, "POST", "/v1/inventory/stock-counts", {
+      workspaceId: home,
+      countDate: "2026-11-02",
+      notes: "Month end",
+      items: [
+        { productId: short, countedQuantity: 5 },
+        { productId: extra, countedQuantity: 6 },
+      ],
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      reference: "STK-0001",
+      status: "draft",
+      workspaceName: "Count Main Workspace",
+      differences: 2,
+      netDifference: -1,
+      netDifferenceValue: -11,
+    })
+    expect(created.body.items).toEqual([
+      expect.objectContaining({
+        productId: short,
+        systemQuantity: 8,
+        countedQuantity: 5,
+        difference: -3,
+      }),
+      expect.objectContaining({
+        productId: extra,
+        systemQuantity: 4,
+        countedQuantity: 6,
+        difference: 2,
+      }),
+    ])
+    // A draft changes nothing yet.
+    expect(await branchStock(token, home, short)).toBe(8)
+
+    const approved = await api(
+      token,
+      "POST",
+      `/v1/inventory/stock-counts/${created.body.id}/complete`
+    )
+    expect(approved.body.status).toBe("completed")
+
+    expect(await branchStock(token, home, short)).toBe(5)
+    expect(await branchStock(token, other, short)).toBe(2)
+    expect((await getProduct(short)).stockQuantity).toBe(7)
+    expect(await branchStock(token, home, extra)).toBe(6)
+    expect((await getProduct(untouched)).stockQuantity).toBe(7)
+
+    // An approved count is a record: it can't be edited, approved again or deleted.
+    expect(
+      (
+        await api(token, "PATCH", `/v1/inventory/stock-counts/${created.body.id}`, {
+          countDate: "2026-11-02",
+          items: [],
+        })
+      ).status
+    ).toBe(409)
+    expect(
+      (await api(token, "DELETE", `/v1/inventory/stock-counts/${created.body.id}`)).status
+    ).toBe(409)
+  })
+
+  it("approves against the stock at approval time, and lets a draft be edited or deleted", async () => {
+    const { token, actor } = await signIn("count-draft@example.com", "Count Draft")
+    const home = actor.workspaceId!
+    const productId = await seedProduct(actor.organizationId, home, { stockQuantity: 10 })
+
+    const draft = await api(token, "POST", "/v1/inventory/stock-counts", {
+      workspaceId: home,
+      countDate: "2026-11-02",
+      items: [{ productId, countedQuantity: 9 }],
+    })
+    const edited = await api(token, "PATCH", `/v1/inventory/stock-counts/${draft.body.id}`, {
+      countDate: "2026-11-03",
+      notes: "Recount",
+      items: [{ productId, countedQuantity: 8 }],
+    })
+    expect(edited.body).toMatchObject({ countDate: "2026-11-03", notes: "Recount" })
+    expect(edited.body.items[0]).toMatchObject({ countedQuantity: 8, difference: -2 })
+
+    // Stock moves after the draft was saved (e.g. a sale): the count still lands on 8.
+    await database.query("update products set stock_quantity = 6 where id = $1", [productId])
+    await api(token, "POST", `/v1/inventory/stock-counts/${draft.body.id}/complete`)
+    expect(await branchStock(token, home, productId)).toBe(8)
+
+    const another = await api(token, "POST", "/v1/inventory/stock-counts", {
+      workspaceId: home,
+      countDate: "2026-11-04",
+      items: [],
+    })
+    expect(another.body.reference).toBe("STK-0002")
+    expect(
+      (await api(token, "POST", `/v1/inventory/stock-counts/${another.body.id}/complete`)).status
+    ).toBe(400)
+    expect(
+      (await api(token, "DELETE", `/v1/inventory/stock-counts/${another.body.id}`)).status
+    ).toBe(200)
+    const list = await api(token, "GET", "/v1/inventory/stock-counts")
+    expect(list.body.items.map((item: { reference: string }) => item.reference)).toEqual([
+      "STK-0001",
+    ])
+  })
+})

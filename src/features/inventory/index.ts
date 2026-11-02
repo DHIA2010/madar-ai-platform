@@ -1,3 +1,6 @@
+export * from "./components/stock-count-form-page"
+export * from "./components/stock-counts-page"
 export * from "./components/stock-transfer-form-page"
 export * from "./components/stock-transfers-page"
+export * from "./services/stock-count.service"
 export * from "./services/stock-transfer.service"

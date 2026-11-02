@@ -73,7 +73,8 @@
       "productsList": "قائمة المنتجات",
       "productCategories": "التصنيفات",
       "inventory": "المخزون",
-      "stockTransfers": "تحويل المخزون"
+      "stockTransfers": "تحويل المخزون",
+      "stockCounts": "جرد المخزون"
     }
   },
   "auth": {
@@ -8598,6 +8599,122 @@
         "stockFailed": "تعذر تحميل مخزون الفرع.",
         "unknownBranch": "أحد الفرعين غير موجود. حدّث الصفحة واختر الفرع مرة أخرى."
       }
+    },
+    "counts": {
+      "heading": "جرد المخزون",
+      "subheading": "عدّ المخزون الفعلي في كل فرع ومطابقته مع مدار. اعتماد الجرد يضبط مخزون الفرع على الكميات المعدودة.",
+      "kpis": {
+        "total": "إجمالي عمليات الجرد",
+        "drafts": "جرد قيد التنفيذ",
+        "completedThisMonth": "جرد معتمد هذا الشهر",
+        "netValue": "صافي قيمة الفروقات"
+      },
+      "searchPlaceholder": "ابحث برقم الجرد أو الملاحظات...",
+      "filters": {
+        "branch": "الفرع",
+        "allBranches": "كل الفروع",
+        "status": "الحالة",
+        "allStatuses": "كل الحالات"
+      },
+      "status": {
+        "draft": "مسودة",
+        "completed": "معتمد"
+      },
+      "add": "جرد جديد",
+      "view": "عرض",
+      "continue": "متابعة الجرد",
+      "table": {
+        "reference": "رقم الجرد",
+        "branch": "الفرع",
+        "date": "تاريخ الجرد",
+        "status": "الحالة",
+        "counted": "منتجات معدودة",
+        "differences": "بها فروقات",
+        "net": "صافي الفرق",
+        "netValue": "قيمة الفرق",
+        "by": "بواسطة",
+        "actions": "إجراءات"
+      },
+      "loading": "جارٍ تحميل عمليات الجرد...",
+      "empty": {
+        "title": "لا توجد عمليات جرد بعد",
+        "description": "ابدأ أول جرد لمطابقة مخزون فرعك مع مدار.",
+        "noMatchTitle": "لا توجد عمليات جرد مطابقة",
+        "noMatchDescription": "جرّب بحثاً أو فلاتر مختلفة."
+      },
+      "showingCount": "عرض {shown} من {total} عملية جرد",
+      "toasts": {
+        "loadFailed": "تعذر تحميل عمليات الجرد."
+      }
+    },
+    "countForm": {
+      "back": "العودة إلى جرد المخزون",
+      "heading": "جرد مخزون جديد",
+      "headingExisting": "جرد المخزون {reference}",
+      "subheading": "أدخل الكمية المعدودة لكل منتج. يمكنك الحفظ كمسودة والمتابعة لاحقاً، ثم اعتماد الجرد لضبط مخزون الفرع.",
+      "completedNote": "جرد معتمد بواسطة {name} بتاريخ {date}. تم ضبط مخزون الفرع على الكميات المعدودة.",
+      "reference": "رقم الجرد",
+      "referenceHint": "يُنشأ تلقائياً عند الحفظ",
+      "branch": "الفرع",
+      "branchPlaceholder": "اختر الفرع المراد جرده",
+      "branchLocked": "لا يمكن تغيير الفرع بعد بدء الجرد",
+      "date": "تاريخ الجرد",
+      "notes": "ملاحظات",
+      "notesPlaceholder": "اختياري — مثال: جرد نهاية الشهر",
+      "productsTitle": "المنتجات",
+      "pickBranch": "اختر الفرع لعرض منتجاته وبدء الجرد.",
+      "loadingStock": "جارٍ تحميل مخزون الفرع...",
+      "searchPlaceholder": "امسح الباركود أو اكتب رمز المنتج (SKU) واضغط Enter لعدّ قطعة...",
+      "filters": {
+        "all": "الكل",
+        "counted": "تم عدّها",
+        "uncounted": "لم تُعدّ",
+        "differences": "بها فروقات"
+      },
+      "table": {
+        "product": "المنتج",
+        "system": "الكمية في مدار",
+        "counted": "الكمية المعدودة",
+        "difference": "الفرق",
+        "differenceValue": "قيمة الفرق"
+      },
+      "countedPlaceholder": "لم تُعدّ",
+      "countedLabel": "الكمية المعدودة لـ {name}",
+      "noProducts": "لا توجد منتجات تحتفظ بمخزون في هذا الفرع.",
+      "noMatch": "لا توجد منتجات مطابقة.",
+      "summary": {
+        "counted": "تم عدّ {counted} من {total}",
+        "differences": "{count} بها فروقات",
+        "net": "صافي الفرق:",
+        "netValue": "قيمة الفرق:"
+      },
+      "delete": "حذف المسودة",
+      "saveDraft": "حفظ كمسودة",
+      "approve": "اعتماد الجرد",
+      "approveDialog": {
+        "title": "اعتماد الجرد؟",
+        "description": "سيُضبط مخزون {counted} منتج في هذا الفرع على الكميات المعدودة ({differences} منها بها فروقات). المنتجات التي لم تُعدّ لن تتغير.",
+        "warning": "بعد الاعتماد لا يمكن تعديل الجرد أو حذفه."
+      },
+      "deleteDialog": {
+        "title": "حذف المسودة {reference}؟",
+        "description": "ستُحذف الكميات المعدودة في هذه المسودة. لن يتغير أي مخزون."
+      },
+      "toasts": {
+        "loadFailed": "تعذر تحميل الجرد.",
+        "stockFailed": "تعذر تحميل مخزون الفرع.",
+        "saveFailed": "تعذر حفظ الجرد.",
+        "saved": "تم حفظ المسودة {reference}.",
+        "approved": "تم اعتماد الجرد {reference} وضبط المخزون.",
+        "approveFailed": "تعذر اعتماد الجرد.",
+        "deleted": "تم حذف المسودة {reference}.",
+        "deleteFailed": "تعذر حذف المسودة.",
+        "scanNoMatch": "لا يوجد منتج بالرمز \"{query}\" في هذا الفرع.",
+        "scanManyMatches": "أكثر من منتج يطابق البحث. امسح الرمز أو اكتبه كاملاً."
+      },
+      "searchPlaceholderReadOnly": "ابحث باسم المنتج أو رمزه (SKU)...",
+      "scanHint": "كل مسح أو Enter يضيف 1 إلى الكمية المعدودة، ويمكنك أيضاً كتابة الكمية مباشرة.",
+      "lastScanned": "آخر عدّ: {name} — المعدود: {count}"
     }
   }
 }

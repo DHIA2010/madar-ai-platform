@@ -19,6 +19,8 @@ export const ROUTES = {
   productCategories: "/products/categories",
   inventoryTransfers: "/inventory/transfers",
   inventoryTransfersAdd: "/inventory/transfers/add",
+  inventoryStockCounts: "/inventory/stock-counts",
+  inventoryStockCountsNew: "/inventory/stock-counts/count",
   productsAdd: "/eCommerce/add-product",
   orders: "/orders",
   ordersCreate: "/orders/new",

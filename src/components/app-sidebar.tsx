@@ -49,6 +49,7 @@ import {
   Wallet,
   Warehouse,
   ArrowLeftRight,
+  ClipboardCheck,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 
@@ -162,6 +163,11 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
           title: t("stockTransfers"),
           url: ROUTES.inventoryTransfers,
           icon: <ArrowLeftRight />,
+        },
+        {
+          title: t("stockCounts"),
+          url: ROUTES.inventoryStockCounts,
+          icon: <ClipboardCheck />,
         },
       ],
     },
