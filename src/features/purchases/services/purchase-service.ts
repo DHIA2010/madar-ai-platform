@@ -90,7 +90,39 @@ function toSavePayload(values: PurchaseFormValues) {
     paymentMethod: values.paymentMethod,
     referenceNumber: values.referenceNumber,
     note: values.note,
+    invoiceAttachmentUrl: values.invoiceAttachmentUrl,
   }
+}
+
+export type InvoiceMatchSource = "memory" | "sku" | "name"
+
+export interface ScannedInvoiceLine {
+  code: string | null
+  name: string
+  qty: number
+  unitCost: number
+  discount: number
+  taxPercent: number | null
+  match: { productId: string; productName: string; sku: string; by: InvoiceMatchSource } | null
+}
+
+export interface ScannedInvoice {
+  attachmentUrl: string | null
+  supplierName: string | null
+  invoiceNumber: string | null
+  invoiceDate: string | null
+  lines: ScannedInvoiceLine[]
+}
+
+export type InvoiceContentType = "application/pdf" | "image/jpeg" | "image/png" | "image/webp"
+
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "")
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 export const purchaseService = {
@@ -120,5 +152,29 @@ export const purchaseService = {
       toSavePayload(values)
     )
     return withWarehouseName(dto)
+  },
+
+  // Uploads a supplier's invoice and reads its lines, matched to products where possible.
+  async scanInvoice(supplierId: string, file: File): Promise<ScannedInvoice> {
+    return client.post<
+      { supplierId: string; fileBase64: string; contentType: InvoiceContentType },
+      ScannedInvoice
+    >([PURCHASES_ENDPOINT, "invoice-scan"].join(PATH_SEPARATOR), {
+      supplierId,
+      fileBase64: await readAsBase64(file),
+      contentType: file.type as InvoiceContentType,
+    })
+  },
+
+  // Remembers which of this supplier's invoice codes mean which product.
+  async rememberSupplierCodes(
+    supplierId: string,
+    links: { code: string | null; name: string; productId: string }[]
+  ): Promise<void> {
+    if (links.length === 0) return
+    await client.post<
+      { supplierId: string; links: { code: string | null; name: string; productId: string }[] },
+      unknown
+    >([PURCHASES_ENDPOINT, "supplier-codes"].join(PATH_SEPARATOR), { supplierId, links })
   },
 }

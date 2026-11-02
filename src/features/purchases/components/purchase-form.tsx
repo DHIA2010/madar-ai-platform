@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
-import { Plus } from "lucide-react"
+import { ExternalLink, FileText, Plus, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -24,6 +24,7 @@ import {
 import { FIELD_CLASS, PANEL, PurchaseField, SuffixInput } from "./purchase-field"
 import type { CalculationLevel } from "./purchase-line-items-table"
 import { PurchaseLineItemsTable } from "./purchase-line-items-table"
+import { type AppliedInvoice, SupplierInvoiceDialog } from "./supplier-invoice-dialog"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
@@ -60,6 +61,7 @@ function purchaseToFormValues(purchase: Purchase): PurchaseFormValues {
     paymentMethod: purchase.paymentMethod,
     referenceNumber: purchase.referenceNumber,
     note: purchase.note,
+    invoiceAttachmentUrl: purchase.invoiceAttachmentUrl ?? null,
   }
 }
 
@@ -79,6 +81,29 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
   )
   const [taxLevel, setTaxLevel] = useState<CalculationLevel>(() => inferTaxLevel(values))
   const [submitting, setSubmitting] = useState(false)
+  const [invoiceOpen, setInvoiceOpen] = useState(false)
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === values.supplierId)
+
+  // Lines read from the supplier's invoice join the order; a product already on it gets the
+  // invoice's quantity added rather than a second row.
+  function applyInvoice(invoice: AppliedInvoice) {
+    setValues((current) => {
+      const items = [...current.items]
+      for (const line of invoice.items) {
+        const index = items.findIndex((item) => item.productId === line.productId)
+        if (index === -1) items.push(line)
+        else items[index] = { ...items[index], qty: items[index].qty + line.qty }
+      }
+      return {
+        ...current,
+        items,
+        invoiceAttachmentUrl: invoice.attachmentUrl ?? current.invoiceAttachmentUrl,
+        referenceNumber: current.referenceNumber.trim()
+          ? current.referenceNumber
+          : (invoice.invoiceNumber ?? ""),
+      }
+    })
+  }
 
   function set<K extends keyof PurchaseFormValues>(key: K, value: PurchaseFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }))
@@ -183,6 +208,52 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
       </section>
 
       <section className={cn(PANEL, "p-4 md:p-5")}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[#dbe6fb] bg-gradient-to-l from-[#f4f8ff] to-white px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2878ff] text-white shadow-[0_4px_12px_rgba(40,120,255,0.3)]">
+              <Sparkles className="size-5" />
+            </span>
+            <div>
+              <p className="text-[13.5px] font-bold text-[#0b1738]">{t("invoiceUpload.title")}</p>
+              <p className="text-[12px] text-[#6b7b96]">
+                {values.supplierId ? t("invoiceUpload.hint") : t("invoiceUpload.pickSupplierFirst")}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {values.invoiceAttachmentUrl ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 py-1 ps-3 pe-1 text-[12px] font-semibold text-emerald-700">
+                <FileText className="size-3.5" />
+                <a
+                  href={values.invoiceAttachmentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 hover:underline"
+                >
+                  {t("invoiceUpload.attached")}
+                  <ExternalLink className="size-3" />
+                </a>
+                <button
+                  type="button"
+                  aria-label={t("invoiceUpload.remove")}
+                  onClick={() => set("invoiceAttachmentUrl", null)}
+                  className="flex size-5 items-center justify-center rounded-full hover:bg-emerald-100"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ) : null}
+            <AppButton
+              type="button"
+              disabled={!values.supplierId}
+              onClick={() => setInvoiceOpen(true)}
+              icon={<Sparkles className="size-4" />}
+              className="h-10 gap-2 rounded-full bg-[#2878ff] px-4 text-[12.5px] font-bold text-white shadow-[0_6px_16px_rgba(40,120,255,0.28)] hover:bg-[#1f63d6] disabled:opacity-50 disabled:shadow-none"
+            >
+              {t("invoiceUpload.button")}
+            </AppButton>
+          </div>
+        </div>
         <PurchaseLineItemsTable
           items={values.items}
           onItemsChange={(items) => set("items", items)}
@@ -281,6 +352,16 @@ export function PurchaseForm({ initialPurchase }: { initialPurchase?: Purchase }
           {isEditing ? t("saveChanges") : t("createPurchase")}
         </AppButton>
       </div>
+      {values.supplierId ? (
+        <SupplierInvoiceDialog
+          open={invoiceOpen}
+          onOpenChange={setInvoiceOpen}
+          supplierId={values.supplierId}
+          supplierName={selectedSupplier?.name ?? ""}
+          taxLevel={taxLevel}
+          onApply={applyInvoice}
+        />
+      ) : null}
     </AppForm>
   )
 }

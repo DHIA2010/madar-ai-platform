@@ -1282,6 +1282,29 @@ export const createPurchaseSchema = z.object({
     .default(null),
   referenceNumber: z.string().max(200).default(""),
   note: z.string().max(2000).default(""),
+  // The supplier's own invoice, uploaded through /v1/purchases/invoice-scan.
+  invoiceAttachmentUrl: z.string().url().max(2000).nullable().optional().default(null),
+})
+
+// ~8MB of file, base64-encoded.
+export const scanSupplierInvoiceSchema = z.object({
+  supplierId: z.string().uuid(),
+  fileBase64: z.string().min(1).max(11_200_000),
+  contentType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
+})
+
+export const rememberSupplierCodesSchema = z.object({
+  supplierId: z.string().uuid(),
+  links: z
+    .array(
+      z.object({
+        code: z.string().trim().max(200).nullable(),
+        name: z.string().trim().min(1).max(300),
+        productId: z.string().uuid(),
+      })
+    )
+    .min(1)
+    .max(200),
 })
 
 const returnLineItemSchema = z.object({

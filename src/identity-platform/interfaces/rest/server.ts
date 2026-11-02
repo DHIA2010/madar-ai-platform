@@ -79,7 +79,9 @@ import { ZidProductStockPushService } from "../../products/zid-product-stock-pus
 import { requireProcurementEnabled } from "../../procurement/guards"
 import { requireCustomReportsEnabled } from "../../reports/custom-reports-guard"
 import { SuppliersService } from "../../procurement/suppliers-service"
+import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
+import { SupplierInvoicesService } from "../../procurement/supplier-invoices-service"
 import { ReturnsService } from "../../procurement/returns-service"
 import { VouchersService } from "../../procurement/vouchers-service"
 import { ExpenseCategoriesService } from "../../expenses/expense-categories-service"
@@ -250,6 +252,8 @@ import {
   bulkUpdateSupplierStatusSchema,
   uploadSupplierImageSchema,
   createPurchaseSchema,
+  rememberSupplierCodesSchema,
+  scanSupplierInvoiceSchema,
   createPurchaseReturnSchema,
   createSupplierVoucherSchema,
   createExpenseCategorySchema,
@@ -753,6 +757,18 @@ export function createIdentityApiServer(
     : null
   const purchasesService = container.infrastructure.database
     ? new PurchasesService(container.infrastructure.database)
+    : null
+  const supplierInvoicesService = container.infrastructure.database
+    ? new SupplierInvoicesService(
+        container.infrastructure.database,
+        container.infrastructure.objectStorage ?? null,
+        container.config.anthropicApiKey
+          ? new ClaudeInvoiceExtractor(
+              container.config.anthropicApiKey,
+              container.config.invoiceReaderModel
+            )
+          : null
+      )
     : null
   const returnsService = container.infrastructure.database
     ? new ReturnsService(container.infrastructure.database)
@@ -5548,6 +5564,39 @@ export function createIdentityApiServer(
             await purchasesService.create(actor.organizationId, actor.workspaceId, payload)
           )
         }
+      }
+
+      if (method === "POST" && url.pathname === "/v1/purchases/invoice-scan") {
+        if (!supplierInvoicesService) {
+          return send(503, {
+            code: "PURCHASES_UNAVAILABLE",
+            message: "Purchases are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+        const payload = scanSupplierInvoiceSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await supplierInvoicesService.scan({ organizationId: actor.organizationId, ...payload })
+        )
+      }
+
+      if (method === "POST" && url.pathname === "/v1/purchases/supplier-codes") {
+        if (!supplierInvoicesService) {
+          return send(503, {
+            code: "PURCHASES_UNAVAILABLE",
+            message: "Purchases are unavailable in memory mode.",
+          })
+        }
+        if (!actor.modulePermissions.includes("purchases:manage")) throw ERRORS.forbidden()
+        const payload = rememberSupplierCodesSchema.parse(await readJsonBody(request))
+        return send(
+          200,
+          await supplierInvoicesService.rememberCodes({
+            organizationId: actor.organizationId,
+            ...payload,
+          })
+        )
       }
 
       const purchaseMatch = url.pathname.match(/^\/v1\/purchases\/([^/]+)$/)

@@ -28,6 +28,7 @@ function mapPurchase(row: Record<string, unknown>, items: PurchaseLineItemDto[])
     paymentMethod: (row.payment_method as PurchaseDto["paymentMethod"]) ?? null,
     referenceNumber: (row.reference_number as string | null) ?? "",
     note: (row.note as string | null) ?? "",
+    invoiceAttachmentUrl: (row.invoice_attachment_url as string | null) ?? null,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   }
@@ -130,9 +131,10 @@ export class PurchasesRepository {
         `INSERT INTO purchases (
            id, organization_id, workspace_id, code, supplier_id, warehouse_id, date, due_date,
            delivery_date, status, order_tax_percent, discount_amount, shipping_amount,
-           other_costs, currency, payment_method, reference_number, note, created_at, updated_at
+           other_costs, currency, payment_method, reference_number, note, invoice_attachment_url,
+           created_at, updated_at
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, now(), now()
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, now(), now()
          )`,
         [
           id,
@@ -153,6 +155,7 @@ export class PurchasesRepository {
           input.paymentMethod,
           input.referenceNumber,
           input.note,
+          input.invoiceAttachmentUrl,
         ]
       )
 
@@ -180,7 +183,7 @@ export class PurchasesRepository {
            supplier_id = $3, warehouse_id = $4, date = $5, due_date = $6, delivery_date = $7,
            status = $8, order_tax_percent = $9, discount_amount = $10, shipping_amount = $11,
            other_costs = $12, currency = $13, payment_method = $14, reference_number = $15,
-           note = $16, updated_at = now()
+           note = $16, invoice_attachment_url = $17, updated_at = now()
          WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`,
         [
           organizationId,
@@ -199,6 +202,7 @@ export class PurchasesRepository {
           input.paymentMethod,
           input.referenceNumber,
           input.note,
+          input.invoiceAttachmentUrl,
         ]
       )
       if (result.rowCount === 0) return

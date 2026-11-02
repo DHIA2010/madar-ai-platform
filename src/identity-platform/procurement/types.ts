@@ -102,6 +102,7 @@ export interface PurchaseDto {
   paymentMethod: PurchasePaymentMethod | null
   referenceNumber: string
   note: string
+  invoiceAttachmentUrl: string | null
   createdAt: string
   updatedAt: string
 }
@@ -130,6 +131,7 @@ export interface SavePurchaseInput {
   paymentMethod: PurchasePaymentMethod | null
   referenceNumber: string
   note: string
+  invoiceAttachmentUrl: string | null
 }
 
 // Fixed and server-computed at creation, never client-set or changed afterward (see

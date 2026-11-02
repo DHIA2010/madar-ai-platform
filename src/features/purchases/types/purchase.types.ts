@@ -48,6 +48,8 @@ export interface Purchase {
   paymentMethod: PurchasePaymentMethod | null
   referenceNumber: string
   note: string
+  // The supplier's own invoice file, when one was uploaded.
+  invoiceAttachmentUrl: string | null
   createdAt: string
 }
 
@@ -182,6 +184,7 @@ export interface PurchaseFormValues {
   paymentMethod: PurchasePaymentMethod | null
   referenceNumber: string
   note: string
+  invoiceAttachmentUrl: string | null
 }
 
 export const EMPTY_PURCHASE_FORM_VALUES: PurchaseFormValues = {
@@ -200,6 +203,7 @@ export const EMPTY_PURCHASE_FORM_VALUES: PurchaseFormValues = {
   paymentMethod: null,
   referenceNumber: "",
   note: "",
+  invoiceAttachmentUrl: null,
 }
 
 // No "status" field -- it's computed server-side from the submitted items vs the purchase, never

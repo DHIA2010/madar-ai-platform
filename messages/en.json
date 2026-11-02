@@ -1021,6 +1021,14 @@
         "updateSuccess": "Purchase order {code} updated.",
         "createSuccess": "Purchase order {code} created.",
         "saveError": "Couldn't save the purchase order. Try again."
+      },
+      "invoiceUpload": {
+        "title": "Upload supplier invoice",
+        "hint": "Upload the supplier's invoice (PDF or photo) and Madar reads its products, quantities and prices for you.",
+        "pickSupplierFirst": "Choose the supplier first to upload their invoice.",
+        "button": "Upload invoice",
+        "attached": "Supplier invoice attached",
+        "remove": "Remove attached invoice"
       }
     },
     "lineItems": {
@@ -1075,7 +1083,9 @@
       "grandTotal": "Grand Total",
       "paidAmount": "Paid Amount",
       "remaining": "Remaining",
-      "notes": "Notes"
+      "notes": "Notes",
+      "invoiceAttachment": "Supplier invoice",
+      "openInvoice": "Open invoice"
     },
     "print": {
       "title": "Purchase Order",
@@ -1211,6 +1221,51 @@
           "createSuccess": "Return {code} created.",
           "saveError": "Couldn't save the return. Try again."
         }
+      }
+    },
+    "invoiceScan": {
+      "title": "Read supplier invoice",
+      "supplier": "Supplier: {name}",
+      "description": "Upload the supplier's invoice and Madar reads each line and matches it to your products.",
+      "reviewDescription": "Review what was read and check the matched product for each line before adding them to the purchase order.",
+      "dropTitle": "Drop the invoice here or click to choose a file",
+      "dropHint": "PDF, JPG, PNG or WEBP — up to 8MB",
+      "reading": "Reading the invoice...",
+      "readingHint": "This can take up to a minute depending on the invoice.",
+      "invoiceNumber": "Invoice #: {number}",
+      "invoiceDate": "Date: {date}",
+      "matchedCount": "{matched} of {total} matched",
+      "unmatchedCount": "{count} unmatched",
+      "noCode": "No code",
+      "discount": "Discount: {amount}",
+      "pickProduct": "Choose product",
+      "searchProduct": "Search by name or SKU...",
+      "noProducts": "No products",
+      "table": {
+        "invoiceLine": "Invoice line",
+        "qty": "Qty",
+        "unitCost": "Unit cost (before VAT)",
+        "product": "Product in Madar",
+        "include": "Add {name}"
+      },
+      "matchBy": {
+        "memory": "Remembered code for this supplier",
+        "sku": "Matched by SKU",
+        "name": "Suggested by name — check it",
+        "manual": "Chosen manually",
+        "none": "No product found"
+      },
+      "rememberNote": "Madar will remember this supplier's codes so their next invoices match automatically.",
+      "apply": "{count, plural, =0 {Add to purchase order} one {Add # product} other {Add # products}}",
+      "toasts": {
+        "badType": "Only a PDF or an image (JPG, PNG, WEBP) can be read.",
+        "tooLarge": "The file is larger than 8MB.",
+        "readFailed": "Couldn't read the invoice. Try a clearer file.",
+        "noLines": "No product lines were found on the invoice.",
+        "applied": "Added {count} invoice lines to the purchase order.",
+        "unavailable": "Reading invoices isn't available right now. Try again later.",
+        "forbidden": "You don't have permission to upload supplier invoices.",
+        "uploadFailed": "Couldn't upload the invoice. Check your connection and try again."
       }
     }
   },

@@ -14,6 +14,8 @@ import { createIdentityPlatform } from "../bootstrap/create-identity-platform"
 import { runIdentityMigrations } from "../infrastructure/postgres/migration-runner"
 import { PostgresDatabase } from "../infrastructure/postgres/database"
 import { createIdentityApiServer } from "../interfaces/rest/server"
+import type { ExtractedInvoice, InvoiceExtractor } from "../procurement/invoice-reader"
+import { SupplierInvoicesService } from "../procurement/supplier-invoices-service"
 
 let database: PostgresDatabase
 let server: ReturnType<typeof createIdentityApiServer>
@@ -524,5 +526,124 @@ describe("procurement: application-activation gate", () => {
     expect((await fetch(`${baseUrl}/v1/suppliers`, { headers: authHeaders(token) })).status).toBe(
       403
     )
+  })
+})
+
+describe("procurement: supplier invoices", () => {
+  // A stand-in for Claude: returns a fixed reading of the invoice.
+  function stubExtractor(lines: ExtractedInvoice["lines"]): InvoiceExtractor {
+    return {
+      extract: async () => ({
+        supplierName: "Sunrise Wholesale",
+        invoiceNumber: "INV-7781",
+        invoiceDate: "2026-10-30",
+        lines,
+      }),
+    }
+  }
+
+  it("matches lines by remembered code, then SKU, then name, and remembers confirmed codes", async () => {
+    const { token, actor } = await signIn("invoice-scan@example.com", "Invoice Scan")
+    const supplierId = String((await createSupplier(token)).body.id)
+    const rice = await seedProduct(actor.organizationId, actor.workspaceId)
+    await database.query(
+      `update products set name = 'أرز بسمتي 5 كجم', sku = 'RICE-5' where id = $1`,
+      [rice]
+    )
+    const sugar = await seedProduct(actor.organizationId, actor.workspaceId)
+    await database.query(`update products set name = 'سكر ناعم', sku = 'SUG-1' where id = $1`, [
+      sugar,
+    ])
+
+    const lines = [
+      {
+        code: "WT-88213",
+        name: "أرز بسمتي ٥ كيلو",
+        qty: 20,
+        unitCost: 31.5,
+        discount: 0,
+        taxPercent: 15,
+      },
+      { code: "rice-5", name: "Basmati rice", qty: 2, unitCost: 30, discount: 0, taxPercent: null },
+      { code: null, name: "سكر  ناعم", qty: 5, unitCost: 4, discount: 1, taxPercent: 15 },
+      { code: "ZZ-1", name: "منتج غير معروف", qty: 1, unitCost: 9, discount: 0, taxPercent: null },
+    ]
+    const service = new SupplierInvoicesService(database, null, stubExtractor(lines))
+    const file = { fileBase64: Buffer.from("%PDF-1.4 test").toString("base64") }
+    const scan = () =>
+      service.scan({
+        organizationId: actor.organizationId,
+        supplierId,
+        contentType: "application/pdf",
+        ...file,
+      })
+
+    const first = await scan()
+    expect(first).toMatchObject({ invoiceNumber: "INV-7781", attachmentUrl: null })
+    expect(first.lines.map((line) => line.match?.by ?? null)).toEqual([null, "sku", "name", null])
+    expect(first.lines[2].match?.productId).toBe(sugar)
+
+    // The user confirms WT-88213 is the rice; the next invoice from this supplier matches it.
+    const remembered = await fetch(`${baseUrl}/v1/purchases/supplier-codes`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        supplierId,
+        links: [
+          { code: "WT-88213", name: "أرز بسمتي ٥ كيلو", productId: rice },
+          // A line with no code is remembered by its name.
+          { code: null, name: "منتج غير معروف", productId: sugar },
+        ],
+      }),
+    })
+    expect(await remembered.json()).toEqual({ saved: 2 })
+
+    const second = await scan()
+    expect(second.lines[0].match).toMatchObject({ productId: rice, by: "memory" })
+    // ZZ-1 has a code, so its name alone doesn't match it; a code-less line with that name would.
+    expect(second.lines[3].match).toBeNull()
+
+    // A receipt with no codes: the line the user matched by name before now matches from memory.
+    const receipt = await new SupplierInvoicesService(
+      database,
+      null,
+      stubExtractor([
+        { code: null, name: "منتج  غير معروف", qty: 1, unitCost: 9, discount: 0, taxPercent: null },
+      ])
+    ).scan({ organizationId: actor.organizationId, supplierId, contentType: "image/jpeg", ...file })
+    expect(receipt.lines[0].match).toMatchObject({ productId: sugar, by: "memory" })
+  })
+
+  it("keeps the supplier invoice on the purchase", async () => {
+    const { token, actor } = await signIn("invoice-attach@example.com", "Invoice Attach")
+    const supplierId = String((await createSupplier(token)).body.id)
+    const productId = await seedProduct(actor.organizationId, actor.workspaceId)
+
+    const created = await createPurchase(token, {
+      supplierId,
+      items: [{ productId, netUnitCost: 20, qty: 1, discount: 0, taxPercent: 0 }],
+      invoiceAttachmentUrl: "https://files.example.com/purchase-invoices/a.pdf",
+    })
+    expect(created.status).toBe(201)
+    expect(created.body.invoiceAttachmentUrl).toBe(
+      "https://files.example.com/purchase-invoices/a.pdf"
+    )
+  })
+
+  it("refuses to remember a code for another organization's product", async () => {
+    const other = await signIn("invoice-other@example.com", "Invoice Other")
+    const foreignProduct = await seedProduct(other.actor.organizationId, other.actor.workspaceId)
+    const { token } = await signIn("invoice-own@example.com", "Invoice Own")
+    const supplierId = String((await createSupplier(token)).body.id)
+
+    const response = await fetch(`${baseUrl}/v1/purchases/supplier-codes`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        supplierId,
+        links: [{ code: "X-1", name: "X", productId: foreignProduct }],
+      }),
+    })
+    expect(await response.json()).toEqual({ saved: 0 })
   })
 })

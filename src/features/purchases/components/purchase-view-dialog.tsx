@@ -1,6 +1,7 @@
 "use client"
 
 import { useLocale, useTranslations } from "next-intl"
+import { ExternalLink, FileText } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
@@ -134,6 +135,23 @@ export function PurchaseViewDialog({
                 value={purchase.paymentMethod ? tPaymentMethod(purchase.paymentMethod) : ""}
               />
               <Field label={t("referenceNumber")} value={purchase.referenceNumber} />
+              {purchase.invoiceAttachmentUrl ? (
+                <div>
+                  <p className="text-[11px] font-semibold text-[#95a4bd]">
+                    {t("invoiceAttachment")}
+                  </p>
+                  <a
+                    href={purchase.invoiceAttachmentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#2878ff] hover:underline"
+                  >
+                    <FileText className="size-3.5" />
+                    {t("openInvoice")}
+                    <ExternalLink className="size-3" />
+                  </a>
+                </div>
+              ) : null}
             </div>
           </Section>
 

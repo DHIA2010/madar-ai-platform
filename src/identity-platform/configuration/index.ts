@@ -42,6 +42,7 @@ export interface IdentityPlatformConfig {
   // ai-chat feature module is null-gated on its absence, same as every other optional service.
   anthropicApiKey?: string
   aiChatModel: string
+  invoiceReaderModel: string
 }
 
 const configSchema = z.object({
@@ -79,6 +80,7 @@ const configSchema = z.object({
   platformAdminEmails: z.array(z.string().email()),
   anthropicApiKey: z.string().optional(),
   aiChatModel: z.string().min(1),
+  invoiceReaderModel: z.string().min(1),
 })
 
 export function loadIdentityPlatformConfig(
@@ -180,5 +182,9 @@ export function loadIdentityPlatformConfig(
     anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
     aiChatModel:
       overrides.aiChatModel ?? process.env.IDENTITY_PLATFORM_AI_CHAT_MODEL ?? "claude-sonnet-5",
+    invoiceReaderModel:
+      overrides.invoiceReaderModel ??
+      process.env.IDENTITY_PLATFORM_INVOICE_READER_MODEL ??
+      "claude-opus-5-5",
   })
 }
