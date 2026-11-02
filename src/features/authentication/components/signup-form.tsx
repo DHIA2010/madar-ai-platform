@@ -30,6 +30,7 @@ import {
 import { useAuth } from "../hooks"
 import { safeNextPath } from "../utils/safe-next-path"
 import { type SignupFormValues, signupInvitationSchema, signupSchema } from "../validators"
+import { GoogleSignInButton } from "./google-sign-in-button"
 
 import { useApplicationServices } from "@/application"
 
@@ -162,6 +163,7 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [formError, setFormError] = useState<string | null>(null)
   const t = useTranslations("auth.register")
+  const tGoogle = useTranslations("auth.google")
 
   const steps: { step: 1 | 2 | 3; label: string }[] = isInvitationMode
     ? [
@@ -608,6 +610,17 @@ export function SignupForm({ className, ...props }: React.ComponentPropsWithoutR
           </>
         ) : null}
       </AppForm>
+
+      {step === 1 && !isInvitationMode ? (
+        <>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            {tGoogle("orSignUpWith")}
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
+          <GoogleSignInButton />
+        </>
+      ) : null}
 
       {step === 1 ? (
         <p className="text-center text-sm text-slate-600">

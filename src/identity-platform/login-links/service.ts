@@ -26,24 +26,28 @@ export class LoginLinkService {
     private readonly appUrl: string
   ) {}
 
-  // Returns the full URL to put in the e-mail.
+  // Returns the full URL to put in the e-mail. singleUse/ttlMs make a link that works once and
+  // briefly -- what "Continue with Google" hands the browser.
   async create(input: {
     userId: string
     organizationId: string
     redirectPath: string
+    singleUse?: boolean
+    ttlMs?: number
   }): Promise<string> {
     const token = `mll_${randomBytes(24).toString("hex")}`
     await this.db.query(
       `INSERT INTO account_login_links
-         (id, token_hash, user_id, organization_id, redirect_path, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+         (id, token_hash, user_id, organization_id, redirect_path, expires_at, single_use)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         randomUUID(),
         hashToken(token),
         input.userId,
         input.organizationId,
         input.redirectPath,
-        new Date(Date.now() + LINK_TTL_MS).toISOString(),
+        new Date(Date.now() + (input.ttlMs ?? LINK_TTL_MS)).toISOString(),
+        input.singleUse ?? false,
       ]
     )
     return `${this.appUrl.replace(/\/$/, "")}/login-link/${token}`
@@ -66,13 +70,19 @@ export class LoginLinkService {
       organization_id: string
       redirect_path: string
       expires_at: string | Date
+      single_use: boolean
+      last_used_at: string | Date | null
     }>(
-      `SELECT id, user_id, organization_id, redirect_path, expires_at
+      `SELECT id, user_id, organization_id, redirect_path, expires_at, single_use, last_used_at
          FROM account_login_links WHERE token_hash = $1`,
       [hashToken(token)]
     )
     const row = link.rows[0]
-    if (!row || new Date(row.expires_at).getTime() <= Date.now()) {
+    if (
+      !row ||
+      new Date(row.expires_at).getTime() <= Date.now() ||
+      (row.single_use && row.last_used_at !== null)
+    ) {
       return { status: "invalid" }
     }
 

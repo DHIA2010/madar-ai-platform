@@ -19,51 +19,9 @@ import { AppButton, AppCheckbox, AppForm, AppInput, AppPasswordInput } from "@/c
 import { useAuth } from "../hooks"
 import { safeNextPath } from "../utils/safe-next-path"
 import { type LoginFormValues, loginSchema } from "../validators"
+import { GoogleSignInButton } from "./google-sign-in-button"
 
 import { useApplicationServices } from "@/application"
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-4">
-      <path
-        d="M19.6 10.23c0-.68-.06-1.32-.17-1.94H10v3.67h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.75 2.99-4.32 2.99-7.25Z"
-        fill="#4285F4"
-      />
-      <path
-        d="M10 20c2.7 0 4.96-.89 6.61-2.42l-3.23-2.5c-.9.6-2.04.96-3.38.96-2.6 0-4.8-1.76-5.59-4.12H1.07v2.59A9.99 9.99 0 0 0 10 20Z"
-        fill="#34A853"
-      />
-      <path
-        d="M4.41 11.92a6.02 6.02 0 0 1 0-3.84V5.49H1.07a10 10 0 0 0 0 9.02l3.34-2.59Z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M10 3.96c1.47 0 2.79.5 3.83 1.5l2.87-2.87C14.95.99 12.7 0 10 0A9.99 9.99 0 0 0 1.07 5.49l3.34 2.59C5.2 5.72 7.4 3.96 10 3.96Z"
-        fill="#EA4335"
-      />
-    </svg>
-  )
-}
-
-function MicrosoftIcon() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-4">
-      <rect x="1" y="1" width="8.5" height="8.5" fill="#F25022" />
-      <rect x="10.5" y="1" width="8.5" height="8.5" fill="#7FBA00" />
-      <rect x="1" y="10.5" width="8.5" height="8.5" fill="#00A4EF" />
-      <rect x="10.5" y="10.5" width="8.5" height="8.5" fill="#FFB900" />
-    </svg>
-  )
-}
-
-function AppleIcon() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-4" fill="#000000">
-      <path d="M14.5 10.6c0-1.9 1.5-2.8 1.6-2.9-.9-1.3-2.2-1.5-2.7-1.5-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.6-1.3 0-2.4.7-3.1 1.9-1.3 2.3-.3 5.7.9 7.6.6.9 1.4 1.9 2.3 1.9.9 0 1.3-.6 2.4-.6s1.4.6 2.4.6c1 0 1.7-.9 2.3-1.8.7-1 1-2 1-2.1-.1 0-2-.8-2-3.1Z" />
-      <path d="M12.6 4.8c.5-.6.8-1.4.7-2.3-.7 0-1.6.5-2.1 1.1-.5.5-.9 1.4-.8 2.2.8.1 1.7-.4 2.2-1Z" />
-    </svg>
-  )
-}
 
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const { login, authStatus } = useAuth()
@@ -75,6 +33,17 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const invitationToken = searchParams.get("invitation")
   const zidInstallToken = searchParams.get("zidInstall")
   const nextPath = safeNextPath(searchParams.get("next"))
+  const tGoogle = useTranslations("auth.google")
+  // "Continue with Google" comes back here with ?error=google_<reason> when it can't sign in.
+  const googleError = searchParams.get("error")
+  const googleErrorReason = googleError?.startsWith("google_")
+    ? googleError.slice("google_".length)
+    : null
+  const googleErrorMessage = googleErrorReason
+    ? ["unverified_email", "no_membership", "unavailable"].includes(googleErrorReason)
+      ? tGoogle(`errors.${googleErrorReason}`)
+      : tGoogle("errors.failed")
+    : null
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -167,6 +136,15 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         </div>
       ) : null}
 
+      {googleErrorMessage ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-700"
+        >
+          {googleErrorMessage}
+        </div>
+      ) : null}
+
       <AppForm
         onSubmit={onSubmit}
         className="space-y-3 [&_input]:h-11 [&_input]:bg-white [&_input]:text-[15px]"
@@ -228,29 +206,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
           <span className="h-px flex-1 bg-slate-200" />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            type="button"
-            title={t("comingSoon")}
-            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <GoogleIcon />
-          </button>
-          <button
-            type="button"
-            title={t("comingSoon")}
-            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <MicrosoftIcon />
-          </button>
-          <button
-            type="button"
-            title={t("comingSoon")}
-            className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <AppleIcon />
-          </button>
-        </div>
+        <GoogleSignInButton />
 
         <p className="text-center text-sm text-slate-600">
           {t("noAccount")}{" "}

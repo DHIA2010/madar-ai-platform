@@ -1192,7 +1192,7 @@ export default function ProductsPage() {
               />
             ))}
 
-            <div className="relative ms-auto w-full md:w-[225px]">
+            <div className="relative w-full basis-full">
               <Search className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-[#95a4bd]" />
               <Input
                 placeholder={t("searchPlaceholder")}

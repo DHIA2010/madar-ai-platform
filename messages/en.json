@@ -89,7 +89,6 @@
       "forgotPassword": "Forgot password?",
       "submit": "Sign in",
       "orContinueWith": "Or sign in with",
-      "comingSoon": "Coming soon",
       "noAccount": "Don't have an account?",
       "createAccount": "Create a new account",
       "genericError": "Couldn't sign in. Please try again.",
@@ -383,6 +382,16 @@
       "errorHeading": "Couldn't sign you in",
       "errorDescription": "This sign-in link has expired or is no longer valid. Sign in with the email and password from your welcome email.",
       "goToLogin": "Go to sign in"
+    },
+    "google": {
+      "continue": "Continue with Google",
+      "orSignUpWith": "or sign up with",
+      "errors": {
+        "failed": "Couldn't sign in with Google. Please try again.",
+        "unverified_email": "Your Google email isn't verified. Use a verified Google account or sign up with email and password.",
+        "no_membership": "This email belongs to an inactive Madar account. Contact your account admin.",
+        "unavailable": "Signing in with Google isn't available right now."
+      }
     }
   },
   "dashboard": {

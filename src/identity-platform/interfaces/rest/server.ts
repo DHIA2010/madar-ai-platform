@@ -34,6 +34,7 @@ import { SallaSyncRepository } from "../../salla-oauth/sync-repository"
 import { verifySallaWebhookSignature } from "../../salla-oauth/webhook-verification"
 import { SallaWebhookService, type SallaWebhookPayload } from "../../salla-oauth/webhook-service"
 import { SallaMarketplaceAutoProvisionService } from "../../salla-oauth/auto-provision-service"
+import { GoogleSignInService } from "../../google-sign-in/service"
 import { LoginLinkService } from "../../login-links/service"
 import { mapSallaAppEvent, type SallaAppEventBody } from "../../tracking/salla-app-events"
 import { ShopifyOAuthConnectionDeletionService } from "../../shopify-oauth/connection-deletion-service"
@@ -1052,6 +1053,24 @@ export function createIdentityApiServer(
           appUrl
         )
       : null
+  // "Continue with Google" on the sign-in and register pages -- see GoogleSignInService.
+  const googleSignInService =
+    loginLinkService &&
+    container.zidAutoProvisionDeps &&
+    container.infrastructure.googleIdentityCredentialsProvider
+      ? new GoogleSignInService({
+          ...container.zidAutoProvisionDeps,
+          credentials: container.infrastructure.googleIdentityCredentialsProvider,
+          stateSecret: container.config.tokenHashSecret,
+          createSignInLink: (input) =>
+            loginLinkService.create({
+              ...input,
+              redirectPath: "/",
+              singleUse: true,
+              ttlMs: 5 * 60 * 1000,
+            }),
+        })
+      : null
   // A Salla App Store install becomes a Madar account (or links to the merchant's existing one)
   // with the store connected and syncing -- reuses the same account repositories, password hasher
   // and email gateway Zid's auto-provisioning gets from the container.
@@ -1532,6 +1551,43 @@ export function createIdentityApiServer(
       // claim token above.
       // Public on purpose -- the token in an e-mailed sign-in link *is* the credential (see
       // LoginLinkService). Signs in whichever account the link belongs to.
+      // Public: starts and finishes "Continue with Google". Both end in a browser redirect -- to
+      // Google, then to a one-time sign-in link (or back to sign-in with an error).
+      if (method === "GET" && url.pathname === "/v1/auth/google/start") {
+        if (!googleSignInService) {
+          response.writeHead(302, {
+            location: `${appUrl}/auth/basic/login?error=google_unavailable`,
+          })
+          response.end()
+          return
+        }
+        const startUrl = await googleSignInService.startUrl().catch((error: unknown) => {
+          console.error("google_sign_in.start_failed", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+          return `${appUrl}/auth/basic/login?error=google_unavailable`
+        })
+        response.writeHead(302, { location: startUrl })
+        response.end()
+        return
+      }
+      if (method === "GET" && url.pathname === "/v1/auth/google/callback") {
+        const outcome = googleSignInService
+          ? await googleSignInService.callback({
+              code: url.searchParams.get("code"),
+              state: url.searchParams.get("state"),
+            })
+          : ({ status: "error", reason: "google" } as const)
+        response.writeHead(302, {
+          location:
+            outcome.status === "ok"
+              ? outcome.signInUrl
+              : `${appUrl}/auth/basic/login?error=google_${outcome.reason}`,
+        })
+        response.end()
+        return
+      }
+
       const loginLinkConsumeMatch = url.pathname.match(
         /^\/v1\/auth\/login-links\/([^/]+)\/consume$/
       )
