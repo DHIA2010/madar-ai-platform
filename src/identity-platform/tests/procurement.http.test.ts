@@ -621,6 +621,7 @@ describe("procurement: supplier invoices", () => {
 
     const created = await createPurchase(token, {
       supplierId,
+      warehouseId: actor.workspaceId,
       items: [{ productId, netUnitCost: 20, qty: 1, discount: 0, taxPercent: 0 }],
       invoiceAttachmentUrl: "https://files.example.com/purchase-invoices/a.pdf",
     })
@@ -628,6 +629,8 @@ describe("procurement: supplier invoices", () => {
     expect(created.body.invoiceAttachmentUrl).toBe(
       "https://files.example.com/purchase-invoices/a.pdf"
     )
+    // The branch comes back by name, not just its id.
+    expect(created.body.warehouseName).toBe("Invoice Attach Workspace")
   })
 
   it("refuses to remember a code for another organization's product", async () => {

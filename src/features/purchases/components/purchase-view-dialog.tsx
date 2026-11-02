@@ -14,14 +14,12 @@ import { useSupplierVouchers } from "@/features/suppliers"
 
 import { purchaseService } from "../services"
 import {
-  derivePurchasePaymentStatus,
   lineItemSubtotal,
   type Purchase,
   purchaseGrandTotal,
   purchaseItemsSubtotal,
 } from "../types"
 import { PurchaseAvatar } from "./purchase-avatar"
-import { PurchasePaymentStatusBadge } from "./purchase-payment-status-badge"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
 
@@ -38,10 +36,13 @@ function formatMoney(value: number, currency: string) {
   }
 }
 
+// Order status (received / pending) is hidden for now.
+const SHOW_ORDER_STATUS = false
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold text-[#95a4bd]">{label}</p>
+      <p className="text-[11px] font-semibold text-[#0b1738]">{label}</p>
       <p className="mt-0.5 text-[13px] font-medium text-[#0b1738]">{value || "—"}</p>
     </div>
   )
@@ -93,7 +94,7 @@ export function PurchaseViewDialog({
               <span className="block text-[17px] font-extrabold text-[#0b1738]">
                 {purchase.supplierName}
               </span>
-              <span className="mt-0.5 block text-[11.5px] font-medium text-[#6b7b96]">
+              <span className="mt-0.5 block text-[11.5px] font-medium text-[#0b1738]">
                 {purchase.code}
               </span>
             </span>
@@ -119,7 +120,6 @@ export function PurchaseViewDialog({
       {purchase ? (
         <div dir={dir} className="max-h-[60vh] space-y-4 overflow-y-auto pe-1">
           <div className="flex items-center justify-between rounded-[12px] bg-[#f7f9fd] px-4 py-3">
-            <PurchasePaymentStatusBadge status={derivePurchasePaymentStatus(purchase, vouchers)} />
             <p className="text-[13px] font-bold text-[#0b1738]">
               {t("grandTotalLabel", { total: formatMoney(grandTotal, purchase.currency) })}
             </p>
@@ -127,7 +127,9 @@ export function PurchaseViewDialog({
 
           <Section title={t("orderDetails")}>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <Field label={t("orderStatus")} value={tStatus(purchase.status)} />
+              {SHOW_ORDER_STATUS ? (
+                <Field label={t("orderStatus")} value={tStatus(purchase.status)} />
+              ) : null}
               <Field label={t("warehouse")} value={purchase.warehouseName} />
               <Field label={t("orderDate")} value={purchase.date} />
               <Field label={t("dueDate")} value={purchase.dueDate ?? ""} />
@@ -140,7 +142,7 @@ export function PurchaseViewDialog({
               <Field label={t("referenceNumber")} value={purchase.referenceNumber} />
               {purchase.invoiceAttachmentUrl ? (
                 <div>
-                  <p className="text-[11px] font-semibold text-[#95a4bd]">
+                  <p className="text-[11px] font-semibold text-[#0b1738]">
                     {t("invoiceAttachment")}
                   </p>
                   <button
@@ -170,7 +172,7 @@ export function PurchaseViewDialog({
                 >
                   <div>
                     <p className="font-medium text-[#0b1738]">{item.productName}</p>
-                    <p className="text-[11px] text-[#95a4bd]">
+                    <p className="text-[11px] text-[#0b1738]">
                       {item.sku} · {item.qty} × {formatMoney(item.netUnitCost, purchase.currency)}
                     </p>
                   </div>
@@ -185,13 +187,13 @@ export function PurchaseViewDialog({
           <Section title={t("totals")}>
             <div className="space-y-1.5 text-[12.5px]">
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">{t("subtotal")}</span>
+                <span className="text-[#0b1738]">{t("subtotal")}</span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(subtotal, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">
+                <span className="text-[#0b1738]">
                   {t("orderTax", { pct: purchase.orderTaxPercent })}
                 </span>
                 <span className="font-semibold text-[#0b1738]">
@@ -199,19 +201,19 @@ export function PurchaseViewDialog({
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">{t("orderDiscount")}</span>
+                <span className="text-[#0b1738]">{t("orderDiscount")}</span>
                 <span className="font-semibold text-rose-600">
                   -{formatMoney(purchase.discountAmount, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">{t("shipping")}</span>
+                <span className="text-[#0b1738]">{t("shipping")}</span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(purchase.shippingAmount, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">{t("otherCosts")}</span>
+                <span className="text-[#0b1738]">{t("otherCosts")}</span>
                 <span className="font-semibold text-[#0b1738]">
                   {formatMoney(
                     Number.isFinite(purchase.otherCosts) ? purchase.otherCosts : 0,
@@ -226,13 +228,13 @@ export function PurchaseViewDialog({
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">{t("paidAmount")}</span>
+                <span className="text-[#0b1738]">{t("paidAmount")}</span>
                 <span className="font-semibold text-emerald-600">
                   {formatMoney(paidAmount, purchase.currency)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#6b7b96]">{t("remaining")}</span>
+                <span className="text-[#0b1738]">{t("remaining")}</span>
                 <span className="font-semibold text-rose-600">
                   {formatMoney(Math.max(0, grandTotal - paidAmount), purchase.currency)}
                 </span>

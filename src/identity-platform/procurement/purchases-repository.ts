@@ -15,6 +15,8 @@ function mapPurchase(row: Record<string, unknown>, items: PurchaseLineItemDto[])
     supplierName: String(row.supplier_name),
     supplierImageUrl: (row.supplier_image_url as string | null) ?? null,
     warehouseId: String(row.warehouse_id),
+    // The branch (workspace) the purchase is for; null if it no longer exists.
+    warehouseName: (row.warehouse_name as string | null) ?? null,
     date: toDateString(row.date),
     dueDate: row.due_date ? toDateString(row.due_date) : null,
     deliveryDate: row.delivery_date ? toDateString(row.delivery_date) : null,
@@ -67,9 +69,11 @@ export class PurchasesRepository {
 
   async list(organizationId: string): Promise<PurchaseDto[]> {
     const headers = await this.db.query<Record<string, unknown>>(
-      `SELECT p.*, s.name AS supplier_name, s.image_url AS supplier_image_url
+      `SELECT p.*, s.name AS supplier_name, s.image_url AS supplier_image_url,
+              w.name AS warehouse_name
        FROM purchases p
        JOIN suppliers s ON s.id = p.supplier_id
+       LEFT JOIN workspaces w ON w.id::text = p.warehouse_id
        WHERE p.organization_id = $1 AND p.deleted_at IS NULL
        ORDER BY p.created_at DESC`,
       [organizationId]
@@ -98,9 +102,11 @@ export class PurchasesRepository {
 
   async findById(organizationId: string, id: string): Promise<PurchaseDto | null> {
     const headerResult = await this.db.query<Record<string, unknown>>(
-      `SELECT p.*, s.name AS supplier_name, s.image_url AS supplier_image_url
+      `SELECT p.*, s.name AS supplier_name, s.image_url AS supplier_image_url,
+              w.name AS warehouse_name
        FROM purchases p
        JOIN suppliers s ON s.id = p.supplier_id
+       LEFT JOIN workspaces w ON w.id::text = p.warehouse_id
        WHERE p.organization_id = $1 AND p.id = $2 AND p.deleted_at IS NULL`,
       [organizationId, id]
     )

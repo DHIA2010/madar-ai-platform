@@ -89,6 +89,7 @@ export interface PurchaseDto {
   supplierName: string
   supplierImageUrl: string | null
   warehouseId: string
+  warehouseName: string | null
   date: string
   dueDate: string | null
   deliveryDate: string | null

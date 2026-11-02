@@ -51,12 +51,15 @@ const client = createHttpDataClient({
 
 // The backend DTO carries warehouseId only (no warehouses table exists) -- warehouseName is
 // resolved client-side from the real workspaces list (see getAvailableWorkspacesFromStorage).
-type PurchaseDto = Omit<Purchase, "warehouseName">
+type PurchaseDto = Omit<Purchase, "warehouseName"> & { warehouseName?: string | null }
 
 function withWarehouseName(dto: PurchaseDto): Purchase {
+  // The server sends the branch name; the locally known workspaces are only a fallback.
   const warehouseName =
+    dto.warehouseName ??
     getAvailableWorkspacesFromStorage().find((workspace) => workspace.id === dto.warehouseId)
-      ?.name ?? dto.warehouseId
+      ?.name ??
+    dto.warehouseId
   return { ...dto, warehouseName }
 }
 
