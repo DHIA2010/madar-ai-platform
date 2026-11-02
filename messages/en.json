@@ -1257,7 +1257,8 @@
         "name": "Suggested by name — check it",
         "manual": "Chosen manually",
         "none": "No product found",
-        "created": "New product (draft)"
+        "created": "New product (draft)",
+        "createdActive": "New product (active) · {price}"
       },
       "rememberNote": "Madar will remember this supplier's codes so their next invoices match automatically.",
       "apply": "{count, plural, =0 {Add to purchase order} one {Add # product} other {Add # products}}",
@@ -1282,7 +1283,11 @@
       "filters": {
         "all": "All ({count})",
         "empty": "No lines in this view."
-      }
+      },
+      "sellPricePlaceholder": "Selling price (optional)",
+      "sellPriceLabel": "Selling price for {name}",
+      "sellPriceActiveHint": "Shows in the cashier right away",
+      "sellPriceDraftHint": "Without a price it's created as a draft"
     }
   },
   "suppliers": {

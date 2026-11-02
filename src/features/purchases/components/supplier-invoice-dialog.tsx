@@ -49,6 +49,8 @@ interface ReviewLine extends ScannedInvoiceLine {
   key: string
   productId: string | null
   include: boolean
+  // Optional selling price for a product created from this line; with one it's created active.
+  sellPrice: string
 }
 
 export interface AppliedInvoice {
@@ -100,6 +102,8 @@ export function SupplierInvoiceDialog({
   const [createdProducts, setCreatedProducts] = useState<ProductRecord[]>([])
   const [creatingKeys, setCreatingKeys] = useState<Set<string>>(new Set())
   const [createdKeys, setCreatedKeys] = useState<Set<string>>(new Set())
+  // The created ones that had no selling price -- drafts, kept out of the cashier.
+  const [draftKeys, setDraftKeys] = useState<Set<string>>(new Set())
   const [creatingAll, setCreatingAll] = useState(false)
   const [filter, setFilter] = useState<"all" | "matched" | "unmatched">("all")
 
@@ -122,12 +126,16 @@ export function SupplierInvoiceDialog({
     setCreatedProducts([])
     setCreatingKeys(new Set())
     setCreatedKeys(new Set())
+    setDraftKeys(new Set())
     setFilter("all")
   }
 
-  // Creates a product from an invoice line and picks it for that line. It starts as a draft --
-  // out of the cashier until a selling price is set -- and its stock comes from this purchase.
+  // Creates a product from an invoice line and picks it for that line; its stock comes from this
+  // purchase. Given a selling price it's created active (sold in the cashier right away);
+  // without one it's a draft, out of the cashier until a price is set.
   async function createProductFor(line: ReviewLine): Promise<boolean> {
+    const price = Number(line.sellPrice)
+    const priced = line.sellPrice.trim() !== "" && Number.isFinite(price) && price > 0
     setCreatingKeys((current) => new Set(current).add(line.key))
     const sku = line.code?.trim() || `PUR-${Date.now().toString(36).toUpperCase()}-${line.key}`
     try {
@@ -137,9 +145,9 @@ export function SupplierInvoiceDialog({
         sku,
         category: "",
         description: "",
-        status: "draft",
+        status: priced ? "active" : "draft",
         baseUnit: null,
-        sellPrice: 0,
+        sellPrice: priced ? price : 0,
         costPrice: line.unitCost,
         stockQuantity: 0,
         minStock: null,
@@ -159,10 +167,10 @@ export function SupplierInvoiceDialog({
           name: created.name,
           sku: created.sku ?? sku,
           category: "",
-          status: "Draft",
+          status: priced ? "Active" : "Draft",
           availableStock: 0,
           costPrice: line.unitCost,
-          sellingPrice: 0,
+          sellingPrice: priced ? price : 0,
           currency: "SAR",
           platform: "Madar",
           productType: created.productType,
@@ -175,6 +183,7 @@ export function SupplierInvoiceDialog({
         },
       ])
       setCreatedKeys((current) => new Set(current).add(line.key))
+      if (!priced) setDraftKeys((current) => new Set(current).add(line.key))
       updateLine(line.key, { productId: created.id, include: true })
       return true
     } catch {
@@ -234,6 +243,7 @@ export function SupplierInvoiceDialog({
           key: `${index}`,
           productId: line.match?.productId ?? null,
           include: line.match !== null,
+          sellPrice: "",
         }))
       )
       if (scanned.lines.length === 0) toast.error(t("toasts.noLines"))
@@ -505,10 +515,10 @@ export function SupplierInvoiceDialog({
                 </button>
               ) : null}
             </div>
-            {createdKeys.size > 0 ? (
+            {draftKeys.size > 0 ? (
               <p className="flex items-center gap-1.5 rounded-[10px] bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
                 <AlertTriangle className="size-3.5 shrink-0" />
-                {t("draftNote", { count: createdKeys.size })}
+                {t("draftNote", { count: draftKeys.size })}
               </p>
             ) : null}
 
@@ -587,10 +597,19 @@ export function SupplierInvoiceDialog({
                             ariaLabel={t("table.product")}
                           />
                           {createdKeys.has(line.key) && line.productId ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-semibold text-violet-700">
-                              <PackagePlus className="size-3" />
-                              {t("matchBy.created")}
-                            </span>
+                            draftKeys.has(line.key) ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-semibold text-violet-700">
+                                <PackagePlus className="size-3" />
+                                {t("matchBy.created")}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+                                <PackagePlus className="size-3" />
+                                {t("matchBy.createdActive", {
+                                  price: formatAmount(Number(line.sellPrice)),
+                                })}
+                              </span>
+                            )
                           ) : style ? (
                             <span
                               className={cn(
@@ -607,24 +626,56 @@ export function SupplierInvoiceDialog({
                               {t("matchBy.manual")}
                             </span>
                           ) : (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-semibold text-rose-600">
-                                <AlertTriangle className="size-3" />
-                                {t("matchBy.none")}
-                              </span>
-                              <button
-                                type="button"
-                                disabled={creatingAll || creatingKeys.has(line.key)}
-                                onClick={() => void createOne(line)}
-                                className="inline-flex items-center gap-1 rounded-full bg-[#2878ff] px-2.5 py-0.5 text-[10.5px] font-bold text-white transition-colors hover:bg-[#1f63d6] disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {creatingKeys.has(line.key) ? (
-                                  <Loader2 className="size-3 animate-spin" />
-                                ) : (
-                                  <PackagePlus className="size-3" />
-                                )}
-                                {t("createProduct")}
-                              </button>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <div className="relative w-36">
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min={0}
+                                    step="0.01"
+                                    value={line.sellPrice}
+                                    onChange={(event) =>
+                                      updateLine(line.key, { sellPrice: event.target.value })
+                                    }
+                                    placeholder={t("sellPricePlaceholder")}
+                                    aria-label={t("sellPriceLabel", { name: line.name })}
+                                    className="h-8 w-full rounded-[8px] border border-[#e1e7f0] bg-white ps-2.5 pe-10 text-[12px] text-[#0b1738] outline-none placeholder:text-[#95a4bd] focus:border-[#2878ff]"
+                                  />
+                                  <span className="pointer-events-none absolute inset-y-0 end-2.5 flex items-center text-[10.5px] font-semibold text-[#95a4bd]">
+                                    SAR
+                                  </span>
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-[10.5px]",
+                                    Number(line.sellPrice) > 0 ? "text-emerald-700" : MUTED
+                                  )}
+                                >
+                                  {Number(line.sellPrice) > 0
+                                    ? t("sellPriceActiveHint")
+                                    : t("sellPriceDraftHint")}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-semibold text-rose-600">
+                                  <AlertTriangle className="size-3" />
+                                  {t("matchBy.none")}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={creatingAll || creatingKeys.has(line.key)}
+                                  onClick={() => void createOne(line)}
+                                  className="inline-flex items-center gap-1 rounded-full bg-[#2878ff] px-2.5 py-0.5 text-[10.5px] font-bold text-white transition-colors hover:bg-[#1f63d6] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {creatingKeys.has(line.key) ? (
+                                    <Loader2 className="size-3 animate-spin" />
+                                  ) : (
+                                    <PackagePlus className="size-3" />
+                                  )}
+                                  {t("createProduct")}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </td>
