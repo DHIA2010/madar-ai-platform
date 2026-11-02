@@ -74,6 +74,15 @@ function groupProducts(products: CategorizedProduct[]) {
   return groups
 }
 
+// Every exact spelling the products use for one category (names match without case or spaces).
+function spellings(products: CategorizedProduct[], key: string) {
+  const values = new Set<string>()
+  for (const product of products) {
+    if (product.category && nameKey(product.category) === key) values.add(product.category)
+  }
+  return [...values]
+}
+
 // A workspace's product categories: every category its products carry (from Madar and from each
 // connected store), plus the ones created here, each with its status. Inactive ones -- and their
 // products -- are left out of the cashier.
@@ -198,24 +207,123 @@ export class ProductCategoriesService {
     )
   }
 
-  // Only a category created in Madar, and only while no product uses it -- a store's category
-  // comes back with its next sync, and a category in use would leave its products uncategorised.
+  // Rename and delete only apply to a category made entirely of Madar products (or created here
+  // with none yet): a store's category is managed in the store and comes back with its next sync.
+  private madarOnlyGroup(products: CategorizedProduct[], key: string) {
+    const group = groupProducts(products).get(key)
+    if (group && [...group.sources].some((source) => source !== "madar")) {
+      throw ERRORS.conflict(
+        "CATEGORY_MANAGED_BY_STORE",
+        "This category comes from a connected store; change it there."
+      )
+    }
+    return group
+  }
+
+  // Renames the category and moves its products to the new name.
+  async rename(input: {
+    organizationId: string
+    workspaceId: string | null
+    name: string
+    newName: string
+    products: CategorizedProduct[]
+  }): Promise<void> {
+    const key = nameKey(input.name)
+    const newName = input.newName.trim()
+    const newKey = nameKey(newName)
+    const row = (await this.rows(input.organizationId, input.workspaceId)).find(
+      (candidate) => candidate.name_key === key
+    )
+    const group = this.madarOnlyGroup(input.products, key)
+    if (!row && !group) throw ERRORS.notFound("Category")
+    if (row && row.source !== "madar") {
+      throw ERRORS.conflict(
+        "CATEGORY_MANAGED_BY_STORE",
+        "This category comes from a connected store; change it there."
+      )
+    }
+    if (newKey !== key) {
+      const existing = await this.list(input.organizationId, input.workspaceId, input.products)
+      if (existing.some((category) => nameKey(category.name) === newKey)) {
+        throw ERRORS.conflict("CATEGORY_EXISTS", "A category with this name already exists.")
+      }
+    }
+
+    await this.db.query(
+      `UPDATE products SET category = $4, updated_at = now()
+        WHERE organization_id = $1 AND deleted_at IS NULL
+          AND ($2::uuid IS NULL OR workspace_id = $2::uuid)
+          AND category = ANY($3::text[])`,
+      [input.organizationId, input.workspaceId, spellings(input.products, key), newName]
+    )
+    if (row) {
+      await this.db.query(
+        `UPDATE product_categories SET name = $2, name_key = $3, updated_at = now() WHERE id = $1`,
+        [row.id, newName, newKey]
+      )
+    }
+  }
+
+  // Deletes the category; its products stay, uncategorized.
   async remove(input: {
     organizationId: string
     workspaceId: string | null
-    id: string
+    name: string
     products: CategorizedProduct[]
   }): Promise<void> {
+    const key = nameKey(input.name)
     const row = (await this.rows(input.organizationId, input.workspaceId)).find(
-      (candidate) => candidate.id === input.id
+      (candidate) => candidate.name_key === key
     )
-    if (!row) throw ERRORS.notFound("Category")
-    if (row.source !== "madar" || groupProducts(input.products).has(row.name_key)) {
+    const group = this.madarOnlyGroup(input.products, key)
+    if (!row && !group) throw ERRORS.notFound("Category")
+    if (row && row.source !== "madar") {
       throw ERRORS.conflict(
-        "CATEGORY_IN_USE",
-        "Only an unused category created in Madar can be deleted."
+        "CATEGORY_MANAGED_BY_STORE",
+        "This category comes from a connected store; change it there."
       )
     }
-    await this.db.query("DELETE FROM product_categories WHERE id = $1", [row.id])
+
+    await this.db.query(
+      `UPDATE products SET category = '', updated_at = now()
+        WHERE organization_id = $1 AND deleted_at IS NULL
+          AND ($2::uuid IS NULL OR workspace_id = $2::uuid)
+          AND category = ANY($3::text[])`,
+      [input.organizationId, input.workspaceId, spellings(input.products, key)]
+    )
+    if (row) await this.db.query("DELETE FROM product_categories WHERE id = $1", [row.id])
+  }
+
+  async setStatusMany(input: {
+    organizationId: string
+    workspaceId: string | null
+    names: string[]
+    status: CategoryStatus
+    userId: string
+    products: CategorizedProduct[]
+  }): Promise<{ updated: number }> {
+    for (const name of input.names) await this.setStatus({ ...input, name })
+    return { updated: input.names.length }
+  }
+
+  // Deletes what it can; a store's category is skipped (it comes back with the store's next sync).
+  async removeMany(input: {
+    organizationId: string
+    workspaceId: string | null
+    names: string[]
+    products: CategorizedProduct[]
+  }): Promise<{ deleted: number; skipped: number }> {
+    let deleted = 0
+    let skipped = 0
+    for (const name of input.names) {
+      try {
+        await this.remove({ ...input, name })
+        deleted += 1
+      } catch (error) {
+        if ((error as { code?: string }).code !== "CATEGORY_MANAGED_BY_STORE") throw error
+        skipped += 1
+      }
+    }
+    return { deleted, skipped }
   }
 }

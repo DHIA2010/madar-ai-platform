@@ -1337,6 +1337,24 @@ export const createProductCategorySchema = z.object({
   name: z.string().trim().min(1).max(80),
 })
 
+export const bulkProductCategoryStatusSchema = z.object({
+  names: z.array(z.string().trim().min(1).max(200)).min(1).max(500),
+  status: z.enum(["active", "inactive"]),
+})
+
+export const bulkDeleteProductCategoriesSchema = z.object({
+  names: z.array(z.string().trim().min(1).max(200)).min(1).max(500),
+})
+
+export const renameProductCategorySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  newName: z.string().trim().min(1).max(80),
+})
+
+export const deleteProductCategorySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+})
+
 export const productCategoryStatusSchema = z.object({
   name: z.string().trim().min(1).max(200),
   status: z.enum(["active", "inactive"]),

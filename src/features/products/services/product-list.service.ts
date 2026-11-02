@@ -450,7 +450,33 @@ export const productCategoryService = {
     )
   },
 
-  async remove(id: string): Promise<void> {
-    await client.delete<unknown>([CATEGORIES_ENDPOINT, id].join(PATH_SEPARATOR))
+  async rename(name: string, newName: string): Promise<void> {
+    await client.patch<{ name: string; newName: string }, unknown>(
+      [CATEGORIES_ENDPOINT, "rename"].join(PATH_SEPARATOR),
+      { name, newName }
+    )
+  },
+
+  async setStatusMany(names: string[], status: ProductCategoryStatus): Promise<void> {
+    await client.post<{ names: string[]; status: ProductCategoryStatus }, unknown>(
+      [CATEGORIES_ENDPOINT, "bulk-status"].join(PATH_SEPARATOR),
+      { names, status }
+    )
+  },
+
+  // A store's category is skipped, not deleted.
+  async removeMany(names: string[]): Promise<{ deleted: number; skipped: number }> {
+    return client.post<{ names: string[] }, { deleted: number; skipped: number }>(
+      [CATEGORIES_ENDPOINT, "bulk-delete"].join(PATH_SEPARATOR),
+      { names }
+    )
+  },
+
+  // Its products stay, uncategorized.
+  async remove(name: string): Promise<void> {
+    await client.post<{ name: string }, unknown>(
+      [CATEGORIES_ENDPOINT, "delete"].join(PATH_SEPARATOR),
+      { name }
+    )
   },
 }

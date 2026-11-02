@@ -1180,7 +1180,7 @@ describe("Products -> Categories", () => {
     ])
   })
 
-  it("adds a Madar category, refuses a duplicate name, and deletes it while unused", async () => {
+  it("adds a Madar category, refuses a duplicate name, and deletes it", async () => {
     const { token } = await signIn("owner@categories-add.test", "Categories Add Org")
     await createProduct(token, SIMPLE_PRODUCT)
 
@@ -1198,13 +1198,13 @@ describe("Products -> Categories", () => {
     expect((await api(token, "POST", "/v1/product-categories", { name: "ملابس" })).status).toBe(409)
 
     expect((await list(token)).map((category) => category.name)).toEqual(["حلويات", "ملابس"])
-    expect((await api(token, "DELETE", `/v1/product-categories/${created.body.id}`)).status).toBe(
-      200
-    )
+    expect(
+      (await api(token, "POST", "/v1/product-categories/delete", { name: "حلويات" })).status
+    ).toBe(200)
     expect((await list(token)).map((category) => category.name)).toEqual(["ملابس"])
   })
 
-  it("switches a category off and on, and never deletes one products still use", async () => {
+  it("switches a category off and on", async () => {
     const { token } = await signIn("owner@categories-status.test", "Categories Status Org")
     await createProduct(token, SIMPLE_PRODUCT)
 
@@ -1220,8 +1220,6 @@ describe("Products -> Categories", () => {
     expect(inactive).toMatchObject({ name: "ملابس", status: "inactive", productCount: 1 })
     expect(inactive.id).toEqual(expect.any(String))
 
-    expect((await api(token, "DELETE", `/v1/product-categories/${inactive.id}`)).status).toBe(409)
-
     await api(token, "PATCH", "/v1/product-categories/status", { name: "ملابس", status: "active" })
     expect((await list(token))[0].status).toBe("active")
     expect(
@@ -1232,6 +1230,108 @@ describe("Products -> Categories", () => {
         })
       ).status
     ).toBe(404)
+  })
+
+  it("renames a category and moves its products, keeping its status", async () => {
+    const { token } = await signIn("owner@categories-rename.test", "Categories Rename Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+    await createProduct(token, {
+      ...SIMPLE_PRODUCT,
+      name: "عصير",
+      sku: "SKU-201",
+      category: "مشروبات",
+    })
+    await api(token, "PATCH", "/v1/product-categories/status", {
+      name: "ملابس",
+      status: "inactive",
+    })
+
+    // Another category's name is taken.
+    expect(
+      (
+        await api(token, "PATCH", "/v1/product-categories/rename", {
+          name: "ملابس",
+          newName: "مشروبات",
+        })
+      ).status
+    ).toBe(409)
+
+    expect(
+      (
+        await api(token, "PATCH", "/v1/product-categories/rename", {
+          name: "ملابس",
+          newName: "أزياء",
+        })
+      ).status
+    ).toBe(200)
+    expect(await list(token)).toEqual([
+      expect.objectContaining({ name: "أزياء", status: "inactive", productCount: 1 }),
+      expect.objectContaining({ name: "مشروبات", status: "active", productCount: 1 }),
+    ])
+    const products = await api<{ items: { name: string; category: string }[] }>(
+      token,
+      "GET",
+      "/v1/products"
+    )
+    expect(
+      products.body.items.find((product) => product.name === SIMPLE_PRODUCT.name)
+    ).toMatchObject({
+      category: "أزياء",
+    })
+  })
+
+  it("deletes a category its products use, leaving them uncategorized", async () => {
+    const { token } = await signIn("owner@categories-delete.test", "Categories Delete Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+    await api(token, "PATCH", "/v1/product-categories/status", {
+      name: "ملابس",
+      status: "inactive",
+    })
+
+    expect(
+      (await api(token, "POST", "/v1/product-categories/delete", { name: "ملابس" })).status
+    ).toBe(200)
+    const overview = await api<{ items: Category[]; uncategorizedCount: number }>(
+      token,
+      "GET",
+      "/v1/product-categories"
+    )
+    expect(overview.body).toEqual({ items: [], uncategorizedCount: 1 })
+    expect(
+      (await api(token, "POST", "/v1/product-categories/delete", { name: "ملابس" })).status
+    ).toBe(404)
+  })
+
+  it("switches several categories at once, and deletes several at once", async () => {
+    const { token } = await signIn("owner@categories-bulk.test", "Categories Bulk Org")
+    await createProduct(token, SIMPLE_PRODUCT)
+    await createProduct(token, {
+      ...SIMPLE_PRODUCT,
+      name: "عصير",
+      sku: "SKU-301",
+      category: "مشروبات",
+    })
+    await api(token, "POST", "/v1/product-categories", { name: "حلويات" })
+
+    expect(
+      (
+        await api(token, "POST", "/v1/product-categories/bulk-status", {
+          names: ["ملابس", "مشروبات"],
+          status: "inactive",
+        })
+      ).body
+    ).toEqual({ updated: 2 })
+    expect((await list(token)).map((category) => [category.name, category.status])).toEqual([
+      ["حلويات", "active"],
+      ["مشروبات", "inactive"],
+      ["ملابس", "inactive"],
+    ])
+
+    const deleted = await api(token, "POST", "/v1/product-categories/bulk-delete", {
+      names: ["حلويات", "مشروبات"],
+    })
+    expect(deleted.body).toEqual({ deleted: 2, skipped: 0 })
+    expect((await list(token)).map((category) => category.name)).toEqual(["ملابس"])
   })
 
   // Category is optional: a product saved without one, or with the cashier's "unspecified"

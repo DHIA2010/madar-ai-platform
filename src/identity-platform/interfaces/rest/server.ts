@@ -241,6 +241,10 @@ import {
   syncComponentsSchema,
   createProductCategorySchema,
   productCategoryStatusSchema,
+  renameProductCategorySchema,
+  bulkProductCategoryStatusSchema,
+  bulkDeleteProductCategoriesSchema,
+  deleteProductCategorySchema,
   activateFreeApplicationSchema,
   createSupplierSchema,
   bulkUpdateSupplierStatusSchema,
@@ -4924,12 +4928,51 @@ export function createIdentityApiServer(
           })
           return send(200, { ok: true })
         }
-        const categoryIdMatch = url.pathname.match(/^\/v1\/product-categories\/([0-9a-f-]{36})$/)
-        if (method === "DELETE" && categoryIdMatch) {
+        if (method === "POST" && url.pathname === "/v1/product-categories/bulk-status") {
+          if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+          const { names, status } = bulkProductCategoryStatusSchema.parse(
+            await readJsonBody(request)
+          )
+          return send(
+            200,
+            await productCategoriesService.setStatusMany({
+              ...scope,
+              names,
+              status,
+              userId: actor.userId,
+              products: await listMergedProducts(actor),
+            })
+          )
+        }
+        if (method === "POST" && url.pathname === "/v1/product-categories/bulk-delete") {
           if (!actor.modulePermissions.includes("products:delete")) throw ERRORS.forbidden()
+          const { names } = bulkDeleteProductCategoriesSchema.parse(await readJsonBody(request))
+          return send(
+            200,
+            await productCategoriesService.removeMany({
+              ...scope,
+              names,
+              products: await listMergedProducts(actor),
+            })
+          )
+        }
+        if (method === "PATCH" && url.pathname === "/v1/product-categories/rename") {
+          if (!actor.modulePermissions.includes("products:edit")) throw ERRORS.forbidden()
+          const { name, newName } = renameProductCategorySchema.parse(await readJsonBody(request))
+          await productCategoriesService.rename({
+            ...scope,
+            name,
+            newName,
+            products: await listMergedProducts(actor),
+          })
+          return send(200, { ok: true })
+        }
+        if (method === "POST" && url.pathname === "/v1/product-categories/delete") {
+          if (!actor.modulePermissions.includes("products:delete")) throw ERRORS.forbidden()
+          const { name } = deleteProductCategorySchema.parse(await readJsonBody(request))
           await productCategoriesService.remove({
             ...scope,
-            id: categoryIdMatch[1],
+            name,
             products: await listMergedProducts(actor),
           })
           return send(200, { ok: true })
