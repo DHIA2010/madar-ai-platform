@@ -72,6 +72,16 @@ export class StockTransfersService {
     if (result.rows.length === 0) throw ERRORS.validation({ [field]: "Unknown branch." })
   }
 
+  // The organization's branches, as the server knows them.
+  async branches(organizationId: string): Promise<{ id: string; name: string }[]> {
+    const result = await this.db.query<{ id: string; name: string }>(
+      `SELECT id, name FROM workspaces WHERE organization_id = $1 AND deleted_at IS NULL
+        ORDER BY created_at ASC`,
+      [organizationId]
+    )
+    return result.rows
+  }
+
   // Every transferable product of the organization with its quantity in one branch -- what the
   // transfer form offers, whichever branch the user is working in.
   async branchStock(

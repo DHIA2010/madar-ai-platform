@@ -388,6 +388,7 @@ export function toNormalizedProduct(product: ProductView): NormalizedProduct {
     image: product.imageUrls[0] ?? null,
     activityDate: product.updatedAt,
     isNative: true,
+    workspaceId: product.workspaceId,
   }
 }
 

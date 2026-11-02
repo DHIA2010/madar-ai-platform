@@ -11,8 +11,6 @@ import { ROUTES } from "@/constants/routes"
 
 import { AppButton, AppDateField, AppInput, AppSearchableSelect } from "@/components/app"
 
-import { useWorkspace } from "@/features/workspace"
-
 import { type BranchStockItem, stockTransferService } from "../services/stock-transfer.service"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -63,7 +61,14 @@ export function StockTransferFormPage() {
   const locale = useLocale() as Locale
   const dir = localeDirection(locale)
   const router = useRouter()
-  const { availableWorkspaces } = useWorkspace()
+  // Branches come from the server, never the browser's saved list.
+  const [availableWorkspaces, setBranches] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    stockTransferService
+      .branches()
+      .then(setBranches)
+      .catch(() => setBranches([]))
+  }, [])
 
   const [fromBranch, setFromBranch] = useState("")
   const [toBranch, setToBranch] = useState("")
@@ -163,10 +168,14 @@ export function StockTransferFormPage() {
       toast.success(t("toasts.created", { reference: created.reference }))
       router.push(ROUTES.inventoryTransfers)
     } catch (error) {
+      const { code, details } = (error ?? {}) as { code?: string; details?: unknown }
+      const unknownBranch = JSON.stringify(details ?? "").includes("WorkspaceId")
       toast.error(
-        (error as { code?: string })?.code === "STOCK_INSUFFICIENT"
+        code === "STOCK_INSUFFICIENT"
           ? t("toasts.insufficient")
-          : t("toasts.createFailed")
+          : unknownBranch
+            ? t("toasts.unknownBranch")
+            : t("toasts.createFailed")
       )
     } finally {
       setSubmitting(false)

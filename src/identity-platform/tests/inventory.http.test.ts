@@ -250,6 +250,60 @@ describe("inventory: stock per branch", () => {
     expect(items.map((item) => item.reference)).toEqual(["TRF-0002", "TRF-0001"])
   })
 
+  it("lists the organization's real branches, and refuses one that isn't", async () => {
+    const { token, actor } = await signIn("transfer-branches@example.com", "Transfer Branches")
+    const jeddah = await addBranch(actor.organizationId, "Jeddah")
+    const productId = await seedProduct(actor.organizationId, actor.workspaceId, {
+      stockQuantity: 3,
+    })
+
+    const response = await fetch(`${baseUrl}/v1/inventory/branches`, {
+      headers: authHeaders(token),
+    })
+    const branches = ((await response.json()) as { items: { id: string; name: string }[] }).items
+    expect(branches).toEqual([
+      { id: actor.workspaceId, name: "Transfer Branches Workspace" },
+      { id: jeddah, name: "Jeddah" },
+    ])
+
+    const unknown = await transfer(token, {
+      fromWorkspaceId: actor.workspaceId,
+      toWorkspaceId: randomUUID(),
+      items: [{ productId, quantity: 1 }],
+    })
+    expect(unknown.status).toBe(400)
+  })
+
+  it("lists every branch's products with their branch on request, and the current branch's by default", async () => {
+    const { token, actor } = await signIn("products-branches@example.com", "Products Branches")
+    const jeddah = await addBranch(actor.organizationId, "Jeddah")
+    const own = await seedProduct(actor.organizationId, actor.workspaceId)
+    const other = await seedProduct(actor.organizationId, jeddah)
+    const shared = await seedProduct(actor.organizationId, null)
+
+    const list = async (query: string) => {
+      const response = await fetch(`${baseUrl}/v1/products${query}`, {
+        headers: authHeaders(token),
+      })
+      return (
+        (await response.json()) as {
+          items: { id: string; workspaceId?: string | null; workspaceName?: string | null }[]
+        }
+      ).items
+    }
+
+    const all = await list("?scope=all")
+    expect(all.find((item) => item.id === other)).toMatchObject({
+      workspaceId: jeddah,
+      workspaceName: "Jeddah",
+    })
+    expect(all.find((item) => item.id === shared)).toMatchObject({ workspaceId: null })
+    expect(all.map((item) => item.id)).toEqual(expect.arrayContaining([own, other, shared]))
+
+    // The default (what the cashier uses) stays the current branch's.
+    expect((await list("")).map((item) => item.id)).toEqual([own])
+  })
+
   it("refuses to move more than the branch has, or to the same branch", async () => {
     const { token, actor } = await signIn("transfer-limits@example.com", "Transfer Limits")
     const home = actor.workspaceId!

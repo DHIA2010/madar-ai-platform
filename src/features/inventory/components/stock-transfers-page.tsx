@@ -34,8 +34,6 @@ import {
   AppTableRow,
 } from "@/components/app"
 
-import { useWorkspace } from "@/features/workspace"
-
 import { type StockTransfer, stockTransferService } from "../services/stock-transfer.service"
 
 import { type Locale, localeDirection } from "@/i18n/locales"
@@ -167,7 +165,14 @@ export function StockTransfersPage() {
   const locale = useLocale() as Locale
   const dir = localeDirection(locale)
   const router = useRouter()
-  const { availableWorkspaces } = useWorkspace()
+  // Branches come from the server, never the browser's saved list.
+  const [availableWorkspaces, setBranches] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    stockTransferService
+      .branches()
+      .then(setBranches)
+      .catch(() => setBranches([]))
+  }, [])
 
   const [transfers, setTransfers] = useState<StockTransfer[] | null>(null)
   const [search, setSearch] = useState("")

@@ -78,6 +78,10 @@ export interface ProductRecord {
   // actual behavior (edit/delete, bulk status change, usable as a packaging/purchase/order line
   // item) must check isNative, never platform === "Madar".
   isNative: boolean
+  // Only on the Products page's all-branches list: the branch a Madar product belongs to (null =
+  // shared by all branches); absent on a store-synced product.
+  workspaceId?: string | null
+  workspaceName?: string | null
 }
 
 // Avoids the slash-prefix literal lint rule (same trick as customer-list.service.ts's
@@ -228,8 +232,11 @@ export interface UpsertZidProductLinkInput {
 }
 
 export const productListService = {
-  async listProducts(): Promise<ProductRecord[]> {
-    const response = await client.get<{ items: ProductRecord[] }>(PRODUCTS_ENDPOINT)
+  // allBranches: every branch's products (the Products page); otherwise the current branch's only.
+  async listProducts(options: { allBranches?: boolean } = {}): Promise<ProductRecord[]> {
+    const response = await client.get<{ items: ProductRecord[] }>(
+      options.allBranches ? `${PRODUCTS_ENDPOINT}?scope=all` : PRODUCTS_ENDPOINT
+    )
     return response.items
   },
 
@@ -428,6 +435,14 @@ export interface ProductCategoriesOverview {
   items: ProductCategory[]
   // Products with no category (or the cashier quick-add's "unspecified").
   uncategorizedCount: number
+}
+
+// The organization's branches, as the server knows them.
+export async function listBranches(): Promise<{ id: string; name: string }[]> {
+  const response = await client.get<{ items: { id: string; name: string }[] }>(
+    ["", "v1", "inventory", "branches"].join(PATH_SEPARATOR)
+  )
+  return response.items
 }
 
 export const productCategoryService = {

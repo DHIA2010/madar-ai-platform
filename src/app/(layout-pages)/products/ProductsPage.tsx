@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils"
 import { ROUTES } from "@/constants/routes"
 import { cairo } from "@/components/design/fonts"
 import {
+  listBranches,
   productListService,
   type BulkImportProductResult,
   type BulkImportProductRow,
@@ -765,6 +766,9 @@ export default function ProductsPage() {
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState("All Inventory Status")
   const [statusFilter, setStatusFilter] = useState("All Status")
   const [productTypeFilter, setProductTypeFilter] = useState("All Product Types")
+  // "all", "shared" (a product shared by all branches), or a branch id.
+  const [branchFilter, setBranchFilter] = useState("all")
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const router = useRouter()
   const [detailProduct, setDetailProduct] = useState<ProductRow | null>(null)
@@ -779,7 +783,7 @@ export default function ProductsPage() {
     setLoadError(null)
 
     try {
-      const items = await productListService.listProducts()
+      const items = await productListService.listProducts({ allBranches: true })
       setProducts(items)
     } catch (error) {
       // Logged rather than swallowed: a silent generic message here previously hid a real
@@ -794,6 +798,21 @@ export default function ProductsPage() {
   useEffect(() => {
     void loadProducts()
   }, [loadProducts])
+
+  useEffect(() => {
+    listBranches()
+      .then(setBranches)
+      .catch(() => setBranches([]))
+  }, [])
+
+  // Where a product lives: its branch, "all branches" for a shared Madar product, nothing for a
+  // product synced from a store.
+  const branchLabel = (product: ProductRow) =>
+    !product.isNative
+      ? "—"
+      : product.workspaceId
+        ? (product.workspaceName ?? "—")
+        : t("branch.shared")
 
   const dynamicCategoryOptions = useMemo(() => {
     const realCategories = Array.from(
@@ -815,6 +834,11 @@ export default function ProductsPage() {
       const matchesStatus = statusFilter === "All Status" || product.status === statusFilter
       const matchesProductType =
         productTypeFilter === "All Product Types" || product.productType === productTypeFilter
+      const matchesBranch =
+        branchFilter === "all" ||
+        (branchFilter === "shared"
+          ? product.isNative && !product.workspaceId
+          : product.workspaceId === branchFilter)
       // Presets and single-day calendar picks land on a specific instant (e.g. "now" for the
       // Today preset, midnight for a plain day click), not a full-day span -- widening to
       // startOfDay/endOfDay here is what makes a same-day product actually match instead of
@@ -833,10 +857,12 @@ export default function ProductsPage() {
         matchesInventoryStatus &&
         matchesStatus &&
         matchesProductType &&
+        matchesBranch &&
         matchesDateRange
       )
     })
   }, [
+    branchFilter,
     category,
     dateRange,
     inventoryStatusFilter,
@@ -1135,6 +1161,21 @@ export default function ProductsPage() {
               }}
             />
 
+            <AppSearchableSelect
+              value={branchFilter}
+              onChange={(next) => {
+                setBranchFilter(next)
+                setPage(1)
+              }}
+              options={[
+                { value: "all", label: t("branch.all") },
+                ...branches.map((branch) => ({ value: branch.id, label: branch.name })),
+                { value: "shared", label: t("branch.shared") },
+              ]}
+              ariaLabel={t("table.columns.branch")}
+              triggerClassName={FILTER_TRIGGER_CLASS}
+            />
+
             {filterSelects.map((filter, index) => (
               <AppSearchableSelect
                 key={index}
@@ -1296,7 +1337,10 @@ export default function ProductsPage() {
                     <p className={cn("mt-3 truncate text-[13px] font-extrabold", HEADING)}>
                       {product.name}
                     </p>
-                    <p className={cn("mt-0.5 truncate text-[11px]", MUTED)}>{product.category}</p>
+                    <p className={cn("mt-0.5 truncate text-[11px]", MUTED)}>
+                      {product.category}
+                      {product.isNative ? ` · ${branchLabel(product)}` : ""}
+                    </p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
                       <span
@@ -1347,6 +1391,7 @@ export default function ProductsPage() {
                       { key: "product", label: t("table.columns.product"), align: "text-right" },
                       { key: "sku", label: t("table.columns.sku"), align: "text-center" },
                       { key: "category", label: t("table.columns.category"), align: "text-center" },
+                      { key: "branch", label: t("table.columns.branch"), align: "text-center" },
                       { key: "status", label: t("table.columns.status"), align: "text-center" },
                       {
                         key: "inventory",
@@ -1430,6 +1475,22 @@ export default function ProductsPage() {
                         </td>
                         <td className={cn("px-3 py-3.5 text-[12px]", HEADING)}>
                           {product.category}
+                        </td>
+                        <td className="px-3 py-3.5 text-center">
+                          {product.isNative ? (
+                            <span
+                              className={cn(
+                                "inline-flex max-w-[10rem] items-center gap-1 truncate rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+                                product.workspaceId
+                                  ? "bg-teal-50 text-teal-700"
+                                  : "bg-[#f1f4f9] text-[#0b1738]"
+                              )}
+                            >
+                              <span className="truncate">{branchLabel(product)}</span>
+                            </span>
+                          ) : (
+                            <span className={cn("text-[11.5px]", MUTED)}>—</span>
+                          )}
                         </td>
 
                         <td className="px-3 py-3.5">

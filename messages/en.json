@@ -1863,7 +1863,8 @@
           "cost": "Cost Price",
           "price": "Selling Price",
           "platform": "Platform",
-          "actions": "Actions"
+          "actions": "Actions",
+          "branch": "Branch"
         }
       },
       "pagination": {
@@ -1948,6 +1949,10 @@
         "noDeletePermission": "You don't have permission to delete products.",
         "contactOwnerDelete": "Contact the account owner to grant you the products:delete permission.",
         "deleteError": "Couldn't delete the product."
+      },
+      "branch": {
+        "all": "All branches",
+        "shared": "Shared by all branches"
       }
     },
     "form": {
@@ -8594,7 +8599,8 @@
         "createFailed": "Couldn't make the transfer.",
         "insufficient": "That's more than the branch has.",
         "productsFailed": "Couldn't load products.",
-        "stockFailed": "Couldn't load the branch's stock."
+        "stockFailed": "Couldn't load the branch's stock.",
+        "unknownBranch": "One of the branches doesn't exist. Refresh the page and choose the branch again."
       }
     }
   }

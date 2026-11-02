@@ -78,6 +78,14 @@ export const stockTransferService = {
     )
   },
 
+  // The organization's real branches (the browser's saved list can hold ones the server doesn't).
+  async branches(): Promise<{ id: string; name: string }[]> {
+    const response = await client.get<{ items: { id: string; name: string }[] }>(
+      [INVENTORY_ENDPOINT, "branches"].join(PATH_SEPARATOR)
+    )
+    return response.items
+  },
+
   // Every transferable product with its quantity in one branch.
   async branchStock(workspaceId: string): Promise<BranchStockItem[]> {
     const response = await client.get<{ items: BranchStockItem[] }>(

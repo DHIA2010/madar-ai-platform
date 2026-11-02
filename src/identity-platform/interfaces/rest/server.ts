@@ -870,13 +870,19 @@ export function createIdentityApiServer(
   // it actually came from, so it reads as what it is instead of looking indistinguishable from a
   // product authored directly in Madar. Shared by GET /v1/products and the categories routes, so a
   // category's product count and source always match the products list.
+  // allBranches: the Products page lists every branch's products (with each one's branch); the
+  // cashier and everything else keep only the current branch's.
   async function listMergedProducts(
-    actor: Parameters<ProductsAggregationService["listProducts"]>[0]
+    actor: Parameters<ProductsAggregationService["listProducts"]>[0],
+    options: { allBranches?: boolean } = {}
   ) {
     if (!productsAggregationService || !productCatalogService) return []
     const [synced, native, sallaLinkedProductIds, zidLinkedProductIds] = await Promise.all([
       productsAggregationService.listProducts(actor),
-      productCatalogService.list(actor.organizationId, actor.workspaceId),
+      productCatalogService.list(
+        actor.organizationId,
+        options.allBranches ? null : actor.workspaceId
+      ),
       productsAggregationService.fetchLinkedNativeProductIds(
         "salla_product_links",
         actor.organizationId
@@ -4872,7 +4878,18 @@ export function createIdentityApiServer(
           // Products authored here and products synced from a storefront are one list to the
           // user, so both sources are merged and re-sorted by activity rather than returned as
           // two separate feeds the client would have to stitch together.
-          const items = await listMergedProducts(actor)
+          const allBranches = url.searchParams.get("scope") === "all"
+          const items = await listMergedProducts(actor, { allBranches })
+          if (allBranches && container.infrastructure.database) {
+            const branches = await container.infrastructure.database.query<{
+              id: string
+              name: string
+            }>("SELECT id, name FROM workspaces WHERE organization_id = $1", [actor.organizationId])
+            const nameById = new Map(branches.rows.map((row) => [row.id, row.name]))
+            for (const item of items) {
+              if (item.workspaceId) item.workspaceName = nameById.get(item.workspaceId) ?? null
+            }
+          }
 
           return send(200, { items })
         }
@@ -4920,6 +4937,10 @@ export function createIdentityApiServer(
             201,
             await stockTransfersService.create(actor.organizationId, actor.userId, payload)
           )
+        }
+        if (method === "GET" && url.pathname === "/v1/inventory/branches") {
+          if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()
+          return send(200, { items: await stockTransfersService.branches(actor.organizationId) })
         }
         if (method === "GET" && url.pathname === "/v1/inventory/branch-stock") {
           if (!actor.modulePermissions.includes("products:view")) throw ERRORS.forbidden()

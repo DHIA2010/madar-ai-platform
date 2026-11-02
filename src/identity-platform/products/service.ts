@@ -49,6 +49,10 @@ export interface NormalizedProduct {
   // packaging/purchase/order line item") must check this, never `platform === "Madar"` -- that
   // string comparison is only ever correct for telling origin apart, not for what a row can do.
   isNative: boolean
+  // The branch a native product belongs to (null = shared by all branches); absent on a synced
+  // product.
+  workspaceId?: string | null
+  workspaceName?: string | null
 }
 
 interface CommerceRecordRow {
