@@ -26,8 +26,10 @@ const PACKAGE_LABEL: Record<string, string> = {
   Pro: "الاحترافية",
 }
 
-// Apps sold in tiers, in the order their tabs appear ("madarApps" is a retired bundle).
-const TAB_ORDER = ["pos", "ecommerce", "advertising", "customReports", "ai"]
+// The main apps, as tabs in this order.
+const TAB_ORDER = ["pos", "ecommerce", "advertising"]
+// Not shown on the website ("madarApps" is a retired bundle).
+const HIDDEN = ["madarApps", "customReports"]
 
 type Interval = "monthly" | "yearly"
 
@@ -62,7 +64,7 @@ export function PricingSection({ pricing }: { pricing: PublicApplicationPricing[
   const extras = pricing.filter(
     (entry) =>
       entry.application !== "madarComplete" &&
-      entry.application !== "madarApps" &&
+      !HIDDEN.includes(entry.application) &&
       !tiered.includes(entry) &&
       (entry.mode === "free" || entry.packages.length > 0)
   )
