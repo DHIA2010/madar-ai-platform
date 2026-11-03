@@ -82,6 +82,7 @@ import { requireCustomReportsEnabled } from "../../reports/custom-reports-guard"
 import { SuppliersService } from "../../procurement/suppliers-service"
 import { StockCountsService } from "../../inventory/stock-counts-service"
 import { notify, NotificationsService } from "../../notifications/service"
+import { BillingOverviewService } from "../../billing/overview-service"
 import { StockTransfersService } from "../../inventory/transfers-service"
 import { ClaudeInvoiceExtractor } from "../../procurement/invoice-reader"
 import { PurchasesService } from "../../procurement/purchases-service"
@@ -863,6 +864,9 @@ export function createIdentityApiServer(
           taxRatesService
         )
       : null
+  const billingOverviewService = container.infrastructure.database
+    ? new BillingOverviewService(container.infrastructure.database)
+    : null
   const notificationsService = container.infrastructure.database
     ? new NotificationsService(container.infrastructure.database)
     : null
@@ -4999,6 +5003,14 @@ export function createIdentityApiServer(
       // Products -> Categories: every category the workspace's products carry plus the ones created
       // here, with each one's status (inactive ones are hidden from the cashier). See
       // products/categories-service.ts.
+      // "الفوترة": the organization's subscriptions and payments (owners and admins).
+      if (method === "GET" && url.pathname === "/v1/billing/overview") {
+        if (!billingOverviewService) {
+          return send(503, { code: "BILLING_UNAVAILABLE", message: "Billing is unavailable." })
+        }
+        return send(200, await billingOverviewService.overview(actor))
+      }
+
       // The bell: this person's notifications, and marking them read.
       if (url.pathname === "/v1/notifications" || url.pathname.startsWith("/v1/notifications/")) {
         if (!notificationsService) {

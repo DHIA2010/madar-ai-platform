@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 
 import { useAuth } from "@/features/authentication/hooks/use-auth"
+import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 
 function getInitials(fullName: string | undefined, fallback: string) {
@@ -172,7 +173,10 @@ export function NavUser({ variant = "sidebar" }: NavUserProps) {
             <BadgeCheckIcon className="!size-5" />
             {t("account")}
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2 h-9">
+          <DropdownMenuItem
+            className="gap-2 h-9"
+            onClick={() => router.push(ROUTES.accountBilling)}
+          >
             <CreditCardIcon className="!size-5" />
             {t("billing")}
           </DropdownMenuItem>

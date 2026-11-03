@@ -5698,6 +5698,112 @@
           "description": "The payment may have gone through -- try verifying again before paying again."
         }
       }
+    },
+    "overview": {
+      "heading": "Billing & subscriptions",
+      "subheading": "Your Madar app subscriptions and all your invoices and payments in one place.",
+      "loading": "Loading...",
+      "sar": "SAR",
+      "loadFailedTitle": "Couldn't load billing",
+      "loadFailedDescription": "This page is for the organization owner and admins only, or something went wrong. Try again later.",
+      "kpis": {
+        "active": "Active subscriptions",
+        "nextRenewal": "Next renewal",
+        "totalPaid": "Total paid",
+        "invoices": "Paid invoices"
+      },
+      "subscriptions": {
+        "title": "My subscriptions",
+        "browse": "Browse apps",
+        "emptyTitle": "No subscriptions yet",
+        "emptyDescription": "Activate any app from the Madar marketplace and its subscription will appear here.",
+        "price": "Price",
+        "free": "Free",
+        "startedAt": "Started",
+        "trialEnds": "Trial ends",
+        "renewsAt": "Renews on",
+        "endedAt": "Ended on",
+        "noEnd": "No end date",
+        "daysLeft": "Remaining",
+        "days": "{count, plural, =0 {Today} one {# day} other {# days}}",
+        "subscribe": "Subscribe now",
+        "renew": "Renew subscription"
+      },
+      "subscriptionStatus": {
+        "active": "Active",
+        "trial": "Trial",
+        "overdue": "Overdue",
+        "expired": "Expired",
+        "cancelled": "Cancelled"
+      },
+      "sources": {
+        "trial": "Free trial",
+        "payment": "Paid subscription",
+        "bank_transfer": "Bank transfer",
+        "admin": "Activated by Madar",
+        "existing": "Existing subscription",
+        "free": "Free"
+      },
+      "intervals": {
+        "monthly": "Monthly",
+        "yearly": "Yearly"
+      },
+      "methods": {
+        "card": "Card",
+        "bank_transfer": "Bank transfer"
+      },
+      "paymentStatus": {
+        "paid": "Paid",
+        "pending": "Under review",
+        "failed": "Failed",
+        "rejected": "Rejected"
+      },
+      "payments": {
+        "title": "Invoices & payments",
+        "number": "Invoice no.",
+        "date": "Date",
+        "application": "App",
+        "package": "Package",
+        "method": "Method",
+        "amount": "Amount",
+        "status": "Status",
+        "actions": "Actions",
+        "view": "View invoice",
+        "discount": "{amount} off",
+        "emptyTitle": "No payments yet",
+        "emptyDescription": "Every card payment and bank transfer will appear here."
+      },
+      "receipt": {
+        "title": "Invoice details",
+        "brand": "Madar",
+        "kind": "Payment receipt",
+        "billedTo": "Billed to",
+        "taxNumber": "Tax number",
+        "item": "Item",
+        "line": "{application} subscription",
+        "discount": "Discount",
+        "total": "Total",
+        "reference": "Transaction ID",
+        "rejectionReason": "Rejection reason",
+        "pendingNote": "Your bank transfer is being reviewed by the Madar team; the receipt is issued once it's approved.",
+        "print": "Print",
+        "close": "Close"
+      },
+      "toasts": {
+        "loadFailed": "Couldn't load billing data.",
+        "popupBlocked": "Allow pop-ups to print the invoice."
+      },
+      "applications": {
+        "pos": "Point of Sale",
+        "ecommerce": "Online Stores",
+        "advertising": "Ad Campaigns",
+        "procurement": "Supply & Purchase",
+        "expenses": "Expenses",
+        "ai": "AI",
+        "customReports": "Custom Reports",
+        "madarApps": "Madar Apps",
+        "madarComplete": "Madar Complete"
+      }
     }
   },
   "account": {
