@@ -3,7 +3,7 @@ import { ROUTES } from "@/constants/routes"
 
 export const MARKETING_SITE_URL = "https://madar.my"
 export const MADAR_APP_URL = "https://app.madar.my"
-export const MADAR_CONTACT_EMAIL = "dhiamuhammed@gmail.com"
+export const MADAR_CONTACT_EMAIL = "support@madar.my"
 
 export const MADAR_REGISTER_URL = `${MADAR_APP_URL}${ROUTES.register}`
 export const MADAR_LOGIN_URL = `${MADAR_APP_URL}${ROUTES.login}`
