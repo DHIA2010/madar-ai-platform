@@ -100,11 +100,11 @@ export default async function RootLayout({
   const locale = await getLocale()
   const messages = await getMessages()
   const headersList = await headers()
-  // The public marketing site (madar.my) is English-only regardless of the app's locale
-  // cookie/default (Arabic) -- everything else keeps the existing locale-driven lang/dir.
+  // The public marketing site (madar.my) is Arabic regardless of the app's locale cookie --
+  // everything else keeps the existing locale-driven lang/dir.
   const isMarketingSite = isMarketingHostname(headersList.get("host") ?? "")
-  const htmlLang = isMarketingSite ? "en" : locale
-  const htmlDir = isMarketingSite ? "ltr" : localeDirection(locale as "ar" | "en")
+  const htmlLang = isMarketingSite ? "ar" : locale
+  const htmlDir = isMarketingSite ? "rtl" : localeDirection(locale as "ar" | "en")
 
   // cairo.variable goes on <html>, not <body>: globals.css derives --font-sans from it on :root,
   // and a custom property defined only on <body> is out of scope there.

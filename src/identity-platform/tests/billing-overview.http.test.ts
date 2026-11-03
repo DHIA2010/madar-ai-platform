@@ -190,3 +190,30 @@ describe("billing overview", () => {
     expect(elsewhere.body.payments).toEqual([])
   })
 })
+
+describe("public pricing", () => {
+  it("shows madar.my the prices on sale without signing in, and nothing internal", async () => {
+    const response = await fetch(`${baseUrl}/v1/public/pricing`)
+    expect(response.status).toBe(200)
+    const pricing = (await response.json()) as {
+      application: string
+      packages: Record<string, unknown>[]
+    }[]
+    expect(pricing.length).toBeGreaterThan(0)
+    expect(pricing.map((entry) => entry.application)).toContain("pos")
+    for (const entry of pricing) {
+      for (const pkg of entry.packages) {
+        expect(Object.keys(pkg).sort()).toEqual(
+          [
+            "description",
+            "features",
+            "isRecommended",
+            "monthlyPriceHalalas",
+            "name",
+            "yearlyPriceHalalas",
+          ].sort()
+        )
+      }
+    }
+  })
+})

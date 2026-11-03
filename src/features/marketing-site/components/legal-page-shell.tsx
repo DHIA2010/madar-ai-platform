@@ -12,9 +12,10 @@ interface LegalPageShellProps {
 
 export function LegalPageShell({ title, effectiveDate, intro, children }: LegalPageShellProps) {
   return (
-    <div lang="en" dir="ltr" className="min-h-screen bg-white text-slate-900 antialiased">
+    <div lang="ar" dir="rtl" className="min-h-screen bg-white text-slate-900 antialiased">
       <MarketingHeader />
-      <main className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+      {/* The policy text itself is English. */}
+      <main lang="en" dir="ltr" className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
         <header className="mb-10 border-b border-slate-200 pb-8">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
             {title}

@@ -126,9 +126,11 @@ export const ROUTES = {
   terms: "/terms",
   marketing: {
     product: "/#product",
+    features: "/#features",
     integrations: "/#integrations",
     howItWorks: "/#how-it-works",
-    about: "/#about",
+    pricing: "/#pricing",
+    faq: "/#faq",
     contact: "/#contact",
   },
   forgotPassword: "/auth/basic/forgot-password",

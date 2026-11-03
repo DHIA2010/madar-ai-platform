@@ -1,8 +1,12 @@
+import { ASSETS } from "@/constants/assets"
 import { ROUTES } from "@/constants/routes"
 
 export const MARKETING_SITE_URL = "https://madar.my"
 export const MADAR_APP_URL = "https://app.madar.my"
 export const MADAR_CONTACT_EMAIL = "dhiamuhammed@gmail.com"
+
+export const MADAR_REGISTER_URL = `${MADAR_APP_URL}${ROUTES.register}`
+export const MADAR_LOGIN_URL = `${MADAR_APP_URL}${ROUTES.login}`
 
 // madar.my and www.madar.my resolve to the same frontend service as app.madar.my (same ALB,
 // host-header routed) -- this is the single source of truth for which hostnames get the public
@@ -15,62 +19,78 @@ export function isMarketingHostname(rawHost: string): boolean {
   return MARKETING_HOSTNAMES.has(host)
 }
 
-// Homepage-relative (not bare "#...") so these still resolve correctly from other pages
-// like /privacy and /terms, not only when already on "/".
+// Homepage-relative (not bare "#...") so these still resolve from /privacy and /terms too.
 export const MARKETING_NAV_LINKS = [
-  { label: "Product", href: ROUTES.marketing.product },
-  { label: "Integrations", href: ROUTES.marketing.integrations },
-  { label: "How It Works", href: ROUTES.marketing.howItWorks },
-  { label: "About", href: ROUTES.marketing.about },
+  { label: "الحلول", href: ROUTES.marketing.product },
+  { label: "المزايا", href: ROUTES.marketing.features },
+  { label: "التكاملات", href: ROUTES.marketing.integrations },
+  { label: "الأسعار", href: ROUTES.marketing.pricing },
+  { label: "الأسئلة الشائعة", href: ROUTES.marketing.faq },
 ] as const
 
-export type IntegrationStatus = "Available" | "In Development" | "Coming Soon"
+export type IntegrationCategory = "stores" | "ads" | "analytics"
 
 export interface IntegrationEntry {
   name: string
-  status: IntegrationStatus
+  logo: string
+  category: IntegrationCategory
   description: string
+}
+
+export const INTEGRATION_CATEGORY_LABEL: Record<IntegrationCategory, string> = {
+  stores: "متاجر",
+  ads: "إعلانات",
+  analytics: "التحليلات",
 }
 
 export const MARKETING_INTEGRATIONS: IntegrationEntry[] = [
   {
-    name: "Google Ads",
-    status: "Available",
-    description: "Campaign and account-level advertising performance.",
+    name: "سلة",
+    logo: ASSETS.platforms.salla,
+    category: "stores",
+    description:
+      "المنتجات والطلبات والعملاء تتزامن تلقائيًا، ويمكن تثبيت مدار من متجر تطبيقات سلة.",
   },
   {
-    name: "Meta Ads",
-    status: "Available",
-    description: "Facebook and Instagram campaign, ad, and performance data.",
-  },
-  {
-    name: "Snapchat Ads",
-    status: "Available",
-    description: "Campaign, ad squad, and ad-level performance data.",
-  },
-  {
-    name: "Google Analytics",
-    status: "Available",
-    description: "Traffic, engagement, events, and conversion data.",
-  },
-  {
-    name: "Salla",
-    status: "Available",
-    description: "Store, product, order, and customer data.",
+    name: "زد",
+    logo: ASSETS.platforms.zid,
+    category: "stores",
+    description: "ربط متجرك على زد بضغطات، ويمكن تثبيت مدار مباشرة من سوق تطبيقات زد.",
   },
   {
     name: "Shopify",
-    status: "Available",
-    description: "Store, product, order, and customer data.",
+    logo: ASSETS.platforms.shopify,
+    category: "stores",
+    description: "مزامنة المنتجات والطلبات والعملاء من متجرك على شوبيفاي.",
   },
   {
-    name: "TikTok Ads",
-    status: "Available",
-    description: "TikTok advertising campaign analytics and reporting.",
+    name: "Google Ads",
+    logo: ASSETS.platforms.googleAds,
+    category: "ads",
+    description: "أداء الحملات والإنفاق والنقرات والعائد على الإنفاق الإعلاني.",
   },
   {
-    name: "Zid",
-    status: "Available",
-    description: "Store, product, order, and customer data.",
+    name: "Meta",
+    logo: ASSETS.platforms.meta,
+    category: "ads",
+    description: "حملات فيسبوك وإنستغرام وإعلاناتها وأداؤها في مكان واحد.",
+  },
+  {
+    name: "Snapchat",
+    logo: ASSETS.platforms.snapchat,
+    category: "ads",
+    description: "أداء الحملات والمجموعات الإعلانية والإعلانات على سناب شات.",
+  },
+  {
+    name: "TikTok",
+    logo: ASSETS.platforms.tiktok,
+    category: "ads",
+    description: "تحليلات وتقارير حملاتك الإعلانية على تيك توك.",
+  },
+  {
+    name: "Google Analytics",
+    logo: ASSETS.platforms.googleAnalytics,
+    category: "analytics",
+    description: "الزيارات والتفاعل والأحداث والتحويلات في موقعك.",
   },
 ]

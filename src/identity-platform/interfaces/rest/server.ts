@@ -1560,6 +1560,33 @@ export function createIdentityApiServer(
       // claim token above.
       // Public on purpose -- the token in an e-mailed sign-in link *is* the credential (see
       // LoginLinkService). Signs in whichever account the link belongs to.
+      // Public: the prices madar.my shows -- the same catalog the marketplace shows signed-in
+      // customers, limited to what's on sale.
+      if (method === "GET" && url.pathname === "/v1/public/pricing") {
+        if (!pricingService) {
+          return send(503, { code: "PRICING_UNAVAILABLE", message: "Pricing is unavailable." })
+        }
+        const catalog = await pricingService.getCatalog({ includeInactive: false })
+        return send(
+          200,
+          catalog
+            .filter((entry) => entry.visible)
+            .map((entry) => ({
+              application: entry.application,
+              mode: entry.mode,
+              freeDays: entry.freeDays,
+              packages: entry.packages.map((pkg) => ({
+                name: pkg.name,
+                description: pkg.description,
+                features: pkg.features,
+                monthlyPriceHalalas: pkg.monthlyPriceHalalas,
+                yearlyPriceHalalas: pkg.yearlyPriceHalalas,
+                isRecommended: pkg.isRecommended,
+              })),
+            }))
+        )
+      }
+
       // Public: starts and finishes "Continue with Google". Both end in a browser redirect -- to
       // Google, then to a one-time sign-in link (or back to sign-in with an error).
       if (method === "GET" && url.pathname === "/v1/auth/google/start") {

@@ -16,18 +16,19 @@ export async function generateMetadata(): Promise<Metadata> {
     return {}
   }
 
-  const title = "MADAR | AI-Powered Marketing Intelligence for E-commerce"
+  const title = "مدار | كل تجارتك في مدار واحد — كاشير ومتاجر وإعلانات ومخزون"
   const description =
-    "MADAR helps e-commerce businesses connect marketing data, analyze advertising performance, monitor key KPIs, and turn data into actionable insights."
+    "مدار منصة سعودية تجمع الكاشير المتوافق مع الفوترة الإلكترونية، وتحليلات متاجر سلة وزد وشوبيفاي، والحملات الإعلانية، والمشتريات، والمخزون، والتقارير، ومساعدًا ذكيًا في نظام واحد."
 
   return {
-    title,
+    title: { absolute: title },
     description,
     alternates: { canonical: "https://madar.my/" },
     openGraph: {
       type: "website",
       url: "https://madar.my/",
-      siteName: "MADAR",
+      siteName: "مدار",
+      locale: "ar_SA",
       title,
       description,
     },

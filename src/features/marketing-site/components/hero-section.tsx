@@ -1,114 +1,98 @@
-import Link from "next/link"
-import { ArrowUpRight, TrendingUp } from "lucide-react"
+import { ArrowLeft, BadgeCheck, CheckCircle2, Sparkles } from "lucide-react"
 
-import { ROUTES } from "@/constants/routes"
+import { MADAR_REGISTER_URL, MARKETING_INTEGRATIONS } from "../marketing-constants"
+import { DashboardMockup, ReceiptCard } from "./mockups"
 
-import { AppButton } from "@/components/app"
-
-import { MADAR_APP_URL } from "../marketing-constants"
+const HIGHLIGHTS = ["تجربة مجانية ٧ أيام", "متوافق مع الفوترة الإلكترونية", "عربي بالكامل"]
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-white pt-16 pb-20 sm:pt-24 sm:pb-28">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] bg-[radial-gradient(60%_50%_at_50%_0%,rgba(37,99,235,0.10),rgba(255,255,255,0))]"
-      />
+    <section className="relative overflow-hidden bg-white pt-14 pb-20 sm:pt-20 lg:pb-28">
+      {/* Soft brand glows and a faint grid behind the headline. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-b from-[#dff7f3] via-[#e8f0ff] to-transparent opacity-80 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#eef2f7_1px,transparent_1px),linear-gradient(to_bottom,#eef2f7_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_70%)] bg-[size:48px_48px]" />
+      </div>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col items-center px-4 text-center sm:px-6 lg:px-8">
-        <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-medium text-blue-700">
-          Marketing intelligence for e-commerce
-        </span>
+      <div className="relative mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#cfe0ff] bg-white/80 px-4 py-1.5 text-[13px] font-bold text-[#1d4ed8] shadow-sm">
+            <Sparkles className="size-4" />
+            منصة سعودية متكاملة لإدارة التجارة
+          </span>
+          <h1 className="mt-6 text-4xl leading-[1.25] font-black tracking-tight text-[#0b1738] sm:text-6xl sm:leading-[1.2]">
+            كل تجارتك في{" "}
+            <span className="bg-gradient-to-l from-[#12b5a6] via-[#2563eb] to-[#1e3a8a] bg-clip-text text-transparent">
+              مدار واحد
+            </span>
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl sm:leading-9">
+            الكاشير، ومتجرك الإلكتروني، وحملاتك الإعلانية، والمشتريات، والمخزون، والتقارير — مع
+            مساعد ذكي يجيبك بالعربي. نظام واحد بدل خمسة، مصمم للتاجر السعودي.
+          </p>
 
-        <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
-          AI-Powered Marketing Intelligence for E-commerce
-        </h1>
-
-        <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-          MADAR brings your advertising and commerce data together to help you understand campaign
-          performance, monitor marketing KPIs, and make smarter decisions.
-        </p>
-
-        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
-          <AppButton size="lg" asChild className="px-8">
-            <a href={MADAR_APP_URL} rel="noopener">
-              Get Started
-              <ArrowUpRight className="size-4" />
+          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <a
+              href={MADAR_REGISTER_URL}
+              className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#2878ff] px-8 py-4 text-base font-bold text-white shadow-[0_14px_34px_rgba(40,120,255,0.38)] transition-all hover:-translate-y-0.5 hover:bg-[#1f63d6] sm:w-auto"
+            >
+              ابدأ تجربتك المجانية
+              <ArrowLeft className="size-5 transition-transform group-hover:-translate-x-1" />
             </a>
-          </AppButton>
-          <AppButton size="lg" variant="outline" asChild className="px-8">
-            <Link href={ROUTES.marketing.product}>Explore MADAR</Link>
-          </AppButton>
+            <a
+              href="#pricing"
+              className="inline-flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-8 py-4 text-base font-bold text-[#0b1738] transition-colors hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+            >
+              شاهد الأسعار
+            </a>
+          </div>
+
+          <ul className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-semibold text-slate-600">
+            {HIGHLIGHTS.map((item) => (
+              <li key={item} className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-4 text-[#12b5a6]" />
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <div className="relative mt-16 w-full max-w-5xl">
+        <div className="relative mx-auto mt-16 max-w-5xl">
           <div
-            aria-hidden="true"
-            className="absolute -inset-6 -z-10 rounded-[32px] bg-gradient-to-tr from-blue-500/10 via-sky-400/10 to-cyan-400/10 blur-2xl"
+            aria-hidden
+            className="absolute -inset-x-10 -inset-y-6 -z-10 rounded-[40px] bg-gradient-to-tr from-[#12b5a6]/15 via-[#2563eb]/10 to-transparent blur-2xl"
           />
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10">
-            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="flex gap-1.5">
-                <span className="size-2.5 rounded-full bg-slate-300" />
-                <span className="size-2.5 rounded-full bg-slate-300" />
-                <span className="size-2.5 rounded-full bg-slate-300" />
-              </div>
-              <span className="ml-2 text-xs font-medium text-slate-500">
-                app.madar.my — Example dashboard
-              </span>
-            </div>
-
-            <div className="grid gap-4 p-6 text-left sm:grid-cols-3">
-              {[
-                { label: "Total Revenue", value: "$482,300", delta: "+12.4%" },
-                { label: "Marketing Spend", value: "$61,200", delta: "+4.1%" },
-                { label: "ROAS", value: "4.8x", delta: "+0.6x" },
-              ].map((metric) => (
-                <div
-                  key={metric.label}
-                  className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
-                >
-                  <p className="text-xs font-medium text-slate-500">{metric.label}</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">{metric.value}</p>
-                  <p className="mt-1 flex items-center gap-1 text-xs font-medium text-emerald-600">
-                    <TrendingUp className="size-3.5" />
-                    {metric.delta}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-xs font-medium text-slate-500">Revenue trend</p>
-                <svg viewBox="0 0 240 80" className="mt-3 h-20 w-full" aria-hidden="true">
-                  <polyline
-                    fill="none"
-                    stroke="#2563eb"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points="0,60 30,52 60,55 90,38 120,42 150,24 180,28 210,14 240,18"
-                  />
-                </svg>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-xs font-medium text-slate-500">Channel performance</p>
-                <div className="mt-3 flex h-20 items-end gap-2">
-                  {[38, 62, 45, 74, 50, 66, 58].map((height, index) => (
-                    <span
-                      key={index}
-                      style={{ height: `${height}%` }}
-                      className="flex-1 rounded-t-sm bg-sky-400/70"
-                    />
-                  ))}
-                </div>
-              </div>
+          <DashboardMockup />
+          <ReceiptCard className="absolute -bottom-10 -start-4 hidden rotate-[-4deg] md:block lg:-start-12" />
+          <div className="absolute -top-6 -end-4 hidden items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_20px_50px_-12px_rgba(11,23,56,0.3)] ring-1 ring-slate-100 md:flex lg:-end-10">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <BadgeCheck className="size-5" />
+            </span>
+            <div className="text-start">
+              <p className="text-[13px] font-extrabold text-[#0b1738]">طلب جديد من سلة</p>
+              <p className="text-[11px] text-slate-500">المصدر: إعلان سناب شات</p>
             </div>
           </div>
-          <p className="mt-3 text-center text-xs text-slate-400">
-            Example dashboard — illustrative interface preview, not live account data.
-          </p>
+        </div>
+
+        <div className="mt-24 text-center">
+          <p className="text-sm font-bold text-slate-500">يتكامل مع المنصات التي تعمل عليها</p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+            {MARKETING_INTEGRATIONS.map((integration) => (
+              <div
+                key={integration.name}
+                className="flex items-center gap-2 opacity-80 grayscale transition hover:opacity-100 hover:grayscale-0"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={integration.logo}
+                  alt={integration.name}
+                  className="h-8 w-8 rounded-lg object-contain"
+                />
+                <span className="text-[15px] font-bold text-[#0b1738]">{integration.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
